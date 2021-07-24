@@ -7,6 +7,9 @@
 // window for clock global
 WINDOW *space4clock;
 
+	// use the mouse returned values
+	MEVENT mort;
+
 
 int main() {
 	// init
@@ -21,8 +24,12 @@ int main() {
     WINDOW *sidebar_opener;
     WINDOW *sidebar;
     int sidebaropen = 0;
-    char input;
+    char input, mouseinput;
     int sidebarwidth = MINSIDEBARWIDTH;
+
+	// use the mouse
+    keypad(stdscr,TRUE);
+    mousemask(ALL_MOUSE_EVENTS,NULL);
 
 	// for clock
 	time_t now;
@@ -62,11 +69,14 @@ int main() {
 		wrefresh(space4clock);
 	}
 
+	mousemask(ALL_MOUSE_EVENTS,NULL);
 	while (1) {
-		input = wgetch(sidebar_opener);
 		sidebarwidth = ((COLS / SIDEBARDIVIDER) > MINSIDEBARWIDTH) ? MINSIDEBARWIDTH : (COLS / SIDEBARDIVIDER);
 
-		if (input == '+') {
+		input = wgetch(sidebar_opener);
+// TODO (jens#1#07/24/21): mouse input does not work (wrong window? needs to trigger on stdscr OR rewrite the whole thing?
+
+		if ( (input == '+') || (input == KEY_MOUSE)) {
 			if (sidebaropen == 0) {
 				mvwin(sidebar_opener,0,3);
 				sidebar = newwin(COLS,3,0,0);
