@@ -1,0 +1,5 @@
+# depslib dependency file v1.0
+1627121034 source:/home/jens/development/breakthrough/popOS-proof-of-principle-OS.c
+	<ncurses.h>
+	<time.h>
+

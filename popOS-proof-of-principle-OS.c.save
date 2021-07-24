@@ -7,6 +7,9 @@
 // window for clock global
 WINDOW *space4clock;
 
+	// use the mouse
+	MEVENT mort;
+
 
 int main() {
 	// init
@@ -21,8 +24,12 @@ int main() {
     WINDOW *sidebar_opener;
     WINDOW *sidebar;
     int sidebaropen = 0;
-    char input;
+    char input, mouseinput;
     int sidebarwidth = MINSIDEBARWIDTH;
+
+	// use the mouse
+    keypad(stdscr,TRUE);
+    mousemask(ALL_MOUSE_EVENTS,NULL);
 
 	// for clock
 	time_t now;
@@ -63,10 +70,11 @@ int main() {
 	}
 
 	while (1) {
-		input = wgetch(sidebar_opener);
 		sidebarwidth = ((COLS / SIDEBARDIVIDER) > MINSIDEBARWIDTH) ? MINSIDEBARWIDTH : (COLS / SIDEBARDIVIDER);
 
-		if (input == '+') {
+		input = wgetch(sidebar_opener);
+
+		if ( (input == '+') || (input == KEY_MOUSE)) {
 			if (sidebaropen == 0) {
 				mvwin(sidebar_opener,0,3);
 				sidebar = newwin(COLS,3,0,0);
@@ -127,7 +135,7 @@ void writeCurrentTime(void) {
     /* fill the time structure */
     clock = localtime(&now);
     /* display the clock */
-
+	mvwin(space4clock,0,COLS - 8);
 	mvwprintw(space4clock,0,0, "%2d:%02d:%2d",
 		clock->tm_hour,
 		clock->tm_min,
