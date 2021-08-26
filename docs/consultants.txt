@@ -1,3 +1,5 @@
+potential supporters to contact at a reasonable milestone (like whitepaper finished)
+
 Dan Gookin (C Programming)
 Steward Weiss (System Programming)
 David R Butenhof (Threads)
