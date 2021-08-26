@@ -1,3 +1,6 @@
 Dan Gookin (C Programming)
 Steward Weiss (System Programming)
 David R Butenhof (Threads)
+
+
+Pina Merkert 
