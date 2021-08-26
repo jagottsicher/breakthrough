@@ -1,6 +1,6 @@
+### – a whitepaper – 
 # breakthrough
-## – the whitepaper – 
-### A posix-compatible windows manager for the text-terminal utilitizing curses/ncurses
+## An extension for your POSIX-compatible shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
 #### Abstract
