@@ -1,5 +1,5 @@
 # breakthrough
-## – whitepaper – 
+## – the whitepaper – 
 ### A posix-compatible windows manager for the text-terminal utilitizing curses/ncurses
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
