@@ -1,4 +1,4 @@
-### – a whitepaper – 
+### – a whitepaper, draft – 
 # breakthrough
 ## An extension for your POSIX-compatible shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
