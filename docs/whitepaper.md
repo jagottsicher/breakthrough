@@ -1,10 +1,10 @@
 ### – a whitepaper, draft – 
 # breakthrough
-## An extension for your (mostly) POSIX-compliant shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal
+## An extension for your (mostly) POSIX-compliant shell based on curses/ncurses putting a TUI as a quasi-windows-like layer over the terminal.
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
 #### Abstract
-A pseudo-windows-like interface for (mostly) POSIX-compliant operating systems written in C/C++.
+A quasi-windows-like interface for (mostly) POSIX-compliant operating systems written in C/C++.
 
 Imagine that you open a terminal session/shell to your (mostly) POSIX-compliant operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
