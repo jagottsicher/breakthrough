@@ -1,8 +1,7 @@
-potential supporters to contact at a reasonable milestone (like whitepaper finished)
+Potential supporters to contact at a reasonable milestone (like whitepaper finished)
 
 Dan Gookin (C Programming)
 Steward Weiss (System Programming)
 David R Butenhof (Threads)
 
-
-Pina Merkert 
+Pina Merkert (Hardcore coding/Consultant)
