@@ -1,12 +1,12 @@
 ### – a whitepaper, draft – 
 # breakthrough
-## An extension for your POSIX-compatible shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal
+## An extension for your (mostly) POSIX-compliant shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
 #### Abstract
 A pseudo-windows-like interface for (mostly) POSIX-compliant operating systems written in C/C++.
 
-Imagine that you open a terminal session/shell to your POSIX-compatible operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
+Imagine that you open a terminal session/shell to your (mostly) POSIX-compliant operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
 Moving the cursor to the bottom opens a simple sliding taskbar that shows the PID of  processes along with the name of applications. Mouseover displays additional information in a bubble, such as the path of the application.You can open windows that have minimize, maximize and close buttons, as well as a title bar and a search box next to it that can be used to search for regular expressions and of course offers file-globbing and a context-sensitive search suggestion (default: locate).  In addition, there are simple clickable fields for options, view settings, etc. Dropdown menus open up and radio buttons work as well as simple switches.
 You can open windows that have minimize, maximize and close buttons, as well as a title bar and a search box next to it that can be used to search for regular expressions and of course offers file-globbing and a context-sensitive search suggestion (default: locate).  In addition, there are simple clickable fields for options, view settings, etc. Dropdown menus open and radio buttons function as well as simple switches.
@@ -19,7 +19,7 @@ Windows can be touched (even with the mouse) and freely move around on the deskt
 
 If you think - as I do - that you would like to work in such an environment and enjoy the speed and reliability of a SSH session, the convenience of a quasi-windows-like environment and all that completely remotely if you want, then join and let's make it a reality. 
 
-The idea is to create a modern TUI and access your POSIX-compatible environment with ease, while benefiting from the experience of developing modern operating systems that focus on graphical user interfaces. You won't just have the best of both worlds, but of all possible worlds. Ultimately, this won't be just a window to your computer or a convenient TUI, but a revelation, an epiphany and a complete breakthrough to the best features your terminal can offer - locally or remotely. 
+The idea is to create a modern TUI and access your (mostly) POSIX-compliant environment with ease, while benefiting from the experience of developing modern operating systems that focus on graphical user interfaces. You won't just have the best of both worlds, but of all possible worlds. Ultimately, this won't be just a window to your computer or a convenient TUI, but a revelation, an epiphany and a complete breakthrough to the best features your terminal can offer - locally or remotely. 
 
 Want to imagine more read on, else skip to the introduction
 
@@ -59,13 +59,13 @@ All kind of feedback regarding any aspect of the project is highly appreciated.
 Supporters and companions wanted
 breakthrough can be a great project for learning about systems programming, for teaching and sharing knowledge, or for passing on experience as an advanced developer to aspiring systems programmers. 
 
-Should the development of the project breakthrough gain a foothold and the idea for a POSIX-compatible TUI finds acceptance in the community, hopefully independent system programmers or those employed by large enterprises will take notice of breakthrough and take on the development. It would be a great success and achievement to bring programmers and developers of different quality together and to see them working self-motivated and with enthusiasm on a project.
+Should the development of the project breakthrough gain a foothold and the idea for a (mostly) POSIX-compliant TUI finds acceptance in the community, hopefully independent system programmers or those employed by large enterprises will take notice of breakthrough and take on the development. It would be a great success and achievement to bring programmers and developers of different quality together and to see them working self-motivated and with enthusiasm on a project.
 
 #### Tools/requirements
 
-By default, breakthrough should be basically POSIX compatible, but with various additional modes for more color, better display options / extended character set / more special characters / offer different color variants / color schemes.
+By default, breakthrough should be basically (mostly) POSIX-compliant, but with various additional modes for more color, better display options / extended character set / more special characters / offer different color variants / color schemes.
 
-So you should use breakthrough with as in the fully POSIX-compatible default version with
+So you should use breakthrough with as in the (mostly) POSIX-compliant default version with
 
 ```console
 foo@bar:~$ breaktrough
