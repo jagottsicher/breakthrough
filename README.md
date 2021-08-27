@@ -7,4 +7,4 @@
 
 A pseudo-windows-like interface for posix compatible operating systems written in C (maybe some C++).
 
-This is a first draft only - urgently seeking companions. :)
+This is a first draft only - urgently seeking companions. Please read the first draft of the whitepaper and, if you're interested, open an issue for further discussion. Surely, there is a spot for you if you want to commit. There is no need to fork from, em, barely nothing. Thanks.
