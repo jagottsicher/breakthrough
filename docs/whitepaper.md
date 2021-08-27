@@ -4,7 +4,7 @@
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
 #### Abstract
-A pseudo-windows-like interface for posix compatible operating systems written in C.
+A pseudo-windows-like interface for posix compatible operating systems written in C/C++.
 
 Imagine that you open a terminal session/shell to your POSIX-compatible operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
