@@ -9,4 +9,6 @@ A pseudo-windows-like interface for (mostly) POSIX-compliant operating systems w
 
 This is a first draft only - urgently seeking companions. Please read the first draft of the [whitepaper](https://github.com/jagottsicher/breakthrough/blob/main/docs/whitepaper.md) and, if you're interested, open an issue or [start a discussion](https://github.com/jagottsicher/breakthrough/discussions). 
 
-Surely, there is a spot for you if you want to commit. There is no need to fork from, em, barely nothing. Thanks.
+Surely, there is a spot for you if you want to commit. There is no need to fork from, em, barely nothing. Thanks!
+
+P.S.: Please note the sponsor button above. You can send me a few Satoshis with the Lighning Network ⚡️ – it already works!
