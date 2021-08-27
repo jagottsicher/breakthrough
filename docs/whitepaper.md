@@ -4,7 +4,7 @@
 #### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
 
 #### Abstract
-A pseudo-windows-like interface for posix compatible operating systems written in C/C++.
+A pseudo-windows-like interface for (mostly) POSIX-compliant operating systems written in C/C++.
 
 Imagine that you open a terminal session/shell to your POSIX-compatible operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
@@ -32,7 +32,9 @@ Man öffnet drei Fenster. Sources A, B and Destination C. In window A you select
 By the way: 
 - Links to frequently used scripts or applications can be placed on the desktop or grouped in the taskbar and are available at the push of a button. 
 - Files can be dragged to shortcuts to editors to be edited
-- when typing, breakthorugh already suggests command completion and path selection suggestions.
+- when typing, breakthorugh already suggests command completion and path selection suggestions
+- tail the output of your webserver logfiles in one windows, watch your bitcoin node in another, while in a third one you see your lightning node working
+- use git, docker and other cli-based services on one ssh session, but follow several open terminals on the same desktop at the same time
 - Drag&drop, mouse selection, input fields, clickable & editable elements, running shells in windows – optional with tabs within the windows, minimizing windows, use of screens, regex searches, bulk rename, swichtching elements and input fields with pressing/clicking on <TAB> and switching tasks/windows with <ALT>+<TAB>, there are so many options and useful options out there to implement it seems overwhelming. 
 
 On the other hand we're working on the console/terminal and if any is true than "**if there is a shell, there is a way!**".
