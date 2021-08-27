@@ -87,5 +87,15 @@ Other features and tools the project should utilize in order not to have to rein
 
 Unfortunately, breakthrough is not even a concept at the moment, but rather just an idea for a concept. Please help already at this early stage, fork and revise this whitepaper to make it better and bring in new ideas.
 
-Discussion on any topic related to project breakthrough on GitHub is highly welcome. If you like the idea and approach of breakthrough, feel free to share the idea, this whitepaper, and its repository to anybody you think might be interested or contribute something useful to breakthrough. Thank you!
+Potential role one could take are
+- [ ] developer (an active programmer)
+- [ ] consultant (giving advice)
+- [ ] manager (help to get the job done, also reviewing)
+- [ ] supporter (seeking help, aquire people)
+- [ ] ambassador (spread the word and the idea in the community)
+- [ ] patron (helping whereever need is help)
+
+Of course, you can take several roles. :)
+
+Discussion on any topic related to project breakthrough on github is highly appreciated. If you like the idea and approach of breakthrough, feel free to share the idea, this whitepaper, and its repository to anybody you think might be interested or contribute something useful to breakthrough. Thank you!
 
