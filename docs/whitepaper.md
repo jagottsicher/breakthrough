@@ -5,15 +5,23 @@
 
 #### Abstract
 A pseudo-windows-like interface for posix compatible operating systems written in C.
-Alternative zu windowsmanager in graphikmodes. Man kann sich das vorstellen, wie eine version von window3.11 auf textbasis, aber mit allen features, die ein aktuelles modernes Gui mitbringt. Alle Welt will Graphik und Schnick-Schnack, aber In unix/linux-umgebungen auf dem Terminal wollen die Admins eine weniger fancy aber eine effiziente und effective Umgebung, die eine schnelle Ausführungsgeschwindigkeit hat, resourcenschonend arbeitet, sicher und reliable ist und sich flexible an den workflow des benutzers anpassen lässt.
 
-Man stelle sich vor, dass man via SSH eine Terminalsitzung/shell zu seinem POSIX-kompatiblem Betriebsystem öffnet. Man erweitert die Shell zum Vollbild und startet breakthrough auf der console. Nach kurzer Initialisierung erscheint eine aufgeräumte Oberfläche von ca 211 Columns x 59 Lines (angenommen bei 1920 x 1080 px) . 
+Imagine that you open a terminal session/shell to your POSIX-compatible operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
-Mit der Maus den Cursor zum unteren Ende fahrend öffnet sich eine einfache verschiebbare Taskbar, die die PID einiger Prozesses anzeigt zusammen mit dem Namen von Anwendungen. Mouseover lässt zuätzliche Informationen in einer "Bubble" erscheinen, wie den Pfad der Anwendung. Man kann Fenster öffnen, die Minimierungs-, Maximierungs- und Schließen-button haben, ebenso wie eine Titelleiste und einem Suchfeld daneben, das sich auf eine Suche nach regulären Ausdrücken verwenden lässt und natürlich file-globbing und eine context-senstive Suchvorschläge (defauklt: locate) anbietet. Dazu gibt es einfache anklickbare Felder für Optionen, Ansichteinstellungen usw. Dropdown-Menus öffnen sich und Radiobuttons funktionen ebenso wie einfach switches.
+Moving the cursor to the bottom opens a simple sliding taskbar that shows the PID of  processes along with the name of applications. Mouseover displays additional information in a bubble, such as the path of the application.You can open windows that have minimize, maximize and close buttons, as well as a title bar and a search box next to it that can be used to search for regular expressions and of course offers file-globbing and a context-sensitive search suggestion (default: locate).  In addition, there are simple clickable fields for options, view settings, etc. Dropdown menus open up and radio buttons work as well as simple switches.
+You can open windows that have minimize, maximize and close buttons, as well as a title bar and a search box next to it that can be used to search for regular expressions and of course offers file-globbing and a context-sensitive search suggestion (default: locate).  In addition, there are simple clickable fields for options, view settings, etc. Dropdown menus open and radio buttons function as well as simple switches.
 
-Die Titelleiste selbst zeigt den aktuellen Pfad an. Man kann den Pfad markieren undin die Zwischenablage kopieren, richt-click and hold makes too long paths start scrolling instead of showing an abbreviated version like "/etc/this/or/.../many/others/". Nice: if you move the coursor up or down while keeping right button pressed down you can speedup and slow down the scrolling. Useful for long paths. the segment of the path shown stays this way until you move the window of refresh it. With double-clicking into its field OR selecting it with <TAB>-key and <ENTER> kann man den angezeigten Teil editieren. Mit Drücken der Entertaste wechselt der Scope des Fenster in den neuen Pfad. Das Fenster zeigt den inhalt des aktuellen Pfades – bei Bedarf scrollbar. Eine Seitenlleiste mit Baumansicht lässt sich links einblenden und bei Bedarf kann man ein Informationsfenster einblenden lassen, das zusätzliche Informationen wie Pfad, Besitzer, Gruppen und permissions (editierbar) anzeigt. Die Darstellungs der ORdnerinhalte lässt sich über die gleichen Optionen wie "ls" abrufen. Alternativ tippt man "ls -alF" in ein Befehlsfeld, das sich unterhalb der Fensterleiste öffnen lässt. Dort lassten sich auch Anwendungen, die man auch der Konsole ausführen kann wie Midnight Commander, top/htop oder iptraf, starten und im Fenter ausführen. 
+The title bar itself shows the current path.You can select the path and copy it to the clipboard, right-click and hold makes too long paths start scrolling instead of showing an abbreviated version like "/etc/this/or/.../many/others/". Nice: if you move the cursor up or down while keeping right button pressed down you can speedup and slow down the scrolling. Useful for long paths. The segment of the path shown stays this way until you move the window or refresh it.  With double-clicking into its field OR selecting it with <TAB>-key and <ENTER> you can edit the shown part. By pressing the Enter key the scope of the window changes to the new path. The window shows the content of the current path - can be scrolled if needed. A sidebar with tree view can be shown on the left side and if needed an information window can be shown, which shows additional information like path, owner, groups and permissions (editable).The display of the folder contents can be accessed using the same options as "ls". Alternatively, one types "ls -alF" into a command field that can be opened below the window bar. Here you can also start applications that can be executed on the console ,like Midnight Commander, top/htop or iptraf, and execute them in the window. 
 
-Die Fenster lassen sich (auch mit der Maus) touch und freely move around on the Desktop. Der Desktop ist simple und erscheint leer, aber soll die möglichkeit geben, Funktionen auszuführen, die sich ohne Fenstermanager nur schwer oder gar nicht erreichen lassen. 
+Windows can be touched (even with the mouse) and freely move around on the desktop. Corners follow the mouse pointer to the desired position to show the size of the window to be moved. The desktop is simple and appears empty, but should give the possibility to execute functions that are difficult or impossible to reach without a window manager. 
+
+#### Why? 
+
+If you think - as I do - that you would like to work in such an environment and enjoy the speed and reliability of a SSH session, the convenience of a quasi-windows-like environment and all that completely remotely if you want, then join and let's make it a reality. 
+
+The idea is to create a modern TUI and access your POSIX-compatible environment with ease, while benefiting from the experience of developing modern operating systems that focus on graphical user interfaces. You won't just have the best of both worlds, but of all possible worlds. Ultimately, this won't be just a window to your computer or a convenient TUI, but a revelation, an epiphany and a complete breakthrough to the best features your terminal can offer - locally or remotely. 
+
+Want to imagine more read on, else skip to the introduction
 
 ##### an Example of a use case
 
@@ -21,47 +29,61 @@ Aufgaben wie das Umbennen und/oder Zusammenführen von zuvor aus unterschiedlich
   
 Man öffnet drei Fenster. Sources A, B and Destination C. In window A you select with your mouse several files in folder ~/my_pics/ in windows B you locate all family*.jpg by using the regex-search field and if satisfied with the appearing list you select them by the newly appearing "select all listed" button. From windows A you drag&drop the selection to window C and you are ask, if you want to copy, move or bulk rename the files. you choose bulk-rename and are asked if you want add files? you want and drag&drop the selection from windows B also to windows C. asked again if you want to add you answer "no". A list of the files from window A and from several subdirectories in the selction from windows B is shown in windows C. You are asked if you want to rename the originals or copies into path of windows C. you choose originals. A dialog shows up listing options for renaminig, filters and of cours original names and names after applying your desired new name conventions. all quite similar to the renaming options of total commander. After pressing start you end up with perfect renamed pictures in several folders. you realise a picture was renamed wrongly. just use the search field in a newly opend window, but this time you click the option uttons at the right side of the input field and set it to "use find" instead of "use locate". Alternatively you have a global "ipdate-db"-button to reindex.
 
-If you – like me – think that you would like to work in such an environment and enjoy the speed and reliability of an SSH-Session, the convenience of a windows-like environment and all that completely remote if you like, then please join us and let us make that become reality. The idea is to create a modern TUI and access your POSIX-compatible Environment with easy while benefitting from the experience of the development of modern operating systems which are focussing on graphical user interfaces. You will have the best not only from two worlds, but from all possible worlds. Eventually, this will not be a windows to your computer or a convenient TUI, it will be a revelation, an epiphany and a complete breakthrough to the best features your terminal can provide – locally or remote.
+By the way: 
+- Links to frequently used scripts or applications can be placed on the desktop or grouped in the taskbar and are available at the push of a button. 
+- Files can be dragged to shortcuts to editors to be edited
+- when typing, breakthorugh already suggests command completion and path selection suggestions.
+- Drag&drop, mouse selection, input fields, clickable & editable elements, running shells in windows – optional with tabs within the windows, minimizing windows, use of screens, regex searches, bulk rename, swichtching elements and input fields with pressing/clicking on <TAB> and switching tasks/windows with <ALT>+<TAB>, there are so many options and useful options out there to implement it seems overwhelming. 
+
+On the other hand we're working on the console/terminal and if any is true than "**if there is a shell, there is a way!**".
+
+At the end there is not just a great like nano, midnight commander or htop, which provides convenience and which you don't want to miss after a short time, but a comprehensive environment, in which it is fun to be not just a user, but administrator and system operator on the console - and suddenly you shall realize that you miss breakthrough when you log in via ssh and read:
+
+```console
+foo@bar:~$ breaktrough
+breakthrough: command not found
+```
 
 #### Introduction 
 
-  Whitepaper versteht sich zur projektcorstellung, um die idea und das konzept anderen schmackhaft zu machen, eine Art Machbarkeitsstudie und natürlich auch als aufforderung für feedback und kritik. Vor allem, was nutzen, adaption und akzeptanz angeht. 
+Whitepaper is intended as a project presentation, to make the idea and the concept appealing to others, a kind of feasibility study and, of course, also as a request for feedback and criticism. Especially with regard to use, adaptation and acceptance. 
 
-Mitstreiter und Weggefährten gesucht
-Großartiges projekt, um sich mit der systemprogrammierung vertraut zu machen oder als fortgeschrittener entwickler erfahrungen weiterzugeben and die, die für die auch raspis gedacht waren.
+It is clear that Breakthrough is an aspirational project. The first step is to find help, because such an ambitious project cannot be carried out by one developer alone. 
 
-#### Anwendungsfall
+breakthrough is though about to be developed under the Mozilla Public License 2.0 (MPL-2.0), which offers the possibility to trademark the name, but otherwise is fully supported by the open-source community. It would be nice, but not necessary, if one day some kind of commercial product could be made out of breakthrough. 
 
-Drag&drop, mark, input fields, clickable & editable elements, shells in windows and with tabs, etc based on ncurses! minimizing Windows, screens, Regex suche, bulk umbenennen, swichtching elements and input fields with pressing/clicking on <TAB> or switching tasks/windows with <ALT>+<TAB>, there are so many options and useful options aout there to implement it seems overwhelming. 
+All kind of feedback regarding any aspect of the project is highly appreciated.
 
-On the other hand we're working on the console/terminal and if any is true than "if there is a shell, there is a way!".  usw
+Supporters and companions wanted
+breakthrough can be a great project for learning about systems programming, for teaching and sharing knowledge, or for passing on experience as an advanced developer to aspiring systems programmers. 
 
-Am Ende ein tool wie nano, midnight commander oder htop, dass Bequemlichkeit verschafft und das man nach kurzer Zeit nicht mehr missen möchte. eine Umgebung, in der es Spaß macht nicht nur ein Anwender, sondern Administrator und System operator zu sein.
+Should the development of the project breakthrough gain a foothold and the idea for a POSIX-compatible TUI finds acceptance in the community, hopefully independent system programmers or those employed by large enterprises will take notice of breakthrough and take on the development. It would be a great success and achievement to bring programmers and developers of different quality together and to see them working self-motivated and with enthusiasm on a project.
 
 #### Tools/requirements
 
-In der Grundeinstellung POSIX-kompatibel mit verschiedenen Zusatzmodi für mehr Farbe, bessere Darstellungsoptionen / erweiterten Zeichensatz / mehr Sonderzeichen / Verschiedene Farbvarianten/Farbschemata. 
+By default, breakthrough should be basically POSIX compatible, but with various additional modes for more color, better display options / extended character set / more special characters / offer different color variants / color schemes.
 
-Man sollte also breakthrough mit als in der voll POSIX-kompatiblen default version mit
-Verschiedene Farbvarianten. 
+So you should use breakthrough with as in the fully POSIX-compatible default version with
+
 ```console
 foo@bar:~$ breaktrough
 Starting - breaking through the walls...
 ```
-oder eine angepasste Version mit 
+or a customized version with something like
 ```console
 foo@bar:~$ breaktrough --color-mode 16 --char-set alternate --utf-8 --color-scheme hacker
 Starting - breaking through the walls...
 ```
-  
-UTF-8
-C/C++
-Curses/libcurses
-Systemnah
-Open-source
-Lernprojekt
+Other features and tools the project should utilize in order not to have to reinvent the wheel and to achieve a usable result as soon as possible:   
+- C/C++
+- Curses/libcurses (do avoid the need to invent a complete new windowing system
+- as near to system libraries as possible
+- Open-source (to attract ideologically motivated developers) 
+- UTF-8-Support 
+- as a teaching project for advanced programmers and educators for your students
 
-#### Schluss: 
+#### Final sentence: 
 
-Momentan nur konzept, order besser gesagt nur idea für ein konzept. 
+Unfortunately, breakthrough is not even a concept at the moment, but rather just an idea for a concept. Please help already at this early stage, fork and revise this whitepaper to make it better and bring in new ideas.
 
+Discussion on any topic related to project breakthrough on github is highly welcome. If you like the idea and approach of breakthrough, feel free to share the idea, this whitepaper and its repository to anybody you think might be interested or contribute something useful to breakthough. Thank you!
