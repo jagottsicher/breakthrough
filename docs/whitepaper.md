@@ -87,7 +87,7 @@ Other features and tools the project should utilize in order not to have to rein
 
 Unfortunately, breakthrough is not even a concept at the moment, but rather just an idea for a concept. Please help already at this early stage, fork and revise this whitepaper to make it better and bring in new ideas.
 
-Potential role one could take are
+Potential roles one could take are
 - [ ] developer (an active programmer)
 - [ ] consultant (giving advice)
 - [ ] manager (help to get the job done, also reviewing)
