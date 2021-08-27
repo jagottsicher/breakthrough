@@ -11,4 +11,4 @@ This is a first draft only - urgently seeking companions. Please read the first 
 
 Surely, there is a spot for you if you want to commit. There is no need to fork from, em, barely nothing. Thanks!
 
-P.S.: Please note the sponsor button above. You can send me a few Satoshis with the Lighning Network ⚡️ – it already works!
+P.S.: The best way to support the development of breakthrough is to partizipate and commit. But please also note the sponsor button above. You can send me a few Satoshis with the Lighning Network ⚡️ – it already works!
