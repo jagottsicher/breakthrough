@@ -5,3 +5,14 @@ Steward Weiss (System Programming)
 David R Butenhof (Threads)
 
 Pina Merkert (Hardcore coding/Consultant)
+
+Potential roles one could take are
+
+* developer (an active programmer)
+* consultant (giving advice)
+* manager (help to get the job done, also reviewing)
+* supporter (seeking help, aquire people)
+* ambassador (spread the word and the idea in the community)
+* patron (helping whereever need is help)
+
+Of course, you can take several roles. :)
