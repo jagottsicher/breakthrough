@@ -3,7 +3,7 @@
 [![twitter](https://badges.aleen42.com/src/wechat.svg)](weixin://dl/chat?jagottsicher)
 
 # breakthrough
-## An extension for your POSIX-compatible shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal.
+## An extension for your (mostly) POSIX-compliant shell based on ncurses putting a TUI as a quasi-windows-like layer over the terminal.
 
 A pseudo-windows-like interface for posix compatible operating systems written in C (maybe some C++).
 
