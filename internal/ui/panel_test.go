@@ -5,16 +5,19 @@ import "testing"
 func TestBuildHeaderSpans(t *testing.T) {
 	text, spans := buildHeaderSpans("/a/bb/c")
 
-	wantText := " /a/bb/c"
+	wantText := " ~ < >  /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
 	want := []headerSpan{
-		{start: 1, end: 2, target: "/"},
-		{start: 2, end: 3, target: "/a"},
-		{start: 4, end: 6, target: "/a/bb"},
-		{start: 7, end: 8, target: "/a/bb/c"},
+		{start: 1, end: 2, action: actionHome},
+		{start: 3, end: 4, action: actionBack},
+		{start: 5, end: 6, action: actionForward},
+		{start: 8, end: 9, action: actionNavigate, target: "/"},
+		{start: 9, end: 10, action: actionNavigate, target: "/a"},
+		{start: 11, end: 13, action: actionNavigate, target: "/a/bb"},
+		{start: 14, end: 15, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -26,24 +29,24 @@ func TestBuildHeaderSpans(t *testing.T) {
 		}
 	}
 
-	// Every span's slice of text must equal its own last path component
-	// (or "/" for the root span) — this is what makes clicking a name
-	// actually correspond to what's drawn under the cursor.
+	// Every path span's slice of text must equal its own last path
+	// component (or "/" for the root span) — this is what makes clicking
+	// a name actually correspond to what's drawn under the cursor.
 	runes := []rune(text)
 	for _, s := range spans {
+		if s.action != actionNavigate {
+			continue
+		}
 		got := string(runes[s.start:s.end])
 		want := s.target
 		if s.target != "/" {
 			parts := []rune(s.target)
-			// Last component after the final "/".
-			last := ""
 			for i := len(parts) - 1; i >= 0; i-- {
 				if parts[i] == '/' {
-					last = string(parts[i+1:])
+					want = string(parts[i+1:])
 					break
 				}
 			}
-			want = last
 		}
 		if got != want {
 			t.Errorf("span %+v covers text %q, want %q", s, got, want)
@@ -54,12 +57,17 @@ func TestBuildHeaderSpans(t *testing.T) {
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
-	wantText := " /"
+	wantText := " ~ < >  /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	if len(spans) != 1 || spans[0] != (headerSpan{start: 1, end: 2, target: "/"}) {
-		t.Fatalf("spans = %+v, want a single root span", spans)
+	// 3 buttons + the root span.
+	if len(spans) != 4 {
+		t.Fatalf("got %d spans, want 4: %+v", len(spans), spans)
+	}
+	root := spans[len(spans)-1]
+	if root != (headerSpan{start: 8, end: 9, action: actionNavigate, target: "/"}) {
+		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
