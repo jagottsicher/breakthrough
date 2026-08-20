@@ -87,3 +87,25 @@ func (p *Panel) onSelect(index int, mainText, secondaryText string, shortcut run
 	// the panel simply stays on its current listing.
 	_ = p.load(target)
 }
+
+// EntryAt returns the item name shown at screen row y, or ok=false if y
+// is outside the list or doesn't correspond to an item.
+//
+// tview.List has an equivalent indexAtPoint, but it's unexported, so this
+// reimplements it for the fixed configuration this Panel always uses
+// (single-line items, i.e. ShowSecondaryText(false) — see NewPanel).
+func (p *Panel) EntryAt(y int) (name string, ok bool) {
+	_, rectY, _, height := p.GetInnerRect()
+	if y < rectY || y >= rectY+height {
+		return "", false
+	}
+
+	offset, _ := p.GetOffset()
+	index := y - rectY + offset
+	if index < 0 || index >= p.GetItemCount() {
+		return "", false
+	}
+
+	main, _ := p.GetItemText(index)
+	return main, true
+}
