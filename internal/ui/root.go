@@ -36,6 +36,7 @@ type Root struct {
 	menu        *tview.List
 	rename      *tview.InputField
 	info        *tview.TextView
+	errorView   *tview.TextView
 	quitConfirm *tview.List
 
 	// target is the absolute path the context menu / rename prompt is
@@ -92,6 +93,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
 
 	r.info = r.newInfoView()
+	r.errorView = r.newErrorView()
+
+	// Panel reports its own failures (unreadable directory, bad path
+	// typed into the header) through Root's error overlay.
+	panel.onError = r.showError
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
 	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
@@ -106,6 +112,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(infoPage, r.info, false, false)
+	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
@@ -232,6 +239,21 @@ func (r *Root) RequestQuit() {
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
 }
 
+// RequestCancel is the Ctrl+X sibling for Ctrl+C (see cmd/breakthrough):
+// a global "back out of whatever is open" that behaves like Escape.
+// Having it as a real key matters because Escape is deliberately inert
+// while the path header is being edited — Ctrl+C is the keyboard way out
+// of that, where otherwise only a mouse click would do.
+//
+// It never quits: stopping breakthrough is Ctrl+X plus a confirmation.
+func (r *Root) RequestCancel() {
+	if r.activePage != "" {
+		r.hideOverlay()
+		return
+	}
+	r.panel.cancelEdit()
+}
+
 // confirmQuit is the quit overlay's "Quit breakthrough" action.
 func (r *Root) confirmQuit() {
 	r.app.Stop()
@@ -320,24 +342,25 @@ func (r *Root) openRename() {
 }
 
 // finishRename handles Enter (submit) and Escape/Tab (cancel) in the
-// rename prompt, then always hands focus back to the panel.
+// rename prompt.
+//
+// The rename field is closed up front rather than in a defer: a failed
+// rename opens the error overlay, and hiding "the active overlay"
+// afterwards would close that error again before the user ever saw it.
 func (r *Root) finishRename(key tcell.Key) {
-	defer r.hideOverlay()
+	newName := r.rename.GetText()
+	r.hideOverlay()
 
 	if key != tcell.KeyEnter {
 		return // cancelled
 	}
-
-	newName := r.rename.GetText()
 	if newName == "" || newName == filepath.Base(r.target) {
 		return
 	}
 
-	// Errors (e.g. destination already exists) are swallowed for now:
-	// Phase 1 has no error dialog yet. The panel reload below simply
-	// shows whatever the directory actually looks like afterwards,
-	// which for a refused rename means the old name is still there —
-	// visible, if not explained.
-	_, _ = fsops.Rename(r.target, newName)
-	_ = r.panel.load(r.panel.path)
+	if _, err := fsops.Rename(r.target, newName); err != nil {
+		r.showError(err)
+		return
+	}
+	r.showError(r.panel.load(r.panel.path))
 }
