@@ -305,12 +305,49 @@ func (p *Panel) activateRow(row int) {
 // table, past the last row, or the ".." row, which isn't a file operation
 // target. Used by Root to find which entry was right-clicked.
 func (p *Panel) RowAt(x, y int) (path string, ok bool) {
-	row, _ := p.table.CellAt(x, y)
-	ref, ok := p.rowRef(row)
-	if !ok || ref.name == ".." {
+	row, ok := p.rowIndexAt(x, y)
+	if !ok {
+		return "", false
+	}
+	ref, _ := p.rowRef(row) // rowIndexAt already confirmed this succeeds
+	if ref.name == ".." {
 		return "", false
 	}
 	return ref.path, true
+}
+
+// rowIndexAt returns the row index at screen position (x, y), or
+// ok=false if that position doesn't correspond to a populated row.
+// Unlike RowAt, this doesn't exclude "..": a caller working with a
+// contiguous range of rows (see selectRange) needs the real index either
+// way, and toggling ".." is already a no-op (not checkable).
+func (p *Panel) rowIndexAt(x, y int) (row int, ok bool) {
+	row, _ = p.table.CellAt(x, y)
+	if _, ok := p.rowRef(row); !ok {
+		return 0, false
+	}
+	return row, true
+}
+
+// selectRange checks every checkable entry from row from through to,
+// inclusive and order-independent — the effect of a right-button drag
+// across rows (see Root.captureMouse). A row that isn't checkable (the
+// ".." row, if it falls within the range) is silently skipped, same as clicking its
+// checkbox would be.
+func (p *Panel) selectRange(from, to int) {
+	if from > to {
+		from, to = to, from
+	}
+	for row := from; row <= to; row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !ref.checkable || p.selected[ref.path] {
+			continue
+		}
+		p.selected[ref.path] = true
+		if cell := p.table.GetCell(row, colCheckbox); cell != nil {
+			cell.SetText(checkboxText(true))
+		}
+	}
 }
 
 // navigate is load plus history bookkeeping: on success it records the

@@ -53,6 +53,16 @@ type Root struct {
 	// behavior.
 	activePage   string
 	activeWidget tview.Primitive
+
+	// dragStartRow/dragging track a right-button drag in progress, set on
+	// MouseRightDown and consumed on MouseRightUp (see captureMouse). A
+	// plain right-click (no movement) still opens the context menu as
+	// usual — dragging only kicks in once the mouse actually moved, which
+	// tview itself already distinguishes: it only synthesizes
+	// MouseRightClick when the position didn't change between down and
+	// up, so a real drag never reaches that case at all.
+	dragStartRow int
+	dragging     bool
 }
 
 // NewRoot creates the top-level UI rooted at path. app is passed down to
@@ -265,9 +275,21 @@ func (r *Root) cancelQuit() {
 	r.hideOverlay()
 }
 
-// captureMouse intercepts right-clicks on the panel to open the context
+// captureMouse intercepts right-button activity on the panel: a plain
+// right-click opens the context menu (unchanged from before); a
+// right-button drag across rows instead checks all of them, from the
+// press row through the release row inclusive, and does not open the
 // menu. Everything else (left-click, scrolling) passes through unchanged
 // to the panel's own handling — see Panel.activateRow for that.
+//
+// The click-vs-drag distinction is tview's own, not something tracked
+// here: Application.fireMouseActions only synthesizes MouseRightClick
+// when the release position matches the press position — a genuine drag
+// simply never produces one, only MouseRightDown and MouseRightUp fire.
+// So MouseRightUp always runs first, for both a click and a drag; it does
+// the range-select and consumes the event only when the release row
+// actually differs from the press row, and otherwise steps aside so the
+// MouseRightClick that (per tview) is about to follow can open the menu.
 //
 // This is also where Panel.captureOutsideEdit gets a chance to run first:
 // only one SetMouseCapture can be installed on Panel at a time, and Root
@@ -279,21 +301,48 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		return tview.MouseConsumed, nil
 	}
 
-	if action != tview.MouseRightClick {
+	switch action {
+	case tview.MouseRightDown:
+		x, y := event.Position()
+		if row, ok := r.panel.rowIndexAt(x, y); ok {
+			r.dragStartRow = row
+			r.dragging = true
+		} else {
+			r.dragging = false
+		}
+		return action, event // Table has no case for this action; harmless to pass through
+
+	case tview.MouseRightUp:
+		wasDragging := r.dragging
+		r.dragging = false
+		if !wasDragging {
+			return action, event
+		}
+		x, y := event.Position()
+		endRow, ok := r.panel.rowIndexAt(x, y)
+		if !ok || endRow == r.dragStartRow {
+			// Not a real drag (or it ended off the table): let a
+			// same-position MouseRightClick, if tview fires one right
+			// after this, open the menu as usual.
+			return action, event
+		}
+		r.panel.selectRange(r.dragStartRow, endRow)
+		return tview.MouseConsumed, nil
+
+	case tview.MouseRightClick:
+		x, y := event.Position()
+		path, ok := r.panel.RowAt(x, y)
+		if !ok {
+			return action, event // nothing sensible to act on
+		}
+		r.target = path
+		r.targetRow = y
+		r.showMenu(x, y)
+		return tview.MouseConsumed, nil
+
+	default:
 		return action, event
 	}
-
-	x, y := event.Position()
-	path, ok := r.panel.RowAt(x, y)
-	if !ok {
-		return action, event // nothing sensible to act on
-	}
-
-	r.target = path
-	r.targetRow = y
-	r.showMenu(x, y)
-
-	return tview.MouseConsumed, nil
 }
 
 // showMenu positions the context menu near (x, y), clamped to the panel's
