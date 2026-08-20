@@ -22,9 +22,9 @@ const (
 // panel; Root owns the logic for what appears where and how focus hands
 // back and forth between them.
 //
-// Phase 1 intentionally has exactly one context menu action: Rename. See
-// docs/whitepaper.md for the other actions (copy path, properties,
-// copy-to/move-to) planned for later phases.
+// Phase 1's context menu has two actions: Rename and Info. See
+// docs/whitepaper.md for the other actions (copy path, copy-to/move-to)
+// planned for later phases.
 type Root struct {
 	*tview.Pages
 
@@ -33,6 +33,7 @@ type Root struct {
 	panel       *Panel
 	menu        *tview.List
 	rename      *tview.InputField
+	info        *tview.TextView
 	quitConfirm *tview.List
 
 	// target is the absolute path the context menu / rename prompt is
@@ -64,6 +65,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Rename", "", 0, r.openRename)
+	r.menu.AddItem("Info", "", 0, r.openInfo)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
 	r.rename = tview.NewInputField().SetLabel("New name: ")
@@ -72,6 +74,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rename.SetLabelColor(tcell.ColorWhite)
 	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
+
+	r.info = r.newInfoView()
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
 	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
@@ -85,6 +89,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(panelPage, panel, true, true)
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
+	r.AddPage(infoPage, r.info, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
@@ -107,6 +112,7 @@ func (r *Root) RequestQuit() {
 	r.quitConfirm.SetCurrentItem(0)
 	r.HidePage(contextMenuPage)
 	r.HidePage(renamePage)
+	r.HidePage(infoPage)
 	r.ShowPage(quitConfirmPage)
 }
 
