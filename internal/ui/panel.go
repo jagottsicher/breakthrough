@@ -4,17 +4,26 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-// Panel is the single directory-listing view for Phase 0: it shows the
-// entries of one directory and lets the user navigate with the arrow keys
-// (built into tview.List) and Enter. No menu, no right-click yet — that's
-// later phases.
+// accentBackgroundColor sets the header bar and floating elements (context
+// menu, rename prompt) apart from the plain listing by background color —
+// deliberately chosen over a box-drawing border, which reads as dated.
+const accentBackgroundColor = tcell.ColorDarkSlateGray
+
+// Panel is the single directory-listing view for Phase 0/1: a one-line
+// path header above a list of entries, navigable with the arrow keys
+// (built into tview.List) and Enter, plus (via Root) a right-click
+// context menu. No borders anywhere — see accentBackgroundColor.
 type Panel struct {
-	*tview.List
+	*tview.Flex
+
+	header *tview.TextView
+	list   *tview.List
 
 	// path is the absolute path currently shown.
 	path string
@@ -23,20 +32,25 @@ type Panel struct {
 // NewPanel creates a Panel rooted at path.
 func NewPanel(path string) (*Panel, error) {
 	p := &Panel{
-		List: tview.NewList().ShowSecondaryText(false),
+		Flex:   tview.NewFlex().SetDirection(tview.FlexRow),
+		header: tview.NewTextView().SetTextColor(tcell.ColorWhite),
+		list:   tview.NewList().ShowSecondaryText(false),
 	}
-	p.SetBorder(true)
+	p.header.SetBackgroundColor(accentBackgroundColor)
+
+	p.AddItem(p.header, 1, 0, false) // fixed one-line header
+	p.AddItem(p.list, 0, 1, true)    // fills the rest, holds focus
 
 	if err := p.load(path); err != nil {
 		return nil, err
 	}
-	p.SetSelectedFunc(p.onSelect)
+	p.list.SetSelectedFunc(p.onSelect)
 
 	return p, nil
 }
 
 // load replaces the panel's contents with the entries of dir. It only
-// mutates the panel's state (path, title, list items) once ListDir has
+// mutates the panel's state (path, header, list items) once ListDir has
 // succeeded, so a failed load leaves the panel showing whatever it showed
 // before.
 func (p *Panel) load(dir string) error {
@@ -50,19 +64,19 @@ func (p *Panel) load(dir string) error {
 		return err
 	}
 
-	p.Clear()
+	p.list.Clear()
 	p.path = abs
-	p.SetTitle(" " + abs + " ")
+	p.header.SetText(" " + abs)
 
 	if parent := filepath.Dir(abs); parent != abs {
-		p.AddItem("..", "", 0, nil)
+		p.list.AddItem("..", "", 0, nil)
 	}
 	for _, e := range entries {
 		label := e.Name
 		if e.IsDir {
 			label += "/"
 		}
-		p.AddItem(label, "", 0, nil)
+		p.list.AddItem(label, "", 0, nil)
 	}
 
 	return nil
@@ -95,17 +109,17 @@ func (p *Panel) onSelect(index int, mainText, secondaryText string, shortcut run
 // reimplements it for the fixed configuration this Panel always uses
 // (single-line items, i.e. ShowSecondaryText(false) — see NewPanel).
 func (p *Panel) EntryAt(y int) (name string, ok bool) {
-	_, rectY, _, height := p.GetInnerRect()
+	_, rectY, _, height := p.list.GetInnerRect()
 	if y < rectY || y >= rectY+height {
 		return "", false
 	}
 
-	offset, _ := p.GetOffset()
+	offset, _ := p.list.GetOffset()
 	index := y - rectY + offset
-	if index < 0 || index >= p.GetItemCount() {
+	if index < 0 || index >= p.list.GetItemCount() {
 		return "", false
 	}
 
-	main, _ := p.GetItemText(index)
+	main, _ := p.list.GetItemText(index)
 	return main, true
 }
