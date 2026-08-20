@@ -54,6 +54,13 @@ type Panel struct {
 	history    []string
 	historyIdx int
 
+	// onError reports failures the user should see (a directory that
+	// can't be read, a refused rename) to whoever owns the UI's error
+	// display — Root wires this to its error overlay. Panel deliberately
+	// doesn't own that overlay itself: it has no business deciding how
+	// errors are presented, only which ones are worth reporting.
+	onError func(error)
+
 	// editing is true while the header's edit field is shown. Root's
 	// captureMouse calls captureOutsideEdit before its own logic (only
 	// one SetMouseCapture can be installed on Panel, and Root already
@@ -182,6 +189,14 @@ func (p *Panel) navigate(dir string) error {
 	return nil
 }
 
+// reportError hands err to whoever is displaying errors, if anyone is.
+// A nil error is ignored, so callers can pass a result through directly.
+func (p *Panel) reportError(err error) {
+	if err != nil && p.onError != nil {
+		p.onError(err)
+	}
+}
+
 // back steps one entry back in history, if possible.
 //
 // The index only moves once the load has actually succeeded: if the
@@ -194,7 +209,8 @@ func (p *Panel) back() {
 		return
 	}
 	if err := p.load(p.history[p.historyIdx-1]); err != nil {
-		return // Phase 1 has no error dialog yet; stay put rather than lie
+		p.reportError(err) // stay put rather than lie about where we are
+		return
 	}
 	p.historyIdx--
 }
@@ -206,6 +222,7 @@ func (p *Panel) forward() {
 		return
 	}
 	if err := p.load(p.history[p.historyIdx+1]); err != nil {
+		p.reportError(err)
 		return
 	}
 	p.historyIdx++
@@ -225,7 +242,7 @@ func (p *Panel) onSelect(index int, mainText, secondaryText string, shortcut run
 		return
 	}
 
-	_ = p.navigate(target)
+	p.reportError(p.navigate(target))
 }
 
 // EntryAt returns the item name shown at screen row y, or ok=false if y
@@ -345,15 +362,18 @@ func (p *Panel) spanAt(col int) (headerSpan, bool) {
 func (p *Panel) runHeaderAction(span headerSpan) {
 	switch span.action {
 	case actionHome:
-		if home, err := os.UserHomeDir(); err == nil {
-			_ = p.navigate(home)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			p.reportError(err)
+			return
 		}
+		p.reportError(p.navigate(home))
 	case actionBack:
 		p.back()
 	case actionForward:
 		p.forward()
 	case actionNavigate:
-		_ = p.navigate(span.target)
+		p.reportError(p.navigate(span.target))
 	}
 }
 
@@ -417,7 +437,7 @@ func (p *Panel) finishEdit(key tcell.Key) {
 	switch key {
 	case tcell.KeyEnter:
 		if typed := p.headerEdit.GetText(); typed != "" {
-			_ = p.navigate(p.resolvePath(typed))
+			p.reportError(p.navigate(p.resolvePath(typed)))
 		}
 		p.closeEdit()
 	case tcell.KeyTab:

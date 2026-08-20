@@ -30,12 +30,14 @@ func (r *Root) newInfoView() *tview.TextView {
 // rather than by shelling out to and parsing ls (see the Phase 1 design
 // discussion for why generic command-output parsing doesn't scale here).
 func (r *Root) openInfo() {
-	var text string
-	if info, err := fsops.Stat(r.target); err != nil {
-		text = fmt.Sprintf("Could not read info for %s:\n%v", r.target, err)
-	} else {
-		text = formatInfo(info)
+	info, err := fsops.Stat(r.target)
+	if err != nil {
+		r.hideOverlay() // close the context menu before reporting
+		r.showError(err)
+		return
 	}
+
+	text := formatInfo(info)
 	r.info.SetText(text)
 
 	x, y, _, _ := r.menu.GetRect()
