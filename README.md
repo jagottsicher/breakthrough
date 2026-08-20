@@ -1,14 +1,35 @@
-[![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![twitter](https://badges.aleen42.com/src/twitter.svg)](https://twitter.com/jagottsicher)
 [![twitter](https://badges.aleen42.com/src/wechat.svg)](weixin://dl/chat?jagottsicher)
 
 # breakthrough
-## An extension for your (mostly) POSIX-compliant shell based on curses/ncurses putting a TUI as a quasi-windows-like layer over the terminal.
+## A window/menu-based TUI file manager for your POSIX-compliant terminal, written in Go.
 
-A pseudo-windows-like interface for (mostly) POSIX-compliant operating systems written in C (maybe some C++).
+breakthrough puts a quasi-windows-like layer — panels, floating overlays,
+context menus, a taskbar — over your terminal session, without leaving the
+shell. It's built with [tcell](https://github.com/gdamore/tcell) and
+[tview](https://github.com/rivo/tview); it is not integrated into Bash
+itself. The shell connection stays a thin wrapper (aliases, shell
+functions, readline keybindings), never code integration into Bash.
 
-This is a first draft only - urgently seeking companions. Please read the first draft of the [whitepaper](https://github.com/jagottsicher/breakthrough/blob/main/docs/whitepaper.md) and, if you're interested, open an issue or [start a discussion](https://github.com/jagottsicher/breakthrough/discussions). 
+It is explicitly not an attempt to rebuild Midnight Commander — the goal is
+its own UX philosophy, closer to classic GUI file managers, just in the
+terminal.
 
-Surely, there is a spot for you if you want to commit. There is no need to fork from, em, barely nothing. Thanks!
+**Status:** early rewrite. The original C/ncurses proof of concept has been
+retired in favor of a clean Go implementation; there is no working build
+yet. See the [whitepaper](docs/whitepaper.md) for the full concept and
+vision, and follow along or join in on
+[Discussions](https://github.com/jagottsicher/breakthrough/discussions).
 
-P.S.: The best way to support the development of breakthrough is to partizipate and commit. But please also note the sponsor button above. You can send me a few Satoshis with the Lighning Network ⚡️ – it already works!
+## Contributing
+
+Contributions are very welcome — this is an ambitious project for one
+person alone. See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, the
+branch workflow, and code style expectations.
+
+## Support
+
+The best way to support breakthrough is to participate and contribute. If
+you'd like to leave a tip instead, you can send a few Satoshis via the
+Lightning Network ⚡️ using the sponsor button above.
