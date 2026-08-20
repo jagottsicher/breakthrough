@@ -31,20 +31,23 @@ func run() error {
 		return err
 	}
 
-	root, err := ui.NewRoot(start)
+	app := tview.NewApplication().EnableMouse(true)
+
+	root, err := ui.NewRoot(app, start)
 	if err != nil {
 		return err
 	}
 
-	app := tview.NewApplication().EnableMouse(true)
-
-	// tcell puts the terminal in raw mode, so Ctrl+C arrives as a regular
-	// key event instead of a SIGINT — without this, there would be no way
+	// tcell puts the terminal in raw mode, so Ctrl+X arrives as a regular
+	// key event instead of a signal — without this, there would be no way
 	// to quit at all. This is a global capture (not tied to any one
-	// primitive) so it works regardless of what currently has focus.
+	// primitive) so it works regardless of what currently has focus. It
+	// only opens a confirmation overlay (Root.RequestQuit) rather than
+	// stopping immediately, since a stray Ctrl+X shouldn't lose your
+	// place without asking first.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyCtrlC {
-			app.Stop()
+		if event.Key() == tcell.KeyCtrlX {
+			root.RequestQuit()
 			return nil
 		}
 		return event

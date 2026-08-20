@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,47 +16,94 @@ import (
 // deliberately chosen over a box-drawing border, which reads as dated.
 const accentBackgroundColor = tcell.ColorDarkSlateGray
 
-// Panel is the single directory-listing view for Phase 0/1: a one-line
-// path header above a list of entries, navigable with the arrow keys
-// (built into tview.List) and Enter, plus (via Root) a right-click
-// context menu. No borders anywhere — see accentBackgroundColor.
+const (
+	headerDisplayPage = "display"
+	headerEditPage    = "edit"
+)
+
+// Panel is the single directory-listing view for Phase 0/1: a one-line,
+// browser-address-bar-style header above a list of entries. The header has
+// Home/Back/Forward buttons followed by the path, whose components are
+// individually clickable (clicking "b" in /a/b/c/d jumps to /a/b);
+// clicking anywhere else in the header (e.g. the empty space after the
+// path) switches it to a plain editable text field, like a browser URL
+// bar. The list below is navigable with the arrow keys (built into
+// tview.List) and Enter, plus (via Root) a right-click context menu. No
+// borders anywhere — see accentBackgroundColor.
 type Panel struct {
 	*tview.Flex
 
-	header *tview.TextView
-	list   *tview.List
+	app *tview.Application
+
+	headerPages *tview.Pages
+	header      *tview.TextView   // display mode: buttons + path breadcrumbs
+	headerEdit  *tview.InputField // edit mode: raw, freely editable path
+
+	list *tview.List
 
 	// path is the absolute path currently shown.
 	path string
 
-	// headerSpans locates each clickable path component within the
-	// header's text (see buildHeaderSpans), rebuilt on every load().
+	// headerSpans locates each clickable region in the header's display
+	// text (see buildHeaderSpans), rebuilt on every load().
 	headerSpans []headerSpan
+
+	// history is a browser-style navigation history: history[historyIdx]
+	// is the current path. navigate() appends to it (truncating any
+	// forward entries first); back()/forward() only move historyIdx.
+	history    []string
+	historyIdx int
 }
 
-// headerSpan is one clickable path component in the header: [start, end)
-// is its half-open column range within the header's text (relative to the
-// header's own inner rect), target is the path clicking it navigates to.
+// headerAction identifies what a headerSpan does when clicked.
+type headerAction int
+
+const (
+	actionNavigate headerAction = iota // go to target
+	actionHome                         // go to the user's home directory
+	actionBack                         // step back in history
+	actionForward                      // step forward in history
+)
+
+// headerSpan is one clickable region in the header's display text:
+// [start, end) is its half-open column range (relative to the header's
+// own inner rect).
 type headerSpan struct {
 	start, end int
-	target     string
+	action     headerAction
+	target     string // only meaningful for actionNavigate
 }
 
-// NewPanel creates a Panel rooted at path.
-func NewPanel(path string) (*Panel, error) {
+// NewPanel creates a Panel rooted at path. app is needed to move keyboard
+// focus into the header's edit field on click and back to the list
+// afterwards — see Panel.openEdit.
+func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p := &Panel{
-		Flex:   tview.NewFlex().SetDirection(tview.FlexRow),
-		header: tview.NewTextView().SetTextColor(tcell.ColorWhite),
-		list:   tview.NewList().ShowSecondaryText(false),
+		Flex: tview.NewFlex().SetDirection(tview.FlexRow),
+		app:  app,
+		list: tview.NewList().ShowSecondaryText(false),
 	}
-	p.header.SetBackgroundColor(accentBackgroundColor)
-	p.header.SetMouseCapture(p.captureHeaderMouse)
 	p.list.SetHighlightFullLine(true)
 
-	p.AddItem(p.header, 1, 0, false) // fixed one-line header
-	p.AddItem(p.list, 0, 1, true)    // fills the rest, holds focus
+	p.header = tview.NewTextView().SetTextColor(tcell.ColorWhite)
+	p.header.SetWrap(false)
+	p.header.SetBackgroundColor(accentBackgroundColor)
+	p.header.SetMouseCapture(p.captureHeaderMouse)
 
-	if err := p.load(path); err != nil {
+	p.headerEdit = tview.NewInputField()
+	p.headerEdit.SetFieldBackgroundColor(accentBackgroundColor)
+	p.headerEdit.SetBackgroundColor(accentBackgroundColor)
+	p.headerEdit.SetFieldTextColor(tcell.ColorWhite)
+	p.headerEdit.SetDoneFunc(p.finishEdit)
+
+	p.headerPages = tview.NewPages()
+	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
+	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
+
+	p.AddItem(p.headerPages, 1, 0, false) // fixed one-line header
+	p.AddItem(p.list, 0, 1, true)         // fills the rest, holds focus
+
+	if err := p.navigate(path); err != nil {
 		return nil, err
 	}
 	p.list.SetSelectedFunc(p.onSelect)
@@ -66,7 +114,7 @@ func NewPanel(path string) (*Panel, error) {
 // load replaces the panel's contents with the entries of dir. It only
 // mutates the panel's state (path, header, list items) once ListDir has
 // succeeded, so a failed load leaves the panel showing whatever it showed
-// before.
+// before. It does not touch history — see navigate, back, forward.
 func (p *Panel) load(dir string) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -99,6 +147,54 @@ func (p *Panel) load(dir string) error {
 	return nil
 }
 
+// navigate is load plus history bookkeeping: on success it records the
+// new path as the current history entry, discarding any "forward" entries
+// beyond where we were — the same behavior a browser's address bar has.
+// Every user-initiated jump (opening a directory, a breadcrumb click, the
+// Home button, submitting the edit field) goes through this; back() and
+// forward() call load() directly instead, since they must not themselves
+// create new history entries.
+func (p *Panel) navigate(dir string) error {
+	if err := p.load(dir); err != nil {
+		return err
+	}
+
+	if len(p.history) == 0 {
+		p.history = []string{p.path}
+		p.historyIdx = 0
+		return nil
+	}
+
+	if p.history[p.historyIdx] == p.path {
+		return nil // already there; don't push a duplicate entry
+	}
+
+	p.history = append(p.history[:p.historyIdx+1], p.path)
+	p.historyIdx = len(p.history) - 1
+	return nil
+}
+
+// back steps one entry back in history, if possible.
+func (p *Panel) back() {
+	if p.historyIdx <= 0 {
+		return
+	}
+	p.historyIdx--
+	// A failed load (e.g. the directory was since removed) leaves history
+	// pointing at a path the panel no longer displays; Phase 1 has no
+	// error dialog yet to surface that, so it's silently left as is.
+	_ = p.load(p.history[p.historyIdx])
+}
+
+// forward steps one entry forward in history, if possible.
+func (p *Panel) forward() {
+	if p.historyIdx >= len(p.history)-1 {
+		return
+	}
+	p.historyIdx++
+	_ = p.load(p.history[p.historyIdx])
+}
+
 // onSelect handles Enter (or a mouse click) on the currently highlighted
 // item. Entering a directory reloads the panel there; a regular file is a
 // no-op for now — opening/viewing files is a later phase.
@@ -113,10 +209,7 @@ func (p *Panel) onSelect(index int, mainText, secondaryText string, shortcut run
 		return
 	}
 
-	// Errors (e.g. permission denied) are swallowed for now: Phase 0 has
-	// no error dialog yet, and load() only mutates state on success, so
-	// the panel simply stays on its current listing.
-	_ = p.load(target)
+	_ = p.navigate(target)
 }
 
 // EntryAt returns the item name shown at screen row y, or ok=false if y
@@ -141,43 +234,67 @@ func (p *Panel) EntryAt(y int) (name string, ok bool) {
 	return main, true
 }
 
-// buildHeaderSpans renders abs as " " + abs (unchanged from before) and
-// computes one clickable span per path component — the leading "/" plus
-// each name in between — so that e.g. clicking "b" in "/a/b/c/d" jumps to
-// "/a/b". Column offsets are in runes, which is exact for the common case
-// but, like the rest of Phase 0/1, doesn't yet account for double-width
-// (e.g. CJK) characters in file names.
+// buildHeaderSpans renders the header's display text — Home/Back/Forward
+// button glyphs followed by the path, one clickable span per path
+// component (the leading "/" plus each name in between), e.g. clicking
+// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
+// exact for the common case but, like the rest of Phase 0/1, doesn't yet
+// account for double-width (e.g. CJK) characters in file names.
+//
+// A click that lands in the header but doesn't hit any of these spans
+// (e.g. on a "/" separator, or in empty space after the path) is handled
+// by captureHeaderMouse as "switch to edit mode" — deliberately not
+// represented as a span here, since it's everything else.
 func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
-	const prefix = " "
-	text = prefix + abs
+	var b strings.Builder
+	col := 0
 
-	col := len([]rune(prefix))
-	spans = append(spans, headerSpan{start: col, end: col + 1, target: "/"})
+	button := func(glyph string, action headerAction) {
+		b.WriteByte(' ')
+		col++
+		start := col
+		b.WriteString(glyph)
+		col += len([]rune(glyph))
+		spans = append(spans, headerSpan{start: start, end: col, action: action})
+	}
+	button("~", actionHome)
+	button("<", actionBack)
+	button(">", actionForward)
+	b.WriteString("  ")
+	col += 2
+
+	rootStart := col
+	b.WriteString("/")
 	col++
+	spans = append(spans, headerSpan{start: rootStart, end: col, action: actionNavigate, target: "/"})
 
 	rest := strings.TrimPrefix(abs, "/")
-	if rest == "" {
-		return text, spans
+	if rest != "" {
+		current := ""
+		parts := strings.Split(rest, "/")
+		for i, part := range parts {
+			current += "/" + part
+			width := len([]rune(part))
+			spans = append(spans, headerSpan{start: col, end: col + width, action: actionNavigate, target: current})
+			b.WriteString(part)
+			col += width
+			if i < len(parts)-1 {
+				b.WriteByte('/')
+				col++
+			}
+		}
 	}
 
-	current := ""
-	for _, part := range strings.Split(rest, "/") {
-		current += "/" + part
-		width := len([]rune(part))
-		spans = append(spans, headerSpan{start: col, end: col + width, target: current})
-		col += width + 1 // + 1 for the "/" separator before the next part
-	}
-
-	return text, spans
+	return b.String(), spans
 }
 
-// captureHeaderMouse makes the path header's components clickable without
-// letting tview's default TextView mouse handling run at all: that
-// handler grabs focus on MouseLeftDown, which would silently break
-// arrow-key navigation in the list below (it'd start scrolling the
-// header's text instead). So every mouse event landing within the
-// header's bounds is consumed here — acted on if it's a left click on a
-// component, otherwise just swallowed.
+// captureHeaderMouse drives the header's buttons and breadcrumbs, and
+// falls back to opening the edit field for any other click within the
+// header. It deliberately never lets tview's default TextView mouse
+// handling run: that handler grabs focus on MouseLeftDown, which would
+// silently break arrow-key navigation in the list below (it'd start
+// scrolling the header's text instead). So every mouse event landing
+// within the header's bounds is consumed here.
 func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if !p.header.InRect(event.Position()) {
 		return action, event
@@ -188,13 +305,64 @@ func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventM
 		rectX, _, _, _ := p.header.GetInnerRect()
 		col := x - rectX
 
-		for _, span := range p.headerSpans {
-			if col >= span.start && col < span.end {
-				_ = p.load(span.target)
-				break
-			}
+		if span, ok := p.spanAt(col); ok {
+			p.runHeaderAction(span)
+		} else {
+			p.openEdit()
 		}
 	}
 
 	return tview.MouseConsumed, nil
+}
+
+// spanAt returns the headerSpan covering column col, if any.
+func (p *Panel) spanAt(col int) (headerSpan, bool) {
+	for _, span := range p.headerSpans {
+		if col >= span.start && col < span.end {
+			return span, true
+		}
+	}
+	return headerSpan{}, false
+}
+
+// runHeaderAction executes a clicked button or breadcrumb.
+func (p *Panel) runHeaderAction(span headerSpan) {
+	switch span.action {
+	case actionHome:
+		if home, err := os.UserHomeDir(); err == nil {
+			_ = p.navigate(home)
+		}
+	case actionBack:
+		p.back()
+	case actionForward:
+		p.forward()
+	case actionNavigate:
+		_ = p.navigate(span.target)
+	}
+}
+
+// openEdit switches the header to its editable text field, pre-filled
+// with the current path, and moves keyboard focus there.
+func (p *Panel) openEdit() {
+	p.headerEdit.SetText(p.path)
+	p.headerPages.SwitchToPage(headerEditPage)
+	p.app.SetFocus(p.headerEdit)
+}
+
+// finishEdit handles Enter (submit) and Escape/Tab (cancel) in the header
+// edit field, then always switches back to the display header and returns
+// focus to the list.
+func (p *Panel) finishEdit(key tcell.Key) {
+	defer func() {
+		p.headerPages.SwitchToPage(headerDisplayPage)
+		p.app.SetFocus(p.list)
+	}()
+
+	if key != tcell.KeyEnter {
+		return // cancelled
+	}
+
+	if typed := p.headerEdit.GetText(); typed != "" {
+		_ = p.navigate(typed)
+	}
 }

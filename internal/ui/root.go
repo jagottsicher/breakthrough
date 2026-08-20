@@ -13,6 +13,7 @@ const (
 	panelPage       = "panel"
 	contextMenuPage = "context-menu"
 	renamePage      = "rename"
+	quitConfirmPage = "quit-confirm"
 )
 
 // Root is breakthrough's top-level UI for Phase 1: the directory panel,
@@ -27,24 +28,30 @@ const (
 type Root struct {
 	*tview.Pages
 
-	panel  *Panel
-	menu   *tview.List
-	rename *tview.InputField
+	app *tview.Application
+
+	panel       *Panel
+	menu        *tview.List
+	rename      *tview.InputField
+	quitConfirm *tview.List
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. Only meaningful while one of them is visible.
 	target string
 }
 
-// NewRoot creates the top-level UI rooted at path.
-func NewRoot(path string) (*Root, error) {
-	panel, err := NewPanel(path)
+// NewRoot creates the top-level UI rooted at path. app is passed down to
+// the Panel, which needs it to move keyboard focus into its header's edit
+// field — see Panel.openEdit.
+func NewRoot(app *tview.Application, path string) (*Root, error) {
+	panel, err := NewPanel(app, path)
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Root{
 		Pages: tview.NewPages(),
+		app:   app,
 		panel: panel,
 	}
 
@@ -66,13 +73,52 @@ func NewRoot(path string) (*Root, error) {
 	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
 
+	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
+	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
+	r.quitConfirm.SetMainTextColor(tcell.ColorWhite)
+	r.quitConfirm.SetHighlightFullLine(true)
+	r.quitConfirm.SetBorderPadding(0, 0, 1, 1)
+	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
+	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
+	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
+
 	r.AddPage(panelPage, panel, true, true)
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
+	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 
 	return r, nil
+}
+
+// RequestQuit shows a confirmation overlay instead of quitting right
+// away — Ctrl+X (see cmd/breakthrough) is easy to hit by accident, so the
+// application only actually stops once the user picks "Quit breakthrough"
+// from this overlay (or presses Enter, since it's the default selection).
+func (r *Root) RequestQuit() {
+	width, height := listSize(r.quitConfirm)
+
+	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
+	x := (screenWidth - width) / 2
+	y := (screenHeight - height) / 2
+
+	r.quitConfirm.SetRect(x, y, width, height)
+	r.quitConfirm.SetCurrentItem(0)
+	r.HidePage(contextMenuPage)
+	r.HidePage(renamePage)
+	r.ShowPage(quitConfirmPage)
+}
+
+// confirmQuit is the quit overlay's "Quit breakthrough" action.
+func (r *Root) confirmQuit() {
+	r.app.Stop()
+}
+
+// cancelQuit hides the quit overlay without taking any action (Escape or
+// "Cancel") and hands focus back to whatever was visible underneath.
+func (r *Root) cancelQuit() {
+	r.HidePage(quitConfirmPage)
 }
 
 // captureMouse intercepts right-clicks on the panel to open the context
@@ -99,7 +145,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
-	width, height := r.menuSize()
+	width, height := listSize(r.menu)
 
 	px, py, pw, ph := r.panel.GetInnerRect()
 	if x+width > px+pw {
@@ -121,17 +167,17 @@ func (r *Root) showMenu(x, y int) {
 	r.ShowPage(contextMenuPage)
 }
 
-// menuSize returns the menu's width — the widest item's text plus the
-// 1-char left/right padding set in NewRoot — and its height, one row per
-// item.
-func (r *Root) menuSize() (width, height int) {
-	for i := 0; i < r.menu.GetItemCount(); i++ {
-		main, _ := r.menu.GetItemText(i)
+// listSize returns a no-border, no-secondary-text List's width — the
+// widest item's text plus 1-char left/right padding (see the
+// SetBorderPadding calls in NewRoot) — and its height, one row per item.
+func listSize(l *tview.List) (width, height int) {
+	for i := 0; i < l.GetItemCount(); i++ {
+		main, _ := l.GetItemText(i)
 		if w := len([]rune(main)); w > width {
 			width = w
 		}
 	}
-	return width + 2, r.menu.GetItemCount() // +2: 1-char padding on each side
+	return width + 2, l.GetItemCount() // +2: 1-char padding on each side
 }
 
 // closeMenu hides the context menu without taking any action (Escape) and
