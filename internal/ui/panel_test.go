@@ -196,11 +196,11 @@ func TestResolvePath(t *testing.T) {
 }
 
 func TestCheckboxText(t *testing.T) {
-	if got := checkboxText(false); got != "☐" {
-		t.Errorf("checkboxText(false) = %q, want %q", got, "☐")
+	if got := checkboxText(false); got != "○" {
+		t.Errorf("checkboxText(false) = %q, want %q", got, "○")
 	}
-	if got := checkboxText(true); got != "☑" {
-		t.Errorf("checkboxText(true) = %q, want %q", got, "☑")
+	if got := checkboxText(true); got != "●" {
+		t.Errorf("checkboxText(true) = %q, want %q", got, "●")
 	}
 }
 
@@ -264,16 +264,16 @@ func TestToggleCheckbox(t *testing.T) {
 	if !p.selected[ref.path] {
 		t.Errorf("expected %q to be selected after toggling", ref.path)
 	}
-	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "☑" {
-		t.Errorf("checkbox cell = %q, want ☑", cell.Text)
+	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "●" {
+		t.Errorf("checkbox cell = %q, want ●", cell.Text)
 	}
 
 	p.toggleCheckbox(1)
 	if p.selected[ref.path] {
 		t.Errorf("expected %q to be unselected after toggling twice", ref.path)
 	}
-	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "☐" {
-		t.Errorf("checkbox cell = %q, want ☐", cell.Text)
+	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "○" {
+		t.Errorf("checkbox cell = %q, want ○", cell.Text)
 	}
 }
 
