@@ -329,23 +329,39 @@ func (p *Panel) rowIndexAt(x, y int) (row int, ok bool) {
 	return row, true
 }
 
-// selectRange checks every checkable entry from row from through to,
-// inclusive and order-independent — the effect of a right-button drag
-// across rows (see Root.captureMouse). A row that isn't checkable (the
-// ".." row, if it falls within the range) is silently skipped, same as clicking its
-// checkbox would be.
-func (p *Panel) selectRange(from, to int) {
+// isChecked reports whether row's entry is currently selected. Used to
+// decide a right-button drag's direction (see Root.captureMouse):
+// dragging starting from an unchecked row checks the range, starting from
+// an already-checked row unchecks it — so repeating the same drag over an
+// already-selected range clears it, rather than being a no-op.
+func (p *Panel) isChecked(row int) bool {
+	ref, ok := p.rowRef(row)
+	return ok && p.selected[ref.path]
+}
+
+// selectRange sets every checkable entry from row from through to,
+// inclusive and order-independent, to checked — the effect of a
+// right-button drag across rows (see Root.captureMouse, which derives
+// checked from the press row's state via isChecked so the drag's
+// direction depends on where it started). A row that isn't checkable
+// (the ".." row, if it falls within the range) is silently skipped, same
+// as clicking its checkbox would be.
+func (p *Panel) selectRange(from, to int, checked bool) {
 	if from > to {
 		from, to = to, from
 	}
 	for row := from; row <= to; row++ {
 		ref, ok := p.rowRef(row)
-		if !ok || !ref.checkable || p.selected[ref.path] {
+		if !ok || !ref.checkable || p.selected[ref.path] == checked {
 			continue
 		}
-		p.selected[ref.path] = true
+		if checked {
+			p.selected[ref.path] = true
+		} else {
+			delete(p.selected, ref.path)
+		}
 		if cell := p.table.GetCell(row, colCheckbox); cell != nil {
-			cell.SetText(checkboxText(true))
+			cell.SetText(checkboxText(checked))
 		}
 	}
 }
