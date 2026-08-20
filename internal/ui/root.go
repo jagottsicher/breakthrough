@@ -54,14 +54,21 @@ type Root struct {
 	activePage   string
 	activeWidget tview.Primitive
 
-	// dragStartRow/dragging track a right-button drag in progress, set on
-	// MouseRightDown and consumed on MouseRightUp (see captureMouse). A
-	// plain right-click (no movement) still opens the context menu as
-	// usual — dragging only kicks in once the mouse actually moved, which
-	// tview itself already distinguishes: it only synthesizes
-	// MouseRightClick when the position didn't change between down and
-	// up, so a real drag never reaches that case at all.
+	// dragStartRow/dragChecking/dragging track a right-button drag in
+	// progress, set on MouseRightDown and consumed on MouseRightUp (see
+	// captureMouse). A plain right-click (no movement) still opens the
+	// context menu as usual — dragging only kicks in once the mouse
+	// actually moved, which tview itself already distinguishes: it only
+	// synthesizes MouseRightClick when the position didn't change between
+	// down and up, so a real drag never reaches that case at all.
+	//
+	// dragChecking is decided once, from the press row's checked state at
+	// MouseRightDown, and applied to the whole range on release — not
+	// recomputed per row — so the drag has one consistent direction: from
+	// an unchecked row it checks the range it's dragged over, from an
+	// already-checked row it unchecks that range instead.
 	dragStartRow int
+	dragChecking bool
 	dragging     bool
 }
 
@@ -306,6 +313,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		x, y := event.Position()
 		if row, ok := r.panel.rowIndexAt(x, y); ok {
 			r.dragStartRow = row
+			r.dragChecking = !r.panel.isChecked(row)
 			r.dragging = true
 		} else {
 			r.dragging = false
@@ -326,7 +334,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 			// after this, open the menu as usual.
 			return action, event
 		}
-		r.panel.selectRange(r.dragStartRow, endRow)
+		r.panel.selectRange(r.dragStartRow, endRow, r.dragChecking)
 		return tview.MouseConsumed, nil
 
 	case tview.MouseRightClick:

@@ -164,29 +164,37 @@ func drawnRoot(t *testing.T, dir string) (root *Root, cleanup func()) {
 	return root, screen.Fini
 }
 
+// dragRight performs a right-button drag from row from to row to — the
+// same two actions (MouseRightDown then MouseRightUp) and nothing else, a
+// genuine drag produces; see captureMouse's doc comment for why no
+// MouseRightClick is involved.
+func dragRight(t *testing.T, root *Root, from, to int) {
+	t.Helper()
+
+	fromX, fromY, ok := findRowPos(root.panel.table, from, 80, 24)
+	if !ok {
+		t.Fatalf("could not locate row %d's screen position", from)
+	}
+	toX, toY, ok := findRowPos(root.panel.table, to, 80, 24)
+	if !ok {
+		t.Fatalf("could not locate row %d's screen position", to)
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(fromX, fromY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(toX, toY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+}
+
 // TestRightDragSelectsRange simulates a right-button drag from row 1
-// through row 3 (MouseRightDown then MouseRightUp at a different row, the
-// same two actions — and nothing else — a genuine drag produces; see
-// captureMouse's doc comment for why no MouseRightClick is involved) and
-// checks that exactly those rows end up selected, the context menu never
-// opens, and the drag state is left clean for the next gesture.
+// through row 3 and checks that exactly those rows end up selected, the
+// context menu never opens, and the drag state is left clean for the
+// next gesture.
 func TestRightDragSelectsRange(t *testing.T) {
 	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
 	root, cleanup := drawnRoot(t, dir)
 	defer cleanup()
 
-	startX, startY, ok := findRowPos(root.panel.table, 1, 80, 24)
-	if !ok {
-		t.Fatal("could not locate row 1's screen position")
-	}
-	endX, endY, ok := findRowPos(root.panel.table, 3, 80, 24)
-	if !ok {
-		t.Fatal("could not locate row 3's screen position")
-	}
-
-	handler := root.MouseHandler()
-	handler(tview.MouseRightDown, tcell.NewEventMouse(startX, startY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
-	handler(tview.MouseRightUp, tcell.NewEventMouse(endX, endY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	dragRight(t, root, 1, 3)
 
 	wantSelected := map[int]bool{1: true, 2: true, 3: true, 4: false}
 	for row, want := range wantSelected {
@@ -204,6 +212,40 @@ func TestRightDragSelectsRange(t *testing.T) {
 	}
 	if root.dragging {
 		t.Error("dragging should be cleared after MouseRightUp")
+	}
+}
+
+// TestRightDragAgainDeselects repeats the same drag over an
+// already-selected range and checks that it clears the selection instead
+// of being a no-op: the drag's direction (check vs. uncheck) is decided
+// once, from the press row's state at MouseRightDown, and applied to the
+// whole range — not recomputed per row.
+func TestRightDragAgainDeselects(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	dragRight(t, root, 1, 3)
+	for _, row := range []int{1, 2, 3} {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if !root.panel.selected[ref.path] {
+			t.Fatalf("setup: row %d should be selected after the first drag", row)
+		}
+	}
+
+	dragRight(t, root, 1, 3) // same range again
+
+	for _, row := range []int{1, 2, 3} {
+		ref, _ := root.panel.rowRef(row)
+		if root.panel.selected[ref.path] {
+			t.Errorf("row %d should be unselected after dragging the same range again", row)
+		}
+		if cell := root.panel.table.GetCell(row, colCheckbox); cell.Text != checkboxText(false) {
+			t.Errorf("row %d checkbox cell = %q, want %q", row, cell.Text, checkboxText(false))
+		}
 	}
 }
 
