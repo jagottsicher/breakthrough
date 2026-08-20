@@ -103,12 +103,6 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerEdit.SetBackgroundColor(accentBackgroundColor)
 	p.headerEdit.SetFieldTextColor(tcell.ColorWhite)
 	p.headerEdit.SetDoneFunc(p.finishEdit)
-	p.headerEdit.SetAutocompleteFunc(p.autocompletePath)
-	p.headerEdit.SetAutocompleteStyles(
-		accentBackgroundColor,
-		tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(accentBackgroundColor),
-		tcell.StyleDefault.Foreground(accentBackgroundColor).Background(tcell.ColorWhite),
-	)
 
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
@@ -189,24 +183,32 @@ func (p *Panel) navigate(dir string) error {
 }
 
 // back steps one entry back in history, if possible.
+//
+// The index only moves once the load has actually succeeded: if the
+// directory has since been deleted, moving it anyway would leave
+// historyIdx pointing at a path the panel isn't showing, and the next
+// navigate() would then truncate the forward entries from the wrong
+// position — silently dropping a page the user never left.
 func (p *Panel) back() {
 	if p.historyIdx <= 0 {
 		return
 	}
+	if err := p.load(p.history[p.historyIdx-1]); err != nil {
+		return // Phase 1 has no error dialog yet; stay put rather than lie
+	}
 	p.historyIdx--
-	// A failed load (e.g. the directory was since removed) leaves history
-	// pointing at a path the panel no longer displays; Phase 1 has no
-	// error dialog yet to surface that, so it's silently left as is.
-	_ = p.load(p.history[p.historyIdx])
 }
 
-// forward steps one entry forward in history, if possible.
+// forward steps one entry forward in history, if possible. As in back(),
+// the index only moves once the load has succeeded.
 func (p *Panel) forward() {
 	if p.historyIdx >= len(p.history)-1 {
 		return
 	}
+	if err := p.load(p.history[p.historyIdx+1]); err != nil {
+		return
+	}
 	p.historyIdx++
-	_ = p.load(p.history[p.historyIdx])
 }
 
 // onSelect handles Enter (or a mouse click) on the currently highlighted
@@ -375,7 +377,12 @@ func (p *Panel) closeEdit() {
 // cancelEdit closes the edit field without navigating anywhere — used
 // when a click lands outside it, the same way a browser's address bar
 // reverts to the current URL instead of acting on whatever was typed.
+// Safe to call unconditionally: it does nothing if no edit is in
+// progress.
 func (p *Panel) cancelEdit() {
+	if !p.editing {
+		return
+	}
 	p.closeEdit()
 }
 
@@ -405,41 +412,53 @@ func (p *Panel) captureOutsideEdit(action tview.MouseAction, event *tcell.EventM
 // ends editing by submitting; a click outside the field (see
 // captureOutsideEdit) is the only other way out — Escape and Backtab are
 // deliberately no-ops here so they can't be hit by accident while typing
-// a path. Tab triggers bash-style completion: SetAutocompleteFunc is only
-// invoked here (and not by tview itself opening a drop-down) when Tab is
-// pressed while no drop-down is currently open — once one is open, Tab
-// instead selects the highlighted entry without ever reaching this
-// function (see InputField's InputHandler).
+// a path. Tab completes the path in place, bash-style.
 func (p *Panel) finishEdit(key tcell.Key) {
 	switch key {
 	case tcell.KeyEnter:
 		if typed := p.headerEdit.GetText(); typed != "" {
-			_ = p.navigate(typed)
+			_ = p.navigate(p.resolvePath(typed))
 		}
 		p.closeEdit()
 	case tcell.KeyTab:
-		p.headerEdit.Autocomplete()
+		p.completePath()
 	}
 }
 
-// autocompletePath is the header edit field's autocomplete callback:
-// bash-style completion of the path component after the last "/" against
-// the actual directory listing, returned as full strings ready to replace
-// the field's entire text (matching InputField's default "replace on
-// selection" behavior) — directories get a trailing "/" so completion can
-// be chained into their contents.
-func (p *Panel) autocompletePath(currentText string) []string {
+// completePath is the Tab handler: it extends whatever is typed to the
+// longest unambiguous completion, exactly like bash does — a single match
+// completes fully, several matches complete as far as they agree, and no
+// match leaves the text alone.
+//
+// This deliberately does not use tview's InputField autocomplete
+// (SetAutocompleteFunc), even though it exists: that renders a drop-down
+// *outside* the field's own rect, which the header's mouse capture would
+// have to know about to avoid swallowing clicks meant for it, and its
+// callback fires on every keystroke — a full directory read per typed
+// character. Completing in place has neither problem and is closer to
+// what bash actually does.
+func (p *Panel) completePath() {
+	matches := p.completions(p.headerEdit.GetText())
+	if len(matches) == 0 {
+		return
+	}
+	p.headerEdit.SetText(longestCommonPrefix(matches))
+}
+
+// completions returns the possible expansions of currentText: the path
+// component after the last "/" matched, case-insensitively, against the
+// real contents of the directory before it. Directories come back with a
+// trailing "/" so completion chains into them. Results keep the text the
+// user typed (including a leading "~" or a relative path) rather than the
+// resolved absolute form, so completing doesn't rewrite the field into
+// something the user didn't type.
+func (p *Panel) completions(currentText string) []string {
 	dir, prefix := "", currentText
 	if idx := strings.LastIndex(currentText, "/"); idx >= 0 {
 		dir, prefix = currentText[:idx+1], currentText[idx+1:]
 	}
 
-	lookupDir := dir
-	if lookupDir == "" {
-		lookupDir = "."
-	}
-
-	entries, err := fsops.ListDir(lookupDir)
+	entries, err := fsops.ListDir(p.resolvePath(dir))
 	if err != nil {
 		return nil
 	}
@@ -457,4 +476,51 @@ func (p *Panel) autocompletePath(currentText string) []string {
 		matches = append(matches, dir+name)
 	}
 	return matches
+}
+
+// resolvePath turns text typed into the header into an absolute path: a
+// leading "~" expands to the user's home directory (the header has a "~"
+// button doing the same thing, so users reasonably expect it), and a
+// relative path resolves against the directory the panel is currently
+// showing — not the process's working directory, which stops matching
+// what the user sees the moment they navigate anywhere.
+func (p *Panel) resolvePath(input string) string {
+	switch {
+	case input == "~":
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+	case strings.HasPrefix(input, "~/"):
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, input[len("~/"):])
+		}
+	}
+
+	if filepath.IsAbs(input) {
+		return input
+	}
+	return filepath.Join(p.path, input)
+}
+
+// longestCommonPrefix returns the longest prefix shared by all values,
+// compared by rune so it can never cut a multi-byte character in half.
+func longestCommonPrefix(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	prefix := []rune(values[0])
+	for _, value := range values[1:] {
+		runes := []rune(value)
+		if len(runes) < len(prefix) {
+			prefix = prefix[:len(runes)]
+		}
+		for i := range prefix {
+			if prefix[i] != runes[i] {
+				prefix = prefix[:i]
+				break
+			}
+		}
+	}
+	return string(prefix)
 }

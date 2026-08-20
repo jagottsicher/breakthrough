@@ -40,14 +40,7 @@ func (r *Root) openInfo() {
 
 	x, y, _, _ := r.menu.GetRect()
 	width, height := textSize(text)
-	if px, py, pw, ph := r.panel.GetInnerRect(); pw > 0 {
-		if x+width > px+pw {
-			x = px + pw - width
-		}
-		if y+height > py+ph {
-			y = py + ph - height
-		}
-	}
+	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.info.SetRect(x, y, width, height)
 
 	r.showOverlay(infoPage, r.info)

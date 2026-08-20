@@ -143,24 +143,33 @@ func (r *Root) hideOverlay() {
 	r.app.SetFocus(r.panel)
 }
 
-// captureOutsideClick closes whichever overlay is currently open when the
-// user clicks anywhere outside of it, instead of leaving it stuck open —
-// consuming that click rather than also letting it act on the panel
-// underneath, so it takes a second click to do anything else.
+// captureOutsideClick keeps the panel underneath an open overlay inert:
+// a click outside the overlay closes it (instead of leaving it stuck
+// open) and is consumed rather than also acting on the panel, so it takes
+// a second click to do anything else. Scrolling is swallowed outright
+// while an overlay is open — letting it through would scroll the list out
+// from under a menu that stays put, which both looks wrong and would
+// leave targetRow (see openRename) pointing at a different file than the
+// one the menu was opened for.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}
-	if action != tview.MouseLeftClick && action != tview.MouseRightClick {
-		return action, event
-	}
+
 	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
-		return action, event // click landed on the open overlay itself
+		return action, event // event landed on the open overlay itself
 	}
 
-	r.hideOverlay()
-	return tview.MouseConsumed, nil
+	switch action {
+	case tview.MouseLeftClick, tview.MouseRightClick:
+		r.hideOverlay()
+		return tview.MouseConsumed, nil
+	case tview.MouseScrollUp, tview.MouseScrollDown, tview.MouseScrollLeft, tview.MouseScrollRight:
+		return tview.MouseConsumed, nil
+	default:
+		return action, event
+	}
 }
 
 // primitiveContains reports whether (x, y) falls within p's rectangle.
@@ -169,11 +178,49 @@ func primitiveContains(p tview.Primitive, x, y int) bool {
 	return x >= rx && x < rx+w && y >= ry && y < ry+h
 }
 
+// clampToPanel keeps an overlay of the given size fully inside the
+// panel's inner rect, shrinking it first if it can't fit at all — a long
+// path in the Info view is easily wider than an 80-column terminal, and
+// without this the labelled left edge gets pushed off-screen.
+func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
+	px, py, pw, ph := r.panel.GetInnerRect()
+	if pw <= 0 || ph <= 0 {
+		return x, y, width, height
+	}
+
+	if width > pw {
+		width = pw
+	}
+	if height > ph {
+		height = ph
+	}
+	if x+width > px+pw {
+		x = px + pw - width
+	}
+	if y+height > py+ph {
+		y = py + ph - height
+	}
+	if x < px {
+		x = px
+	}
+	if y < py {
+		y = py
+	}
+
+	return x, y, width, height
+}
+
 // RequestQuit shows a confirmation overlay instead of quitting right
 // away — Ctrl+X (see cmd/breakthrough) is easy to hit by accident, so the
 // application only actually stops once the user picks "Quit breakthrough"
 // from this overlay (or presses Enter, since it's the default selection).
 func (r *Root) RequestQuit() {
+	// Ctrl+X is a global key capture, so it can arrive while the header
+	// is mid-edit. Without this the edit field would stay on screen after
+	// cancelling the quit, focused-looking but unreachable, since
+	// hideOverlay hands focus to the panel's list rather than back to it.
+	r.panel.cancelEdit()
+
 	width, height := listSize(r.quitConfirm)
 
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
@@ -232,20 +279,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
 	width, height := listSize(r.menu)
-
-	px, py, pw, ph := r.panel.GetInnerRect()
-	if x+width > px+pw {
-		x = px + pw - width
-	}
-	if y+height > py+ph {
-		y = py + ph - height
-	}
-	if x < px {
-		x = px
-	}
-	if y < py {
-		y = py
-	}
+	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.menu.SetRect(x, y, width, height)
 	r.menu.SetCurrentItem(0)
@@ -277,9 +311,10 @@ func (r *Root) closeMenu() {
 // with the current name.
 func (r *Root) openRename() {
 	x, _, width, _ := r.panel.list.GetInnerRect()
+	x, y, width, height := r.clampToPanel(x, r.targetRow, width, 1)
 
 	r.rename.SetText(filepath.Base(r.target))
-	r.rename.SetRect(x, r.targetRow, width, 1)
+	r.rename.SetRect(x, y, width, height)
 
 	r.showOverlay(renamePage, r.rename)
 }
