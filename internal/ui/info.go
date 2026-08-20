@@ -50,13 +50,12 @@ func (r *Root) openInfo() {
 	}
 	r.info.SetRect(x, y, width, height)
 
-	r.HidePage(contextMenuPage)
-	r.ShowPage(infoPage)
+	r.showOverlay(infoPage, r.info)
 }
 
-// closeInfo hides the info overlay and hands focus back to the panel.
+// closeInfo hides the info overlay (Escape, Enter, or Tab).
 func (r *Root) closeInfo() {
-	r.HidePage(infoPage)
+	r.hideOverlay()
 }
 
 // formatInfo renders info as labeled lines — the same facts `ls -halF`

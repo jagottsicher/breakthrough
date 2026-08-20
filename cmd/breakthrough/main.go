@@ -2,10 +2,11 @@
 // manager.
 //
 // Phase 0/1: a single panel showing the current directory, navigable with
-// the arrow keys and Enter, plus a right-click context menu with exactly
-// one action (Rename). Further actions and a second panel land in later,
-// vertically-sliced feature branches (see docs/whitepaper.md for the
-// overall concept).
+// the arrow keys, Enter, and a browser-style path header (Home/Back/
+// Forward, clickable breadcrumbs, click-to-edit), plus a right-click
+// context menu (Info, Rename). A second panel and further actions land in
+// later, vertically-sliced feature branches (see docs/whitepaper.md for
+// the overall concept).
 package main
 
 import (
