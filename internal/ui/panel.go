@@ -21,15 +21,30 @@ const (
 	headerEditPage    = "edit"
 )
 
+// Table columns. There is deliberately no header row labelling them (the
+// path bar above already orients the user); these just index into
+// table.SetCell/GetCell.
+const (
+	colCheckbox = iota
+	colName
+)
+
 // Panel is the single directory-listing view for Phase 0/1: a one-line,
-// browser-address-bar-style header above a list of entries. The header has
-// Home/Back/Forward buttons followed by the path, whose components are
-// individually clickable (clicking "b" in /a/b/c/d jumps to /a/b);
+// browser-address-bar-style header above a table of entries. The header
+// has Home/Back/Forward buttons followed by the path, whose components
+// are individually clickable (clicking "b" in /a/b/c/d jumps to /a/b);
 // clicking anywhere else in the header (e.g. the empty space after the
 // path) switches it to a plain editable text field, like a browser URL
-// bar. The list below is navigable with the arrow keys (built into
-// tview.List) and Enter, plus (via Root) a right-click context menu. No
-// borders anywhere — see accentBackgroundColor.
+// bar. The table below is navigable with the arrow keys (built into
+// tview.Table) and Enter, has a clickable checkbox column for marking
+// entries, and (via Root) a right-click context menu. No borders anywhere
+// — see accentBackgroundColor.
+//
+// A tview.Table, not tview.List: a checkbox column needs a second column
+// at all, which List doesn't have, and Table.CellAt/TableCell.Reference
+// give exact hit-testing and per-row data for free — no more hand-rolled
+// coordinate math (see RowAt, and contrast with Phase 1's since-removed
+// EntryAt, which had to reimplement List's own unexported indexAtPoint).
 type Panel struct {
 	*tview.Flex
 
@@ -39,10 +54,16 @@ type Panel struct {
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
 
-	list *tview.List
+	table *tview.Table
 
 	// path is the absolute path currently shown.
 	path string
+
+	// selected holds the absolute paths currently checked in the checkbox
+	// column. Reset on every successful load() — selection is scoped to
+	// the directory currently on screen, not carried across navigation,
+	// matching how most file managers treat it.
+	selected map[string]bool
 
 	// headerSpans locates each clickable region in the header's display
 	// text (see buildHeaderSpans), rebuilt on every load().
@@ -89,16 +110,29 @@ type headerSpan struct {
 	target     string // only meaningful for actionNavigate
 }
 
+// rowRef is attached to each row's name cell via TableCell.SetReference,
+// so a row's data can be read straight off the cell instead of being
+// re-derived from its displayed text or its index.
+type rowRef struct {
+	path      string // absolute path; for the ".." row, its parent directory
+	name      string // display name, ".." for the parent-directory row
+	isDir     bool
+	checkable bool // false for "..", which can't be a file operation target
+}
+
 // NewPanel creates a Panel rooted at path. app is needed to move keyboard
 // focus into the header's edit field on click and back to the list
 // afterwards — see Panel.openEdit.
 func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p := &Panel{
-		Flex: tview.NewFlex().SetDirection(tview.FlexRow),
-		app:  app,
-		list: tview.NewList().ShowSecondaryText(false),
+		Flex:  tview.NewFlex().SetDirection(tview.FlexRow),
+		app:   app,
+		table: tview.NewTable(),
 	}
-	p.list.SetHighlightFullLine(true)
+	p.table.SetBorders(false)
+	p.table.SetSelectable(true, false) // whole rows, not individual cells
+	p.table.SetSelectedFunc(func(row, column int) { p.activateRow(row) })
+	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
 
 	p.header = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	p.header.SetWrap(false)
@@ -116,18 +150,17 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
 
 	p.AddItem(p.headerPages, 1, 0, false) // fixed one-line header
-	p.AddItem(p.list, 0, 1, true)         // fills the rest, holds focus
+	p.AddItem(p.table, 0, 1, true)        // fills the rest, holds focus
 
 	if err := p.navigate(path); err != nil {
 		return nil, err
 	}
-	p.list.SetSelectedFunc(p.onSelect)
 
 	return p, nil
 }
 
 // load replaces the panel's contents with the entries of dir. It only
-// mutates the panel's state (path, header, list items) once ListDir has
+// mutates the panel's state (path, header, table rows) once ListDir has
 // succeeded, so a failed load leaves the panel showing whatever it showed
 // before. It does not touch history — see navigate, back, forward.
 func (p *Panel) load(dir string) error {
@@ -141,25 +174,136 @@ func (p *Panel) load(dir string) error {
 		return err
 	}
 
-	p.list.Clear()
+	p.table.Clear()
+	p.selected = make(map[string]bool)
 	p.path = abs
 
 	text, spans := buildHeaderSpans(abs)
 	p.header.SetText(text)
 	p.headerSpans = spans
 
+	row := 0
 	if parent := filepath.Dir(abs); parent != abs {
-		p.list.AddItem("..", "", 0, nil)
+		p.addRow(row, rowRef{path: parent, name: "..", isDir: true, checkable: false})
+		row++
 	}
 	for _, e := range entries {
-		label := e.Name
-		if e.IsDir {
-			label += "/"
-		}
-		p.list.AddItem(label, "", 0, nil)
+		p.addRow(row, rowRef{path: filepath.Join(abs, e.Name), name: e.Name, isDir: e.IsDir, checkable: true})
+		row++
 	}
 
 	return nil
+}
+
+// addRow renders one table row for ref at the given row index.
+func (p *Panel) addRow(row int, ref rowRef) {
+	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(tcell.ColorWhite)
+	if !ref.checkable {
+		checkbox.SetText("   ")
+	} else {
+		checkbox.SetClickedFunc(func() bool {
+			p.toggleCheckbox(row)
+			return true // handled; don't also move the row selection
+		})
+	}
+	p.table.SetCell(row, colCheckbox, checkbox)
+
+	label := ref.name
+	if ref.isDir {
+		label += "/"
+	}
+	name := tview.NewTableCell(label).SetTextColor(tcell.ColorWhite)
+	name.SetReference(ref)
+	name.SetExpansion(1) // consume the rest of the row's width
+	name.SetClickedFunc(func() bool {
+		p.activateRow(row)
+		return false // still let the row become selected/highlighted
+	})
+	p.table.SetCell(row, colName, name)
+}
+
+// checkboxText renders the checkbox column's two states. Plain ASCII
+// brackets rather than Unicode box glyphs, matching the header's "~ < >"
+// buttons — reliable across terminal fonts rather than assuming Unicode
+// glyph support.
+func checkboxText(checked bool) string {
+	if checked {
+		return "[x]"
+	}
+	return "[ ]"
+}
+
+// rowRef returns the rowRef attached to row's name cell, if any.
+func (p *Panel) rowRef(row int) (rowRef, bool) {
+	cell := p.table.GetCell(row, colName)
+	if cell == nil {
+		return rowRef{}, false
+	}
+	ref, ok := cell.GetReference().(rowRef)
+	return ref, ok
+}
+
+// toggleCheckbox flips whether row's entry is selected and updates the
+// checkbox cell's text to match. A no-op for the ".." row (checkable
+// false) or a row with no rowRef at all — the latter shouldn't be
+// reachable, but this stays defensive rather than assume it. The ".."
+// guard matters here specifically because, unlike a plain mouse click,
+// captureTableKey's Space shortcut reaches this directly regardless of
+// which row is currently selected.
+func (p *Panel) toggleCheckbox(row int) {
+	ref, ok := p.rowRef(row)
+	if !ok || !ref.checkable {
+		return
+	}
+
+	checked := !p.selected[ref.path]
+	if checked {
+		p.selected[ref.path] = true
+	} else {
+		delete(p.selected, ref.path)
+	}
+
+	if cell := p.table.GetCell(row, colCheckbox); cell != nil {
+		cell.SetText(checkboxText(checked))
+	}
+}
+
+// captureTableKey handles the one key the table needs beyond its built-in
+// navigation: Space toggles the checkbox on the currently selected row,
+// the same action a click on that row's checkbox performs.
+func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
+		row, _ := p.table.GetSelection()
+		p.toggleCheckbox(row)
+		return nil
+	}
+	return event
+}
+
+// activateRow is what Enter and a click on the name cell both do: enter
+// the row's directory, or do nothing for a regular file — opening/viewing
+// files is a later phase. Ignores the checkbox column: a click there is
+// handled by its own TableCell.ClickedFunc instead (see addRow), which
+// returns true specifically so this never also runs for it.
+func (p *Panel) activateRow(row int) {
+	ref, ok := p.rowRef(row)
+	if !ok || !ref.isDir {
+		return
+	}
+	p.reportError(p.navigate(ref.path))
+}
+
+// RowAt returns the absolute path of the entry at screen position (x, y),
+// or ok=false if that position isn't a selectable entry — outside the
+// table, past the last row, or the ".." row, which isn't a file operation
+// target. Used by Root to find which entry was right-clicked.
+func (p *Panel) RowAt(x, y int) (path string, ok bool) {
+	row, _ := p.table.CellAt(x, y)
+	ref, ok := p.rowRef(row)
+	if !ok || ref.name == ".." {
+		return "", false
+	}
+	return ref.path, true
 }
 
 // navigate is load plus history bookkeeping: on success it records the
@@ -226,45 +370,6 @@ func (p *Panel) forward() {
 		return
 	}
 	p.historyIdx++
-}
-
-// onSelect handles Enter (or a mouse click) on the currently highlighted
-// item. Entering a directory reloads the panel there; a regular file is a
-// no-op for now — opening/viewing files is a later phase.
-func (p *Panel) onSelect(index int, mainText, secondaryText string, shortcut rune) {
-	var target string
-	switch {
-	case mainText == "..":
-		target = filepath.Dir(p.path)
-	case strings.HasSuffix(mainText, "/"):
-		target = filepath.Join(p.path, strings.TrimSuffix(mainText, "/"))
-	default:
-		return
-	}
-
-	p.reportError(p.navigate(target))
-}
-
-// EntryAt returns the item name shown at screen row y, or ok=false if y
-// is outside the list or doesn't correspond to an item.
-//
-// tview.List has an equivalent indexAtPoint, but it's unexported, so this
-// reimplements it for the fixed configuration this Panel always uses
-// (single-line items, i.e. ShowSecondaryText(false) — see NewPanel).
-func (p *Panel) EntryAt(y int) (name string, ok bool) {
-	_, rectY, _, height := p.list.GetInnerRect()
-	if y < rectY || y >= rectY+height {
-		return "", false
-	}
-
-	offset, _ := p.list.GetOffset()
-	index := y - rectY + offset
-	if index < 0 || index >= p.list.GetItemCount() {
-		return "", false
-	}
-
-	main, _ := p.list.GetItemText(index)
-	return main, true
 }
 
 // buildHeaderSpans renders the header's display text — Home/Back/Forward
@@ -387,11 +492,11 @@ func (p *Panel) openEdit() {
 }
 
 // closeEdit switches back to the display header and returns focus to the
-// list. Shared by finishEdit's Enter case and cancelEdit.
+// table. Shared by finishEdit's Enter case and cancelEdit.
 func (p *Panel) closeEdit() {
 	p.editing = false
 	p.headerPages.SwitchToPage(headerDisplayPage)
-	p.app.SetFocus(p.list)
+	p.app.SetFocus(p.table)
 }
 
 // cancelEdit closes the edit field without navigating anywhere — used

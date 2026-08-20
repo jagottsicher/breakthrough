@@ -41,7 +41,7 @@ type Root struct {
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its screen row in the panel's
-	// list, used to position the rename field exactly over that row.
+	// table, used to position the rename field exactly over that row.
 	// Only meaningful while one of the overlays below is visible.
 	target    string
 	targetRow int
@@ -225,7 +225,7 @@ func (r *Root) RequestQuit() {
 	// Ctrl+X is a global key capture, so it can arrive while the header
 	// is mid-edit. Without this the edit field would stay on screen after
 	// cancelling the quit, focused-looking but unreachable, since
-	// hideOverlay hands focus to the panel's list rather than back to it.
+	// hideOverlay hands focus to the panel's table rather than back to it.
 	r.panel.cancelEdit()
 
 	width, height := listSize(r.quitConfirm)
@@ -267,7 +267,7 @@ func (r *Root) cancelQuit() {
 
 // captureMouse intercepts right-clicks on the panel to open the context
 // menu. Everything else (left-click, scrolling) passes through unchanged
-// to the panel's own handling — see Panel.onSelect for that.
+// to the panel's own handling — see Panel.activateRow for that.
 //
 // This is also where Panel.captureOutsideEdit gets a chance to run first:
 // only one SetMouseCapture can be installed on Panel at a time, and Root
@@ -284,12 +284,12 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 	}
 
 	x, y := event.Position()
-	name, ok := r.panel.EntryAt(y)
-	if !ok || name == ".." {
+	path, ok := r.panel.RowAt(x, y)
+	if !ok {
 		return action, event // nothing sensible to act on
 	}
 
-	r.target = filepath.Join(r.panel.path, name)
+	r.target = path
 	r.targetRow = y
 	r.showMenu(x, y)
 
@@ -328,11 +328,11 @@ func (r *Root) closeMenu() {
 
 // openRename is the context menu's "Rename" action. Rather than a prompt
 // floating near the menu, it positions the rename field exactly over the
-// target's own row in the list — same x, width, and height as that row —
+// target's own row in the table — same x, width, and height as that row —
 // so it reads as the row itself becoming editable in place, pre-filled
 // with the current name.
 func (r *Root) openRename() {
-	x, _, width, _ := r.panel.list.GetInnerRect()
+	x, _, width, _ := r.panel.table.GetInnerRect()
 	x, y, width, height := r.clampToPanel(x, r.targetRow, width, 1)
 
 	r.rename.SetText(filepath.Base(r.target))
