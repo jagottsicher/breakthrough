@@ -199,11 +199,14 @@ func (p *Panel) load(dir string) error {
 func (p *Panel) addRow(row int, ref rowRef) {
 	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(tcell.ColorWhite)
 	if !ref.checkable {
-		checkbox.SetText("   ")
+		checkbox.SetText(" ")
 	} else {
 		checkbox.SetClickedFunc(func() bool {
 			p.toggleCheckbox(row)
-			return true // handled; don't also move the row selection
+			return false // also let the row become selected/highlighted,
+			// the same visible feedback a click anywhere else in the row
+			// gives — a checked/unchecked glyph flipping is easy to miss
+			// on its own, especially if the click landed a column off.
 		})
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
@@ -222,15 +225,18 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	p.table.SetCell(row, colName, name)
 }
 
-// checkboxText renders the checkbox column's two states. Plain ASCII
-// brackets rather than Unicode box glyphs, matching the header's "~ < >"
-// buttons — reliable across terminal fonts rather than assuming Unicode
-// glyph support.
+// checkboxText renders the checkbox column's two states as Unicode ballot
+// box glyphs (☐/☑) — breakthrough already commits to UTF-8 support (see
+// docs/whitepaper.md), and an empty-vs-filled box reads at a glance in a
+// way "[ ]" vs "[x]" doesn't: that swap is one character out of three,
+// easy to miss, especially since — unlike a click elsewhere in the row —
+// the checkbox column used to not highlight the row on click either (that
+// changed too, see addRow).
 func checkboxText(checked bool) string {
 	if checked {
-		return "[x]"
+		return "☑"
 	}
-	return "[ ]"
+	return "☐"
 }
 
 // rowRef returns the rowRef attached to row's name cell, if any.
