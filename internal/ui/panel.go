@@ -225,18 +225,19 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	p.table.SetCell(row, colName, name)
 }
 
-// checkboxText renders the checkbox column's two states as Unicode ballot
-// box glyphs (☐/☑) — breakthrough already commits to UTF-8 support (see
-// docs/whitepaper.md), and an empty-vs-filled box reads at a glance in a
-// way "[ ]" vs "[x]" doesn't: that swap is one character out of three,
-// easy to miss, especially since — unlike a click elsewhere in the row —
-// the checkbox column used to not highlight the row on click either (that
-// changed too, see addRow).
+// checkboxText renders the checkbox column's two states as an outline vs.
+// filled circle (○/●) — breakthrough already commits to UTF-8 support
+// (see docs/whitepaper.md). A blank space for "unchecked" was considered
+// and rejected: it would make the checkbox column invisible whenever a
+// row isn't checked, losing the "there's something clickable here" cue
+// entirely rather than just being subtle about it (see the ballot-box
+// glyphs this replaced, and addRow's now-highlight-on-click for the
+// other half of that fix).
 func checkboxText(checked bool) string {
 	if checked {
-		return "☑"
+		return "●"
 	}
-	return "☐"
+	return "○"
 }
 
 // rowRef returns the rowRef attached to row's name cell, if any.
