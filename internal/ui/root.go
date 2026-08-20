@@ -54,6 +54,8 @@ func NewRoot(path string) (*Root, error) {
 	r.menu = tview.NewList().ShowSecondaryText(false)
 	r.menu.SetBackgroundColor(accentBackgroundColor)
 	r.menu.SetMainTextColor(tcell.ColorWhite)
+	r.menu.SetHighlightFullLine(true)
+	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
@@ -97,7 +99,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
-	const width, height = 14, 1 // no border: just the one "Rename" line
+	width, height := r.menuSize()
 
 	px, py, pw, ph := r.panel.GetInnerRect()
 	if x+width > px+pw {
@@ -117,6 +119,19 @@ func (r *Root) showMenu(x, y int) {
 	r.menu.SetCurrentItem(0)
 	r.HidePage(renamePage)
 	r.ShowPage(contextMenuPage)
+}
+
+// menuSize returns the menu's width — the widest item's text plus the
+// 1-char left/right padding set in NewRoot — and its height, one row per
+// item.
+func (r *Root) menuSize() (width, height int) {
+	for i := 0; i < r.menu.GetItemCount(); i++ {
+		main, _ := r.menu.GetItemText(i)
+		if w := len([]rune(main)); w > width {
+			width = w
+		}
+	}
+	return width + 2, r.menu.GetItemCount() // +2: 1-char padding on each side
 }
 
 // closeMenu hides the context menu without taking any action (Escape) and
