@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/rivo/tview"
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
@@ -190,5 +192,110 @@ func TestResolvePath(t *testing.T) {
 		if got := p.resolvePath(tt.input); got != tt.want {
 			t.Errorf("resolvePath(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestCheckboxText(t *testing.T) {
+	if got := checkboxText(false); got != "[ ]" {
+		t.Errorf("checkboxText(false) = %q, want %q", got, "[ ]")
+	}
+	if got := checkboxText(true); got != "[x]" {
+		t.Errorf("checkboxText(true) = %q, want %q", got, "[x]")
+	}
+}
+
+// TestPanelLoadPopulatesTable checks that load() builds one table row per
+// entry, in the same directories-first order ListDir already guarantees,
+// each carrying the rowRef that the rest of the table logic (activateRow,
+// toggleCheckbox, RowAt) depends on.
+func TestPanelLoadPopulatesTable(t *testing.T) {
+	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	// dir has a parent, so row 0 is "..".
+	wantNames := []string{"..", "app-data", "apple.txt", "apricot.txt", "banana.txt"}
+	wantDirs := []bool{true, true, false, false, false}
+
+	if got := p.table.GetRowCount(); got != len(wantNames) {
+		t.Fatalf("got %d rows, want %d", got, len(wantNames))
+	}
+
+	for row, wantName := range wantNames {
+		ref, ok := p.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if ref.name != wantName {
+			t.Errorf("row %d: name = %q, want %q", row, ref.name, wantName)
+		}
+		if ref.isDir != wantDirs[row] {
+			t.Errorf("row %d (%s): isDir = %v, want %v", row, ref.name, ref.isDir, wantDirs[row])
+		}
+	}
+}
+
+func TestToggleCheckbox(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	// Row 0 is "..", which addRow marks not checkable.
+	p.toggleCheckbox(0)
+	if len(p.selected) != 0 {
+		t.Errorf("toggling \"..\" should not select anything, got %v", p.selected)
+	}
+	if cell := p.table.GetCell(0, colCheckbox); cell.Text != "   " {
+		t.Errorf("\"..\" checkbox cell = %q, want blank", cell.Text)
+	}
+
+	// Row 1 (app-data) is a normal, checkable entry.
+	ref, ok := p.rowRef(1)
+	if !ok {
+		t.Fatal("row 1: no rowRef")
+	}
+
+	p.toggleCheckbox(1)
+	if !p.selected[ref.path] {
+		t.Errorf("expected %q to be selected after toggling", ref.path)
+	}
+	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "[x]" {
+		t.Errorf("checkbox cell = %q, want [x]", cell.Text)
+	}
+
+	p.toggleCheckbox(1)
+	if p.selected[ref.path] {
+		t.Errorf("expected %q to be unselected after toggling twice", ref.path)
+	}
+	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "[ ]" {
+		t.Errorf("checkbox cell = %q, want [ ]", cell.Text)
+	}
+}
+
+// TestPanelLoadResetsSelection pins the documented behavior that
+// selection is scoped to the directory on screen: navigating away and
+// loading a new directory must not carry old checkmarks forward.
+func TestPanelLoadResetsSelection(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.toggleCheckbox(1)
+	if len(p.selected) != 1 {
+		t.Fatalf("setup: expected 1 selected entry, got %d", len(p.selected))
+	}
+
+	if err := p.load(dir); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(p.selected) != 0 {
+		t.Errorf("expected selection to be cleared after load, got %v", p.selected)
 	}
 }
