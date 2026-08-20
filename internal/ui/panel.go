@@ -53,6 +53,14 @@ type Panel struct {
 	// forward entries first); back()/forward() only move historyIdx.
 	history    []string
 	historyIdx int
+
+	// editing is true while the header's edit field is shown. Root's
+	// captureMouse calls captureOutsideEdit before its own logic (only
+	// one SetMouseCapture can be installed on Panel, and Root already
+	// owns that slot for right-click detection), so it needs this to
+	// know whether a click landing outside the edit field should cancel
+	// editing.
+	editing bool
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -95,6 +103,12 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerEdit.SetBackgroundColor(accentBackgroundColor)
 	p.headerEdit.SetFieldTextColor(tcell.ColorWhite)
 	p.headerEdit.SetDoneFunc(p.finishEdit)
+	p.headerEdit.SetAutocompleteFunc(p.autocompletePath)
+	p.headerEdit.SetAutocompleteStyles(
+		accentBackgroundColor,
+		tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(accentBackgroundColor),
+		tcell.StyleDefault.Foreground(accentBackgroundColor).Background(tcell.ColorWhite),
+	)
 
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
@@ -344,25 +358,103 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // openEdit switches the header to its editable text field, pre-filled
 // with the current path, and moves keyboard focus there.
 func (p *Panel) openEdit() {
+	p.editing = true
 	p.headerEdit.SetText(p.path)
 	p.headerPages.SwitchToPage(headerEditPage)
 	p.app.SetFocus(p.headerEdit)
 }
 
-// finishEdit handles Enter (submit) and Escape/Tab (cancel) in the header
-// edit field, then always switches back to the display header and returns
-// focus to the list.
+// closeEdit switches back to the display header and returns focus to the
+// list. Shared by finishEdit's Enter case and cancelEdit.
+func (p *Panel) closeEdit() {
+	p.editing = false
+	p.headerPages.SwitchToPage(headerDisplayPage)
+	p.app.SetFocus(p.list)
+}
+
+// cancelEdit closes the edit field without navigating anywhere — used
+// when a click lands outside it, the same way a browser's address bar
+// reverts to the current URL instead of acting on whatever was typed.
+func (p *Panel) cancelEdit() {
+	p.closeEdit()
+}
+
+// captureOutsideEdit is called by Root.captureMouse (see the editing
+// field's doc comment for why it can't just be Panel's own
+// SetMouseCapture) before Root does anything else. If the header is being
+// edited and the click landed outside the edit field, it cancels editing
+// and reports that it handled the click, so Root doesn't also act on it
+// (e.g. by opening the context menu on a stray right-click).
+func (p *Panel) captureOutsideEdit(action tview.MouseAction, event *tcell.EventMouse) (consumed bool) {
+	if !p.editing {
+		return false
+	}
+	if action != tview.MouseLeftClick && action != tview.MouseRightClick {
+		return false
+	}
+	x, y := event.Position()
+	if primitiveContains(p.headerEdit, x, y) {
+		return false // click landed on the edit field itself
+	}
+
+	p.cancelEdit()
+	return true
+}
+
+// finishEdit handles the header edit field's special keys. Only Enter
+// ends editing by submitting; a click outside the field (see
+// captureOutsideEdit) is the only other way out — Escape and Backtab are
+// deliberately no-ops here so they can't be hit by accident while typing
+// a path. Tab triggers bash-style completion: SetAutocompleteFunc is only
+// invoked here (and not by tview itself opening a drop-down) when Tab is
+// pressed while no drop-down is currently open — once one is open, Tab
+// instead selects the highlighted entry without ever reaching this
+// function (see InputField's InputHandler).
 func (p *Panel) finishEdit(key tcell.Key) {
-	defer func() {
-		p.headerPages.SwitchToPage(headerDisplayPage)
-		p.app.SetFocus(p.list)
-	}()
+	switch key {
+	case tcell.KeyEnter:
+		if typed := p.headerEdit.GetText(); typed != "" {
+			_ = p.navigate(typed)
+		}
+		p.closeEdit()
+	case tcell.KeyTab:
+		p.headerEdit.Autocomplete()
+	}
+}
 
-	if key != tcell.KeyEnter {
-		return // cancelled
+// autocompletePath is the header edit field's autocomplete callback:
+// bash-style completion of the path component after the last "/" against
+// the actual directory listing, returned as full strings ready to replace
+// the field's entire text (matching InputField's default "replace on
+// selection" behavior) — directories get a trailing "/" so completion can
+// be chained into their contents.
+func (p *Panel) autocompletePath(currentText string) []string {
+	dir, prefix := "", currentText
+	if idx := strings.LastIndex(currentText, "/"); idx >= 0 {
+		dir, prefix = currentText[:idx+1], currentText[idx+1:]
 	}
 
-	if typed := p.headerEdit.GetText(); typed != "" {
-		_ = p.navigate(typed)
+	lookupDir := dir
+	if lookupDir == "" {
+		lookupDir = "."
 	}
+
+	entries, err := fsops.ListDir(lookupDir)
+	if err != nil {
+		return nil
+	}
+
+	var matches []string
+	lowerPrefix := strings.ToLower(prefix)
+	for _, e := range entries {
+		if !strings.HasPrefix(strings.ToLower(e.Name), lowerPrefix) {
+			continue
+		}
+		name := e.Name
+		if e.IsDir {
+			name += "/"
+		}
+		matches = append(matches, dir+name)
+	}
+	return matches
 }
