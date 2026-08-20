@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/ui"
@@ -36,5 +37,18 @@ func run() error {
 	}
 
 	app := tview.NewApplication().EnableMouse(true)
+
+	// tcell puts the terminal in raw mode, so Ctrl+C arrives as a regular
+	// key event instead of a SIGINT — without this, there would be no way
+	// to quit at all. This is a global capture (not tied to any one
+	// primitive) so it works regardless of what currently has focus.
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyCtrlC {
+			app.Stop()
+			return nil
+		}
+		return event
+	})
+
 	return app.SetRoot(root, true).Run()
 }
