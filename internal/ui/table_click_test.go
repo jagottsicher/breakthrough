@@ -217,9 +217,9 @@ func TestRightDragSelectsRange(t *testing.T) {
 
 // TestRightDragAgainDeselects repeats the same drag over an
 // already-selected range and checks that it clears the selection instead
-// of being a no-op: the drag's direction (check vs. uncheck) is decided
-// once, from the press row's state at MouseRightDown, and applied to the
-// whole range — not recomputed per row.
+// of being a no-op: every row in the range toggles its own state, so
+// dragging the same uniformly-checked range again flips every one of
+// them back off.
 func TestRightDragAgainDeselects(t *testing.T) {
 	dir := fixtureDir(t)
 	root, cleanup := drawnRoot(t, dir)
@@ -245,6 +245,34 @@ func TestRightDragAgainDeselects(t *testing.T) {
 		}
 		if cell := root.panel.table.GetCell(row, colCheckbox); cell.Text != checkboxText(false) {
 			t.Errorf("row %d checkbox cell = %q, want %q", row, cell.Text, checkboxText(false))
+		}
+	}
+}
+
+// TestRightDragTogglesEachRowIndependently drags over a range that starts
+// out mixed — row 1 already checked, rows 2 and 3 not — and checks that
+// each row flips its own state rather than the whole range being forced
+// to match (or invert) the press row's state.
+func TestRightDragTogglesEachRowIndependently(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	root.panel.toggleCheckbox(1)
+	if ref, _ := root.panel.rowRef(1); !root.panel.selected[ref.path] {
+		t.Fatal("setup: row 1 should be checked")
+	}
+
+	dragRight(t, root, 1, 3)
+
+	want := map[int]bool{1: false, 2: true, 3: true}
+	for row, wantChecked := range want {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if got := root.panel.selected[ref.path]; got != wantChecked {
+			t.Errorf("row %d: selected = %v, want %v", row, got, wantChecked)
 		}
 	}
 }

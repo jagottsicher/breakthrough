@@ -39,18 +39,20 @@ func run() error {
 		return err
 	}
 
-	// tcell puts the terminal in raw mode, so Ctrl+X and Ctrl+C arrive as
-	// regular key events rather than signals. These are global captures
-	// (not tied to any one primitive) so they work regardless of what
-	// currently has focus.
+	// tcell puts the terminal in raw mode, so these arrive as regular key
+	// events rather than signals. These are global captures (not tied to
+	// any one primitive) so they work regardless of what currently has
+	// focus.
 	//
-	// Ctrl+X only opens a confirmation overlay rather than stopping
-	// immediately, since a stray keypress shouldn't lose your place
-	// without asking first. Ctrl+C deliberately does not quit at all —
-	// it backs out of whatever is open, like Escape.
+	// Ctrl+X and Ctrl+Q both just open a confirmation overlay rather than
+	// stopping immediately, since a stray keypress shouldn't lose your
+	// place without asking first — Ctrl+Q is a second, equally direct way
+	// in (many terminal apps use it to quit) alongside Ctrl+X. Ctrl+C
+	// deliberately does not quit at all — it backs out of whatever is
+	// open, like Escape.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-		case tcell.KeyCtrlX:
+		case tcell.KeyCtrlX, tcell.KeyCtrlQ:
 			root.RequestQuit()
 			return nil
 		case tcell.KeyCtrlC:
