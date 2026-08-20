@@ -27,20 +27,40 @@ func ListDir(path string) ([]Entry, error) {
 		return nil, err
 	}
 
-	entries := make([]Entry, len(dirEntries))
+	// keyedEntry pairs each Entry with its lowercase sort key, computed
+	// once up front rather than inside the sort.Slice comparator below
+	// (which runs O(n log n) times) — for a directory with tens of
+	// thousands of entries, recomputing strings.ToLower per comparison
+	// means millions of redundant allocations for no benefit. Sorting a
+	// slice of this combined type (instead of Entry plus a parallel key
+	// slice) keeps each key attached to its Entry through every swap;
+	// sort.Slice only knows how to swap elements of the one slice it's
+	// given, so a separate parallel slice would silently desync.
+	type keyedEntry struct {
+		Entry
+		key string
+	}
+
+	keyed := make([]keyedEntry, len(dirEntries))
 	for i, de := range dirEntries {
-		entries[i] = Entry{
-			Name:  de.Name(),
-			IsDir: de.IsDir(),
+		name := de.Name()
+		keyed[i] = keyedEntry{
+			Entry: Entry{Name: name, IsDir: de.IsDir()},
+			key:   strings.ToLower(name),
 		}
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].IsDir != entries[j].IsDir {
-			return entries[i].IsDir // directories before files
+	sort.Slice(keyed, func(i, j int) bool {
+		if keyed[i].IsDir != keyed[j].IsDir {
+			return keyed[i].IsDir // directories before files
 		}
-		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+		return keyed[i].key < keyed[j].key
 	})
+
+	entries := make([]Entry, len(keyed))
+	for i, k := range keyed {
+		entries[i] = k.Entry
+	}
 
 	return entries, nil
 }
