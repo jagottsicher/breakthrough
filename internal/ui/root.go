@@ -48,13 +48,20 @@ func NewRoot(path string) (*Root, error) {
 		panel: panel,
 	}
 
+	// No borders on the floating elements below — a background color set
+	// apart from the plain panel does the same job without the
+	// box-drawing look.
 	r.menu = tview.NewList().ShowSecondaryText(false)
-	r.menu.SetBorder(true).SetTitle(" Actions ")
+	r.menu.SetBackgroundColor(accentBackgroundColor)
+	r.menu.SetMainTextColor(tcell.ColorWhite)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
 	r.rename = tview.NewInputField().SetLabel("New name: ")
-	r.rename.SetBorder(true).SetTitle(" Rename ")
+	r.rename.SetFieldBackgroundColor(accentBackgroundColor)
+	r.rename.SetBackgroundColor(accentBackgroundColor)
+	r.rename.SetLabelColor(tcell.ColorWhite)
+	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
 
 	r.AddPage(panelPage, panel, true, true)
@@ -90,7 +97,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
-	const width, height = 20, 3 // border + one "Rename" item
+	const width, height = 14, 1 // no border: just the one "Rename" line
 
 	px, py, pw, ph := r.panel.GetInnerRect()
 	if x+width > px+pw {
@@ -122,10 +129,20 @@ func (r *Root) closeMenu() {
 // the rename prompt, pre-filled with the target's current name, positioned
 // over the same area.
 func (r *Root) openRename() {
-	x, y, w, _ := r.menu.GetRect()
+	const width, height = 30, 1
+
+	x, y, _, _ := r.menu.GetRect()
+	if px, py, pw, ph := r.panel.GetInnerRect(); pw > 0 {
+		if x+width > px+pw {
+			x = px + pw - width
+		}
+		if y+height > py+ph {
+			y = py + ph - height
+		}
+	}
 
 	r.rename.SetText(filepath.Base(r.target))
-	r.rename.SetRect(x, y, w, 3)
+	r.rename.SetRect(x, y, width, height)
 
 	r.HidePage(contextMenuPage)
 	r.ShowPage(renamePage)
