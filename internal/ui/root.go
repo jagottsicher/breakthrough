@@ -39,8 +39,11 @@ type Root struct {
 	quitConfirm *tview.List
 
 	// target is the absolute path the context menu / rename prompt is
-	// currently acting on. Only meaningful while one of them is visible.
-	target string
+	// currently acting on. targetRow is its screen row in the panel's
+	// list, used to position the rename field exactly over that row.
+	// Only meaningful while one of the overlays below is visible.
+	target    string
+	targetRow int
 
 	// activePage/activeWidget track whichever overlay (context menu,
 	// rename, info, quit confirm) is currently shown, if any — see
@@ -78,7 +81,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
-	r.rename = tview.NewInputField().SetLabel("New name: ")
+	// No label: this is positioned exactly over the target's row in
+	// openRename, so it reads as "the row itself became editable" rather
+	// than a separate prompt.
+	r.rename = tview.NewInputField()
 	r.rename.SetFieldBackgroundColor(accentBackgroundColor)
 	r.rename.SetBackgroundColor(accentBackgroundColor)
 	r.rename.SetLabelColor(tcell.ColorWhite)
@@ -193,7 +199,17 @@ func (r *Root) cancelQuit() {
 // captureMouse intercepts right-clicks on the panel to open the context
 // menu. Everything else (left-click, scrolling) passes through unchanged
 // to the panel's own handling — see Panel.onSelect for that.
+//
+// This is also where Panel.captureOutsideEdit gets a chance to run first:
+// only one SetMouseCapture can be installed on Panel at a time, and Root
+// already needs that slot for right-click detection, so Root's capture
+// delegates to Panel's own "was the header being edited and did this
+// click land outside it" check before doing anything else.
 func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if r.panel.captureOutsideEdit(action, event) {
+		return tview.MouseConsumed, nil
+	}
+
 	if action != tview.MouseRightClick {
 		return action, event
 	}
@@ -205,6 +221,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 	}
 
 	r.target = filepath.Join(r.panel.path, name)
+	r.targetRow = y
 	r.showMenu(x, y)
 
 	return tview.MouseConsumed, nil
@@ -253,24 +270,16 @@ func (r *Root) closeMenu() {
 	r.hideOverlay()
 }
 
-// openRename is the context menu's "Rename" action: it swaps the menu for
-// the rename prompt, pre-filled with the target's current name, positioned
-// over the same area.
+// openRename is the context menu's "Rename" action. Rather than a prompt
+// floating near the menu, it positions the rename field exactly over the
+// target's own row in the list — same x, width, and height as that row —
+// so it reads as the row itself becoming editable in place, pre-filled
+// with the current name.
 func (r *Root) openRename() {
-	const width, height = 30, 1
-
-	x, y, _, _ := r.menu.GetRect()
-	if px, py, pw, ph := r.panel.GetInnerRect(); pw > 0 {
-		if x+width > px+pw {
-			x = px + pw - width
-		}
-		if y+height > py+ph {
-			y = py + ph - height
-		}
-	}
+	x, _, width, _ := r.panel.list.GetInnerRect()
 
 	r.rename.SetText(filepath.Base(r.target))
-	r.rename.SetRect(x, y, width, height)
+	r.rename.SetRect(x, r.targetRow, width, 1)
 
 	r.showOverlay(renamePage, r.rename)
 }

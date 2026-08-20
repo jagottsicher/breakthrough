@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+)
 
 func TestBuildHeaderSpans(t *testing.T) {
 	text, spans := buildHeaderSpans("/a/bb/c")
@@ -69,5 +74,46 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	root := spans[len(spans)-1]
 	if root != (headerSpan{start: 8, end: 9, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
+	}
+}
+
+func TestAutocompletePath(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"apple.txt", "apricot.txt", "banana.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "app-data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var p Panel // autocompletePath doesn't touch any Panel field, a zero value is fine
+
+	got := p.autocompletePath(dir + "/ap")
+	sort.Strings(got)
+
+	want := []string{dir + "/app-data/", dir + "/apple.txt", dir + "/apricot.txt"}
+	sort.Strings(want)
+
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestAutocompletePathNoMatch(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "banana.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var p Panel
+	if got := p.autocompletePath(dir + "/zz"); len(got) != 0 {
+		t.Errorf("got %v, want no matches", got)
 	}
 }
