@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -11,30 +13,235 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-const infoPage = "info"
+const propertiesPage = "properties"
 
-// newInfoView creates the read-only overlay used to show the "Info"
-// action's output. Escape, Enter, Tab, and Backtab all dismiss it
-// (TextView.SetDoneFunc fires for all four) — that's unchanged by the
-// hash button (see computeHashes): captureInfoKey only intercepts 'h',
-// leaving those four alone, and captureInfoMouse only intercepts a click
-// that lands on the hash line specifically.
-func (r *Root) newInfoView() *tview.TextView {
-	v := tview.NewTextView().SetTextColor(tcell.ColorWhite)
-	v.SetBackgroundColor(accentBackgroundColor)
-	v.SetBorderPadding(0, 0, 1, 1)
-	v.SetDoneFunc(func(tcell.Key) { r.closeInfo() })
-	v.SetInputCapture(r.captureInfoKey)
-	v.SetMouseCapture(r.captureInfoMouse)
-	return v
+// editableBackgroundColor sets an editable field's value apart from the
+// rest of the Properties overlay's plain text — the visual cue that it's
+// clickable, distinct from accentBackgroundColor so it reads as "raised"
+// rather than blending into the overlay's own background.
+const editableBackgroundColor = tcell.ColorSlateGray
+
+// propertyField identifies one editable region within the Properties
+// overlay — see propertySpan and propertiesBuilder.
+type propertyField int
+
+const (
+	fieldNone propertyField = iota
+	fieldName
+	fieldPermOwnerRead
+	fieldPermOwnerWrite
+	fieldPermOwnerExec
+	fieldPermGroupRead
+	fieldPermGroupWrite
+	fieldPermGroupExec
+	fieldPermOtherRead
+	fieldPermOtherWrite
+	fieldPermOtherExec
+	fieldMtimeDate
+	fieldMtimeTime
+)
+
+// permFieldBit maps each permission propertyField to the bit it toggles
+// in a permission-only os.FileMode (0-0777) — owner/group/other times
+// read/write/execute, matching os.FileMode.Perm()'s own bit order.
+var permFieldBit = map[propertyField]os.FileMode{
+	fieldPermOwnerRead:  0o400,
+	fieldPermOwnerWrite: 0o200,
+	fieldPermOwnerExec:  0o100,
+	fieldPermGroupRead:  0o040,
+	fieldPermGroupWrite: 0o020,
+	fieldPermGroupExec:  0o010,
+	fieldPermOtherRead:  0o004,
+	fieldPermOtherWrite: 0o002,
+	fieldPermOtherExec:  0o001,
 }
 
-// openInfo is the context menu's "Info" action: it shows everything
-// breakthrough currently knows about the target — roughly what
-// `ls -halF` prints for one entry — gathered natively via fsops.Stat
-// rather than by shelling out to and parsing ls (see the Phase 1 design
-// discussion for why generic command-output parsing doesn't scale here).
-func (r *Root) openInfo() {
+// propertySpan is one clickable region within the Properties overlay's
+// text — the same half-open [start,end) column-range idea as headerSpan,
+// with a row added since Properties, unlike the header, is multi-line.
+type propertySpan struct {
+	row              int
+	startCol, endCol int
+	field            propertyField
+}
+
+// propertiesBuilder assembles the Properties overlay's text field by
+// field, tracking each editable field's row/column span as it goes (see
+// propertySpan) — the same running-column-count idea buildHeaderSpans
+// uses for the path bar, extended to multiple rows. Style tags (used for
+// editableBackgroundColor) are written via tag, which — unlike text —
+// doesn't advance col, since tags are zero-width once tview renders them;
+// getting this distinction wrong would silently throw off every span
+// after the first highlighted one.
+type propertiesBuilder struct {
+	b     strings.Builder
+	row   int
+	col   int
+	spans []propertySpan
+}
+
+func (pb *propertiesBuilder) tag(s string) {
+	pb.b.WriteString(s)
+}
+
+func (pb *propertiesBuilder) text(s string) {
+	pb.b.WriteString(s)
+	pb.col += len([]rune(s))
+}
+
+func (pb *propertiesBuilder) newline() {
+	pb.b.WriteByte('\n')
+	pb.row++
+	pb.col = 0
+}
+
+// field writes one plain, non-editable "Label: value" line — same
+// column layout as infoField, which this replaces as the properties
+// overlay's line-builder (infoField itself is kept for hashLines, which
+// has no spans to track).
+func (pb *propertiesBuilder) field(label, value string) {
+	pb.text(infoField(label, value))
+}
+
+// editableField writes one "Label: value" line with value highlighted
+// (editableBackgroundColor) and recorded as a propertySpan under field.
+func (pb *propertiesBuilder) editableField(label, value string, field propertyField) {
+	pb.text(fmt.Sprintf("%-13s", label+":"))
+	pb.tag("[:slategray]")
+	start := pb.col
+	pb.text(value)
+	end := pb.col
+	pb.tag("[:-]")
+	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: end, field: field})
+}
+
+// permissionsField writes the "Permissions:" line: the one-character
+// file-type prefix (not editable — changing what kind of thing a path is
+// isn't a permission edit), then the 9 rwx characters as one highlighted
+// block with 9 separate propertySpans (one per bit, for per-character
+// click routing — see Root.togglePermBit), then the octal form.
+func (pb *propertiesBuilder) permissionsField(mode os.FileMode) {
+	pb.text(fmt.Sprintf("%-13s", "Permissions:"))
+	pb.text(string(permTypeChar(mode)))
+
+	bitFields := [9]propertyField{
+		fieldPermOwnerRead, fieldPermOwnerWrite, fieldPermOwnerExec,
+		fieldPermGroupRead, fieldPermGroupWrite, fieldPermGroupExec,
+		fieldPermOtherRead, fieldPermOtherWrite, fieldPermOtherExec,
+	}
+	const rwx = "rwxrwxrwx"
+
+	pb.tag("[:slategray]")
+	for i, f := range bitFields {
+		start := pb.col
+		ch := byte('-')
+		if mode&(1<<uint(9-1-i)) != 0 {
+			ch = rwx[i]
+		}
+		pb.text(string(ch))
+		pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: pb.col, field: f})
+	}
+	pb.tag("[:-]")
+
+	pb.text(fmt.Sprintf(" (%04o)", mode.Perm()))
+}
+
+// mtimeField writes the "Modified:" line with the date and time halves
+// as two independently highlighted, independently clickable spans (see
+// fieldMtimeDate/fieldMtimeTime) — edited separately, per the user's own
+// request, even though both stage into the same time.Time together.
+func (pb *propertiesBuilder) mtimeField(t time.Time) {
+	pb.text(fmt.Sprintf("%-13s", "Modified:"))
+
+	pb.tag("[:slategray]")
+	dateStart := pb.col
+	pb.text(t.Format("2006-01-02"))
+	dateEnd := pb.col
+	pb.tag("[:-]")
+	pb.text(" ")
+	pb.tag("[:slategray]")
+	timeStart := pb.col
+	pb.text(t.Format("15:04:05"))
+	timeEnd := pb.col
+	pb.tag("[:-]")
+
+	pb.spans = append(pb.spans,
+		propertySpan{row: pb.row, startCol: dateStart, endCol: dateEnd, field: fieldMtimeDate},
+		propertySpan{row: pb.row, startCol: timeStart, endCol: timeEnd, field: fieldMtimeTime},
+	)
+}
+
+// newPropertiesView creates the Properties overlay: a read-only text
+// display (propertiesText) that individual fields' values are drawn on
+// top of the highlighted spans of (see propertiesBuilder), plus two
+// pieces shown only once editing has actually started — a single
+// reusable inline input (propertiesEditField, repositioned over whichever
+// field is being text-edited, the same "one shared field, repositioned
+// per use" approach Root.rename/Root.prompt already use) and a Cancel/
+// Save button row (propertiesButtons). All three live in their own
+// tview.Pages (r.properties) rather than Root's top-level one: unlike
+// Root's overlays, which are mutually exclusive, propertiesText must stay
+// visible under propertiesEditField/propertiesButtons, and tview.Pages
+// happily shows multiple of its own pages at once as long as nothing
+// tells it not to — Root's showOverlay/hideOverlay only enforce
+// single-overlay-at-a-time as their own policy on top of that, not a
+// limitation of Pages itself.
+func (r *Root) newPropertiesView() *tview.Pages {
+	r.propertiesText = tview.NewTextView().SetTextColor(tcell.ColorWhite)
+	r.propertiesText.SetBackgroundColor(accentBackgroundColor)
+	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
+	r.propertiesText.SetDynamicColors(true) // needed for the editableBackgroundColor style tags
+	r.propertiesText.SetDoneFunc(func(tcell.Key) { r.closeProperties() })
+	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
+	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
+
+	r.propertiesEditField = tview.NewInputField()
+	r.propertiesEditField.SetFieldBackgroundColor(editableBackgroundColor)
+	r.propertiesEditField.SetBackgroundColor(editableBackgroundColor)
+	r.propertiesEditField.SetFieldTextColor(tcell.ColorWhite)
+	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
+
+	r.propertiesButtons = newPropertiesButtons(r.cancelPropertiesEdit, r.savePropertiesEdit)
+
+	pages := tview.NewPages()
+	pages.AddPage("text", r.propertiesText, true, true)
+	pages.AddPage("editfield", r.propertiesEditField, false, false)
+	pages.AddPage("buttons", r.propertiesButtons, false, false)
+	return pages
+}
+
+// newPropertiesButtons builds the Cancel/Save row shown once any field
+// has been touched (see Root.markPropertiesDirty).
+func newPropertiesButtons(cancel, save func()) *tview.Flex {
+	cancelBtn := tview.NewButton("Cancel").SetSelectedFunc(cancel)
+	saveBtn := tview.NewButton("Save").SetSelectedFunc(save)
+	for _, b := range []*tview.Button{cancelBtn, saveBtn} {
+		b.SetBackgroundColor(accentBackgroundColor)
+		b.SetLabelColor(tcell.ColorWhite)
+	}
+
+	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
+	flex.SetBackgroundColor(accentBackgroundColor)
+	flex.AddItem(cancelBtn, 0, 1, false)
+	flex.AddItem(saveBtn, 0, 1, false)
+	return flex
+}
+
+// openProperties is the context menu's "Properties" action (still called
+// "Info" internally in a few identifiers pending a fuller cleanup — the
+// user-visible label changed first): it shows and, per this field's own
+// rules, lets the user edit what breakthrough knows about the target —
+// gathered natively via fsops.Stat rather than by shelling out to and
+// parsing ls (see the Phase 1 design discussion for why generic
+// command-output parsing doesn't scale here).
+//
+// Edits are staged, not applied live: stagedName/stagedMode/stagedMtime
+// start out equal to what fsops.Stat just found, and only change as
+// fields are edited; nothing touches the real file until Save (see
+// savePropertiesEdit). See markPropertiesDirty for why even clicking a
+// field once — not just an actual change — locks the overlay into
+// "Cancel or Save to leave" mode.
+func (r *Root) openProperties() {
 	info, err := fsops.Stat(r.target)
 	if err != nil {
 		r.hideOverlay() // close the context menu before reporting
@@ -42,54 +249,342 @@ func (r *Root) openInfo() {
 		return
 	}
 
-	r.infoTarget = r.target
-	r.infoStat = info
-	r.renderInfo(nil) // nil: fresh open, nothing hashed yet even if this target was hashed before
+	r.propertiesTarget = r.target
+	r.propertiesStat = info
+	r.propertiesHashes = nil
+	r.propertiesDirty = false
+	r.stagedName = info.Name
+	r.stagedMode = info.Mode.Perm()
+	r.stagedMtime = info.ModTime
+
+	r.renderProperties()
 
 	x, y, _, _ := r.menu.GetRect()
-	width, height := textSize(r.info.GetText(true))
-	x, y, width, height = r.clampToPanel(x, y, width, height)
-	r.info.SetRect(x, y, width, height)
+	r.resizeProperties(x, y)
 
-	r.showOverlay(infoPage, r.info)
+	r.properties.HidePage("editfield")
+	r.properties.HidePage("buttons")
+
+	r.showOverlay(propertiesPage, r.properties)
 }
 
-// closeInfo hides the info overlay (Escape, Enter, or Tab).
-func (r *Root) closeInfo() {
+// closeProperties hides the Properties overlay (Escape, Enter, or Tab on
+// the read-only text) — unreachable while propertiesDirty is true, since
+// captureOutsideClick blocks an outside click in that state and the text
+// view's own DoneFunc is the only other way here, which callers only
+// reach when nothing's been touched yet.
+func (r *Root) closeProperties() {
 	r.hideOverlay()
 }
 
-// renderInfo rebuilds the Info overlay's text from whatever fsops.Stat
-// found for the target it's currently showing (see openInfo) plus a hash
-// section — a hint to compute them until hashes is non-nil, then the
-// digests themselves (see hashLines) — appended for anything that isn't a
-// directory. Also records where that section starts (hashSectionRow), so
-// captureInfoMouse knows what counts as a click on it.
-func (r *Root) renderInfo(hashes *fsops.Hashes) {
-	text := formatInfo(r.infoStat)
+// renderProperties rebuilds the Properties overlay's text from
+// propertiesStat (the read-only fields) and the staged values (Name,
+// Permissions, Modified — see openProperties), plus a hash section for
+// anything that isn't a directory (or resolves to one — see isDirish): a
+// hint to compute them until propertiesHashes is set, then the digests
+// themselves. Called after every edit (a permission toggle, finishing a
+// text field, computing hashes) to keep the display and propertySpans in
+// sync with current state.
+func (r *Root) renderProperties() {
+	pb := &propertiesBuilder{}
 
-	if r.infoStat.IsSymlink {
-		if chain := fsops.ResolveChain(r.infoTarget); len(chain.Hops) > 1 {
+	pb.editableField("Name", r.stagedName, fieldName)
+	pb.newline()
+	pb.field("Type", classifyKind(r.propertiesStat))
+	pb.newline()
+	pb.permissionsField(r.stagedMode)
+	if r.propertiesStat.Nlink > 1 && !r.propertiesStat.IsDir {
+		// Not shown for directories: every directory has Nlink >= 2
+		// trivially (its own "." entry, plus each subdirectory's ".."),
+		// which isn't the "this content also exists under another name"
+		// signal that's actually worth flagging.
+		pb.newline()
+		pb.field("Links", fmt.Sprintf("%d (shared with other names)", r.propertiesStat.Nlink))
+	}
+	pb.newline()
+	pb.field("Owner", r.propertiesStat.Owner) // not yet editable — see the Owner/Group picker discussion
+	pb.newline()
+	pb.field("Group", r.propertiesStat.Group)
+	pb.newline()
+	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
+	pb.newline()
+	pb.mtimeField(r.stagedMtime)
+	pb.newline()
+	pb.field("Path", r.propertiesStat.Path)
+	if r.propertiesStat.IsSymlink && r.propertiesStat.LinkTarget != "" {
+		pb.newline()
+		pb.field("Link target", r.propertiesStat.LinkTarget)
+	}
+	if r.propertiesStat.MountPoint {
+		pb.newline()
+		pb.field("Mount point", "yes")
+	}
+	if r.propertiesStat.IsSymlink {
+		if chain := fsops.ResolveChain(r.propertiesTarget); len(chain.Hops) > 1 {
 			// Only shown once there's an actual chain (more than one
 			// hop) — a simple single-target symlink is already fully
-			// described by the "Link target" and "Type" fields above.
-			text += "\n" + infoField("Chain", formatChain(chain))
+			// described by "Link target" and "Type" above.
+			pb.newline()
+			pb.field("Chain", formatChain(chain))
 		}
 	}
 
-	if !isDirish(r.infoStat) {
-		r.hashSectionRow = strings.Count(text, "\n") + 2 // +1 past the fields' own last line, +1 for the blank separator
-		text += "\n\n" + hashLines(hashes)
+	text := pb.b.String()
+	if !isDirish(r.propertiesStat) {
+		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
+		text += "\n\n" + hashLines(r.propertiesHashes)
 	}
-	r.info.SetText(text)
+
+	r.propertySpans = pb.spans
+	r.propertiesText.SetText(text)
+}
+
+// resizeProperties recomputes the overlay's rect from its current text
+// (see renderProperties), keeping (x, y) as given but not necessarily as
+// where it last was — openProperties passes the context menu's own
+// position (first open), everything else passes wherever the overlay
+// currently sits (a resize after an edit, not a reposition). One line is
+// reserved for the Cancel/Save row unconditionally, even before anything
+// is dirty, so revealing it doesn't resize/jump the overlay out from
+// under the user.
+func (r *Root) resizeProperties(x, y int) {
+	width, height := textSize(r.propertiesText.GetText(true))
+	height++ // reserved button row
+	x, y, width, height = r.clampToPanel(x, y, width, height)
+
+	r.properties.SetRect(x, y, width, height)
+	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+}
+
+// rerenderProperties re-runs renderProperties/resizeProperties in place
+// — the common tail of every edit action (permission toggle, finishing a
+// text field, computing hashes).
+func (r *Root) rerenderProperties() {
+	x, y, _, _ := r.properties.GetRect()
+	r.renderProperties()
+	r.resizeProperties(x, y)
+}
+
+// markPropertiesDirty is what the very first interaction with any field
+// does — a click, not necessarily a completed change. It reveals the
+// Cancel/Save row and (see captureOutsideClick) switches an outside click
+// from "close the overlay" to "do nothing": once something's been
+// touched, Cancel or Save is the only way out, so a stray click can't
+// silently discard or lose track of an in-progress edit.
+func (r *Root) markPropertiesDirty() {
+	if r.propertiesDirty {
+		return
+	}
+	r.propertiesDirty = true
+	r.properties.ShowPage("buttons")
+}
+
+// cancelPropertiesEdit is the Cancel button: closes the overlay without
+// applying anything — safe to just hide, since nothing staged was ever
+// written to the real file (see savePropertiesEdit, the only place any
+// of this actually touches disk).
+func (r *Root) cancelPropertiesEdit() {
+	r.hideOverlay()
+}
+
+// savePropertiesEdit is the Save button: applies whichever of
+// Name/Permissions/Modified actually changed, in that order, stopping at
+// the first failure rather than trying the rest — a failure partway
+// through leaves whatever already succeeded applied and whatever didn't
+// get to run undone; reopening Properties and redoing the remaining
+// edits is what recovering from that looks like for now, not an
+// automatic retry or rollback.
+func (r *Root) savePropertiesEdit() {
+	target := r.propertiesTarget
+	var firstErr error
+
+	if r.stagedName != r.propertiesStat.Name {
+		newPath, err := fsops.Rename(target, r.stagedName)
+		if err != nil {
+			firstErr = err
+		} else {
+			target = newPath
+		}
+	}
+	if firstErr == nil && r.stagedMode != r.propertiesStat.Mode.Perm() {
+		if err := fsops.Chmod(target, r.stagedMode); err != nil {
+			firstErr = err
+		}
+	}
+	if firstErr == nil && !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
+		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
+			firstErr = err
+		}
+	}
+
+	r.hideOverlay()
+	r.showError(r.panel.load(r.panel.path))
+	if firstErr != nil {
+		r.showError(firstErr)
+	}
+}
+
+// togglePermBit flips one permission bit in stagedMode (see
+// permFieldBit), marks the overlay dirty, and re-renders — the click *is*
+// the edit here, unlike Name/Modified, which need actual typing. Marks
+// dirty itself rather than relying on activatePropertyField (its only
+// real caller) to have done it first, so it stays correct on its own —
+// including for a test calling it directly, bypassing the click path
+// entirely.
+func (r *Root) togglePermBit(field propertyField) {
+	bit, ok := permFieldBit[field]
+	if !ok {
+		return
+	}
+	r.stagedMode ^= bit
+	r.markPropertiesDirty()
+	r.rerenderProperties()
+}
+
+// activatePropertyField is what clicking any propertySpan does: a
+// permission bit toggles immediately (see togglePermBit); Name/Modified
+// instead position and show the shared inline edit field over that exact
+// span, pre-filled with the current staged value. Either way, this is
+// the first interaction with a field, so it also marks the overlay dirty
+// (see markPropertiesDirty) — even a permission click that gets toggled
+// right back counts, matching "as soon as you click one to edit" as
+// literally as it says.
+func (r *Root) activatePropertyField(span propertySpan) {
+	r.markPropertiesDirty()
+
+	if _, ok := permFieldBit[span.field]; ok {
+		r.togglePermBit(span.field)
+		return
+	}
+
+	var prefill string
+	var minWidth int
+	switch span.field {
+	case fieldName:
+		prefill = r.stagedName
+		minWidth = 24 // room to type a longer name than the current one
+	case fieldMtimeDate:
+		prefill = r.stagedMtime.Format("2006-01-02")
+		minWidth = 10
+	case fieldMtimeTime:
+		prefill = r.stagedMtime.Format("15:04:05")
+		minWidth = 8
+	default:
+		return
+	}
+
+	r.propertiesEditTarget = span.field
+	r.propertiesEditField.SetText(prefill)
+
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	width := span.endCol - span.startCol
+	if width < minWidth {
+		width = minWidth
+	}
+	r.propertiesEditField.SetRect(rectX+span.startCol, rectY+span.row, width, 1)
+
+	r.properties.ShowPage("editfield")
+	r.app.SetFocus(r.propertiesEditField)
+}
+
+// finishPropertyEdit handles Enter (commit) and Escape/Tab (discard just
+// this field's in-progress text) in the shared inline edit field.
+//
+// Invalid date/time input is silently discarded rather than surfaced as
+// an error: Root's error overlay and Properties are both single-slot
+// overlays (see Root.activePage), so opening one here would replace
+// Properties instead of layering over it, losing every other field's
+// staged edits along with it. Leaving the field's own text on screen
+// with no other feedback isn't great, but it beats that.
+func (r *Root) finishPropertyEdit(key tcell.Key) {
+	text := r.propertiesEditField.GetText()
+	target := r.propertiesEditTarget
+	r.properties.HidePage("editfield")
+	r.app.SetFocus(r.propertiesText)
+
+	if key != tcell.KeyEnter {
+		return
+	}
+
+	switch target {
+	case fieldName:
+		if text != "" {
+			r.stagedName = text
+		}
+	case fieldMtimeDate:
+		if t, err := parseDate(text, r.stagedMtime); err == nil {
+			r.stagedMtime = t
+		}
+	case fieldMtimeTime:
+		if t, err := parseTime(text, r.stagedMtime); err == nil {
+			r.stagedMtime = t
+		}
+	}
+
+	r.rerenderProperties()
+}
+
+// parseDate parses s as YYYY-MM-DD, accepting 1- or 2-digit month/day
+// (e.g. "2026-8-5" as well as "2026-08-05") — the leading-zero padding
+// the user asked for happens on the way back out (formatted with the
+// strict 2006-01-02 layout once parsed and applied — see
+// propertiesBuilder.mtimeField), not by rejecting shorthand going in. The
+// time-of-day comes from base, unchanged; only the date half is being
+// edited here. A calendar date that doesn't exist (e.g. Feb 30) is
+// rejected: time.Date normalizes out-of-range components instead of
+// erroring, so the constructed time is read back and compared against
+// what was asked for to catch that.
+func parseDate(s string, base time.Time) (time.Time, error) {
+	parts := strings.Split(strings.TrimSpace(s), "-")
+	if len(parts) != 3 {
+		return time.Time{}, fmt.Errorf("date must be YYYY-MM-DD, got %q", s)
+	}
+	y, err1 := strconv.Atoi(parts[0])
+	mo, err2 := strconv.Atoi(parts[1])
+	d, err3 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return time.Time{}, fmt.Errorf("date must be YYYY-MM-DD, got %q", s)
+	}
+
+	t := time.Date(y, time.Month(mo), d, base.Hour(), base.Minute(), base.Second(), 0, time.Local)
+	if t.Year() != y || int(t.Month()) != mo || t.Day() != d {
+		return time.Time{}, fmt.Errorf("%q is not a valid date", s)
+	}
+	return t, nil
+}
+
+// parseTime is parseDate's counterpart for HH:MM:SS — see its doc
+// comment for the shorthand/validation/padding rules, which are the
+// same. The date comes from base, unchanged. Sub-second precision is
+// never part of the input, so the result always has zero nanoseconds —
+// milliseconds/nanoseconds "set to 0", per the user's own spec, falls
+// out of this for free rather than needing to be handled separately.
+func parseTime(s string, base time.Time) (time.Time, error) {
+	parts := strings.Split(strings.TrimSpace(s), ":")
+	if len(parts) != 3 {
+		return time.Time{}, fmt.Errorf("time must be HH:MM:SS, got %q", s)
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	mi, err2 := strconv.Atoi(parts[1])
+	sec, err3 := strconv.Atoi(parts[2])
+	if err1 != nil || err2 != nil || err3 != nil {
+		return time.Time{}, fmt.Errorf("time must be HH:MM:SS, got %q", s)
+	}
+
+	t := time.Date(base.Year(), base.Month(), base.Day(), h, mi, sec, 0, time.Local)
+	if t.Hour() != h || t.Minute() != mi || t.Second() != sec {
+		return time.Time{}, fmt.Errorf("%q is not a valid time", s)
+	}
+	return t, nil
 }
 
 // isDirish reports whether info should be treated as a directory for the
-// hash button's purposes (see renderInfo/computeHashes/captureInfoMouse).
-// info.IsDir alone isn't enough: it's Lstat-based, so it's always false
-// for a symlink even when the symlink resolves to a directory — hashing
-// that would just fail once fsops.Hash follows it there anyway, so
-// there's no point offering the button in the first place.
+// hash button's purposes (see renderProperties/computeHashes/
+// capturePropertiesMouse). info.IsDir alone isn't enough: it's
+// Lstat-based, so it's always false for a symlink even when the symlink
+// resolves to a directory — hashing that would just fail once
+// fsops.Hash follows it there anyway, so there's no point offering the
+// button in the first place.
 func isDirish(info fsops.Info) bool {
 	return info.IsDir || (info.IsSymlink && info.LinkIsDir)
 }
@@ -112,38 +607,33 @@ func formatChain(chain fsops.LinkChain) string {
 	return strings.Join(chain.Hops, " -> ") + suffix
 }
 
-// computeHashes is the Info overlay's hash action (see hashLines and
-// captureInfoKey/captureInfoMouse, its two triggers): hashes the entry
-// Info is currently showing via fsops.Hash and re-renders the overlay
-// with the results in place of the hint line. A no-op if Info isn't the
-// open overlay, or its target is a directory, or resolves to one via
-// isDirish (hashing isn't offered for those — see fsops.Hash's own doc
-// comment on why).
+// computeHashes is the Properties overlay's hash action (see hashLines
+// and capturePropertiesKey/capturePropertiesMouse, its two triggers):
+// hashes the entry Properties is currently showing via fsops.Hash and
+// re-renders with the results in place of the hint line. A no-op if
+// Properties isn't the open overlay, or its target is a directory, or
+// resolves to one via isDirish (hashing isn't offered for those — see
+// fsops.Hash's own doc comment on why).
 func (r *Root) computeHashes() {
-	if r.activePage != infoPage || isDirish(r.infoStat) {
+	if r.activePage != propertiesPage || isDirish(r.propertiesStat) {
 		return
 	}
 
-	hashes, err := fsops.Hash(r.infoTarget)
+	hashes, err := fsops.Hash(r.propertiesTarget)
 	if err != nil {
 		r.showError(err)
 		return
 	}
 
-	r.renderInfo(&hashes)
-
-	// The text just grew by two lines; keep the overlay sized to fit it,
-	// same clamping openInfo's initial sizing uses.
-	x, y, _, _ := r.info.GetRect()
-	width, height := textSize(r.info.GetText(true))
-	x, y, width, height = r.clampToPanel(x, y, width, height)
-	r.info.SetRect(x, y, width, height)
+	r.propertiesHashes = &hashes
+	r.rerenderProperties()
 }
 
-// captureInfoKey adds "h computes hashes" to the Info overlay, alongside
-// its existing Escape/Enter/Tab/Backtab close behavior (see newInfoView)
-// — this only intercepts the one rune those don't already use.
-func (r *Root) captureInfoKey(event *tcell.EventKey) *tcell.EventKey {
+// capturePropertiesKey adds "h computes hashes" to the Properties
+// overlay, alongside its existing Escape/Enter/Tab/Backtab close behavior
+// (see newPropertiesView) — this only intercepts the one rune those don't
+// already use.
+func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
 		r.computeHashes()
 		return nil
@@ -151,66 +641,53 @@ func (r *Root) captureInfoKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// captureInfoMouse makes the hash hint/result section at the bottom of
-// the Info overlay (see hashLines) clickable — the same action the 'h'
-// key triggers. Everything else in the overlay passes through unchanged;
-// unlike Panel's header, there's no default TextView behavior here worth
-// pre-empting, so a click that misses the hash section just does nothing.
-func (r *Root) captureInfoMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.info.InRect(event.Position()) {
+// capturePropertiesMouse routes a click within the Properties overlay's
+// read-only text: a propertySpan (Name, a permission bit, or half of
+// Modified) activates that field (see activatePropertyField); missing
+// all of those, a click on the hash hint/result section computes hashes,
+// the same action the 'h' key triggers. A click that misses everything
+// just does nothing — unlike Panel's header, there's no default TextView
+// behavior here worth pre-empting.
+func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick || !r.propertiesText.InRect(event.Position()) {
 		return action, event
 	}
 
-	_, y := event.Position()
-	_, rectY, _, _ := r.info.GetInnerRect()
-	if !isDirish(r.infoStat) && y-rectY >= r.hashSectionRow {
+	x, y := event.Position()
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	row, col := y-rectY, x-rectX
+
+	if span, ok := r.propertySpanAt(row, col); ok {
+		r.activatePropertyField(span)
+		return tview.MouseConsumed, nil
+	}
+
+	if !isDirish(r.propertiesStat) && row >= r.hashSectionRow {
 		r.computeHashes()
 		return tview.MouseConsumed, nil
 	}
 	return action, event
 }
 
-// infoField renders one "Label: value" line in the Info overlay's fixed
-// column layout — shared by formatInfo and hashLines so both stay
-// visually aligned.
+// propertySpanAt returns the propertySpan covering (row, col), if any.
+func (r *Root) propertySpanAt(row, col int) (propertySpan, bool) {
+	for _, s := range r.propertySpans {
+		if s.row == row && col >= s.startCol && col < s.endCol {
+			return s, true
+		}
+	}
+	return propertySpan{}, false
+}
+
+// infoField renders one "Label: value" line in the Properties overlay's
+// fixed column layout — shared by hashLines (which has no span to track,
+// unlike propertiesBuilder.field/editableField) so both stay visually
+// aligned.
 func infoField(label, value string) string {
 	return fmt.Sprintf("%-13s%s", label+":", value)
 }
 
-// formatInfo renders info as labeled lines — the same facts `ls -halF`
-// would show for one entry, but as a small properties list instead of a
-// single packed line.
-func formatInfo(info fsops.Info) string {
-	lines := []string{
-		infoField("Name", info.Name),
-		infoField("Type", classifyKind(info)),
-		infoField("Permissions", fmt.Sprintf("%s (%04o)", permString(info.Mode), info.Mode.Perm())),
-	}
-	if info.Nlink > 1 && !info.IsDir {
-		// Not shown for directories: every directory has Nlink >= 2
-		// trivially (its own "." entry, plus each subdirectory's ".."),
-		// which isn't the "this content also exists under another name"
-		// signal that's actually worth flagging.
-		lines = append(lines, infoField("Links", fmt.Sprintf("%d (shared with other names)", info.Nlink)))
-	}
-	lines = append(lines,
-		infoField("Owner", info.Owner),
-		infoField("Group", info.Group),
-		infoField("Size", sizeWithBytes(info.Size)),
-		infoField("Modified", info.ModTime.Format("2006-01-02 15:04:05")),
-		infoField("Path", info.Path),
-	)
-	if info.IsSymlink && info.LinkTarget != "" {
-		lines = append(lines, infoField("Link target", info.LinkTarget))
-	}
-	if info.MountPoint {
-		lines = append(lines, infoField("Mount point", "yes"))
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// classifyKind renders info's Type field with more detail than a plain
+// classifyKind renders the Type field with more detail than a plain
 // file/directory/symlink split: a symlink additionally says what it
 // resolves to (or that it's broken — info.LinkBroken), and the rarer
 // special files (sockets, FIFOs, devices) get their own label instead of
@@ -238,9 +715,9 @@ func classifyKind(info fsops.Info) string {
 	}
 }
 
-// hashLines renders the Info overlay's hash section: a hint to compute
-// them (see Root.computeHashes) until hashes is non-nil, then the three
-// digests themselves.
+// hashLines renders the Properties overlay's hash section: a hint to
+// compute them (see Root.computeHashes) until hashes is non-nil, then the
+// three digests themselves.
 func hashLines(hashes *fsops.Hashes) string {
 	if hashes == nil {
 		return "Press h or click here to compute MD5 / SHA-1 / SHA-256"
@@ -252,31 +729,39 @@ func hashLines(hashes *fsops.Hashes) string {
 	}, "\n")
 }
 
-// permString renders mode roughly the way `ls -l` does: a one-character
-// file type followed by the nine rwx permission characters. Unlike ls, it
-// doesn't yet render setuid/setgid/sticky as the s/S/t/T variants in the
-// execute-bit position — a known simplification.
-func permString(mode os.FileMode) string {
-	typeChar := byte('-')
+// permTypeChar is permString's own file-type character, split out so
+// propertiesBuilder.permissionsField can use it without also getting
+// the 9 rwx characters permString bakes in (it builds and tracks those
+// itself, per-character, for click routing).
+func permTypeChar(mode os.FileMode) byte {
 	switch {
 	case mode&os.ModeDir != 0:
-		typeChar = 'd'
+		return 'd'
 	case mode&os.ModeSymlink != 0:
-		typeChar = 'l'
+		return 'l'
 	case mode&os.ModeNamedPipe != 0:
-		typeChar = 'p'
+		return 'p'
 	case mode&os.ModeSocket != 0:
-		typeChar = 's'
+		return 's'
 	case mode&os.ModeDevice != 0 && mode&os.ModeCharDevice != 0:
-		typeChar = 'c'
+		return 'c'
 	case mode&os.ModeDevice != 0:
-		typeChar = 'b'
+		return 'b'
+	default:
+		return '-'
 	}
+}
 
+// permString renders mode roughly the way `ls -l` does: a one-character
+// file type (see permTypeChar) followed by the nine rwx permission
+// characters. Unlike ls, it doesn't yet render setuid/setgid/sticky as
+// the s/S/t/T variants in the execute-bit position — a known
+// simplification.
+func permString(mode os.FileMode) string {
 	const rwx = "rwxrwxrwx"
 	perm := mode.Perm()
 	buf := make([]byte, 0, 10)
-	buf = append(buf, typeChar)
+	buf = append(buf, permTypeChar(mode))
 	for i, c := range rwx {
 		if perm&(1<<uint(9-1-i)) != 0 {
 			buf = append(buf, byte(c))
@@ -317,7 +802,10 @@ func sizeWithBytes(size int64) string {
 
 // textSize returns the width (the longest line, plus 1-char left/right
 // padding — matching listSize) and height (line count) of a block of
-// text, for sizing a no-border overlay to fit it exactly.
+// text, for sizing a no-border overlay to fit it exactly. Style tags
+// (see propertiesBuilder) would throw this off if counted, but
+// GetText(true) — every caller's source for the text passed in here —
+// already strips them.
 func textSize(text string) (width, height int) {
 	lines := strings.Split(text, "\n")
 	height = len(lines)

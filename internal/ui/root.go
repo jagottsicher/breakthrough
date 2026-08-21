@@ -2,7 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -19,21 +21,28 @@ const (
 )
 
 // Root is breakthrough's top-level UI: the directory panel, plus a
-// right-click context menu and the overlays it opens (Info, Rename, the
-// single-line prompt behind Select +/-/chown/chmod), and a Ctrl+Q quit
-// confirmation. Pages layers all of these as floating overlays on top of
-// the still-visible panel; Root owns the logic for what appears where,
-// giving each overlay real keyboard focus while it's shown (see
+// right-click context menu and the overlays it opens (Properties, Rename,
+// the single-line prompt behind Select +/-/chown/chmod), and a Ctrl+Q
+// quit confirmation. Pages layers all of these as floating overlays on
+// top of the still-visible panel; Root owns the logic for what appears
+// where, giving each overlay real keyboard focus while it's shown (see
 // showOverlay/hideOverlay), and closing whichever one is open when the
-// user clicks outside it (captureOutsideClick).
+// user clicks outside it (captureOutsideClick) — except Properties while
+// it has unsaved edits in progress, which blocks that instead (see
+// propertiesDirty).
 //
-// The context menu is grouped into three parts: Info/Rename, a
+// The context menu is grouped into three parts: Properties/Rename, a
 // "Selection" section (Select all/Deselect all/Select +/Select -,
 // operating on the checkbox column), and a "Commands" section
 // (Copy/Cut/Paste/chown/chmod). See menuSectionLabel for how the section
 // dividers are drawn, and docs/whitepaper.md for the dialog-based
 // Copy-to/Move-to planned as a possible later addition alongside the
 // clipboard-style Copy/Cut/Paste built here.
+//
+// Properties (see properties.go) is also where Name, Permissions, and
+// Modified can be edited in place — Owner/Group are still read-only,
+// pending a cross-platform way to list system users/groups (macOS
+// doesn't expose them via /etc/passwd the way Linux does).
 type Root struct {
 	*tview.Pages
 
@@ -43,9 +52,18 @@ type Root struct {
 	menu        *tview.List
 	rename      *tview.InputField
 	prompt      *tview.InputField
-	info        *tview.TextView
 	errorView   *tview.TextView
 	quitConfirm *tview.List
+
+	// properties is the Properties overlay's own nested Pages (see
+	// newPropertiesView) — propertiesText is the always-visible read-only
+	// display; propertiesEditField/propertiesButtons are shown/positioned
+	// on top of it once editing starts.
+	properties           *tview.Pages
+	propertiesText       *tview.TextView
+	propertiesEditField  *tview.InputField
+	propertiesEditTarget propertyField
+	propertiesButtons    *tview.Flex
 
 	// promptSubmit is what the currently-open prompt overlay (see
 	// openPrompt/finishPrompt) runs with the typed text if the user
@@ -81,17 +99,38 @@ type Root struct {
 	target    string
 	targetRow int
 
-	// infoTarget/infoStat cache what the Info overlay is currently
-	// showing, so computeHashes (triggered separately, after Info is
-	// already open — see captureInfoKey/captureInfoMouse) knows what to
-	// hash and can re-render the same text with the results appended,
-	// without re-running fsops.Stat. hashSectionRow is the 0-based row,
-	// within that text, where the hash hint/result line starts — set by
-	// renderInfo, read by captureInfoMouse to tell whether a click landed
-	// on it.
-	infoTarget     string
-	infoStat       fsops.Info
-	hashSectionRow int
+	// propertiesTarget/propertiesStat cache what the Properties overlay is
+	// currently showing, so computeHashes (triggered separately, after
+	// Properties is already open — see capturePropertiesKey/
+	// capturePropertiesMouse) knows what to hash and can re-render the
+	// same text with the results appended, without re-running fsops.Stat.
+	// propertiesHashes holds the computed digests once that's happened,
+	// nil until then — renderProperties reads it directly rather than
+	// taking it as a parameter, since it's re-run after every kind of
+	// edit, not just this one. hashSectionRow is the 0-based row, within
+	// that text, where the hash hint/result line starts — set by
+	// renderProperties, read by capturePropertiesMouse to tell whether a
+	// click landed on it.
+	propertiesTarget string
+	propertiesStat   fsops.Info
+	propertiesHashes *fsops.Hashes
+	hashSectionRow   int
+
+	// propertySpans locates each editable region in the Properties
+	// overlay's current text (see propertiesBuilder), rebuilt on every
+	// renderProperties call.
+	propertySpans []propertySpan
+
+	// propertiesDirty/stagedName/stagedMode/stagedMtime hold the
+	// Properties overlay's in-progress edit, if any — see
+	// markPropertiesDirty and savePropertiesEdit. The staged values start
+	// out equal to propertiesStat's own (set in openProperties) and only
+	// diverge as fields are edited; nothing here is written to the real
+	// file until Save.
+	propertiesDirty bool
+	stagedName      string
+	stagedMode      os.FileMode
+	stagedMtime     time.Time
 
 	// activePage/activeWidget track whichever overlay (context menu,
 	// rename, info, quit confirm) is currently shown, if any — see
@@ -143,8 +182,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetBackgroundColor(accentBackgroundColor)
 	r.menu.SetMainTextColor(tcell.ColorWhite)
 	r.menu.SetHighlightFullLine(true)
-	r.menu.SetBorderPadding(0, 0, 1, 1)             // 1-char left/right padding; no border needed for this
-	r.menu.AddItem("Properties", "", 0, r.openInfo) // first and default-selected; identifiers below still say "Info" pending the editable rework
+	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
+	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
@@ -186,7 +225,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.prompt.SetFieldTextColor(tcell.ColorWhite)
 	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
-	r.info = r.newInfoView()
+	r.properties = r.newPropertiesView()
 	r.errorView = r.newErrorView()
 
 	// Panel reports its own failures (unreadable directory, bad path
@@ -206,7 +245,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
-	r.AddPage(infoPage, r.info, false, false)
+	r.AddPage(propertiesPage, r.properties, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 
@@ -253,6 +292,13 @@ func (r *Root) hideOverlay() {
 // from under a menu that stays put, which both looks wrong and would
 // leave targetRow (see openRename) pointing at a different file than the
 // one the menu was opened for.
+//
+// The Properties overlay is the one exception to "click outside closes
+// it": once propertiesDirty is true (see markPropertiesDirty), an
+// outside click is consumed and otherwise ignored instead — Cancel or
+// Save is the only way out from there, so an in-progress edit (a
+// permission bit already toggled, a name half-typed) can't be silently
+// discarded, or just as silently lost track of, by a stray click.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
@@ -261,6 +307,10 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
+	}
+
+	if r.activePage == propertiesPage && r.propertiesDirty {
+		return tview.MouseConsumed, nil
 	}
 
 	switch action {

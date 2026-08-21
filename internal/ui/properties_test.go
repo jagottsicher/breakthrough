@@ -71,28 +71,6 @@ func TestSizeWithBytes(t *testing.T) {
 	}
 }
 
-func TestFormatInfoIncludesLinkTargetOnlyForSymlinks(t *testing.T) {
-	file := formatInfo(fsops.Info{Name: "a.txt", ModTime: time.Now()})
-	if strings.Contains(file, "Link target") {
-		t.Error("a regular file's Info should not mention a link target")
-	}
-
-	link := formatInfo(fsops.Info{
-		Name:       "b.txt",
-		IsSymlink:  true,
-		LinkTarget: "/somewhere/else",
-		ModTime:    time.Now(),
-	})
-	wantLinkLine := fmt.Sprintf("%-13s%s", "Link target:", "/somewhere/else")
-	if !strings.Contains(link, wantLinkLine) {
-		t.Errorf("symlink Info should contain %q, got:\n%s", wantLinkLine, link)
-	}
-	wantTypeLine := fmt.Sprintf("%-13s%s", "Type:", "symlink")
-	if !strings.Contains(link, wantTypeLine) {
-		t.Errorf("symlink Info should contain %q, got:\n%s", wantTypeLine, link)
-	}
-}
-
 func TestClassifyKind(t *testing.T) {
 	tests := []struct {
 		name string
@@ -157,47 +135,102 @@ func TestFormatChain(t *testing.T) {
 	}
 }
 
-// TestFormatInfoShowsLinksOnlyWhenSharedAndNotForDirs pins the "Links"
+func TestTextSize(t *testing.T) {
+	width, height := textSize("ab\nabcd\na")
+	if width != 6 { // longest line "abcd" (4) + 2 padding
+		t.Errorf("width = %d, want 6", width)
+	}
+	if height != 3 {
+		t.Errorf("height = %d, want 3", height)
+	}
+}
+
+// seedProperties builds a real Root (any directory will do — this is for
+// exercising renderProperties/propertiesBuilder with a hand-built Info,
+// not real navigation) and seeds its Properties state directly, the same
+// assignments openProperties itself makes, bypassing fsops.Stat so a
+// fabricated fsops.Info can be used without a real file backing it.
+// Callers that need Root.propertiesTarget to resolve to something real on
+// disk (Save, hashing, symlink chains) should set info.Path themselves
+// and create it under t.TempDir() first.
+func seedProperties(t *testing.T, info fsops.Info) *Root {
+	t.Helper()
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.propertiesTarget = info.Path
+	r.propertiesStat = info
+	r.propertiesHashes = nil
+	r.propertiesDirty = false
+	r.stagedName = info.Name
+	r.stagedMode = info.Mode.Perm()
+	r.stagedMtime = info.ModTime
+	r.renderProperties()
+	return r
+}
+
+func TestPropertiesShowsLinkTargetOnlyForSymlinks(t *testing.T) {
+	file := seedProperties(t, fsops.Info{Name: "a.txt", ModTime: time.Now()})
+	if text := file.propertiesText.GetText(true); strings.Contains(text, "Link target") {
+		t.Error("a regular file's Properties should not mention a link target")
+	}
+
+	link := seedProperties(t, fsops.Info{
+		Name:       "b.txt",
+		IsSymlink:  true,
+		LinkTarget: "/somewhere/else",
+		ModTime:    time.Now(),
+	})
+	text := link.propertiesText.GetText(true)
+	wantLinkLine := fmt.Sprintf("%-13s%s", "Link target:", "/somewhere/else")
+	if !strings.Contains(text, wantLinkLine) {
+		t.Errorf("symlink Properties should contain %q, got:\n%s", wantLinkLine, text)
+	}
+}
+
+// TestPropertiesShowsLinksOnlyWhenSharedAndNotForDirs pins the "Links"
 // field's visibility rule: only shown for a non-directory with Nlink > 1
 // (content that exists under another name too) — not for an ordinary
 // single-link file, and not for a directory even though directories
 // always have Nlink >= 2 trivially.
-func TestFormatInfoShowsLinksOnlyWhenSharedAndNotForDirs(t *testing.T) {
-	single := formatInfo(fsops.Info{Name: "a.txt", Nlink: 1, ModTime: time.Now()})
-	if strings.Contains(single, "Links") {
-		t.Errorf("a single-link file should not mention Links, got:\n%s", single)
+func TestPropertiesShowsLinksOnlyWhenSharedAndNotForDirs(t *testing.T) {
+	single := seedProperties(t, fsops.Info{Name: "a.txt", Nlink: 1, ModTime: time.Now()})
+	if text := single.propertiesText.GetText(true); strings.Contains(text, "Links") {
+		t.Errorf("a single-link file should not mention Links, got:\n%s", text)
 	}
 
-	shared := formatInfo(fsops.Info{Name: "b.txt", Nlink: 2, ModTime: time.Now()})
-	if !strings.Contains(shared, "Links") {
-		t.Errorf("a file with Nlink=2 should mention Links, got:\n%s", shared)
+	shared := seedProperties(t, fsops.Info{Name: "b.txt", Nlink: 2, ModTime: time.Now()})
+	if text := shared.propertiesText.GetText(true); !strings.Contains(text, "Links") {
+		t.Errorf("a file with Nlink=2 should mention Links, got:\n%s", text)
 	}
 
-	dir := formatInfo(fsops.Info{Name: "c", IsDir: true, Nlink: 2, ModTime: time.Now()})
-	if strings.Contains(dir, "Links") {
-		t.Errorf("a directory should not mention Links even with Nlink > 1, got:\n%s", dir)
+	dir := seedProperties(t, fsops.Info{Name: "c", IsDir: true, Nlink: 2, ModTime: time.Now()})
+	if text := dir.propertiesText.GetText(true); strings.Contains(text, "Links") {
+		t.Errorf("a directory should not mention Links even with Nlink > 1, got:\n%s", text)
 	}
 }
 
-// TestFormatInfoShowsMountPoint pins that "Mount point: yes" only
+// TestPropertiesShowsMountPoint pins that "Mount point: yes" only
 // appears when Info.MountPoint is true.
-func TestFormatInfoShowsMountPoint(t *testing.T) {
-	plain := formatInfo(fsops.Info{Name: "a", IsDir: true, ModTime: time.Now()})
-	if strings.Contains(plain, "Mount point") {
-		t.Errorf("an ordinary directory should not mention a mount point, got:\n%s", plain)
+func TestPropertiesShowsMountPoint(t *testing.T) {
+	plain := seedProperties(t, fsops.Info{Name: "a", IsDir: true, ModTime: time.Now()})
+	if text := plain.propertiesText.GetText(true); strings.Contains(text, "Mount point") {
+		t.Errorf("an ordinary directory should not mention a mount point, got:\n%s", text)
 	}
 
-	mounted := formatInfo(fsops.Info{Name: "b", IsDir: true, MountPoint: true, ModTime: time.Now()})
+	mounted := seedProperties(t, fsops.Info{Name: "b", IsDir: true, MountPoint: true, ModTime: time.Now()})
+	text := mounted.propertiesText.GetText(true)
 	wantLine := fmt.Sprintf("%-13s%s", "Mount point:", "yes")
-	if !strings.Contains(mounted, wantLine) {
-		t.Errorf("a mount point should say so (want %q), got:\n%s", wantLine, mounted)
+	if !strings.Contains(text, wantLine) {
+		t.Errorf("a mount point should say so (want %q), got:\n%s", wantLine, text)
 	}
 }
 
-// TestRenderInfoShowsChainForMultiHopSymlink exercises the full path
-// from a real multi-hop symlink on disk through Root.openInfo to the
-// rendered "Chain" line.
-func TestRenderInfoShowsChainForMultiHopSymlink(t *testing.T) {
+// TestRenderPropertiesShowsChainForMultiHopSymlink exercises the full
+// path from a real multi-hop symlink on disk through Root.openProperties
+// to the rendered "Chain" line.
+func TestRenderPropertiesShowsChainForMultiHopSymlink(t *testing.T) {
 	dir := t.TempDir()
 	final := filepath.Join(dir, "final.txt")
 	mid := filepath.Join(dir, "mid")
@@ -217,19 +250,19 @@ func TestRenderInfoShowsChainForMultiHopSymlink(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = start
-	r.openInfo()
+	r.openProperties()
 
-	text := r.info.GetText(true)
+	text := r.propertiesText.GetText(true)
 	wantChain := fmt.Sprintf("%s -> %s (file)", mid, final)
 	if !strings.Contains(text, wantChain) {
-		t.Errorf("Info text should contain the chain %q, got:\n%s", wantChain, text)
+		t.Errorf("Properties text should contain the chain %q, got:\n%s", wantChain, text)
 	}
 }
 
-// TestRenderInfoOmitsChainForSingleHopSymlink pins that a simple,
+// TestRenderPropertiesOmitsChainForSingleHopSymlink pins that a simple,
 // non-chained symlink doesn't get a redundant "Chain" line — "Link
 // target" and "Type" already fully describe it.
-func TestRenderInfoOmitsChainForSingleHopSymlink(t *testing.T) {
+func TestRenderPropertiesOmitsChainForSingleHopSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target.txt")
 	link := filepath.Join(dir, "link")
@@ -245,20 +278,18 @@ func TestRenderInfoOmitsChainForSingleHopSymlink(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = link
-	r.openInfo()
+	r.openProperties()
 
 	// "Chain:" (with the colon infoField adds), not just "Chain" — the
 	// bare word is a false-positive trap here: t.TempDir() names the
-	// directory after this very test function, and "...OmitsChainFor..."
+	// directory after this very test function, and this one's own name
 	// contains "Chain" too, via the Path/Link target fields.
-	if text := r.info.GetText(true); strings.Contains(text, "Chain:") {
+	if text := r.propertiesText.GetText(true); strings.Contains(text, "Chain:") {
 		t.Errorf("a single-hop symlink should not show a Chain line, got:\n%s", text)
 	}
 }
 
-// TestComputeHashesUpdatesInfoText exercises the full path: openInfo
-// shows the hint, computeHashes replaces it with the real digests.
-func TestComputeHashesUpdatesInfoText(t *testing.T) {
+func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
 	if err := os.WriteFile(path, []byte("hello world"), 0o640); err != nil {
@@ -270,26 +301,24 @@ func TestComputeHashesUpdatesInfoText(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = path
-	r.openInfo()
+	r.openProperties()
 
-	before := r.info.GetText(true)
+	before := r.propertiesText.GetText(true)
 	if !strings.Contains(before, "Press h or click here") {
-		t.Errorf("Info text before computing hashes should show the hint, got:\n%s", before)
+		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
 	r.computeHashes()
 
-	after := r.info.GetText(true)
+	after := r.propertiesText.GetText(true)
 	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") { // MD5("hello world")
-		t.Errorf("Info text after computing hashes should show the MD5 digest, got:\n%s", after)
+		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
 	if !strings.Contains(after, "SHA-256") {
-		t.Errorf("Info text after computing hashes should label the SHA-256 line, got:\n%s", after)
+		t.Errorf("Properties text after computing hashes should label the SHA-256 line, got:\n%s", after)
 	}
 }
 
-// TestComputeHashesSkipsDirectories pins that directories neither offer
-// nor accept the hash action — see fsops.Hash's own doc comment on why.
 func TestComputeHashesSkipsDirectories(t *testing.T) {
 	dir := fixtureDir(t)
 
@@ -298,26 +327,23 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = filepath.Join(dir, "app-data")
-	r.openInfo()
+	r.openProperties()
 
-	text := r.info.GetText(true)
+	text := r.propertiesText.GetText(true)
 	if strings.Contains(text, "Press h or click here") {
-		t.Errorf("a directory's Info should not offer to compute a hash, got:\n%s", text)
+		t.Errorf("a directory's Properties should not offer to compute a hash, got:\n%s", text)
 	}
 
 	r.computeHashes()
-	if r.info.GetText(true) != text {
-		t.Error("computeHashes on a directory should not change the Info text")
+	if r.propertiesText.GetText(true) != text {
+		t.Error("computeHashes on a directory should not change the Properties text")
 	}
 	if r.activePage == errorPage {
 		t.Error("computeHashes on a directory should silently no-op, not report an error")
 	}
 }
 
-// TestCaptureInfoKeyTriggersHash pins the 'h' keybinding, dispatched the
-// way it actually arrives (through captureInfoKey), not by calling
-// computeHashes directly.
-func TestCaptureInfoKeyTriggersHash(t *testing.T) {
+func TestCapturePropertiesKeyTriggersHash(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -326,22 +352,22 @@ func TestCaptureInfoKeyTriggersHash(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = path
-	r.openInfo()
+	r.openProperties()
 
-	if got := r.captureInfoKey(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)); got != nil {
-		t.Error("captureInfoKey should consume the 'h' key")
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)); got != nil {
+		t.Error("capturePropertiesKey should consume the 'h' key")
 	}
-	if !strings.Contains(r.info.GetText(true), "MD5:") {
+	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
 		t.Error("pressing h should have computed and shown the hash")
 	}
 }
 
-// TestCaptureInfoMouseClickOnHashLineTriggersHash pins the click
+// TestCapturePropertiesMouseClickOnHashLineTriggersHash pins the click
 // affordance: a click landing on (or below) the hash hint line computes
-// the hash, dispatched through captureInfoMouse the way a real click
-// arrives, with a genuinely drawn overlay (tcell.SimulationScreen) behind
-// the coordinates rather than assumed ones.
-func TestCaptureInfoMouseClickOnHashLineTriggersHash(t *testing.T) {
+// the hash, dispatched through capturePropertiesMouse the way a real
+// click arrives, with a genuinely drawn overlay (tcell.SimulationScreen)
+// behind the coordinates rather than assumed ones.
+func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -350,67 +376,559 @@ func TestCaptureInfoMouseClickOnHashLineTriggersHash(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = path
-	r.openInfo()
+	r.openProperties()
 
-	screen := tcell.NewSimulationScreen("")
-	if err := screen.Init(); err != nil {
-		t.Fatalf("screen.Init: %v", err)
-	}
+	screen := drawProperties(t, r)
 	defer screen.Fini()
-	screen.SetSize(80, 24)
-	r.info.Draw(screen)
 
-	x, y, _, _ := r.info.GetInnerRect()
+	x, y, _, _ := r.propertiesText.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
-	action, event := r.captureInfoMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0))
+	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0))
 	if action != tview.MouseConsumed || event != nil {
 		t.Errorf("click on the hash line should be consumed, got action=%v event=%v", action, event)
 	}
-	if !strings.Contains(r.info.GetText(true), "MD5:") {
+	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
 		t.Error("clicking the hash line should have computed and shown the hash")
 	}
 }
 
-// TestCaptureInfoMouseClickAboveHashLineDoesNothing is the click test's
-// negative case: clicking one of the ordinary fields (e.g. "Name:") must
-// not trigger hashing.
-func TestCaptureInfoMouseClickAboveHashLineDoesNothing(t *testing.T) {
+// drawProperties draws root's Properties overlay into a same-sized
+// SimulationScreen, so its text's InRect/GetInnerRect have real layout to
+// resolve coordinates against — the same drawnRoot helper table_click_
+// test.go uses, but scoped to just the overlay under test here.
+func drawProperties(t *testing.T, r *Root) tcell.SimulationScreen {
+	t.Helper()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(80, 24)
+	r.properties.SetRect(0, 0, 60, 20)
+	r.properties.Draw(screen)
+	return screen
+}
+
+// TestCapturePropertiesMouseClickOnPermissionBitToggles is
+// TestRenamePositionsOverRightClickedRow's counterpart for this overlay:
+// a real click, dispatched through capturePropertiesMouse against a
+// genuinely drawn screen, must land on the actual permission bit under
+// the cursor — not some other row's worth of column math, which a
+// multi-row TextView (unlike the header's single-row one) has much more
+// room to get wrong.
+func TestCapturePropertiesMouseClickOnPermissionBitToggles(t *testing.T) {
 	dir := fixtureDir(t)
-	path := filepath.Join(dir, "banana.txt")
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.target = path
-	r.openInfo()
+	r.openProperties()
 
-	screen := tcell.NewSimulationScreen("")
-	if err := screen.Init(); err != nil {
-		t.Fatalf("screen.Init: %v", err)
-	}
+	screen := drawProperties(t, r)
 	defer screen.Fini()
-	screen.SetSize(80, 24)
-	r.info.Draw(screen)
 
-	x, y, _, _ := r.info.GetInnerRect() // row 0: the "Name:" field
-
-	action, _ := r.captureInfoMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
-	if action == tview.MouseConsumed {
-		t.Error("a click on the Name field should not be treated as hitting the hash line")
+	span, ok := findPropertySpan(r, fieldPermOwnerWrite)
+	if !ok {
+		t.Fatal("no fieldPermOwnerWrite span found")
 	}
-	if strings.Contains(r.info.GetText(true), "MD5:") {
-		t.Error("clicking above the hash line should not have computed anything")
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	clickX, clickY := rectX+span.startCol, rectY+span.row
+
+	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0))
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("click on a permission bit should be consumed, got action=%v event=%v", action, event)
+	}
+	if r.stagedMode != 0o444 { // owner-write toggled off
+		t.Errorf("stagedMode = %o, want %o", r.stagedMode, 0o444)
+	}
+	if !r.propertiesDirty {
+		t.Error("clicking a permission bit should mark Properties dirty")
 	}
 }
 
-func TestTextSize(t *testing.T) {
-	width, height := textSize("ab\nabcd\na")
-	if width != 6 { // longest line "abcd" (4) + 2 padding
-		t.Errorf("width = %d, want 6", width)
+func TestPropertySpanAt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
-	if height != 3 {
-		t.Errorf("height = %d, want 3", height)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	nameSpan, ok := findPropertySpan(r, fieldName)
+	if !ok {
+		t.Fatal("no fieldName span found")
 	}
+
+	got, ok := r.propertySpanAt(nameSpan.row, nameSpan.startCol)
+	if !ok || got.field != fieldName {
+		t.Errorf("propertySpanAt(%d, %d) = %+v, %v, want fieldName", nameSpan.row, nameSpan.startCol, got, ok)
+	}
+
+	if _, ok := r.propertySpanAt(nameSpan.row, nameSpan.endCol); ok {
+		t.Error("propertySpanAt at the span's end column (exclusive) should not match")
+	}
+}
+
+// findPropertySpan returns the first span for field in r.propertySpans.
+func findPropertySpan(r *Root, field propertyField) (propertySpan, bool) {
+	for _, s := range r.propertySpans {
+		if s.field == field {
+			return s, true
+		}
+	}
+	return propertySpan{}, false
+}
+
+func TestOpenPropertiesInitializesStagedValues(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	if r.stagedName != "apple.txt" {
+		t.Errorf("stagedName = %q, want %q", r.stagedName, "apple.txt")
+	}
+	if r.stagedMode != 0o640 {
+		t.Errorf("stagedMode = %o, want %o", r.stagedMode, 0o640)
+	}
+	if !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
+		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, r.propertiesStat.ModTime)
+	}
+	if r.propertiesDirty {
+		t.Error("propertiesDirty should be false right after opening, before any field is touched")
+	}
+}
+
+func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	// 0644 already has owner-write set, so toggling it flips it *off*
+	// (0444) — matching the user's own example ("wenn ich bei r klicke,
+	// wird aus r ein -").
+	r.togglePermBit(fieldPermOwnerWrite)
+
+	const want = 0o444
+	if r.stagedMode != want {
+		t.Errorf("stagedMode = %o, want %o", r.stagedMode, want)
+	}
+	if !r.propertiesDirty {
+		t.Error("toggling a permission bit should mark Properties dirty")
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), fmt.Sprintf("(%04o)", want)) {
+		t.Errorf("rendered text should show the new octal value, got:\n%s", r.propertiesText.GetText(true))
+	}
+
+	r.togglePermBit(fieldPermOwnerWrite)
+	if r.stagedMode != 0o644 {
+		t.Errorf("stagedMode after toggling twice = %o, want %o (back to original)", r.stagedMode, 0o644)
+	}
+}
+
+// TestActivatePropertyFieldMarksDirty pins the literal "as soon as you
+// click one to edit" behavior: dirty becomes true, and the Cancel/Save
+// row is shown, on the click itself — not only once an actual change is
+// confirmed.
+func TestActivatePropertyFieldMarksDirty(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if r.propertiesDirty {
+		t.Fatal("setup: should not be dirty before any click")
+	}
+
+	span, ok := findPropertySpan(r, fieldName)
+	if !ok {
+		t.Fatal("no fieldName span found")
+	}
+	r.activatePropertyField(span)
+
+	if !r.propertiesDirty {
+		t.Error("clicking a field should mark Properties dirty immediately")
+	}
+	if got := r.propertiesEditField.GetText(); got != "apple.txt" {
+		t.Errorf("edit field pre-filled with %q, want %q", got, "apple.txt")
+	}
+}
+
+func TestFinishPropertyEditAppliesNameOnEnter(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	span, _ := findPropertySpan(r, fieldName)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("renamed.txt")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	if r.stagedName != "renamed.txt" {
+		t.Errorf("stagedName = %q, want %q", r.stagedName, "renamed.txt")
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "renamed.txt") {
+		t.Error("rendered text should reflect the staged name")
+	}
+}
+
+func TestFinishPropertyEditEscapeDiscardsFieldEdit(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	span, _ := findPropertySpan(r, fieldName)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("should-not-apply.txt")
+	r.finishPropertyEdit(tcell.KeyEscape)
+
+	if r.stagedName != "apple.txt" {
+		t.Errorf("stagedName = %q, want unchanged %q", r.stagedName, "apple.txt")
+	}
+}
+
+func TestFinishPropertyEditDateValidShorthandPadsAndPreservesTime(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
+
+	span, _ := findPropertySpan(r, fieldMtimeDate)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("2026-8-5") // shorthand: 1-digit month/day
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	want := time.Date(2026, time.August, 5, 14, 30, 45, 0, time.Local)
+	if !r.stagedMtime.Equal(want) {
+		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, want)
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "2026-08-05") {
+		t.Error("rendered text should show the zero-padded date")
+	}
+}
+
+func TestFinishPropertyEditTimeValidShorthandPadsAndPreservesDate(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.stagedMtime = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.Local)
+
+	span, _ := findPropertySpan(r, fieldMtimeTime)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("9:5:3")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	want := time.Date(2020, time.January, 1, 9, 5, 3, 0, time.Local)
+	if !r.stagedMtime.Equal(want) {
+		t.Errorf("stagedMtime = %v, want %v", r.stagedMtime, want)
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "09:05:03") {
+		t.Error("rendered text should show the zero-padded time")
+	}
+}
+
+func TestFinishPropertyEditInvalidDateKeepsPreviousStaged(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	original := r.stagedMtime
+
+	span, _ := findPropertySpan(r, fieldMtimeDate)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("2026-02-30") // no such day
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	if !r.stagedMtime.Equal(original) {
+		t.Errorf("stagedMtime = %v, want unchanged %v after invalid input", r.stagedMtime, original)
+	}
+	if r.activePage == errorPage {
+		t.Error("invalid date input should not open the error overlay (see finishPropertyEdit's doc comment)")
+	}
+}
+
+func TestParseDate(t *testing.T) {
+	base := time.Date(2000, time.January, 1, 10, 20, 30, 0, time.Local)
+
+	tests := []struct {
+		in      string
+		want    time.Time
+		wantErr bool
+	}{
+		{"2026-08-05", time.Date(2026, time.August, 5, 10, 20, 30, 0, time.Local), false},
+		{"2026-8-5", time.Date(2026, time.August, 5, 10, 20, 30, 0, time.Local), false}, // shorthand accepted
+		{"2026-13-01", time.Time{}, true},                                               // no month 13
+		{"2026-02-30", time.Time{}, true},                                               // no Feb 30
+		{"not-a-date", time.Time{}, true},
+		{"2026-08", time.Time{}, true}, // missing day
+	}
+
+	for _, tt := range tests {
+		got, err := parseDate(tt.in, base)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("parseDate(%q) = %v, want an error", tt.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseDate(%q): unexpected error %v", tt.in, err)
+			continue
+		}
+		if !got.Equal(tt.want) {
+			t.Errorf("parseDate(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestParseTime(t *testing.T) {
+	base := time.Date(2026, time.August, 5, 0, 0, 0, 0, time.Local)
+
+	tests := []struct {
+		in      string
+		want    time.Time
+		wantErr bool
+	}{
+		{"14:05:09", time.Date(2026, time.August, 5, 14, 5, 9, 0, time.Local), false},
+		{"9:5:3", time.Date(2026, time.August, 5, 9, 5, 3, 0, time.Local), false}, // shorthand accepted
+		{"25:00:00", time.Time{}, true},                                           // no hour 25
+		{"12:60:00", time.Time{}, true},                                           // no minute 60
+		{"garbage", time.Time{}, true},
+		{"14:05", time.Time{}, true}, // missing seconds
+	}
+
+	for _, tt := range tests {
+		got, err := parseTime(tt.in, base)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("parseTime(%q) = %v, want an error", tt.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseTime(%q): unexpected error %v", tt.in, err)
+			continue
+		}
+		if !got.Equal(tt.want) {
+			t.Errorf("parseTime(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestSavePropertiesEditAppliesAllStagedChanges is the end-to-end test
+// for the risky part of this feature: Save must actually rename, chmod,
+// and touch the real file to match what was staged, and only then close
+// the overlay and reload the panel.
+func TestSavePropertiesEditAppliesAllStagedChanges(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640
+
+	nameSpan, _ := findPropertySpan(r, fieldName)
+	r.activatePropertyField(nameSpan)
+	r.propertiesEditField.SetText("saved.txt")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	wantMtime := time.Date(2021, time.June, 15, 8, 0, 0, 0, time.Local)
+	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
+	r.activatePropertyField(dateSpan)
+	r.propertiesEditField.SetText(wantMtime.Format("2006-01-02"))
+	r.finishPropertyEdit(tcell.KeyEnter)
+	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
+	r.activatePropertyField(timeSpan)
+	r.propertiesEditField.SetText(wantMtime.Format("15:04:05"))
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	r.savePropertiesEdit()
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Save, want closed", r.activePage)
+	}
+
+	newPath := filepath.Join(dir, "saved.txt")
+	fi, err := os.Stat(newPath)
+	if err != nil {
+		t.Fatalf("saved.txt should exist after Save: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("apple.txt should no longer exist after renaming, stat err = %v", err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o, want 0640", fi.Mode().Perm())
+	}
+	if !fi.ModTime().Equal(wantMtime) {
+		t.Errorf("ModTime = %v, want %v", fi.ModTime(), wantMtime)
+	}
+}
+
+// TestSavePropertiesEditNoopWhenNothingChanged pins that Save works
+// cleanly even when nothing was actually edited (dirty could still be
+// true from a field having been clicked into and back out of unchanged).
+func TestSavePropertiesEditNoopWhenNothingChanged(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	r.savePropertiesEdit()
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Save, want closed", r.activePage)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("apple.txt should still exist unchanged: %v", err)
+	}
+}
+
+// TestCancelPropertiesEditDiscardsChanges pins that Cancel never touches
+// the real file, even after a permission bit was toggled.
+func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	r.togglePermBit(fieldPermOtherRead)
+	if !r.propertiesDirty {
+		t.Fatal("setup: should be dirty after toggling a bit")
+	}
+
+	r.cancelPropertiesEdit()
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Cancel, want closed", r.activePage)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o644 {
+		t.Errorf("mode = %o after Cancel, want unchanged 0644", fi.Mode().Perm())
+	}
+}
+
+// TestCaptureOutsideClickBlockedWhilePropertiesDirty pins the user's own
+// requirement: once a field's been touched, a click outside Properties
+// must not close it — Cancel or Save is the only way out from there.
+func TestCaptureOutsideClickBlockedWhilePropertiesDirty(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // any touch marks it dirty
+
+	x, y := outsidePropertiesClick(r)
+	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
+
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to still be open", r.activePage)
+	}
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("outside click while dirty should be consumed and swallowed, got action=%v event=%v", action, event)
+	}
+}
+
+// TestCaptureOutsideClickClosesPropertiesBeforeAnyEdit pins that nothing
+// changes for the "haven't touched anything yet" case — the existing
+// click-outside-closes behavior every other overlay already has.
+func TestCaptureOutsideClickClosesPropertiesBeforeAnyEdit(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	x, y := outsidePropertiesClick(r)
+	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want Properties closed by the outside click", r.activePage)
+	}
+}
+
+// outsidePropertiesClick returns a screen position guaranteed to fall
+// outside r.properties' actual rect — computed from that rect rather
+// than assumed (e.g. (0,0)), since r.properties is positioned relative to
+// r.menu's own rect (see openProperties), which is wherever it happens
+// to default to when a test opens Properties directly instead of through
+// a real right-click (showMenu) first.
+func outsidePropertiesClick(r *Root) (x, y int) {
+	px, py, pw, ph := r.properties.GetRect()
+	return px + pw + 10, py + ph + 10
 }
