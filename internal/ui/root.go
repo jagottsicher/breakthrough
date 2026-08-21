@@ -69,9 +69,15 @@ type Root struct {
 	hiddenToggleIdx int
 
 	// target is the absolute path the context menu / rename prompt is
-	// currently acting on. targetRow is its screen row in the panel's
-	// table, used to position the rename field exactly over that row.
-	// Only meaningful while one of the overlays below is visible.
+	// currently acting on. targetRow is its table row *index* (0 = "..",
+	// 1 = the first entry, ...; see Panel.rowIndexAt) — not a screen
+	// coordinate, which is what a since-fixed bug here used to store
+	// (see captureMouse's MouseRightClick case): openRename passes it
+	// straight to Panel.nameCellRect, which indexes Table.GetCell with
+	// it, so a screen y only happened to line up by coincidence, and
+	// silently drifted out of sync with the table's own scroll offset as
+	// soon as one existed. Only meaningful while one of the overlays
+	// below is visible.
 	target    string
 	targetRow int
 
@@ -457,11 +463,16 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		if !ok {
 			return action, event // nothing sensible to act on
 		}
-		if row, ok := r.panel.rowIndexAt(x, y); ok {
-			r.panel.focusRow(row) // the menu is about this row; the highlight should agree
+		row, ok := r.panel.rowIndexAt(x, y)
+		if !ok {
+			// RowAt just succeeded via this same lookup, so this
+			// shouldn't happen — stay defensive rather than fall back to
+			// a stale or wrong targetRow.
+			return action, event
 		}
+		r.panel.focusRow(row) // the menu is about this row; the highlight should agree
 		r.target = path
-		r.targetRow = y
+		r.targetRow = row
 		r.showMenu(x, y)
 		return tview.MouseConsumed, nil
 
