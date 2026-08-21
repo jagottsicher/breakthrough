@@ -26,7 +26,7 @@ const propertiesPage = "properties"
 // visible, that's what it's covering, so it should always look focused
 // too, not fall back to the duller "editable" look the field underneath
 // no longer shows once its own text is covered.
-const focusedBackgroundColor = tcell.ColorAqua
+const focusedBackgroundColor = tcell.ColorDarkCyan
 
 // propertyField identifies one editable region within the Properties
 // overlay — see propertySpan and propertiesBuilder.
@@ -168,7 +168,7 @@ func (pb *propertiesBuilder) field(label, value string) {
 // never needs to restore anything beyond what it changed.
 func focusTag(field, focused propertyField) (tag, reset string) {
 	if field == focused {
-		return "[:aqua:b]", "[:-:-]" // matches focusedBackgroundColor
+		return "[:darkcyan:b]", "[:-:-]" // matches focusedBackgroundColor
 	}
 	return "[:slategray]", "[:-]"
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -10,6 +11,23 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+// TestMain isolates every test in this package from whatever the real
+// machine's $HISTFILE/~/.bash_history actually contains — Root now
+// loads real bash history at construction (see historyFilePath/
+// loadBashHistory), and no test here should depend on, or be thrown off
+// by, this developer's or CI runner's own command history. Pointed at a
+// path that doesn't exist rather than a real (even if temporary) file:
+// loadBashHistory already treats "doesn't exist" as "start empty", the
+// same as a first run would. Tests that specifically exercise
+// runShellCommand — the only thing that ever writes to this path (see
+// appendBashHistory) — additionally isolate themselves with their own
+// t.TempDir()-scoped HISTFILE, so they can't contaminate each other
+// either, regardless of run order.
+func TestMain(m *testing.M) {
+	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
+	os.Exit(m.Run())
+}
 
 // t.Setenv (not os.Setenv/os.Unsetenv) throughout: it restores the
 // original value automatically once the test ends, and "" is
@@ -341,7 +359,18 @@ func TestPanelOnLoadRefreshesStatusBar(t *testing.T) {
 // screen — see TestCaptureStatusBarMouseEditClickRunsEditAction's own
 // doc comment — so this only pins the wiring and the "line clears
 // afterwards" behavior, not that a command actually ran).
+// isolateHistoryFile points $HISTFILE at a path scoped to this test's
+// own t.TempDir() — used by every test below that exercises
+// runShellCommand (the only thing that writes to it — see
+// appendBashHistory), so they can't contaminate each other via
+// TestMain's single shared default path.
+func isolateHistoryFile(t *testing.T) {
+	t.Helper()
+	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
+}
+
 func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
+	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -360,6 +389,7 @@ func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
 // whitespace-only) command does nothing — no Suspend, no panel reload,
 // no error.
 func TestRunShellCommandEmptyIsNoop(t *testing.T) {
+	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -380,6 +410,7 @@ func TestRunShellCommandEmptyIsNoop(t *testing.T) {
 // appended, unconditionally — the same as a real shell, which remembers
 // what was typed regardless of whether it succeeded.
 func TestRunShellCommandRecordsHistory(t *testing.T) {
+	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -408,6 +439,7 @@ func TestRunShellCommandRecordsHistory(t *testing.T) {
 // oldest; Down recalls newer entries and restores whatever was being
 // typed (the draft) once it moves past the newest one.
 func TestBashHistoryUpDownNavigation(t *testing.T) {
+	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -451,6 +483,7 @@ func TestBashHistoryUpDownNavigation(t *testing.T) {
 // nothing has been recalled yet (no history at all, or history exists
 // but Up was never pressed).
 func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
+	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -462,5 +495,100 @@ func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
 
 	if got := r.bashLine.GetText(); got != "untouched" {
 		t.Errorf("text = %q after a stray Down, want unchanged %q", got, "untouched")
+	}
+}
+
+func TestHistoryFilePathPrefersHISTFILE(t *testing.T) {
+	t.Setenv("HISTFILE", "/some/explicit/path")
+	if got := historyFilePath(); got != "/some/explicit/path" {
+		t.Errorf("historyFilePath() = %q, want %q", got, "/some/explicit/path")
+	}
+}
+
+func TestHistoryFilePathFallsBackToBashHistory(t *testing.T) {
+	t.Setenv("HISTFILE", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home directory in this environment: %v", err)
+	}
+	want := filepath.Join(home, ".bash_history")
+	if got := historyFilePath(); got != want {
+		t.Errorf("historyFilePath() = %q, want %q", got, want)
+	}
+}
+
+// TestLoadBashHistorySkipsTimestampComments pins that bash's own
+// optional "#<unix timestamp>" history-file comment lines (written when
+// HISTTIMEFORMAT is set) are skipped rather than mistaken for commands,
+// while an ordinary line starting with "#" some other way (a command
+// that's genuinely a shell comment, or coincidentally starts with a
+// word after the #) is kept.
+func TestLoadBashHistorySkipsTimestampComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history")
+	content := "ls -la\n#1700000000\ncd /tmp\n#not-a-timestamp\necho hi\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := loadBashHistory(path)
+	want := []string{"ls -la", "cd /tmp", "#not-a-timestamp", "echo hi"}
+	if len(got) != len(want) {
+		t.Fatalf("loadBashHistory() = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("loadBashHistory()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+func TestLoadBashHistoryMissingFileIsEmpty(t *testing.T) {
+	got := loadBashHistory(filepath.Join(t.TempDir(), "does-not-exist"))
+	if len(got) != 0 {
+		t.Errorf("loadBashHistory() = %v, want empty for a missing file", got)
+	}
+}
+
+func TestAppendBashHistoryThenLoadRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history")
+
+	if err := appendBashHistory(path, "first command"); err != nil {
+		t.Fatalf("appendBashHistory: %v", err)
+	}
+	if err := appendBashHistory(path, "second command"); err != nil {
+		t.Fatalf("appendBashHistory: %v", err)
+	}
+
+	got := loadBashHistory(path)
+	want := []string{"first command", "second command"}
+	if len(got) != len(want) {
+		t.Fatalf("loadBashHistory() after appends = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("loadBashHistory()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestNewRootLoadsExistingHistory pins the end-to-end wiring: a
+// pre-existing history file is what Up recalls from the moment Root is
+// constructed, before any command has been run in this session at all
+// — inheriting an old session's history, not just recording a new one.
+func TestNewRootLoadsExistingHistory(t *testing.T) {
+	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
+	if err := appendBashHistory(os.Getenv("HISTFILE"), "old session command"); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone))
+	if got := r.bashLine.GetText(); got != "old session command" {
+		t.Errorf("Up right after startup = %q, want the pre-existing history entry %q", got, "old session command")
 	}
 }

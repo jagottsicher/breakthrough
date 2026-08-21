@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +55,14 @@ func (r *Root) newBottomBar() {
 		r.runShellCommand(r.bashLine.GetText())
 	})
 	r.bashLine.SetInputCapture(r.captureBashLineKey)
+
+	// Inherit whatever real command history already exists (see
+	// historyFilePath/loadBashHistory), the same way a real shell starts
+	// a new session with Up already recalling what earlier sessions ran
+	// — not just what's typed into this one.
+	r.bashHistoryFile = historyFilePath()
+	r.bashHistory = loadBashHistory(r.bashHistoryFile)
+	r.bashHistoryIdx = len(r.bashHistory)
 
 	r.statusBar = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	r.statusBar.SetBackgroundColor(accentBackgroundColor)
@@ -263,6 +273,90 @@ func userShell() string {
 	return "/bin/sh"
 }
 
+// historyFilePath returns where bash-style command history lives:
+// $HISTFILE if set (an explicit override, honored regardless of what
+// $SHELL actually is), otherwise "~/.bash_history" — bash's own
+// hardcoded default. That default is used even if $SHELL isn't bash: a
+// "bash Eingabezeile" inheriting history "wie in einer normalen bash
+// Session" is specifically what was asked for, not whatever the current
+// shell's own (possibly different, e.g. zsh's ~/.zsh_history) history
+// file convention happens to be. Empty if the home directory can't be
+// resolved.
+func historyFilePath() string {
+	if f := os.Getenv("HISTFILE"); f != "" {
+		return f
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".bash_history")
+}
+
+// loadBashHistory reads path's existing command history, oldest first
+// — one command per line, skipping bash's own optional "#<unix
+// timestamp>" comment lines (written when HISTTIMEFORMAT is set) rather
+// than mistaking them for commands. A missing or unreadable file isn't
+// an error worth reporting: an empty history is exactly what a first
+// run — or one where $HISTFILE genuinely doesn't exist yet — should
+// start with.
+func loadBashHistory(path string) []string {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var history []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || isHistoryTimestampComment(line) {
+			continue
+		}
+		history = append(history, line)
+	}
+	return history
+}
+
+// isHistoryTimestampComment reports whether line is one of bash's own
+// "#<unix timestamp>" history-file comment lines (see loadBashHistory).
+func isHistoryTimestampComment(line string) bool {
+	rest, ok := strings.CutPrefix(line, "#")
+	if !ok {
+		return false
+	}
+	_, err := strconv.ParseInt(rest, 10, 64)
+	return err == nil
+}
+
+// appendBashHistory appends command to path as bash itself would — one
+// line — so a later real bash session (or another breakthrough one)
+// inherits it too, the same way runShellCommand's caller inherited
+// whatever was already there (see loadBashHistory). Best-effort: called
+// via "_ = appendBashHistory(...)" in runShellCommand — a failure here
+// (a missing home directory, a permissions problem) shouldn't stop the
+// command that was just run from having run, or get reported as if it
+// were that command's own failure.
+func appendBashHistory(path, command string) (err error) {
+	if path == "" {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		// Only overrides err if the write itself succeeded — a failure
+		// there is the more relevant one to report.
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	_, err = fmt.Fprintln(f, command)
+	return err
+}
+
 // runShellCommand is the bash line's Enter action: suspends the TUI (see
 // tview.Application.Suspend) and runs command through userShell, with
 // the real terminal handed over for the duration and the panel's
@@ -283,6 +377,7 @@ func (r *Root) runShellCommand(command string) {
 	r.bashHistory = append(r.bashHistory, command)
 	r.bashHistoryIdx = len(r.bashHistory)
 	r.bashHistoryDraft = ""
+	_ = appendBashHistory(r.bashHistoryFile, command) // best-effort — see its own doc comment
 
 	var runErr error
 	r.app.Suspend(func() {

@@ -91,11 +91,13 @@ type Root struct {
 	statusBar      *tview.TextView
 	statusBarSpans []statusBarSpan
 
-	// bashHistory is every command runShellCommand has run this session,
-	// oldest first — session-scoped only (not persisted to
-	// ~/.bash_history or read from it), navigated with Up/Down the same
-	// way a real shell's readline history is (see bashHistoryUp/Down).
-	// bashHistoryIdx is which entry is currently showing:
+	// bashHistory is every command available for the bash line's Up/Down
+	// navigation (see bashHistoryUp/Down) — seeded at construction from
+	// bashHistoryFile's existing content (see historyFilePath/
+	// loadBashHistory: real, cross-session history, the same as a real
+	// shell's own), then appended to (both here and back to
+	// bashHistoryFile — see appendBashHistory) as runShellCommand runs
+	// each one. bashHistoryIdx is which entry is currently showing:
 	// len(bashHistory) means "not currently browsing history" — a fresh
 	// or in-progress line, not one recalled from it — in which case
 	// bashHistoryDraft is what that in-progress line was, restored if
@@ -103,6 +105,7 @@ type Root struct {
 	bashHistory      []string
 	bashHistoryIdx   int
 	bashHistoryDraft string
+	bashHistoryFile  string
 
 	// currentUser is resolved once (see currentUsername) — it can't
 	// meaningfully change over a session, unlike the current directory
