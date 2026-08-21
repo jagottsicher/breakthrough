@@ -107,10 +107,13 @@ func TestOpenOwnerGroupPickerCancelRunsOnCancel(t *testing.T) {
 
 // TestOwnerGroupPickerPositionedNearField pins the fix for the user's
 // own report: the picker used to always appear dead center regardless
-// of context — opened from Properties' Owner/Group fields, it now
-// starts exactly where the clicked span itself was drawn, the same
-// position activateInlineTextField uses for every other field, instead
-// of the middle of the screen.
+// of context — opened from Properties' Owner/Group fields, it's now
+// vertically centered on the clicked span's own row (shifted up by
+// pickerCenterRows — see propertyFieldPosition), so the *currently
+// selected entry*, not the window's own top edge, ends up level with
+// where "Owner: <name>" itself was. Horizontally, it starts at the
+// span's own column, the same one activateInlineTextField uses for
+// every other field.
 func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -135,16 +138,24 @@ func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
 		t.Fatal("no fieldOwner span found")
 	}
 	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
-	wantX, wantY := rectX+span.startCol, rectY+span.row
+	wantX, wantWindowTopY := rectX+span.startCol, rectY+span.row-pickerCenterRows
 
 	r.activatePropertyField(span)
 	if r.activePage != pickerPage {
 		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the inline text field instead")
 	}
 
-	gotX, gotY, _, _ := r.picker.GetRect()
-	if gotX != wantX || gotY != wantY {
-		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — anchored to the Owner field, not centered on screen", gotX, gotY, wantX, wantY)
+	gotX, gotWindowTopY, _, _ := r.picker.GetRect()
+	if gotX != wantX || gotWindowTopY != wantWindowTopY {
+		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — its window top should sit pickerCenterRows above the Owner field's row, so the current entry lands on it", gotX, gotWindowTopY, wantX, wantWindowTopY)
+	}
+
+	// The row actually level with the field is the *current entry*'s own
+	// row within the picker, pickerCenterRows down from the window's top
+	// — not the window's top edge itself.
+	wantCurrentEntryY := rectY + span.row
+	if gotCurrentEntryY := gotWindowTopY + pickerCenterRows; gotCurrentEntryY != wantCurrentEntryY {
+		t.Errorf("current entry row = %d, want %d (level with the Owner field)", gotCurrentEntryY, wantCurrentEntryY)
 	}
 }
 

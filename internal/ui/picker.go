@@ -14,11 +14,16 @@ const (
 	pickGroup
 )
 
+// pickerCenterRows is how many entries show above (and below) the
+// current one in the picker's visible window — the user's own spec for
+// this, an "endless scroll" field showing the current value with 3
+// entries either side.
+const pickerCenterRows = 3
+
 // pickerHeight is the owner/group picker's fixed height: the current
-// entry (see openOwnerGroupPicker's centering) plus 3 rows either side,
-// per the user's own spec for this — an "endless scroll" field showing
-// the current value with 3 entries above and below it.
-const pickerHeight = 7
+// entry (see openOwnerGroupPicker's centering) plus pickerCenterRows
+// rows either side.
+const pickerHeight = 2*pickerCenterRows + 1
 
 // pickerPosition resolves where a picker of the given width/height
 // should appear — computed after the picker's own content is known
@@ -38,16 +43,19 @@ func (r *Root) centeredOnScreen(width, height int) (x, y int) {
 }
 
 // propertyFieldPosition is the picker-position Properties' Owner/Group
-// fields use (see activatePropertyField): the picker's top-left starts
-// exactly where span itself is drawn, the same coordinate
+// fields use (see activatePropertyField): horizontally, the picker
+// starts exactly where span itself is drawn, the same column
 // activateInlineTextField positions the shared text editor at for every
-// other field — so the picker reads as belonging to that one field,
-// growing downward from it, rather than appearing arbitrarily in the
-// middle of the screen.
+// other field. Vertically, it's shifted up by pickerCenterRows, so the
+// *currently selected entry* — pickerCenterRows rows into the visible
+// window, not the window's own top edge — is what ends up level with
+// span's row: the picker then reads as centered on the field it grew
+// out of, the current value sitting right where "Owner: <name>" itself
+// was, rather than appearing pickerCenterRows rows below it.
 func (r *Root) propertyFieldPosition(span propertySpan) pickerPosition {
 	return func(int, int) (x, y int) {
 		rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
-		return rectX + span.startCol, rectY + span.row
+		return rectX + span.startCol, rectY + span.row - pickerCenterRows
 	}
 }
 
@@ -141,7 +149,7 @@ func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, pos pickerPo
 	r.picker.SetRect(x, y, width, height)
 
 	r.picker.SetCurrentItem(currentIndex)
-	offset := currentIndex - 3
+	offset := currentIndex - pickerCenterRows
 	if offset < 0 {
 		offset = 0
 	}
