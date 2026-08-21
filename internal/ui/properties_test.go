@@ -553,6 +553,29 @@ func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
 	}
 }
 
+// TestPropertiesEditFieldUsesFocusedColor pins the fix for the user's
+// own report ("manche Felder leuchten hell auf, wenn man drin ist,
+// andere aber nicht"): the shared inline edit field always carries
+// focusedBackgroundColor, the same bright color the currently-focused
+// field's own span in propertiesText shows (see focusTag) — before this
+// fix it used the plainer editableBackgroundColor instead, so a field
+// that opened its own editor immediately (Name/Date/Time/the octal
+// value) visually covered its own highlight with a duller color, while
+// a field that doesn't auto-open (a permission bit, Owner/Group) kept
+// showing the brighter one — the exact inconsistency being pinned here.
+func TestPropertiesEditFieldUsesFocusedColor(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	_, bg, _ := r.propertiesEditField.GetFieldStyle().Decompose()
+	if bg != focusedBackgroundColor {
+		t.Errorf("propertiesEditField's field background = %v, want focusedBackgroundColor (%v)", bg, focusedBackgroundColor)
+	}
+}
+
 // TestActivatePropertyFieldMarksDirty pins the literal "as soon as you
 // click one to edit" behavior: dirty becomes true, and the Cancel/Save
 // row is shown, on the click itself — not only once an actual change is

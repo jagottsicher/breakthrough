@@ -15,11 +15,18 @@ import (
 
 const propertiesPage = "properties"
 
-// editableBackgroundColor sets an editable field's value apart from the
-// rest of the Properties overlay's plain text — the visual cue that it's
-// clickable, distinct from accentBackgroundColor so it reads as "raised"
-// rather than blending into the overlay's own background.
-const editableBackgroundColor = tcell.ColorSlateGray
+// focusedBackgroundColor sets apart whichever field propertiesFocusIndex
+// currently points at (see focusTag/setPropertiesFocus) from every other
+// editable field's plain slategray shade (see focusTag) — brighter, so
+// "this is the one keyboard focus is on right now" reads as a distinct
+// state from "this is merely editable". Also propertiesEditField's own
+// color (see newPropertiesView): unlike the plain shade, which many
+// spans in the read-only text all share, the inline edit field is only
+// ever shown for whichever field is currently focused — every time it's
+// visible, that's what it's covering, so it should always look focused
+// too, not fall back to the duller "editable" look the field underneath
+// no longer shows once its own text is covered.
+const focusedBackgroundColor = tcell.ColorDarkCyan
 
 // propertyField identifies one editable region within the Properties
 // overlay — see propertySpan and propertiesBuilder.
@@ -118,7 +125,7 @@ type propertySpan struct {
 // field, tracking each editable field's row/column span as it goes (see
 // propertySpan) — the same running-column-count idea buildHeaderSpans
 // uses for the path bar, extended to multiple rows. Style tags (used for
-// editableBackgroundColor) are written via tag, which — unlike text —
+// the slategray/aqua styling) are written via tag, which — unlike text —
 // doesn't advance col, since tags are zero-width once tview renders them;
 // getting this distinction wrong would silently throw off every span
 // after the first highlighted one.
@@ -156,18 +163,18 @@ func (pb *propertiesBuilder) field(label, value string) {
 // a brighter, bolder "this one has keyboard focus" style if it's the one
 // propertiesFocusIndex currently points at (focused — see
 // focusedPropertyField), otherwise the plain "this is editable" style
-// (editableBackgroundColor) every field already had. Neither ever
+// (plain slategray) every field already had. Neither ever
 // touches the foreground color, only background/bold, so the reset tag
 // never needs to restore anything beyond what it changed.
 func focusTag(field, focused propertyField) (tag, reset string) {
 	if field == focused {
-		return "[:aqua:b]", "[:-:-]"
+		return "[:darkcyan:b]", "[:-:-]" // matches focusedBackgroundColor
 	}
 	return "[:slategray]", "[:-]"
 }
 
 // editableField writes one "Label: value" line with value highlighted
-// (editableBackgroundColor, or focusTag's brighter style while it's the
+// (plain slategray, or focusTag's brighter style while it's the
 // one keyboard focus currently points at) and recorded as a propertySpan
 // under field.
 func (pb *propertiesBuilder) editableField(label, value string, field, focused propertyField) {
@@ -291,13 +298,18 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	r.propertiesText = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	r.propertiesText.SetBackgroundColor(accentBackgroundColor)
 	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
-	r.propertiesText.SetDynamicColors(true) // needed for the editableBackgroundColor/focusTag style tags
+	r.propertiesText.SetDynamicColors(true) // needed for focusTag's style tags
 	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
 	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
 
 	r.propertiesEditField = tview.NewInputField()
-	r.propertiesEditField.SetFieldBackgroundColor(editableBackgroundColor)
-	r.propertiesEditField.SetBackgroundColor(editableBackgroundColor)
+	// focusedBackgroundColor, not editableBackgroundColor: this field is
+	// only ever shown for whichever field is currently focused (see
+	// focusedBackgroundColor's own doc comment), so it should always
+	// carry that look, not the plainer "merely editable" one the span
+	// underneath no longer shows once this covers it.
+	r.propertiesEditField.SetFieldBackgroundColor(focusedBackgroundColor)
+	r.propertiesEditField.SetBackgroundColor(focusedBackgroundColor)
 	r.propertiesEditField.SetFieldTextColor(tcell.ColorWhite)
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
 
@@ -662,7 +674,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 
 	switch span.field {
 	case fieldOwner:
-		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, func(name string, _ int) {
+		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedOwner = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {
@@ -670,7 +682,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		})
 		return
 	case fieldGroup:
-		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, func(name string, _ int) {
+		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedGroup = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {

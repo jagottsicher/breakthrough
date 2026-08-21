@@ -38,7 +38,7 @@ func TestOpenOwnerGroupPickerListsRealUsers(t *testing.T) {
 	var picked string
 	var pickedID int
 	fellBack := false
-	r.openOwnerGroupPicker(pickUser, uid, func(n string, id int) {
+	r.openOwnerGroupPicker(pickUser, uid, r.centeredOnScreen, func(n string, id int) {
 		picked, pickedID = n, id
 	}, nil, func() {
 		fellBack = true
@@ -84,7 +84,7 @@ func TestOpenOwnerGroupPickerCancelRunsOnCancel(t *testing.T) {
 
 	cancelled := false
 	fellBack := false
-	r.openOwnerGroupPicker(pickUser, uid, func(string, int) {
+	r.openOwnerGroupPicker(pickUser, uid, r.centeredOnScreen, func(string, int) {
 		t.Error("onPick should not run on cancel")
 	}, func() {
 		cancelled = true
@@ -102,6 +102,64 @@ func TestOpenOwnerGroupPickerCancelRunsOnCancel(t *testing.T) {
 	}
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after cancelling, want closed", r.activePage)
+	}
+}
+
+// TestOwnerGroupPickerPositionedNearField pins the fix for the user's
+// own report: the picker used to always appear dead center regardless
+// of context — opened from Properties' Owner/Group fields, it's now
+// vertically centered on the clicked span's own row (shifted up by
+// pickerCenterRows — see propertyFieldPosition), so the *currently
+// selected entry*, not the window's own top edge, ends up level with
+// where "Owner: <name>" itself was. Horizontally, it starts at the
+// span's own column, the same one activateInlineTextField uses for
+// every other field.
+func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+	// clampToPanel keeps the picker within r.panel's own rect — give it
+	// a realistic (terminal-sized) one here; Box's own construction
+	// default (15x10, a placeholder never meant to be drawn against) is
+	// otherwise narrow enough to force the requested position back to
+	// the panel's left edge, which would make this test fail for a
+	// reason that has nothing to do with what it's actually pinning.
+	r.panel.SetRect(0, 0, 80, 24)
+
+	span, ok := findPropertySpan(r, fieldOwner)
+	if !ok {
+		t.Fatal("no fieldOwner span found")
+	}
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	// -1 on X: the picker's own 1-char left padding (SetBorderPadding in
+	// NewRoot) means its *text* starts 1 column right of its outer
+	// rect — so the outer rect itself sits 1 column left of the field to
+	// make the visible text line up with it.
+	wantX, wantWindowTopY := rectX+span.startCol-1, rectY+span.row-pickerCenterRows
+
+	r.activatePropertyField(span)
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the inline text field instead")
+	}
+
+	gotX, gotWindowTopY, _, _ := r.picker.GetRect()
+	if gotX != wantX || gotWindowTopY != wantWindowTopY {
+		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — its window top should sit pickerCenterRows above the Owner field's row (and 1 column left, for its own padding), so the current entry's text lands on it", gotX, gotWindowTopY, wantX, wantWindowTopY)
+	}
+
+	// The row actually level with the field is the *current entry*'s own
+	// row within the picker, pickerCenterRows down from the window's top
+	// — not the window's top edge itself.
+	wantCurrentEntryY := rectY + span.row
+	if gotCurrentEntryY := gotWindowTopY + pickerCenterRows; gotCurrentEntryY != wantCurrentEntryY {
+		t.Errorf("current entry row = %d, want %d (level with the Owner field)", gotCurrentEntryY, wantCurrentEntryY)
 	}
 }
 

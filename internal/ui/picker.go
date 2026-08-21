@@ -14,20 +14,63 @@ const (
 	pickGroup
 )
 
+// pickerCenterRows is how many entries show above (and below) the
+// current one in the picker's visible window — the user's own spec for
+// this, an "endless scroll" field showing the current value with 3
+// entries either side.
+const pickerCenterRows = 3
+
 // pickerHeight is the owner/group picker's fixed height: the current
-// entry (see openOwnerGroupPicker's centering) plus 3 rows either side,
-// per the user's own spec for this — an "endless scroll" field showing
-// the current value with 3 entries above and below it.
-const pickerHeight = 7
+// entry (see openOwnerGroupPicker's centering) plus pickerCenterRows
+// rows either side.
+const pickerHeight = 2*pickerCenterRows + 1
+
+// pickerPosition resolves where a picker of the given width/height
+// should appear — computed after the picker's own content is known
+// (see openOwnerGroupPicker), since a caller anchoring it to a specific
+// screen position rather than centering it doesn't get to pick its size.
+// clampToPanel still runs on whatever this returns, so a position near
+// the panel's edge is pulled back on-screen rather than clipped.
+type pickerPosition func(width, height int) (x, y int)
+
+// centeredOnScreen is the picker-position Root.openChown uses: dead
+// center, the same as it always has been — there's no particular screen
+// element it's opened "from" the way Properties' Owner/Group fields have
+// their own row/column (see propertyFieldPosition).
+func (r *Root) centeredOnScreen(width, height int) (x, y int) {
+	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
+	return (screenWidth - width) / 2, (screenHeight - height) / 2
+}
+
+// propertyFieldPosition is the picker-position Properties' Owner/Group
+// fields use (see activatePropertyField): horizontally, the picker's
+// *text* — not its own outer rect, which is 1 column further left,
+// since r.picker (unlike propertiesText) carries its own 1-char left
+// padding (see NewRoot's SetBorderPadding(0, 0, 1, 1)) — starts exactly
+// where span itself is drawn, the same column activateInlineTextField
+// positions the shared text editor at for every other field. Vertically,
+// it's shifted up by pickerCenterRows, so the *currently selected
+// entry* — pickerCenterRows rows into the visible window, not the
+// window's own top edge — is what ends up level with span's row: the
+// picker then reads as centered on the field it grew out of, the
+// current value sitting right where "Owner: <name>" itself was, rather
+// than appearing pickerCenterRows rows below it.
+func (r *Root) propertyFieldPosition(span propertySpan) pickerPosition {
+	return func(int, int) (x, y int) {
+		rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+		return rectX + span.startCol - 1, rectY + span.row - pickerCenterRows
+	}
+}
 
 // openOwnerGroupPicker shows a scrollable list of every local user (kind
 // == pickUser) or group (pickGroup), sorted alphabetically (see
 // fsops.ListUsers/ListGroups), with the entry matching currentID
-// centered in the visible window. Confirming an entry — click or Enter,
-// tview.List's own behavior — closes the picker and runs onPick with its
-// name and numeric id; Escape/Tab close it and run onCancel instead, if
-// given (nil is fine: most callers have nothing special to do beyond the
-// close, which happens either way).
+// centered in the visible window, positioned per pos (see
+// centeredOnScreen/propertyFieldPosition). Confirming an entry — click
+// or Enter, tview.List's own behavior — closes the picker and runs
+// onPick with its name and numeric id; Escape/Tab close it and run
+// onCancel instead, if given (nil is fine: most callers have nothing
+// special to do beyond the close, which happens either way).
 //
 // The picker always layers on top of whatever's currently open (see
 // pushOverlay) rather than replacing it — Properties' Owner/Group fields
@@ -42,7 +85,7 @@ const pickerHeight = 7
 // caller can offer its own equivalent plain text prompt (see
 // Root.openChown and the Properties overlay's Owner/Group fields for
 // what that looks like).
-func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, onPick func(name string, id int), onCancel func(), onFallback func()) {
+func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, pos pickerPosition, onPick func(name string, id int), onCancel func(), onFallback func()) {
 	type namedID struct {
 		name string
 		id   int
@@ -104,14 +147,12 @@ func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, onPick func(
 	if len(entries) < height {
 		height = len(entries)
 	}
-	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
-	x := (screenWidth - width) / 2
-	y := (screenHeight - height) / 2
+	x, y := pos(width, height)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.picker.SetRect(x, y, width, height)
 
 	r.picker.SetCurrentItem(currentIndex)
-	offset := currentIndex - 3
+	offset := currentIndex - pickerCenterRows
 	if offset < 0 {
 		offset = 0
 	}
