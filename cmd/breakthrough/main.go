@@ -36,12 +36,26 @@ func run() error {
 		return err
 	}
 
-	app := tview.NewApplication().EnableMouse(true)
+	// EnablePaste turns on tcell's bracketed-paste support: without it, a
+	// terminal paste arrives as a burst of ordinary key events, which for
+	// a multi-line clipboard (or one containing a stray control
+	// character) can misfire an InputField's own key handling instead of
+	// just inserting the text. This is what makes pasting into any of
+	// breakthrough's text fields — the new bash line (see
+	// ui.Root.StartClock's neighbors in bottombar.go) most of all —
+	// reliable.
+	app := tview.NewApplication().EnableMouse(true).EnablePaste(true)
 
 	root, err := ui.NewRoot(app, start)
 	if err != nil {
 		return err
 	}
+
+	// Only meaningful once Application.Run is about to start draining its
+	// update queue — see StartClock's own doc comment for why NewRoot
+	// itself doesn't do this.
+	stopClock := root.StartClock()
+	defer stopClock()
 
 	// tcell puts the terminal in raw mode, so these arrive as regular key
 	// events rather than signals. These are global captures (not tied to
@@ -54,6 +68,15 @@ func run() error {
 	// it backs out of whatever is open, like Escape. Ctrl+X is
 	// deliberately left unclaimed (available for a future binding),
 	// having previously also quit.
+	//
+	// Ctrl+E/Ctrl+R/Ctrl+G (Edit/Rename/toggle hidden files — see the
+	// bottom bar's own buttons) check their own preconditions before
+	// acting (see Root.acceptsGlobalShortcut) rather than always firing
+	// the way Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step
+	// on the bash line's own typing. Ctrl+H is deliberately not one of
+	// them — it's indistinguishable from Backspace at the terminal
+	// protocol level (both send the same 0x08 byte), so Ctrl+G was used
+	// for "toggle hidden files" instead.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -61,6 +84,15 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlC:
 			root.RequestCancel()
+			return nil
+		case tcell.KeyCtrlE:
+			root.EditShortcut()
+			return nil
+		case tcell.KeyCtrlR:
+			root.RenameShortcut()
+			return nil
+		case tcell.KeyCtrlG:
+			root.ToggleHiddenShortcut()
 			return nil
 		}
 		return event
