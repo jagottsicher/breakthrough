@@ -455,6 +455,62 @@ func TestRightClickMovesFocus(t *testing.T) {
 	}
 }
 
+// TestRenamePositionsOverRightClickedRow is a regression test for a bug
+// where Root.targetRow stored the right-click event's raw screen y
+// coordinate instead of the table's own row *index* (see captureMouse's
+// MouseRightClick case). openRename indexes the table by row index, not
+// screen position (Panel.nameCellRect -> Table.GetCell), so the two only
+// ever matched by coincidence — off by the header's 1-line offset even
+// with no scrolling at all, and drifting further out of sync with
+// whatever the table's scroll offset happened to be after navigating
+// around. The rename field would then silently open over some other
+// row's name instead of the one actually right-clicked — editable-
+// looking, but not editing what the user thought.
+//
+// Row 3 alone is enough to catch it: its screen y (4, from the header's
+// 1 line plus rows 0-3) already differs from its own row index before
+// any scrolling is involved.
+func TestRenamePositionsOverRightClickedRow(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	const row = 3
+	x, y, ok := findRowPos(root.panel.table, row, 80, 24)
+	if !ok {
+		t.Fatalf("could not locate row %d's screen position", row)
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(x, y, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightClick, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	if root.targetRow != row {
+		t.Fatalf("targetRow = %d, want %d (the table row index, not the screen y %d)", root.targetRow, row, y)
+	}
+
+	root.openRename()
+
+	wantX, wantY, wantWidth, ok := root.panel.nameCellRect(row)
+	if !ok {
+		t.Fatal("nameCellRect(row) failed")
+	}
+	gotX, gotY, gotWidth, _ := root.rename.GetRect()
+	if gotX != wantX || gotY != wantY || gotWidth != wantWidth {
+		t.Errorf("rename field rect = (%d,%d,%d), want (%d,%d,%d) — the right-clicked row's own name cell",
+			gotX, gotY, gotWidth, wantX, wantY, wantWidth)
+	}
+
+	ref, ok := root.panel.rowRef(row)
+	if !ok {
+		t.Fatal("row has no rowRef")
+	}
+	if got := root.rename.GetText(); got != ref.name {
+		t.Errorf("rename field pre-filled with %q, want %q (the right-clicked row's own name)", got, ref.name)
+	}
+}
+
 // TestRightDragMovesFocusToEndRow checks that a right-button drag leaves
 // the table's highlight on the row the drag ended on (the release row),
 // not the row it started from.
