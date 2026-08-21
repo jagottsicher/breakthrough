@@ -327,6 +327,7 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 			return action, event
 		}
 		r.panel.toggleRange(r.dragStartRow, endRow)
+		r.panel.focusRow(endRow) // leave the highlight on the row the drag ended on
 		return tview.MouseConsumed, nil
 
 	case tview.MouseRightClick:
@@ -334,6 +335,9 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		path, ok := r.panel.RowAt(x, y)
 		if !ok {
 			return action, event // nothing sensible to act on
+		}
+		if row, ok := r.panel.rowIndexAt(x, y); ok {
+			r.panel.focusRow(row) // the menu is about this row; the highlight should agree
 		}
 		r.target = path
 		r.targetRow = y
