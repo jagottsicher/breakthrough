@@ -304,6 +304,98 @@ func TestToggleCheckbox(t *testing.T) {
 	}
 }
 
+// TestSelectAllDeselectAll pins the context menu's "Select all"/
+// "Deselect all": every checkable row ends up checked or unchecked, and
+// the ".." row (not checkable) is left alone either way.
+func TestSelectAllDeselectAll(t *testing.T) {
+	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.selectAll()
+	if len(p.selected) != 4 { // everything except ".."
+		t.Fatalf("selectAll: %d selected, want 4", len(p.selected))
+	}
+	if cell := p.table.GetCell(0, colCheckbox); cell.Text != " " {
+		t.Errorf("\"..\" checkbox cell = %q after selectAll, want blank", cell.Text)
+	}
+
+	p.deselectAll()
+	if len(p.selected) != 0 {
+		t.Errorf("deselectAll: %d still selected, want 0", len(p.selected))
+	}
+}
+
+// TestSelectByPattern pins the context menu's "Select +"/"Select -":
+// glob-matching entries get checked or unchecked, matching filepath.Match
+// semantics; an unmatched pattern is not an error, a malformed one is.
+func TestSelectByPattern(t *testing.T) {
+	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	matched, err := p.selectByPattern("ap*", true)
+	if err != nil {
+		t.Fatalf("selectByPattern: %v", err)
+	}
+	if matched != 3 { // app-data, apple.txt, apricot.txt
+		t.Errorf("matched = %d, want 3", matched)
+	}
+	if len(p.selected) != 3 {
+		t.Errorf("selected = %d, want 3", len(p.selected))
+	}
+
+	matched, err = p.selectByPattern("apricot.txt", false)
+	if err != nil {
+		t.Fatalf("selectByPattern: %v", err)
+	}
+	if matched != 1 || len(p.selected) != 2 {
+		t.Errorf("after unmarking apricot.txt: matched=%d selected=%d, want 1, 2", matched, len(p.selected))
+	}
+
+	if matched, err := p.selectByPattern("nothing-matches-this", true); err != nil || matched != 0 {
+		t.Errorf("no match: matched=%d err=%v, want 0, nil", matched, err)
+	}
+
+	if _, err := p.selectByPattern("[", true); err == nil {
+		t.Error("a malformed pattern should return an error")
+	}
+}
+
+// TestSelectedPaths pins that SelectedPaths reflects exactly the checked
+// rows, absolute paths, in whatever order the underlying map yields.
+func TestSelectedPaths(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	if got := p.SelectedPaths(); len(got) != 0 {
+		t.Fatalf("setup: SelectedPaths = %v, want empty", got)
+	}
+
+	p.toggleCheckbox(1)
+	p.toggleCheckbox(2)
+	ref1, _ := p.rowRef(1)
+	ref2, _ := p.rowRef(2)
+
+	got := p.SelectedPaths()
+	want := map[string]bool{ref1.path: true, ref2.path: true}
+	if len(got) != 2 {
+		t.Fatalf("SelectedPaths = %v, want 2 entries", got)
+	}
+	for _, path := range got {
+		if !want[path] {
+			t.Errorf("SelectedPaths returned unexpected path %q", path)
+		}
+	}
+}
+
 // TestPanelLoadResetsSelection pins the documented behavior that
 // selection is scoped to the directory on screen: navigating away and
 // loading a new directory must not carry old checkmarks forward.

@@ -263,8 +263,20 @@ func (p *Panel) toggleCheckbox(row int) {
 	if !ok || !ref.checkable {
 		return
 	}
+	p.setChecked(row, !p.selected[ref.path])
+}
 
-	checked := !p.selected[ref.path]
+// setChecked sets row's checkbox state directly to checked (rather than
+// flipping it, as toggleCheckbox does) and updates the cell's text to
+// match. Shares toggleCheckbox's guards, and is what it's built on top
+// of; also used directly by selectAll/deselectAll/selectByPattern, which
+// all need to set a specific target state rather than toggle.
+func (p *Panel) setChecked(row int, checked bool) {
+	ref, ok := p.rowRef(row)
+	if !ok || !ref.checkable {
+		return
+	}
+
 	if checked {
 		p.selected[ref.path] = true
 	} else {
@@ -274,6 +286,59 @@ func (p *Panel) toggleCheckbox(row int) {
 	if cell := p.table.GetCell(row, colCheckbox); cell != nil {
 		cell.SetText(checkboxText(checked))
 	}
+}
+
+// selectAll checks every checkable row in the current listing — the
+// context menu's "Select all".
+func (p *Panel) selectAll() {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		p.setChecked(row, true)
+	}
+}
+
+// deselectAll unchecks every row in the current listing — the context
+// menu's "Deselect all".
+func (p *Panel) deselectAll() {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		p.setChecked(row, false)
+	}
+}
+
+// selectByPattern sets checked on every row whose name matches pattern —
+// shell glob syntax, as filepath.Match understands it (the same
+// convention the header's path completion already uses). Backs the
+// context menu's "Select +" (checked=true) and "Select -" (checked=
+// false), the classic file-manager pair for marking/unmarking a whole
+// group by wildcard instead of clicking each entry. Returns the number of
+// rows that matched; an error is only ever a malformed pattern
+// (filepath.ErrBadPattern) — matching nothing is not an error, just zero.
+func (p *Panel) selectByPattern(pattern string, checked bool) (matched int, err error) {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !ref.checkable {
+			continue
+		}
+		hit, err := filepath.Match(pattern, ref.name)
+		if err != nil {
+			return matched, err
+		}
+		if hit {
+			p.setChecked(row, checked)
+			matched++
+		}
+	}
+	return matched, nil
+}
+
+// SelectedPaths returns the absolute paths currently checked, in no
+// particular order. Used by Root's Copy/Cut to capture what the clipboard
+// should act on.
+func (p *Panel) SelectedPaths() []string {
+	paths := make([]string, 0, len(p.selected))
+	for path := range p.selected {
+		paths = append(paths, path)
+	}
+	return paths
 }
 
 // captureTableKey handles the one key the table needs beyond its built-in
