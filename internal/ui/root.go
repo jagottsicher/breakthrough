@@ -143,8 +143,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetBackgroundColor(accentBackgroundColor)
 	r.menu.SetMainTextColor(tcell.ColorWhite)
 	r.menu.SetHighlightFullLine(true)
-	r.menu.SetBorderPadding(0, 0, 1, 1)       // 1-char left/right padding; no border needed for this
-	r.menu.AddItem("Info", "", 0, r.openInfo) // first and default-selected
+	r.menu.SetBorderPadding(0, 0, 1, 1)             // 1-char left/right padding; no border needed for this
+	r.menu.AddItem("Properties", "", 0, r.openInfo) // first and default-selected; identifiers below still say "Info" pending the editable rework
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)

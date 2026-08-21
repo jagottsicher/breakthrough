@@ -88,13 +88,14 @@ type Panel struct {
 	// reverseSortOrder — rather than reversing the whole listing, which
 	// would also swap which group comes first.
 	//
-	// showHidden's default (false) matches `ls` without -a: dotfile
-	// entries (name starting with ".") are filtered out of the listing
-	// entirely in load() — see filterHidden — rather than kept as rows
-	// that are merely skipped elsewhere. That's what makes every
-	// row-based operation (selectAll, selectByPattern, arrow-key
-	// navigation, ...) exclude them for free, without each one needing
-	// its own "is this row actually hidden right now" check.
+	// showHidden defaults to true (set in NewPanel) — dotfiles are shown
+	// unless toggled off. When false, dotfile entries (name starting with
+	// ".") are filtered out of the listing entirely in load() — see
+	// filterHidden — rather than kept as rows that are merely skipped
+	// elsewhere. That's what makes every row-based operation (selectAll,
+	// selectByPattern, arrow-key navigation, ...) exclude them for free
+	// once hidden, without each one needing its own "is this row actually
+	// hidden right now" check.
 	sortDescending bool
 	showHidden     bool
 
@@ -163,9 +164,10 @@ type rowRef struct {
 // afterwards — see Panel.openEdit.
 func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p := &Panel{
-		Flex:  tview.NewFlex().SetDirection(tview.FlexRow),
-		app:   app,
-		table: tview.NewTable(),
+		Flex:       tview.NewFlex().SetDirection(tview.FlexRow),
+		app:        app,
+		table:      tview.NewTable(),
+		showHidden: true, // default: dotfiles shown — see the field's own doc comment
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
@@ -250,7 +252,8 @@ func (p *Panel) load(dir string) error {
 }
 
 // filterHidden removes dotfile entries (name starting with ".") from
-// entries — load()'s effect when showHidden is false, the default. This
+// entries — load()'s effect when showHidden has been toggled off (the
+// default is true — dotfiles shown — see Panel.showHidden). This
 // happens before any row is ever added to the table, rather than adding
 // a row that's then somehow marked hidden: every row-based operation
 // (selectAll, selectByPattern, arrow-key navigation, ...) excludes a
