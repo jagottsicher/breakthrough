@@ -27,7 +27,9 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod",
 		menuSectionLabel("Globals"),
-		"Hide hidden files", // dotfiles are shown by default now
+		"Hide hidden files",                    // dotfiles are shown by default now
+		"Show size in bytes",                   // human-readable is the default
+		"Show modified date as Unix timestamp", // formatted is the default
 	}
 	if got := r.menu.GetItemCount(); got != len(want) {
 		t.Fatalf("menu has %d items, want %d", got, len(want))
@@ -79,6 +81,63 @@ func TestToggleHiddenViaMenu(t *testing.T) {
 	}
 	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Hide hidden files" {
 		t.Errorf("hidden-toggle label = %q, want %q", main, "Hide hidden files")
+	}
+}
+
+// TestToggleSizeBytesViaMenu mirrors TestToggleHiddenViaMenu for the
+// Size-format toggle: drives the actual menu action, checks the label
+// flips and the rendered column changes.
+func TestToggleSizeBytesViaMenu(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if main, _ := r.menu.GetItemText(r.sizeFormatToggleIdx); main != "Show size in bytes" {
+		t.Fatalf("setup: size-format label = %q, want %q", main, "Show size in bytes")
+	}
+
+	r.toggleSizeBytes()
+
+	if !r.panel.sizeBytes {
+		t.Error("sizeBytes should be true after toggling once")
+	}
+	if main, _ := r.menu.GetItemText(r.sizeFormatToggleIdx); main != "Show size (human-readable)" {
+		t.Errorf("size-format label = %q, want %q", main, "Show size (human-readable)")
+	}
+
+	r.toggleSizeBytes()
+	if r.panel.sizeBytes {
+		t.Error("sizeBytes should be false again after toggling twice")
+	}
+}
+
+// TestToggleMtimeUnixViaMenu mirrors TestToggleHiddenViaMenu for the
+// Modified-format toggle.
+func TestToggleMtimeUnixViaMenu(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date as Unix timestamp" {
+		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show modified date as Unix timestamp")
+	}
+
+	r.toggleMtimeUnix()
+
+	if !r.panel.mtimeUnix {
+		t.Error("mtimeUnix should be true after toggling once")
+	}
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date formatted" {
+		t.Errorf("mtime-format label = %q, want %q", main, "Show modified date formatted")
+	}
+
+	r.toggleMtimeUnix()
+	if r.panel.mtimeUnix {
+		t.Error("mtimeUnix should be false again after toggling twice")
 	}
 }
 
