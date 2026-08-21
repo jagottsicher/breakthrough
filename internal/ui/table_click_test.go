@@ -185,6 +185,59 @@ func dragRight(t *testing.T, root *Root, from, to int) {
 	handler(tview.MouseRightUp, tcell.NewEventMouse(toX, toY, tcell.ButtonNone, 0), func(tview.Primitive) {})
 }
 
+// TestRightDragLiveFocusFollowsMouseMove reproduces what a real drag
+// actually generates, not just the down/up pair dragRight uses: a
+// MouseRightDown, then a stream of MouseMove events as the mouse crosses
+// rows with the button still held (tview only fires MouseRightDown/Up
+// again once the button state itself changes — see
+// Application.fireMouseActions — so a real terminal reports these as
+// plain moves throughout the drag), then MouseRightUp. Checks that the
+// highlight tracks the row under the mouse *while still dragging*, not
+// only once released — and that nothing gets toggled until release.
+func TestRightDragLiveFocusFollowsMouseMove(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	downX, downY, ok := findRowPos(root.panel.table, 1, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 1's screen position")
+	}
+	midX, midY, ok := findRowPos(root.panel.table, 2, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 2's screen position")
+	}
+	upX, upY, ok := findRowPos(root.panel.table, 3, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 3's screen position")
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(downX, downY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	if got, _ := root.panel.table.GetSelection(); got != 1 {
+		t.Errorf("focus after MouseRightDown = %d, want 1", got)
+	}
+
+	handler(tview.MouseMove, tcell.NewEventMouse(midX, midY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	if got, _ := root.panel.table.GetSelection(); got != 2 {
+		t.Errorf("focus after MouseMove to row 2 (still dragging) = %d, want 2 (live tracking)", got)
+	}
+	if ref, _ := root.panel.rowRef(2); root.panel.selected[ref.path] {
+		t.Error("row 2 should not be checked yet, mid-drag")
+	}
+
+	handler(tview.MouseRightUp, tcell.NewEventMouse(upX, upY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	if got, _ := root.panel.table.GetSelection(); got != 3 {
+		t.Errorf("focus after release = %d, want 3", got)
+	}
+	for _, row := range []int{1, 2, 3} {
+		ref, _ := root.panel.rowRef(row)
+		if !root.panel.selected[ref.path] {
+			t.Errorf("row %d should be checked after release", row)
+		}
+	}
+}
+
 // TestRightDragSelectsRange simulates a right-button drag from row 1
 // through row 3 and checks that exactly those rows end up selected, the
 // context menu never opens, and the drag state is left clean for the

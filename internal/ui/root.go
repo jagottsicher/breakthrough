@@ -307,10 +307,27 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		if row, ok := r.panel.rowIndexAt(x, y); ok {
 			r.dragStartRow = row
 			r.dragging = true
+			r.panel.focusRow(row) // move the highlight to the press row right away, not just on release
 		} else {
 			r.dragging = false
 		}
 		return action, event // Table has no case for this action; harmless to pass through
+
+	case tview.MouseMove:
+		// While the right button is held, the terminal reports a stream
+		// of these as the mouse crosses cells — button state itself
+		// doesn't change, so tview never fires MouseRightDown/Up for
+		// them (see Application.fireMouseActions). Without handling this
+		// case at all, nothing happened until release: no live feedback
+		// for where the drag currently reaches.
+		if !r.dragging {
+			return action, event
+		}
+		x, y := event.Position()
+		if row, ok := r.panel.rowIndexAt(x, y); ok {
+			r.panel.focusRow(row)
+		}
+		return tview.MouseConsumed, nil
 
 	case tview.MouseRightUp:
 		wasDragging := r.dragging
