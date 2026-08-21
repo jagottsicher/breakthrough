@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,6 +67,18 @@ type Panel struct {
 	headerPages *tview.Pages
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
+
+	// filterField and filterRegexBtn sit alongside headerPages in the
+	// same top row (see NewPanel) — a live, always-visible narrow-the-
+	// listing box, and the toggle between its two matching modes (see
+	// filterByText). filterText/filterRegex are the field/button's
+	// current values, read by load() on every call; filterField's own
+	// SetChangedFunc is what actually drives a live reload as the user
+	// types (see NewPanel).
+	filterField    *tview.InputField
+	filterRegexBtn *tview.Button
+	filterText     string
+	filterRegex    bool
 
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
@@ -236,7 +249,41 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
 
-	p.AddItem(p.headerPages, 1, 0, false)  // fixed one-line path bar
+	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
+	p.filterRegexBtn.SetBackgroundColor(accentBackgroundColor)
+	p.filterRegexBtn.SetLabelColor(tcell.ColorWhite)
+	p.filterRegexBtn.SetSelectedFunc(func() {
+		p.filterRegex = !p.filterRegex
+		p.filterRegexBtn.SetLabel(filterModeLabel(p.filterRegex))
+		p.reportError(p.load(p.path))
+	})
+
+	p.filterField = tview.NewInputField()
+	p.filterField.SetPlaceholder("filter")
+	p.filterField.SetPlaceholderTextColor(tcell.ColorLightGray)
+	p.filterField.SetFieldBackgroundColor(accentBackgroundColor)
+	p.filterField.SetBackgroundColor(accentBackgroundColor)
+	p.filterField.SetFieldTextColor(tcell.ColorWhite)
+	p.filterField.SetChangedFunc(func(text string) {
+		if text == p.filterText {
+			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
+		}
+		p.filterText = text
+		p.reportError(p.load(p.path))
+	})
+	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+
+	// headerRow puts the path bar and the filter side by side in the
+	// same top line, per the user's own request — headerPages keeps
+	// whatever's left after the filter's own fixed width, so a long path
+	// still has as much room as possible rather than being pushed off
+	// entirely.
+	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
+	headerRow.AddItem(p.headerPages, 0, 1, false)
+	headerRow.AddItem(p.filterRegexBtn, 8, 0, false)
+	headerRow.AddItem(p.filterField, 20, 0, false)
+
+	p.AddItem(headerRow, 1, 0, false)      // fixed one-line path bar + filter
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
 	p.AddItem(p.table, 0, 1, true)         // fills the rest, holds focus
 
@@ -251,6 +298,25 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 // mutates the panel's state (path, header, table rows) once ListDir has
 // succeeded, so a failed load leaves the panel showing whatever it showed
 // before. It does not touch history — see navigate, back, forward.
+//
+// Moving to a genuinely different directory (newDirectory — as opposed
+// to a same-directory refresh, e.g. after toggling hidden files, sort,
+// or the filter's own regex mode) resets two things:
+//
+//   - The filter box, the same "scoped to what's on screen, not
+//     carried across navigation" rule selected already follows, and for
+//     the same reason: a filter that stayed applied after moving
+//     somewhere unrelated would too easily leave the new directory
+//     looking empty for a reason that isn't obvious. filterField.SetText
+//     below re-enters this func's own SetChangedFunc, which no-ops
+//     there since filterText already matches by the time it fires — see
+//     that handler's own comment.
+//   - The table's own cursor, back to the top row — per the user's own
+//     request, landing on wherever the table's internal selection
+//     happened to be left (Table.Clear doesn't touch it, so without this
+//     it's whatever row a previous, unrelated directory's listing had
+//     it on, not necessarily even a valid row in this one) reads as
+//     arbitrary, not "here's the directory you just opened".
 func (p *Panel) load(dir string) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -264,6 +330,12 @@ func (p *Panel) load(dir string) error {
 	if !p.showHidden {
 		entries = filterHidden(entries)
 	}
+	newDirectory := abs != p.path
+	if newDirectory {
+		p.filterText = ""
+		p.filterField.SetText("")
+	}
+	entries = filterByText(entries, p.filterText, p.filterRegex)
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
 	p.table.Clear()
@@ -303,6 +375,10 @@ func (p *Panel) load(dir string) error {
 	// robust way to state that instead of relying on that always holding.
 	p.buildColumnHeader()
 
+	if newDirectory {
+		p.focusRow(0) // top of the listing — see this func's own doc comment
+	}
+
 	if p.onLoad != nil {
 		p.onLoad(p.path)
 	}
@@ -321,6 +397,68 @@ func filterHidden(entries []fsops.Entry) []fsops.Entry {
 	visible := entries[:0] // reuses entries' backing array; entries itself isn't read again after this call
 	for _, e := range entries {
 		if !strings.HasPrefix(e.Name, ".") {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// filterModeLabel is the filter's regex-toggle button's own label — the
+// mode clicking it is currently in, not (unlike e.g. Root's Globals-menu
+// toggles) what clicking it will switch to: there's no room in an
+// 8-column button for a longer "click for X" phrasing, and the mode
+// itself is what needs to be legible from across the panel while typing
+// a pattern, not a description of the click.
+func filterModeLabel(regex bool) string {
+	if regex {
+		return "Regex"
+	}
+	return "Glob"
+}
+
+// filterByText narrows entries to those whose name matches filterText —
+// via filepath.Match (shell-pattern globbing, "*"/"?"/"[...]", the same
+// syntax Select+/- already uses) by default, or via regexp.MatchString
+// once filterRegex is on — matching how Midnight Commander's own filter
+// dialog offers exactly the same two modes ("Shell Patterns" on or off).
+// An empty filterText is a no-op (every entry kept, unfiltered).
+//
+// An invalid pattern is treated the same as "no filter yet" (every
+// entry kept) rather than surfaced as an error: this runs on every
+// keystroke, so an incomplete regex (or a malformed glob like an
+// unterminated "[") is an expected, transient state while typing, not
+// something worth interrupting for.
+func filterByText(entries []fsops.Entry, filterText string, filterRegex bool) []fsops.Entry {
+	if filterText == "" {
+		return entries
+	}
+
+	var match func(name string) bool
+	if filterRegex {
+		re, err := regexp.Compile(filterText)
+		if err != nil {
+			return entries
+		}
+		match = re.MatchString
+	} else {
+		// Checked once, against an arbitrary probe string, rather than
+		// per entry inside match itself: filterText's validity as a
+		// pattern doesn't depend on what it's being matched against, and
+		// checking it per entry would make every entry fail to match
+		// (not just leave the pattern effectively unfiltered) the moment
+		// it's malformed — the opposite of what this function documents.
+		if _, err := filepath.Match(filterText, ""); err != nil {
+			return entries
+		}
+		match = func(name string) bool {
+			hit, _ := filepath.Match(filterText, name) // err is nil: already checked above
+			return hit
+		}
+	}
+
+	visible := entries[:0] // reuses entries' backing array, same as filterHidden
+	for _, e := range entries {
+		if match(e.Name) {
 			visible = append(visible, e)
 		}
 	}
