@@ -17,6 +17,7 @@ const (
 	contextMenuPage = "context-menu"
 	renamePage      = "rename"
 	promptPage      = "prompt"
+	pickerPage      = "owner-group-picker"
 	quitConfirmPage = "quit-confirm"
 )
 
@@ -52,6 +53,7 @@ type Root struct {
 	menu        *tview.List
 	rename      *tview.InputField
 	prompt      *tview.InputField
+	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
 
@@ -124,16 +126,22 @@ type Root struct {
 	// renderProperties call.
 	propertySpans []propertySpan
 
-	// propertiesDirty/stagedName/stagedMode/stagedMtime hold the
-	// Properties overlay's in-progress edit, if any — see
-	// markPropertiesDirty and savePropertiesEdit. The staged values start
-	// out equal to propertiesStat's own (set in openProperties) and only
-	// diverge as fields are edited; nothing here is written to the real
-	// file until Save.
+	// propertiesDirty/stagedName/stagedMode/stagedMtime/stagedOwner/
+	// stagedGroup hold the Properties overlay's in-progress edit, if any
+	// — see markPropertiesDirty and savePropertiesEdit. The staged values
+	// start out equal to propertiesStat's own (set in openProperties) and
+	// only diverge as fields are edited; nothing here is written to the
+	// real file until Save. stagedOwner/stagedGroup are plain name
+	// strings either way — chosen via the owner/group picker or typed
+	// into its text fallback — resolved to a uid/gid via
+	// fsops.ResolveUID/ResolveGID only at Save time, the same as
+	// propertiesStat.Owner/Group are themselves already just names.
 	propertiesDirty bool
 	stagedName      string
 	stagedMode      os.FileMode
 	stagedMtime     time.Time
+	stagedOwner     string
+	stagedGroup     string
 
 	// activePage/activeWidget track whichever overlay (context menu,
 	// rename, info, quit confirm) is currently shown, if any — see
@@ -249,11 +257,21 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
 	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
 
+	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
+	// repopulated and repositioned per open, the same pattern rename/
+	// prompt/propertiesEditField already use.
+	r.picker = tview.NewList().ShowSecondaryText(false)
+	r.picker.SetBackgroundColor(accentBackgroundColor)
+	r.picker.SetMainTextColor(tcell.ColorWhite)
+	r.picker.SetHighlightFullLine(true)
+	r.picker.SetBorderPadding(0, 0, 1, 1)
+
 	r.AddPage(panelPage, panel, true, true)
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
 	r.AddPage(propertiesPage, r.properties, false, false)
+	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 
@@ -827,24 +845,63 @@ func (r *Root) pasteClipboard() {
 	}
 }
 
-// openChown is the context menu's "chown": prompts for chown(1)'s own
-// "owner[:group]" syntax and applies it to the target. target is captured
-// up front rather than read from r.target inside the callback — nothing
-// else changes it while the prompt is open in this single-threaded UI,
-// but reading it early avoids relying on that staying true.
+// openChown is the context menu's "chown": opens a scrollable picker
+// (openOwnerGroupPicker) of every local user, then — once one's picked —
+// every local group, applying both once the group's confirmed too.
+// Backing out of just the group step (Escape) still applies the
+// already-picked owner, leaving the group unchanged — the same
+// flexibility chown(1)'s own "owner[:group]" syntax has always had.
+//
+// Falls back to that same text syntax (openChownTextFallback, this
+// action's entire behavior before the picker existed) if the picker's
+// data source (fsops.ListUsers/ListGroups) isn't available — e.g. on
+// macOS. target is captured up front rather than read from r.target
+// inside the callbacks — nothing else changes it while any of this is
+// open in this single-threaded UI, but reading it early avoids relying
+// on that staying true.
 func (r *Root) openChown() {
 	target := r.target
+
+	info, err := fsops.Stat(target)
+	if err != nil {
+		r.showError(err)
+		return
+	}
+
+	r.openOwnerGroupPicker(pickUser, info.UID, func(_ string, uid int) {
+		r.openOwnerGroupPicker(pickGroup, info.GID, func(_ string, gid int) {
+			r.applyChown(target, uid, gid)
+		}, func() {
+			r.applyChown(target, uid, -1) // group step cancelled: owner-only change
+		}, func() {
+			r.openChownTextFallback(target)
+		})
+	}, nil, func() {
+		r.openChownTextFallback(target)
+	})
+}
+
+// applyChown runs fsops.Chown and reloads the panel, reporting either's
+// failure — the common tail of every path through openChown.
+func (r *Root) applyChown(target string, uid, gid int) {
+	if err := fsops.Chown(target, uid, gid); err != nil {
+		r.showError(err)
+		return
+	}
+	r.showError(r.panel.load(r.panel.path))
+}
+
+// openChownTextFallback prompts for chown(1)'s own "owner[:group]"
+// syntax — openChown's fallback when the picker's data source isn't
+// available.
+func (r *Root) openChownTextFallback(target string) {
 	r.openPrompt("chown (owner[:group]):", "", func(text string) {
 		uid, gid, err := fsops.ParseOwnerGroup(text)
 		if err != nil {
 			r.showError(err)
 			return
 		}
-		if err := fsops.Chown(target, uid, gid); err != nil {
-			r.showError(err)
-			return
-		}
-		r.showError(r.panel.load(r.panel.path))
+		r.applyChown(target, uid, gid)
 	})
 }
 

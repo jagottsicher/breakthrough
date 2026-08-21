@@ -284,7 +284,36 @@ func TestChmodViaPrompt(t *testing.T) {
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
 // ownership to anyone else needs root, but chowning to the process's own
 // uid:gid is guaranteed to succeed anywhere this test runs.
-func TestChownViaPromptNoopToOwnUser(t *testing.T) {
+// TestChownTextFallbackNoopToOwnUser exercises openChown's own pre-picker
+// behavior directly — still reachable as the picker's fallback when
+// fsops.ListUsers/ListGroups isn't available (e.g. macOS). See
+// TestOpenChownPickerNoopToOwnUser for the picker-based primary path,
+// which openChown itself now tries first wherever it's available (this
+// test's own environment included).
+func TestChownTextFallbackNoopToOwnUser(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+
+	r.openChownTextFallback(path)
+	r.prompt.SetText(fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
+	r.finishPrompt(tcell.KeyEnter)
+
+	if r.activePage == errorPage {
+		t.Errorf("chown to own uid/gid should succeed, got error overlay: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestOpenChownPickerNoopToOwnUser exercises openChown's actual current
+// behavior: the owner picker, then the group picker, both confirmed via
+// Enter on their pre-centered (current-user/current-group) selection —
+// a no-op chown, so this doesn't need root to pass.
+func TestOpenChownPickerNoopToOwnUser(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
 
@@ -295,11 +324,50 @@ func TestChownViaPromptNoopToOwnUser(t *testing.T) {
 	r.target = path
 
 	r.openChown()
-	r.prompt.SetText(fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()))
-	r.finishPrompt(tcell.KeyEnter)
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the text prompt instead")
+	}
+
+	// Owner step: confirm the pre-selected (current) user.
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != pickerPage {
+		t.Fatalf("activePage = %q after the owner step, want the group picker still open", r.activePage)
+	}
+
+	// Group step: confirm the pre-selected (current) group.
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage == errorPage {
 		t.Errorf("chown to own uid/gid should succeed, got error overlay: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestOpenChownPickerGroupCancelAppliesOwnerOnly pins that backing out of
+// just the group step (Escape) still applies the already-picked owner,
+// leaving the group untouched — the same flexibility chown(1)'s own
+// "owner[:group]" syntax has always had.
+func TestOpenChownPickerGroupCancelAppliesOwnerOnly(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+
+	r.openChown()
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the text prompt instead")
+	}
+
+	// Owner step: confirm the pre-selected (current) user.
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	// Group step: back out instead of confirming.
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage == errorPage {
+		t.Errorf("owner-only chown to the current user should succeed, got error overlay: %q", r.errorView.GetText(true))
 	}
 }
 

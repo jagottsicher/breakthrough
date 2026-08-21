@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -840,6 +842,46 @@ func TestSavePropertiesEditNoopWhenNothingChanged(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("apple.txt should still exist unchanged: %v", err)
+	}
+}
+
+// TestSavePropertiesEditAppliesOwnerGroupChange pins that Save actually
+// applies a changed stagedOwner/stagedGroup via fsops.Chown — kept
+// privilege-independent the same way TestChownNoopToOwnUser in fsops is:
+// staging the process's own uid/gid *as a numeric string* differs from
+// propertiesStat.Owner/Group (which are resolved names), so the "did
+// this change" comparison sees a real change and Chown actually runs,
+// but resolves back to a no-op requiring no special privileges.
+func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	r.stagedOwner = strconv.Itoa(os.Getuid())
+	r.stagedGroup = strconv.Itoa(os.Getgid())
+	r.markPropertiesDirty()
+
+	r.savePropertiesEdit()
+
+	if r.activePage == errorPage {
+		t.Fatalf("Save should have succeeded, got error overlay: %q", r.errorView.GetText(true))
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Skip("can't inspect raw uid/gid on this platform")
+	}
+	if int(stat.Uid) != os.Getuid() || int(stat.Gid) != os.Getgid() {
+		t.Errorf("file uid:gid = %d:%d, want %d:%d", stat.Uid, stat.Gid, os.Getuid(), os.Getgid())
 	}
 }
 

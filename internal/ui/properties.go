@@ -39,6 +39,8 @@ const (
 	fieldPermOtherExec
 	fieldMtimeDate
 	fieldMtimeTime
+	fieldOwner
+	fieldGroup
 )
 
 // permFieldBit maps each permission propertyField to the bit it toggles
@@ -256,6 +258,8 @@ func (r *Root) openProperties() {
 	r.stagedName = info.Name
 	r.stagedMode = info.Mode.Perm()
 	r.stagedMtime = info.ModTime
+	r.stagedOwner = info.Owner
+	r.stagedGroup = info.Group
 
 	r.renderProperties()
 
@@ -302,9 +306,9 @@ func (r *Root) renderProperties() {
 		pb.field("Links", fmt.Sprintf("%d (shared with other names)", r.propertiesStat.Nlink))
 	}
 	pb.newline()
-	pb.field("Owner", r.propertiesStat.Owner) // not yet editable — see the Owner/Group picker discussion
+	pb.editableField("Owner", r.stagedOwner, fieldOwner)
 	pb.newline()
-	pb.field("Group", r.propertiesStat.Group)
+	pb.editableField("Group", r.stagedGroup, fieldGroup)
 	pb.newline()
 	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
 	pb.newline()
@@ -388,12 +392,12 @@ func (r *Root) cancelPropertiesEdit() {
 }
 
 // savePropertiesEdit is the Save button: applies whichever of
-// Name/Permissions/Modified actually changed, in that order, stopping at
-// the first failure rather than trying the rest — a failure partway
-// through leaves whatever already succeeded applied and whatever didn't
-// get to run undone; reopening Properties and redoing the remaining
-// edits is what recovering from that looks like for now, not an
-// automatic retry or rollback.
+// Name/Permissions/Modified/Owner/Group actually changed, in that order,
+// stopping at the first failure rather than trying the rest — a failure
+// partway through leaves whatever already succeeded applied and whatever
+// didn't get to run undone; reopening Properties and redoing the
+// remaining edits is what recovering from that looks like for now, not
+// an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
 	target := r.propertiesTarget
 	var firstErr error
@@ -414,6 +418,32 @@ func (r *Root) savePropertiesEdit() {
 	if firstErr == nil && !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
 			firstErr = err
+		}
+	}
+	if firstErr == nil && (r.stagedOwner != r.propertiesStat.Owner || r.stagedGroup != r.propertiesStat.Group) {
+		// -1 for whichever half didn't change, matching os.Chown's own
+		// "leave this one unchanged" convention (see fsops.ParseOwnerGroup,
+		// which the standalone chown action's text fallback already relies
+		// on the same way).
+		uid, gid := -1, -1
+		if r.stagedOwner != r.propertiesStat.Owner {
+			if id, err := fsops.ResolveUID(r.stagedOwner); err != nil {
+				firstErr = err
+			} else {
+				uid = id
+			}
+		}
+		if firstErr == nil && r.stagedGroup != r.propertiesStat.Group {
+			if id, err := fsops.ResolveGID(r.stagedGroup); err != nil {
+				firstErr = err
+			} else {
+				gid = id
+			}
+		}
+		if firstErr == nil {
+			if err := fsops.Chown(target, uid, gid); err != nil {
+				firstErr = err
+			}
 		}
 	}
 
@@ -457,6 +487,25 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		return
 	}
 
+	switch span.field {
+	case fieldOwner:
+		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, func(name string, _ int) {
+			r.stagedOwner = name
+			r.resumeProperties()
+		}, r.resumeProperties, func() {
+			r.activateInlineTextField(span, r.stagedOwner, 24)
+		})
+		return
+	case fieldGroup:
+		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, func(name string, _ int) {
+			r.stagedGroup = name
+			r.resumeProperties()
+		}, r.resumeProperties, func() {
+			r.activateInlineTextField(span, r.stagedGroup, 24)
+		})
+		return
+	}
+
 	var prefill string
 	var minWidth int
 	switch span.field {
@@ -472,7 +521,25 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	default:
 		return
 	}
+	r.activateInlineTextField(span, prefill, minWidth)
+}
 
+// resumeProperties re-shows the Properties overlay after the owner/group
+// picker (a separate, Root-level overlay — see openOwnerGroupPicker) has
+// closed, whether that was a pick or a cancel, and re-renders it.
+// propertiesDirty and every staged value survive the round trip
+// untouched regardless: they're plain Root fields, not tied to whether
+// the overlay happens to be visible right now.
+func (r *Root) resumeProperties() {
+	r.showOverlay(propertiesPage, r.properties)
+	r.rerenderProperties()
+}
+
+// activateInlineTextField positions and shows the shared inline edit
+// field over span, pre-filled with prefill, at least minWidth wide — the
+// common tail for Name/Modified date/time, and the owner/group picker's
+// own text fallback when fsops.ListUsers/ListGroups isn't available.
+func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
 	r.propertiesEditTarget = span.field
 	r.propertiesEditField.SetText(prefill)
 
@@ -518,6 +585,20 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 	case fieldMtimeTime:
 		if t, err := parseTime(text, r.stagedMtime); err == nil {
 			r.stagedMtime = t
+		}
+	case fieldOwner:
+		// Not resolved here — just staged as typed. Owner/Group only
+		// reach this text field at all as the picker's fallback (see
+		// activatePropertyField), so there's no fsops.ListUsers result to
+		// validate against locally; resolving via fsops.ResolveUID and
+		// reporting a real error if that fails waits for Save, the same
+		// as any other invalid staged value.
+		if text != "" {
+			r.stagedOwner = text
+		}
+	case fieldGroup:
+		if text != "" {
+			r.stagedGroup = text
 		}
 	}
 
