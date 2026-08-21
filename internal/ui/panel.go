@@ -300,6 +300,20 @@ func (p *Panel) activateRow(row int) {
 	p.reportError(p.navigate(ref.path))
 }
 
+// nameCellRect returns the on-screen position and width row's name cell
+// occupied the last time the table was drawn (see TableCell.GetLastPosition),
+// or ok=false if row doesn't exist. Used to position the rename field
+// exactly over the name column without also covering the checkbox
+// column, so the checkbox stays visible — showing what's otherwise
+// selected — while renaming, without becoming part of what's editable.
+func (p *Panel) nameCellRect(row int) (x, y, width int, ok bool) {
+	if _, ok := p.rowRef(row); !ok {
+		return 0, 0, 0, false
+	}
+	x, y, width = p.table.GetCell(row, colName).GetLastPosition()
+	return x, y, width, true
+}
+
 // RowAt returns the absolute path of the entry at screen position (x, y),
 // or ok=false if that position isn't a selectable entry — outside the
 // table, past the last row, or the ".." row, which isn't a file operation
