@@ -26,12 +26,12 @@ func ParseOwnerGroup(s string) (uid, gid int, err error) {
 	}
 
 	if ownerPart != "" {
-		if uid, err = resolveUID(ownerPart); err != nil {
+		if uid, err = ResolveUID(ownerPart); err != nil {
 			return -1, -1, err
 		}
 	}
 	if hasGroup && groupPart != "" {
-		if gid, err = resolveGID(groupPart); err != nil {
+		if gid, err = ResolveGID(groupPart); err != nil {
 			return -1, -1, err
 		}
 	}
@@ -39,7 +39,13 @@ func ParseOwnerGroup(s string) (uid, gid int, err error) {
 	return uid, gid, nil
 }
 
-func resolveUID(s string) (int, error) {
+// ResolveUID resolves s — a username (via os/user) or a bare numeric
+// uid — to a uid. Exported for callers that only have one half of
+// chown(1)'s "owner[:group]" syntax to resolve, e.g. the Properties
+// overlay's separately-editable Owner field (see ui.Root's
+// openOwnerGroupPicker) — ParseOwnerGroup itself is built on top of this
+// and ResolveGID.
+func ResolveUID(s string) (int, error) {
 	if u, err := user.Lookup(s); err == nil {
 		return strconv.Atoi(u.Uid)
 	}
@@ -49,7 +55,8 @@ func resolveUID(s string) (int, error) {
 	return 0, fmt.Errorf("fsops: unknown user %q", s)
 }
 
-func resolveGID(s string) (int, error) {
+// ResolveGID is ResolveUID's own counterpart for group names/gids.
+func ResolveGID(s string) (int, error) {
 	if g, err := user.LookupGroup(s); err == nil {
 		return strconv.Atoi(g.Gid)
 	}
