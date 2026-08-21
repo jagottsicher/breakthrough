@@ -8,6 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
@@ -301,6 +303,159 @@ func TestToggleCheckbox(t *testing.T) {
 	}
 	if cell := p.table.GetCell(1, colCheckbox); cell.Text != "○" {
 		t.Errorf("checkbox cell = %q, want ○", cell.Text)
+	}
+}
+
+func TestTypeGlyph(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  rowRef
+		want byte
+	}{
+		{"plain file", rowRef{entryType: fsops.TypeFile}, ' '},
+		{"executable file", rowRef{entryType: fsops.TypeFile, mode: 0o755}, '*'},
+		{"executable bit for group only still counts", rowRef{entryType: fsops.TypeFile, mode: 0o650}, '*'},
+		{"directory", rowRef{entryType: fsops.TypeDir}, '/'},
+		{"symlink to directory", rowRef{entryType: fsops.TypeSymlinkDir}, '~'},
+		{"symlink to file", rowRef{entryType: fsops.TypeSymlinkFile}, '@'},
+		{"broken symlink", rowRef{entryType: fsops.TypeSymlinkBroken}, '!'},
+		{"socket", rowRef{entryType: fsops.TypeSocket}, '='},
+		{"FIFO", rowRef{entryType: fsops.TypeFIFO}, '|'},
+		{"character device", rowRef{entryType: fsops.TypeCharDevice}, '-'},
+		{"block device", rowRef{entryType: fsops.TypeBlockDevice}, '+'},
+	}
+
+	for _, tt := range tests {
+		if got := typeGlyph(tt.ref); got != tt.want {
+			t.Errorf("%s: typeGlyph() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestTypeGlyphColor(t *testing.T) {
+	if got := typeGlyphColor(rowRef{entryType: fsops.TypeSymlinkBroken}); got != tcell.ColorRed {
+		t.Errorf("broken symlink color = %v, want red", got)
+	}
+	if got := typeGlyphColor(rowRef{entryType: fsops.TypeDir}); got != tcell.ColorWhite {
+		t.Errorf("directory color = %v, want white", got)
+	}
+}
+
+func TestModifierGlyph(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  rowRef
+		want byte
+	}{
+		{"plain file", rowRef{entryType: fsops.TypeFile}, ' '},
+		{"hardlinked file", rowRef{entryType: fsops.TypeFile, nlink: 2}, '&'},
+		{"single-link file with nlink=1", rowRef{entryType: fsops.TypeFile, nlink: 1}, ' '},
+		{"mounted directory", rowRef{entryType: fsops.TypeDir, mountPoint: true}, '>'},
+		{"mounted directory symlink", rowRef{entryType: fsops.TypeSymlinkDir, mountPoint: true}, '>'},
+		{"ordinary directory", rowRef{entryType: fsops.TypeDir}, ' '},
+		{"mountPoint flag ignored for a file (shouldn't happen, but stay defensive)", rowRef{entryType: fsops.TypeFile, mountPoint: true}, ' '},
+	}
+
+	for _, tt := range tests {
+		if got := modifierGlyph(tt.ref); got != tt.want {
+			t.Errorf("%s: modifierGlyph() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestAddRowRendersTypeAndModifierColumns is an end-to-end check, through
+// a real ListDir + load, that the type and modifier glyphs land in their
+// own separate table cells rather than being baked into the name text.
+func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link-to-file")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(target, filepath.Join(dir, "hardlinked.txt")); err != nil {
+		t.Skipf("hard links not supported here: %v", err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int) // name -> row
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+
+	linkRow, ok := byName["link-to-file"]
+	if !ok {
+		t.Fatal("link-to-file row not found")
+	}
+	if got := p.table.GetCell(linkRow, colType).Text; got != "@" {
+		t.Errorf("link-to-file type cell = %q, want %q", got, "@")
+	}
+	if got := p.table.GetCell(linkRow, colName).Text; got != "link-to-file -> "+target {
+		t.Errorf("link-to-file name cell = %q, want the inline arrow-target form", got)
+	}
+
+	hardlinkRow, ok := byName["hardlinked.txt"]
+	if !ok {
+		t.Fatal("hardlinked.txt row not found")
+	}
+	if got := p.table.GetCell(hardlinkRow, colModifier).Text; got != "&" {
+		t.Errorf("hardlinked.txt modifier cell = %q, want %q", got, "&")
+	}
+	if got := p.table.GetCell(hardlinkRow, colType).Text; got != " " {
+		t.Errorf("hardlinked.txt type cell = %q, want blank (a plain, non-executable file)", got)
+	}
+}
+
+// TestActivateRowNavigatesIntoDirectorySymlink pins a behavior change
+// that comes for free now that ListDir resolves symlinks to classify
+// them (see fsops.Entry.IsDir's doc comment): Enter/click on a directory
+// symlink navigates into it, the same as a real directory — it used to
+// be treated as an inert file.
+func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
+	dir := t.TempDir()
+	targetDir := filepath.Join(dir, "target-dir")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "inside.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link-to-dir")
+	if err := os.Symlink(targetDir, link); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	row := -1
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.name == "link-to-dir" {
+			row = i
+		}
+	}
+	if row < 0 {
+		t.Fatal("link-to-dir row not found")
+	}
+
+	p.activateRow(row)
+
+	if p.path != link {
+		t.Errorf("p.path = %q after activating a directory symlink, want %q", p.path, link)
+	}
+	if _, ok := p.rowRef(1); !ok {
+		t.Fatal("expected the symlinked directory's own contents to be listed")
 	}
 }
 
