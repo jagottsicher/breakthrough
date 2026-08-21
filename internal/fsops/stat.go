@@ -28,6 +28,8 @@ type Info struct {
 	ModTime    time.Time
 	Owner      string // falls back to the numeric uid (as a string) if unresolved
 	Group      string // falls back to the numeric gid (as a string) if unresolved
+	UID        int    // the raw uid/gid Owner/Group were resolved from — e.g. for centering the owner/group picker on the current value
+	GID        int
 	Nlink      uint64 // hard-link count of path itself (not a symlink's target)
 	MountPoint bool   // true if this is a directory (or a symlink resolving to one) on a different filesystem than its parent
 }
@@ -72,7 +74,7 @@ func Stat(path string) (Info, error) {
 		info.MountPoint = isMountPoint(path)
 	}
 
-	info.Owner, info.Group = ownerGroup(fi)
+	info.Owner, info.Group, info.UID, info.GID = ownerGroup(fi)
 
 	return info, nil
 }
@@ -81,23 +83,25 @@ func Stat(path string) (Info, error) {
 // stat structure, falling back to the numeric id (as a string) if that
 // data isn't available or the name lookup fails — e.g. a uid/gid with no
 // matching passwd/group entry.
-func ownerGroup(fi os.FileInfo) (owner, group string) {
+func ownerGroup(fi os.FileInfo) (owner, group string, uidNum, gidNum int) {
 	stat, ok := fi.Sys().(*syscall.Stat_t)
 	if !ok {
-		return "", ""
+		return "", "", 0, 0
 	}
 
+	uidNum = int(stat.Uid)
 	uid := strconv.FormatUint(uint64(stat.Uid), 10)
 	owner = uid
 	if u, err := user.LookupId(uid); err == nil {
 		owner = u.Username
 	}
 
+	gidNum = int(stat.Gid)
 	gid := strconv.FormatUint(uint64(stat.Gid), 10)
 	group = gid
 	if g, err := user.LookupGroupId(gid); err == nil {
 		group = g.Name
 	}
 
-	return owner, group
+	return owner, group, uidNum, gidNum
 }
