@@ -37,6 +37,7 @@ const (
 	fieldPermOtherRead
 	fieldPermOtherWrite
 	fieldPermOtherExec
+	fieldPermOctal
 	fieldMtimeDate
 	fieldMtimeTime
 	fieldOwner
@@ -46,16 +47,20 @@ const (
 // propertyFieldOrder is every editable field, in the same top-to-bottom
 // order renderProperties draws them — the Tab/Backtab navigation order
 // (see movePropertiesFocus/setPropertiesFocus): Name, the 9 permission
-// bits, Owner, Group, then the Modified date and time halves. Cancel and
-// Save (see newPropertiesView) follow immediately after, as stops
-// len(propertyFieldOrder) and len(propertyFieldOrder)+1 — not part of
-// this slice themselves, since they're real tview.Button widgets with
-// their own focus, not text spans within propertiesText.
+// bits, the octal permission value (fieldPermOctal — an equivalent,
+// direct way to set all 9 at once, per the user's own request, rather
+// than only one bit at a time by clicking), Owner, Group, then the
+// Modified date and time halves. Cancel and Save (see newPropertiesView)
+// follow immediately after, as stops len(propertyFieldOrder) and
+// len(propertyFieldOrder)+1 — not part of this slice themselves, since
+// they're real tview.Button widgets with their own focus, not text spans
+// within propertiesText.
 var propertyFieldOrder = []propertyField{
 	fieldName,
 	fieldPermOwnerRead, fieldPermOwnerWrite, fieldPermOwnerExec,
 	fieldPermGroupRead, fieldPermGroupWrite, fieldPermGroupExec,
 	fieldPermOtherRead, fieldPermOtherWrite, fieldPermOtherExec,
+	fieldPermOctal,
 	fieldOwner, fieldGroup,
 	fieldMtimeDate, fieldMtimeTime,
 }
@@ -86,6 +91,18 @@ var permFieldBit = map[propertyField]os.FileMode{
 	fieldPermOtherRead:  0o004,
 	fieldPermOtherWrite: 0o002,
 	fieldPermOtherExec:  0o001,
+}
+
+// permFieldLetter maps each permission propertyField to the rwx letter
+// that explicitly turns it on (see capturePropertiesKey) — 'r'/'w'/'x'
+// depending on which of the 9 bits it is, regardless of owner/group/
+// other. The matching letter sets the bit on; Delete or '-' sets it off;
+// Space/Enter toggle whatever it currently is — three ways in, per the
+// user's own request, alongside the plain click every bit already had.
+var permFieldLetter = map[propertyField]byte{
+	fieldPermOwnerRead: 'r', fieldPermGroupRead: 'r', fieldPermOtherRead: 'r',
+	fieldPermOwnerWrite: 'w', fieldPermGroupWrite: 'w', fieldPermOtherWrite: 'w',
+	fieldPermOwnerExec: 'x', fieldPermGroupExec: 'x', fieldPermOtherExec: 'x',
 }
 
 // propertySpan is one clickable region within the Properties overlay's
@@ -170,7 +187,10 @@ func (pb *propertiesBuilder) editableField(label, value string, field, focused p
 // propertySpan (for per-character click routing — see
 // Root.togglePermBit) styled individually via focusTag so the one
 // keyboard focus currently points at (if any) stands out from the rest,
-// then the octal form.
+// then the octal form — itself its own editable propertySpan
+// (fieldPermOctal), so all 9 bits can be set at once by typing a value
+// like "755" instead of only one at a time by clicking, per the user's
+// own request.
 func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", "Permissions:"))
 	pb.text(string(permTypeChar(mode)))
@@ -195,7 +215,15 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 		pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: pb.col, field: f})
 	}
 
-	pb.text(fmt.Sprintf(" (%04o)", mode.Perm()))
+	pb.text(" (")
+	octalTag, octalReset := focusTag(fieldPermOctal, focused)
+	pb.tag(octalTag)
+	octalStart := pb.col
+	pb.text(fmt.Sprintf("%04o", mode.Perm()))
+	octalEnd := pb.col
+	pb.tag(octalReset)
+	pb.text(")")
+	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: octalStart, endCol: octalEnd, field: fieldPermOctal})
 }
 
 // mtimeField writes the "Modified:" line with the date and time halves
@@ -590,6 +618,24 @@ func (r *Root) togglePermBit(field propertyField) {
 	r.rerenderProperties()
 }
 
+// setPermBit explicitly sets (on) or clears (!on) one permission bit in
+// stagedMode — the "type the matching letter to turn it on, Delete or
+// '-' to turn it off" alternative to togglePermBit's "flip whatever it
+// currently is" (see capturePropertiesKey), per the user's own request.
+func (r *Root) setPermBit(field propertyField, on bool) {
+	bit, ok := permFieldBit[field]
+	if !ok {
+		return
+	}
+	if on {
+		r.stagedMode |= bit
+	} else {
+		r.stagedMode &^= bit
+	}
+	r.markPropertiesDirty()
+	r.rerenderProperties()
+}
+
 // activatePropertyField is what clicking any propertySpan does — and,
 // via activateFocusedPropertyStop, what pressing Enter on one via
 // keyboard navigation does too: a permission bit toggles immediately
@@ -639,6 +685,14 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	case fieldName:
 		prefill = r.stagedName
 		minWidth = 24 // room to type a longer name than the current one
+	case fieldPermOctal:
+		// 4 digits, matching exactly what's on screen (permissionsField's
+		// own "%04o") — typing "644" still works fine too, ParseMode
+		// doesn't care about a leading zero either way, but the field you
+		// clicked shouldn't visibly change digit count out from under you
+		// the moment you start editing it.
+		prefill = fmt.Sprintf("%04o", r.stagedMode.Perm())
+		minWidth = 4
 	case fieldMtimeDate:
 		prefill = r.stagedMtime.Format("2006-01-02")
 		minWidth = 10
@@ -705,6 +759,26 @@ func (r *Root) propertySpanForField(field propertyField) (propertySpan, bool) {
 	return propertySpan{}, false
 }
 
+// isAutoEditField reports whether landing keyboard focus on field (see
+// setPropertiesFocus) should open its inline editor immediately, with no
+// separate Enter/Space needed first — Name, the octal permission value,
+// and the Modified date/time halves: plain text entry, where "select the
+// field" and "start typing" are the same action as far as the user's
+// concerned, per their own request. The individual permission bits (a
+// toggle, not text — see capturePropertiesKey's letter/Delete/Space
+// handling) and Owner/Group (which open the heavier picker overlay, not
+// appropriate to trigger just by tabbing past on the way to some other
+// field) are deliberately excluded — those still wait for an explicit
+// key or click.
+func isAutoEditField(field propertyField) bool {
+	switch field {
+	case fieldName, fieldPermOctal, fieldMtimeDate, fieldMtimeTime:
+		return true
+	default:
+		return false
+	}
+}
+
 // setPropertiesFocus moves keyboard-navigation focus to stop idx — a
 // field span (0..len(propertyFieldOrder)-1), the Cancel button
 // (len(propertyFieldOrder)), or the Save button
@@ -713,11 +787,14 @@ func (r *Root) propertySpanForField(field propertyField) (propertySpan, bool) {
 // lives on real keyboard focus: propertiesText for a field (see
 // capturePropertiesKey's Tab/Backtab/Enter handling), or the button
 // itself, whose own InputHandler and SetExitFunc (see
-// newPropertiesButtons) take over navigation from there. Also serves as
-// the owner/group picker's own restore callback (see
-// showOverlayWithRestore/restoreProperties): reapplying the current
-// index is exactly what re-entering Properties after the picker closes
-// needs, regardless of why setPropertiesFocus is running.
+// newPropertiesButtons) take over navigation from there. Landing on a
+// field that opens automatically (see isAutoEditField) immediately does
+// so, folding "select the field" and "start editing it" into the single
+// Tab press that got here. Also serves as the owner/group picker's own
+// restore callback (see showOverlayWithRestore/restoreProperties):
+// reapplying the current index is exactly what re-entering Properties
+// after the picker closes needs, regardless of why setPropertiesFocus is
+// running.
 func (r *Root) setPropertiesFocus(idx int) {
 	r.propertiesFocusIndex = idx
 	r.rerenderProperties()
@@ -730,6 +807,9 @@ func (r *Root) setPropertiesFocus(idx int) {
 		r.app.SetFocus(r.propertiesSaveBtn)
 	default:
 		r.app.SetFocus(r.propertiesText)
+		if idx >= 0 && idx < n && isAutoEditField(propertyFieldOrder[idx]) {
+			r.activateFocusedPropertyStop()
+		}
 	}
 }
 
@@ -788,8 +868,19 @@ func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWid
 	r.app.SetFocus(r.propertiesEditField)
 }
 
-// finishPropertyEdit handles Enter (commit) and Escape/Tab (discard just
-// this field's in-progress text) in the shared inline edit field.
+// finishPropertyEdit handles Enter, Tab, and Backtab (commit) and
+// Escape (discard just this field's in-progress text) in the shared
+// inline edit field.
+//
+// Tab/Backtab commit the same as Enter — not discard, the way they used
+// to (and Escape still does) — and then continue the outer field
+// navigation Tab/Backtab was already asking for (see
+// movePropertiesFocus): "type a value, then keep tabbing through the
+// rest of the fields" only works if leaving a field via Tab keeps what
+// was just typed. Before this fix, tabbing out of a field discarded it
+// exactly like Escape — from the user's own perspective, the value they
+// just edited appeared to silently reset the moment the field lost
+// focus.
 //
 // Invalid date/time input is silently discarded rather than surfaced as
 // an error: Root's error overlay and Properties are both single-slot
@@ -801,16 +892,53 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 	text := r.propertiesEditField.GetText()
 	target := r.propertiesEditTarget
 	r.properties.HidePage("editfield")
-	r.app.SetFocus(r.propertiesText)
 
-	if key != tcell.KeyEnter {
-		return
+	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
+		r.applyPropertyEditText(target, text)
 	}
 
+	switch key {
+	case tcell.KeyTab:
+		r.movePropertiesFocus(1)
+	case tcell.KeyBacktab:
+		r.movePropertiesFocus(-1)
+	default: // Enter or Escape: conclude editing, stay on the same field
+		r.refocusPropertiesField()
+	}
+}
+
+// refocusPropertiesField re-renders and returns real keyboard focus to
+// propertiesText for whatever propertiesFocusIndex currently is, without
+// re-triggering isAutoEditField's auto-open the way setPropertiesFocus
+// would — finishPropertyEdit's own Enter/Escape case (see above) needs
+// exactly this: the field just edited stays focused/highlighted, but
+// its own Return is what's supposed to *conclude* that one entry, per
+// the user's own request — a fresh Tab arrival auto-opening a field is
+// one thing; immediately reopening the very editor Enter just closed,
+// on the same keystroke, would be another.
+func (r *Root) refocusPropertiesField() {
+	r.rerenderProperties()
+	r.app.SetFocus(r.propertiesText)
+}
+
+// applyPropertyEditText stages text as target's new value — the commit
+// logic finishPropertyEdit's Enter/Tab/Backtab cases share.
+func (r *Root) applyPropertyEditText(target propertyField, text string) {
 	switch target {
 	case fieldName:
 		if text != "" {
 			r.stagedName = text
+		}
+	case fieldPermOctal:
+		// Same parser the standalone chmod menu action's prompt already
+		// uses — accepts "755"-style octal, rejects setuid/setgid/sticky
+		// and anything out of range. Invalid input is silently discarded,
+		// the same convention as an invalid date/time (see this method's
+		// own doc comment) — a value already checked by ParseMode itself,
+		// so unlike Owner/Group there's no separate Save-time validation
+		// step for this one.
+		if mode, err := fsops.ParseMode(text); err == nil {
+			r.stagedMode = mode
 		}
 	case fieldMtimeDate:
 		if t, err := parseDate(text, r.stagedMtime); err == nil {
@@ -835,8 +963,6 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 			r.stagedGroup = text
 		}
 	}
-
-	r.rerenderProperties()
 }
 
 // parseDate parses s as YYYY-MM-DD, accepting 1- or 2-digit month/day
@@ -949,7 +1075,10 @@ func (r *Root) computeHashes() {
 // while propertiesText itself has real keyboard focus, i.e. while a
 // field stop (or nothing, idx < 0) currently has focus; once Tab/Backtab
 // hands focus to a button, that button's own InputHandler and
-// SetExitFunc (see newPropertiesButtons) take over instead.
+// SetExitFunc (see newPropertiesButtons) take over instead, and once
+// focus lands on a text field it opens immediately (see
+// isAutoEditField/setPropertiesFocus), handing focus to
+// propertiesEditField and its own SetDoneFunc instead.
 //
 // Tab/Backtab move propertiesFocusIndex (movePropertiesFocus); Enter
 // activates whatever's currently focused (activateFocusedPropertyStop);
@@ -960,8 +1089,13 @@ func (r *Root) computeHashes() {
 // every staged edit with no way back) for all four, which is exactly the
 // bug this replaces: Tab or Enter after finishing an edit used to close
 // Properties instead of moving on, silently losing whatever had just
-// been typed. 'h' (compute hashes) is unrelated to any of that and
-// unchanged.
+// been typed.
+//
+// While a permission bit has focus, three more keys act on it directly
+// rather than needing Enter first, per the user's own request: Space
+// toggles it, same as Enter; Delete or '-' explicitly clears it; the
+// matching letter (r/w/x — see permFieldLetter) explicitly sets it.
+// 'h' (compute hashes) is unrelated to any of that and unchanged.
 func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -976,7 +1110,30 @@ func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEscape:
 		r.cancelPropertiesEdit()
 		return nil
+	case tcell.KeyDelete:
+		field := r.focusedPropertyField()
+		if _, ok := permFieldBit[field]; ok {
+			r.setPermBit(field, false)
+			return nil
+		}
 	case tcell.KeyRune:
+		field := r.focusedPropertyField()
+		if _, ok := permFieldBit[field]; ok {
+			switch {
+			case event.Rune() == ' ':
+				r.activateFocusedPropertyStop() // toggle, same as Enter
+				return nil
+			case event.Rune() == '-':
+				r.setPermBit(field, false)
+				return nil
+			case rune(permFieldLetter[field]) == event.Rune():
+				r.setPermBit(field, true)
+				return nil
+			}
+		} else if event.Rune() == ' ' {
+			r.activateFocusedPropertyStop() // toggle target aside, Space is Enter's equivalent everywhere else too (e.g. Owner/Group's picker)
+			return nil
+		}
 		if event.Rune() == 'h' {
 			r.computeHashes()
 			return nil
