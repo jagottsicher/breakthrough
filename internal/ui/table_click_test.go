@@ -199,6 +199,15 @@ func TestRightDragLiveFocusFollowsMouseMove(t *testing.T) {
 	root, cleanup := drawnRoot(t, dir)
 	defer cleanup()
 
+	checked := func(row int) bool {
+		t.Helper()
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		return root.panel.selected[ref.path]
+	}
+
 	downX, downY, ok := findRowPos(root.panel.table, 1, 80, 24)
 	if !ok {
 		t.Fatal("could not locate row 1's screen position")
@@ -217,13 +226,23 @@ func TestRightDragLiveFocusFollowsMouseMove(t *testing.T) {
 	if got, _ := root.panel.table.GetSelection(); got != 1 {
 		t.Errorf("focus after MouseRightDown = %d, want 1", got)
 	}
+	// Nothing toggles on press alone — only once the drag actually moves
+	// (see advanceDrag), so a plain click still toggles nothing.
+	if checked(1) {
+		t.Error("row 1 should not be checked yet, right after MouseRightDown")
+	}
 
 	handler(tview.MouseMove, tcell.NewEventMouse(midX, midY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
 	if got, _ := root.panel.table.GetSelection(); got != 2 {
 		t.Errorf("focus after MouseMove to row 2 (still dragging) = %d, want 2 (live tracking)", got)
 	}
-	if ref, _ := root.panel.rowRef(2); root.panel.selected[ref.path] {
-		t.Error("row 2 should not be checked yet, mid-drag")
+	// The drag has now genuinely moved: rows 1 and 2 should already be
+	// checked live, before the button is ever released.
+	if !checked(1) || !checked(2) {
+		t.Errorf("rows 1 and 2 should already be checked mid-drag: row1=%v row2=%v", checked(1), checked(2))
+	}
+	if checked(3) || checked(4) {
+		t.Error("rows the drag hasn't reached yet should not be checked")
 	}
 
 	handler(tview.MouseRightUp, tcell.NewEventMouse(upX, upY, tcell.ButtonNone, 0), func(tview.Primitive) {})
@@ -231,10 +250,12 @@ func TestRightDragLiveFocusFollowsMouseMove(t *testing.T) {
 		t.Errorf("focus after release = %d, want 3", got)
 	}
 	for _, row := range []int{1, 2, 3} {
-		ref, _ := root.panel.rowRef(row)
-		if !root.panel.selected[ref.path] {
+		if !checked(row) {
 			t.Errorf("row %d should be checked after release", row)
 		}
+	}
+	if checked(4) {
+		t.Error("row 4 (never reached by the drag) should not be checked")
 	}
 }
 
@@ -319,6 +340,44 @@ func TestRightDragTogglesEachRowIndependently(t *testing.T) {
 	dragRight(t, root, 1, 3)
 
 	want := map[int]bool{1: false, 2: true, 3: true}
+	for row, wantChecked := range want {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if got := root.panel.selected[ref.path]; got != wantChecked {
+			t.Errorf("row %d: selected = %v, want %v", row, got, wantChecked)
+		}
+	}
+}
+
+// TestRightDragReversalUntogglesRowsLeftBehind drags 1 -> 3 -> 2, live,
+// via MouseMove — checking applyDragDelta's actual point: row 3 was
+// briefly inside the dragged range and got checked, then the drag pulled
+// back and left it behind, so it should end up unchecked again, while
+// rows 1 and 2 (never left behind) stay checked.
+func TestRightDragReversalUntogglesRowsLeftBehind(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	downX, downY, _ := findRowPos(root.panel.table, 1, 80, 24)
+	farX, farY, _ := findRowPos(root.panel.table, 3, 80, 24)
+	backX, backY, _ := findRowPos(root.panel.table, 2, 80, 24)
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(downX, downY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseMove, tcell.NewEventMouse(farX, farY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+
+	ref3, _ := root.panel.rowRef(3)
+	if !root.panel.selected[ref3.path] {
+		t.Fatal("setup: row 3 should be checked after reaching it")
+	}
+
+	handler(tview.MouseMove, tcell.NewEventMouse(backX, backY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(backX, backY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	want := map[int]bool{1: true, 2: true, 3: false}
 	for row, wantChecked := range want {
 		ref, ok := root.panel.rowRef(row)
 		if !ok {

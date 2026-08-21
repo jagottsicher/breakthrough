@@ -54,15 +54,24 @@ type Root struct {
 	activePage   string
 	activeWidget tview.Primitive
 
-	// dragStartRow/dragging track a right-button drag in progress, set on
-	// MouseRightDown and consumed on MouseRightUp (see captureMouse). A
-	// plain right-click (no movement) still opens the context menu as
-	// usual — dragging only kicks in once the mouse actually moved, which
-	// tview itself already distinguishes: it only synthesizes
-	// MouseRightClick when the position didn't change between down and
-	// up, so a real drag never reaches that case at all.
-	dragStartRow int
-	dragging     bool
+	// dragStartRow/dragCurrentRow/dragMoved/dragging track a right-button
+	// drag in progress, live — see captureMouse's MouseRightDown/MouseMove/
+	// MouseRightUp cases and advanceDrag.
+	//
+	// dragStartRow never changes once a drag begins. dragCurrentRow is
+	// where the toggled range currently ends, updated on every MouseMove
+	// so advanceDrag only has to toggle the rows that changed membership
+	// since the last update (see Panel.applyDragDelta), not re-toggle the
+	// whole range each time. dragMoved stays false until the mouse first
+	// leaves the press row; nothing gets toggled before that, so a plain
+	// right-click (no movement at all) still opens the context menu as
+	// usual, matching what tview itself does: it only synthesizes
+	// MouseRightClick when the release position matches the press
+	// position, so a real drag never produces one.
+	dragStartRow   int
+	dragCurrentRow int
+	dragMoved      bool
+	dragging       bool
 }
 
 // NewRoot creates the top-level UI rooted at path. app is passed down to
@@ -275,21 +284,48 @@ func (r *Root) cancelQuit() {
 	r.hideOverlay()
 }
 
+// advanceDrag brings the live-toggled range up to date with row, the
+// mouse's current (from MouseMove) or final (from MouseRightUp) position.
+// The very first time row differs from dragStartRow, it also brings the
+// press row itself into the toggle — it isn't toggled immediately on
+// MouseRightDown, so that a plain click (down and up with no movement at
+// all) never toggles anything, matching the same click-vs-drag test
+// tview itself uses (see captureMouse's doc comment). Safe to call
+// repeatedly (every MouseMove) or exactly once (MouseRightUp with no
+// MouseMove in between): each call only toggles the delta since the last
+// one, via Panel.applyDragDelta, so calling it more or fewer times along
+// the same path never changes the end result.
+func (r *Root) advanceDrag(row int) {
+	if !r.dragMoved && row != r.dragStartRow {
+		r.dragMoved = true
+		r.panel.toggleCheckbox(r.dragStartRow)
+	}
+	if r.dragMoved && row != r.dragCurrentRow {
+		r.panel.applyDragDelta(r.dragStartRow, r.dragCurrentRow, row)
+	}
+	r.dragCurrentRow = row
+}
+
 // captureMouse intercepts right-button activity on the panel: a plain
 // right-click opens the context menu (unchanged from before); a
-// right-button drag across rows instead toggles each of them, from the
-// press row through the release row inclusive, and does not open the
-// menu. Everything else (left-click, scrolling) passes through unchanged
-// to the panel's own handling — see Panel.activateRow for that.
+// right-button drag across rows instead toggles each of them live, as the
+// drag reaches them, and does not open the menu. Everything else
+// (left-click, scrolling) passes through unchanged to the panel's own
+// handling — see Panel.activateRow for that.
 //
 // The click-vs-drag distinction is tview's own, not something tracked
 // here: Application.fireMouseActions only synthesizes MouseRightClick
 // when the release position matches the press position — a genuine drag
-// simply never produces one, only MouseRightDown and MouseRightUp fire.
-// So MouseRightUp always runs first, for both a click and a drag; it does
-// the range-toggle and consumes the event only when the release row
-// actually differs from the press row, and otherwise steps aside so the
-// MouseRightClick that (per tview) is about to follow can open the menu.
+// simply never produces one, only MouseRightDown, MouseMove (repeatedly,
+// while the button stays held — button state itself hasn't changed, so
+// neither Down nor Up fires again for these), and MouseRightUp fire.
+// MouseRightUp always runs first, for both a click and a drag; advanceDrag
+// only actually toggles anything once the release position has moved off
+// the press row (possibly having done so already via MouseMove, possibly
+// only now if no MouseMove ever arrived — e.g. a fast drag some terminals
+// report as just down+up with no intermediate positions). If nothing ever
+// moved, the event is left unconsumed so the MouseRightClick that (per
+// tview) is about to follow can open the menu as usual.
 //
 // This is also where Panel.captureOutsideEdit gets a chance to run first:
 // only one SetMouseCapture can be installed on Panel at a time, and Root
@@ -306,6 +342,8 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		x, y := event.Position()
 		if row, ok := r.panel.rowIndexAt(x, y); ok {
 			r.dragStartRow = row
+			r.dragCurrentRow = row
+			r.dragMoved = false
 			r.dragging = true
 			r.panel.focusRow(row) // move the highlight to the press row right away, not just on release
 		} else {
@@ -314,17 +352,12 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		return action, event // Table has no case for this action; harmless to pass through
 
 	case tview.MouseMove:
-		// While the right button is held, the terminal reports a stream
-		// of these as the mouse crosses cells — button state itself
-		// doesn't change, so tview never fires MouseRightDown/Up for
-		// them (see Application.fireMouseActions). Without handling this
-		// case at all, nothing happened until release: no live feedback
-		// for where the drag currently reaches.
 		if !r.dragging {
 			return action, event
 		}
 		x, y := event.Position()
 		if row, ok := r.panel.rowIndexAt(x, y); ok {
+			r.advanceDrag(row)
 			r.panel.focusRow(row)
 		}
 		return tview.MouseConsumed, nil
@@ -336,15 +369,16 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 			return action, event
 		}
 		x, y := event.Position()
-		endRow, ok := r.panel.rowIndexAt(x, y)
-		if !ok || endRow == r.dragStartRow {
-			// Not a real drag (or it ended off the table): let a
-			// same-position MouseRightClick, if tview fires one right
-			// after this, open the menu as usual.
+		if endRow, ok := r.panel.rowIndexAt(x, y); ok {
+			r.advanceDrag(endRow)
+		}
+		if !r.dragMoved {
+			// Never actually moved off the press row: nothing was
+			// toggled, let a same-position MouseRightClick, if tview
+			// fires one right after this, open the menu as usual.
 			return action, event
 		}
-		r.panel.toggleRange(r.dragStartRow, endRow)
-		r.panel.focusRow(endRow) // leave the highlight on the row the drag ended on
+		r.panel.focusRow(r.dragCurrentRow) // leave the highlight on the row the drag ended on
 		return tview.MouseConsumed, nil
 
 	case tview.MouseRightClick:
