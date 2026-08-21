@@ -43,19 +43,22 @@ func (r *Root) centeredOnScreen(width, height int) (x, y int) {
 }
 
 // propertyFieldPosition is the picker-position Properties' Owner/Group
-// fields use (see activatePropertyField): horizontally, the picker
-// starts exactly where span itself is drawn, the same column
-// activateInlineTextField positions the shared text editor at for every
-// other field. Vertically, it's shifted up by pickerCenterRows, so the
-// *currently selected entry* — pickerCenterRows rows into the visible
-// window, not the window's own top edge — is what ends up level with
-// span's row: the picker then reads as centered on the field it grew
-// out of, the current value sitting right where "Owner: <name>" itself
-// was, rather than appearing pickerCenterRows rows below it.
+// fields use (see activatePropertyField): horizontally, the picker's
+// *text* — not its own outer rect, which is 1 column further left,
+// since r.picker (unlike propertiesText) carries its own 1-char left
+// padding (see NewRoot's SetBorderPadding(0, 0, 1, 1)) — starts exactly
+// where span itself is drawn, the same column activateInlineTextField
+// positions the shared text editor at for every other field. Vertically,
+// it's shifted up by pickerCenterRows, so the *currently selected
+// entry* — pickerCenterRows rows into the visible window, not the
+// window's own top edge — is what ends up level with span's row: the
+// picker then reads as centered on the field it grew out of, the
+// current value sitting right where "Owner: <name>" itself was, rather
+// than appearing pickerCenterRows rows below it.
 func (r *Root) propertyFieldPosition(span propertySpan) pickerPosition {
 	return func(int, int) (x, y int) {
 		rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
-		return rectX + span.startCol, rectY + span.row - pickerCenterRows
+		return rectX + span.startCol - 1, rectY + span.row - pickerCenterRows
 	}
 }
 

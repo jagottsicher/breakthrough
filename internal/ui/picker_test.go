@@ -138,7 +138,11 @@ func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
 		t.Fatal("no fieldOwner span found")
 	}
 	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
-	wantX, wantWindowTopY := rectX+span.startCol, rectY+span.row-pickerCenterRows
+	// -1 on X: the picker's own 1-char left padding (SetBorderPadding in
+	// NewRoot) means its *text* starts 1 column right of its outer
+	// rect — so the outer rect itself sits 1 column left of the field to
+	// make the visible text line up with it.
+	wantX, wantWindowTopY := rectX+span.startCol-1, rectY+span.row-pickerCenterRows
 
 	r.activatePropertyField(span)
 	if r.activePage != pickerPage {
@@ -147,7 +151,7 @@ func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
 
 	gotX, gotWindowTopY, _, _ := r.picker.GetRect()
 	if gotX != wantX || gotWindowTopY != wantWindowTopY {
-		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — its window top should sit pickerCenterRows above the Owner field's row, so the current entry lands on it", gotX, gotWindowTopY, wantX, wantWindowTopY)
+		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — its window top should sit pickerCenterRows above the Owner field's row (and 1 column left, for its own padding), so the current entry's text lands on it", gotX, gotWindowTopY, wantX, wantWindowTopY)
 	}
 
 	// The row actually level with the field is the *current entry*'s own
