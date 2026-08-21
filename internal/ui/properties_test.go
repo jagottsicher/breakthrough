@@ -974,3 +974,206 @@ func outsidePropertiesClick(r *Root) (x, y int) {
 	px, py, pw, ph := r.properties.GetRect()
 	return px + pw + 10, py + ph + 10
 }
+
+// TestPropertiesButtonsVisibleImmediately pins the fix for the stray
+// placeholder blank row bug the user reported, and the closely related
+// request behind it: Cancel/Save show up the moment Properties opens,
+// not only once a field's been touched — resizeProperties always
+// reserved a row for them, but they used to stay hidden (and that row
+// blank) until markPropertiesDirty first ran.
+func TestPropertiesButtonsVisibleImmediately(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if r.propertiesDirty {
+		t.Fatal("setup: should not be dirty right after opening")
+	}
+	visible := r.properties.GetPageNames(true)
+	for _, p := range visible {
+		if p == "buttons" {
+			return
+		}
+	}
+	t.Errorf("buttons page should be visible right after opening, visible pages: %v", visible)
+}
+
+// TestCapturePropertiesKeyTabNavigatesInsteadOfClosing pins the fix for
+// the bug the user reported ("Datum und Uhrzeit lassen sich nicht
+// ändern"): Tab used to fall through to TextView's own default handling
+// and close Properties outright — discarding every staged edit with no
+// way back — instead of moving keyboard focus to the next field, the way
+// it's supposed to.
+func TestCapturePropertiesKeyTabNavigatesInsteadOfClosing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // any touch marks it dirty, same as the real bug report's state
+
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Error("capturePropertiesKey should consume Tab")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q after Tab, want Properties to stay open", r.activePage)
+	}
+	if r.propertiesFocusIndex != 0 {
+		t.Errorf("propertiesFocusIndex = %d after Tab from nothing focused, want 0 (Name)", r.propertiesFocusIndex)
+	}
+}
+
+// TestCapturePropertiesKeyEnterActivatesFocusedField is
+// TestCapturePropertiesKeyTabNavigatesInsteadOfClosing's Enter
+// counterpart: once Tab has moved focus onto a field, Enter activates it
+// (the same as clicking it) instead of closing the overlay.
+func TestCapturePropertiesKeyEnterActivatesFocusedField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) // -> Name
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)); got != nil {
+		t.Error("capturePropertiesKey should consume Enter")
+	}
+
+	if got := r.propertiesEditField.GetText(); got != "apple.txt" {
+		t.Errorf("Enter on the focused Name field should open the inline editor pre-filled with %q, got %q", "apple.txt", got)
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
+	}
+}
+
+// TestPropertiesFocusCyclesFieldsThenButtonsThenWraps drives Tab through
+// the real dispatch path all the way around the loop once: repeated
+// capturePropertiesKey calls (propertiesText has real focus) through
+// every field stop in propertyFieldOrder, then — once focus reaches a
+// button — that button's own InputHandler (see newPropertiesButtons'
+// SetExitFunc), through Cancel, Save, and the wrap back to the first
+// field.
+func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	n := len(propertyFieldOrder)
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	noSetFocus := func(tview.Primitive) {}
+
+	for i := 0; i < n; i++ {
+		r.capturePropertiesKey(tab)
+		if r.propertiesFocusIndex != i {
+			t.Fatalf("after %d Tabs, propertiesFocusIndex = %d, want %d", i+1, r.propertiesFocusIndex, i)
+		}
+	}
+
+	r.capturePropertiesKey(tab) // last field -> Cancel (still dispatched via propertiesText)
+	if r.propertiesFocusIndex != n {
+		t.Fatalf("propertiesFocusIndex = %d, want Cancel (%d)", r.propertiesFocusIndex, n)
+	}
+
+	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	if r.propertiesFocusIndex != n+1 {
+		t.Fatalf("propertiesFocusIndex = %d, want Save (%d)", r.propertiesFocusIndex, n+1)
+	}
+
+	r.propertiesSaveBtn.InputHandler()(tab, noSetFocus) // Save -> wraps to the first field
+	if r.propertiesFocusIndex != 0 {
+		t.Errorf("propertiesFocusIndex = %d after wrapping, want 0", r.propertiesFocusIndex)
+	}
+}
+
+// TestSaveReachableViaKeyboardAfterEditingDate is the end-to-end
+// regression test for the bug report itself: edit the Modified date via
+// the inline field, then navigate onward and confirm Save using nothing
+// but the real key-dispatch path (capturePropertiesKey, then the
+// buttons' own InputHandler) — the edit must actually reach disk, not
+// get silently discarded by Tab/Enter closing the overlay along the way.
+func TestSaveReachableViaKeyboardAfterEditingDate(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	dateSpan, ok := findPropertySpan(r, fieldMtimeDate)
+	if !ok {
+		t.Fatal("no fieldMtimeDate span found")
+	}
+	r.activatePropertyField(dateSpan) // click the date field, same as a real click
+	wantMtime := time.Date(2021, time.June, 15, r.stagedMtime.Hour(), r.stagedMtime.Minute(), r.stagedMtime.Second(), 0, time.Local)
+	r.propertiesEditField.SetText(wantMtime.Format("2006-01-02"))
+	r.finishPropertyEdit(tcell.KeyEnter) // commit, same as a real Enter — focus returns to propertiesText
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	enter := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	noSetFocus := func(tview.Primitive) {}
+
+	r.capturePropertiesKey(tab)                           // date -> time
+	r.capturePropertiesKey(tab)                           // time -> Cancel
+	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	r.propertiesSaveBtn.InputHandler()(enter, noSetFocus) // activate Save
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.ModTime().Equal(wantMtime) {
+		t.Errorf("ModTime = %v, want %v — the date edit should have survived all the way to Save", fi.ModTime(), wantMtime)
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Save, want closed", r.activePage)
+	}
+}
+
+// TestSpaceActivatesFocusedButton pins the user's explicit request that
+// either Enter or Space confirm a focused Cancel/Save button.
+func TestSpaceActivatesFocusedButton(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640, something for Save to actually apply
+
+	r.setPropertiesFocus(len(propertyFieldOrder) + 1) // Save
+
+	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if got := r.propertiesSaveBtn.GetInputCapture()(space); got != nil {
+		t.Error("space should be consumed by the Save button's input capture")
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o, want 0640 — space on the focused Save button should have saved", fi.Mode().Perm())
+	}
+}

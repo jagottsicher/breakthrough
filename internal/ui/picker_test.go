@@ -163,3 +163,75 @@ func TestPropertiesOwnerPickResumesAndStages(t *testing.T) {
 		t.Errorf("stagedOwner = %q, want %q", r.stagedOwner, name)
 	}
 }
+
+// TestOwnerGroupPickerLayersOverPropertiesWithoutClosingIt pins the
+// user's own request ("ich möchte, dass der [Picker] praktisch als ein
+// weiterer Layer darüberliegt"): opening the picker from Properties must
+// not close Properties underneath it — both should be simultaneously
+// open (see pushOverlay), the picker layered on top rather than
+// replacing it, and cancelling the picker should leave Properties open,
+// not close everything.
+func TestOwnerGroupPickerLayersOverPropertiesWithoutClosingIt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldOwner)
+	if !ok {
+		t.Fatal("no fieldOwner span found")
+	}
+	r.activatePropertyField(span)
+
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the inline text field instead")
+	}
+
+	visible := r.GetPageNames(true)
+	var hasProperties, hasPicker bool
+	for _, p := range visible {
+		hasProperties = hasProperties || p == propertiesPage
+		hasPicker = hasPicker || p == pickerPage
+	}
+	if !hasProperties {
+		t.Errorf("Properties should still be visible underneath the picker, visible pages: %v", visible)
+	}
+	if !hasPicker {
+		t.Errorf("the picker should be visible, visible pages: %v", visible)
+	}
+
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q after cancelling the picker, want Properties to still be open", r.activePage)
+	}
+}
+
+// TestOpenChownClosesContextMenuBehindThePicker is
+// TestOwnerGroupPickerLayersOverPropertiesWithoutClosingIt's opposite
+// case: the picker opened by the standalone "chown" menu action closes
+// the context menu first (see Root.openChown), rather than leaving it
+// open underneath — unlike Properties' Owner/Group fields, there's
+// nothing worth keeping visible behind it here.
+func TestOpenChownClosesContextMenuBehindThePicker(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.showMenu(0, 0) // open the context menu the way a real right-click would
+
+	r.openChown()
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the text prompt instead")
+	}
+
+	for _, p := range r.GetPageNames(true) {
+		if p == contextMenuPage {
+			t.Errorf("context menu should be closed once the picker opens, visible pages: %v", r.GetPageNames(true))
+		}
+	}
+}

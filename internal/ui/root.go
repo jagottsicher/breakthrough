@@ -21,6 +21,21 @@ const (
 	quitConfirmPage = "quit-confirm"
 )
 
+// overlayFrame is one entry in Root.overlayStack (see showOverlay/
+// pushOverlay/hideOverlay): the page name and widget shown, plus an
+// optional restore callback run instead of the default
+// Application.SetFocus(widget) when this frame becomes the topmost one
+// again after whatever was layered on top of it closes. Properties is
+// the only current user (see showOverlayWithRestore/restoreProperties)
+// — it keeps several sub-widgets simultaneously visible (see
+// newPropertiesView), so simply refocusing r.properties itself isn't
+// precise enough to land keyboard focus back on the right one.
+type overlayFrame struct {
+	page    string
+	widget  tview.Primitive
+	restore func()
+}
+
 // Root is breakthrough's top-level UI: the directory panel, plus a
 // right-click context menu and the overlays it opens (Properties, Rename,
 // the single-line prompt behind Select +/-/chown/chmod), and a Ctrl+Q
@@ -59,13 +74,28 @@ type Root struct {
 
 	// properties is the Properties overlay's own nested Pages (see
 	// newPropertiesView) — propertiesText is the always-visible read-only
-	// display; propertiesEditField/propertiesButtons are shown/positioned
-	// on top of it once editing starts.
+	// display; propertiesEditField is shown/positioned on top of it only
+	// while a field is being text-edited; propertiesButtons (and its two
+	// buttons, propertiesCancelBtn/propertiesSaveBtn — kept individually
+	// addressable so setPropertiesFocus can give either one real keyboard
+	// focus) are visible the whole time Properties is open.
 	properties           *tview.Pages
 	propertiesText       *tview.TextView
 	propertiesEditField  *tview.InputField
 	propertiesEditTarget propertyField
 	propertiesButtons    *tview.Flex
+	propertiesCancelBtn  *tview.Button
+	propertiesSaveBtn    *tview.Button
+
+	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
+	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
+	// -1 (nothing focused, Properties' state right after opening) or an
+	// index into propertyFieldOrder for a field span, or
+	// len(propertyFieldOrder)/len(propertyFieldOrder)+1 for the Cancel/
+	// Save buttons. Clicking a field (see activatePropertyField) sets it
+	// too, so keyboard navigation continues naturally from wherever the
+	// mouse last landed.
+	propertiesFocusIndex int
 
 	// promptSubmit is what the currently-open prompt overlay (see
 	// openPrompt/finishPrompt) runs with the typed text if the user
@@ -143,13 +173,23 @@ type Root struct {
 	stagedOwner     string
 	stagedGroup     string
 
-	// activePage/activeWidget track whichever overlay (context menu,
-	// rename, info, quit confirm) is currently shown, if any — see
-	// showOverlay/hideOverlay. This drives both explicit focus handling
-	// and captureOutsideClick's "click outside the overlay closes it"
-	// behavior.
+	// activePage/activeWidget mirror overlayStack's top frame — see
+	// showOverlay/pushOverlay/hideOverlay. This drives both explicit focus
+	// handling and captureOutsideClick's "click outside the topmost
+	// overlay closes it" behavior.
 	activePage   string
 	activeWidget tview.Primitive
+
+	// overlayStack holds every currently-open overlay, most-recently-opened
+	// last. showOverlay closes everything already open first, then opens
+	// exactly one — the original one-overlay-at-a-time behavior every
+	// caller except the owner/group picker wants. pushOverlay instead adds
+	// a new layer on top of whatever's already open, leaving it visible
+	// underneath — see openOwnerGroupPicker, whose picker floats on top of
+	// Properties rather than replacing it, per the user's own request.
+	// hideOverlay always closes just the topmost layer, revealing whatever
+	// was underneath, if anything.
+	overlayStack []overlayFrame
 
 	// dragStartRow/dragCurrentRow/dragMoved/dragging track a right-button
 	// drag in progress, live — see captureMouse's MouseRightDown/MouseMove/
@@ -184,6 +224,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		Pages: tview.NewPages(),
 		app:   app,
 		panel: panel,
+		// -1: "nothing focused yet" — see focusedPropertyField/
+		// setPropertiesFocus. Set here rather than only in openProperties
+		// so it's already correct for anything that renders Properties
+		// without going through openProperties (e.g. seedProperties in
+		// the test suite).
+		propertiesFocusIndex: -1,
 	}
 
 	// No borders on the floating elements below — a background color set
@@ -281,33 +327,85 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	return r, nil
 }
 
-// showOverlay reveals the named page, gives it real keyboard focus, and
-// records it as the active overlay. Any previously active overlay is
-// hidden first (there is only ever one at a time).
+// showOverlay closes whatever overlay (or stack of layered overlays) is
+// currently open and opens page/widget as the new, sole one — the
+// original one-overlay-at-a-time behavior every caller except the
+// owner/group picker wants (see pushOverlay for that one).
 //
-// Focus is set explicitly via Application.SetFocus rather than relying on
-// Pages' own "re-focus the last visible page if already focused" behavior
-// — the implicit version turned out to be fragile in practice (Escape and
-// outside clicks not reliably reaching the shown overlay), the same
-// reason Panel.openEdit does this explicitly too.
+// Focus is set explicitly via Application.SetFocus (inside pushOverlay)
+// rather than relying on Pages' own "re-focus the last visible page if
+// already focused" behavior — the implicit version turned out to be
+// fragile in practice (Escape and outside clicks not reliably reaching
+// the shown overlay), the same reason Panel.openEdit does this explicitly
+// too.
 func (r *Root) showOverlay(page string, widget tview.Primitive) {
-	r.hideOverlay()
+	r.showOverlayWithRestore(page, widget, nil)
+}
+
+// showOverlayWithRestore is showOverlay, plus a restore callback for
+// this specific frame — see overlayFrame and restoreProperties for the
+// one case that currently needs it.
+func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, restore func()) {
+	r.closeAllOverlays()
+	r.pushOverlay(page, widget, restore)
+}
+
+// pushOverlay adds page/widget as a new layer on top of whatever's
+// already open, without closing it — see openOwnerGroupPicker, the only
+// current use: the owner/group picker floats on top of Properties rather
+// than replacing it.
+func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) {
+	r.overlayStack = append(r.overlayStack, overlayFrame{page: page, widget: widget, restore: restore})
 	r.activePage = page
 	r.activeWidget = widget
 	r.ShowPage(page)
-	r.app.SetFocus(widget)
+	if restore != nil {
+		restore()
+	} else {
+		r.app.SetFocus(widget)
+	}
 }
 
-// hideOverlay hides the currently active overlay, if any, and returns
+// hideOverlay closes just the topmost overlay layer, if any, revealing
+// whatever was underneath it — restoring that layer's own focus (see
+// overlayFrame.restore) — or, if that was the only one open, returning
 // focus to the panel.
 func (r *Root) hideOverlay() {
-	if r.activePage == "" {
+	if len(r.overlayStack) == 0 {
 		return
 	}
-	r.HidePage(r.activePage)
+	top := r.overlayStack[len(r.overlayStack)-1]
+	r.overlayStack = r.overlayStack[:len(r.overlayStack)-1]
+	r.HidePage(top.page)
+
+	if len(r.overlayStack) == 0 {
+		r.activePage = ""
+		r.activeWidget = nil
+		r.app.SetFocus(r.panel)
+		return
+	}
+
+	below := r.overlayStack[len(r.overlayStack)-1]
+	r.activePage = below.page
+	r.activeWidget = below.widget
+	if below.restore != nil {
+		below.restore()
+	} else {
+		r.app.SetFocus(below.widget)
+	}
+}
+
+// closeAllOverlays hides every currently-open overlay layer without
+// bothering to restore focus to any of the intermediate ones along the
+// way — showOverlay's own tail end (pushOverlay) sets focus correctly
+// once, for whatever it opens next.
+func (r *Root) closeAllOverlays() {
+	for _, f := range r.overlayStack {
+		r.HidePage(f.page)
+	}
+	r.overlayStack = nil
 	r.activePage = ""
 	r.activeWidget = nil
-	r.app.SetFocus(r.panel)
 }
 
 // captureOutsideClick keeps the panel underneath an open overlay inert:
@@ -859,7 +957,15 @@ func (r *Root) pasteClipboard() {
 // inside the callbacks — nothing else changes it while any of this is
 // open in this single-threaded UI, but reading it early avoids relying
 // on that staying true.
+//
+// The context menu is closed explicitly first: openOwnerGroupPicker
+// always layers on top of whatever's currently open (see
+// pushOverlay) rather than replacing it — the right behavior when it's
+// opened from Properties' Owner/Group fields (see
+// activatePropertyField), but not here, where nothing should be left
+// showing underneath it.
 func (r *Root) openChown() {
+	r.hideOverlay()
 	target := r.target
 
 	info, err := fsops.Stat(target)

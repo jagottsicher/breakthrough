@@ -29,6 +29,13 @@ const pickerHeight = 7
 // given (nil is fine: most callers have nothing special to do beyond the
 // close, which happens either way).
 //
+// The picker always layers on top of whatever's currently open (see
+// pushOverlay) rather than replacing it — Properties' Owner/Group fields
+// (see activatePropertyField) rely on this to stay visible underneath
+// the picker instead of disappearing while it's up, per the user's own
+// request. Root.openChown, the other caller, closes the context menu
+// itself first so the picker still ends up as the only thing shown there.
+//
 // If fsops.ListUsers/ListGroups itself fails — always on macOS, or any
 // other reason /etc/passwd or /etc/group couldn't be read — or comes
 // back empty, this runs onFallback instead of showing anything, so the
@@ -110,5 +117,5 @@ func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, onPick func(
 	}
 	r.picker.SetOffset(offset, 0)
 
-	r.showOverlay(pickerPage, r.picker)
+	r.pushOverlay(pickerPage, r.picker, nil)
 }
