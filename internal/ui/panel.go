@@ -31,7 +31,7 @@ const (
 
 // Panel is the single directory-listing view for Phase 0/1: a one-line,
 // browser-address-bar-style header above a table of entries. The header
-// has Home/Back/Forward buttons followed by the path, whose components
+// has Start/Home/Back/Forward buttons followed by the path, whose components
 // are individually clickable (clicking "b" in /a/b/c/d jumps to /a/b);
 // clicking anywhere else in the header (e.g. the empty space after the
 // path) switches it to a plain editable text field, like a browser URL
@@ -96,6 +96,7 @@ type headerAction int
 
 const (
 	actionNavigate headerAction = iota // go to target
+	actionStart                        // go to the directory breakthrough was launched from
 	actionHome                         // go to the user's home directory
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
@@ -445,8 +446,8 @@ func (p *Panel) forward() {
 	p.historyIdx++
 }
 
-// buildHeaderSpans renders the header's display text — Home/Back/Forward
-// button glyphs followed by the path, one clickable span per path
+// buildHeaderSpans renders the header's display text — Start/Home/Back/
+// Forward button glyphs followed by the path, one clickable span per path
 // component (the leading "/" plus each name in between), e.g. clicking
 // "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
 // exact for the common case but, like the rest of Phase 0/1, doesn't yet
@@ -468,6 +469,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 		col += len([]rune(glyph))
 		spans = append(spans, headerSpan{start: start, end: col, action: action})
 	}
+	button("^", actionStart)
 	button("~", actionHome)
 	button("<", actionBack)
 	button(">", actionForward)
@@ -539,6 +541,12 @@ func (p *Panel) spanAt(col int) (headerSpan, bool) {
 // runHeaderAction executes a clicked button or breadcrumb.
 func (p *Panel) runHeaderAction(span headerSpan) {
 	switch span.action {
+	case actionStart:
+		// history[0] is the first directory this Panel ever successfully
+		// loaded — NewPanel's initial navigate() call sets it and nothing
+		// afterwards ever removes it, so it's a stable record of where
+		// breakthrough started, independent of the OS home directory.
+		p.reportError(p.navigate(p.history[0]))
 	case actionHome:
 		home, err := os.UserHomeDir()
 		if err != nil {

@@ -13,19 +13,20 @@ import (
 func TestBuildHeaderSpans(t *testing.T) {
 	text, spans := buildHeaderSpans("/a/bb/c")
 
-	wantText := " ~ < >  /a/bb/c"
+	wantText := " ^ ~ < >  /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
 	want := []headerSpan{
-		{start: 1, end: 2, action: actionHome},
-		{start: 3, end: 4, action: actionBack},
-		{start: 5, end: 6, action: actionForward},
-		{start: 8, end: 9, action: actionNavigate, target: "/"},
-		{start: 9, end: 10, action: actionNavigate, target: "/a"},
-		{start: 11, end: 13, action: actionNavigate, target: "/a/bb"},
-		{start: 14, end: 15, action: actionNavigate, target: "/a/bb/c"},
+		{start: 1, end: 2, action: actionStart},
+		{start: 3, end: 4, action: actionHome},
+		{start: 5, end: 6, action: actionBack},
+		{start: 7, end: 8, action: actionForward},
+		{start: 10, end: 11, action: actionNavigate, target: "/"},
+		{start: 11, end: 12, action: actionNavigate, target: "/a"},
+		{start: 13, end: 15, action: actionNavigate, target: "/a/bb"},
+		{start: 16, end: 17, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -65,18 +66,43 @@ func TestBuildHeaderSpans(t *testing.T) {
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
-	wantText := " ~ < >  /"
+	wantText := " ^ ~ < >  /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	// 3 buttons + the root span.
-	if len(spans) != 4 {
-		t.Fatalf("got %d spans, want 4: %+v", len(spans), spans)
+	// 4 buttons + the root span.
+	if len(spans) != 5 {
+		t.Fatalf("got %d spans, want 5: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 8, end: 9, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 10, end: 11, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
+	}
+}
+
+// TestStartButtonReturnsToLaunchDirectory pins the Start button's
+// contract: no matter how far navigation has wandered since, it always
+// returns to the directory the Panel was first opened at (history[0]),
+// distinct from the OS home directory the Home button uses.
+func TestStartButtonReturnsToLaunchDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	sub := filepath.Join(dir, "app-data")
+	if err := p.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+	if p.path != sub {
+		t.Fatalf("setup: p.path = %q, want %q", p.path, sub)
+	}
+
+	p.runHeaderAction(headerSpan{action: actionStart})
+	if p.path != dir {
+		t.Errorf("after Start: p.path = %q, want launch directory %q", p.path, dir)
 	}
 }
 

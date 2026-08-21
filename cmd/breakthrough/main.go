@@ -2,11 +2,15 @@
 // manager.
 //
 // Phase 0/1: a single panel showing the current directory, navigable with
-// the arrow keys, Enter, and a browser-style path header (Home/Back/
+// the arrow keys, Enter, and a browser-style path header (Start/Home/Back/
 // Forward, clickable breadcrumbs, click-to-edit), plus a right-click
 // context menu (Info, Rename). A second panel and further actions land in
 // later, vertically-sliced feature branches (see docs/whitepaper.md for
 // the overall concept).
+//
+// The initial directory is the process's working directory unless a path
+// is given on the command line, e.g. "breakthrough /var/log" — see
+// startDir. That directory also becomes the header's Start button target.
 package main
 
 import (
@@ -27,7 +31,7 @@ func main() {
 }
 
 func run() error {
-	start, err := os.Getwd()
+	start, err := startDir()
 	if err != nil {
 		return err
 	}
@@ -63,4 +67,17 @@ func run() error {
 	})
 
 	return app.SetRoot(root, true).Run()
+}
+
+// startDir picks the directory breakthrough opens in: an explicit
+// "breakthrough /some/path" argument if one was given, otherwise the
+// process's current working directory. Whichever it resolves to also
+// becomes the panel's "Start" button target (see ui.Panel's header) — an
+// invalid or unreadable argument is left for Panel's own load to reject,
+// rather than duplicating that validation here.
+func startDir() (string, error) {
+	if len(os.Args) > 1 {
+		return os.Args[1], nil
+	}
+	return os.Getwd()
 }
