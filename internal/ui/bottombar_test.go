@@ -406,6 +406,146 @@ func TestRunShellCommandEmptyIsNoop(t *testing.T) {
 	}
 }
 
+func TestParseCdCommand(t *testing.T) {
+	tests := []struct {
+		in         string
+		wantTarget string
+		wantOK     bool
+	}{
+		{"cd", "", true},
+		{"  cd  ", "", true}, // stray whitespace around a bare cd
+		{"cd /var/log", "/var/log", true},
+		{"cd -", "-", true},
+		{"cd ~", "~", true},
+		{"cd ~/projects", "~/projects", true},
+		{"ls", "", false},
+		{"cdsomething", "", false},   // a different word, not "cd"
+		{"cd a b", "", false},        // too many arguments to be plain cd
+		{"echo cd", "", false},       // "cd" isn't the first word
+		{"cd /foo && ls", "", false}, // compound command — left alone, see parseCdCommand's own doc comment
+	}
+	for _, tt := range tests {
+		gotTarget, gotOK := parseCdCommand(tt.in)
+		if gotOK != tt.wantOK || (gotOK && gotTarget != tt.wantTarget) {
+			t.Errorf("parseCdCommand(%q) = (%q, %v), want (%q, %v)", tt.in, gotTarget, gotOK, tt.wantTarget, tt.wantOK)
+		}
+	}
+}
+
+// TestRunShellCommandCdNavigatesPanelDirectly pins the fix for the
+// user's own report: "cd" in the bash line must change the panel's own
+// directory, the same as Midnight Commander's command line does —
+// running it as an ordinary subshell command (as everything else on
+// this line does) can't do that, since a child process's own cd has no
+// way to affect the parent's displayed directory once that child exits.
+// app.Suspend is a no-op in this test (no real screen behind r.app — see
+// TestCaptureStatusBarMouseEditClickRunsEditAction's own doc comment),
+// so if this ran through the ordinary subshell path instead of being
+// intercepted, the panel's directory would stay exactly where it
+// started — which is exactly what this pins against.
+func TestRunShellCommandCdNavigatesPanelDirectly(t *testing.T) {
+	isolateHistoryFile(t)
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "app-data")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.runShellCommand("cd app-data")
+
+	if r.panel.path != target {
+		t.Errorf("panel.path = %q, want %q", r.panel.path, target)
+	}
+	if r.activePage == errorPage {
+		t.Errorf("cd to a real directory should not report an error, got: %q", r.errorView.GetText(true))
+	}
+	if got := r.bashLine.GetText(); got != "" {
+		t.Errorf("bash line text = %q after cd, want cleared", got)
+	}
+}
+
+// TestChangeDirectoryBareGoesHome pins that a bare "cd" (target == "")
+// goes home, the same as a real shell.
+func TestChangeDirectoryBareGoesHome(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home directory in this environment: %v", err)
+	}
+
+	if err := r.changeDirectory(""); err != nil {
+		t.Fatalf("changeDirectory(\"\"): %v", err)
+	}
+	if r.panel.path != home {
+		t.Errorf("panel.path = %q, want home %q", r.panel.path, home)
+	}
+}
+
+// TestChangeDirectoryDashGoesToPreviousPath pins "cd -" against a real
+// navigation history: two hops in, "-" should land back on the first.
+func TestChangeDirectoryDashGoesToPreviousPath(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	sub := filepath.Join(dir, "app-data")
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+
+	if err := r.changeDirectory("-"); err != nil {
+		t.Fatalf("changeDirectory(\"-\"): %v", err)
+	}
+	if r.panel.path != dir {
+		t.Errorf("panel.path = %q, want the previous directory %q", r.panel.path, dir)
+	}
+}
+
+// TestChangeDirectoryDashWithNoHistoryErrors pins that "cd -" reports an
+// error rather than silently doing nothing when there's no previous
+// directory to go back to.
+func TestChangeDirectoryDashWithNoHistoryErrors(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if err := r.changeDirectory("-"); err == nil {
+		t.Error("changeDirectory(\"-\") with no previous directory should return an error")
+	}
+}
+
+// TestPanelPreviousPath pins Panel.previousPath directly: false with no
+// history to go back to, true (and the right path) once there is.
+func TestPanelPreviousPath(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if _, ok := r.panel.previousPath(); ok {
+		t.Error("previousPath should be false right after construction")
+	}
+
+	sub := filepath.Join(dir, "app-data")
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+	got, ok := r.panel.previousPath()
+	if !ok || got != dir {
+		t.Errorf("previousPath() = (%q, %v), want (%q, true)", got, ok, dir)
+	}
+}
+
 // TestRunShellCommandRecordsHistory pins that every submitted command is
 // appended, unconditionally — the same as a real shell, which remembers
 // what was typed regardless of whether it succeeded.

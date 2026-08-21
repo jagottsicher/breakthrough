@@ -1000,6 +1000,21 @@ func (p *Panel) forward() {
 	p.historyIdx++
 }
 
+// previousPath returns the directory navigate() most recently moved
+// away from — one step back in the browser-style history (see
+// back/forward) — for the bash line's own "cd -" (see
+// Root.changeDirectory). Not a true shell OLDPWD toggle (repeated
+// "cd -" walks further back through history rather than swapping
+// between exactly two directories the way a real shell's does), but
+// close enough for what this is actually used for: a quick way back to
+// wherever the panel just was.
+func (p *Panel) previousPath() (string, bool) {
+	if p.historyIdx <= 0 {
+		return "", false
+	}
+	return p.history[p.historyIdx-1], true
+}
+
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
 // Forward button glyphs followed by the path, one clickable span per path
 // component (the leading "/" plus each name in between), e.g. clicking

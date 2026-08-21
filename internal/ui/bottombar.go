@@ -366,6 +366,15 @@ func appendBashHistory(path, command string) (err error) {
 // command exits, in case it changed anything in the directory currently
 // on screen.
 //
+// "cd", "cd <path>", and "cd -" are special-cased instead (see
+// parseCdCommand/Root.changeDirectory) — the same as Midnight
+// Commander's own command line does it, and for the same reason: a "cd"
+// run inside the subshell above only ever changes that child process's
+// own working directory, which has no way to affect the panel once the
+// child exits. No subshell, and no Suspend, is involved for these —
+// updating which directory the panel shows is instant, the same as
+// clicking a breadcrumb already is.
+//
 // command is recorded in bashHistory before it runs, unconditionally
 // (not only once it succeeds) — the same as a real shell, which
 // remembers what you typed regardless of the exit code.
@@ -378,6 +387,12 @@ func (r *Root) runShellCommand(command string) {
 	r.bashHistoryIdx = len(r.bashHistory)
 	r.bashHistoryDraft = ""
 	_ = appendBashHistory(r.bashHistoryFile, command) // best-effort — see its own doc comment
+
+	if target, ok := parseCdCommand(command); ok {
+		r.bashLine.SetText("")
+		r.showError(r.changeDirectory(target))
+		return
+	}
 
 	var runErr error
 	r.app.Suspend(func() {
@@ -393,6 +408,51 @@ func (r *Root) runShellCommand(command string) {
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))
+}
+
+// parseCdCommand reports whether command is exactly a "cd" invocation —
+// "cd", "cd <path>", or "cd -" — and if so, whatever followed it ("" for
+// a bare "cd"). Deliberately narrow: a compound command like
+// "cd /foo && ls" or "cd /foo; ls" is left alone and runs in the
+// subshell as usual, rather than this trying to parse general shell
+// syntax to decide how much of it is "the cd part" — recognizing plain,
+// standalone "cd" is what Midnight Commander's own command line does
+// too, and covers what "cd" is actually used for from a line like this.
+func parseCdCommand(command string) (target string, ok bool) {
+	fields := strings.Fields(command)
+	if len(fields) == 0 || fields[0] != "cd" || len(fields) > 2 {
+		return "", false
+	}
+	if len(fields) == 1 {
+		return "", true
+	}
+	return fields[1], true
+}
+
+// changeDirectory is what the bash line's own "cd" (see parseCdCommand)
+// runs instead of spawning a subshell for it: target is whatever
+// followed "cd" — "" for a bare "cd" (home, the same as a real shell),
+// "-" for the panel's previous directory (see Panel.previousPath), or
+// otherwise resolved exactly the way typing it into the path header's
+// own edit field would be (Panel.resolvePath: "~" expansion, relative
+// paths resolved against the panel's current directory).
+func (r *Root) changeDirectory(target string) error {
+	switch target {
+	case "":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		return r.panel.navigate(home)
+	case "-":
+		prev, ok := r.panel.previousPath()
+		if !ok {
+			return fmt.Errorf("cd: no previous directory")
+		}
+		return r.panel.navigate(prev)
+	default:
+		return r.panel.navigate(r.panel.resolvePath(target))
+	}
 }
 
 // editorCommand returns the editor to run for Edit — $VISUAL first (the
