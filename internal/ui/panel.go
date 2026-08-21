@@ -134,6 +134,16 @@ type Panel struct {
 	// errors are presented, only which ones are worth reporting.
 	onError func(error)
 
+	// onLoad reports every successful load() (navigation, a hidden-files
+	// toggle, anything that reloads the directory currently on screen) —
+	// Root wires this to refresh the status bar's disk-usage display,
+	// which depends on the current directory. Not called for the very
+	// first load (inside NewPanel, before Root has anything to wire this
+	// to yet) — Root re-syncs once explicitly right after wiring it
+	// instead, the same "defensive initial sync" showMenu already does
+	// for its own menu labels.
+	onLoad func(path string)
+
 	// editing is true while the header's edit field is shown. Root's
 	// captureMouse calls captureOutsideEdit before its own logic (only
 	// one SetMouseCapture can be installed on Panel, and Root already
@@ -293,6 +303,9 @@ func (p *Panel) load(dir string) error {
 	// robust way to state that instead of relying on that always holding.
 	p.buildColumnHeader()
 
+	if p.onLoad != nil {
+		p.onLoad(p.path)
+	}
 	return nil
 }
 
@@ -855,6 +868,21 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 		return "", false
 	}
 	return ref.path, true
+}
+
+// CurrentRowPath is RowAt's keyboard equivalent: the row and absolute
+// path of whichever entry the table's own cursor (arrow-key navigation)
+// currently sits on, rather than one under a screen position. Used by
+// Root's keyboard-triggered actions (Ctrl+E Edit, Ctrl+R Rename) that
+// have no right-clicked position to work from. ok is false for the ".."
+// row (not a file operation target, matching RowAt) or an empty table.
+func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
+	row, _ = p.table.GetSelection()
+	ref, ok := p.rowRef(row)
+	if !ok || ref.name == ".." {
+		return 0, "", false
+	}
+	return row, ref.path, true
 }
 
 // rowIndexAt returns the row index at screen position (x, y), or

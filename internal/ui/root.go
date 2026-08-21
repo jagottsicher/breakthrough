@@ -72,6 +72,31 @@ type Root struct {
 	errorView   *tview.TextView
 	quitConfirm *tview.List
 
+	// mainLayout wraps panel, bashLine, and statusBar into the vertical
+	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
+	// still owns its own rect the same way it always has (clampToPanel
+	// and everything else reading panel.GetInnerRect() is unaffected),
+	// just resized to leave the bottom two rows free.
+	mainLayout *tview.Flex
+
+	// bashLine is the second-to-last row: a plain shell command line
+	// (see runShellCommand) — pasting into it works because
+	// cmd/breakthrough enables tview's bracketed-paste support
+	// (Application.EnablePaste), not anything Root itself does.
+	//
+	// statusBar is the last row: user/disk-usage/quick-action buttons/
+	// clock (see buildStatusBar), with statusBarSpans locating each
+	// button the same way propertySpans do for Properties.
+	bashLine       *tview.InputField
+	statusBar      *tview.TextView
+	statusBarSpans []statusBarSpan
+
+	// currentUser is resolved once (see currentUsername) — it can't
+	// meaningfully change over a session, unlike the current directory
+	// (df) or the clock, which is why only those two need refreshing
+	// (see refreshStatusBar).
+	currentUser string
+
 	// properties is the Properties overlay's own nested Pages (see
 	// newPropertiesView) — propertiesText is the always-visible read-only
 	// display; propertiesEditField is shown/positioned on top of it only
@@ -294,6 +319,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// typed into the header) through Root's error overlay.
 	panel.onError = r.showError
 
+	// The bottom bar (see newBottomBar): bashLine/statusBar must exist
+	// before onLoad can be wired below, and before mainLayout is built.
+	r.newBottomBar()
+
+	// Panel's disk-usage display depends on whichever directory it's
+	// currently showing — refreshed on every navigation from here on
+	// (onLoad isn't called for the very first load, which already
+	// happened inside NewPanel above, before there was anything to wire
+	// it to — refreshStatusBar is called once explicitly, right after
+	// AddPage below, to cover that one case).
+	panel.onLoad = func(string) { r.refreshStatusBar() }
+
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
 	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
 	r.quitConfirm.SetMainTextColor(tcell.ColorWhite)
@@ -312,7 +349,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)
 
-	r.AddPage(panelPage, panel, true, true)
+	// mainLayout stacks the panel above the two new bottom rows — panel
+	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
+	// remaining space) and real focus by default (see NewFlex/AddItem's
+	// own "focus" parameter); bashLine/statusBar are each pinned to
+	// exactly one row (1, 0) and never auto-focused — reaching bashLine
+	// is a deliberate click, not something Tab should stumble into.
+	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
+	r.mainLayout.AddItem(panel, 0, 1, true)
+	r.mainLayout.AddItem(r.bashLine, 1, 0, false)
+	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
+
+	r.AddPage(panelPage, r.mainLayout, true, true)
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
@@ -323,6 +371,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
+
+	r.refreshStatusBar() // initial sync — see the onLoad comment above
 
 	return r, nil
 }
