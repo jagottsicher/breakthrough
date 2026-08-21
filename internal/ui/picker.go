@@ -44,8 +44,14 @@ func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, onPick func(
 	var entries []namedID
 	switch kind {
 	case pickUser:
-		users, err := fsops.ListUsers()
-		if err != nil {
+		// The err check below is always non-nil on macOS, by design (see
+		// users_darwin.go) — not a mistake staticcheck needs to flag on
+		// that platform's build, hence the nolints: this exact check is
+		// what makes the fallback work everywhere ListUsers can't
+		// succeed, on macOS or otherwise (e.g. an unreadable
+		// /etc/passwd).
+		users, err := fsops.ListUsers() //nolint:staticcheck
+		if err != nil {                 //nolint:staticcheck
 			onFallback()
 			return
 		}
@@ -53,8 +59,8 @@ func (r *Root) openOwnerGroupPicker(kind pickerKind, currentID int, onPick func(
 			entries = append(entries, namedID{u.Name, u.UID})
 		}
 	case pickGroup:
-		groups, err := fsops.ListGroups()
-		if err != nil {
+		groups, err := fsops.ListGroups() //nolint:staticcheck // see the pickUser case above
+		if err != nil {                   //nolint:staticcheck
 			onFallback()
 			return
 		}
