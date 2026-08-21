@@ -1,0 +1,140 @@
+# GoReleaser v2 configuration — see .github/workflows/release.yml for
+# what runs this (a "v*.*.*" tag pushed to main) and CLAUDE.md section 5
+# for the reasoning behind the target platform list and package formats.
+#
+# Schema verified against the current GoReleaser docs (goreleaser.com)
+# at the time this was written, not guessed from training data — the
+# config format has changed between major versions (this is a v2
+# config; a v1 one looks different in several of these sections, most
+# notably archives.formats below, which used to be the singular
+# archives.format).
+version: 2
+
+project_name: breakthrough
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: breakthrough
+    main: ./cmd/breakthrough
+    binary: breakthrough
+    # No CGO anywhere in this project (see CLAUDE.md's own architecture
+    # guardrail) — CGO_ENABLED=0 is what makes cross-compiling straight
+    # from a single Linux runner to every target below possible at all,
+    # without needing a C cross-compiler toolchain per platform.
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # freebsd/arm64 is deliberately not a target (see CLAUDE.md's own
+      # platform list) — only freebsd/amd64 is.
+      - goos: freebsd
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+
+archives:
+  - id: breakthrough
+    formats: ["tar.gz"]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# .deb/.rpm packages (see CLAUDE.md section 5 — Homebrew and AUR are
+# explicitly a later step, needing a separate tap repo, not part of
+# this first pipeline). Linux only, matching the formats themselves.
+nfpms:
+  - id: breakthrough
+    package_name: breakthrough
+    file_name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    maintainer: jagottsicher <jagottsicher@gmx.net>
+    homepage: https://github.com/jagottsicher/breakthrough
+    description: >-
+      POSIX-friendly, window/menu-based TUI file manager for the
+      terminal, inspired by the Windows 3.11 UX.
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge pull request"
+      - "^Merge branch"
+      - "^Merge remote-tracking branch"
+  groups:
+    # Matches this project's own Conventional Commits type list
+    # (CLAUDE.md section 3: feat/fix/refactor/docs/chore/test) — not a
+    # generic feat/fix/docs/chore list copied from GoReleaser's own
+    # example, which uses a different set.
+    - title: Features
+      regexp: '^feat(\([[:word:]-]+\))?!?:.+$'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\([[:word:]-]+\))?!?:.+$'
+      order: 1
+    - title: Refactoring
+      regexp: '^refactor(\([[:word:]-]+\))?!?:.+$'
+      order: 2
+    - title: Documentation
+      regexp: '^docs(\([[:word:]-]+\))?!?:.+$'
+      order: 3
+    - title: Tests
+      regexp: '^test(\([[:word:]-]+\))?!?:.+$'
+      order: 4
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: jagottsicher
+    name: breakthrough
+  prerelease: auto
+  mode: replace
+  header: |
+    ## breakthrough {{ .Tag }}
+
+    POSIX-friendly, window/menu-based TUI file manager for the terminal,
+    inspired by the Windows 3.11 UX — built with [tcell](https://github.com/gdamore/tcell)
+    and [tview](https://github.com/rivo/tview).
+
+    ### Installing
+
+    Download the archive for your platform below, or grab the `.deb`/`.rpm`
+    package if your distribution uses one. Extract and run:
+
+    ```sh
+    tar xzf breakthrough_*_<os>_<arch>.tar.gz
+    ./breakthrough
+    ```
+
+    Verify a download against `checksums.txt` with `sha256sum -c`.
+  footer: |
+    ---
+
+    See [CONTRIBUTING.md](https://github.com/jagottsicher/breakthrough/blob/main/CONTRIBUTING.md)
+    for the branch workflow, and [docs/whitepaper.md](https://github.com/jagottsicher/breakthrough/blob/main/docs/whitepaper.md)
+    for the broader concept and vision.

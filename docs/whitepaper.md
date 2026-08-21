@@ -1,10 +1,10 @@
 ### – a whitepaper, draft – 
 # breakthrough
-## An extension for your (mostly) POSIX-compliant shell based on curses/ncurses putting a TUI as a quasi-windows-like layer over the terminal.
-#### MIT, Apache or GNU-License, 2021-08-26 Version 0.0.1
+## An extension for your (mostly) POSIX-compliant shell built in Go with tcell/tview, putting a TUI as a quasi-windows-like layer over the terminal.
+#### Apache-2.0 License, Version 0.0.1
 
 #### Abstract
-A quasi-windows-like interface for (mostly) POSIX-compliant operating systems written in C/C++.
+A quasi-windows-like interface for (mostly) POSIX-compliant operating systems written in Go.
 
 Imagine that you open a terminal session/shell to your (mostly) POSIX-compliant operating system via SSH. You expand the shell to full screen and start breakthrough on the console. After a short initialization a tidy surface of approx. 211 Columns x 59 Lines (assumed at a resolution of 1920x1080 px) appears. 
 
@@ -51,7 +51,7 @@ This whitepaper is intended as a project presentation, to make the idea and the 
 
 Breakthrough is an aspirational project. The first step is to find help because such an ambitious project cannot be carried out by one developer alone. 
 
-breakthrough is though about to be developed under the Mozilla Public License 2.0 (MPL-2.0), which offers the possibility to trademark the name, otherwise is fully supported by the open-source community. It would be nice, but not necessary if one day some kind of commercial product could be made out of breakthrough. 
+breakthrough is developed under the Apache License, Version 2.0 (Apache-2.0), which includes an explicit patent grant on top of the usual open-source permissions, and is well established in the Go community. It would be nice, but not necessary if one day some kind of commercial product could be made out of breakthrough. 
 
 All kinds of feedback regarding any aspect of the project is highly appreciated.
 
@@ -76,9 +76,9 @@ foo@bar:~$ breakthrough --color-mode 16 --char-set alternate --utf-8 --color-sch
 Starting - breaking through the walls...
 ```
 Other features and tools the project should utilize in order not to have to reinvent the wheel and to achieve a usable result as soon as possible:   
-- C/C++
-- Curses/libcurses (does avoid the need to invent a completely new windowing system)
-- as near to system libraries as possible
+- Go, for a memory-safe implementation with an easy cross-platform build/release story (no CGO unless a terminal feature truly requires it)
+- [tcell](https://github.com/gdamore/tcell) for low-level terminal/event handling (avoids the need to invent a completely new windowing system) plus [tview](https://github.com/rivo/tview) as the widget layer for lists, modals, and forms
+- as near to system libraries as possible, without pulling in CGO
 - Open-source (to attract ideologically motivated developers) 
 - UTF-8-Support 
 - as a teaching project for advanced programmers and educators for your students

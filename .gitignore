@@ -1,0 +1,13 @@
+# Local-only development file, never committed (see local dev notes).
+CLAUDE.md
+
+# Fine-grained GitHub PAT, local-only, never committed.
+github-token.txt
+
+# Go build artifacts
+/bin/
+*.test
+*.out
+
+# GoReleaser build output
+dist/
