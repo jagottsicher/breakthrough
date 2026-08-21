@@ -78,13 +78,16 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
-	// hiddenToggleIdx is the "Globals" section's hidden-files toggle
-	// item's index in r.menu, set once in NewRoot — needed so
-	// toggleHidden and showMenu can relabel that one item in place (see
-	// hiddenToggleLabel) to describe what clicking it will do next,
-	// rather than a static label that stops matching reality after the
-	// first click.
-	hiddenToggleIdx int
+	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are the
+	// "Globals" section's three toggle items' indices in r.menu, set once
+	// in NewRoot — needed so toggleHidden/toggleSizeBytes/toggleMtimeUnix
+	// and showMenu can relabel their own item in place (see
+	// hiddenToggleLabel/sizeFormatToggleLabel/mtimeFormatToggleLabel) to
+	// describe what clicking it will do next, rather than a static label
+	// that stops matching reality after the first click.
+	hiddenToggleIdx      int
+	sizeFormatToggleIdx  int
+	mtimeFormatToggleIdx int
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its table row *index* (0 = "..",
@@ -197,12 +200,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
-	// hiddenToggleIdx is computed rather than a hardcoded literal, so it
-	// keeps pointing at the right row if another item is ever added above
-	// it — see toggleHidden and showMenu, which both need it to relabel
-	// this one item in place.
+	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
+	// computed rather than hardcoded literals, so they keep pointing at
+	// the right row if another item is ever added above them — see
+	// toggleHidden/toggleSizeBytes/toggleMtimeUnix and showMenu, which
+	// all need them to relabel their own item in place.
 	r.hiddenToggleIdx = r.menu.GetItemCount()
 	r.menu.AddItem(hiddenToggleLabel(r.panel.showHidden), "", 0, r.toggleHidden)
+	r.sizeFormatToggleIdx = r.menu.GetItemCount()
+	r.menu.AddItem(sizeFormatToggleLabel(r.panel.sizeBytes), "", 0, r.toggleSizeBytes)
+	r.mtimeFormatToggleIdx = r.menu.GetItemCount()
+	r.menu.AddItem(mtimeFormatToggleLabel(r.panel.mtimeUnix), "", 0, r.toggleMtimeUnix)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
 	// No label: this is positioned exactly over the target's row in
@@ -548,10 +556,12 @@ func menuSectionLabel(name string) string {
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
-	// Defensive re-sync rather than trusting toggleHidden's own relabel
-	// to always have run last: cheap, and keeps this correct even if
-	// something else ever changes panel.showHidden directly.
+	// Defensive re-sync rather than trusting each toggle method's own
+	// relabel to always have run last: cheap, and keeps this correct even
+	// if something else ever changes the underlying Panel field directly.
 	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
+	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
 
 	width, height := listSize(r.menu)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
@@ -580,6 +590,44 @@ func hiddenToggleLabel(showHidden bool) string {
 		return "Hide hidden files"
 	}
 	return "Show hidden files"
+}
+
+// toggleSizeBytes is the "Globals" section's Size-format toggle: flips
+// whether the list's Size column shows exact bytes or humanSize's
+// shorthand (see Panel.sizeBytes/formatSizeCell), reloads the current
+// directory so the change takes effect immediately, and relabels the
+// menu item itself — the same pattern toggleHidden already uses, see its
+// own doc comment for why (dirty labels, dirty defensive re-sync).
+func (r *Root) toggleSizeBytes() {
+	r.panel.sizeBytes = !r.panel.sizeBytes
+	r.showError(r.panel.load(r.panel.path))
+	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
+}
+
+// sizeFormatToggleLabel is sizeBytes's own toggleHidden-style label.
+func sizeFormatToggleLabel(sizeBytes bool) string {
+	if sizeBytes {
+		return "Show size (human-readable)"
+	}
+	return "Show size in bytes"
+}
+
+// toggleMtimeUnix is the "Globals" section's Modified-format toggle:
+// flips whether the list's Modified column shows a Unix timestamp or the
+// formatted "YYYY-MM-DD HH:MM:SS" (see Panel.mtimeUnix/
+// formatModTimeCell) — otherwise a copy of toggleSizeBytes.
+func (r *Root) toggleMtimeUnix() {
+	r.panel.mtimeUnix = !r.panel.mtimeUnix
+	r.showError(r.panel.load(r.panel.path))
+	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
+}
+
+// mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
+func mtimeFormatToggleLabel(mtimeUnix bool) string {
+	if mtimeUnix {
+		return "Show modified date formatted"
+	}
+	return "Show modified date as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the

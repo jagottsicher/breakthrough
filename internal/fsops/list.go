@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // EntryType classifies what kind of filesystem object an Entry is — more
@@ -67,6 +68,13 @@ type Entry struct {
 	// bit for TypeFile — see ui.typeGlyph's '*', matching `ls -F`/
 	// Midnight Commander's own convention for an executable file.
 	Mode os.FileMode
+
+	// Size and ModTime are the entry's own (Lstat's, not a symlink's
+	// target — the same "report the entry itself" convention Mode/Nlink
+	// already follow) size and modification time, for the list's
+	// sortable Size/Modified columns.
+	Size    int64
+	ModTime time.Time
 }
 
 // ListDir returns the entries of the directory at path, sorted with
@@ -136,36 +144,52 @@ func describeEntry(entryPath, name string, parentDev uint64, haveParentDev bool)
 		return Entry{Name: name, Type: TypeFile}
 	}
 
-	nlink := nlinkOf(fi)
 	mode := fi.Mode()
+	// base carries every field common to all the specific cases below,
+	// so each of them only has to set Type and whatever else makes it
+	// different — Name/Nlink/Mode/Size/ModTime never need repeating.
+	base := Entry{
+		Name:    name,
+		Nlink:   nlinkOf(fi),
+		Mode:    mode,
+		Size:    fi.Size(),
+		ModTime: fi.ModTime(),
+	}
 
 	if mode&os.ModeSymlink != 0 {
 		target, _ := os.Readlink(entryPath) // best-effort; empty on failure, which shouldn't happen right after a successful Lstat
+		base.LinkTarget = target
 
 		resolved, err := os.Stat(entryPath) // follows the whole chain
 		if err != nil {
-			return Entry{Name: name, Type: TypeSymlinkBroken, LinkTarget: target, Nlink: nlink, Mode: mode}
+			base.Type = TypeSymlinkBroken
+			return base
 		}
 		if resolved.IsDir() {
-			mount := mountPointVia(entryPath, parentDev, haveParentDev)
-			return Entry{Name: name, Type: TypeSymlinkDir, IsDir: true, LinkTarget: target, Nlink: nlink, MountPoint: mount, Mode: mode}
+			base.Type = TypeSymlinkDir
+			base.IsDir = true
+			base.MountPoint = mountPointVia(entryPath, parentDev, haveParentDev)
+			return base
 		}
-		return Entry{Name: name, Type: TypeSymlinkFile, LinkTarget: target, Nlink: nlink, Mode: mode}
+		base.Type = TypeSymlinkFile
+		return base
 	}
 
 	switch {
 	case fi.IsDir():
-		mount := mountPointVia(entryPath, parentDev, haveParentDev)
-		return Entry{Name: name, Type: TypeDir, IsDir: true, Nlink: nlink, MountPoint: mount, Mode: mode}
+		base.Type = TypeDir
+		base.IsDir = true
+		base.MountPoint = mountPointVia(entryPath, parentDev, haveParentDev)
 	case mode&os.ModeSocket != 0:
-		return Entry{Name: name, Type: TypeSocket, Nlink: nlink, Mode: mode}
+		base.Type = TypeSocket
 	case mode&os.ModeNamedPipe != 0:
-		return Entry{Name: name, Type: TypeFIFO, Nlink: nlink, Mode: mode}
+		base.Type = TypeFIFO
 	case mode&os.ModeDevice != 0 && mode&os.ModeCharDevice != 0:
-		return Entry{Name: name, Type: TypeCharDevice, Nlink: nlink, Mode: mode}
+		base.Type = TypeCharDevice
 	case mode&os.ModeDevice != 0:
-		return Entry{Name: name, Type: TypeBlockDevice, Nlink: nlink, Mode: mode}
+		base.Type = TypeBlockDevice
 	default:
-		return Entry{Name: name, Type: TypeFile, Nlink: nlink, Mode: mode}
+		base.Type = TypeFile
 	}
+	return base
 }
