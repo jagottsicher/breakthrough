@@ -13,9 +13,9 @@ import (
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
-	text, spans := buildHeaderSpans("/a/bb/c")
+	text, spans := buildHeaderSpans("/a/bb/c", false)
 
-	wantText := " ^ ~ < >  /a/bb/c"
+	wantText := " ^ ~ < > ↑  /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
@@ -25,10 +25,11 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 3, end: 4, action: actionHome},
 		{start: 5, end: 6, action: actionBack},
 		{start: 7, end: 8, action: actionForward},
-		{start: 10, end: 11, action: actionNavigate, target: "/"},
-		{start: 11, end: 12, action: actionNavigate, target: "/a"},
-		{start: 13, end: 15, action: actionNavigate, target: "/a/bb"},
-		{start: 16, end: 17, action: actionNavigate, target: "/a/bb/c"},
+		{start: 9, end: 10, action: actionSortToggle},
+		{start: 12, end: 13, action: actionNavigate, target: "/"},
+		{start: 13, end: 14, action: actionNavigate, target: "/a"},
+		{start: 15, end: 17, action: actionNavigate, target: "/a/bb"},
+		{start: 18, end: 19, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -66,20 +67,46 @@ func TestBuildHeaderSpans(t *testing.T) {
 }
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
-	text, spans := buildHeaderSpans("/")
+	text, spans := buildHeaderSpans("/", false)
 
-	wantText := " ^ ~ < >  /"
+	wantText := " ^ ~ < > ↑  /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	// 4 buttons + the root span.
-	if len(spans) != 5 {
-		t.Fatalf("got %d spans, want 5: %+v", len(spans), spans)
+	// 5 buttons + the root span.
+	if len(spans) != 6 {
+		t.Fatalf("got %d spans, want 6: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 10, end: 11, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 12, end: 13, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
+	}
+}
+
+// TestBuildHeaderSpansDescending pins the sort-toggle button's glyph
+// reflecting the current direction (see sortGlyph) — '↓' once
+// sortDescending is true, in the same column position '↑' occupied.
+func TestBuildHeaderSpansDescending(t *testing.T) {
+	text, spans := buildHeaderSpans("/", true)
+
+	wantText := " ^ ~ < > ↓  /"
+	if text != wantText {
+		t.Fatalf("text = %q, want %q", text, wantText)
+	}
+
+	var sortSpan headerSpan
+	found := false
+	for _, s := range spans {
+		if s.action == actionSortToggle {
+			sortSpan, found = s, true
+		}
+	}
+	if !found {
+		t.Fatal("no actionSortToggle span found")
+	}
+	if got := string([]rune(text)[sortSpan.start:sortSpan.end]); got != "↓" {
+		t.Errorf("sort-toggle span covers %q, want %q", got, "↓")
 	}
 }
 
@@ -306,6 +333,185 @@ func TestToggleCheckbox(t *testing.T) {
 	}
 }
 
+func TestFilterHidden(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: ".hidden"},
+		{Name: "visible.txt"},
+		{Name: ".git", IsDir: true, Type: fsops.TypeDir},
+		{Name: "normal", IsDir: true, Type: fsops.TypeDir},
+	}
+
+	got := filterHidden(entries)
+	var names []string
+	for _, e := range got {
+		names = append(names, e.Name)
+	}
+
+	want := []string{"visible.txt", "normal"}
+	if len(names) != len(want) {
+		t.Fatalf("got %v, want %v", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Errorf("names[%d] = %q, want %q", i, names[i], want[i])
+		}
+	}
+}
+
+func TestReverseSortOrder(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "Alpha", IsDir: true},
+		{Name: "Omega", IsDir: true},
+		{Name: "beta.txt"},
+		{Name: "zeta.txt"},
+	}
+
+	reverseSortOrder(entries)
+
+	// Reversed within each group independently — directories still come
+	// first, just Z-A instead of A-Z within that group, same for files.
+	want := []string{"Omega", "Alpha", "zeta.txt", "beta.txt"}
+	for i, w := range want {
+		if entries[i].Name != w {
+			t.Errorf("entries[%d].Name = %q, want %q", i, entries[i].Name, w)
+		}
+	}
+}
+
+func TestReverseSortOrderEdgeCases(t *testing.T) {
+	// All one group (no files at all) must not panic or misbehave at the
+	// split boundary.
+	allDirs := []fsops.Entry{{Name: "a", IsDir: true}, {Name: "b", IsDir: true}}
+	reverseSortOrder(allDirs)
+	if allDirs[0].Name != "b" || allDirs[1].Name != "a" {
+		t.Errorf("allDirs = %v, want [b a]", allDirs)
+	}
+
+	var empty []fsops.Entry
+	reverseSortOrder(empty) // must not panic
+}
+
+// TestLoadHidesDotfilesByDefault pins showHidden's default: dotfiles are
+// filtered out of the listing entirely, not just skipped over.
+func TestLoadHidesDotfilesByDefault(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "visible.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.name == ".hidden" {
+			t.Error(".hidden should not be listed by default")
+		}
+	}
+}
+
+// TestToggleShowHiddenRevealsDotfiles pins the other half: setting
+// showHidden and reloading brings dotfiles back.
+func TestToggleShowHiddenRevealsDotfiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.showHidden = true
+	if err := p.load(dir); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	found := false
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.name == ".hidden" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error(".hidden should be listed once showHidden is true")
+	}
+}
+
+// TestSelectAllExcludesHiddenFiles pins the explicit requirement that
+// selection actions never touch a currently-hidden dotfile — automatic
+// here since a hidden entry never gets a row in the first place.
+func TestSelectAllExcludesHiddenFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "visible.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.selectAll()
+
+	for path := range p.selected {
+		if filepath.Base(path) == ".hidden" {
+			t.Error("selectAll should not have selected a hidden entry")
+		}
+	}
+	if len(p.selected) != 1 { // just visible.txt
+		t.Errorf("selected = %d, want 1", len(p.selected))
+	}
+}
+
+// TestSortToggleReversesOrderAndPersistsAcrossNavigation exercises the
+// header button's actual action, and pins that the preference is
+// session-scoped (survives navigating away and back), not reset on every
+// load like the checkbox selection is.
+func TestSortToggleReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "Alpha")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "Omega"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	// Row 0 is "..", row 1 is the first directory ascending (Alpha).
+	if ref, _ := p.rowRef(1); ref.name != "Alpha" {
+		t.Fatalf("setup: row 1 = %q, want Alpha", ref.name)
+	}
+
+	p.runHeaderAction(headerSpan{action: actionSortToggle})
+	if ref, _ := p.rowRef(1); ref.name != "Omega" {
+		t.Errorf("after sort toggle: row 1 = %q, want Omega", ref.name)
+	}
+
+	if err := p.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+	if err := p.navigate(dir); err != nil {
+		t.Fatalf("navigate back: %v", err)
+	}
+	if ref, _ := p.rowRef(1); ref.name != "Omega" {
+		t.Errorf("after navigating away and back: row 1 = %q, want Omega (descending should have stuck)", ref.name)
+	}
+}
+
 func TestTypeGlyph(t *testing.T) {
 	tests := []struct {
 		name string
@@ -332,11 +538,17 @@ func TestTypeGlyph(t *testing.T) {
 	}
 }
 
-func TestTypeGlyphColor(t *testing.T) {
-	if got := typeGlyphColor(rowRef{entryType: fsops.TypeSymlinkBroken}); got != tcell.ColorRed {
+func TestEntryColor(t *testing.T) {
+	if got := entryColor(rowRef{entryType: fsops.TypeSymlinkBroken}); got != tcell.ColorRed {
 		t.Errorf("broken symlink color = %v, want red", got)
 	}
-	if got := typeGlyphColor(rowRef{entryType: fsops.TypeDir}); got != tcell.ColorWhite {
+	if got := entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755}); got != tcell.ColorGreen {
+		t.Errorf("executable file color = %v, want green", got)
+	}
+	if got := entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o644}); got != tcell.ColorWhite {
+		t.Errorf("non-executable file color = %v, want white", got)
+	}
+	if got := entryColor(rowRef{entryType: fsops.TypeDir}); got != tcell.ColorWhite {
 		t.Errorf("directory color = %v, want white", got)
 	}
 }

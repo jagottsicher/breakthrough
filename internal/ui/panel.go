@@ -77,6 +77,27 @@ type Panel struct {
 	history    []string
 	historyIdx int
 
+	// sortDescending and showHidden are session-scoped display
+	// preferences, not per-directory state: load() re-applies whichever
+	// is currently set on every call, including when navigating to a new
+	// directory, so both stick as you browse rather than resetting each
+	// time (see runHeaderAction's actionSortToggle and Root.toggleHidden).
+	//
+	// sortDescending reverses ListDir's alphabetical order within each of
+	// its two groups (directories, then files) independently — see
+	// reverseSortOrder — rather than reversing the whole listing, which
+	// would also swap which group comes first.
+	//
+	// showHidden's default (false) matches `ls` without -a: dotfile
+	// entries (name starting with ".") are filtered out of the listing
+	// entirely in load() — see filterHidden — rather than kept as rows
+	// that are merely skipped elsewhere. That's what makes every
+	// row-based operation (selectAll, selectByPattern, arrow-key
+	// navigation, ...) exclude them for free, without each one needing
+	// its own "is this row actually hidden right now" check.
+	sortDescending bool
+	showHidden     bool
+
 	// onError reports failures the user should see (a directory that
 	// can't be read, a refused rename) to whoever owns the UI's error
 	// display — Root wires this to its error overlay. Panel deliberately
@@ -97,11 +118,12 @@ type Panel struct {
 type headerAction int
 
 const (
-	actionNavigate headerAction = iota // go to target
-	actionStart                        // go to the directory breakthrough was launched from
-	actionHome                         // go to the user's home directory
-	actionBack                         // step back in history
-	actionForward                      // step forward in history
+	actionNavigate   headerAction = iota // go to target
+	actionStart                          // go to the directory breakthrough was launched from
+	actionHome                           // go to the user's home directory
+	actionBack                           // step back in history
+	actionForward                        // step forward in history
+	actionSortToggle                     // flip ascending/descending sort order
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -189,12 +211,18 @@ func (p *Panel) load(dir string) error {
 	if err != nil {
 		return err
 	}
+	if !p.showHidden {
+		entries = filterHidden(entries)
+	}
+	if p.sortDescending {
+		reverseSortOrder(entries)
+	}
 
 	p.table.Clear()
 	p.selected = make(map[string]bool)
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs)
+	text, spans := buildHeaderSpans(abs, p.sortDescending)
 	p.header.SetText(text)
 	p.headerSpans = spans
 
@@ -221,6 +249,46 @@ func (p *Panel) load(dir string) error {
 	return nil
 }
 
+// filterHidden removes dotfile entries (name starting with ".") from
+// entries — load()'s effect when showHidden is false, the default. This
+// happens before any row is ever added to the table, rather than adding
+// a row that's then somehow marked hidden: every row-based operation
+// (selectAll, selectByPattern, arrow-key navigation, ...) excludes a
+// hidden entry for free that way, with no operation needing its own "is
+// this one actually hidden right now" check.
+func filterHidden(entries []fsops.Entry) []fsops.Entry {
+	visible := entries[:0] // reuses entries' backing array; entries itself isn't read again after this call
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name, ".") {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// reverseSortOrder reverses entries in place within each of ListDir's two
+// already-sorted groups (directories, then files) independently, keeping
+// directories first either way — load()'s effect when sortDescending is
+// true. A plain whole-slice reverse would also swap which group comes
+// first, which isn't what a sort-direction toggle is for.
+func reverseSortOrder(entries []fsops.Entry) {
+	split := len(entries)
+	for i, e := range entries {
+		if !e.IsDir {
+			split = i
+			break
+		}
+	}
+	reverseEntries(entries[:split])
+	reverseEntries(entries[split:])
+}
+
+func reverseEntries(entries []fsops.Entry) {
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+}
+
 // addRow renders one table row for ref at the given row index.
 func (p *Panel) addRow(row int, ref rowRef) {
 	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(tcell.ColorWhite)
@@ -237,7 +305,9 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
 
-	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(typeGlyphColor(ref))
+	color := entryColor(ref)
+
+	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(tcell.ColorWhite)
@@ -250,7 +320,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	if ref.linkTarget != "" {
 		label += " -> " + ref.linkTarget
 	}
-	name := tview.NewTableCell(label).SetTextColor(tcell.ColorWhite)
+	name := tview.NewTableCell(label).SetTextColor(color)
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
@@ -258,6 +328,21 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		return false // still let the row become selected/highlighted
 	})
 	p.table.SetCell(row, colName, name)
+}
+
+// sortGlyph renders the header's sort-toggle button — an arrow showing
+// the currently active direction (rather than a fixed icon), so the
+// button doubles as an indicator, not just a control. Plain arrows
+// (U+2191/U+2193), not the checkbox's circles: those are Unicode
+// "ambiguous width" and only got a pass because the user explicitly
+// wanted circles there; there's no reason to take on that same rendering
+// risk again here when a narrow, universally single-width alternative
+// exists.
+func sortGlyph(descending bool) string {
+	if descending {
+		return "↓"
+	}
+	return "↑"
 }
 
 // checkboxText renders the checkbox column's two states as an outline vs.
@@ -318,14 +403,23 @@ func typeGlyph(ref rowRef) byte {
 	return ' '
 }
 
-// typeGlyphColor sets a broken symlink's type character apart in red —
-// the one case in the type column that's worth a color, not just a
-// character, since it flags something that will fail if acted on.
-func typeGlyphColor(ref rowRef) tcell.Color {
-	if ref.entryType == fsops.TypeSymlinkBroken {
+// entryColor sets a row's type character and name apart by color for the
+// two cases worth flagging beyond the glyph alone — a broken symlink in
+// red (something that will fail if acted on) and an executable file in
+// green, matching Midnight Commander's own default skin, which colors an
+// executable's whole name, not just its '*'. Applied to both the type
+// cell and the name cell (see addRow) for the same reason MC colors the
+// whole entry rather than a lone prefix character: it reads at a glance
+// across the row, not just in the narrow type column.
+func entryColor(ref rowRef) tcell.Color {
+	switch {
+	case ref.entryType == fsops.TypeSymlinkBroken:
 		return tcell.ColorRed
+	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
+		return tcell.ColorGreen
+	default:
+		return tcell.ColorWhite
 	}
-	return tcell.ColorWhite
 }
 
 // modifierGlyph renders ref's modifier column — information MC's own
@@ -618,17 +712,23 @@ func (p *Panel) forward() {
 }
 
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
-// Forward button glyphs followed by the path, one clickable span per path
-// component (the leading "/" plus each name in between), e.g. clicking
-// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
-// exact for the common case but, like the rest of Phase 0/1, doesn't yet
-// account for double-width (e.g. CJK) characters in file names.
+// Forward/sort-toggle button glyphs followed by the path, one clickable
+// span per path component (the leading "/" plus each name in between),
+// e.g. clicking "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in
+// runes, which is exact for the common case but, like the rest of
+// Phase 0/1, doesn't yet account for double-width (e.g. CJK) characters
+// in file names.
+//
+// sortDescending picks the sort-toggle button's glyph (see sortGlyph) —
+// passed in explicitly, the same as abs, rather than read off a Panel
+// receiver, so this stays a pure function callers can test directly with
+// arbitrary input instead of having to construct a whole Panel first.
 //
 // A click that lands in the header but doesn't hit any of these spans
 // (e.g. on a "/" separator, or in empty space after the path) is handled
 // by captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
+func buildHeaderSpans(abs string, sortDescending bool) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
@@ -644,6 +744,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	button("~", actionHome)
 	button("<", actionBack)
 	button(">", actionForward)
+	button(sortGlyph(sortDescending), actionSortToggle)
 	b.WriteString("  ")
 	col += 2
 
@@ -729,6 +830,13 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		p.back()
 	case actionForward:
 		p.forward()
+	case actionSortToggle:
+		// A re-render of the directory already on screen with a
+		// different display preference, not navigation — load() directly
+		// rather than navigate(), so this doesn't push a history entry or
+		// otherwise touch back/forward.
+		p.sortDescending = !p.sortDescending
+		p.reportError(p.load(p.path))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
