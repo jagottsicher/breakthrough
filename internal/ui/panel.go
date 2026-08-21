@@ -329,6 +329,17 @@ func (p *Panel) rowIndexAt(x, y int) (row int, ok bool) {
 	return row, true
 }
 
+// focusRow moves the table's own current-row highlight — and, via arrow
+// keys, where keyboard navigation continues from — to row. This is
+// distinct from the checkbox column's per-entry marking (see selected,
+// toggleCheckbox): a right-click or right-drag on a row that wasn't
+// already the highlighted one would otherwise leave the highlight
+// pointing somewhere else while the context menu or the just-toggled
+// checkboxes are clearly about a different row.
+func (p *Panel) focusRow(row int) {
+	p.table.Select(row, colName)
+}
+
 // toggleRange flips the checked state of every checkable entry from row
 // from through to, inclusive and order-independent — the effect of a
 // right-button drag across rows (see Root.captureMouse). Each row toggles

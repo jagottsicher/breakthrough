@@ -313,3 +313,47 @@ func TestRightClickWithoutDragOpensMenu(t *testing.T) {
 		t.Error("a plain right-click must not select the row")
 	}
 }
+
+// TestRightClickMovesFocus checks that right-clicking a row that isn't
+// already the table's highlighted one moves the highlight there — the
+// context menu is clearly about that row, so the highlight should agree,
+// not point wherever a previous left-click or arrow key left it.
+func TestRightClickMovesFocus(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	// Row 0 is the table's default focus; right-click a different row.
+	const row = 3
+	x, y, ok := findRowPos(root.panel.table, row, 80, 24)
+	if !ok {
+		t.Fatalf("could not locate row %d's screen position", row)
+	}
+	if got, _ := root.panel.table.GetSelection(); got == row {
+		t.Fatalf("setup: row %d should not already be focused", row)
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(x, y, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightClick, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	if got, _ := root.panel.table.GetSelection(); got != row {
+		t.Errorf("focused row = %d after right-clicking row %d, want %d", got, row, row)
+	}
+}
+
+// TestRightDragMovesFocusToEndRow checks that a right-button drag leaves
+// the table's highlight on the row the drag ended on (the release row),
+// not the row it started from.
+func TestRightDragMovesFocusToEndRow(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	dragRight(t, root, 1, 3)
+
+	if got, _ := root.panel.table.GetSelection(); got != 3 {
+		t.Errorf("focused row = %d after dragging 1 -> 3, want 3", got)
+	}
+}
