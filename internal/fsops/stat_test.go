@@ -9,6 +9,28 @@ import (
 	"time"
 )
 
+// TestStatUIDGID pins that UID/GID are populated with the process's own
+// ids for a file it just created — the one case guaranteed to be
+// unambiguous regardless of what account runs this test.
+func TestStatUIDGID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.UID != os.Getuid() {
+		t.Errorf("UID = %d, want %d", info.UID, os.Getuid())
+	}
+	if info.GID != os.Getgid() {
+		t.Errorf("GID = %d, want %d", info.GID, os.Getgid())
+	}
+}
+
 func TestStatFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.txt")

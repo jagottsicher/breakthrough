@@ -7,6 +7,32 @@ import (
 	"testing"
 )
 
+func TestResolveUIDNumeric(t *testing.T) {
+	uid, err := ResolveUID("1000")
+	if err != nil {
+		t.Fatalf("ResolveUID(\"1000\"): %v", err)
+	}
+	if uid != 1000 {
+		t.Errorf("uid = %d, want 1000", uid)
+	}
+}
+
+func TestResolveGIDNumeric(t *testing.T) {
+	gid, err := ResolveGID("1000")
+	if err != nil {
+		t.Fatalf("ResolveGID(\"1000\"): %v", err)
+	}
+	if gid != 1000 {
+		t.Errorf("gid = %d, want 1000", gid)
+	}
+}
+
+func TestResolveUIDUnknown(t *testing.T) {
+	if _, err := ResolveUID("notauser12345"); err == nil {
+		t.Error("ResolveUID should fail for a name that's neither a known user nor numeric")
+	}
+}
+
 func TestParseOwnerGroup(t *testing.T) {
 	tests := []struct {
 		in      string
