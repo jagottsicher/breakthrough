@@ -18,7 +18,7 @@ const (
 
 // Root is breakthrough's top-level UI for Phase 1: the directory panel,
 // plus a right-click context menu and the overlays it opens (Info,
-// Rename), and a Ctrl+X quit confirmation. Pages layers all of these as
+// Rename), and a Ctrl+Q quit confirmation. Pages layers all of these as
 // floating overlays on top of the still-visible panel; Root owns the
 // logic for what appears where, giving each overlay real keyboard focus
 // while it's shown (see showOverlay/hideOverlay), and closing whichever
@@ -237,11 +237,11 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 }
 
 // RequestQuit shows a confirmation overlay instead of quitting right
-// away — Ctrl+X (see cmd/breakthrough) is easy to hit by accident, so the
+// away — Ctrl+Q (see cmd/breakthrough) is easy to hit by accident, so the
 // application only actually stops once the user picks "Quit breakthrough"
 // from this overlay (or presses Enter, since it's the default selection).
 func (r *Root) RequestQuit() {
-	// Ctrl+X is a global key capture, so it can arrive while the header
+	// Ctrl+Q is a global key capture, so it can arrive while the header
 	// is mid-edit. Without this the edit field would stay on screen after
 	// cancelling the quit, focused-looking but unreachable, since
 	// hideOverlay hands focus to the panel's table rather than back to it.
@@ -258,13 +258,13 @@ func (r *Root) RequestQuit() {
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
 }
 
-// RequestCancel is the Ctrl+X sibling for Ctrl+C (see cmd/breakthrough):
+// RequestCancel is the Ctrl+Q sibling for Ctrl+C (see cmd/breakthrough):
 // a global "back out of whatever is open" that behaves like Escape.
 // Having it as a real key matters because Escape is deliberately inert
 // while the path header is being edited — Ctrl+C is the keyboard way out
 // of that, where otherwise only a mouse click would do.
 //
-// It never quits: stopping breakthrough is Ctrl+X plus a confirmation.
+// It never quits: stopping breakthrough is Ctrl+Q plus a confirmation.
 func (r *Root) RequestCancel() {
 	if r.activePage != "" {
 		r.hideOverlay()
