@@ -38,7 +38,7 @@ func TestOpenOwnerGroupPickerListsRealUsers(t *testing.T) {
 	var picked string
 	var pickedID int
 	fellBack := false
-	r.openOwnerGroupPicker(pickUser, uid, func(n string, id int) {
+	r.openOwnerGroupPicker(pickUser, uid, r.centeredOnScreen, func(n string, id int) {
 		picked, pickedID = n, id
 	}, nil, func() {
 		fellBack = true
@@ -84,7 +84,7 @@ func TestOpenOwnerGroupPickerCancelRunsOnCancel(t *testing.T) {
 
 	cancelled := false
 	fellBack := false
-	r.openOwnerGroupPicker(pickUser, uid, func(string, int) {
+	r.openOwnerGroupPicker(pickUser, uid, r.centeredOnScreen, func(string, int) {
 		t.Error("onPick should not run on cancel")
 	}, func() {
 		cancelled = true
@@ -102,6 +102,49 @@ func TestOpenOwnerGroupPickerCancelRunsOnCancel(t *testing.T) {
 	}
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after cancelling, want closed", r.activePage)
+	}
+}
+
+// TestOwnerGroupPickerPositionedNearField pins the fix for the user's
+// own report: the picker used to always appear dead center regardless
+// of context — opened from Properties' Owner/Group fields, it now
+// starts exactly where the clicked span itself was drawn, the same
+// position activateInlineTextField uses for every other field, instead
+// of the middle of the screen.
+func TestOwnerGroupPickerPositionedNearField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+	// clampToPanel keeps the picker within r.panel's own rect — give it
+	// a realistic (terminal-sized) one here; Box's own construction
+	// default (15x10, a placeholder never meant to be drawn against) is
+	// otherwise narrow enough to force the requested position back to
+	// the panel's left edge, which would make this test fail for a
+	// reason that has nothing to do with what it's actually pinning.
+	r.panel.SetRect(0, 0, 80, 24)
+
+	span, ok := findPropertySpan(r, fieldOwner)
+	if !ok {
+		t.Fatal("no fieldOwner span found")
+	}
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	wantX, wantY := rectX+span.startCol, rectY+span.row
+
+	r.activatePropertyField(span)
+	if r.activePage != pickerPage {
+		t.Skip("fsops.ListUsers unavailable in this environment (e.g. macOS): falls back to the inline text field instead")
+	}
+
+	gotX, gotY, _, _ := r.picker.GetRect()
+	if gotX != wantX || gotY != wantY {
+		t.Errorf("picker positioned at (%d,%d), want (%d,%d) — anchored to the Owner field, not centered on screen", gotX, gotY, wantX, wantY)
 	}
 }
 

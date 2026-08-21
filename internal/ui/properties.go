@@ -674,7 +674,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 
 	switch span.field {
 	case fieldOwner:
-		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, func(name string, _ int) {
+		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedOwner = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {
@@ -682,7 +682,7 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		})
 		return
 	case fieldGroup:
-		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, func(name string, _ int) {
+		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedGroup = name
 			r.resumeProperties()
 		}, r.resumeProperties, func() {

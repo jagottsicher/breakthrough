@@ -1040,8 +1040,8 @@ func (r *Root) openChown() {
 		return
 	}
 
-	r.openOwnerGroupPicker(pickUser, info.UID, func(_ string, uid int) {
-		r.openOwnerGroupPicker(pickGroup, info.GID, func(_ string, gid int) {
+	r.openOwnerGroupPicker(pickUser, info.UID, r.centeredOnScreen, func(_ string, uid int) {
+		r.openOwnerGroupPicker(pickGroup, info.GID, r.centeredOnScreen, func(_ string, gid int) {
 			r.applyChown(target, uid, gid)
 		}, func() {
 			r.applyChown(target, uid, -1) // group step cancelled: owner-only change
