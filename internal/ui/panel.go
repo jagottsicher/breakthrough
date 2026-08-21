@@ -340,22 +340,28 @@ func (p *Panel) focusRow(row int) {
 	p.table.Select(row, colName)
 }
 
-// toggleRange flips the checked state of every checkable entry from row
-// from through to, inclusive and order-independent — the effect of a
-// right-button drag across rows (see Root.captureMouse). Each row toggles
-// its own current state independently: a range that's a mix of checked
-// and unchecked rows ends up with every row flipped, not forced to a
-// single direction — so dragging the same range twice always clears
-// whatever the first drag did, and dragging a mixed range doesn't
-// silently normalize it to one state. toggleCheckbox already no-ops for
-// a row that isn't checkable (the ".." row, if it falls within the
-// range), so that's handled for free here too.
-func (p *Panel) toggleRange(from, to int) {
-	if from > to {
-		from, to = to, from
-	}
-	for row := from; row <= to; row++ {
-		p.toggleCheckbox(row)
+// applyDragDelta toggles exactly the rows whose membership in the range
+// [start, to] differs from their membership in [start, from] — the rows
+// a right-button drag has newly entered or newly left since the last
+// update, each toggled exactly once. This is what lets Root.captureMouse
+// update the toggled state live, once per MouseMove, without re-toggling
+// (and so silently cancelling) rows the drag already passed over: calling
+// this repeatedly as the range grows, shrinks, or reverses direction
+// always leaves each row's state consistent with whether it's currently
+// inside [start, to], not with how many times a naive re-toggle-the-whole-
+// range would have flipped it. toggleCheckbox already no-ops for a row
+// that isn't checkable (the ".." row, if it falls within either range),
+// so that's handled for free here too.
+func (p *Panel) applyDragDelta(start, from, to int) {
+	oldLo, oldHi := min(start, from), max(start, from)
+	newLo, newHi := min(start, to), max(start, to)
+
+	for row := min(oldLo, newLo); row <= max(oldHi, newHi); row++ {
+		inOld := row >= oldLo && row <= oldHi
+		inNew := row >= newLo && row <= newHi
+		if inOld != inNew {
+			p.toggleCheckbox(row)
+		}
 	}
 }
 
