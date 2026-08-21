@@ -1,16 +1,12 @@
 // Command breakthrough is the entry point of the breakthrough TUI file
-// manager.
-//
-// Phase 0/1: a single panel showing the current directory, navigable with
-// the arrow keys, Enter, and a browser-style path header (Start/Home/Back/
-// Forward, clickable breadcrumbs, click-to-edit), plus a right-click
-// context menu (Info, Rename). A second panel and further actions land in
-// later, vertically-sliced feature branches (see docs/whitepaper.md for
-// the overall concept).
+// manager — see internal/ui.Root for what it actually shows (see also
+// docs/whitepaper.md for the overall concept and vision).
 //
 // The initial directory is the process's working directory unless a path
 // is given on the command line, e.g. "breakthrough /var/log" — see
 // startDir. That directory also becomes the header's Start button target.
+// "breakthrough --version" (or "-v") prints version information instead
+// of starting the TUI — see the version/commit/date/builtBy vars below.
 package main
 
 import (
@@ -23,7 +19,23 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/ui"
 )
 
+// version, commit, date, and builtBy are set via "go build -ldflags -X
+// ..." by the release pipeline (see .goreleaser.yaml, which relies on
+// exactly these four names existing here) — the defaults below are what
+// a plain "go build", with no ldflags at all, reports instead.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "source"
+)
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("breakthrough %s (commit %s, built %s by %s)\n", version, commit, date, builtBy)
+		return
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "breakthrough:", err)
 		os.Exit(1)

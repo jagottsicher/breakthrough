@@ -1,0 +1,38 @@
+name: release
+
+# Only a "v*.*.*" tag pushed to main triggers this — main is exclusively
+# for tagged releases (see CLAUDE.md section 3), never a direct commit,
+# so a tag landing there always means "this is the commit to release".
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# contents: write is what lets GoReleaser create the GitHub Release and
+# upload its assets — see goreleaser.com/ci/actions, the current
+# (checked, not guessed) recommended setup this workflow follows.
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # GoReleaser needs the full history for its changelog
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
