@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -21,26 +25,33 @@ const (
 	headerEditPage    = "edit"
 )
 
-// Table columns. There is deliberately no header row labelling them (the
-// path bar above already orients the user); these just index into
-// table.SetCell/GetCell.
+// Table columns — colSize/colModified are also mirrored, cell for cell,
+// in columnHeader (see buildColumnHeader): the icon columns get a blank
+// header cell (self-explanatory via their own glyphs), Name/Size/
+// Modified get a clickable label that sorts by that column.
 const (
 	colCheckbox = iota
 	colType
 	colModifier
 	colName
+	colSizeSep // a bare "│" — see columnSeparator — not a real data column
+	colSize
+	colModifiedSep // likewise, before colModified
+	colModified
 )
 
-// Panel is the single directory-listing view for Phase 0/1: a one-line,
-// browser-address-bar-style header above a table of entries. The header
-// has Start/Home/Back/Forward buttons followed by the path, whose components
-// are individually clickable (clicking "b" in /a/b/c/d jumps to /a/b);
-// clicking anywhere else in the header (e.g. the empty space after the
+// Panel is the single directory-listing view: a one-line, browser-
+// address-bar-style path header above a table of entries. The path
+// header has Start/Home/Back/Forward buttons followed by the path, whose
+// components are individually clickable (clicking "b" in /a/b/c/d jumps
+// to /a/b); clicking anywhere else in it (e.g. the empty space after the
 // path) switches it to a plain editable text field, like a browser URL
-// bar. The table below is navigable with the arrow keys (built into
-// tview.Table) and Enter, has a clickable checkbox column for marking
-// entries, and (via Root) a right-click context menu. No borders anywhere
-// — see accentBackgroundColor.
+// bar. Below that sits a second, one-line column-header row (see
+// columnHeader/buildColumnHeader) labelling Name/Size/Modified — clicking
+// one sorts by it. The table itself is navigable with the arrow keys
+// (built into tview.Table) and Enter, has a clickable checkbox column for
+// marking entries, and (via Root) a right-click context menu. No borders
+// anywhere — see accentBackgroundColor.
 //
 // A tview.Table, not tview.List: a checkbox column needs a second column
 // at all, which List doesn't have, and Table.CellAt/TableCell.Reference
@@ -56,7 +67,14 @@ type Panel struct {
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
 
-	table *tview.Table
+	// columnHeader is a second, single-row table sitting between the path
+	// bar and the data table (table) — its own doc comment (see
+	// buildColumnHeader) explains why a second table, not a shared row 0
+	// of table itself (tview.Table.SetFixed would do that, but at the
+	// cost of shifting every existing row index used throughout this
+	// package and its tests by one).
+	columnHeader *tview.Table
+	table        *tview.Table
 
 	// path is the absolute path currently shown.
 	path string
@@ -77,16 +95,23 @@ type Panel struct {
 	history    []string
 	historyIdx int
 
-	// sortDescending and showHidden are session-scoped display
-	// preferences, not per-directory state: load() re-applies whichever
-	// is currently set on every call, including when navigating to a new
-	// directory, so both stick as you browse rather than resetting each
-	// time (see runHeaderAction's actionSortToggle and Root.toggleHidden).
+	// sortKey/sortDescending, sizeBytes/mtimeUnix, and showHidden are all
+	// session-scoped display preferences, not per-directory state:
+	// load() re-applies whichever is currently set on every call,
+	// including when navigating to a new directory, so all of them stick
+	// as you browse rather than resetting each time.
 	//
-	// sortDescending reverses ListDir's alphabetical order within each of
-	// its two groups (directories, then files) independently — see
-	// reverseSortOrder — rather than reversing the whole listing, which
-	// would also swap which group comes first.
+	// sortKey/sortDescending pick which of ListDir's fields to sort by
+	// and which direction — see applySortPreference, and
+	// buildColumnHeader/setSortKey for how a column-header click changes
+	// them. Directories always stay grouped first either way; only the
+	// order within that group (and within the files that follow) changes.
+	//
+	// sizeBytes/mtimeUnix pick the Size/Modified columns' display format
+	// — see formatSizeCell/formatModTimeCell — toggled via Root's
+	// "Globals" menu (Root.toggleSizeBytes/toggleMtimeUnix), not from the
+	// column header itself: a click there is unambiguously "sort by this
+	// column", with no separate click zone competing for the same cell.
 	//
 	// showHidden defaults to true (set in NewPanel) — dotfiles are shown
 	// unless toggled off. When false, dotfile entries (name starting with
@@ -96,7 +121,10 @@ type Panel struct {
 	// selectByPattern, arrow-key navigation, ...) exclude them for free
 	// once hidden, without each one needing its own "is this row actually
 	// hidden right now" check.
+	sortKey        sortKey
 	sortDescending bool
+	sizeBytes      bool
+	mtimeUnix      bool
 	showHidden     bool
 
 	// onError reports failures the user should see (a directory that
@@ -119,12 +147,11 @@ type Panel struct {
 type headerAction int
 
 const (
-	actionNavigate   headerAction = iota // go to target
-	actionStart                          // go to the directory breakthrough was launched from
-	actionHome                           // go to the user's home directory
-	actionBack                           // step back in history
-	actionForward                        // step forward in history
-	actionSortToggle                     // flip ascending/descending sort order
+	actionNavigate headerAction = iota // go to target
+	actionStart                        // go to the directory breakthrough was launched from
+	actionHome                         // go to the user's home directory
+	actionBack                         // step back in history
+	actionForward                      // step forward in history
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -157,6 +184,11 @@ type rowRef struct {
 	nlink      uint64
 	mountPoint bool
 	mode       os.FileMode
+
+	// size/modTime mirror fsops.Entry's own fields, for the Size/Modified
+	// columns (see addRow/formatSizeCell/formatModTimeCell).
+	size    int64
+	modTime time.Time
 }
 
 // NewPanel creates a Panel rooted at path. app is needed to move keyboard
@@ -164,15 +196,20 @@ type rowRef struct {
 // afterwards — see Panel.openEdit.
 func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p := &Panel{
-		Flex:       tview.NewFlex().SetDirection(tview.FlexRow),
-		app:        app,
-		table:      tview.NewTable(),
-		showHidden: true, // default: dotfiles shown — see the field's own doc comment
+		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
+		app:          app,
+		table:        tview.NewTable(),
+		columnHeader: tview.NewTable(),
+		showHidden:   true, // default: dotfiles shown — see the field's own doc comment
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
 	p.table.SetSelectedFunc(func(row, column int) { p.activateRow(row) })
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
+
+	p.columnHeader.SetBorders(false)
+	p.columnHeader.SetBackgroundColor(accentBackgroundColor)
+	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
 
 	p.header = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	p.header.SetWrap(false)
@@ -189,8 +226,9 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
 
-	p.AddItem(p.headerPages, 1, 0, false) // fixed one-line header
-	p.AddItem(p.table, 0, 1, true)        // fills the rest, holds focus
+	p.AddItem(p.headerPages, 1, 0, false)  // fixed one-line path bar
+	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
+	p.AddItem(p.table, 0, 1, true)         // fills the rest, holds focus
 
 	if err := p.navigate(path); err != nil {
 		return nil, err
@@ -216,15 +254,13 @@ func (p *Panel) load(dir string) error {
 	if !p.showHidden {
 		entries = filterHidden(entries)
 	}
-	if p.sortDescending {
-		reverseSortOrder(entries)
-	}
+	applySortPreference(entries, p.sortKey, p.sortDescending)
 
 	p.table.Clear()
 	p.selected = make(map[string]bool)
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs, p.sortDescending)
+	text, spans := buildHeaderSpans(abs)
 	p.header.SetText(text)
 	p.headerSpans = spans
 
@@ -244,9 +280,18 @@ func (p *Panel) load(dir string) error {
 			nlink:      e.Nlink,
 			mountPoint: e.MountPoint,
 			mode:       e.Mode,
+			size:       e.Size,
+			modTime:    e.ModTime,
 		})
 		row++
 	}
+
+	// After the rows, not before: buildColumnHeader's checkbox reflects
+	// allSelected(), which reads the table's own rows — right now that's
+	// moot (selected was just reset above, so allSelected() is false
+	// either way), but building it from the real, populated table is the
+	// robust way to state that instead of relying on that always holding.
+	p.buildColumnHeader()
 
 	return nil
 }
@@ -269,12 +314,22 @@ func filterHidden(entries []fsops.Entry) []fsops.Entry {
 	return visible
 }
 
-// reverseSortOrder reverses entries in place within each of ListDir's two
-// already-sorted groups (directories, then files) independently, keeping
-// directories first either way — load()'s effect when sortDescending is
-// true. A plain whole-slice reverse would also swap which group comes
-// first, which isn't what a sort-direction toggle is for.
-func reverseSortOrder(entries []fsops.Entry) {
+// sortKey picks which of an Entry's fields Panel sorts by — see
+// applySortPreference and buildColumnHeader/setSortKey (a column-header
+// click).
+type sortKey int
+
+const (
+	sortByName sortKey = iota
+	sortBySize
+	sortByModified
+)
+
+// applySortPreference reorders entries in place: directories first
+// (ListDir's own grouping, kept regardless of key/direction — merging
+// files and directories into one order isn't what any of these keys are
+// for), then by key within each group, in the given direction.
+func applySortPreference(entries []fsops.Entry, key sortKey, descending bool) {
 	split := len(entries)
 	for i, e := range entries {
 		if !e.IsDir {
@@ -282,14 +337,34 @@ func reverseSortOrder(entries []fsops.Entry) {
 			break
 		}
 	}
-	reverseEntries(entries[:split])
-	reverseEntries(entries[split:])
+	sortGroup(entries[:split], key, descending)
+	sortGroup(entries[split:], key, descending)
 }
 
-func reverseEntries(entries []fsops.Entry) {
-	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
-		entries[i], entries[j] = entries[j], entries[i]
+// sortGroup sorts one directories-or-files group by key, breaking ties
+// (and doing the entire comparison, for sortByName itself) by name — the
+// same case-insensitive comparison ListDir already sorted the group by,
+// so a sortByName, ascending call here is a no-op on already-sorted
+// input rather than doing needless work.
+func sortGroup(entries []fsops.Entry, key sortKey, descending bool) {
+	less := func(i, j int) bool {
+		switch key {
+		case sortBySize:
+			if entries[i].Size != entries[j].Size {
+				return entries[i].Size < entries[j].Size
+			}
+		case sortByModified:
+			if !entries[i].ModTime.Equal(entries[j].ModTime) {
+				return entries[i].ModTime.Before(entries[j].ModTime)
+			}
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
 	}
+	if descending {
+		asc := less
+		less = func(i, j int) bool { return asc(j, i) }
+	}
+	sort.SliceStable(entries, less)
 }
 
 // addRow renders one table row for ref at the given row index.
@@ -331,21 +406,157 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		return false // still let the row become selected/highlighted
 	})
 	p.table.SetCell(row, colName, name)
+
+	// ".." (checkable false) has no real Entry behind it, so ref.size/
+	// modTime are just zero values — blank cells instead of formatting
+	// those into a nonsense "0B"/"0001-01-01 00:00:00".
+	sizeText, mtimeText := "", ""
+	if ref.checkable {
+		sizeText = formatSizeCell(ref.size, p.sizeBytes)
+		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
+	}
+	p.table.SetCell(row, colSizeSep, columnSeparator())
+	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(tcell.ColorWhite))
+	p.table.SetCell(row, colModifiedSep, columnSeparator())
+	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(tcell.ColorWhite))
 }
 
-// sortGlyph renders the header's sort-toggle button — an arrow showing
-// the currently active direction (rather than a fixed icon), so the
-// button doubles as an indicator, not just a control. Plain arrows
-// (U+2191/U+2193), not the checkbox's circles: those are Unicode
-// "ambiguous width" and only got a pass because the user explicitly
-// wanted circles there; there's no reason to take on that same rendering
-// risk again here when a narrow, universally single-width alternative
-// exists.
-func sortGlyph(descending bool) string {
-	if descending {
-		return "↓"
+// columnSeparator is a new cell for the bare "│" columns dividing
+// Name/Size/Modified (colSizeSep/colModifiedSep) — a thin rule between
+// columns rather than a full box-drawing border around them (see
+// accentBackgroundColor's own doc comment on why this codebase avoids
+// those generally; this is the one deliberate exception, at the user's
+// own request, scoped to just these column boundaries). Always present,
+// even on the ".." row: it's structural, not data, so there's nothing to
+// blank out the way Size/Modified's own values are for that row.
+func columnSeparator() *tview.TableCell {
+	return tview.NewTableCell("│").SetTextColor(tcell.ColorWhite)
+}
+
+// sizeColumnWidth is the fixed width every Size cell — data or header —
+// is formatted to, so toggling between byte and human-readable format
+// (see Root's "Globals" menu) never reflows the column. Wide enough for
+// the exact byte count of a multi-terabyte file (13 digits) plus a
+// little breathing room.
+const sizeColumnWidth = 14
+
+// formatSizeCell renders size right-aligned within sizeColumnWidth, as
+// either the exact byte count (bytesMode) or humanSize's shorthand.
+func formatSizeCell(size int64, bytesMode bool) string {
+	s := humanSize(size)
+	if bytesMode {
+		s = strconv.FormatInt(size, 10)
 	}
-	return "↑"
+	return fmt.Sprintf("%*s", sizeColumnWidth, s)
+}
+
+// modColumnWidth is Modified's counterpart to sizeColumnWidth: the
+// width of "2026-08-19 09:12:03" (19 characters), which a Unix
+// timestamp (10 digits until the year 2286) comfortably fits within too
+// — so, again, toggling the format never reflows the column.
+const modColumnWidth = 19
+
+// formatModTimeCell renders t right-aligned within modColumnWidth, as
+// either a Unix timestamp (unixMode) or the same "2006-01-02 15:04:05"
+// layout the Properties overlay's Modified field uses.
+func formatModTimeCell(t time.Time, unixMode bool) string {
+	s := t.Format("2006-01-02 15:04:05")
+	if unixMode {
+		s = strconv.FormatInt(t.Unix(), 10)
+	}
+	return fmt.Sprintf("%*s", modColumnWidth, s)
+}
+
+// sortArrow is the small suffix buildColumnHeader appends to whichever
+// column label is the current sort key, showing its direction. Plain
+// arrows (U+2191/U+2193), not a geometric triangle: those are Unicode
+// "ambiguous width", a rendering risk not worth taking here when a
+// narrow, universally single-width alternative exists (the checkbox's
+// circles are this codebase's one deliberate exception, at the user's
+// explicit request — not a precedent to keep spending here).
+func sortArrow(descending bool) string {
+	if descending {
+		return " ↓"
+	}
+	return " ↑"
+}
+
+// buildColumnHeader (re)builds columnHeader's one row: the checkbox
+// column gets a clickable ○/● of its own (see toggleSelectAllViaHeader)
+// — an additional way to trigger the context menu's Select all/Deselect
+// all, right where the data rows' own checkboxes are; type/modifier get
+// a blank cell (self-explanatory via their own glyphs, no label needed);
+// Name/Size/Modified get their own clickable cell — click sorts by that
+// column (see setSortKey), starting ascending if it wasn't already the
+// active key, or reversing direction if it was. The active column's
+// label gets sortArrow's suffix.
+//
+// This table's columns only end up matching table's own widths by
+// construction, not any explicit synchronization: colCheckbox/colType/
+// colModifier are always exactly 1 character wide in both tables (their
+// content is always exactly that long), and colSize/colModified are
+// always formatted to a fixed width (see formatSizeCell/
+// formatModTimeCell) regardless of value or format — since
+// tview.Table sizes each column to its widest cell, two separate tables
+// with the same per-column content-width characteristics size
+// identically without needing to coordinate.
+func (p *Panel) buildColumnHeader() {
+	p.columnHeader.Clear()
+
+	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(tcell.ColorWhite)
+	checkboxHeader.SetClickedFunc(func() bool {
+		p.toggleSelectAllViaHeader()
+		return false
+	})
+	p.columnHeader.SetCell(0, colCheckbox, checkboxHeader)
+	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
+	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
+
+	nameLabel := "Name"
+	if p.sortKey == sortByName {
+		nameLabel += sortArrow(p.sortDescending)
+	}
+	nameCell := tview.NewTableCell(nameLabel).SetTextColor(tcell.ColorWhite)
+	nameCell.SetExpansion(1)
+	nameCell.SetClickedFunc(func() bool {
+		p.setSortKey(sortByName)
+		return false
+	})
+	p.columnHeader.SetCell(0, colName, nameCell)
+
+	p.columnHeader.SetCell(0, colSizeSep, columnSeparator())
+	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
+	p.columnHeader.SetCell(0, colModifiedSep, columnSeparator())
+	p.setColumnHeaderCell(colModified, modColumnWidth, "Modified", sortByModified)
+}
+
+// setColumnHeaderCell builds one of columnHeader's fixed-width, right-
+// aligned Size/Modified cells — see buildColumnHeader.
+func (p *Panel) setColumnHeaderCell(col, width int, label string, key sortKey) {
+	text := label
+	if p.sortKey == key {
+		text += sortArrow(p.sortDescending)
+	}
+	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(tcell.ColorWhite)
+	cell.SetClickedFunc(func() bool {
+		p.setSortKey(key)
+		return false
+	})
+	p.columnHeader.SetCell(0, col, cell)
+}
+
+// setSortKey is what clicking a column header does: switch to sorting by
+// key, starting ascending — or, if key is already the active one, flip
+// direction instead. The same "click a new column: ascending; click the
+// active one again: reverse" convention most file managers use.
+func (p *Panel) setSortKey(key sortKey) {
+	if p.sortKey == key {
+		p.sortDescending = !p.sortDescending
+	} else {
+		p.sortKey = key
+		p.sortDescending = false
+	}
+	p.reportError(p.load(p.path))
 }
 
 // checkboxText renders the checkbox column's two states as an outline vs.
@@ -473,7 +684,11 @@ func (p *Panel) toggleCheckbox(row int) {
 // flipping it, as toggleCheckbox does) and updates the cell's text to
 // match. Shares toggleCheckbox's guards, and is what it's built on top
 // of; also used directly by selectAll/deselectAll/selectByPattern, which
-// all need to set a specific target state rather than toggle.
+// all need to set a specific target state rather than toggle. Every
+// selection path funnels through here — including live drag-toggling —
+// which is why refreshHeaderCheckbox lives here too, rather than needing
+// each of those callers to remember to keep the column header's own
+// checkbox in sync themselves.
 func (p *Panel) setChecked(row int, checked bool) {
 	ref, ok := p.rowRef(row)
 	if !ok || !ref.checkable {
@@ -488,6 +703,49 @@ func (p *Panel) setChecked(row int, checked bool) {
 
 	if cell := p.table.GetCell(row, colCheckbox); cell != nil {
 		cell.SetText(checkboxText(checked))
+	}
+	p.refreshHeaderCheckbox()
+}
+
+// refreshHeaderCheckbox keeps the column header's own checkbox glyph
+// (see buildColumnHeader/toggleSelectAllViaHeader) in sync with whether
+// every checkable row is currently selected.
+func (p *Panel) refreshHeaderCheckbox() {
+	if cell := p.columnHeader.GetCell(0, colCheckbox); cell != nil {
+		cell.SetText(checkboxText(p.allSelected()))
+	}
+}
+
+// allSelected reports whether every checkable row in the current listing
+// is currently selected. False for a listing with nothing checkable in
+// it at all (just "..", or nothing loaded yet) — an all-unchecked master
+// checkbox is what "nothing to select" should look like, not a
+// misleadingly-filled one.
+func (p *Panel) allSelected() bool {
+	anyCheckable := false
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !ref.checkable {
+			continue
+		}
+		anyCheckable = true
+		if !p.selected[ref.path] {
+			return false
+		}
+	}
+	return anyCheckable
+}
+
+// toggleSelectAllViaHeader is the column header's checkbox's own action
+// (see buildColumnHeader): selects everything if it isn't all selected
+// yet, deselects everything if it already is — the same two actions the
+// context menu's Select all/Deselect all already offer, just reachable
+// without opening the menu.
+func (p *Panel) toggleSelectAllViaHeader() {
+	if p.allSelected() {
+		p.deselectAll()
+	} else {
+		p.selectAll()
 	}
 }
 
@@ -715,23 +973,17 @@ func (p *Panel) forward() {
 }
 
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
-// Forward/sort-toggle button glyphs followed by the path, one clickable
-// span per path component (the leading "/" plus each name in between),
-// e.g. clicking "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in
-// runes, which is exact for the common case but, like the rest of
-// Phase 0/1, doesn't yet account for double-width (e.g. CJK) characters
-// in file names.
-//
-// sortDescending picks the sort-toggle button's glyph (see sortGlyph) —
-// passed in explicitly, the same as abs, rather than read off a Panel
-// receiver, so this stays a pure function callers can test directly with
-// arbitrary input instead of having to construct a whole Panel first.
+// Forward button glyphs followed by the path, one clickable span per path
+// component (the leading "/" plus each name in between), e.g. clicking
+// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
+// exact for the common case but, like the rest of Phase 0/1, doesn't yet
+// account for double-width (e.g. CJK) characters in file names.
 //
 // A click that lands in the header but doesn't hit any of these spans
 // (e.g. on a "/" separator, or in empty space after the path) is handled
 // by captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-func buildHeaderSpans(abs string, sortDescending bool) (text string, spans []headerSpan) {
+func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
@@ -747,7 +999,6 @@ func buildHeaderSpans(abs string, sortDescending bool) (text string, spans []hea
 	button("~", actionHome)
 	button("<", actionBack)
 	button(">", actionForward)
-	button(sortGlyph(sortDescending), actionSortToggle)
 	b.WriteString("  ")
 	col += 2
 
@@ -833,13 +1084,6 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		p.back()
 	case actionForward:
 		p.forward()
-	case actionSortToggle:
-		// A re-render of the directory already on screen with a
-		// different display preference, not navigation — load() directly
-		// rather than navigate(), so this doesn't push a history entry or
-		// otherwise touch back/forward.
-		p.sortDescending = !p.sortDescending
-		p.reportError(p.load(p.path))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}

@@ -123,6 +123,36 @@ func TestListDirSymlinks(t *testing.T) {
 
 // TestListDirNlink pins the hard-link count: a file with one extra link
 // (created via os.Link) reports Nlink=2, unlike an ordinary file's 1.
+// TestListDirSizeAndModTime pins that Size/ModTime are populated from
+// the entry's own Lstat, matching what os.Stat itself reports.
+func TestListDirSizeAndModTime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+
+	if entries[0].Size != want.Size() {
+		t.Errorf("Size = %d, want %d", entries[0].Size, want.Size())
+	}
+	if !entries[0].ModTime.Equal(want.ModTime()) {
+		t.Errorf("ModTime = %v, want %v", entries[0].ModTime, want.ModTime())
+	}
+}
+
 func TestListDirNlink(t *testing.T) {
 	dir := t.TempDir()
 	original := filepath.Join(dir, "original.txt")
