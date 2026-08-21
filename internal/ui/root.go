@@ -627,7 +627,7 @@ func mtimeFormatToggleLabel(mtimeUnix bool) string {
 	if mtimeUnix {
 		return "Show modified date formatted"
 	}
-	return "Show modified date as Unix timestamp"
+	return "Show modified date as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the

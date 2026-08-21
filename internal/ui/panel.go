@@ -34,7 +34,9 @@ const (
 	colType
 	colModifier
 	colName
+	colSizeSep // a bare "│" — see columnSeparator — not a real data column
 	colSize
+	colModifiedSep // likewise, before colModified
 	colModified
 )
 
@@ -261,7 +263,6 @@ func (p *Panel) load(dir string) error {
 	text, spans := buildHeaderSpans(abs)
 	p.header.SetText(text)
 	p.headerSpans = spans
-	p.buildColumnHeader()
 
 	row := 0
 	if parent := filepath.Dir(abs); parent != abs {
@@ -284,6 +285,13 @@ func (p *Panel) load(dir string) error {
 		})
 		row++
 	}
+
+	// After the rows, not before: buildColumnHeader's checkbox reflects
+	// allSelected(), which reads the table's own rows — right now that's
+	// moot (selected was just reset above, so allSelected() is false
+	// either way), but building it from the real, populated table is the
+	// robust way to state that instead of relying on that always holding.
+	p.buildColumnHeader()
 
 	return nil
 }
@@ -407,8 +415,22 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
+	p.table.SetCell(row, colSizeSep, columnSeparator())
 	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(tcell.ColorWhite))
+	p.table.SetCell(row, colModifiedSep, columnSeparator())
 	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(tcell.ColorWhite))
+}
+
+// columnSeparator is a new cell for the bare "│" columns dividing
+// Name/Size/Modified (colSizeSep/colModifiedSep) — a thin rule between
+// columns rather than a full box-drawing border around them (see
+// accentBackgroundColor's own doc comment on why this codebase avoids
+// those generally; this is the one deliberate exception, at the user's
+// own request, scoped to just these column boundaries). Always present,
+// even on the ".." row: it's structural, not data, so there's nothing to
+// blank out the way Size/Modified's own values are for that row.
+func columnSeparator() *tview.TableCell {
+	return tview.NewTableCell("│").SetTextColor(tcell.ColorWhite)
 }
 
 // sizeColumnWidth is the fixed width every Size cell — data or header —
@@ -459,12 +481,15 @@ func sortArrow(descending bool) string {
 	return " ↑"
 }
 
-// buildColumnHeader (re)builds columnHeader's one row: a blank cell for
-// each icon column (checkbox/type/modifier — self-explanatory via their
-// own glyphs, no label needed), then Name/Size/Modified as their own
-// clickable cell — click sorts by that column (see setSortKey), starting
-// ascending if it wasn't already the active key, or reversing direction
-// if it was. The active column's label gets sortArrow's suffix.
+// buildColumnHeader (re)builds columnHeader's one row: the checkbox
+// column gets a clickable ○/● of its own (see toggleSelectAllViaHeader)
+// — an additional way to trigger the context menu's Select all/Deselect
+// all, right where the data rows' own checkboxes are; type/modifier get
+// a blank cell (self-explanatory via their own glyphs, no label needed);
+// Name/Size/Modified get their own clickable cell — click sorts by that
+// column (see setSortKey), starting ascending if it wasn't already the
+// active key, or reversing direction if it was. The active column's
+// label gets sortArrow's suffix.
 //
 // This table's columns only end up matching table's own widths by
 // construction, not any explicit synchronization: colCheckbox/colType/
@@ -478,8 +503,12 @@ func sortArrow(descending bool) string {
 func (p *Panel) buildColumnHeader() {
 	p.columnHeader.Clear()
 
-	blank := tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite)
-	p.columnHeader.SetCell(0, colCheckbox, blank)
+	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(tcell.ColorWhite)
+	checkboxHeader.SetClickedFunc(func() bool {
+		p.toggleSelectAllViaHeader()
+		return false
+	})
+	p.columnHeader.SetCell(0, colCheckbox, checkboxHeader)
 	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
 	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
 
@@ -495,7 +524,9 @@ func (p *Panel) buildColumnHeader() {
 	})
 	p.columnHeader.SetCell(0, colName, nameCell)
 
+	p.columnHeader.SetCell(0, colSizeSep, columnSeparator())
 	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
+	p.columnHeader.SetCell(0, colModifiedSep, columnSeparator())
 	p.setColumnHeaderCell(colModified, modColumnWidth, "Modified", sortByModified)
 }
 
@@ -653,7 +684,11 @@ func (p *Panel) toggleCheckbox(row int) {
 // flipping it, as toggleCheckbox does) and updates the cell's text to
 // match. Shares toggleCheckbox's guards, and is what it's built on top
 // of; also used directly by selectAll/deselectAll/selectByPattern, which
-// all need to set a specific target state rather than toggle.
+// all need to set a specific target state rather than toggle. Every
+// selection path funnels through here — including live drag-toggling —
+// which is why refreshHeaderCheckbox lives here too, rather than needing
+// each of those callers to remember to keep the column header's own
+// checkbox in sync themselves.
 func (p *Panel) setChecked(row int, checked bool) {
 	ref, ok := p.rowRef(row)
 	if !ok || !ref.checkable {
@@ -668,6 +703,49 @@ func (p *Panel) setChecked(row int, checked bool) {
 
 	if cell := p.table.GetCell(row, colCheckbox); cell != nil {
 		cell.SetText(checkboxText(checked))
+	}
+	p.refreshHeaderCheckbox()
+}
+
+// refreshHeaderCheckbox keeps the column header's own checkbox glyph
+// (see buildColumnHeader/toggleSelectAllViaHeader) in sync with whether
+// every checkable row is currently selected.
+func (p *Panel) refreshHeaderCheckbox() {
+	if cell := p.columnHeader.GetCell(0, colCheckbox); cell != nil {
+		cell.SetText(checkboxText(p.allSelected()))
+	}
+}
+
+// allSelected reports whether every checkable row in the current listing
+// is currently selected. False for a listing with nothing checkable in
+// it at all (just "..", or nothing loaded yet) — an all-unchecked master
+// checkbox is what "nothing to select" should look like, not a
+// misleadingly-filled one.
+func (p *Panel) allSelected() bool {
+	anyCheckable := false
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !ref.checkable {
+			continue
+		}
+		anyCheckable = true
+		if !p.selected[ref.path] {
+			return false
+		}
+	}
+	return anyCheckable
+}
+
+// toggleSelectAllViaHeader is the column header's checkbox's own action
+// (see buildColumnHeader): selects everything if it isn't all selected
+// yet, deselects everything if it already is — the same two actions the
+// context menu's Select all/Deselect all already offer, just reachable
+// without opening the menu.
+func (p *Panel) toggleSelectAllViaHeader() {
+	if p.allSelected() {
+		p.deselectAll()
+	} else {
+		p.selectAll()
 	}
 }
 

@@ -27,9 +27,9 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod",
 		menuSectionLabel("Globals"),
-		"Hide hidden files",                    // dotfiles are shown by default now
-		"Show size in bytes",                   // human-readable is the default
-		"Show modified date as Unix timestamp", // formatted is the default
+		"Hide hidden files",               // dotfiles are shown by default now
+		"Show size in bytes",              // human-readable is the default
+		"Show modified date as timestamp", // formatted is the default
 	}
 	if got := r.menu.GetItemCount(); got != len(want) {
 		t.Fatalf("menu has %d items, want %d", got, len(want))
@@ -122,8 +122,8 @@ func TestToggleMtimeUnixViaMenu(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date as Unix timestamp" {
-		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show modified date as Unix timestamp")
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date as timestamp" {
+		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show modified date as timestamp")
 	}
 
 	r.toggleMtimeUnix()

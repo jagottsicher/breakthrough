@@ -568,6 +568,138 @@ func TestColumnHeaderClickSortsBySize(t *testing.T) {
 	}
 }
 
+func TestAllSelected(t *testing.T) {
+	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	if p.allSelected() {
+		t.Error("allSelected() = true, want false: nothing is checked yet")
+	}
+
+	p.selectAll()
+	if !p.allSelected() {
+		t.Error("allSelected() = false after selectAll(), want true")
+	}
+
+	p.toggleCheckbox(1) // unchecks one entry
+	if p.allSelected() {
+		t.Error("allSelected() = true after unchecking one entry, want false")
+	}
+}
+
+// TestToggleSelectAllViaHeader pins the header checkbox's own action:
+// selects everything if it isn't all selected yet, deselects everything
+// if it already is — the same two actions Select all/Deselect all in the
+// context menu already offer.
+func TestToggleSelectAllViaHeader(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.toggleSelectAllViaHeader()
+	if !p.allSelected() {
+		t.Error("first click should have selected everything")
+	}
+
+	p.toggleSelectAllViaHeader()
+	if len(p.selected) != 0 {
+		t.Errorf("second click should have deselected everything, got %v", p.selected)
+	}
+}
+
+// TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles pins that the
+// column header's checkbox glyph updates from every selection path, not
+// just toggleSelectAllViaHeader itself — setChecked is the one place all
+// of them funnel through (see its own doc comment).
+func TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles(t *testing.T) {
+	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt: rows 1-4
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	headerText := func() string { return p.columnHeader.GetCell(0, colCheckbox).Text }
+
+	if got := headerText(); got != checkboxText(false) {
+		t.Fatalf("setup: header checkbox = %q, want unchecked", got)
+	}
+
+	for row := 1; row <= 4; row++ {
+		p.toggleCheckbox(row)
+	}
+	if got := headerText(); got != checkboxText(true) {
+		t.Errorf("header checkbox = %q after checking every row individually, want checked", got)
+	}
+
+	p.toggleCheckbox(2) // uncheck just one
+	if got := headerText(); got != checkboxText(false) {
+		t.Errorf("header checkbox = %q after unchecking one row, want unchecked again", got)
+	}
+}
+
+// TestColumnHeaderCheckboxClickSelectsAll is the header checkbox's real-
+// click counterpart to TestColumnHeaderClickSortsBySize — same rigor,
+// same reason: real coordinate-dependent click routing.
+func TestColumnHeaderCheckboxClickSelectsAll(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(120, 24)
+	p.columnHeader.SetRect(0, 0, 120, 1)
+	p.columnHeader.Draw(screen)
+
+	x, _, _ := p.columnHeader.GetCell(0, colCheckbox).GetLastPosition()
+
+	handler := p.columnHeader.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(x, 0, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if !p.allSelected() {
+		t.Error("clicking the header checkbox should have selected every row")
+	}
+}
+
+// TestColumnSeparatorsPresent pins that the "│" divider cells (see
+// columnSeparator) are populated in both the column header and every
+// data row, including "..", which has no real Entry behind it (unlike
+// Size/Modified, there's nothing data-dependent about a separator to
+// blank out for that row).
+func TestColumnSeparatorsPresent(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	if got := p.columnHeader.GetCell(0, colSizeSep).Text; got != "│" {
+		t.Errorf("header colSizeSep = %q, want %q", got, "│")
+	}
+	if got := p.columnHeader.GetCell(0, colModifiedSep).Text; got != "│" {
+		t.Errorf("header colModifiedSep = %q, want %q", got, "│")
+	}
+
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if got := p.table.GetCell(row, colSizeSep).Text; got != "│" {
+			t.Errorf("row %d colSizeSep = %q, want %q", row, got, "│")
+		}
+		if got := p.table.GetCell(row, colModifiedSep).Text; got != "│" {
+			t.Errorf("row %d colModifiedSep = %q, want %q", row, got, "│")
+		}
+	}
+}
+
 // TestLoadHidesDotfilesByDefault pins showHidden's default: dotfiles are
 // filtered out of the listing entirely, not just skipped over.
 func TestLoadShowsDotfilesByDefault(t *testing.T) {
