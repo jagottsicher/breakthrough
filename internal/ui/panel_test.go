@@ -1161,3 +1161,52 @@ func TestNameCellRectExcludesCheckboxColumn(t *testing.T) {
 		t.Error("name cell width should be positive")
 	}
 }
+
+// TestLoadResetsCursorToTopOnNewDirectory pins the fix for the user's
+// own report: entering a directory (as opposed to refreshing the one
+// already on screen) always starts at the top row, not wherever the
+// table's own selection happened to be left from a previous, unrelated
+// listing — Table.Clear doesn't touch that itself, so without this fix
+// it stayed put at whatever row index a completely different directory
+// last had it on.
+func TestLoadResetsCursorToTopOnNewDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.panel.focusRow(3) // move away from the top, simulating having browsed around first
+
+	sub := filepath.Join(dir, "app-data")
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+
+	row, _ := r.panel.table.GetSelection()
+	if row != 0 {
+		t.Errorf("selected row after navigating to a new directory = %d, want 0 (the top)", row)
+	}
+}
+
+// TestLoadPreservesCursorOnSameDirectoryRefresh is
+// TestLoadResetsCursorToTopOnNewDirectory's counterpart: reloading the
+// directory already on screen (e.g. toggling hidden files) does not
+// reset the cursor — only an actual move to a different directory does.
+func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.panel.focusRow(2)
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatalf("load (refresh): %v", err)
+	}
+
+	row, _ := r.panel.table.GetSelection()
+	if row != 2 {
+		t.Errorf("selected row after a same-directory refresh = %d, want unchanged 2", row)
+	}
+}
