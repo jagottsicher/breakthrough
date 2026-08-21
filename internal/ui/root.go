@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/gdamore/tcell/v2"
@@ -13,20 +14,26 @@ const (
 	panelPage       = "panel"
 	contextMenuPage = "context-menu"
 	renamePage      = "rename"
+	promptPage      = "prompt"
 	quitConfirmPage = "quit-confirm"
 )
 
-// Root is breakthrough's top-level UI for Phase 1: the directory panel,
-// plus a right-click context menu and the overlays it opens (Info,
-// Rename), and a Ctrl+Q quit confirmation. Pages layers all of these as
-// floating overlays on top of the still-visible panel; Root owns the
-// logic for what appears where, giving each overlay real keyboard focus
-// while it's shown (see showOverlay/hideOverlay), and closing whichever
-// one is open when the user clicks outside it (captureOutsideClick).
+// Root is breakthrough's top-level UI: the directory panel, plus a
+// right-click context menu and the overlays it opens (Info, Rename, the
+// single-line prompt behind Select +/-/chown/chmod), and a Ctrl+Q quit
+// confirmation. Pages layers all of these as floating overlays on top of
+// the still-visible panel; Root owns the logic for what appears where,
+// giving each overlay real keyboard focus while it's shown (see
+// showOverlay/hideOverlay), and closing whichever one is open when the
+// user clicks outside it (captureOutsideClick).
 //
-// Phase 1's context menu has two actions, Info (first, default-selected)
-// and Rename. See docs/whitepaper.md for the other actions (copy path,
-// copy-to/move-to) planned for later phases.
+// The context menu is grouped into three parts: Info/Rename, a
+// "Selection" section (Select all/Deselect all/Select +/Select -,
+// operating on the checkbox column), and a "Commands" section
+// (Copy/Cut/Paste/chown/chmod). See menuSectionLabel for how the section
+// dividers are drawn, and docs/whitepaper.md for the dialog-based
+// Copy-to/Move-to planned as a possible later addition alongside the
+// clipboard-style Copy/Cut/Paste built here.
 type Root struct {
 	*tview.Pages
 
@@ -35,9 +42,23 @@ type Root struct {
 	panel       *Panel
 	menu        *tview.List
 	rename      *tview.InputField
+	prompt      *tview.InputField
 	info        *tview.TextView
 	errorView   *tview.TextView
 	quitConfirm *tview.List
+
+	// promptSubmit is what the currently-open prompt overlay (see
+	// openPrompt/finishPrompt) runs with the typed text if the user
+	// confirms with Enter. Only meaningful while promptPage is active.
+	promptSubmit func(text string)
+
+	// clipboard holds the absolute paths Copy or Cut last captured (see
+	// clipboardTargets) — the checkbox selection at the time, or just the
+	// right-clicked target if nothing was checked. clipboardCut records
+	// which of the two: Paste copies when false, moves (via fsops.Move)
+	// when true.
+	clipboard    []string
+	clipboardCut bool
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its screen row in the panel's
@@ -45,6 +66,18 @@ type Root struct {
 	// Only meaningful while one of the overlays below is visible.
 	target    string
 	targetRow int
+
+	// infoTarget/infoStat cache what the Info overlay is currently
+	// showing, so computeHashes (triggered separately, after Info is
+	// already open — see captureInfoKey/captureInfoMouse) knows what to
+	// hash and can re-render the same text with the results appended,
+	// without re-running fsops.Stat. hashSectionRow is the 0-based row,
+	// within that text, where the hash hint/result line starts — set by
+	// renderInfo, read by captureInfoMouse to tell whether a click landed
+	// on it.
+	infoTarget     string
+	infoStat       fsops.Info
+	hashSectionRow int
 
 	// activePage/activeWidget track whichever overlay (context menu,
 	// rename, info, quit confirm) is currently shown, if any — see
@@ -99,6 +132,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetBorderPadding(0, 0, 1, 1)       // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Info", "", 0, r.openInfo) // first and default-selected
 	r.menu.AddItem("Rename", "", 0, r.openRename)
+	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
+	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
+	r.menu.AddItem("Deselect all", "", 0, r.panel.deselectAll)
+	r.menu.AddItem("Select +", "", 0, r.openSelectPlus)
+	r.menu.AddItem("Select -", "", 0, r.openSelectMinus)
+	r.menu.AddItem(menuSectionLabel("Commands"), "", 0, nil)
+	r.menu.AddItem("Copy", "", 0, r.copyToClipboard)
+	r.menu.AddItem("Cut", "", 0, r.cutToClipboard)
+	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
+	r.menu.AddItem("chown", "", 0, r.openChown)
+	r.menu.AddItem("chmod", "", 0, r.openChmod)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
 	// No label: this is positioned exactly over the target's row in
@@ -110,6 +154,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rename.SetLabelColor(tcell.ColorWhite)
 	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
+
+	// Backs Select +/-/chown/chmod: a single labelled field, centered on
+	// screen (unlike rename, it's not tied to any one row) — see
+	// openPrompt.
+	r.prompt = tview.NewInputField()
+	r.prompt.SetFieldBackgroundColor(accentBackgroundColor)
+	r.prompt.SetBackgroundColor(accentBackgroundColor)
+	r.prompt.SetLabelColor(tcell.ColorWhite)
+	r.prompt.SetFieldTextColor(tcell.ColorWhite)
+	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
 	r.info = r.newInfoView()
 	r.errorView = r.newErrorView()
@@ -130,6 +184,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(panelPage, panel, true, true)
 	r.AddPage(contextMenuPage, r.menu, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
+	r.AddPage(promptPage, r.prompt, false, false)
 	r.AddPage(infoPage, r.info, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
@@ -400,6 +455,19 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 	}
 }
 
+// menuSectionLabel renders a non-actionable divider row's text for the
+// context menu — dim style tags (tview's own "[fg:bg:flags]" syntax,
+// enabled by default for List item text) rather than a real, clickable
+// item, so it reads as a section label. Paired with a nil selected func
+// in the AddItem call that uses it (see NewRoot), which makes Enter/click
+// on the row a no-op. Arrow-key navigation still stops on it for a
+// moment, since tview.List has no "disabled item" concept to skip it with
+// — a small, accepted quirk rather than hand-rolling navigation logic for
+// what's cosmetic.
+func menuSectionLabel(name string) string {
+	return fmt.Sprintf("[::d]── %s ──[::-]", name)
+}
+
 // showMenu positions the context menu near (x, y), clamped to the panel's
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
@@ -413,12 +481,15 @@ func (r *Root) showMenu(x, y int) {
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
-// widest item's text plus 1-char left/right padding (see the
+// widest item's rendered text plus 1-char left/right padding (see the
 // SetBorderPadding calls in NewRoot) — and its height, one row per item.
+// tview.TaggedStringWidth, not a plain rune count, since section-header
+// items (see menuSectionLabel) carry style tags that aren't part of what
+// actually gets drawn.
 func listSize(l *tview.List) (width, height int) {
 	for i := 0; i < l.GetItemCount(); i++ {
 		main, _ := l.GetItemText(i)
-		if w := len([]rune(main)); w > width {
+		if w := tview.TaggedStringWidth(main); w > width {
 			width = w
 		}
 	}
@@ -472,4 +543,175 @@ func (r *Root) finishRename(key tcell.Key) {
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))
+}
+
+// openPrompt shows a single-line input overlay labelled label, pre-filled
+// with prefill, centered on screen (unlike rename, it isn't tied to any
+// one row — Select +/-/chown/chmod all act on either the checkbox
+// selection or a single right-clicked target, not a visible row range).
+// onSubmit runs with whatever was typed if the user confirms with Enter;
+// see finishPrompt for what happens on Escape/Tab instead.
+func (r *Root) openPrompt(label, prefill string, onSubmit func(text string)) {
+	r.prompt.SetLabel(label + " ")
+	r.prompt.SetText(prefill)
+	r.promptSubmit = onSubmit
+
+	width := tview.TaggedStringWidth(label) + 26 // label plus room to type
+	const height = 1
+	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
+	if width > screenWidth {
+		width = screenWidth
+	}
+	x := (screenWidth - width) / 2
+	y := (screenHeight - height) / 2
+	x, y, width, clampedHeight := r.clampToPanel(x, y, width, height)
+
+	r.prompt.SetRect(x, y, width, clampedHeight)
+	r.showOverlay(promptPage, r.prompt)
+}
+
+// finishPrompt handles Enter (submit) and Escape/Tab (cancel) in the
+// generic prompt overlay (see openPrompt) — the same DoneFunc pattern
+// finishRename uses, generalized since this overlay backs several
+// different actions rather than just one.
+func (r *Root) finishPrompt(key tcell.Key) {
+	text := r.prompt.GetText()
+	submit := r.promptSubmit
+	r.hideOverlay()
+	r.promptSubmit = nil
+
+	if key != tcell.KeyEnter || text == "" || submit == nil {
+		return // cancelled, or nothing typed
+	}
+	submit(text)
+}
+
+// openSelectPlus is the context menu's "Select +": prompts for a glob
+// pattern and checks every currently-listed entry that matches it, in
+// addition to whatever was already checked.
+func (r *Root) openSelectPlus() {
+	r.openPrompt("Select + (glob pattern):", "", func(text string) {
+		if _, err := r.panel.selectByPattern(text, true); err != nil {
+			r.showError(err)
+		}
+	})
+}
+
+// openSelectMinus is "Select -": the same pattern prompt as Select+, but
+// unchecks matches instead of checking them.
+func (r *Root) openSelectMinus() {
+	r.openPrompt("Select - (glob pattern):", "", func(text string) {
+		if _, err := r.panel.selectByPattern(text, false); err != nil {
+			r.showError(err)
+		}
+	})
+}
+
+// clipboardTargets is what Copy/Cut capture: the current checkbox
+// selection if there is one, otherwise just the entry the context menu
+// was opened on — so Copy/Cut/Paste on a single, unmarked file needs no
+// separate "select it first" step.
+func (r *Root) clipboardTargets() []string {
+	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
+		return paths
+	}
+	if r.target != "" {
+		return []string{r.target}
+	}
+	return nil
+}
+
+// copyToClipboard is the context menu's "Copy": remembers the current
+// clipboard targets (see clipboardTargets) for a later Paste, which will
+// copy them, leaving these where they are.
+func (r *Root) copyToClipboard() {
+	r.clipboard = r.clipboardTargets()
+	r.clipboardCut = false
+}
+
+// cutToClipboard is "Cut": same as Copy, except the later Paste will move
+// the targets (removing them from here) instead of copying them.
+func (r *Root) cutToClipboard() {
+	r.clipboard = r.clipboardTargets()
+	r.clipboardCut = true
+}
+
+// pasteClipboard is "Paste": copies or moves (per clipboardCut) whatever
+// Copy/Cut last captured into the directory currently on screen. A no-op
+// if nothing was ever copied/cut.
+//
+// Each target that would collide with an existing entry in the current
+// directory is skipped with an error — asking "overwrite?" once per
+// colliding file in a multi-file paste isn't built yet (a known
+// simplification; fsops.Copy/Move's force parameter is where that would
+// hook in). Only the first error is reported, to avoid stacking one error
+// overlay per failed file; the rest of the paste still runs to
+// completion rather than stopping at the first collision.
+func (r *Root) pasteClipboard() {
+	if len(r.clipboard) == 0 {
+		return
+	}
+
+	var firstErr error
+	for _, src := range r.clipboard {
+		dst := filepath.Join(r.panel.path, filepath.Base(src))
+		var err error
+		if r.clipboardCut {
+			err = fsops.Move(src, dst, false)
+		} else {
+			err = fsops.Copy(src, dst, false)
+		}
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	if err := r.panel.load(r.panel.path); err != nil {
+		firstErr = err // the reload failing is more urgent to report than a copy conflict
+	} else if r.clipboardCut && firstErr == nil {
+		r.clipboard = nil // moved away cleanly; nothing left to paste again
+	}
+
+	if firstErr != nil {
+		r.showError(firstErr)
+	}
+}
+
+// openChown is the context menu's "chown": prompts for chown(1)'s own
+// "owner[:group]" syntax and applies it to the target. target is captured
+// up front rather than read from r.target inside the callback — nothing
+// else changes it while the prompt is open in this single-threaded UI,
+// but reading it early avoids relying on that staying true.
+func (r *Root) openChown() {
+	target := r.target
+	r.openPrompt("chown (owner[:group]):", "", func(text string) {
+		uid, gid, err := fsops.ParseOwnerGroup(text)
+		if err != nil {
+			r.showError(err)
+			return
+		}
+		if err := fsops.Chown(target, uid, gid); err != nil {
+			r.showError(err)
+			return
+		}
+		r.showError(r.panel.load(r.panel.path))
+	})
+}
+
+// openChmod is the context menu's "chmod": prompts for an octal
+// permission string (e.g. "755") and applies it to the target.
+func (r *Root) openChmod() {
+	target := r.target
+	r.openPrompt("chmod (octal, e.g. 755):", "", func(text string) {
+		mode, err := fsops.ParseMode(text)
+		if err != nil {
+			r.showError(err)
+			return
+		}
+		if err := fsops.Chmod(target, mode); err != nil {
+			r.showError(err)
+			return
+		}
+		r.showError(r.panel.load(r.panel.path))
+	})
 }
