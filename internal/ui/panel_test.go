@@ -393,7 +393,7 @@ func TestReverseSortOrderEdgeCases(t *testing.T) {
 
 // TestLoadHidesDotfilesByDefault pins showHidden's default: dotfiles are
 // filtered out of the listing entirely, not just skipped over.
-func TestLoadHidesDotfilesByDefault(t *testing.T) {
+func TestLoadShowsDotfilesByDefault(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -407,16 +407,20 @@ func TestLoadHidesDotfilesByDefault(t *testing.T) {
 		t.Fatalf("NewPanel: %v", err)
 	}
 
+	found := false
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		if ref, ok := p.rowRef(row); ok && ref.name == ".hidden" {
-			t.Error(".hidden should not be listed by default")
+			found = true
 		}
+	}
+	if !found {
+		t.Error(".hidden should be listed by default")
 	}
 }
 
-// TestToggleShowHiddenRevealsDotfiles pins the other half: setting
-// showHidden and reloading brings dotfiles back.
-func TestToggleShowHiddenRevealsDotfiles(t *testing.T) {
+// TestToggleHiddenOffHidesDotfiles pins the other half: turning
+// showHidden off and reloading filters dotfiles back out.
+func TestToggleHiddenOffHidesDotfiles(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -427,19 +431,15 @@ func TestToggleShowHiddenRevealsDotfiles(t *testing.T) {
 		t.Fatalf("NewPanel: %v", err)
 	}
 
-	p.showHidden = true
+	p.showHidden = false
 	if err := p.load(dir); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
-	found := false
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		if ref, ok := p.rowRef(row); ok && ref.name == ".hidden" {
-			found = true
+			t.Error(".hidden should not be listed once showHidden is false")
 		}
-	}
-	if !found {
-		t.Error(".hidden should be listed once showHidden is true")
 	}
 }
 
@@ -459,6 +459,13 @@ func TestSelectAllExcludesHiddenFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
+	// Dotfiles are shown by default now — explicitly hide them, since
+	// that's the condition this test is actually about: selectAll must
+	// never touch an entry that's currently filtered out.
+	p.showHidden = false
+	if err := p.load(dir); err != nil {
+		t.Fatalf("load: %v", err)
+	}
 
 	p.selectAll()
 
@@ -469,6 +476,30 @@ func TestSelectAllExcludesHiddenFiles(t *testing.T) {
 	}
 	if len(p.selected) != 1 { // just visible.txt
 		t.Errorf("selected = %d, want 1", len(p.selected))
+	}
+}
+
+// TestSelectAllIncludesHiddenFilesWhenShown is the positive-case
+// counterpart: once dotfiles are shown (the default), they're ordinary
+// rows like any other and selectAll does include them.
+func TestSelectAllIncludesHiddenFilesWhenShown(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "visible.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.selectAll()
+
+	if len(p.selected) != 2 {
+		t.Errorf("selected = %d, want 2 (both .hidden and visible.txt)", len(p.selected))
 	}
 }
 

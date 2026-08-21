@@ -21,13 +21,13 @@ func TestContextMenuStructure(t *testing.T) {
 	}
 
 	want := []string{
-		"Info", "Rename",
+		"Properties", "Rename",
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod",
 		menuSectionLabel("Globals"),
-		"Show hidden files",
+		"Hide hidden files", // dotfiles are shown by default now
 	}
 	if got := r.menu.GetItemCount(); got != len(want) {
 		t.Fatalf("menu has %d items, want %d", got, len(want))
@@ -53,34 +53,32 @@ func TestToggleHiddenViaMenu(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Show hidden files" {
-		t.Fatalf("setup: hidden-toggle label = %q, want %q", main, "Show hidden files")
-	}
-
-	r.toggleHidden()
-
-	if !r.panel.showHidden {
-		t.Error("showHidden should be true after toggling once")
-	}
+	// Dotfiles are shown by default, so the item starts out offering to
+	// hide them.
 	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Hide hidden files" {
-		t.Errorf("hidden-toggle label = %q, want %q", main, "Hide hidden files")
-	}
-	found := false
-	for row := 0; row < r.panel.table.GetRowCount(); row++ {
-		if ref, ok := r.panel.rowRef(row); ok && ref.name == ".hidden" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error(".hidden should be listed after toggling showHidden on")
+		t.Fatalf("setup: hidden-toggle label = %q, want %q", main, "Hide hidden files")
 	}
 
 	r.toggleHidden()
+
 	if r.panel.showHidden {
-		t.Error("showHidden should be false again after toggling twice")
+		t.Error("showHidden should be false after toggling once")
 	}
 	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Show hidden files" {
 		t.Errorf("hidden-toggle label = %q, want %q", main, "Show hidden files")
+	}
+	for row := 0; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok && ref.name == ".hidden" {
+			t.Error(".hidden should not be listed after toggling showHidden off")
+		}
+	}
+
+	r.toggleHidden()
+	if !r.panel.showHidden {
+		t.Error("showHidden should be true again after toggling twice")
+	}
+	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Hide hidden files" {
+		t.Errorf("hidden-toggle label = %q, want %q", main, "Hide hidden files")
 	}
 }
 
