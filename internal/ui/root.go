@@ -60,6 +60,14 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
+	// hiddenToggleIdx is the "Globals" section's hidden-files toggle
+	// item's index in r.menu, set once in NewRoot — needed so
+	// toggleHidden and showMenu can relabel that one item in place (see
+	// hiddenToggleLabel) to describe what clicking it will do next,
+	// rather than a static label that stops matching reality after the
+	// first click.
+	hiddenToggleIdx int
+
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its screen row in the panel's
 	// table, used to position the rename field exactly over that row.
@@ -143,6 +151,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
+	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
+	// hiddenToggleIdx is computed rather than a hardcoded literal, so it
+	// keeps pointing at the right row if another item is ever added above
+	// it — see toggleHidden and showMenu, which both need it to relabel
+	// this one item in place.
+	r.hiddenToggleIdx = r.menu.GetItemCount()
+	r.menu.AddItem(hiddenToggleLabel(r.panel.showHidden), "", 0, r.toggleHidden)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
 	// No label: this is positioned exactly over the target's row in
@@ -472,12 +487,38 @@ func menuSectionLabel(name string) string {
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
+	// Defensive re-sync rather than trusting toggleHidden's own relabel
+	// to always have run last: cheap, and keeps this correct even if
+	// something else ever changes panel.showHidden directly.
+	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+
 	width, height := listSize(r.menu)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.menu.SetRect(x, y, width, height)
 	r.menu.SetCurrentItem(0)
 	r.showOverlay(contextMenuPage, r.menu)
+}
+
+// toggleHidden is the context menu's "Globals" hidden-files toggle: flips
+// whether dotfile entries are shown (see Panel.showHidden), reloads the
+// current directory so the change takes effect immediately, and relabels
+// the menu item itself to describe what clicking it will do next time.
+func (r *Root) toggleHidden() {
+	r.panel.showHidden = !r.panel.showHidden
+	r.showError(r.panel.load(r.panel.path))
+	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+}
+
+// hiddenToggleLabel renders the hidden-files toggle's label as the
+// action clicking it performs next, not its current state — e.g. it
+// reads "Show hidden files" while they're hidden, the same convention
+// most file managers use for a toggle like this.
+func hiddenToggleLabel(showHidden bool) string {
+	if showHidden {
+		return "Hide hidden files"
+	}
+	return "Show hidden files"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
