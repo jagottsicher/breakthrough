@@ -432,12 +432,17 @@ func (r *Root) closeMenu() {
 
 // openRename is the context menu's "Rename" action. Rather than a prompt
 // floating near the menu, it positions the rename field exactly over the
-// target's own row in the table — same x, width, and height as that row —
-// so it reads as the row itself becoming editable in place, pre-filled
-// with the current name.
+// target's own name cell — not the whole row: the checkbox column is
+// deliberately left uncovered, so the row's current checked state stays
+// visible (without becoming editable itself) while renaming. It reads as
+// just the name becoming editable in place, pre-filled with the current
+// one.
 func (r *Root) openRename() {
-	x, _, width, _ := r.panel.table.GetInnerRect()
-	x, y, width, height := r.clampToPanel(x, r.targetRow, width, 1)
+	x, y, width, ok := r.panel.nameCellRect(r.targetRow)
+	if !ok {
+		return // targetRow came from a right-click just validated by RowAt
+	}
+	x, y, width, height := r.clampToPanel(x, y, width, 1)
 
 	r.rename.SetText(filepath.Base(r.target))
 	r.rename.SetRect(x, y, width, height)

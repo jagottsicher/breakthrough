@@ -6,6 +6,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -297,5 +298,41 @@ func TestPanelLoadResetsSelection(t *testing.T) {
 	}
 	if len(p.selected) != 0 {
 		t.Errorf("expected selection to be cleared after load, got %v", p.selected)
+	}
+}
+
+// TestNameCellRectExcludesCheckboxColumn pins the geometry
+// Root.openRename relies on: the name cell's on-screen rect must start
+// at or after the checkbox column ends, so positioning the rename field
+// over exactly that rect leaves the checkbox visible instead of covering
+// the whole row.
+func TestNameCellRectExcludesCheckboxColumn(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+	p.SetRect(0, 0, 80, 24)
+	p.Draw(screen)
+
+	const row = 1
+	checkboxX, _, checkboxWidth := p.table.GetCell(row, colCheckbox).GetLastPosition()
+	nameX, _, nameWidth, ok := p.nameCellRect(row)
+	if !ok {
+		t.Fatalf("nameCellRect(%d) failed", row)
+	}
+
+	if nameX < checkboxX+checkboxWidth {
+		t.Errorf("name cell x=%d overlaps the checkbox column (x=%d, width=%d)", nameX, checkboxX, checkboxWidth)
+	}
+	if nameWidth <= 0 {
+		t.Error("name cell width should be positive")
 	}
 }
