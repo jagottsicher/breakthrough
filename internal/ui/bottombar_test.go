@@ -126,13 +126,22 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 // coordinates against.
 func clickStatusBar(t *testing.T, r *Root, col int) {
 	t.Helper()
+
+	// Sized to the text's own actual width, not a fixed guess: dfSummary
+	// shells out to the real, platform-specific df, and GNU vs. BSD df
+	// (let alone different filesystems/mount paths) don't produce the
+	// same length line — a fixed 80-column screen was narrow enough on
+	// a real macOS CI runner to push the later buttons past its edge,
+	// making InRect reject clicks on them that a wider screen accepts
+	// fine.
+	width := len([]rune(r.statusBar.GetText(true))) + 10
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
 	}
 	defer screen.Fini()
-	screen.SetSize(80, 24)
-	r.statusBar.SetRect(0, 0, 80, 1)
+	screen.SetSize(width, 24)
+	r.statusBar.SetRect(0, 0, width, 1)
 	r.statusBar.Draw(screen)
 
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
@@ -361,5 +370,97 @@ func TestRunShellCommandEmptyIsNoop(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Error("an empty command should not report an error")
+	}
+	if len(r.bashHistory) != 0 {
+		t.Errorf("bashHistory = %v, want empty — a blank command should not be recorded", r.bashHistory)
+	}
+}
+
+// TestRunShellCommandRecordsHistory pins that every submitted command is
+// appended, unconditionally — the same as a real shell, which remembers
+// what was typed regardless of whether it succeeded.
+func TestRunShellCommandRecordsHistory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.runShellCommand("echo one")
+	r.runShellCommand("echo two")
+
+	want := []string{"echo one", "echo two"}
+	if len(r.bashHistory) != len(want) {
+		t.Fatalf("bashHistory = %v, want %v", r.bashHistory, want)
+	}
+	for i, w := range want {
+		if r.bashHistory[i] != w {
+			t.Errorf("bashHistory[%d] = %q, want %q", i, r.bashHistory[i], w)
+		}
+	}
+	if r.bashHistoryIdx != len(r.bashHistory) {
+		t.Errorf("bashHistoryIdx = %d, want %d (not currently browsing)", r.bashHistoryIdx, len(r.bashHistory))
+	}
+}
+
+// TestBashHistoryUpDownNavigation pins the full readline-style
+// interaction: Up recalls older entries one at a time and stops at the
+// oldest; Down recalls newer entries and restores whatever was being
+// typed (the draft) once it moves past the newest one.
+func TestBashHistoryUpDownNavigation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.runShellCommand("first")
+	r.runShellCommand("second")
+	r.bashLine.SetText("in progress")
+
+	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+	down := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+
+	r.captureBashLineKey(up) // -> "second" (newest), remembering "in progress" as the draft
+	if got := r.bashLine.GetText(); got != "second" {
+		t.Errorf("after one Up, text = %q, want %q", got, "second")
+	}
+
+	r.captureBashLineKey(up) // -> "first" (oldest)
+	if got := r.bashLine.GetText(); got != "first" {
+		t.Errorf("after two Ups, text = %q, want %q", got, "first")
+	}
+
+	r.captureBashLineKey(up) // already at the oldest entry — stays put, does not wrap
+	if got := r.bashLine.GetText(); got != "first" {
+		t.Errorf("Up past the oldest entry = %q, want it to stay at %q", got, "first")
+	}
+
+	r.captureBashLineKey(down) // -> "second"
+	if got := r.bashLine.GetText(); got != "second" {
+		t.Errorf("after one Down, text = %q, want %q", got, "second")
+	}
+
+	r.captureBashLineKey(down) // -> back past the newest entry: restores the draft
+	if got := r.bashLine.GetText(); got != "in progress" {
+		t.Errorf("Down past the newest entry = %q, want the draft %q restored", got, "in progress")
+	}
+}
+
+// TestBashHistoryDownWithNoHistoryIsNoop pins that Down is harmless when
+// nothing has been recalled yet (no history at all, or history exists
+// but Up was never pressed).
+func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.bashLine.SetText("untouched")
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+
+	if got := r.bashLine.GetText(); got != "untouched" {
+		t.Errorf("text = %q after a stray Down, want unchanged %q", got, "untouched")
 	}
 }

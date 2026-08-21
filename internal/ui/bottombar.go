@@ -52,6 +52,7 @@ func (r *Root) newBottomBar() {
 		}
 		r.runShellCommand(r.bashLine.GetText())
 	})
+	r.bashLine.SetInputCapture(r.captureBashLineKey)
 
 	r.statusBar = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	r.statusBar.SetBackgroundColor(accentBackgroundColor)
@@ -270,10 +271,18 @@ func userShell() string {
 // Midnight Commander's own command line. The panel reloads once the
 // command exits, in case it changed anything in the directory currently
 // on screen.
+//
+// command is recorded in bashHistory before it runs, unconditionally
+// (not only once it succeeds) — the same as a real shell, which
+// remembers what you typed regardless of the exit code.
 func (r *Root) runShellCommand(command string) {
 	if strings.TrimSpace(command) == "" {
 		return
 	}
+
+	r.bashHistory = append(r.bashHistory, command)
+	r.bashHistoryIdx = len(r.bashHistory)
+	r.bashHistoryDraft = ""
 
 	var runErr error
 	r.app.Suspend(func() {
@@ -353,4 +362,53 @@ func (r *Root) StartClock() (stop func()) {
 		}
 	}()
 	return func() { close(done) }
+}
+
+// captureBashLineKey adds history navigation (see bashHistoryUp/Down) to
+// the bash line — the one thing tview's plain InputField doesn't already
+// give it for free, unlike a real shell's own readline.
+func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyUp:
+		r.bashHistoryUp()
+		return nil
+	case tcell.KeyDown:
+		r.bashHistoryDown()
+		return nil
+	}
+	return event
+}
+
+// bashHistoryUp recalls the previous (older) history entry, the same as
+// pressing Up in a real shell: the first press remembers whatever was
+// on the line so far (bashHistoryDraft), so pressing Down enough times
+// afterwards gets back to it rather than an empty line. Stops at the
+// oldest entry rather than wrapping.
+func (r *Root) bashHistoryUp() {
+	if len(r.bashHistory) == 0 {
+		return
+	}
+	if r.bashHistoryIdx == len(r.bashHistory) {
+		r.bashHistoryDraft = r.bashLine.GetText()
+	}
+	if r.bashHistoryIdx > 0 {
+		r.bashHistoryIdx--
+	}
+	r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
+}
+
+// bashHistoryDown is bashHistoryUp's counterpart: recalls the next
+// (newer) entry, or restores whatever was being typed before Up was
+// first pressed (bashHistoryDraft) once it moves past the newest one —
+// a no-op if history navigation isn't in progress at all.
+func (r *Root) bashHistoryDown() {
+	if r.bashHistoryIdx >= len(r.bashHistory) {
+		return
+	}
+	r.bashHistoryIdx++
+	if r.bashHistoryIdx == len(r.bashHistory) {
+		r.bashLine.SetText(r.bashHistoryDraft)
+	} else {
+		r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
+	}
 }
