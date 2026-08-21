@@ -37,9 +37,46 @@ const (
 	fieldPermOtherRead
 	fieldPermOtherWrite
 	fieldPermOtherExec
+	fieldPermOctal
 	fieldMtimeDate
 	fieldMtimeTime
+	fieldOwner
+	fieldGroup
 )
+
+// propertyFieldOrder is every editable field, in the same top-to-bottom
+// order renderProperties draws them — the Tab/Backtab navigation order
+// (see movePropertiesFocus/setPropertiesFocus): Name, the 9 permission
+// bits, the octal permission value (fieldPermOctal — an equivalent,
+// direct way to set all 9 at once, per the user's own request, rather
+// than only one bit at a time by clicking), Owner, Group, then the
+// Modified date and time halves. Cancel and Save (see newPropertiesView)
+// follow immediately after, as stops len(propertyFieldOrder) and
+// len(propertyFieldOrder)+1 — not part of this slice themselves, since
+// they're real tview.Button widgets with their own focus, not text spans
+// within propertiesText.
+var propertyFieldOrder = []propertyField{
+	fieldName,
+	fieldPermOwnerRead, fieldPermOwnerWrite, fieldPermOwnerExec,
+	fieldPermGroupRead, fieldPermGroupWrite, fieldPermGroupExec,
+	fieldPermOtherRead, fieldPermOtherWrite, fieldPermOtherExec,
+	fieldPermOctal,
+	fieldOwner, fieldGroup,
+	fieldMtimeDate, fieldMtimeTime,
+}
+
+// propertyFieldIndex returns field's position in propertyFieldOrder —
+// used both to seed propertiesFocusIndex when a field is clicked (see
+// activatePropertyField) and, in reverse, by focusedPropertyField to
+// render the right one highlighted.
+func propertyFieldIndex(field propertyField) (int, bool) {
+	for i, f := range propertyFieldOrder {
+		if f == field {
+			return i, true
+		}
+	}
+	return 0, false
+}
 
 // permFieldBit maps each permission propertyField to the bit it toggles
 // in a permission-only os.FileMode (0-0777) — owner/group/other times
@@ -54,6 +91,18 @@ var permFieldBit = map[propertyField]os.FileMode{
 	fieldPermOtherRead:  0o004,
 	fieldPermOtherWrite: 0o002,
 	fieldPermOtherExec:  0o001,
+}
+
+// permFieldLetter maps each permission propertyField to the rwx letter
+// that explicitly turns it on (see capturePropertiesKey) — 'r'/'w'/'x'
+// depending on which of the 9 bits it is, regardless of owner/group/
+// other. The matching letter sets the bit on; Delete or '-' sets it off;
+// Space/Enter toggle whatever it currently is — three ways in, per the
+// user's own request, alongside the plain click every bit already had.
+var permFieldLetter = map[propertyField]byte{
+	fieldPermOwnerRead: 'r', fieldPermGroupRead: 'r', fieldPermOtherRead: 'r',
+	fieldPermOwnerWrite: 'w', fieldPermGroupWrite: 'w', fieldPermOtherWrite: 'w',
+	fieldPermOwnerExec: 'x', fieldPermGroupExec: 'x', fieldPermOtherExec: 'x',
 }
 
 // propertySpan is one clickable region within the Properties overlay's
@@ -103,24 +152,46 @@ func (pb *propertiesBuilder) field(label, value string) {
 	pb.text(infoField(label, value))
 }
 
+// focusTag returns the style tag/reset pair a span for field should use:
+// a brighter, bolder "this one has keyboard focus" style if it's the one
+// propertiesFocusIndex currently points at (focused — see
+// focusedPropertyField), otherwise the plain "this is editable" style
+// (editableBackgroundColor) every field already had. Neither ever
+// touches the foreground color, only background/bold, so the reset tag
+// never needs to restore anything beyond what it changed.
+func focusTag(field, focused propertyField) (tag, reset string) {
+	if field == focused {
+		return "[:aqua:b]", "[:-:-]"
+	}
+	return "[:slategray]", "[:-]"
+}
+
 // editableField writes one "Label: value" line with value highlighted
-// (editableBackgroundColor) and recorded as a propertySpan under field.
-func (pb *propertiesBuilder) editableField(label, value string, field propertyField) {
+// (editableBackgroundColor, or focusTag's brighter style while it's the
+// one keyboard focus currently points at) and recorded as a propertySpan
+// under field.
+func (pb *propertiesBuilder) editableField(label, value string, field, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", label+":"))
-	pb.tag("[:slategray]")
+	tag, reset := focusTag(field, focused)
+	pb.tag(tag)
 	start := pb.col
 	pb.text(value)
 	end := pb.col
-	pb.tag("[:-]")
+	pb.tag(reset)
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: end, field: field})
 }
 
 // permissionsField writes the "Permissions:" line: the one-character
 // file-type prefix (not editable — changing what kind of thing a path is
-// isn't a permission edit), then the 9 rwx characters as one highlighted
-// block with 9 separate propertySpans (one per bit, for per-character
-// click routing — see Root.togglePermBit), then the octal form.
-func (pb *propertiesBuilder) permissionsField(mode os.FileMode) {
+// isn't a permission edit), then the 9 rwx characters, each its own
+// propertySpan (for per-character click routing — see
+// Root.togglePermBit) styled individually via focusTag so the one
+// keyboard focus currently points at (if any) stands out from the rest,
+// then the octal form — itself its own editable propertySpan
+// (fieldPermOctal), so all 9 bits can be set at once by typing a value
+// like "755" instead of only one at a time by clicking, per the user's
+// own request.
+func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", "Permissions:"))
 	pb.text(string(permTypeChar(mode)))
 
@@ -131,39 +202,54 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode) {
 	}
 	const rwx = "rwxrwxrwx"
 
-	pb.tag("[:slategray]")
 	for i, f := range bitFields {
+		tag, reset := focusTag(f, focused)
+		pb.tag(tag)
 		start := pb.col
 		ch := byte('-')
 		if mode&(1<<uint(9-1-i)) != 0 {
 			ch = rwx[i]
 		}
 		pb.text(string(ch))
+		pb.tag(reset)
 		pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: pb.col, field: f})
 	}
-	pb.tag("[:-]")
 
-	pb.text(fmt.Sprintf(" (%04o)", mode.Perm()))
+	pb.text(" (")
+	octalTag, octalReset := focusTag(fieldPermOctal, focused)
+	pb.tag(octalTag)
+	octalStart := pb.col
+	pb.text(fmt.Sprintf("%04o", mode.Perm()))
+	octalEnd := pb.col
+	pb.tag(octalReset)
+	pb.text(")")
+	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: octalStart, endCol: octalEnd, field: fieldPermOctal})
 }
 
 // mtimeField writes the "Modified:" line with the date and time halves
 // as two independently highlighted, independently clickable spans (see
 // fieldMtimeDate/fieldMtimeTime) — edited separately, per the user's own
-// request, even though both stage into the same time.Time together.
-func (pb *propertiesBuilder) mtimeField(t time.Time) {
+// request, even though both stage into the same time.Time together. Each
+// half is styled via focusTag, so whichever one (if either) keyboard
+// focus currently points at stands out from the other.
+func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", "Modified:"))
 
-	pb.tag("[:slategray]")
+	dateTag, dateReset := focusTag(fieldMtimeDate, focused)
+	pb.tag(dateTag)
 	dateStart := pb.col
 	pb.text(t.Format("2006-01-02"))
 	dateEnd := pb.col
-	pb.tag("[:-]")
+	pb.tag(dateReset)
+
 	pb.text(" ")
-	pb.tag("[:slategray]")
+
+	timeTag, timeReset := focusTag(fieldMtimeTime, focused)
+	pb.tag(timeTag)
 	timeStart := pb.col
 	pb.text(t.Format("15:04:05"))
 	timeEnd := pb.col
-	pb.tag("[:-]")
+	pb.tag(timeReset)
 
 	pb.spans = append(pb.spans,
 		propertySpan{row: pb.row, startCol: dateStart, endCol: dateEnd, field: fieldMtimeDate},
@@ -173,25 +259,39 @@ func (pb *propertiesBuilder) mtimeField(t time.Time) {
 
 // newPropertiesView creates the Properties overlay: a read-only text
 // display (propertiesText) that individual fields' values are drawn on
-// top of the highlighted spans of (see propertiesBuilder), plus two
-// pieces shown only once editing has actually started — a single
-// reusable inline input (propertiesEditField, repositioned over whichever
-// field is being text-edited, the same "one shared field, repositioned
-// per use" approach Root.rename/Root.prompt already use) and a Cancel/
-// Save button row (propertiesButtons). All three live in their own
-// tview.Pages (r.properties) rather than Root's top-level one: unlike
-// Root's overlays, which are mutually exclusive, propertiesText must stay
+// top of the highlighted spans of (see propertiesBuilder), a single
+// reusable inline input (propertiesEditField, shown only while text-
+// editing a field, repositioned over whichever one that is — the same
+// "one shared field, repositioned per use" approach Root.rename/
+// Root.prompt already use), and a Cancel/Save button row
+// (propertiesButtons) visible from the moment Properties opens (see
+// openProperties) — not gated behind any edit having started, per the
+// user's own request. All three live in their own tview.Pages
+// (r.properties) rather than Root's top-level one: unlike Root's
+// overlays, which are mutually exclusive, propertiesText must stay
 // visible under propertiesEditField/propertiesButtons, and tview.Pages
 // happily shows multiple of its own pages at once as long as nothing
 // tells it not to — Root's showOverlay/hideOverlay only enforce
 // single-overlay-at-a-time as their own policy on top of that, not a
 // limitation of Pages itself.
+//
+// Keyboard navigation between the fields inside propertiesText and the
+// two buttons is hand-rolled (see capturePropertiesKey,
+// setPropertiesFocus, movePropertiesFocus) rather than left to tview's
+// own focus system, for the same reason every other click target in this
+// overlay is tracked via propertySpan instead of tview's region/
+// Highlight mechanism: propertiesText's fields aren't separate
+// Primitives tview could cycle focus between on its own. The two buttons
+// ARE real Primitives, though, and do get real keyboard focus once
+// navigation reaches them (see propertiesCancelBtn/propertiesSaveBtn's
+// SetExitFunc below) — their own InputHandler already does the right
+// thing for Enter; SetInputCapture adds the same for Space, per the
+// user's own request that either activate a focused button.
 func (r *Root) newPropertiesView() *tview.Pages {
 	r.propertiesText = tview.NewTextView().SetTextColor(tcell.ColorWhite)
 	r.propertiesText.SetBackgroundColor(accentBackgroundColor)
 	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
-	r.propertiesText.SetDynamicColors(true) // needed for the editableBackgroundColor style tags
-	r.propertiesText.SetDoneFunc(func(tcell.Key) { r.closeProperties() })
+	r.propertiesText.SetDynamicColors(true) // needed for the editableBackgroundColor/focusTag style tags
 	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
 	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
 
@@ -201,30 +301,90 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	r.propertiesEditField.SetFieldTextColor(tcell.ColorWhite)
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
 
-	r.propertiesButtons = newPropertiesButtons(r.cancelPropertiesEdit, r.savePropertiesEdit)
+	r.propertiesButtons = r.newPropertiesButtons()
 
 	pages := tview.NewPages()
 	pages.AddPage("text", r.propertiesText, true, true)
 	pages.AddPage("editfield", r.propertiesEditField, false, false)
-	pages.AddPage("buttons", r.propertiesButtons, false, false)
+	pages.AddPage("buttons", r.propertiesButtons, false, true)
 	return pages
 }
 
-// newPropertiesButtons builds the Cancel/Save row shown once any field
-// has been touched (see Root.markPropertiesDirty).
-func newPropertiesButtons(cancel, save func()) *tview.Flex {
-	cancelBtn := tview.NewButton("Cancel").SetSelectedFunc(cancel)
-	saveBtn := tview.NewButton("Save").SetSelectedFunc(save)
-	for _, b := range []*tview.Button{cancelBtn, saveBtn} {
+// newPropertiesButtons builds the always-visible Cancel/Save row (see
+// newPropertiesView) and stores the two buttons directly
+// (propertiesCancelBtn/propertiesSaveBtn) — setPropertiesFocus needs to
+// give either of them real keyboard focus individually, which the Flex
+// container alone doesn't let it address.
+func (r *Root) newPropertiesButtons() *tview.Flex {
+	r.propertiesCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelPropertiesEdit)
+	r.propertiesSaveBtn = tview.NewButton("Save").SetSelectedFunc(r.savePropertiesEdit)
+	for _, b := range []*tview.Button{r.propertiesCancelBtn, r.propertiesSaveBtn} {
 		b.SetBackgroundColor(accentBackgroundColor)
 		b.SetLabelColor(tcell.ColorWhite)
 	}
+	r.propertiesCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
+	r.propertiesSaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
+
+	n := len(propertyFieldOrder)
+	// Tab/Backtab leave the button that currently has focus (see
+	// Button.InputHandler) rather than doing anything themselves — where
+	// that lands is entirely up to SetExitFunc. Escape reaches the same
+	// place from either button: cancelPropertiesEdit, matching Escape's
+	// meaning everywhere else it's already used in this overlay (and in
+	// every other overlay in this app).
+	r.propertiesCancelBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.setPropertiesFocus(n + 1) // Save
+		case tcell.KeyBacktab:
+			r.setPropertiesFocus(n - 1) // last field
+		case tcell.KeyEscape:
+			r.cancelPropertiesEdit()
+		}
+	})
+	r.propertiesSaveBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.setPropertiesFocus(0) // wrap to the first field
+		case tcell.KeyBacktab:
+			r.setPropertiesFocus(n) // Cancel
+		case tcell.KeyEscape:
+			r.cancelPropertiesEdit()
+		}
+	})
+	// A plain mouse click also moves real tview focus to a button
+	// (Button.MouseHandler's own MouseLeftDown case) without going
+	// through setPropertiesFocus at all — SetFocusFunc is what keeps
+	// propertiesFocusIndex (and so the rendered highlight) in sync with
+	// that path too, not just the keyboard one.
+	r.propertiesCancelBtn.SetFocusFunc(func() {
+		r.propertiesFocusIndex = n
+		r.rerenderProperties()
+	})
+	r.propertiesSaveBtn.SetFocusFunc(func() {
+		r.propertiesFocusIndex = n + 1
+		r.rerenderProperties()
+	})
 
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	flex.SetBackgroundColor(accentBackgroundColor)
-	flex.AddItem(cancelBtn, 0, 1, false)
-	flex.AddItem(saveBtn, 0, 1, false)
+	flex.AddItem(r.propertiesCancelBtn, 0, 1, false)
+	flex.AddItem(r.propertiesSaveBtn, 0, 1, false)
 	return flex
+}
+
+// spaceAlsoActivates makes the space bar run action, alongside the Enter
+// key handling Button.InputHandler already has built in for its own
+// SetSelectedFunc — per the user's explicit request that either key
+// activate a focused button.
+func spaceAlsoActivates(action func()) func(event *tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
+			action()
+			return nil
+		}
+		return event
+	}
 }
 
 // openProperties is the context menu's "Properties" action (still called
@@ -253,9 +413,12 @@ func (r *Root) openProperties() {
 	r.propertiesStat = info
 	r.propertiesHashes = nil
 	r.propertiesDirty = false
+	r.propertiesFocusIndex = -1 // nothing focused yet — see setPropertiesFocus
 	r.stagedName = info.Name
 	r.stagedMode = info.Mode.Perm()
 	r.stagedMtime = info.ModTime
+	r.stagedOwner = info.Owner
+	r.stagedGroup = info.Group
 
 	r.renderProperties()
 
@@ -263,18 +426,8 @@ func (r *Root) openProperties() {
 	r.resizeProperties(x, y)
 
 	r.properties.HidePage("editfield")
-	r.properties.HidePage("buttons")
 
-	r.showOverlay(propertiesPage, r.properties)
-}
-
-// closeProperties hides the Properties overlay (Escape, Enter, or Tab on
-// the read-only text) — unreachable while propertiesDirty is true, since
-// captureOutsideClick blocks an outside click in that state and the text
-// view's own DoneFunc is the only other way here, which callers only
-// reach when nothing's been touched yet.
-func (r *Root) closeProperties() {
-	r.hideOverlay()
+	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
 }
 
 // renderProperties rebuilds the Properties overlay's text from
@@ -283,16 +436,17 @@ func (r *Root) closeProperties() {
 // anything that isn't a directory (or resolves to one — see isDirish): a
 // hint to compute them until propertiesHashes is set, then the digests
 // themselves. Called after every edit (a permission toggle, finishing a
-// text field, computing hashes) to keep the display and propertySpans in
-// sync with current state.
+// text field, computing hashes, a focus change) to keep the display,
+// propertySpans, and the focus highlight all in sync with current state.
 func (r *Root) renderProperties() {
 	pb := &propertiesBuilder{}
+	focused := r.focusedPropertyField()
 
-	pb.editableField("Name", r.stagedName, fieldName)
+	pb.editableField("Name", r.stagedName, fieldName, focused)
 	pb.newline()
 	pb.field("Type", classifyKind(r.propertiesStat))
 	pb.newline()
-	pb.permissionsField(r.stagedMode)
+	pb.permissionsField(r.stagedMode, focused)
 	if r.propertiesStat.Nlink > 1 && !r.propertiesStat.IsDir {
 		// Not shown for directories: every directory has Nlink >= 2
 		// trivially (its own "." entry, plus each subdirectory's ".."),
@@ -302,13 +456,13 @@ func (r *Root) renderProperties() {
 		pb.field("Links", fmt.Sprintf("%d (shared with other names)", r.propertiesStat.Nlink))
 	}
 	pb.newline()
-	pb.field("Owner", r.propertiesStat.Owner) // not yet editable — see the Owner/Group picker discussion
+	pb.editableField("Owner", r.stagedOwner, fieldOwner, focused)
 	pb.newline()
-	pb.field("Group", r.propertiesStat.Group)
+	pb.editableField("Group", r.stagedGroup, fieldGroup, focused)
 	pb.newline()
 	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
 	pb.newline()
-	pb.mtimeField(r.stagedMtime)
+	pb.mtimeField(r.stagedMtime, focused)
 	pb.newline()
 	pb.field("Path", r.propertiesStat.Path)
 	if r.propertiesStat.IsSymlink && r.propertiesStat.LinkTarget != "" {
@@ -344,9 +498,10 @@ func (r *Root) renderProperties() {
 // where it last was — openProperties passes the context menu's own
 // position (first open), everything else passes wherever the overlay
 // currently sits (a resize after an edit, not a reposition). One line is
-// reserved for the Cancel/Save row unconditionally, even before anything
-// is dirty, so revealing it doesn't resize/jump the overlay out from
-// under the user.
+// reserved for the Cancel/Save row, which is visible for as long as
+// Properties itself is (see newPropertiesView) — leaving that row out of
+// the reserved height would leave it with nothing of its own to sit on,
+// overlapping propertiesText's own last line instead.
 func (r *Root) resizeProperties(x, y int) {
 	width, height := textSize(r.propertiesText.GetText(true))
 	height++ // reserved button row
@@ -366,17 +521,13 @@ func (r *Root) rerenderProperties() {
 }
 
 // markPropertiesDirty is what the very first interaction with any field
-// does — a click, not necessarily a completed change. It reveals the
-// Cancel/Save row and (see captureOutsideClick) switches an outside click
-// from "close the overlay" to "do nothing": once something's been
-// touched, Cancel or Save is the only way out, so a stray click can't
-// silently discard or lose track of an in-progress edit.
+// does — a click, not necessarily a completed change. It's what (see
+// captureOutsideClick) switches an outside click from "close the
+// overlay" to "do nothing": once something's been touched, Cancel or
+// Save is the only way out, so a stray click can't silently discard or
+// lose track of an in-progress edit.
 func (r *Root) markPropertiesDirty() {
-	if r.propertiesDirty {
-		return
-	}
 	r.propertiesDirty = true
-	r.properties.ShowPage("buttons")
 }
 
 // cancelPropertiesEdit is the Cancel button: closes the overlay without
@@ -388,12 +539,12 @@ func (r *Root) cancelPropertiesEdit() {
 }
 
 // savePropertiesEdit is the Save button: applies whichever of
-// Name/Permissions/Modified actually changed, in that order, stopping at
-// the first failure rather than trying the rest — a failure partway
-// through leaves whatever already succeeded applied and whatever didn't
-// get to run undone; reopening Properties and redoing the remaining
-// edits is what recovering from that looks like for now, not an
-// automatic retry or rollback.
+// Name/Permissions/Modified/Owner/Group actually changed, in that order,
+// stopping at the first failure rather than trying the rest — a failure
+// partway through leaves whatever already succeeded applied and whatever
+// didn't get to run undone; reopening Properties and redoing the
+// remaining edits is what recovering from that looks like for now, not
+// an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
 	target := r.propertiesTarget
 	var firstErr error
@@ -414,6 +565,32 @@ func (r *Root) savePropertiesEdit() {
 	if firstErr == nil && !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
 			firstErr = err
+		}
+	}
+	if firstErr == nil && (r.stagedOwner != r.propertiesStat.Owner || r.stagedGroup != r.propertiesStat.Group) {
+		// -1 for whichever half didn't change, matching os.Chown's own
+		// "leave this one unchanged" convention (see fsops.ParseOwnerGroup,
+		// which the standalone chown action's text fallback already relies
+		// on the same way).
+		uid, gid := -1, -1
+		if r.stagedOwner != r.propertiesStat.Owner {
+			if id, err := fsops.ResolveUID(r.stagedOwner); err != nil {
+				firstErr = err
+			} else {
+				uid = id
+			}
+		}
+		if firstErr == nil && r.stagedGroup != r.propertiesStat.Group {
+			if id, err := fsops.ResolveGID(r.stagedGroup); err != nil {
+				firstErr = err
+			} else {
+				gid = id
+			}
+		}
+		if firstErr == nil {
+			if err := fsops.Chown(target, uid, gid); err != nil {
+				firstErr = err
+			}
 		}
 	}
 
@@ -441,19 +618,64 @@ func (r *Root) togglePermBit(field propertyField) {
 	r.rerenderProperties()
 }
 
-// activatePropertyField is what clicking any propertySpan does: a
-// permission bit toggles immediately (see togglePermBit); Name/Modified
-// instead position and show the shared inline edit field over that exact
-// span, pre-filled with the current staged value. Either way, this is
-// the first interaction with a field, so it also marks the overlay dirty
-// (see markPropertiesDirty) — even a permission click that gets toggled
-// right back counts, matching "as soon as you click one to edit" as
-// literally as it says.
+// setPermBit explicitly sets (on) or clears (!on) one permission bit in
+// stagedMode — the "type the matching letter to turn it on, Delete or
+// '-' to turn it off" alternative to togglePermBit's "flip whatever it
+// currently is" (see capturePropertiesKey), per the user's own request.
+func (r *Root) setPermBit(field propertyField, on bool) {
+	bit, ok := permFieldBit[field]
+	if !ok {
+		return
+	}
+	if on {
+		r.stagedMode |= bit
+	} else {
+		r.stagedMode &^= bit
+	}
+	r.markPropertiesDirty()
+	r.rerenderProperties()
+}
+
+// activatePropertyField is what clicking any propertySpan does — and,
+// via activateFocusedPropertyStop, what pressing Enter on one via
+// keyboard navigation does too: a permission bit toggles immediately
+// (see togglePermBit); Name/Modified instead position and show the
+// shared inline edit field over that exact span, pre-filled with the
+// current staged value. Either way, this is the first interaction with a
+// field, so it also marks the overlay dirty (see markPropertiesDirty) —
+// even a permission click that gets toggled right back counts, matching
+// "as soon as you click one to edit" as literally as it says — and moves
+// propertiesFocusIndex to this field, so Tab afterwards continues
+// naturally from wherever was just clicked rather than wherever keyboard
+// navigation last left off.
 func (r *Root) activatePropertyField(span propertySpan) {
 	r.markPropertiesDirty()
+	if idx, ok := propertyFieldIndex(span.field); ok {
+		r.propertiesFocusIndex = idx
+	}
+	r.rerenderProperties()
 
 	if _, ok := permFieldBit[span.field]; ok {
 		r.togglePermBit(span.field)
+		return
+	}
+
+	switch span.field {
+	case fieldOwner:
+		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, func(name string, _ int) {
+			r.stagedOwner = name
+			r.resumeProperties()
+		}, r.resumeProperties, func() {
+			r.activateInlineTextField(span, r.stagedOwner, 24)
+		})
+		return
+	case fieldGroup:
+		r.openOwnerGroupPicker(pickGroup, r.propertiesStat.GID, func(name string, _ int) {
+			r.stagedGroup = name
+			r.resumeProperties()
+		}, r.resumeProperties, func() {
+			r.activateInlineTextField(span, r.stagedGroup, 24)
+		})
 		return
 	}
 
@@ -463,6 +685,14 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	case fieldName:
 		prefill = r.stagedName
 		minWidth = 24 // room to type a longer name than the current one
+	case fieldPermOctal:
+		// 4 digits, matching exactly what's on screen (permissionsField's
+		// own "%04o") — typing "644" still works fine too, ParseMode
+		// doesn't care about a leading zero either way, but the field you
+		// clicked shouldn't visibly change digit count out from under you
+		// the moment you start editing it.
+		prefill = fmt.Sprintf("%04o", r.stagedMode.Perm())
+		minWidth = 4
 	case fieldMtimeDate:
 		prefill = r.stagedMtime.Format("2006-01-02")
 		minWidth = 10
@@ -472,7 +702,158 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	default:
 		return
 	}
+	r.activateInlineTextField(span, prefill, minWidth)
+}
 
+// resumeProperties re-renders the Properties overlay once the owner/group
+// picker (a separate overlay layered on top of it — see
+// openOwnerGroupPicker/pushOverlay) has closed, whether that was a pick
+// or a cancel, so a picked name shows up immediately. Properties itself
+// was never hidden while the picker was up — closing just the picker
+// (hideOverlay's own pop) already restored its focus (see
+// restoreProperties, its frame's own restore callback) before this even
+// runs — so there's nothing left to do here beyond reflecting whatever
+// changed. propertiesDirty and every staged value survive the round trip
+// untouched regardless: they're plain Root fields, not tied to whether
+// the picker happened to be open.
+func (r *Root) resumeProperties() {
+	r.rerenderProperties()
+}
+
+// restoreProperties re-applies whichever concrete Properties sub-widget
+// should hold real keyboard focus for propertiesFocusIndex's current
+// value. Properties keeps several sub-widgets simultaneously visible
+// (see newPropertiesView), so the overlay stack's own generic "just
+// refocus whatever widget this frame was pushed with" isn't precise
+// enough on its own; this is what showOverlayWithRestore is given as
+// Properties' own frame's restore callback (see openProperties), run
+// whenever Properties becomes the topmost overlay again after the
+// owner/group picker — currently the only thing that ever layers on top
+// of it — closes.
+func (r *Root) restoreProperties() {
+	r.setPropertiesFocus(r.propertiesFocusIndex)
+}
+
+// focusedPropertyField returns which field, if any, propertiesFocusIndex
+// currently points at (see setPropertiesFocus) — fieldNone once the
+// index has moved past the last field stop onto Cancel/Save, or before
+// Tab has ever been pressed (index -1, Properties' state right after
+// opening — see openProperties).
+func (r *Root) focusedPropertyField() propertyField {
+	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(propertyFieldOrder) {
+		return fieldNone
+	}
+	return propertyFieldOrder[r.propertiesFocusIndex]
+}
+
+// propertySpanForField returns the current propertySpan for field, if
+// rendered — the keyboard-navigation counterpart to a mouse click
+// already having a propertySpan in hand (see
+// activateFocusedPropertyStop, capturePropertiesMouse's own click path).
+func (r *Root) propertySpanForField(field propertyField) (propertySpan, bool) {
+	for _, s := range r.propertySpans {
+		if s.field == field {
+			return s, true
+		}
+	}
+	return propertySpan{}, false
+}
+
+// isAutoEditField reports whether landing keyboard focus on field (see
+// setPropertiesFocus) should open its inline editor immediately, with no
+// separate Enter/Space needed first — Name, the octal permission value,
+// and the Modified date/time halves: plain text entry, where "select the
+// field" and "start typing" are the same action as far as the user's
+// concerned, per their own request. The individual permission bits (a
+// toggle, not text — see capturePropertiesKey's letter/Delete/Space
+// handling) and Owner/Group (which open the heavier picker overlay, not
+// appropriate to trigger just by tabbing past on the way to some other
+// field) are deliberately excluded — those still wait for an explicit
+// key or click.
+func isAutoEditField(field propertyField) bool {
+	switch field {
+	case fieldName, fieldPermOctal, fieldMtimeDate, fieldMtimeTime:
+		return true
+	default:
+		return false
+	}
+}
+
+// setPropertiesFocus moves keyboard-navigation focus to stop idx — a
+// field span (0..len(propertyFieldOrder)-1), the Cancel button
+// (len(propertyFieldOrder)), or the Save button
+// (len(propertyFieldOrder)+1) — re-rendering so the highlighted field
+// (if any) matches, and giving the concrete widget that stop actually
+// lives on real keyboard focus: propertiesText for a field (see
+// capturePropertiesKey's Tab/Backtab/Enter handling), or the button
+// itself, whose own InputHandler and SetExitFunc (see
+// newPropertiesButtons) take over navigation from there. Landing on a
+// field that opens automatically (see isAutoEditField) immediately does
+// so, folding "select the field" and "start editing it" into the single
+// Tab press that got here. Also serves as the owner/group picker's own
+// restore callback (see showOverlayWithRestore/restoreProperties):
+// reapplying the current index is exactly what re-entering Properties
+// after the picker closes needs, regardless of why setPropertiesFocus is
+// running.
+func (r *Root) setPropertiesFocus(idx int) {
+	r.propertiesFocusIndex = idx
+	r.rerenderProperties()
+
+	n := len(propertyFieldOrder)
+	switch idx {
+	case n:
+		r.app.SetFocus(r.propertiesCancelBtn)
+	case n + 1:
+		r.app.SetFocus(r.propertiesSaveBtn)
+	default:
+		r.app.SetFocus(r.propertiesText)
+		if idx >= 0 && idx < n && isAutoEditField(propertyFieldOrder[idx]) {
+			r.activateFocusedPropertyStop()
+		}
+	}
+}
+
+// movePropertiesFocus advances propertiesFocusIndex by delta (+1 for
+// Tab, -1 for Backtab) among the field stops — only ever called while a
+// field stop (or nothing, idx < 0) currently holds focus, via
+// capturePropertiesKey; Cancel/Save, once reached, hand navigation off
+// to the buttons' own SetExitFunc (see newPropertiesButtons), which
+// calls setPropertiesFocus directly the same way once Tab/Backtab leaves
+// them.
+func (r *Root) movePropertiesFocus(delta int) {
+	n := len(propertyFieldOrder)
+	idx := r.propertiesFocusIndex + delta
+	switch {
+	case idx < 0:
+		idx = n + 1 // wrap to Save
+	case idx >= n:
+		idx = n // Cancel
+	}
+	r.setPropertiesFocus(idx)
+}
+
+// activateFocusedPropertyStop is Enter's own action in
+// capturePropertiesKey while a field stop has focus — the keyboard
+// counterpart to clicking that same field (see activatePropertyField).
+// A no-op if nothing is focused yet (idx < 0: Tab hasn't been pressed
+// since Properties opened) or the field somehow isn't currently rendered
+// (shouldn't happen — propertyFieldOrder and what renderProperties
+// actually draws are meant to always agree).
+func (r *Root) activateFocusedPropertyStop() {
+	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(propertyFieldOrder) {
+		return
+	}
+	field := propertyFieldOrder[r.propertiesFocusIndex]
+	if span, ok := r.propertySpanForField(field); ok {
+		r.activatePropertyField(span)
+	}
+}
+
+// activateInlineTextField positions and shows the shared inline edit
+// field over span, pre-filled with prefill, at least minWidth wide — the
+// common tail for Name/Modified date/time, and the owner/group picker's
+// own text fallback when fsops.ListUsers/ListGroups isn't available.
+func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
 	r.propertiesEditTarget = span.field
 	r.propertiesEditField.SetText(prefill)
 
@@ -487,8 +868,19 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	r.app.SetFocus(r.propertiesEditField)
 }
 
-// finishPropertyEdit handles Enter (commit) and Escape/Tab (discard just
-// this field's in-progress text) in the shared inline edit field.
+// finishPropertyEdit handles Enter, Tab, and Backtab (commit) and
+// Escape (discard just this field's in-progress text) in the shared
+// inline edit field.
+//
+// Tab/Backtab commit the same as Enter — not discard, the way they used
+// to (and Escape still does) — and then continue the outer field
+// navigation Tab/Backtab was already asking for (see
+// movePropertiesFocus): "type a value, then keep tabbing through the
+// rest of the fields" only works if leaving a field via Tab keeps what
+// was just typed. Before this fix, tabbing out of a field discarded it
+// exactly like Escape — from the user's own perspective, the value they
+// just edited appeared to silently reset the moment the field lost
+// focus.
 //
 // Invalid date/time input is silently discarded rather than surfaced as
 // an error: Root's error overlay and Properties are both single-slot
@@ -500,16 +892,53 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 	text := r.propertiesEditField.GetText()
 	target := r.propertiesEditTarget
 	r.properties.HidePage("editfield")
-	r.app.SetFocus(r.propertiesText)
 
-	if key != tcell.KeyEnter {
-		return
+	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
+		r.applyPropertyEditText(target, text)
 	}
 
+	switch key {
+	case tcell.KeyTab:
+		r.movePropertiesFocus(1)
+	case tcell.KeyBacktab:
+		r.movePropertiesFocus(-1)
+	default: // Enter or Escape: conclude editing, stay on the same field
+		r.refocusPropertiesField()
+	}
+}
+
+// refocusPropertiesField re-renders and returns real keyboard focus to
+// propertiesText for whatever propertiesFocusIndex currently is, without
+// re-triggering isAutoEditField's auto-open the way setPropertiesFocus
+// would — finishPropertyEdit's own Enter/Escape case (see above) needs
+// exactly this: the field just edited stays focused/highlighted, but
+// its own Return is what's supposed to *conclude* that one entry, per
+// the user's own request — a fresh Tab arrival auto-opening a field is
+// one thing; immediately reopening the very editor Enter just closed,
+// on the same keystroke, would be another.
+func (r *Root) refocusPropertiesField() {
+	r.rerenderProperties()
+	r.app.SetFocus(r.propertiesText)
+}
+
+// applyPropertyEditText stages text as target's new value — the commit
+// logic finishPropertyEdit's Enter/Tab/Backtab cases share.
+func (r *Root) applyPropertyEditText(target propertyField, text string) {
 	switch target {
 	case fieldName:
 		if text != "" {
 			r.stagedName = text
+		}
+	case fieldPermOctal:
+		// Same parser the standalone chmod menu action's prompt already
+		// uses — accepts "755"-style octal, rejects setuid/setgid/sticky
+		// and anything out of range. Invalid input is silently discarded,
+		// the same convention as an invalid date/time (see this method's
+		// own doc comment) — a value already checked by ParseMode itself,
+		// so unlike Owner/Group there's no separate Save-time validation
+		// step for this one.
+		if mode, err := fsops.ParseMode(text); err == nil {
+			r.stagedMode = mode
 		}
 	case fieldMtimeDate:
 		if t, err := parseDate(text, r.stagedMtime); err == nil {
@@ -519,9 +948,21 @@ func (r *Root) finishPropertyEdit(key tcell.Key) {
 		if t, err := parseTime(text, r.stagedMtime); err == nil {
 			r.stagedMtime = t
 		}
+	case fieldOwner:
+		// Not resolved here — just staged as typed. Owner/Group only
+		// reach this text field at all as the picker's fallback (see
+		// activatePropertyField), so there's no fsops.ListUsers result to
+		// validate against locally; resolving via fsops.ResolveUID and
+		// reporting a real error if that fails waits for Save, the same
+		// as any other invalid staged value.
+		if text != "" {
+			r.stagedOwner = text
+		}
+	case fieldGroup:
+		if text != "" {
+			r.stagedGroup = text
+		}
 	}
-
-	r.rerenderProperties()
 }
 
 // parseDate parses s as YYYY-MM-DD, accepting 1- or 2-digit month/day
@@ -629,14 +1070,74 @@ func (r *Root) computeHashes() {
 	r.rerenderProperties()
 }
 
-// capturePropertiesKey adds "h computes hashes" to the Properties
-// overlay, alongside its existing Escape/Enter/Tab/Backtab close behavior
-// (see newPropertiesView) — this only intercepts the one rune those don't
-// already use.
+// capturePropertiesKey is Properties' own keyboard-navigation dispatch,
+// installed on propertiesText (see newPropertiesView) — only relevant
+// while propertiesText itself has real keyboard focus, i.e. while a
+// field stop (or nothing, idx < 0) currently has focus; once Tab/Backtab
+// hands focus to a button, that button's own InputHandler and
+// SetExitFunc (see newPropertiesButtons) take over instead, and once
+// focus lands on a text field it opens immediately (see
+// isAutoEditField/setPropertiesFocus), handing focus to
+// propertiesEditField and its own SetDoneFunc instead.
+//
+// Tab/Backtab move propertiesFocusIndex (movePropertiesFocus); Enter
+// activates whatever's currently focused (activateFocusedPropertyStop);
+// Escape always cancels, matching what it already means everywhere else
+// in this app. All four are fully consumed here rather than left to
+// fall through to TextView's own default handling of them — plain
+// TextView calls its DoneFunc (closing the overlay outright, discarding
+// every staged edit with no way back) for all four, which is exactly the
+// bug this replaces: Tab or Enter after finishing an edit used to close
+// Properties instead of moving on, silently losing whatever had just
+// been typed.
+//
+// While a permission bit has focus, three more keys act on it directly
+// rather than needing Enter first, per the user's own request: Space
+// toggles it, same as Enter; Delete or '-' explicitly clears it; the
+// matching letter (r/w/x — see permFieldLetter) explicitly sets it.
+// 'h' (compute hashes) is unrelated to any of that and unchanged.
 func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
-		r.computeHashes()
+	switch event.Key() {
+	case tcell.KeyTab:
+		r.movePropertiesFocus(1)
 		return nil
+	case tcell.KeyBacktab:
+		r.movePropertiesFocus(-1)
+		return nil
+	case tcell.KeyEnter:
+		r.activateFocusedPropertyStop()
+		return nil
+	case tcell.KeyEscape:
+		r.cancelPropertiesEdit()
+		return nil
+	case tcell.KeyDelete:
+		field := r.focusedPropertyField()
+		if _, ok := permFieldBit[field]; ok {
+			r.setPermBit(field, false)
+			return nil
+		}
+	case tcell.KeyRune:
+		field := r.focusedPropertyField()
+		if _, ok := permFieldBit[field]; ok {
+			switch {
+			case event.Rune() == ' ':
+				r.activateFocusedPropertyStop() // toggle, same as Enter
+				return nil
+			case event.Rune() == '-':
+				r.setPermBit(field, false)
+				return nil
+			case rune(permFieldLetter[field]) == event.Rune():
+				r.setPermBit(field, true)
+				return nil
+			}
+		} else if event.Rune() == ' ' {
+			r.activateFocusedPropertyStop() // toggle target aside, Space is Enter's equivalent everywhere else too (e.g. Owner/Group's picker)
+			return nil
+		}
+		if event.Rune() == 'h' {
+			r.computeHashes()
+			return nil
+		}
 	}
 	return event
 }

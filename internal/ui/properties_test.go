@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -623,6 +625,187 @@ func TestFinishPropertyEditEscapeDiscardsFieldEdit(t *testing.T) {
 	}
 }
 
+// TestFinishPropertyEditTabCommitsAndAdvances pins the fix for the bug
+// the user reported: leaving a field via Tab (the primary way to move
+// through fields, now that Properties has real keyboard navigation — see
+// capturePropertiesKey) used to discard whatever was just typed, exactly
+// like Escape — from the user's own perspective, the edited value
+// appeared to silently reset itself. Tab must commit, the same as Enter,
+// and then continue on to the next field stop.
+func TestFinishPropertyEditTabCommitsAndAdvances(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
+
+	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
+	timeIdx, _ := propertyFieldIndex(fieldMtimeTime)
+	r.activatePropertyField(dateSpan)
+	r.propertiesEditField.SetText("2026-08-05")
+	r.finishPropertyEdit(tcell.KeyTab)
+
+	wantDate := time.Date(2026, time.August, 5, 14, 30, 45, 0, time.Local)
+	if !r.stagedMtime.Equal(wantDate) {
+		t.Errorf("stagedMtime = %v, want %v — Tab should commit the typed date, not discard it", r.stagedMtime, wantDate)
+	}
+	if r.propertiesFocusIndex != timeIdx {
+		t.Errorf("propertiesFocusIndex = %d, want %d (the Time field) after Tab out of Date", r.propertiesFocusIndex, timeIdx)
+	}
+}
+
+// TestFinishPropertyEditBacktabCommitsAndRetreats is
+// TestFinishPropertyEditTabCommitsAndAdvances's Backtab counterpart.
+func TestFinishPropertyEditBacktabCommitsAndRetreats(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
+
+	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
+	dateIdx, _ := propertyFieldIndex(fieldMtimeDate)
+	r.activatePropertyField(timeSpan)
+	r.propertiesEditField.SetText("09:05:03")
+	r.finishPropertyEdit(tcell.KeyBacktab)
+
+	wantTime := time.Date(2020, time.January, 1, 9, 5, 3, 0, time.Local)
+	if !r.stagedMtime.Equal(wantTime) {
+		t.Errorf("stagedMtime = %v, want %v — Backtab should commit the typed time, not discard it", r.stagedMtime, wantTime)
+	}
+	if r.propertiesFocusIndex != dateIdx {
+		t.Errorf("propertiesFocusIndex = %d, want %d (the Date field) after Backtab out of Time", r.propertiesFocusIndex, dateIdx)
+	}
+}
+
+// TestActivatePropertyFieldOctalOpensInlineEditor pins that clicking the
+// octal permission value opens the same shared inline editor Name/
+// Modified use, pre-filled with the current mode as 3 octal digits — the
+// direct-entry alternative to toggling bits one at a time the user asked
+// for.
+func TestActivatePropertyFieldOctalOpensInlineEditor(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldPermOctal)
+	if !ok {
+		t.Fatal("no fieldPermOctal span found")
+	}
+	r.activatePropertyField(span)
+
+	if got := r.propertiesEditField.GetText(); got != "0644" {
+		t.Errorf("edit field pre-filled with %q, want %q", got, "0644")
+	}
+}
+
+// TestFinishPropertyEditOctalAppliesValidValue pins that typing a valid
+// octal value into that field and confirming (Enter) stages the whole
+// mode at once.
+func TestFinishPropertyEditOctalAppliesValidValue(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, _ := findPropertySpan(r, fieldPermOctal)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("755")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	if r.stagedMode != 0o755 {
+		t.Errorf("stagedMode = %o, want 0755", r.stagedMode)
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "(0755)") {
+		t.Error("rendered text should show the new octal value")
+	}
+}
+
+// TestFinishPropertyEditOctalInvalidValueKeepsPreviousStaged mirrors
+// TestFinishPropertyEditInvalidDateKeepsPreviousStaged: invalid octal
+// input (out of range, or not octal at all) is silently discarded, the
+// same convention as an invalid date/time.
+func TestFinishPropertyEditOctalInvalidValueKeepsPreviousStaged(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	original := r.stagedMode
+
+	span, _ := findPropertySpan(r, fieldPermOctal)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("999") // not valid octal
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	if r.stagedMode != original {
+		t.Errorf("stagedMode = %o, want unchanged %o after invalid input", r.stagedMode, original)
+	}
+}
+
+// TestSavePropertiesEditAppliesOctalEdit is the octal field's end-to-end
+// counterpart to TestSavePropertiesEditAppliesAllStagedChanges: editing
+// it and saving must actually chmod the real file.
+func TestSavePropertiesEditAppliesOctalEdit(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, _ := findPropertySpan(r, fieldPermOctal)
+	r.activatePropertyField(span)
+	r.propertiesEditField.SetText("600")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	r.savePropertiesEdit()
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %o, want 0600", fi.Mode().Perm())
+	}
+}
+
 func TestFinishPropertyEditDateValidShorthandPadsAndPreservesTime(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -843,6 +1026,46 @@ func TestSavePropertiesEditNoopWhenNothingChanged(t *testing.T) {
 	}
 }
 
+// TestSavePropertiesEditAppliesOwnerGroupChange pins that Save actually
+// applies a changed stagedOwner/stagedGroup via fsops.Chown — kept
+// privilege-independent the same way TestChownNoopToOwnUser in fsops is:
+// staging the process's own uid/gid *as a numeric string* differs from
+// propertiesStat.Owner/Group (which are resolved names), so the "did
+// this change" comparison sees a real change and Chown actually runs,
+// but resolves back to a no-op requiring no special privileges.
+func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	r.stagedOwner = strconv.Itoa(os.Getuid())
+	r.stagedGroup = strconv.Itoa(os.Getgid())
+	r.markPropertiesDirty()
+
+	r.savePropertiesEdit()
+
+	if r.activePage == errorPage {
+		t.Fatalf("Save should have succeeded, got error overlay: %q", r.errorView.GetText(true))
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Skip("can't inspect raw uid/gid on this platform")
+	}
+	if int(stat.Uid) != os.Getuid() || int(stat.Gid) != os.Getgid() {
+		t.Errorf("file uid:gid = %d:%d, want %d:%d", stat.Uid, stat.Gid, os.Getuid(), os.Getgid())
+	}
+}
+
 // TestCancelPropertiesEditDiscardsChanges pins that Cancel never touches
 // the real file, even after a permission bit was toggled.
 func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
@@ -931,4 +1154,377 @@ func TestCaptureOutsideClickClosesPropertiesBeforeAnyEdit(t *testing.T) {
 func outsidePropertiesClick(r *Root) (x, y int) {
 	px, py, pw, ph := r.properties.GetRect()
 	return px + pw + 10, py + ph + 10
+}
+
+// TestPropertiesButtonsVisibleImmediately pins the fix for the stray
+// placeholder blank row bug the user reported, and the closely related
+// request behind it: Cancel/Save show up the moment Properties opens,
+// not only once a field's been touched — resizeProperties always
+// reserved a row for them, but they used to stay hidden (and that row
+// blank) until markPropertiesDirty first ran.
+func TestPropertiesButtonsVisibleImmediately(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if r.propertiesDirty {
+		t.Fatal("setup: should not be dirty right after opening")
+	}
+	visible := r.properties.GetPageNames(true)
+	for _, p := range visible {
+		if p == "buttons" {
+			return
+		}
+	}
+	t.Errorf("buttons page should be visible right after opening, visible pages: %v", visible)
+}
+
+// TestCapturePropertiesKeyTabNavigatesInsteadOfClosing pins the fix for
+// the bug the user reported ("Datum und Uhrzeit lassen sich nicht
+// ändern"): Tab used to fall through to TextView's own default handling
+// and close Properties outright — discarding every staged edit with no
+// way back — instead of moving keyboard focus to the next field, the way
+// it's supposed to.
+func TestCapturePropertiesKeyTabNavigatesInsteadOfClosing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // any touch marks it dirty, same as the real bug report's state
+
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Error("capturePropertiesKey should consume Tab")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q after Tab, want Properties to stay open", r.activePage)
+	}
+	if r.propertiesFocusIndex != 0 {
+		t.Errorf("propertiesFocusIndex = %d after Tab from nothing focused, want 0 (Name)", r.propertiesFocusIndex)
+	}
+}
+
+// TestCapturePropertiesKeyEnterActivatesFocusedField is
+// TestCapturePropertiesKeyTabNavigatesInsteadOfClosing's Enter
+// counterpart: once Tab has moved focus onto a field, Enter activates it
+// (the same as clicking it) instead of closing the overlay.
+func TestCapturePropertiesKeyEnterActivatesFocusedField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) // -> Name
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)); got != nil {
+		t.Error("capturePropertiesKey should consume Enter")
+	}
+
+	if got := r.propertiesEditField.GetText(); got != "apple.txt" {
+		t.Errorf("Enter on the focused Name field should open the inline editor pre-filled with %q, got %q", "apple.txt", got)
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
+	}
+}
+
+// TestPropertiesFocusCyclesFieldsThenButtonsThenWraps drives Tab through
+// the real dispatch path all the way around the loop once: repeated
+// capturePropertiesKey calls (propertiesText has real focus) through
+// every field stop in propertyFieldOrder, then — once focus reaches a
+// button — that button's own InputHandler (see newPropertiesButtons'
+// SetExitFunc), through Cancel, Save, and the wrap back to the first
+// field.
+// propertiesEditFieldOpen reports whether the shared inline text editor
+// (see activateInlineTextField) is currently the one showing — used
+// below to decide whether the next Tab/Backtab should be dispatched
+// through it (finishPropertyEdit, the same as InputField's own
+// SetDoneFunc would) or through capturePropertiesKey (propertiesText's
+// own navigation), matching whichever one actually holds real keyboard
+// focus in the real app at that point.
+func propertiesEditFieldOpen(r *Root) bool {
+	for _, p := range r.properties.GetPageNames(true) {
+		if p == "editfield" {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPropertiesFocusCyclesFieldsThenButtonsThenWraps drives Tab all the
+// way around the loop once, dispatching each press through whichever
+// widget would really have focus at that point — propertiesEditField
+// once a field has auto-opened (see isAutoEditField), propertiesText
+// otherwise — through every field stop in propertyFieldOrder, Cancel,
+// Save, and the wrap back to the first field (auto-opening it again).
+func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	n := len(propertyFieldOrder)
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	noSetFocus := func(tview.Primitive) {}
+
+	tabOnce := func() {
+		if propertiesEditFieldOpen(r) {
+			r.finishPropertyEdit(tcell.KeyTab) // commit + advance, same as InputField's own SetDoneFunc
+		} else {
+			r.capturePropertiesKey(tab)
+		}
+	}
+
+	for i := 0; i < n; i++ {
+		tabOnce()
+		if r.propertiesFocusIndex != i {
+			t.Fatalf("after %d Tabs, propertiesFocusIndex = %d, want %d", i+1, r.propertiesFocusIndex, i)
+		}
+	}
+
+	tabOnce() // off the last field -> Cancel
+	if r.propertiesFocusIndex != n {
+		t.Fatalf("propertiesFocusIndex = %d, want Cancel (%d)", r.propertiesFocusIndex, n)
+	}
+
+	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	if r.propertiesFocusIndex != n+1 {
+		t.Fatalf("propertiesFocusIndex = %d, want Save (%d)", r.propertiesFocusIndex, n+1)
+	}
+
+	r.propertiesSaveBtn.InputHandler()(tab, noSetFocus) // Save -> wraps to the first field
+	if r.propertiesFocusIndex != 0 {
+		t.Errorf("propertiesFocusIndex = %d after wrapping, want 0", r.propertiesFocusIndex)
+	}
+	if !propertiesEditFieldOpen(r) {
+		t.Error("wrapping back to Name should auto-open its inline editor again")
+	}
+}
+
+// TestSaveReachableViaKeyboardAfterEditingDate is the end-to-end
+// regression test for the bug report itself: edit the Modified date via
+// the inline field, then navigate onward and confirm Save using nothing
+// but the real key-dispatch path (capturePropertiesKey, then the
+// buttons' own InputHandler) — the edit must actually reach disk, not
+// get silently discarded by Tab/Enter closing the overlay along the way.
+func TestSaveReachableViaKeyboardAfterEditingDate(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	dateSpan, ok := findPropertySpan(r, fieldMtimeDate)
+	if !ok {
+		t.Fatal("no fieldMtimeDate span found")
+	}
+	r.activatePropertyField(dateSpan) // click the date field, same as a real click
+	wantMtime := time.Date(2021, time.June, 15, r.stagedMtime.Hour(), r.stagedMtime.Minute(), r.stagedMtime.Second(), 0, time.Local)
+	r.propertiesEditField.SetText(wantMtime.Format("2006-01-02"))
+	r.finishPropertyEdit(tcell.KeyEnter) // commit, same as a real Enter — focus returns to propertiesText
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	enter := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+	noSetFocus := func(tview.Primitive) {}
+
+	r.capturePropertiesKey(tab)                           // date -> time
+	r.capturePropertiesKey(tab)                           // time -> Cancel
+	r.propertiesCancelBtn.InputHandler()(tab, noSetFocus) // Cancel -> Save
+	r.propertiesSaveBtn.InputHandler()(enter, noSetFocus) // activate Save
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.ModTime().Equal(wantMtime) {
+		t.Errorf("ModTime = %v, want %v — the date edit should have survived all the way to Save", fi.ModTime(), wantMtime)
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Save, want closed", r.activePage)
+	}
+}
+
+// TestSpaceActivatesFocusedButton pins the user's explicit request that
+// either Enter or Space confirm a focused Cancel/Save button.
+func TestSpaceActivatesFocusedButton(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640, something for Save to actually apply
+
+	r.setPropertiesFocus(len(propertyFieldOrder) + 1) // Save
+
+	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	if got := r.propertiesSaveBtn.GetInputCapture()(space); got != nil {
+		t.Error("space should be consumed by the Save button's input capture")
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o, want 0640 — space on the focused Save button should have saved", fi.Mode().Perm())
+	}
+}
+
+// TestTabAutoOpensTextFieldsButNotTogglesOrPicker pins isAutoEditField's
+// exact split, per the user's own request: landing keyboard focus on
+// Name/the octal value/Date/Time opens the inline editor immediately —
+// no separate Enter needed just to start typing — but landing on a
+// permission bit or Owner/Group does not, since those aren't free text
+// (a toggle, or a heavier picker overlay not appropriate to pop open
+// just by tabbing past on the way to some other field).
+func TestTabAutoOpensTextFieldsButNotTogglesOrPicker(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+
+	r.capturePropertiesKey(tab) // -> Name (index 0), auto-edit
+	if !propertiesEditFieldOpen(r) {
+		t.Error("landing on Name should auto-open its inline editor")
+	}
+
+	r.finishPropertyEdit(tcell.KeyTab) // commit + advance -> first permission bit
+	if propertiesEditFieldOpen(r) {
+		t.Error("landing on a permission bit should not auto-open the inline editor")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties still open", r.activePage)
+	}
+
+	octalIdx, _ := propertyFieldIndex(fieldPermOctal)
+	r.setPropertiesFocus(octalIdx)
+	if !propertiesEditFieldOpen(r) {
+		t.Error("landing on the octal value should auto-open its inline editor")
+	}
+
+	r.finishPropertyEdit(tcell.KeyEnter) // conclude editing, stay on the octal field
+
+	ownerIdx, _ := propertyFieldIndex(fieldOwner)
+	r.setPropertiesFocus(ownerIdx)
+	if propertiesEditFieldOpen(r) {
+		t.Error("landing on Owner should not auto-open the inline editor (it opens the picker instead, on an explicit key/click)")
+	}
+}
+
+// TestFinishPropertyEditEnterConcludesWithoutReopening pins the
+// subtlety behind "jedes Feld braucht für jede Eingabe ein eigenes
+// Return, um die Eingabe abzuschließen": pressing Enter while editing an
+// auto-edit field must commit and *close* the editor, not immediately
+// reopen it again on the very same keystroke — landing on such a field
+// via a fresh Tab auto-opens it, but concluding an edit with its own
+// Enter is a deliberate "I'm done with this one" action, not something
+// that should loop back into edit mode by itself.
+func TestFinishPropertyEditEnterConcludesWithoutReopening(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	nameSpan, _ := findPropertySpan(r, fieldName)
+	r.activatePropertyField(nameSpan)
+	r.propertiesEditField.SetText("renamed.txt")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	if r.stagedName != "renamed.txt" {
+		t.Errorf("stagedName = %q, want %q", r.stagedName, "renamed.txt")
+	}
+	if propertiesEditFieldOpen(r) {
+		t.Error("Enter should close the inline editor, not immediately reopen it")
+	}
+	nameIdx, _ := propertyFieldIndex(fieldName)
+	if r.propertiesFocusIndex != nameIdx {
+		t.Errorf("propertiesFocusIndex = %d, want to stay on Name (%d)", r.propertiesFocusIndex, nameIdx)
+	}
+}
+
+// TestPermBitKeyboardShortcuts pins the three keys the user asked for,
+// alongside the existing Space/Enter toggle: the matching letter (r/w/x
+// — see permFieldLetter) sets a permission bit on; Delete or '-' clears
+// it; a non-matching letter does nothing.
+func TestPermBitKeyboardShortcuts(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	idx, _ := propertyFieldIndex(fieldPermOwnerRead)
+	r.setPropertiesFocus(idx)
+
+	// The matching letter ('r' for a read bit) sets it on.
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModNone)); got != nil {
+		t.Error("the matching letter should be consumed")
+	}
+	if r.stagedMode != 0o400 {
+		t.Errorf("stagedMode = %o, want 0400 after 'r'", r.stagedMode)
+	}
+
+	// A non-matching letter ('w' on a read bit) does nothing.
+	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, 'w', tcell.ModNone)); got == nil {
+		t.Error("a non-matching letter should not be consumed")
+	}
+	if r.stagedMode != 0o400 {
+		t.Errorf("stagedMode = %o, want unchanged 0400 after a non-matching letter", r.stagedMode)
+	}
+
+	// Delete clears it.
+	r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone))
+	if r.stagedMode != 0 {
+		t.Errorf("stagedMode = %o, want 0 after Delete", r.stagedMode)
+	}
+
+	// '-' also clears it (a no-op here, it's already off, but pins the key works).
+	r.setPermBit(fieldPermOwnerRead, true) // back on, so '-' has something to clear
+	r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, '-', tcell.ModNone))
+	if r.stagedMode != 0 {
+		t.Errorf("stagedMode = %o, want 0 after '-'", r.stagedMode)
+	}
+
+	// Space toggles, same as Enter.
+	r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if r.stagedMode != 0o400 {
+		t.Errorf("stagedMode = %o, want 0400 after Space toggles it on", r.stagedMode)
+	}
 }
