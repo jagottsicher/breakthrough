@@ -26,6 +26,8 @@ const (
 // table.SetCell/GetCell.
 const (
 	colCheckbox = iota
+	colType
+	colModifier
 	colName
 )
 
@@ -119,6 +121,19 @@ type rowRef struct {
 	name      string // display name, ".." for the parent-directory row
 	isDir     bool
 	checkable bool // false for "..", which can't be a file operation target
+
+	// entryType/linkTarget/nlink/mountPoint/mode mirror the corresponding
+	// fsops.Entry fields — see typeGlyph and modifierGlyph, the only
+	// things that read them, to render the type and modifier columns. The
+	// ".." row gets a plain TypeDir with nothing else set (see load):
+	// distinguishing whether going up crosses a filesystem boundary would
+	// need an extra stat purely for that row, not worth it for what's
+	// otherwise always just "..".
+	entryType  fsops.EntryType
+	linkTarget string
+	nlink      uint64
+	mountPoint bool
+	mode       os.FileMode
 }
 
 // NewPanel creates a Panel rooted at path. app is needed to move keyboard
@@ -185,11 +200,21 @@ func (p *Panel) load(dir string) error {
 
 	row := 0
 	if parent := filepath.Dir(abs); parent != abs {
-		p.addRow(row, rowRef{path: parent, name: "..", isDir: true, checkable: false})
+		p.addRow(row, rowRef{path: parent, name: "..", isDir: true, checkable: false, entryType: fsops.TypeDir})
 		row++
 	}
 	for _, e := range entries {
-		p.addRow(row, rowRef{path: filepath.Join(abs, e.Name), name: e.Name, isDir: e.IsDir, checkable: true})
+		p.addRow(row, rowRef{
+			path:       filepath.Join(abs, e.Name),
+			name:       e.Name,
+			isDir:      e.IsDir,
+			checkable:  true,
+			entryType:  e.Type,
+			linkTarget: e.LinkTarget,
+			nlink:      e.Nlink,
+			mountPoint: e.MountPoint,
+			mode:       e.Mode,
+		})
 		row++
 	}
 
@@ -212,9 +237,18 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
 
+	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(typeGlyphColor(ref))
+	p.table.SetCell(row, colType, typeCell)
+
+	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(tcell.ColorWhite)
+	p.table.SetCell(row, colModifier, modCell)
+
 	label := ref.name
-	if ref.isDir {
+	if ref.entryType == fsops.TypeDir {
 		label += "/"
+	}
+	if ref.linkTarget != "" {
+		label += " -> " + ref.linkTarget
 	}
 	name := tview.NewTableCell(label).SetTextColor(tcell.ColorWhite)
 	name.SetReference(ref)
@@ -239,6 +273,78 @@ func checkboxText(checked bool) string {
 		return "●"
 	}
 	return "○"
+}
+
+// typeGlyph renders ref's type character, matching Midnight Commander's
+// own single-character "type" panel field exactly (confirmed against
+// source.midnight-commander.org/man/mc.html — not guessed): '*' for an
+// executable file, '/' directory, '~' symlink to a directory, '@'
+// symlink to a file, '!' a broken symlink, '=' socket, '|' FIFO, '-'
+// character device, '+' block device. A plain, non-executable file gets
+// no character at all (blank), same as MC.
+//
+// This is deliberately just the one character MC itself uses — no
+// modifier tacked on, unlike an earlier version of this column that
+// packed a mount-point/hard-link marker in as a second character next to
+// it: the two glyphs then had no gap between them (e.g. "~>"), reading as
+// cramped compared to every other row's single character plus real
+// column spacing. See modifierGlyph, colModifier for where that
+// information moved instead: its own column, so the table's own
+// inter-column gap does the separating rather than a hand-picked
+// character.
+func typeGlyph(ref rowRef) byte {
+	switch ref.entryType {
+	case fsops.TypeDir:
+		return '/'
+	case fsops.TypeSymlinkDir:
+		return '~'
+	case fsops.TypeSymlinkFile:
+		return '@'
+	case fsops.TypeSymlinkBroken:
+		return '!'
+	case fsops.TypeSocket:
+		return '='
+	case fsops.TypeFIFO:
+		return '|'
+	case fsops.TypeCharDevice:
+		return '-'
+	case fsops.TypeBlockDevice:
+		return '+'
+	case fsops.TypeFile:
+		if ref.mode&0o111 != 0 { // any executable bit (owner, group, or other)
+			return '*'
+		}
+	}
+	return ' '
+}
+
+// typeGlyphColor sets a broken symlink's type character apart in red —
+// the one case in the type column that's worth a color, not just a
+// character, since it flags something that will fail if acted on.
+func typeGlyphColor(ref rowRef) tcell.Color {
+	if ref.entryType == fsops.TypeSymlinkBroken {
+		return tcell.ColorRed
+	}
+	return tcell.ColorWhite
+}
+
+// modifierGlyph renders ref's modifier column — information MC's own
+// type field doesn't carry at all, so unlike typeGlyph this isn't
+// borrowed from anywhere, just breakthrough's own addition: '>' for a
+// mount point (a directory, or directory symlink, sitting on a different
+// filesystem than the one being listed — a separate partition, an NFS
+// share, an fstab bind mount, ...), or '&' for a plain file with more
+// than one hard link (content that also exists under another name — see
+// rowRef's own doc comment on why that's not tracked for ".."). The two
+// never apply to the same entry, so one column comfortably covers both.
+func modifierGlyph(ref rowRef) byte {
+	switch {
+	case ref.mountPoint && (ref.entryType == fsops.TypeDir || ref.entryType == fsops.TypeSymlinkDir):
+		return '>'
+	case ref.entryType == fsops.TypeFile && ref.nlink > 1:
+		return '&'
+	}
+	return ' '
 }
 
 // rowRef returns the rowRef attached to row's name cell, if any.

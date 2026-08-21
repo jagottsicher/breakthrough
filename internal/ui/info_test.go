@@ -93,6 +93,169 @@ func TestFormatInfoIncludesLinkTargetOnlyForSymlinks(t *testing.T) {
 	}
 }
 
+func TestClassifyKind(t *testing.T) {
+	tests := []struct {
+		name string
+		info fsops.Info
+		want string
+	}{
+		{"plain file", fsops.Info{}, "file"},
+		{"directory", fsops.Info{IsDir: true}, "directory"},
+		{"symlink to file", fsops.Info{IsSymlink: true}, "symlink to file"},
+		{"symlink to directory", fsops.Info{IsSymlink: true, LinkIsDir: true}, "symlink to directory"},
+		{"broken symlink", fsops.Info{IsSymlink: true, LinkBroken: true}, "broken symlink"},
+		// A broken link takes priority even if LinkIsDir was somehow also
+		// set (shouldn't happen together in practice, but the ordering
+		// should still be unambiguous).
+		{"broken wins over LinkIsDir", fsops.Info{IsSymlink: true, LinkBroken: true, LinkIsDir: true}, "broken symlink"},
+	}
+
+	for _, tt := range tests {
+		if got := classifyKind(tt.info); got != tt.want {
+			t.Errorf("%s: classifyKind() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestIsDirish(t *testing.T) {
+	tests := []struct {
+		name string
+		info fsops.Info
+		want bool
+	}{
+		{"plain file", fsops.Info{}, false},
+		{"directory", fsops.Info{IsDir: true}, true},
+		{"symlink to file", fsops.Info{IsSymlink: true}, false},
+		{"symlink to directory", fsops.Info{IsSymlink: true, LinkIsDir: true}, true},
+		{"broken symlink", fsops.Info{IsSymlink: true, LinkBroken: true}, false},
+	}
+
+	for _, tt := range tests {
+		if got := isDirish(tt.info); got != tt.want {
+			t.Errorf("%s: isDirish() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestFormatChain(t *testing.T) {
+	tests := []struct {
+		name  string
+		chain fsops.LinkChain
+		want  string
+	}{
+		{"resolves to file", fsops.LinkChain{Hops: []string{"/a", "/b"}}, "/a -> /b (file)"},
+		{"resolves to directory", fsops.LinkChain{Hops: []string{"/a", "/b"}, FinalIsDir: true}, "/a -> /b (directory)"},
+		{"broken", fsops.LinkChain{Hops: []string{"/a", "/b"}, Broken: true}, "/a -> /b (broken)"},
+		{"cyclic", fsops.LinkChain{Hops: []string{"/a", "/b"}, Cyclic: true}, "/a -> /b (cycle detected)"},
+		{"too deep", fsops.LinkChain{Hops: []string{"/a", "/b"}, TooDeep: true}, "/a -> /b (too many hops)"},
+	}
+
+	for _, tt := range tests {
+		if got := formatChain(tt.chain); got != tt.want {
+			t.Errorf("%s: formatChain() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestFormatInfoShowsLinksOnlyWhenSharedAndNotForDirs pins the "Links"
+// field's visibility rule: only shown for a non-directory with Nlink > 1
+// (content that exists under another name too) — not for an ordinary
+// single-link file, and not for a directory even though directories
+// always have Nlink >= 2 trivially.
+func TestFormatInfoShowsLinksOnlyWhenSharedAndNotForDirs(t *testing.T) {
+	single := formatInfo(fsops.Info{Name: "a.txt", Nlink: 1, ModTime: time.Now()})
+	if strings.Contains(single, "Links") {
+		t.Errorf("a single-link file should not mention Links, got:\n%s", single)
+	}
+
+	shared := formatInfo(fsops.Info{Name: "b.txt", Nlink: 2, ModTime: time.Now()})
+	if !strings.Contains(shared, "Links") {
+		t.Errorf("a file with Nlink=2 should mention Links, got:\n%s", shared)
+	}
+
+	dir := formatInfo(fsops.Info{Name: "c", IsDir: true, Nlink: 2, ModTime: time.Now()})
+	if strings.Contains(dir, "Links") {
+		t.Errorf("a directory should not mention Links even with Nlink > 1, got:\n%s", dir)
+	}
+}
+
+// TestFormatInfoShowsMountPoint pins that "Mount point: yes" only
+// appears when Info.MountPoint is true.
+func TestFormatInfoShowsMountPoint(t *testing.T) {
+	plain := formatInfo(fsops.Info{Name: "a", IsDir: true, ModTime: time.Now()})
+	if strings.Contains(plain, "Mount point") {
+		t.Errorf("an ordinary directory should not mention a mount point, got:\n%s", plain)
+	}
+
+	mounted := formatInfo(fsops.Info{Name: "b", IsDir: true, MountPoint: true, ModTime: time.Now()})
+	wantLine := fmt.Sprintf("%-13s%s", "Mount point:", "yes")
+	if !strings.Contains(mounted, wantLine) {
+		t.Errorf("a mount point should say so (want %q), got:\n%s", wantLine, mounted)
+	}
+}
+
+// TestRenderInfoShowsChainForMultiHopSymlink exercises the full path
+// from a real multi-hop symlink on disk through Root.openInfo to the
+// rendered "Chain" line.
+func TestRenderInfoShowsChainForMultiHopSymlink(t *testing.T) {
+	dir := t.TempDir()
+	final := filepath.Join(dir, "final.txt")
+	mid := filepath.Join(dir, "mid")
+	start := filepath.Join(dir, "start")
+	if err := os.WriteFile(final, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(final, mid); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(mid, start); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = start
+	r.openInfo()
+
+	text := r.info.GetText(true)
+	wantChain := fmt.Sprintf("%s -> %s (file)", mid, final)
+	if !strings.Contains(text, wantChain) {
+		t.Errorf("Info text should contain the chain %q, got:\n%s", wantChain, text)
+	}
+}
+
+// TestRenderInfoOmitsChainForSingleHopSymlink pins that a simple,
+// non-chained symlink doesn't get a redundant "Chain" line — "Link
+// target" and "Type" already fully describe it.
+func TestRenderInfoOmitsChainForSingleHopSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	link := filepath.Join(dir, "link")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = link
+	r.openInfo()
+
+	// "Chain:" (with the colon infoField adds), not just "Chain" — the
+	// bare word is a false-positive trap here: t.TempDir() names the
+	// directory after this very test function, and "...OmitsChainFor..."
+	// contains "Chain" too, via the Path/Link target fields.
+	if text := r.info.GetText(true); strings.Contains(text, "Chain:") {
+		t.Errorf("a single-hop symlink should not show a Chain line, got:\n%s", text)
+	}
+}
+
 // TestComputeHashesUpdatesInfoText exercises the full path: openInfo
 // shows the hint, computeHashes replaces it with the real digests.
 func TestComputeHashesUpdatesInfoText(t *testing.T) {
