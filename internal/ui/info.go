@@ -67,21 +67,60 @@ func (r *Root) closeInfo() {
 // captureInfoMouse knows what counts as a click on it.
 func (r *Root) renderInfo(hashes *fsops.Hashes) {
 	text := formatInfo(r.infoStat)
-	if !r.infoStat.IsDir {
+
+	if r.infoStat.IsSymlink {
+		if chain := fsops.ResolveChain(r.infoTarget); len(chain.Hops) > 1 {
+			// Only shown once there's an actual chain (more than one
+			// hop) — a simple single-target symlink is already fully
+			// described by the "Link target" and "Type" fields above.
+			text += "\n" + infoField("Chain", formatChain(chain))
+		}
+	}
+
+	if !isDirish(r.infoStat) {
 		r.hashSectionRow = strings.Count(text, "\n") + 2 // +1 past the fields' own last line, +1 for the blank separator
 		text += "\n\n" + hashLines(hashes)
 	}
 	r.info.SetText(text)
 }
 
+// isDirish reports whether info should be treated as a directory for the
+// hash button's purposes (see renderInfo/computeHashes/captureInfoMouse).
+// info.IsDir alone isn't enough: it's Lstat-based, so it's always false
+// for a symlink even when the symlink resolves to a directory — hashing
+// that would just fail once fsops.Hash follows it there anyway, so
+// there's no point offering the button in the first place.
+func isDirish(info fsops.Info) bool {
+	return info.IsDir || (info.IsSymlink && info.LinkIsDir)
+}
+
+// formatChain renders a multi-hop symlink chain as e.g.
+// "/a -> /b -> /c (file)" (or "(directory)"/"(broken)"/
+// "(cycle detected)"/"(too many hops)" instead) — see ResolveChain.
+func formatChain(chain fsops.LinkChain) string {
+	suffix := " (file)"
+	switch {
+	case chain.Broken:
+		suffix = " (broken)"
+	case chain.Cyclic:
+		suffix = " (cycle detected)"
+	case chain.TooDeep:
+		suffix = " (too many hops)"
+	case chain.FinalIsDir:
+		suffix = " (directory)"
+	}
+	return strings.Join(chain.Hops, " -> ") + suffix
+}
+
 // computeHashes is the Info overlay's hash action (see hashLines and
 // captureInfoKey/captureInfoMouse, its two triggers): hashes the entry
 // Info is currently showing via fsops.Hash and re-renders the overlay
 // with the results in place of the hint line. A no-op if Info isn't the
-// open overlay, or its target is a directory (hashing isn't offered for
-// those — see fsops.Hash's own doc comment on why).
+// open overlay, or its target is a directory, or resolves to one via
+// isDirish (hashing isn't offered for those — see fsops.Hash's own doc
+// comment on why).
 func (r *Root) computeHashes() {
-	if r.activePage != infoPage || r.infoStat.IsDir {
+	if r.activePage != infoPage || isDirish(r.infoStat) {
 		return
 	}
 
@@ -124,7 +163,7 @@ func (r *Root) captureInfoMouse(action tview.MouseAction, event *tcell.EventMous
 
 	_, y := event.Position()
 	_, rectY, _, _ := r.info.GetInnerRect()
-	if !r.infoStat.IsDir && y-rectY >= r.hashSectionRow {
+	if !isDirish(r.infoStat) && y-rectY >= r.hashSectionRow {
 		r.computeHashes()
 		return tview.MouseConsumed, nil
 	}
@@ -142,29 +181,61 @@ func infoField(label, value string) string {
 // would show for one entry, but as a small properties list instead of a
 // single packed line.
 func formatInfo(info fsops.Info) string {
-	kind := "file"
-	switch {
-	case info.IsSymlink:
-		kind = "symlink"
-	case info.IsDir:
-		kind = "directory"
-	}
-
 	lines := []string{
 		infoField("Name", info.Name),
-		infoField("Type", kind),
+		infoField("Type", classifyKind(info)),
 		infoField("Permissions", fmt.Sprintf("%s (%04o)", permString(info.Mode), info.Mode.Perm())),
+	}
+	if info.Nlink > 1 && !info.IsDir {
+		// Not shown for directories: every directory has Nlink >= 2
+		// trivially (its own "." entry, plus each subdirectory's ".."),
+		// which isn't the "this content also exists under another name"
+		// signal that's actually worth flagging.
+		lines = append(lines, infoField("Links", fmt.Sprintf("%d (shared with other names)", info.Nlink)))
+	}
+	lines = append(lines,
 		infoField("Owner", info.Owner),
 		infoField("Group", info.Group),
 		infoField("Size", sizeWithBytes(info.Size)),
 		infoField("Modified", info.ModTime.Format("2006-01-02 15:04:05")),
 		infoField("Path", info.Path),
-	}
+	)
 	if info.IsSymlink && info.LinkTarget != "" {
 		lines = append(lines, infoField("Link target", info.LinkTarget))
 	}
+	if info.MountPoint {
+		lines = append(lines, infoField("Mount point", "yes"))
+	}
 
 	return strings.Join(lines, "\n")
+}
+
+// classifyKind renders info's Type field with more detail than a plain
+// file/directory/symlink split: a symlink additionally says what it
+// resolves to (or that it's broken — info.LinkBroken), and the rarer
+// special files (sockets, FIFOs, devices) get their own label instead of
+// falling back to "file".
+func classifyKind(info fsops.Info) string {
+	switch {
+	case info.IsSymlink && info.LinkBroken:
+		return "broken symlink"
+	case info.IsSymlink && info.LinkIsDir:
+		return "symlink to directory"
+	case info.IsSymlink:
+		return "symlink to file"
+	case info.IsDir:
+		return "directory"
+	case info.Mode&os.ModeSocket != 0:
+		return "socket"
+	case info.Mode&os.ModeNamedPipe != 0:
+		return "FIFO"
+	case info.Mode&os.ModeDevice != 0 && info.Mode&os.ModeCharDevice != 0:
+		return "character device"
+	case info.Mode&os.ModeDevice != 0:
+		return "block device"
+	default:
+		return "file"
+	}
 }
 
 // hashLines renders the Info overlay's hash section: a hint to compute
