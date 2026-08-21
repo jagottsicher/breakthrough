@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -13,9 +16,9 @@ import (
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
-	text, spans := buildHeaderSpans("/a/bb/c", false)
+	text, spans := buildHeaderSpans("/a/bb/c")
 
-	wantText := " ^ ~ < > ↑  /a/bb/c"
+	wantText := " ^ ~ < >  /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
@@ -25,11 +28,10 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 3, end: 4, action: actionHome},
 		{start: 5, end: 6, action: actionBack},
 		{start: 7, end: 8, action: actionForward},
-		{start: 9, end: 10, action: actionSortToggle},
-		{start: 12, end: 13, action: actionNavigate, target: "/"},
-		{start: 13, end: 14, action: actionNavigate, target: "/a"},
-		{start: 15, end: 17, action: actionNavigate, target: "/a/bb"},
-		{start: 18, end: 19, action: actionNavigate, target: "/a/bb/c"},
+		{start: 10, end: 11, action: actionNavigate, target: "/"},
+		{start: 11, end: 12, action: actionNavigate, target: "/a"},
+		{start: 13, end: 15, action: actionNavigate, target: "/a/bb"},
+		{start: 16, end: 17, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -67,46 +69,20 @@ func TestBuildHeaderSpans(t *testing.T) {
 }
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
-	text, spans := buildHeaderSpans("/", false)
+	text, spans := buildHeaderSpans("/")
 
-	wantText := " ^ ~ < > ↑  /"
+	wantText := " ^ ~ < >  /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	// 5 buttons + the root span.
-	if len(spans) != 6 {
-		t.Fatalf("got %d spans, want 6: %+v", len(spans), spans)
+	// 4 buttons + the root span.
+	if len(spans) != 5 {
+		t.Fatalf("got %d spans, want 5: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 12, end: 13, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 10, end: 11, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
-	}
-}
-
-// TestBuildHeaderSpansDescending pins the sort-toggle button's glyph
-// reflecting the current direction (see sortGlyph) — '↓' once
-// sortDescending is true, in the same column position '↑' occupied.
-func TestBuildHeaderSpansDescending(t *testing.T) {
-	text, spans := buildHeaderSpans("/", true)
-
-	wantText := " ^ ~ < > ↓  /"
-	if text != wantText {
-		t.Fatalf("text = %q, want %q", text, wantText)
-	}
-
-	var sortSpan headerSpan
-	found := false
-	for _, s := range spans {
-		if s.action == actionSortToggle {
-			sortSpan, found = s, true
-		}
-	}
-	if !found {
-		t.Fatal("no actionSortToggle span found")
-	}
-	if got := string([]rune(text)[sortSpan.start:sortSpan.end]); got != "↓" {
-		t.Errorf("sort-toggle span covers %q, want %q", got, "↓")
 	}
 }
 
@@ -358,7 +334,7 @@ func TestFilterHidden(t *testing.T) {
 	}
 }
 
-func TestReverseSortOrder(t *testing.T) {
+func TestApplySortPreferenceByName(t *testing.T) {
 	entries := []fsops.Entry{
 		{Name: "Alpha", IsDir: true},
 		{Name: "Omega", IsDir: true},
@@ -366,7 +342,7 @@ func TestReverseSortOrder(t *testing.T) {
 		{Name: "zeta.txt"},
 	}
 
-	reverseSortOrder(entries)
+	applySortPreference(entries, sortByName, true)
 
 	// Reversed within each group independently — directories still come
 	// first, just Z-A instead of A-Z within that group, same for files.
@@ -378,17 +354,218 @@ func TestReverseSortOrder(t *testing.T) {
 	}
 }
 
-func TestReverseSortOrderEdgeCases(t *testing.T) {
+func TestApplySortPreferenceEdgeCases(t *testing.T) {
 	// All one group (no files at all) must not panic or misbehave at the
 	// split boundary.
 	allDirs := []fsops.Entry{{Name: "a", IsDir: true}, {Name: "b", IsDir: true}}
-	reverseSortOrder(allDirs)
+	applySortPreference(allDirs, sortByName, true)
 	if allDirs[0].Name != "b" || allDirs[1].Name != "a" {
 		t.Errorf("allDirs = %v, want [b a]", allDirs)
 	}
 
 	var empty []fsops.Entry
-	reverseSortOrder(empty) // must not panic
+	applySortPreference(empty, sortByName, true) // must not panic
+}
+
+func TestApplySortPreferenceBySize(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "big.txt", Size: 300},
+		{Name: "small.txt", Size: 100},
+		{Name: "medium.txt", Size: 200},
+	}
+
+	applySortPreference(entries, sortBySize, false)
+	want := []string{"small.txt", "medium.txt", "big.txt"}
+	for i, w := range want {
+		if entries[i].Name != w {
+			t.Errorf("ascending: entries[%d].Name = %q, want %q", i, entries[i].Name, w)
+		}
+	}
+
+	applySortPreference(entries, sortBySize, true)
+	wantDesc := []string{"big.txt", "medium.txt", "small.txt"}
+	for i, w := range wantDesc {
+		if entries[i].Name != w {
+			t.Errorf("descending: entries[%d].Name = %q, want %q", i, entries[i].Name, w)
+		}
+	}
+}
+
+func TestApplySortPreferenceByModified(t *testing.T) {
+	older := time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+	newer := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	entries := []fsops.Entry{
+		{Name: "b.txt", ModTime: newer},
+		{Name: "a.txt", ModTime: older},
+	}
+
+	applySortPreference(entries, sortByModified, false)
+	if entries[0].Name != "a.txt" || entries[1].Name != "b.txt" {
+		t.Errorf("ascending by ModTime: got %v, %v, want a.txt, b.txt", entries[0].Name, entries[1].Name)
+	}
+}
+
+// TestApplySortPreferenceTiesBreakByName pins that entries sharing the
+// same size (or mtime) fall back to name order rather than an arbitrary
+// one — same case-insensitive comparison ListDir itself already sorts
+// by.
+func TestApplySortPreferenceTiesBreakByName(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "zeta.txt", Size: 100},
+		{Name: "alpha.txt", Size: 100},
+	}
+	applySortPreference(entries, sortBySize, false)
+	if entries[0].Name != "alpha.txt" || entries[1].Name != "zeta.txt" {
+		t.Errorf("tied sizes should fall back to name order, got %v, %v", entries[0].Name, entries[1].Name)
+	}
+}
+
+func TestFormatSizeCell(t *testing.T) {
+	tests := []struct {
+		size      int64
+		bytesMode bool
+		want      string
+	}{
+		{2184, false, humanSize(2184)},
+		{2184, true, "2184"},
+	}
+	for _, tt := range tests {
+		got := formatSizeCell(tt.size, tt.bytesMode)
+		if len([]rune(got)) != sizeColumnWidth {
+			t.Errorf("formatSizeCell(%d, %v) = %q, width %d, want %d", tt.size, tt.bytesMode, got, len([]rune(got)), sizeColumnWidth)
+		}
+		if strings.TrimSpace(got) != tt.want {
+			t.Errorf("formatSizeCell(%d, %v) = %q, want (trimmed) %q", tt.size, tt.bytesMode, got, tt.want)
+		}
+	}
+}
+
+func TestFormatModTimeCell(t *testing.T) {
+	when := time.Date(2026, time.August, 19, 9, 12, 3, 0, time.Local)
+
+	formatted := formatModTimeCell(when, false)
+	if len([]rune(formatted)) != modColumnWidth {
+		t.Errorf("formatted width = %d, want %d", len([]rune(formatted)), modColumnWidth)
+	}
+	if strings.TrimSpace(formatted) != "2026-08-19 09:12:03" {
+		t.Errorf("formatModTimeCell(formatted) = %q, want %q", formatted, "2026-08-19 09:12:03")
+	}
+
+	unix := formatModTimeCell(when, true)
+	if len([]rune(unix)) != modColumnWidth {
+		t.Errorf("unix width = %d, want %d", len([]rune(unix)), modColumnWidth)
+	}
+	if strings.TrimSpace(unix) != strconv.FormatInt(when.Unix(), 10) {
+		t.Errorf("formatModTimeCell(unix) = %q, want %q", unix, strconv.FormatInt(when.Unix(), 10))
+	}
+}
+
+// TestSetSortKeySwitchingColumnStartsAscending pins the "click a new
+// column: always ascending" half of setSortKey's convention — only
+// clicking the *already active* column reverses direction (covered by
+// TestSetSortKeyReversesOrderAndPersistsAcrossNavigation).
+func TestSetSortKeySwitchingColumnStartsAscending(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.setSortKey(sortBySize)
+	if p.sortKey != sortBySize || p.sortDescending {
+		t.Errorf("after switching to sortBySize: key=%v descending=%v, want sortBySize, false", p.sortKey, p.sortDescending)
+	}
+
+	p.setSortKey(sortBySize) // clicking the same column again reverses
+	if !p.sortDescending {
+		t.Error("clicking the already-active column should reverse direction")
+	}
+
+	p.setSortKey(sortByModified) // switching to a different column resets to ascending
+	if p.sortKey != sortByModified || p.sortDescending {
+		t.Errorf("after switching to sortByModified: key=%v descending=%v, want sortByModified, false", p.sortKey, p.sortDescending)
+	}
+}
+
+// TestBuildColumnHeaderShowsArrowOnActiveColumnOnly pins that the sort
+// arrow appears only next to the current sort key's own label.
+func TestBuildColumnHeaderShowsArrowOnActiveColumnOnly(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	nameText := p.columnHeader.GetCell(0, colName).Text
+	if !strings.Contains(nameText, "↑") {
+		t.Errorf("Name header = %q, want it to carry the sort arrow (sortByName is the default)", nameText)
+	}
+	sizeText := p.columnHeader.GetCell(0, colSize).Text
+	if strings.Contains(sizeText, "↑") || strings.Contains(sizeText, "↓") {
+		t.Errorf("Size header = %q, should not carry an arrow while Name is the active sort", sizeText)
+	}
+
+	p.setSortKey(sortBySize)
+
+	nameText = p.columnHeader.GetCell(0, colName).Text
+	if strings.Contains(nameText, "↑") || strings.Contains(nameText, "↓") {
+		t.Errorf("Name header = %q, should lose its arrow once Size becomes the active sort", nameText)
+	}
+	sizeText = p.columnHeader.GetCell(0, colSize).Text
+	if !strings.Contains(sizeText, "↑") {
+		t.Errorf("Size header = %q, want it to carry the arrow now that it's the active sort", sizeText)
+	}
+}
+
+// TestColumnHeaderClickSortsBySize is a real click, dispatched through
+// the column header's own MouseHandler the way an actual click arrives
+// — the same rigor TestRenamePositionsOverRightClickedRow and the
+// Properties multi-row click tests use, for exactly the same reason:
+// this is new, real coordinate-dependent click routing, not something
+// worth trusting to direct method calls alone.
+func TestColumnHeaderClickSortsBySize(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "big.txt"), []byte("aaaaaaaaaa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "small.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(120, 24)
+	p.columnHeader.SetRect(0, 0, 120, 1)
+	p.columnHeader.Draw(screen)
+
+	x := -1
+	for tryX := 0; tryX < 120; tryX++ {
+		if r, c := p.columnHeader.CellAt(tryX, 0); r == 0 && c == colSize {
+			x = tryX
+			break
+		}
+	}
+	if x < 0 {
+		t.Fatal("could not locate the Size header cell's screen position")
+	}
+
+	handler := p.columnHeader.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(x, 0, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if p.sortKey != sortBySize {
+		t.Errorf("sortKey = %v after clicking the Size header, want sortBySize", p.sortKey)
+	}
+	if ref, _ := p.rowRef(1); ref.name != "small.txt" {
+		t.Errorf("row 1 = %q, want small.txt (ascending by size)", ref.name)
+	}
 }
 
 // TestLoadHidesDotfilesByDefault pins showHidden's default: dotfiles are
@@ -503,11 +680,11 @@ func TestSelectAllIncludesHiddenFilesWhenShown(t *testing.T) {
 	}
 }
 
-// TestSortToggleReversesOrderAndPersistsAcrossNavigation exercises the
-// header button's actual action, and pins that the preference is
-// session-scoped (survives navigating away and back), not reset on every
-// load like the checkbox selection is.
-func TestSortToggleReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
+// TestSetSortKeyReversesOrderAndPersistsAcrossNavigation exercises the
+// column header's actual click action (setSortKey), and pins that the
+// preference is session-scoped (survives navigating away and back), not
+// reset on every load like the checkbox selection is.
+func TestSetSortKeyReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "Alpha")
 	if err := os.Mkdir(sub, 0o755); err != nil {
@@ -527,7 +704,7 @@ func TestSortToggleReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
 		t.Fatalf("setup: row 1 = %q, want Alpha", ref.name)
 	}
 
-	p.runHeaderAction(headerSpan{action: actionSortToggle})
+	p.setSortKey(sortByName) // already the active key: this reverses direction
 	if ref, _ := p.rowRef(1); ref.name != "Omega" {
 		t.Errorf("after sort toggle: row 1 = %q, want Omega", ref.name)
 	}
