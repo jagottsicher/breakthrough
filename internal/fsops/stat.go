@@ -20,16 +20,23 @@ type Info struct {
 	Path       string
 	IsDir      bool
 	IsSymlink  bool
-	LinkTarget string // only set if IsSymlink
+	LinkTarget string // only set if IsSymlink; the raw, unresolved link text
+	LinkBroken bool   // only meaningful if IsSymlink: the target doesn't resolve
+	LinkIsDir  bool   // only meaningful if IsSymlink && !LinkBroken: the fully-resolved target is a directory
 	Mode       os.FileMode
 	Size       int64
 	ModTime    time.Time
 	Owner      string // falls back to the numeric uid (as a string) if unresolved
 	Group      string // falls back to the numeric gid (as a string) if unresolved
+	Nlink      uint64 // hard-link count of path itself (not a symlink's target)
+	MountPoint bool   // true if this is a directory (or a symlink resolving to one) on a different filesystem than its parent
 }
 
 // Stat gathers Info for path. It uses Lstat, so a symlink is reported as
-// itself (IsSymlink true, LinkTarget set) rather than being followed.
+// itself (IsSymlink true, LinkTarget set, Size/Mode/Nlink describing the
+// link, not its target) rather than being followed — except for
+// LinkBroken/LinkIsDir/MountPoint, which specifically need to know what
+// the link resolves to and say so explicitly in their own names.
 func Stat(path string) (Info, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
@@ -43,13 +50,26 @@ func Stat(path string) (Info, error) {
 		Mode:    fi.Mode(),
 		Size:    fi.Size(),
 		ModTime: fi.ModTime(),
+		Nlink:   nlinkOf(fi),
 	}
+
+	checkMount := fi.IsDir()
 
 	if fi.Mode()&os.ModeSymlink != 0 {
 		info.IsSymlink = true
 		if target, err := os.Readlink(path); err == nil {
 			info.LinkTarget = target
 		}
+		if resolved, err := os.Stat(path); err != nil {
+			info.LinkBroken = true
+		} else {
+			info.LinkIsDir = resolved.IsDir()
+			checkMount = resolved.IsDir()
+		}
+	}
+
+	if checkMount {
+		info.MountPoint = isMountPoint(path)
 	}
 
 	info.Owner, info.Group = ownerGroup(fi)

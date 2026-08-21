@@ -37,20 +37,146 @@ func TestListDir(t *testing.T) {
 		t.Fatalf("ListDir: %v", err)
 	}
 
-	want := []Entry{
-		{Name: "Alpha", IsDir: true},
-		{Name: "Omega", IsDir: true},
-		{Name: "beta.txt", IsDir: false},
-		{Name: "zeta.txt", IsDir: false},
+	// Name/IsDir/Type only — Nlink is left out deliberately: a freshly
+	// created empty directory's exact link count (2, from its own "."
+	// entry) is a POSIX convention this test shouldn't have to assume
+	// holds on every filesystem CI happens to run on. TestListDirNlink
+	// covers Nlink specifically, for a case where the exact count
+	// actually matters and is unambiguous (a file with one extra hard
+	// link).
+	want := []struct {
+		name  string
+		isDir bool
+		typ   EntryType
+	}{
+		{"Alpha", true, TypeDir},
+		{"Omega", true, TypeDir},
+		{"beta.txt", false, TypeFile},
+		{"zeta.txt", false, TypeFile},
 	}
 
 	if len(entries) != len(want) {
 		t.Fatalf("got %d entries, want %d: %+v", len(entries), len(want), entries)
 	}
-	for i := range want {
-		if entries[i] != want[i] {
-			t.Errorf("entry %d = %+v, want %+v", i, entries[i], want[i])
+	for i, w := range want {
+		if entries[i].Name != w.name || entries[i].IsDir != w.isDir || entries[i].Type != w.typ {
+			t.Errorf("entry %d = %+v, want name=%q isDir=%v type=%v", i, entries[i], w.name, w.isDir, w.typ)
 		}
+	}
+}
+
+// TestListDirSymlinks pins how ListDir classifies the three symlink
+// cases: valid to a file, valid to a directory (which also makes IsDir
+// true, so it sorts and navigates like a real directory now — see
+// Entry.IsDir's doc comment), and broken.
+func TestListDirSymlinks(t *testing.T) {
+	dir := t.TempDir()
+
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target-dir")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	links := map[string]string{
+		"link-to-file.txt": target,
+		"link-to-dir":      targetDir,
+		"link-broken":      filepath.Join(dir, "does-not-exist"),
+	}
+	for name, dst := range links {
+		if err := os.Symlink(dst, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+
+	byName := make(map[string]Entry, len(entries))
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+
+	file, ok := byName["link-to-file.txt"]
+	if !ok || file.Type != TypeSymlinkFile || file.IsDir || file.LinkTarget != target {
+		t.Errorf("link-to-file.txt = %+v, want Type=TypeSymlinkFile IsDir=false LinkTarget=%q", file, target)
+	}
+
+	linkDir, ok := byName["link-to-dir"]
+	if !ok || linkDir.Type != TypeSymlinkDir || !linkDir.IsDir || linkDir.LinkTarget != targetDir {
+		t.Errorf("link-to-dir = %+v, want Type=TypeSymlinkDir IsDir=true LinkTarget=%q", linkDir, targetDir)
+	}
+
+	broken, ok := byName["link-broken"]
+	if !ok || broken.Type != TypeSymlinkBroken || broken.IsDir {
+		t.Errorf("link-broken = %+v, want Type=TypeSymlinkBroken IsDir=false", broken)
+	}
+	if broken.LinkTarget == "" {
+		t.Error("a broken symlink should still report its (dangling) LinkTarget")
+	}
+}
+
+// TestListDirNlink pins the hard-link count: a file with one extra link
+// (created via os.Link) reports Nlink=2, unlike an ordinary file's 1.
+func TestListDirNlink(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "original.txt")
+	if err := os.WriteFile(original, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(original, filepath.Join(dir, "hardlink.txt")); err != nil {
+		t.Skipf("hard links not supported here: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lonely.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+
+	byName := make(map[string]Entry, len(entries))
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+
+	if got := byName["original.txt"].Nlink; got != 2 {
+		t.Errorf("original.txt Nlink = %d, want 2", got)
+	}
+	if got := byName["hardlink.txt"].Nlink; got != 2 {
+		t.Errorf("hardlink.txt Nlink = %d, want 2", got)
+	}
+	if got := byName["lonely.txt"].Nlink; got != 1 {
+		t.Errorf("lonely.txt Nlink = %d, want 1", got)
+	}
+}
+
+// TestListDirMountPointFalseForOrdinaryDir pins the negative case: an
+// ordinary subdirectory, on the same filesystem as its parent, must not
+// be flagged as a mount point. Actually mounting something (a bind mount,
+// tmpfs, ...) to test the positive case needs privileges this test
+// environment can't assume it has, so that side is left unverified by an
+// automated test — the device comparison itself (mountPointVia) is
+// simple enough that this negative case, plus a read, is what matters
+// most to catch a regression in.
+func TestListDirMountPointFalseForOrdinaryDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].MountPoint {
+		t.Errorf("an ordinary subdirectory should not be reported as a mount point, got %+v", entries)
 	}
 }
 
