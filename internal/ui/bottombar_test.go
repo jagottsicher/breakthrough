@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -175,13 +176,143 @@ func TestClockTextFormat(t *testing.T) {
 	}
 }
 
-// TestDfSummaryReturnsNonEmptyLine pins that dfSummary either returns a
-// real df data line for a real directory, or its own "unavailable"
-// fallback — never empty, never just the header row misread as data.
-func TestDfSummaryReturnsNonEmptyLine(t *testing.T) {
-	got := dfSummary(t.TempDir())
-	if strings.TrimSpace(got) == "" {
-		t.Error("dfSummary should never return an empty string")
+// TestFetchDiskUsageRealFilesystem runs the real df binary against a
+// real, if throwaway, directory — sanity-checking shape (non-negative
+// values, a 0-100 percent) rather than exact numbers, which depend on
+// whatever this machine's own disk state happens to be.
+func TestFetchDiskUsageRealFilesystem(t *testing.T) {
+	requireCommand(t, "df")
+	u, ok := fetchDiskUsage(t.TempDir())
+	if !ok {
+		t.Fatal("fetchDiskUsage should succeed against a real, existing directory")
+	}
+	if u.usedBytes < 0 || u.availBytes < 0 || u.usedInodes < 0 || u.availInodes < 0 {
+		t.Errorf("negative usage: %+v", u)
+	}
+	if u.usePercent < 0 || u.usePercent > 100 || u.inodePercent < 0 || u.inodePercent > 100 {
+		t.Errorf("percent out of [0,100]: %+v", u)
+	}
+}
+
+// TestParseDfDataLine pins the field layout against real df output
+// captured on this machine (GNU df, df -k and df -i) plus a simulated
+// BSD-style wrapped line (Filesystem name on its own line, so the data
+// line itself starts one field short) — parseDfDataLine indexes from
+// the end specifically so that second case still works.
+func TestParseDfDataLine(t *testing.T) {
+	tests := []struct {
+		name        string
+		line        string
+		wantUsed    int64
+		wantAvail   int64
+		wantPercent int
+	}{
+		{
+			name:        "GNU df -k",
+			line:        "/dev/md0       480149504 454345216  1782272  97% /",
+			wantUsed:    454345216,
+			wantAvail:   1782272,
+			wantPercent: 97,
+		},
+		{
+			name:        "GNU df -i",
+			line:        "/dev/md0        30515200 1316665 29198535    5% /",
+			wantUsed:    1316665,
+			wantAvail:   29198535,
+			wantPercent: 5,
+		},
+		{
+			name:        "wrapped Filesystem name (BSD-style, own line above)",
+			line:        "        480149504 454345216  1782272  97% /",
+			wantUsed:    454345216,
+			wantAvail:   1782272,
+			wantPercent: 97,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			used, avail, percent, ok := parseDfDataLine(tt.line)
+			if !ok {
+				t.Fatalf("parseDfDataLine(%q) ok = false, want true", tt.line)
+			}
+			if used != tt.wantUsed || avail != tt.wantAvail || percent != tt.wantPercent {
+				t.Errorf("parseDfDataLine(%q) = (%d, %d, %d), want (%d, %d, %d)",
+					tt.line, used, avail, percent, tt.wantUsed, tt.wantAvail, tt.wantPercent)
+			}
+		})
+	}
+}
+
+func TestParseDfDataLineMalformed(t *testing.T) {
+	for _, line := range []string{"", "too few fields", "not numbers at all here really"} {
+		if _, _, _, ok := parseDfDataLine(line); ok {
+			t.Errorf("parseDfDataLine(%q) ok = true, want false", line)
+		}
+	}
+}
+
+func TestDiskUsageWarnColor(t *testing.T) {
+	tests := []struct {
+		percent int
+		want    tcell.Color
+	}{
+		{0, tcell.ColorDefault},
+		{79, tcell.ColorDefault},
+		{80, tcell.ColorOrange},
+		{89, tcell.ColorOrange},
+		{90, tcell.ColorRed},
+		{100, tcell.ColorRed},
+	}
+	for _, tt := range tests {
+		if got := diskUsageWarnColor(tt.percent); got != tt.want {
+			t.Errorf("diskUsageWarnColor(%d) = %v, want %v", tt.percent, got, tt.want)
+		}
+	}
+}
+
+func TestFormatUsagePercentColorsAboveThresholds(t *testing.T) {
+	if got := formatUsagePercent(50); got != "50%" {
+		t.Errorf("formatUsagePercent(50) = %q, want plain %q (no warning)", got, "50%")
+	}
+	got := formatUsagePercent(95)
+	if !strings.Contains(got, "95%") || !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "[-]") {
+		t.Errorf("formatUsagePercent(95) = %q, want a color-tagged \"95%%\"", got)
+	}
+}
+
+func TestHumanCount(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"},
+		{512, "512"},
+		{1024, "1.0K"},
+		{1536, "1.5K"},
+		{1316665, "1.3M"},
+	}
+	for _, tt := range tests {
+		if got := humanCount(tt.n); got != tt.want {
+			t.Errorf("humanCount(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
+	u := diskUsage{usedBytes: 1024, availBytes: 2048, usedInodes: 10, availInodes: 20, usePercent: 50, inodePercent: 50}
+	if got := diskUsageText(u); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+		t.Errorf("diskUsageText(%+v) = %q, want it labeled with \"Disk\"/\"used\"/\"free\"", u, got)
+	}
+	if got := inodeUsageText(u); !strings.HasPrefix(got, "Inodes ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+		t.Errorf("inodeUsageText(%+v) = %q, want it labeled with \"Inodes\"/\"used\"/\"free\"", u, got)
+	}
+}
+
+// requireCommand skips t unless name is on $PATH.
+func requireCommand(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("%s not available in this environment: %v", name, err)
 	}
 }
 
