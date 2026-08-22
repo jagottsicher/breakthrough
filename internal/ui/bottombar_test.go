@@ -138,6 +138,48 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 	}
 }
 
+// TestBuildStatusBarSpansAccountForWideCharacters pins the fix for the
+// user's own report: a current username containing double-width (e.g.
+// CJK) characters must still leave every button span's start column at
+// that button's real display width offset, not short by however many
+// extra columns those characters occupy beyond their rune count (2
+// runes, 4 terminal columns for "文档"). dfSummary shells out to the
+// real, platform-specific df, so its output length isn't fixed across
+// machines — the expected column is derived from the returned text
+// itself via tview.TaggedStringWidth (the same measure buildStatusBar
+// now uses), not a hardcoded offset.
+func TestBuildStatusBarSpansAccountForWideCharacters(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.currentUser = "文档"
+
+	text, spans := r.buildStatusBar()
+
+	idx := strings.Index(text, "^E Edit")
+	if idx < 0 {
+		t.Fatalf("status bar text %q doesn't contain the Edit button label", text)
+	}
+	wantStart := tview.TaggedStringWidth(text[:idx])
+
+	var editSpan statusBarSpan
+	found := false
+	for _, s := range spans {
+		if s.action == statusActionEdit {
+			editSpan, found = s, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("no span for statusActionEdit")
+	}
+	if editSpan.startCol != wantStart {
+		t.Errorf("edit span startCol = %d, want %d (real display width of %q, not its rune count)", editSpan.startCol, wantStart, text[:idx])
+	}
+}
+
 // clickStatusBar simulates a real left-click on the status bar at the
 // given column, the same way capturePropertiesMouse's own tests draw a
 // real screen first so InRect/GetInnerRect have real layout to resolve
@@ -152,7 +194,7 @@ func clickStatusBar(t *testing.T, r *Root, col int) {
 	// a real macOS CI runner to push the later buttons past its edge,
 	// making InRect reject clicks on them that a wider screen accepts
 	// fine.
-	width := len([]rune(r.statusBar.GetText(true))) + 10
+	width := tview.TaggedStringWidth(r.statusBar.GetText(true)) + 10
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
@@ -185,6 +227,33 @@ func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
 	// the actual editor invocation), so this only pins that the click
 	// reaches editCurrentEntry/runEditor and the panel reloads cleanly
 	// afterwards, not that an editor actually ran.
+	clickStatusBar(t, r, span.startCol)
+
+	if r.activePage == errorPage {
+		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks is
+// TestCaptureStatusBarMouseEditClickRunsEditAction's counterpart with a
+// double-width (CJK) username ahead of the buttons on the same row —
+// exercising the fix end to end (real Draw, real column math) rather
+// than just the span numbers a plain unit test would check.
+func TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.currentUser = "文档使用者" // 5 runes, 10 terminal columns
+	r.refreshStatusBar()
+	r.panel.focusRow(1) // off ".." onto a real entry, so editCurrentEntry has something to act on
+
+	span, ok := statusBarSpanFor(r, statusActionEdit)
+	if !ok {
+		t.Fatal("no Edit span found")
+	}
+
 	clickStatusBar(t, r, span.startCol)
 
 	if r.activePage == errorPage {

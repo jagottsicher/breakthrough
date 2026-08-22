@@ -104,9 +104,14 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	var b strings.Builder
 	col := 0
 
+	// col advances by s's display width (tview.TaggedStringWidth), not a
+	// plain rune count — dfSummary's mount point or the current username
+	// could in principle contain double-width (e.g. CJK) characters, and
+	// a rune count would misalign every statusBarSpan after it (see
+	// buildHeaderSpans/propertiesBuilder.text for the same fix elsewhere).
 	write := func(s string) {
 		b.WriteString(s)
-		col += len([]rune(s))
+		col += tview.TaggedStringWidth(s)
 	}
 	button := func(label string, action statusBarAction) {
 		start := col
