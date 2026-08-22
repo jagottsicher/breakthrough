@@ -9,11 +9,6 @@ import (
 
 const errorPage = "error"
 
-// errorBackgroundColor sets error overlays apart from the ordinary ones,
-// which all share accentBackgroundColor. Same idea as everywhere else in
-// this package: colour rather than a box-drawing border.
-const errorBackgroundColor = tcell.ColorDarkRed
-
 // errorViewMaxWidth caps how wide an error overlay grows before its text
 // starts wrapping instead. Filesystem errors embed full paths, which are
 // easily wider than the terminal and read badly as one long line.
@@ -25,8 +20,7 @@ const errorViewMaxWidth = 60
 // (TextView.SetDoneFunc fires for all four), as does a click outside or
 // Ctrl+C (see Root.RequestCancel).
 func (r *Root) newErrorView() *tview.TextView {
-	v := tview.NewTextView().SetTextColor(tcell.ColorWhite)
-	v.SetBackgroundColor(errorBackgroundColor)
+	v := tview.NewTextView()
 	v.SetBorderPadding(0, 0, 1, 1)
 	v.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
 	return v

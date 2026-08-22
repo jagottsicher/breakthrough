@@ -10,23 +10,62 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // TestMain isolates every test in this package from whatever the real
-// machine's $HISTFILE/~/.bash_history actually contains — Root now
-// loads real bash history at construction (see historyFilePath/
-// loadBashHistory), and no test here should depend on, or be thrown off
-// by, this developer's or CI runner's own command history. Pointed at a
-// path that doesn't exist rather than a real (even if temporary) file:
-// loadBashHistory already treats "doesn't exist" as "start empty", the
-// same as a first run would. Tests that specifically exercise
-// runShellCommand — the only thing that ever writes to this path (see
-// appendBashHistory) — additionally isolate themselves with their own
-// t.TempDir()-scoped HISTFILE, so they can't contaminate each other
-// either, regardless of run order.
+// machine's own state might actually be:
+//
+//   - $HISTFILE/~/.bash_history: Root loads real bash history at
+//     construction (see historyFilePath/loadBashHistory), and no test
+//     here should depend on, or be thrown off by, this developer's or CI
+//     runner's own command history. Pointed at a path that doesn't exist
+//     rather than a real (even if temporary) file: loadBashHistory
+//     already treats "doesn't exist" as "start empty", the same as a
+//     first run would. Tests that specifically exercise
+//     runShellCommand — the only thing that ever writes to this path
+//     (see appendBashHistory) — additionally isolate themselves with
+//     their own t.TempDir()-scoped HISTFILE (see isolateHistoryFile), so
+//     they can't contaminate each other either, regardless of run order.
+//   - /etc/breakthrough and ~/.config/breakthrough: Root now also loads
+//     on-disk settings and color schemes at construction (see
+//     loadInitialSettings in theme.go) — the same class of problem, and
+//     the same fix: loadInitialSettings is a package-level var, reset
+//     here to a fixed DefaultSettings()/DefaultTheme() (via
+//     LoadColorSchemes("", ""), which still always includes "default" —
+//     see its own doc comment) rather than anything actually read from
+//     disk. Tests that exercise applyColorScheme's own persistence (the
+//     one thing that writes anywhere here) isolate themselves further via
+//     isolateUserConfigFile.
 func TestMain(m *testing.M) {
 	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
+
+	loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
+		return config.DefaultSettings(), config.LoadColorSchemes("", ""), nil
+	}
+	userConfigFilePath = func() string {
+		return filepath.Join(os.TempDir(), "breakthrough-test-config-does-not-exist")
+	}
+
 	os.Exit(m.Run())
+}
+
+// isolateUserConfigFile points userConfigFilePath (see applyColorScheme
+// in settings.go) at a fresh path within t's own TempDir for the
+// duration of t — TestMain's own override already points it somewhere
+// that doesn't exist, safe for tests that only read it, but a test that
+// actually writes through it needs its own isolated path, the same
+// reason isolateHistoryFile exists alongside TestMain's own HISTFILE
+// override. Returns the path, for a test that wants to inspect the
+// written file afterward.
+func isolateUserConfigFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config")
+	original := userConfigFilePath
+	userConfigFilePath = func() string { return path }
+	t.Cleanup(func() { userConfigFilePath = original })
+	return path
 }
 
 // t.Setenv (not os.Setenv/os.Unsetenv) throughout: it restores the
@@ -93,10 +132,10 @@ func TestDfSummaryReturnsNonEmptyLine(t *testing.T) {
 	}
 }
 
-// TestBuildStatusBarSpansLocateButtons pins that each of the three
-// button spans in buildStatusBar's output actually covers that button's
-// own rendered label, and nothing else — the click-routing tests below
-// rely on this being right.
+// TestBuildStatusBarSpansLocateButtons pins that each of the four button
+// spans in buildStatusBar's output actually covers that button's own
+// rendered label, and nothing else — the click-routing tests below rely
+// on this being right.
 func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -111,6 +150,7 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionEdit:         "^E Edit",
 		statusActionRename:       "^R Rename",
 		statusActionToggleHidden: "^G Hidden",
+		statusActionSettings:     "^X Settings",
 	}
 	found := map[statusBarAction]bool{}
 	for _, s := range spans {

@@ -36,17 +36,48 @@ terminal.
   with your regular shell's `$HISTFILE`, and `cd` handled directly
   rather than uselessly changing a subshell's own directory) plus quick
   actions — Edit (`^E`, opens `$VISUAL`/`$EDITOR` on the selected file),
-  Rename (`^R`), toggle hidden files (`^G`) — alongside the current
-  user, disk usage for the directory on screen, and a clock.
+  Rename (`^R`), toggle hidden files (`^G`), Settings (`^X`) — alongside
+  the current user, disk usage for the directory on screen, and a clock.
+- Color schemes: JSON files under `colorschemes/` in either config tier
+  (see below), switchable live from the Settings overlay (`^X` or the
+  bottom bar's own button) — no restart needed, and the pick is
+  remembered for next time.
 
 ## Status
 
 Actively developed. The single-panel core above is functional and
-tested; a second panel, a session-scoped trash, and a settings/config
-layer (`/etc/breakthrough` + `~/.config/breakthrough`) are planned next
-— see [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
+tested; a second panel, a session-scoped trash, and the rest of the
+settings layer beyond color schemes are planned next — see
+[docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
+
+## Color schemes
+
+breakthrough ships with one built-in scheme ("Default") and reads
+further ones from `colorschemes/*.json` in either config tier —
+`/etc/breakthrough/colorschemes/` for system-wide schemes,
+`~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
+if set) for your own; a user file with the same name replaces a system
+one. Switch between whatever's found via the Settings overlay (`^X`, or
+its button in the bottom bar) — the pick applies immediately and is
+saved to your own `~/.config/breakthrough/config`.
+
+Two ready-made examples ship in [`examples/colorschemes/`](examples/colorschemes/)
+— a dark Solarized-based scheme and a light one:
+
+```sh
+mkdir -p ~/.config/breakthrough/colorschemes
+cp examples/colorschemes/*.json ~/.config/breakthrough/colorschemes/
+```
+
+A scheme file only needs to set the fields it actually wants to change —
+anything left out falls back to the Default scheme's own value. Each
+color is either a `#rrggbb` hex value or a
+[W3C color name](https://pkg.go.dev/github.com/gdamore/tcell/v2#pkg-variables)
+(e.g. `"darkslategray"`). See
+[`examples/colorschemes/solarized.json`](examples/colorschemes/solarized.json)
+for every field a scheme can set.
 
 ## Installing
 

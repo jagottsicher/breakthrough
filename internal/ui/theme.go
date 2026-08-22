@@ -1,0 +1,98 @@
+package ui
+
+import (
+	"fmt"
+
+	"github.com/gdamore/tcell/v2"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
+)
+
+// loadInitialSettings resolves breakthrough's on-disk settings and
+// available color schemes at startup (see NewRoot) — a package-level var
+// rather than a direct config.Load/LoadColorSchemes call, so tests can
+// override it (see TestMain in bottombar_test.go) and stay isolated from
+// whatever a real /etc/breakthrough or ~/.config/breakthrough on the
+// machine running `go test` might actually contain — the same class of
+// problem the bash-history tests solved via a forced HISTFILE (see
+// historyFilePath).
+var loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
+	settings, warnings := config.Load(config.SystemConfigFile(), config.UserConfigFile())
+	schemes := config.LoadColorSchemes(config.SystemColorSchemeDir(), config.UserColorSchemeDir())
+	return settings, schemes, warnings
+}
+
+// userConfigFilePath is where a color-scheme pick gets persisted (see
+// applyColorScheme in settings.go) — a separate override point from
+// loadInitialSettings itself, so a test that exercises persistence can
+// isolate just the write without also having to fake every Load/
+// LoadColorSchemes call.
+var userConfigFilePath = config.UserConfigFile
+
+// colorTag renders c as the color specifier tview's own "[fg:bg:flags]"
+// tag syntax expects (see propertiesBuilder.focusTag) — a "#rrggbb" hex
+// value, so a themed color always round-trips exactly rather than
+// depending on tview's own tag-color name table agreeing with
+// tcell.GetColor's.
+func colorTag(c tcell.Color) string {
+	return fmt.Sprintf("#%06x", c.Hex())
+}
+
+// applyTheme switches every widget Root owns directly to theme, plus
+// Properties (via a re-render — its own colors are baked into style tags
+// propertiesBuilder.focusTag generates, not looked up live) and the
+// panel (see Panel.applyTheme, which additionally reloads to repaint
+// each row's own cell colors). Called once from NewRoot with whatever
+// was loaded from disk (see loadInitialSettings), and again by
+// applyColorScheme whenever the Settings overlay picks a different
+// scheme.
+func (r *Root) applyTheme(theme config.ResolvedTheme) {
+	r.theme = theme
+
+	r.menu.SetBackgroundColor(theme.AccentBackground)
+	r.menu.SetMainTextColor(theme.Text)
+
+	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
+	r.rename.SetBackgroundColor(theme.AccentBackground)
+	r.rename.SetLabelColor(theme.Text)
+	r.rename.SetFieldTextColor(theme.Text)
+
+	r.prompt.SetFieldBackgroundColor(theme.AccentBackground)
+	r.prompt.SetBackgroundColor(theme.AccentBackground)
+	r.prompt.SetLabelColor(theme.Text)
+	r.prompt.SetFieldTextColor(theme.Text)
+
+	r.quitConfirm.SetBackgroundColor(theme.AccentBackground)
+	r.quitConfirm.SetMainTextColor(theme.Text)
+
+	r.picker.SetBackgroundColor(theme.AccentBackground)
+	r.picker.SetMainTextColor(theme.Text)
+
+	r.errorView.SetTextColor(theme.Text)
+	r.errorView.SetBackgroundColor(theme.ErrorBackground)
+
+	r.bashLine.SetFieldBackgroundColor(theme.AccentBackground)
+	r.bashLine.SetBackgroundColor(theme.AccentBackground)
+	r.bashLine.SetLabelColor(theme.Text)
+	r.bashLine.SetFieldTextColor(theme.Text)
+	r.statusBar.SetBackgroundColor(theme.AccentBackground)
+	r.statusBar.SetTextColor(theme.Text)
+
+	r.propertiesText.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesEditField.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.propertiesEditField.SetBackgroundColor(theme.FocusedBackground)
+	r.propertiesEditField.SetFieldTextColor(theme.Text)
+	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesCancelBtn.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesCancelBtn.SetLabelColor(theme.Text)
+	r.propertiesSaveBtn.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesSaveBtn.SetLabelColor(theme.Text)
+	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
+
+	if r.settingsList != nil {
+		r.settingsList.SetBackgroundColor(theme.AccentBackground)
+		r.settingsList.SetMainTextColor(theme.Text)
+	}
+
+	r.panel.applyTheme(theme)
+}

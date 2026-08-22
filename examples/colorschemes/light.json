@@ -1,0 +1,13 @@
+{
+  "name": "Light",
+  "accent_background": "#e4e4e4",
+  "focused_background": "#1e6fd9",
+  "error_background": "#c0392b",
+  "selection_background": "#1e6fd9",
+  "text": "#1a1a1a",
+  "editable_background": "#b0b0b0",
+  "placeholder_text": "#707070",
+  "entry_normal": "#1a1a1a",
+  "entry_executable": "#1a7a1a",
+  "entry_error": "#c0392b"
+}
