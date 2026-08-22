@@ -22,12 +22,30 @@ var loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string
 	return settings, schemes, warnings
 }
 
-// userConfigFilePath is where a color-scheme pick gets persisted (see
-// applyColorScheme in settings.go) — a separate override point from
-// loadInitialSettings itself, so a test that exercises persistence can
-// isolate just the write without also having to fake every Load/
-// LoadColorSchemes call.
+// userConfigFilePath is where a setting change gets persisted (see
+// persistSetting) — a separate override point from loadInitialSettings
+// itself, so a test that exercises persistence can isolate just the
+// write without also having to fake every Load/LoadColorSchemes call.
 var userConfigFilePath = config.UserConfigFile
+
+// persistSetting saves one key to the user's config file (see
+// config.SetKey/userConfigFilePath) — a color-scheme pick (see
+// applyColorScheme) or a "Globals" toggle (see Root.toggleHidden/
+// toggleSizeBytes/toggleMtimeUnix) — so breakthrough remembers it across
+// restarts instead of always resetting to config.DefaultSettings' own
+// built-in default. Best-effort: a failure to persist is reported (see
+// showError) but doesn't undo whatever was already applied live — the
+// new value is in effect either way, just not guaranteed to survive a
+// restart if saving it failed.
+func (r *Root) persistSetting(key, value string) {
+	path := userConfigFilePath()
+	if path == "" {
+		return // no user config tier available (see config.UserDir's own doc comment) — nothing to persist to
+	}
+	if err := config.SetKey(path, key, value); err != nil {
+		r.showError(fmt.Errorf("saving %s: %w", key, err))
+	}
+}
 
 // colorTag renders c as the color specifier tview's own "[fg:bg:flags]"
 // tag syntax expects (see propertiesBuilder.focusTag) — a "#rrggbb" hex

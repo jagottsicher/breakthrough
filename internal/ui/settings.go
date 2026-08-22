@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -76,12 +74,5 @@ func (r *Root) applyColorScheme(slug string) {
 	theme := config.FindColorScheme(r.colorSchemes, slug).Resolve()
 	r.applyTheme(theme)
 	r.settings.ColorScheme = slug
-
-	path := userConfigFilePath()
-	if path == "" {
-		return // no user config tier available (see config.UserDir's own doc comment) — nothing to persist to
-	}
-	if err := config.SetKey(path, "color_scheme", slug); err != nil {
-		r.showError(fmt.Errorf("saving color scheme: %w", err))
-	}
+	r.persistSetting("color_scheme", slug)
 }

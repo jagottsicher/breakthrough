@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -115,6 +116,70 @@ func TestApplyColorSchemeUnknownSlugFallsBackToDefault(t *testing.T) {
 	want := config.DefaultTheme().Resolve()
 	if r.theme != want {
 		t.Errorf("r.theme = %+v, want DefaultTheme().Resolve() = %+v", r.theme, want)
+	}
+}
+
+// TestNewRootRestoresGlobalsFromSettings pins the user's own request:
+// breakthrough starts up with the "Globals" toggles (showHidden/
+// sizeBytes/mtimeUnix) it last saved, not always config.DefaultSettings'
+// own built-in default.
+func TestNewRootRestoresGlobalsFromSettings(t *testing.T) {
+	isolateInitialSettings(t, config.Settings{
+		ColorScheme: "default",
+		Language:    "en",
+		ShowHidden:  false,
+		SizeBytes:   true,
+		MtimeUnix:   true,
+	}, config.LoadColorSchemes("", ""))
+
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if r.panel.showHidden {
+		t.Error("panel.showHidden = true, want false (restored from settings)")
+	}
+	if !r.panel.sizeBytes {
+		t.Error("panel.sizeBytes = false, want true (restored from settings)")
+	}
+	if !r.panel.mtimeUnix {
+		t.Error("panel.mtimeUnix = false, want true (restored from settings)")
+	}
+}
+
+// TestGlobalsTogglesPersist pins that each of the three "Globals"
+// toggles saves its new value to the user's config file (see
+// persistSetting), the same as a color-scheme pick already does (see
+// TestApplyColorSchemeAppliesLiveAndPersists) — so it's still in effect
+// next time breakthrough starts (see TestNewRootRestoresGlobalsFromSettings).
+func TestGlobalsTogglesPersist(t *testing.T) {
+	path := isolateUserConfigFile(t)
+
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.toggleHidden()
+	r.toggleSizeBytes()
+	r.toggleMtimeUnix()
+
+	values, _, err := config.ParseFile(path)
+	if err != nil {
+		t.Fatalf("ParseFile(%q): %v", path, err)
+	}
+	want := map[string]string{
+		"show_hidden": strconv.FormatBool(r.panel.showHidden),
+		"size_bytes":  strconv.FormatBool(r.panel.sizeBytes),
+		"mtime_unix":  strconv.FormatBool(r.panel.mtimeUnix),
+	}
+	for key, wantValue := range want {
+		if values[key] != wantValue {
+			t.Errorf("persisted %s = %q, want %q, file: %v", key, values[key], wantValue, values)
+		}
 	}
 }
 

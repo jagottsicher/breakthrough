@@ -126,7 +126,7 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 // distinct from the OS home directory the Home button uses.
 func TestStartButtonReturnsToLaunchDirectory(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestCheckboxText(t *testing.T) {
 func TestPanelLoadPopulatesTable(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestPanelLoadPopulatesTable(t *testing.T) {
 
 func TestToggleCheckbox(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -500,7 +500,7 @@ func TestFormatModTimeCell(t *testing.T) {
 // TestSetSortKeyReversesOrderAndPersistsAcrossNavigation).
 func TestSetSortKeySwitchingColumnStartsAscending(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -525,7 +525,7 @@ func TestSetSortKeySwitchingColumnStartsAscending(t *testing.T) {
 // arrow appears only next to the current sort key's own label.
 func TestBuildColumnHeaderShowsArrowOnActiveColumnOnly(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestColumnHeaderClickSortsBySize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -604,7 +604,7 @@ func TestColumnHeaderClickSortsBySize(t *testing.T) {
 
 func TestAllSelected(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -630,7 +630,7 @@ func TestAllSelected(t *testing.T) {
 // context menu already offer.
 func TestToggleSelectAllViaHeader(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -652,7 +652,7 @@ func TestToggleSelectAllViaHeader(t *testing.T) {
 // of them funnel through (see its own doc comment).
 func TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt: rows 1-4
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -681,7 +681,7 @@ func TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles(t *testing.T) {
 // same reason: real coordinate-dependent click routing.
 func TestColumnHeaderCheckboxClickSelectsAll(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestColumnHeaderCheckboxClickSelectsAll(t *testing.T) {
 // blank out for that row).
 func TestColumnSeparatorsPresent(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -745,7 +745,7 @@ func TestLoadShowsDotfilesByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestToggleHiddenOffHidesDotfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -798,7 +798,7 @@ func TestSelectAllExcludesHiddenFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -834,7 +834,7 @@ func TestSelectAllIncludesHiddenFilesWhenShown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -860,7 +860,7 @@ func TestSetSortKeyReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -968,7 +968,7 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 		t.Skipf("hard links not supported here: %v", err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1022,7 +1022,7 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1052,7 +1052,7 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 // the ".." row (not checkable) is left alone either way.
 func TestSelectAllDeselectAll(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1076,7 +1076,7 @@ func TestSelectAllDeselectAll(t *testing.T) {
 // semantics; an unmatched pattern is not an error, a malformed one is.
 func TestSelectByPattern(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1113,7 +1113,7 @@ func TestSelectByPattern(t *testing.T) {
 // rows, absolute paths, in whatever order the underlying map yields.
 func TestSelectedPaths(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1144,7 +1144,7 @@ func TestSelectedPaths(t *testing.T) {
 // loading a new directory must not carry old checkmarks forward.
 func TestPanelLoadResetsSelection(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1169,7 +1169,7 @@ func TestPanelLoadResetsSelection(t *testing.T) {
 // the whole row.
 func TestNameCellRectExcludesCheckboxColumn(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve())
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}

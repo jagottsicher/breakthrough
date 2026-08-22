@@ -321,6 +321,14 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	pages.AddPage("text", r.propertiesText, true, true)
 	pages.AddPage("editfield", r.propertiesEditField, false, false)
 	pages.AddPage("buttons", r.propertiesButtons, false, true)
+
+	// Installed on pages itself, the shared ancestor of all three pages
+	// above — see hashesInputCapture/hashesMouseCapture's own doc
+	// comment for why that's what makes 'h' and a hash-section click
+	// keep working no matter which of the three currently has focus.
+	pages.SetInputCapture(r.hashesInputCapture)
+	pages.SetMouseCapture(r.hashesMouseCapture)
+
 	return pages
 }
 
@@ -571,7 +579,16 @@ func (r *Root) savePropertiesEdit() {
 			firstErr = err
 		}
 	}
-	if firstErr == nil && !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
+	// Compared at whole-second precision, not with Equal directly: the
+	// Modified date/time fields (see parseDate/parseTime) only ever
+	// show and edit whole seconds, zeroing out whatever sub-second
+	// precision propertiesStat.ModTime originally had the moment either
+	// half is committed — including by just tabbing through it without
+	// actually typing a new value. Comparing at full precision would
+	// treat that precision loss alone as a real change and write it,
+	// even though nothing the user could see or intentionally edit
+	// here actually differs.
+	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.propertiesStat.ModTime.Truncate(time.Second)) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
 			firstErr = err
 		}
@@ -1079,6 +1096,68 @@ func (r *Root) computeHashes() {
 	r.rerenderProperties()
 }
 
+// hashesInputCapture and hashesMouseCapture make 'h' and a click on the
+// hash section compute hashes (see computeHashes) unconditionally,
+// regardless of which of Properties' several sub-widgets currently has
+// real keyboard/mouse focus — installed directly on r.properties (see
+// newPropertiesView), the shared ancestor of propertiesText/
+// propertiesEditField/propertiesButtons, so both run before whichever of
+// those three would otherwise claim the event on its own (a Box-based
+// primitive's own SetInputCapture/SetMouseCapture always runs before it
+// delegates to whatever currently has focus underneath it — see
+// Box.WrapInputHandler/WrapMouseHandler). Without this, landing keyboard
+// focus on an auto-editing field (see isAutoEditField — Name, the octal
+// permission value, either half of Modified) via Tab hands real focus to
+// propertiesEditField instead of propertiesText, and neither 'h'
+// (previously handled in capturePropertiesKey, installed on
+// propertiesText itself) nor a hash-section click (previously handled in
+// capturePropertiesMouse, likewise) would ever run — per the user's own
+// explicit report and request that either work "jederzeit", not just
+// before the first field is touched.
+//
+// The accepted trade-off for the keyboard half: 'h' can no longer be
+// typed as a literal character while editing Name, or Owner/Group's own
+// text fallback — a narrow cost (renaming to something containing "h")
+// against a much more commonly wanted action.
+func (r *Root) hashesInputCapture(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
+		r.computeHashes()
+		return nil
+	}
+	return event
+}
+
+func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
+		return action, event
+	}
+	x, y := event.Position()
+
+	// Checked first, and independently of the row math below: tview.Pages
+	// gives every visible page the SAME rect as the Pages itself (see
+	// newPropertiesView's own doc comment on why propertiesText,
+	// propertiesEditField, and propertiesButtons all share r.properties'
+	// rect) — so propertiesText.InRect is true for the Cancel/Save row
+	// too, not just its own content lines. Without this check, a real
+	// regression: hashSectionRow can, once the overlay is short enough,
+	// numerically coincide with the button row's own screen row, and a
+	// click meant for Cancel or Save gets swallowed into computeHashes
+	// instead of ever reaching the button underneath it.
+	if primitiveContains(r.propertiesButtons, x, y) {
+		return action, event
+	}
+	if !r.propertiesText.InRect(x, y) {
+		return action, event
+	}
+
+	_, rectY, _, _ := r.propertiesText.GetInnerRect()
+	if y-rectY < r.hashSectionRow {
+		return action, event
+	}
+	r.computeHashes()
+	return tview.MouseConsumed, nil
+}
+
 // capturePropertiesKey is Properties' own keyboard-navigation dispatch,
 // installed on propertiesText (see newPropertiesView) — only relevant
 // while propertiesText itself has real keyboard focus, i.e. while a
@@ -1104,7 +1183,11 @@ func (r *Root) computeHashes() {
 // rather than needing Enter first, per the user's own request: Space
 // toggles it, same as Enter; Delete or '-' explicitly clears it; the
 // matching letter (r/w/x — see permFieldLetter) explicitly sets it.
-// 'h' (compute hashes) is unrelated to any of that and unchanged.
+// 'h' (compute hashes) is handled a level up now (see
+// hashesInputCapture on r.properties itself), not here — it needs to
+// keep working even while propertiesText doesn't have focus at all
+// (e.g. an auto-opened inline editor), which is exactly the case this
+// handler, installed on propertiesText specifically, can never see.
 func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -1143,21 +1226,19 @@ func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 			r.activateFocusedPropertyStop() // toggle target aside, Space is Enter's equivalent everywhere else too (e.g. Owner/Group's picker)
 			return nil
 		}
-		if event.Rune() == 'h' {
-			r.computeHashes()
-			return nil
-		}
 	}
 	return event
 }
 
 // capturePropertiesMouse routes a click within the Properties overlay's
 // read-only text: a propertySpan (Name, a permission bit, or half of
-// Modified) activates that field (see activatePropertyField); missing
-// all of those, a click on the hash hint/result section computes hashes,
-// the same action the 'h' key triggers. A click that misses everything
-// just does nothing — unlike Panel's header, there's no default TextView
-// behavior here worth pre-empting.
+// Modified) activates that field (see activatePropertyField). A hash-
+// section click is handled a level up now (see hashesMouseCapture on
+// r.properties itself, for the same reason capturePropertiesKey no
+// longer handles 'h' — see its own doc comment), so by the time a click
+// reaches here it's already past that check. A click that misses
+// everything just does nothing — unlike Panel's header, there's no
+// default TextView behavior here worth pre-empting.
 func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftClick || !r.propertiesText.InRect(event.Position()) {
 		return action, event
@@ -1169,11 +1250,6 @@ func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.Eve
 
 	if span, ok := r.propertySpanAt(row, col); ok {
 		r.activatePropertyField(span)
-		return tview.MouseConsumed, nil
-	}
-
-	if !isDirish(r.propertiesStat) && row >= r.hashSectionRow {
-		r.computeHashes()
 		return tview.MouseConsumed, nil
 	}
 	return action, event

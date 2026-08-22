@@ -345,7 +345,12 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	}
 }
 
-func TestCapturePropertiesKeyTriggersHash(t *testing.T) {
+// TestPropertiesHPressTriggersHash pins the 'h' keyboard shortcut for
+// computing hashes, dispatched through r.properties itself (see
+// hashesInputCapture) the way a real keypress arrives, rather than
+// calling capturePropertiesKey directly — that's no longer where this
+// is handled (see its own doc comment on why).
+func TestPropertiesHPressTriggersHash(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -356,20 +361,23 @@ func TestCapturePropertiesKeyTriggersHash(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)); got != nil {
-		t.Error("capturePropertiesKey should consume the 'h' key")
-	}
+	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+
 	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
 		t.Error("pressing h should have computed and shown the hash")
 	}
 }
 
-// TestCapturePropertiesMouseClickOnHashLineTriggersHash pins the click
-// affordance: a click landing on (or below) the hash hint line computes
-// the hash, dispatched through capturePropertiesMouse the way a real
-// click arrives, with a genuinely drawn overlay (tcell.SimulationScreen)
-// behind the coordinates rather than assumed ones.
-func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
+// TestPropertiesHPressTriggersHashWhileInlineEditorOpen pins the fix for
+// the user's own report: pressing h stopped working once you'd tabbed
+// onto an auto-editing field (see isAutoEditField — Name, the octal
+// permission value, either half of Modified), since real keyboard focus
+// moves to propertiesEditField then, not propertiesText, where 'h' used
+// to be handled — it would just get typed into whatever field was open
+// instead. hashesInputCapture (installed on r.properties, the shared
+// ancestor of both) fixes this by running before propertiesEditField's
+// own InputHandler ever gets a chance to.
+func TestPropertiesHPressTriggersHashWhileInlineEditorOpen(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -377,6 +385,40 @@ func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	r.target = path
+	r.openProperties()
+
+	r.setPropertiesFocus(0) // fieldName is propertyFieldOrder[0] — auto-opens the inline editor
+	if !r.propertiesEditField.HasFocus() {
+		t.Fatal("setup: expected the inline editor to have opened and taken focus")
+	}
+	nameBefore := r.propertiesEditField.GetText()
+
+	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+
+	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
+		t.Error("pressing h while the inline editor is open should still have computed and shown the hash")
+	}
+	if got := r.propertiesEditField.GetText(); got != nameBefore {
+		t.Errorf("the inline editor's own text = %q, want unchanged %q — h should not have been typed into it", got, nameBefore)
+	}
+}
+
+// TestPropertiesHashLineClickTriggersHash pins the click affordance: a
+// click landing on (or below) the hash hint line computes the hash,
+// dispatched through r.properties itself (see hashesMouseCapture) the
+// way a real click arrives, with a genuinely drawn overlay
+// (tcell.SimulationScreen) behind the coordinates rather than assumed
+// ones.
+func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24) // realistic — see clampToPanel's own default-rect gotcha noted elsewhere in this file
 	r.target = path
 	r.openProperties()
 
@@ -386,12 +428,108 @@ func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
 	x, y, _, _ := r.propertiesText.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
-	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0))
-	if action != tview.MouseConsumed || event != nil {
-		t.Errorf("click on the hash line should be consumed, got action=%v event=%v", action, event)
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on the hash line should be consumed")
 	}
 	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
 		t.Error("clicking the hash line should have computed and shown the hash")
+	}
+}
+
+// TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen pins the
+// fix for the user's own report: clicking the hash line used to instead
+// land on whichever of Properties' several other sub-widgets (an
+// auto-opened inline editor, or the Cancel/Save button row) happened to
+// occupy that screen position once a field had already been tabbed to —
+// closing the overlay via Cancel/Save instead of computing hashes, even
+// though nothing had actually been changed. hashesMouseCapture (also
+// installed on r.properties) runs before any of that, so this now finds
+// the hash line regardless.
+func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+
+	r.setPropertiesFocus(0) // auto-opens the inline editor over Name
+	if !r.propertiesEditField.HasFocus() {
+		t.Fatal("setup: expected the inline editor to have opened and taken focus")
+	}
+
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+
+	x, y, _, _ := r.propertiesText.GetInnerRect()
+	clickY := y + r.hashSectionRow
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on the hash line should be consumed even while the inline editor is open")
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
+		t.Error("clicking the hash line while the inline editor is open should still have computed and shown the hash")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q after clicking the hash line, want Properties to still be open (%q)", r.activePage, propertiesPage)
+	}
+}
+
+// TestSavingUntouchedFieldsDoesNotWriteAnything pins the user's own
+// expectation ("das Fenster sollte keine Werte schreiben, wenn sie nicht
+// geändert wurden"): tabbing all the way through every field stop —
+// which auto-opens an inline editor pre-filled with the current value
+// for Name/the octal permission/either half of Modified (see
+// isAutoEditField), and commits it right back, unchanged, on the very
+// next Tab — without ever typing anything new, then Save, must leave the
+// file exactly as it was. savePropertiesEdit already only applies a
+// field whose staged value differs from the original (see its own doc
+// comment); this pins that a real Tab-through-everything sequence,
+// dispatched the way real keypresses arrive rather than by calling
+// internal methods directly, never disturbs that.
+func TestSavingUntouchedFieldsDoesNotWriteAnything(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	for i := 0; i < len(propertyFieldOrder); i++ {
+		r.properties.InputHandler()(tab, func(tview.Primitive) {})
+	}
+
+	r.savePropertiesEdit()
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Name() != before.Name() {
+		t.Errorf("name changed from %q to %q despite no edit", before.Name(), after.Name())
+	}
+	if after.Mode() != before.Mode() {
+		t.Errorf("mode changed from %v to %v despite no edit", before.Mode(), after.Mode())
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("mtime changed from %v to %v despite no edit", before.ModTime(), after.ModTime())
 	}
 }
 
@@ -408,6 +546,33 @@ func drawProperties(t *testing.T, r *Root) tcell.SimulationScreen {
 	}
 	screen.SetSize(80, 24)
 	r.properties.SetRect(0, 0, 60, 20)
+	r.properties.Draw(screen)
+	return screen
+}
+
+// drawPropertiesAtCurrentRect is drawProperties' counterpart for tests
+// that need r.properties' own real, already-computed rect (see
+// resizeProperties) left alone rather than overridden to a fixed
+// 60x20. That matters specifically for the Cancel/Save row: its own
+// rect (see newPropertiesView's "buttons" page, added with resize:
+// false) is never touched by tview.Pages' own per-Draw resizing, so it
+// stays whatever resizeProperties last computed — which, against a
+// realistic (wide) panel rect and a long enough t.TempDir() path in the
+// rendered "Path:" line, can end up wider than drawProperties' fixed 60
+// columns. Overriding to a narrower rect then leaves the button row's
+// own already-computed position extending past r.properties' new
+// (narrower) bounds, so a click there gets rejected by Pages' own
+// InRect check before ever reaching the button underneath it — not a
+// real app bug, just this fixed-size test helper being too narrow for
+// realistic content.
+func drawPropertiesAtCurrentRect(t *testing.T, r *Root) tcell.SimulationScreen {
+	t.Helper()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(120, 40) // generous enough for any realistic content width against an 80x24 panel
 	r.properties.Draw(screen)
 	return screen
 }
@@ -1172,6 +1337,88 @@ func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o644 {
 		t.Errorf("mode = %o after Cancel, want unchanged 0644", fi.Mode().Perm())
+	}
+}
+
+// TestPropertiesCancelButtonClickStillClosesOverlay pins the fix for a
+// real regression: hashesMouseCapture (installed on r.properties itself
+// — see its own doc comment) used to swallow a click meant for Cancel
+// into computeHashes instead, and leave Properties open — because
+// tview.Pages gives every visible page (propertiesText included) the
+// same rect as the Pages itself, covering the Cancel/Save row too, not
+// just propertiesText's own content lines. Dispatched through
+// r.properties.MouseHandler() the way a real click arrives — the
+// existing TestCancelPropertiesEditDiscardsChanges calls
+// cancelPropertiesEdit directly, which bypasses this routing entirely
+// and so never would have caught it.
+func TestPropertiesCancelButtonClickStillClosesOverlay(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+
+	screen := drawPropertiesAtCurrentRect(t, r)
+	defer screen.Fini()
+
+	x, y, w, h := r.propertiesCancelBtn.GetRect()
+	clickX, clickY := x+w/2, y+h/2
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on Cancel should be consumed")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after clicking Cancel, want closed", r.activePage)
+	}
+	if strings.Contains(r.propertiesText.GetText(true), "MD5:") {
+		t.Error("clicking Cancel should not have computed hashes")
+	}
+}
+
+// TestPropertiesSaveButtonClickStillSaves is
+// TestPropertiesCancelButtonClickStillClosesOverlay's Save-button
+// counterpart, pinning the same fix.
+func TestPropertiesSaveButtonClickStillSaves(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // a real, staged change for Save to actually apply
+
+	screen := drawPropertiesAtCurrentRect(t, r)
+	defer screen.Fini()
+
+	x, y, w, h := r.propertiesSaveBtn.GetRect()
+	clickX, clickY := x+w/2, y+h/2
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on Save should be consumed")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after clicking Save, want closed", r.activePage)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o after Save, want the staged change applied (0640 — other-read toggled off from 0644)", fi.Mode().Perm())
 	}
 }
 
