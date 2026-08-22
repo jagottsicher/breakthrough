@@ -118,6 +118,40 @@ func TestLoadWarnsOnUnknownKey(t *testing.T) {
 	}
 }
 
+func TestLoadParsesGlobalsBooleans(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "show_hidden = false\nsize_bytes = true\nmtime_unix = 1\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.ShowHidden {
+		t.Error("ShowHidden = true, want false")
+	}
+	if !s.SizeBytes {
+		t.Error("SizeBytes = false, want true")
+	}
+	if !s.MtimeUnix {
+		t.Error("MtimeUnix = false, want true (parsed from \"1\")")
+	}
+}
+
+func TestLoadWarnsOnInvalidBooleanValue(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "show_hidden = not-a-bool\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "show_hidden") {
+		t.Errorf("warnings = %v, want one mentioning show_hidden", warnings)
+	}
+	if s.ShowHidden != DefaultSettings().ShowHidden {
+		t.Errorf("ShowHidden = %v, want the default (%v) since the value was rejected", s.ShowHidden, DefaultSettings().ShowHidden)
+	}
+}
+
 func TestSetKeyAppendsNewKeyToEmptyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "user", "config") // parent dir doesn't exist yet
 	if err := SetKey(path, "color_scheme", "solarized"); err != nil {

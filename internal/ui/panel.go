@@ -124,6 +124,8 @@ type Panel struct {
 	// buildColumnHeader/setSortKey for how a column-header click changes
 	// them. Directories always stay grouped first either way; only the
 	// order within that group (and within the files that follow) changes.
+	// Not persisted across restarts, unlike the three below — sorting by
+	// something other than name is more of a one-off, in-the-moment need.
 	//
 	// sizeBytes/mtimeUnix pick the Size/Modified columns' display format
 	// — see formatSizeCell/formatModTimeCell — toggled via Root's
@@ -131,14 +133,21 @@ type Panel struct {
 	// column header itself: a click there is unambiguously "sort by this
 	// column", with no separate click zone competing for the same cell.
 	//
-	// showHidden defaults to true (set in NewPanel) — dotfiles are shown
-	// unless toggled off. When false, dotfile entries (name starting with
-	// ".") are filtered out of the listing entirely in load() — see
+	// showHidden: when false, dotfile entries (name starting with ".")
+	// are filtered out of the listing entirely in load() — see
 	// filterHidden — rather than kept as rows that are merely skipped
 	// elsewhere. That's what makes every row-based operation (selectAll,
 	// selectByPattern, arrow-key navigation, ...) exclude them for free
 	// once hidden, without each one needing its own "is this row actually
 	// hidden right now" check.
+	//
+	// All three are seeded in NewPanel from the on-disk settings (see
+	// config.Settings.ShowHidden/SizeBytes/MtimeUnix, and
+	// config.DefaultSettings for what a fresh install starts with), and
+	// persisted back to it on every toggle (see Root.toggleHidden/
+	// toggleSizeBytes/toggleMtimeUnix) — per the user's own request,
+	// breakthrough remembers the last session's choice for these three
+	// specifically, rather than always resetting to the built-in default.
 	sortKey        sortKey
 	sortDescending bool
 	sizeBytes      bool
@@ -222,17 +231,24 @@ type rowRef struct {
 // NewPanel creates a Panel rooted at path, themed per theme (see
 // paintStaticChrome/applyTheme — Root resolves this once at startup from
 // the on-disk color scheme, see loadInitialSettings, and again on a live
-// scheme switch). app is needed to move keyboard focus into the header's
-// edit field on click and back to the list afterwards — see
-// Panel.openEdit.
-func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme) (*Panel, error) {
+// scheme switch), with the "Globals" toggles (see Panel.showHidden/
+// sizeBytes/mtimeUnix) seeded from settings — the same on-disk source as
+// theme, so breakthrough starts up remembering the last session's
+// choice (see Root.toggleHidden/toggleSizeBytes/toggleMtimeUnix, which
+// persist a change back to it) instead of always resetting to
+// config.DefaultSettings' own built-in default. app is needed to move
+// keyboard focus into the header's edit field on click and back to the
+// list afterwards — see Panel.openEdit.
+func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
 		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
 		app:          app,
 		theme:        theme,
 		table:        tview.NewTable(),
 		columnHeader: tview.NewTable(),
-		showHidden:   true, // default: dotfiles shown — see the field's own doc comment
+		showHidden:   settings.ShowHidden,
+		sizeBytes:    settings.SizeBytes,
+		mtimeUnix:    settings.MtimeUnix,
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
@@ -646,11 +662,14 @@ func formatSizeCell(size int64, bytesMode bool) string {
 	return fmt.Sprintf("%*s", sizeColumnWidth, s)
 }
 
-// modColumnWidth is Modified's counterpart to sizeColumnWidth: the
-// width of "2026-08-19 09:12:03" (19 characters), which a Unix
-// timestamp (10 digits until the year 2286) comfortably fits within too
-// — so, again, toggling the format never reflows the column.
-const modColumnWidth = 19
+// modColumnWidth is Modified's counterpart to sizeColumnWidth: wide
+// enough for the column header's own "Modify time (mtime) ↓/↑" (21
+// characters, the widest of the two — see buildColumnHeader/sortArrow),
+// which comfortably fits "2026-08-19 09:12:03" (19 characters) or a
+// Unix timestamp (10 digits until the year 2286) within it too — so
+// toggling the data format, or which column is sorted, never reflows
+// the column.
+const modColumnWidth = 21
 
 // formatModTimeCell renders t right-aligned within modColumnWidth, as
 // either a Unix timestamp (unixMode) or the same "2006-01-02 15:04:05"
@@ -723,7 +742,7 @@ func (p *Panel) buildColumnHeader() {
 	p.columnHeader.SetCell(0, colSizeSep, p.columnSeparator())
 	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
 	p.columnHeader.SetCell(0, colModifiedSep, p.columnSeparator())
-	p.setColumnHeaderCell(colModified, modColumnWidth, "Modified", sortByModified)
+	p.setColumnHeaderCell(colModified, modColumnWidth, "Modify time (mtime)", sortByModified)
 }
 
 // setColumnHeaderCell builds one of columnHeader's fixed-width, right-

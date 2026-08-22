@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -275,7 +276,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	settings, colorSchemes, configWarnings := loadInitialSettings()
 	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
 
-	panel, err := NewPanel(app, path, theme)
+	panel, err := NewPanel(app, path, theme, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +304,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
+	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
@@ -780,6 +782,8 @@ func (r *Root) toggleHidden() {
 	r.panel.showHidden = !r.panel.showHidden
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+	r.settings.ShowHidden = r.panel.showHidden
+	r.persistSetting("show_hidden", strconv.FormatBool(r.panel.showHidden))
 }
 
 // hiddenToggleLabel renders the hidden-files toggle's label as the
@@ -803,6 +807,8 @@ func (r *Root) toggleSizeBytes() {
 	r.panel.sizeBytes = !r.panel.sizeBytes
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
+	r.settings.SizeBytes = r.panel.sizeBytes
+	r.persistSetting("size_bytes", strconv.FormatBool(r.panel.sizeBytes))
 }
 
 // sizeFormatToggleLabel is sizeBytes's own toggleHidden-style label.
@@ -821,14 +827,16 @@ func (r *Root) toggleMtimeUnix() {
 	r.panel.mtimeUnix = !r.panel.mtimeUnix
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
+	r.settings.MtimeUnix = r.panel.mtimeUnix
+	r.persistSetting("mtime_unix", strconv.FormatBool(r.panel.mtimeUnix))
 }
 
 // mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
 func mtimeFormatToggleLabel(mtimeUnix bool) string {
 	if mtimeUnix {
-		return "Show modified date formatted"
+		return "Show mtime formatted"
 	}
-	return "Show modified date as timestamp"
+	return "Show mtime as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
