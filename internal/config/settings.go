@@ -29,7 +29,15 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 		}
 		return nil, nil, err
 	}
-	defer f.Close()
+	defer func() {
+		// Only overrides err if reading itself succeeded — a failure
+		// there (or a malformed line, surfaced as a warning instead) is
+		// the more relevant one to report, the same convention
+		// appendBashHistory's own deferred Close uses.
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
 
 	scanner := bufio.NewScanner(f)
 	lineNo := 0
@@ -174,16 +182,20 @@ func SetKey(path, key, value string) error {
 	tmpPath := tmp.Name()
 	content := strings.Join(lines, "\n") + "\n"
 	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		// Best-effort cleanup: the write itself already failed, so
+		// that's the error worth reporting — a failure removing the
+		// half-written temp file too isn't worth masking it with (it
+		// just leaves a stray file behind, not a correctness problem).
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	return nil
