@@ -1,0 +1,13 @@
+{
+  "name": "Solarized Dark",
+  "accent_background": "#073642",
+  "focused_background": "#268bd2",
+  "error_background": "#dc322f",
+  "selection_background": "#268bd2",
+  "text": "#93a1a1",
+  "editable_background": "#586e75",
+  "placeholder_text": "#657b83",
+  "entry_normal": "#93a1a1",
+  "entry_executable": "#859900",
+  "entry_error": "#dc322f"
+}
