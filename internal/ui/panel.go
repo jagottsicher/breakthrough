@@ -13,13 +13,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
-
-// accentBackgroundColor sets the header bar and floating elements (context
-// menu, rename prompt) apart from the plain listing by background color —
-// deliberately chosen over a box-drawing border, which reads as dated.
-const accentBackgroundColor = tcell.ColorDarkSlateGray
 
 const (
 	headerDisplayPage = "display"
@@ -52,7 +48,9 @@ const (
 // one sorts by it. The table itself is navigable with the arrow keys
 // (built into tview.Table) and Enter, has a clickable checkbox column for
 // marking entries, and (via Root) a right-click context menu. No borders
-// anywhere — see accentBackgroundColor.
+// anywhere — a background color set apart from the plain panel (see
+// theme/paintStaticChrome) does the same job without the box-drawing
+// look, which reads as dated.
 //
 // A tview.Table, not tview.List: a checkbox column needs a second column
 // at all, which List doesn't have, and Table.CellAt/TableCell.Reference
@@ -63,6 +61,13 @@ type Panel struct {
 	*tview.Flex
 
 	app *tview.Application
+
+	// theme is the panel's own copy of the active color scheme (see
+	// paintStaticChrome/applyTheme, and Root's own theme field) — needed
+	// here too, not just on Root, since entryColor/columnSeparator/addRow
+	// color each row's cells directly rather than through a shared parent
+	// widget's own single color.
+	theme config.ResolvedTheme
 
 	headerPages *tview.Pages
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
@@ -214,13 +219,17 @@ type rowRef struct {
 	modTime time.Time
 }
 
-// NewPanel creates a Panel rooted at path. app is needed to move keyboard
-// focus into the header's edit field on click and back to the list
-// afterwards — see Panel.openEdit.
-func NewPanel(app *tview.Application, path string) (*Panel, error) {
+// NewPanel creates a Panel rooted at path, themed per theme (see
+// paintStaticChrome/applyTheme — Root resolves this once at startup from
+// the on-disk color scheme, see loadInitialSettings, and again on a live
+// scheme switch). app is needed to move keyboard focus into the header's
+// edit field on click and back to the list afterwards — see
+// Panel.openEdit.
+func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme) (*Panel, error) {
 	p := &Panel{
 		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
 		app:          app,
+		theme:        theme,
 		table:        tview.NewTable(),
 		columnHeader: tview.NewTable(),
 		showHidden:   true, // default: dotfiles shown — see the field's own doc comment
@@ -231,18 +240,13 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
 
 	p.columnHeader.SetBorders(false)
-	p.columnHeader.SetBackgroundColor(accentBackgroundColor)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
 
-	p.header = tview.NewTextView().SetTextColor(tcell.ColorWhite)
+	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
-	p.header.SetBackgroundColor(accentBackgroundColor)
 	p.header.SetMouseCapture(p.captureHeaderMouse)
 
 	p.headerEdit = tview.NewInputField()
-	p.headerEdit.SetFieldBackgroundColor(accentBackgroundColor)
-	p.headerEdit.SetBackgroundColor(accentBackgroundColor)
-	p.headerEdit.SetFieldTextColor(tcell.ColorWhite)
 	p.headerEdit.SetDoneFunc(p.finishEdit)
 
 	p.headerPages = tview.NewPages()
@@ -250,8 +254,6 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
 
 	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
-	p.filterRegexBtn.SetBackgroundColor(accentBackgroundColor)
-	p.filterRegexBtn.SetLabelColor(tcell.ColorWhite)
 	p.filterRegexBtn.SetSelectedFunc(func() {
 		p.filterRegex = !p.filterRegex
 		p.filterRegexBtn.SetLabel(filterModeLabel(p.filterRegex))
@@ -260,10 +262,6 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 
 	p.filterField = tview.NewInputField()
 	p.filterField.SetPlaceholder("filter")
-	p.filterField.SetPlaceholderTextColor(tcell.ColorLightGray)
-	p.filterField.SetFieldBackgroundColor(accentBackgroundColor)
-	p.filterField.SetBackgroundColor(accentBackgroundColor)
-	p.filterField.SetFieldTextColor(tcell.ColorWhite)
 	p.filterField.SetChangedFunc(func(text string) {
 		if text == p.filterText {
 			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
@@ -272,6 +270,8 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 		p.reportError(p.load(p.path))
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+
+	p.paintStaticChrome()
 
 	// headerRow puts the path bar and the filter side by side in the
 	// same top line, per the user's own request — headerPages keeps
@@ -292,6 +292,51 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	}
 
 	return p, nil
+}
+
+// paintStaticChrome applies p.theme's colors to every widget that exists
+// for the panel's whole lifetime — as opposed to per-row table cells
+// (see addRow/entryColor), which are baked in at construction and only
+// get repainted by a full reload (see applyTheme). Called once from
+// NewPanel (p.theme already set to the caller's initial value) and again,
+// after p.theme changes, from applyTheme (a live color-scheme switch).
+func (p *Panel) paintStaticChrome() {
+	p.columnHeader.SetBackgroundColor(p.theme.AccentBackground)
+
+	p.header.SetTextColor(p.theme.Text)
+	p.header.SetBackgroundColor(p.theme.AccentBackground)
+
+	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
+	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
+	p.headerEdit.SetFieldTextColor(p.theme.Text)
+
+	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
+	p.filterRegexBtn.SetLabelColor(p.theme.Text)
+
+	p.filterField.SetPlaceholderTextColor(p.theme.PlaceholderText)
+	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
+	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
+	p.filterField.SetFieldTextColor(p.theme.Text)
+
+	// The panel's one other themed color, the current row's own
+	// highlight — tview.Table's own default (StyleDefault, an inverted
+	// fg/bg rather than a fixed color pair) is never quite what a color
+	// scheme means by "selection", so this is set explicitly instead of
+	// left alone.
+	p.table.SetSelectedStyle(tcell.StyleDefault.
+		Background(p.theme.SelectionBackground).
+		Foreground(p.theme.Text))
+}
+
+// applyTheme switches the panel to theme live: every already-built
+// widget (see paintStaticChrome), plus a full reload — the simplest way
+// to repaint each row's own cell colors (see addRow/entryColor), which
+// are baked into their TableCells at construction rather than looked up
+// from p.theme on every draw.
+func (p *Panel) applyTheme(theme config.ResolvedTheme) {
+	p.theme = theme
+	p.paintStaticChrome()
+	p.reportError(p.load(p.path))
 }
 
 // load replaces the panel's contents with the entries of dir. It only
@@ -520,7 +565,7 @@ func sortGroup(entries []fsops.Entry, key sortKey, descending bool) {
 
 // addRow renders one table row for ref at the given row index.
 func (p *Panel) addRow(row int, ref rowRef) {
-	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(tcell.ColorWhite)
+	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(p.theme.Text)
 	if !ref.checkable {
 		checkbox.SetText(" ")
 	} else {
@@ -534,12 +579,12 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
 
-	color := entryColor(ref)
+	color := p.entryColor(ref)
 
 	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
 	p.table.SetCell(row, colType, typeCell)
 
-	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(tcell.ColorWhite)
+	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
 	label := ref.name
@@ -566,22 +611,22 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	p.table.SetCell(row, colSizeSep, columnSeparator())
-	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(tcell.ColorWhite))
-	p.table.SetCell(row, colModifiedSep, columnSeparator())
-	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(tcell.ColorWhite))
+	p.table.SetCell(row, colSizeSep, p.columnSeparator())
+	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
+	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
+	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
 }
 
 // columnSeparator is a new cell for the bare "│" columns dividing
 // Name/Size/Modified (colSizeSep/colModifiedSep) — a thin rule between
-// columns rather than a full box-drawing border around them (see
-// accentBackgroundColor's own doc comment on why this codebase avoids
-// those generally; this is the one deliberate exception, at the user's
-// own request, scoped to just these column boundaries). Always present,
-// even on the ".." row: it's structural, not data, so there's nothing to
-// blank out the way Size/Modified's own values are for that row.
-func columnSeparator() *tview.TableCell {
-	return tview.NewTableCell("│").SetTextColor(tcell.ColorWhite)
+// columns rather than a full box-drawing border around them (see the
+// Panel doc comment on why this codebase avoids those generally; this is
+// the one deliberate exception, at the user's own request, scoped to
+// just these column boundaries). Always present, even on the ".." row:
+// it's structural, not data, so there's nothing to blank out the way
+// Size/Modified's own values are for that row.
+func (p *Panel) columnSeparator() *tview.TableCell {
+	return tview.NewTableCell("│").SetTextColor(p.theme.Text)
 }
 
 // sizeColumnWidth is the fixed width every Size cell — data or header —
@@ -654,20 +699,20 @@ func sortArrow(descending bool) string {
 func (p *Panel) buildColumnHeader() {
 	p.columnHeader.Clear()
 
-	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(tcell.ColorWhite)
+	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(p.theme.Text)
 	checkboxHeader.SetClickedFunc(func() bool {
 		p.toggleSelectAllViaHeader()
 		return false
 	})
 	p.columnHeader.SetCell(0, colCheckbox, checkboxHeader)
-	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
-	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
+	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(p.theme.Text))
+	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(p.theme.Text))
 
 	nameLabel := "Name"
 	if p.sortKey == sortByName {
 		nameLabel += sortArrow(p.sortDescending)
 	}
-	nameCell := tview.NewTableCell(nameLabel).SetTextColor(tcell.ColorWhite)
+	nameCell := tview.NewTableCell(nameLabel).SetTextColor(p.theme.Text)
 	nameCell.SetExpansion(1)
 	nameCell.SetClickedFunc(func() bool {
 		p.setSortKey(sortByName)
@@ -675,9 +720,9 @@ func (p *Panel) buildColumnHeader() {
 	})
 	p.columnHeader.SetCell(0, colName, nameCell)
 
-	p.columnHeader.SetCell(0, colSizeSep, columnSeparator())
+	p.columnHeader.SetCell(0, colSizeSep, p.columnSeparator())
 	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
-	p.columnHeader.SetCell(0, colModifiedSep, columnSeparator())
+	p.columnHeader.SetCell(0, colModifiedSep, p.columnSeparator())
 	p.setColumnHeaderCell(colModified, modColumnWidth, "Modified", sortByModified)
 }
 
@@ -688,7 +733,7 @@ func (p *Panel) setColumnHeaderCell(col, width int, label string, key sortKey) {
 	if p.sortKey == key {
 		text += sortArrow(p.sortDescending)
 	}
-	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(tcell.ColorWhite)
+	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(p.theme.Text)
 	cell.SetClickedFunc(func() bool {
 		p.setSortKey(key)
 		return false
@@ -769,21 +814,22 @@ func typeGlyph(ref rowRef) byte {
 }
 
 // entryColor sets a row's type character and name apart by color for the
-// two cases worth flagging beyond the glyph alone — a broken symlink in
-// red (something that will fail if acted on) and an executable file in
-// green, matching Midnight Commander's own default skin, which colors an
-// executable's whole name, not just its '*'. Applied to both the type
+// two cases worth flagging beyond the glyph alone — a broken symlink
+// (something that will fail if acted on) and an executable file, per
+// p.theme's own EntryError/EntryExecutable (the default scheme's red/
+// green match Midnight Commander's own default skin, which colors an
+// executable's whole name, not just its '*'). Applied to both the type
 // cell and the name cell (see addRow) for the same reason MC colors the
 // whole entry rather than a lone prefix character: it reads at a glance
 // across the row, not just in the narrow type column.
-func entryColor(ref rowRef) tcell.Color {
+func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
-		return tcell.ColorRed
+		return p.theme.EntryError
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
-		return tcell.ColorGreen
+		return p.theme.EntryExecutable
 	default:
-		return tcell.ColorWhite
+		return p.theme.EntryNormal
 	}
 }
 

@@ -10,23 +10,11 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 const propertiesPage = "properties"
-
-// focusedBackgroundColor sets apart whichever field propertiesFocusIndex
-// currently points at (see focusTag/setPropertiesFocus) from every other
-// editable field's plain slategray shade (see focusTag) — brighter, so
-// "this is the one keyboard focus is on right now" reads as a distinct
-// state from "this is merely editable". Also propertiesEditField's own
-// color (see newPropertiesView): unlike the plain shade, which many
-// spans in the read-only text all share, the inline edit field is only
-// ever shown for whichever field is currently focused — every time it's
-// visible, that's what it's covering, so it should always look focused
-// too, not fall back to the duller "editable" look the field underneath
-// no longer shows once its own text is covered.
-const focusedBackgroundColor = tcell.ColorDarkCyan
 
 // propertyField identifies one editable region within the Properties
 // overlay — see propertySpan and propertiesBuilder.
@@ -134,6 +122,11 @@ type propertiesBuilder struct {
 	row   int
 	col   int
 	spans []propertySpan
+
+	// theme drives focusTag's own colors — set once when pb is
+	// constructed (see renderProperties), from whatever Root.theme
+	// currently is.
+	theme config.ResolvedTheme
 }
 
 func (pb *propertiesBuilder) tag(s string) {
@@ -168,17 +161,21 @@ func (pb *propertiesBuilder) field(label, value string) {
 }
 
 // focusTag returns the style tag/reset pair a span for field should use:
-// a brighter, bolder "this one has keyboard focus" style if it's the one
-// propertiesFocusIndex currently points at (focused — see
-// focusedPropertyField), otherwise the plain "this is editable" style
-// (plain slategray) every field already had. Neither ever
-// touches the foreground color, only background/bold, so the reset tag
-// never needs to restore anything beyond what it changed.
-func focusTag(field, focused propertyField) (tag, reset string) {
+// a brighter, bolder "this one has keyboard focus" style (pb.theme's own
+// FocusedBackground) if it's the one propertiesFocusIndex currently
+// points at (focused — see focusedPropertyField), otherwise the plain
+// "this is editable" style (pb.theme's EditableBackground) every field
+// already had. Neither ever touches the foreground color, only
+// background/bold, so the reset tag never needs to restore anything
+// beyond what it changed. Colors are rendered as "#rrggbb" (see
+// colorTag), not a color name, so a themed value always round-trips
+// exactly through tview's own tag parser rather than depending on it
+// recognizing the same names tcell.GetColor does.
+func (pb *propertiesBuilder) focusTag(field, focused propertyField) (tag, reset string) {
 	if field == focused {
-		return "[:darkcyan:b]", "[:-:-]" // matches focusedBackgroundColor
+		return fmt.Sprintf("[:%s:b]", colorTag(pb.theme.FocusedBackground)), "[:-:-]"
 	}
-	return "[:slategray]", "[:-]"
+	return fmt.Sprintf("[:%s]", colorTag(pb.theme.EditableBackground)), "[:-]"
 }
 
 // editableField writes one "Label: value" line with value highlighted
@@ -187,7 +184,7 @@ func focusTag(field, focused propertyField) (tag, reset string) {
 // under field.
 func (pb *propertiesBuilder) editableField(label, value string, field, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", label+":"))
-	tag, reset := focusTag(field, focused)
+	tag, reset := pb.focusTag(field, focused)
 	pb.tag(tag)
 	start := pb.col
 	pb.text(value)
@@ -218,7 +215,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	const rwx = "rwxrwxrwx"
 
 	for i, f := range bitFields {
-		tag, reset := focusTag(f, focused)
+		tag, reset := pb.focusTag(f, focused)
 		pb.tag(tag)
 		start := pb.col
 		ch := byte('-')
@@ -231,7 +228,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	}
 
 	pb.text(" (")
-	octalTag, octalReset := focusTag(fieldPermOctal, focused)
+	octalTag, octalReset := pb.focusTag(fieldPermOctal, focused)
 	pb.tag(octalTag)
 	octalStart := pb.col
 	pb.text(fmt.Sprintf("%04o", mode.Perm()))
@@ -250,7 +247,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", "Modified:"))
 
-	dateTag, dateReset := focusTag(fieldMtimeDate, focused)
+	dateTag, dateReset := pb.focusTag(fieldMtimeDate, focused)
 	pb.tag(dateTag)
 	dateStart := pb.col
 	pb.text(t.Format("2006-01-02"))
@@ -259,7 +256,7 @@ func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 
 	pb.text(" ")
 
-	timeTag, timeReset := focusTag(fieldMtimeTime, focused)
+	timeTag, timeReset := pb.focusTag(fieldMtimeTime, focused)
 	pb.tag(timeTag)
 	timeStart := pb.col
 	pb.text(t.Format("15:04:05"))
@@ -303,22 +300,19 @@ func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 // thing for Enter; SetInputCapture adds the same for Space, per the
 // user's own request that either activate a focused button.
 func (r *Root) newPropertiesView() *tview.Pages {
-	r.propertiesText = tview.NewTextView().SetTextColor(tcell.ColorWhite)
-	r.propertiesText.SetBackgroundColor(accentBackgroundColor)
+	r.propertiesText = tview.NewTextView()
 	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
 	r.propertiesText.SetDynamicColors(true) // needed for focusTag's style tags
 	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
 	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
 
+	// Colored via r.theme.FocusedBackground (see Root.applyTheme), not
+	// r.theme.EditableBackground: this field is only ever shown for
+	// whichever field is currently focused (see focusTag's own doc
+	// comment), so it should always carry that look, not the plainer
+	// "merely editable" one the span underneath no longer shows once
+	// this covers it.
 	r.propertiesEditField = tview.NewInputField()
-	// focusedBackgroundColor, not editableBackgroundColor: this field is
-	// only ever shown for whichever field is currently focused (see
-	// focusedBackgroundColor's own doc comment), so it should always
-	// carry that look, not the plainer "merely editable" one the span
-	// underneath no longer shows once this covers it.
-	r.propertiesEditField.SetFieldBackgroundColor(focusedBackgroundColor)
-	r.propertiesEditField.SetBackgroundColor(focusedBackgroundColor)
-	r.propertiesEditField.SetFieldTextColor(tcell.ColorWhite)
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
 
 	r.propertiesButtons = r.newPropertiesButtons()
@@ -338,10 +332,6 @@ func (r *Root) newPropertiesView() *tview.Pages {
 func (r *Root) newPropertiesButtons() *tview.Flex {
 	r.propertiesCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelPropertiesEdit)
 	r.propertiesSaveBtn = tview.NewButton("Save").SetSelectedFunc(r.savePropertiesEdit)
-	for _, b := range []*tview.Button{r.propertiesCancelBtn, r.propertiesSaveBtn} {
-		b.SetBackgroundColor(accentBackgroundColor)
-		b.SetLabelColor(tcell.ColorWhite)
-	}
 	r.propertiesCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
 	r.propertiesSaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
 
@@ -387,7 +377,6 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	})
 
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	flex.SetBackgroundColor(accentBackgroundColor)
 	flex.AddItem(r.propertiesCancelBtn, 0, 1, false)
 	flex.AddItem(r.propertiesSaveBtn, 0, 1, false)
 	return flex
@@ -459,7 +448,7 @@ func (r *Root) openProperties() {
 // text field, computing hashes, a focus change) to keep the display,
 // propertySpans, and the focus highlight all in sync with current state.
 func (r *Root) renderProperties() {
-	pb := &propertiesBuilder{}
+	pb := &propertiesBuilder{theme: r.theme}
 	focused := r.focusedPropertyField()
 
 	pb.editableField("Name", r.stagedName, fieldName, focused)

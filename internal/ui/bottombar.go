@@ -26,6 +26,7 @@ const (
 	statusActionEdit statusBarAction = iota
 	statusActionRename
 	statusActionToggleHidden
+	statusActionSettings
 )
 
 // statusBarSpan is one clickable region within the status bar's text —
@@ -44,10 +45,6 @@ type statusBarSpan struct {
 func (r *Root) newBottomBar() {
 	r.bashLine = tview.NewInputField()
 	r.bashLine.SetLabel("$ ")
-	r.bashLine.SetFieldBackgroundColor(accentBackgroundColor)
-	r.bashLine.SetBackgroundColor(accentBackgroundColor)
-	r.bashLine.SetLabelColor(tcell.ColorWhite)
-	r.bashLine.SetFieldTextColor(tcell.ColorWhite)
 	r.bashLine.SetDoneFunc(func(key tcell.Key) {
 		if key != tcell.KeyEnter {
 			return
@@ -64,8 +61,7 @@ func (r *Root) newBottomBar() {
 	r.bashHistory = loadBashHistory(r.bashHistoryFile)
 	r.bashHistoryIdx = len(r.bashHistory)
 
-	r.statusBar = tview.NewTextView().SetTextColor(tcell.ColorWhite)
-	r.statusBar.SetBackgroundColor(accentBackgroundColor)
+	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
 	r.statusBar.SetMouseCapture(r.captureStatusBarMouse)
 
@@ -96,7 +92,7 @@ func (r *Root) refreshStatusBar() {
 }
 
 // buildStatusBar renders the status bar's text: the current user, disk
-// usage for the panel's current directory (see dfSummary), three quick-
+// usage for the panel's current directory (see dfSummary), four quick-
 // action buttons in nano's own "^X Label" style (instantly recognizable
 // as "Ctrl+X does this" without needing a separate legend), and the
 // clock.
@@ -131,6 +127,8 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	button("^R Rename", statusActionRename)
 	write("  ")
 	button("^G Hidden", statusActionToggleHidden)
+	write("  ")
+	button("^X Settings", statusActionSettings)
 	sep()
 	write(clockText())
 
@@ -197,6 +195,8 @@ func (r *Root) runStatusBarAction(action statusBarAction) {
 		r.renameCurrentEntry()
 	case statusActionToggleHidden:
 		r.toggleHidden()
+	case statusActionSettings:
+		r.openSettings()
 	}
 }
 
@@ -226,15 +226,17 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G (see
-// EditShortcut/RenameShortcut/ToggleHiddenShortcut, wired up in
-// cmd/breakthrough) should act right now: no overlay is open, and the
-// bash command line doesn't have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X (see
+// EditShortcut/RenameShortcut/ToggleHiddenShortcut/SettingsShortcut,
+// wired up in cmd/breakthrough) should act right now: no overlay is
+// open, and the bash command line doesn't have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these three operate on "the currently
-// selected file" or the hidden-files display — actions that only make
-// sense while the panel itself is what's focused. Critically, this also
+// work from literally anywhere, these four operate on "the currently
+// selected file", the hidden-files display, or open an overlay of their
+// own — actions that only make sense while the panel itself is what's
+// focused, or (Settings) that would otherwise layer confusingly on top
+// of whatever's already open. Critically, this also
 // keeps them out of the bash line's way: tview's plain InputField
 // doesn't implement any readline-style keybindings of its own, but real
 // bash/readline uses Ctrl+E for end-of-line and Ctrl+R for
@@ -245,10 +247,10 @@ func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 
-// EditShortcut, RenameShortcut, and ToggleHiddenShortcut are Ctrl+E,
-// Ctrl+R, and Ctrl+G's global actions (see cmd/breakthrough and
-// acceptsGlobalShortcut for why they check first rather than acting
-// unconditionally).
+// EditShortcut, RenameShortcut, ToggleHiddenShortcut, and
+// SettingsShortcut are Ctrl+E, Ctrl+R, Ctrl+G, and Ctrl+X's global
+// actions (see cmd/breakthrough and acceptsGlobalShortcut for why they
+// check first rather than acting unconditionally).
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()
@@ -264,6 +266,12 @@ func (r *Root) RenameShortcut() {
 func (r *Root) ToggleHiddenShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.toggleHidden()
+	}
+}
+
+func (r *Root) SettingsShortcut() {
+	if r.acceptsGlobalShortcut() {
+		r.openSettings()
 	}
 }
 

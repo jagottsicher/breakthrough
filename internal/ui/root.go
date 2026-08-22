@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -64,13 +66,27 @@ type Root struct {
 
 	app *tview.Application
 
-	panel       *Panel
-	menu        *tview.List
-	rename      *tview.InputField
-	prompt      *tview.InputField
-	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
-	errorView   *tview.TextView
-	quitConfirm *tview.List
+	// theme is the active color scheme, resolved once at startup (see
+	// loadInitialSettings/applyTheme) from settings.ColorScheme against
+	// colorSchemes, and again live whenever the Settings overlay (see
+	// openSettings/applyColorScheme) picks a different one. settings is
+	// every other on-disk setting alongside it (currently just the
+	// reserved, not-yet-functional Language placeholder — see
+	// config.Settings' own doc comment). colorSchemes is every scheme
+	// available to pick from, loaded once at startup — see openSettings'
+	// own doc comment on why it isn't re-scanned on every open.
+	theme        config.ResolvedTheme
+	settings     config.Settings
+	colorSchemes []config.NamedTheme
+
+	panel        *Panel
+	menu         *tview.List
+	rename       *tview.InputField
+	prompt       *tview.InputField
+	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
+	errorView    *tview.TextView
+	quitConfirm  *tview.List
+	settingsList *tview.List // Settings overlay — see openSettings
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
@@ -256,15 +272,21 @@ type Root struct {
 // the Panel, which needs it to move keyboard focus into its header's edit
 // field — see Panel.openEdit.
 func NewRoot(app *tview.Application, path string) (*Root, error) {
-	panel, err := NewPanel(app, path)
+	settings, colorSchemes, configWarnings := loadInitialSettings()
+	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
+
+	panel, err := NewPanel(app, path, theme)
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Root{
-		Pages: tview.NewPages(),
-		app:   app,
-		panel: panel,
+		Pages:        tview.NewPages(),
+		app:          app,
+		panel:        panel,
+		settings:     settings,
+		colorSchemes: colorSchemes,
+		theme:        theme,
 		// -1: "nothing focused yet" — see focusedPropertyField/
 		// setPropertiesFocus. Set here rather than only in openProperties
 		// so it's already correct for anything that renders Properties
@@ -275,10 +297,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// No borders on the floating elements below — a background color set
 	// apart from the plain panel does the same job without the
-	// box-drawing look.
+	// box-drawing look (colors themselves are applied once, uniformly,
+	// by applyTheme near the end of this function, not per widget here).
 	r.menu = tview.NewList().ShowSecondaryText(false)
-	r.menu.SetBackgroundColor(accentBackgroundColor)
-	r.menu.SetMainTextColor(tcell.ColorWhite)
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
@@ -312,20 +333,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// openRename, so it reads as "the row itself became editable" rather
 	// than a separate prompt.
 	r.rename = tview.NewInputField()
-	r.rename.SetFieldBackgroundColor(accentBackgroundColor)
-	r.rename.SetBackgroundColor(accentBackgroundColor)
-	r.rename.SetLabelColor(tcell.ColorWhite)
-	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
 
 	// Backs Select +/-/chown/chmod: a single labelled field, centered on
 	// screen (unlike rename, it's not tied to any one row) — see
 	// openPrompt.
 	r.prompt = tview.NewInputField()
-	r.prompt.SetFieldBackgroundColor(accentBackgroundColor)
-	r.prompt.SetBackgroundColor(accentBackgroundColor)
-	r.prompt.SetLabelColor(tcell.ColorWhite)
-	r.prompt.SetFieldTextColor(tcell.ColorWhite)
 	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
 	r.properties = r.newPropertiesView()
@@ -348,8 +361,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	panel.onLoad = func(string) { r.refreshStatusBar() }
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
-	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
-	r.quitConfirm.SetMainTextColor(tcell.ColorWhite)
 	r.quitConfirm.SetHighlightFullLine(true)
 	r.quitConfirm.SetBorderPadding(0, 0, 1, 1)
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
@@ -360,10 +371,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated and repositioned per open, the same pattern rename/
 	// prompt/propertiesEditField already use.
 	r.picker = tview.NewList().ShowSecondaryText(false)
-	r.picker.SetBackgroundColor(accentBackgroundColor)
-	r.picker.SetMainTextColor(tcell.ColorWhite)
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)
+
+	// The Settings overlay (see openSettings) — same "one shared,
+	// repopulated List" pattern as r.picker above.
+	r.settingsList = r.newSettingsList()
 
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
@@ -384,11 +397,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
+	r.AddPage(settingsPage, r.settingsList, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
 
+	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
+
+	if len(configWarnings) > 0 {
+		r.showError(fmt.Errorf("config: %s", strings.Join(configWarnings, "; ")))
+	}
 
 	return r, nil
 }
