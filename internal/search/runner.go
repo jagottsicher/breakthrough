@@ -34,12 +34,21 @@ type Result struct {
 // "no matches found" is its documented exit status 1) — surfacing
 // every one of those as an error would misreport an ordinary empty or
 // partial result as a failure.
+//
+// Both channels are closed once the search is done — errs strictly
+// before results (see the defer order below), so a caller that first
+// drains results with a plain "for range" and only then checks errs
+// (rather than a select watching both concurrently) can read it
+// straight after, with no risk of blocking forever on a "no error"
+// outcome: a receive on an already-closed, never-sent-to channel
+// returns its zero value immediately rather than blocking.
 func Run(ctx context.Context, req Request) (<-chan Result, <-chan error) {
 	results := make(chan Result)
 	errs := make(chan error, 1)
 
 	go func() {
 		defer close(results)
+		defer close(errs)
 		var err error
 		if req.Content == ContentNone {
 			err = runFilenameSearch(ctx, req, results)
