@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -88,6 +89,32 @@ type Root struct {
 	errorView    *tview.TextView
 	quitConfirm  *tview.List
 	settingsList *tview.List // Settings overlay — see openSettings
+
+	// The search dialog (see search.go/newSearchDialog): searchPages
+	// wraps searchForm (the pattern/scope/mode/engine/content inputs) and
+	// searchList (the results shown once a search has run) as two pages,
+	// the same "several sub-widgets, one overlay" shape r.properties
+	// already has. searchScopeField is searchForm's own path field, kept
+	// individually addressable for Tab-completion, the same reason
+	// r.panel.headerEdit is — see captureSearchScopeKey.
+	// searchEngineOptions/searchContentOptions record which
+	// search.Engine/search.ContentMode each of their own dropdown's
+	// options actually maps to (built once, since availability —
+	// LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't change
+	// mid-session) — the dropdown's own selected index alone isn't
+	// enough once an option is conditionally left out (see their own
+	// doc comments in search.go).
+	searchPages          *tview.Pages
+	searchForm           *tview.Form
+	searchScopeField     *tview.InputField
+	searchList           *tview.List
+	searchEngineOptions  []searchEngineOption
+	searchContentOptions []searchContentOption
+	// searchCancel stops whatever search.Run call is currently in
+	// flight, if any — called before starting a new one, and when the
+	// dialog closes, so a slow "find /" left running never keeps working
+	// after the user has moved on (see runSearch/closeSearch).
+	searchCancel context.CancelFunc
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
@@ -380,6 +407,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated List" pattern as r.picker above.
 	r.settingsList = r.newSettingsList()
 
+	// The search dialog (see openSearch).
+	r.searchPages = r.newSearchDialog()
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -400,6 +430,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(settingsPage, r.settingsList, false, false)
+	r.AddPage(searchPage, r.searchPages, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)

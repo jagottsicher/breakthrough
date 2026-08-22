@@ -27,6 +27,7 @@ const (
 	statusActionRename
 	statusActionToggleHidden
 	statusActionSettings
+	statusActionSearch
 )
 
 // statusBarSpan is one clickable region within the status bar's text —
@@ -92,7 +93,7 @@ func (r *Root) refreshStatusBar() {
 }
 
 // buildStatusBar renders the status bar's text: the current user, disk
-// usage for the panel's current directory (see dfSummary), four quick-
+// usage for the panel's current directory (see dfSummary), five quick-
 // action buttons in nano's own "^X Label" style (instantly recognizable
 // as "Ctrl+X does this" without needing a separate legend), and the
 // clock.
@@ -127,6 +128,8 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	button("^R Rename", statusActionRename)
 	write("  ")
 	button("^G Hidden", statusActionToggleHidden)
+	write("  ")
+	button("^F Search", statusActionSearch)
 	write("  ")
 	button("^X Settings", statusActionSettings)
 	sep()
@@ -197,6 +200,8 @@ func (r *Root) runStatusBarAction(action statusBarAction) {
 		r.toggleHidden()
 	case statusActionSettings:
 		r.openSettings()
+	case statusActionSearch:
+		r.openSearch()
 	}
 }
 
@@ -230,31 +235,32 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X (see
-// EditShortcut/RenameShortcut/ToggleHiddenShortcut/SettingsShortcut,
-// wired up in cmd/breakthrough) should act right now: no overlay is
-// open, and the bash command line doesn't have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X/
+// Ctrl+F (see EditShortcut/RenameShortcut/ToggleHiddenShortcut/
+// SettingsShortcut/SearchShortcut, wired up in cmd/breakthrough) should
+// act right now: no overlay is open, and the bash command line doesn't
+// have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these four operate on "the currently
+// work from literally anywhere, these five operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
-// focused, or (Settings) that would otherwise layer confusingly on top
-// of whatever's already open. Critically, this also
+// focused, or (Settings, Search) that would otherwise layer confusingly
+// on top of whatever's already open. Critically, this also
 // keeps them out of the bash line's way: tview's plain InputField
 // doesn't implement any readline-style keybindings of its own, but real
-// bash/readline uses Ctrl+E for end-of-line and Ctrl+R for
-// reverse-search — letting these global shortcuts fire while typing a
-// command there would silently defeat muscle memory this line is
-// explicitly meant to feel like bash.
+// bash/readline uses Ctrl+E for end-of-line, Ctrl+R for reverse-search,
+// and Ctrl+F to move forward a character — letting these global
+// shortcuts fire while typing a command there would silently defeat
+// muscle memory this line is explicitly meant to feel like bash.
 func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 
-// EditShortcut, RenameShortcut, ToggleHiddenShortcut, and
-// SettingsShortcut are Ctrl+E, Ctrl+R, Ctrl+G, and Ctrl+X's global
-// actions (see cmd/breakthrough and acceptsGlobalShortcut for why they
-// check first rather than acting unconditionally).
+// EditShortcut, RenameShortcut, ToggleHiddenShortcut, SettingsShortcut,
+// and SearchShortcut are Ctrl+E, Ctrl+R, Ctrl+G, Ctrl+X, and Ctrl+F's
+// global actions (see cmd/breakthrough and acceptsGlobalShortcut for
+// why they check first rather than acting unconditionally).
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()
@@ -276,6 +282,12 @@ func (r *Root) ToggleHiddenShortcut() {
 func (r *Root) SettingsShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openSettings()
+	}
+}
+
+func (r *Root) SearchShortcut() {
+	if r.acceptsGlobalShortcut() {
+		r.openSearch()
 	}
 }
 

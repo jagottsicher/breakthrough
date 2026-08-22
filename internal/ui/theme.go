@@ -112,5 +112,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.settingsList.SetMainTextColor(theme.Text)
 	}
 
+	if r.searchForm != nil {
+		r.searchForm.SetBackgroundColor(theme.AccentBackground)
+		r.searchForm.SetLabelColor(theme.Text)
+		r.searchForm.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.searchForm.SetFieldTextColor(theme.Text)
+		r.searchForm.SetButtonBackgroundColor(theme.AccentBackground)
+		r.searchForm.SetButtonTextColor(theme.Text)
+		r.searchScopeField.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.searchScopeField.SetFieldTextColor(theme.Text)
+		r.searchScopeField.SetLabelColor(theme.Text)
+		r.searchList.SetBackgroundColor(theme.AccentBackground)
+		r.searchList.SetMainTextColor(theme.Text)
+	}
+
 	r.panel.applyTheme(theme)
 }
