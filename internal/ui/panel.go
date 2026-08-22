@@ -1164,6 +1164,30 @@ func (p *Panel) navigate(dir string) error {
 	return nil
 }
 
+// navigateAndSelect is navigate's own "and land on this specific entry"
+// variant — target's parent directory becomes the panel's new current
+// directory (see navigate), and target's own row, if load() actually
+// produced one (see the same filter/showHidden rules any other row is
+// subject to — a target the current filter or a hidden-files toggle
+// would exclude simply isn't found here, not an error), gets the
+// cursor. Used by the search dialog's own results list (see
+// Root.openSearchResult) to jump straight to a match instead of just
+// opening the directory it's in and leaving the cursor whichever entry
+// load()'s own top-of-listing reset already put it on.
+func (p *Panel) navigateAndSelect(target string) error {
+	if err := p.navigate(filepath.Dir(target)); err != nil {
+		return err
+	}
+	name := filepath.Base(target)
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.name == name {
+			p.focusRow(row)
+			break
+		}
+	}
+	return nil
+}
+
 // reportError hands err to whoever is displaying errors, if anyone is.
 // A nil error is ignored, so callers can pass a result through directly.
 func (p *Panel) reportError(err error) {

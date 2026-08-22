@@ -77,18 +77,17 @@ func run() error {
 	// Ctrl+Q only opens a confirmation overlay rather than stopping
 	// immediately, since a stray keypress shouldn't lose your place
 	// without asking first. Ctrl+C deliberately does not quit at all —
-	// it backs out of whatever is open, like Escape. Ctrl+X is
-	// deliberately left unclaimed (available for a future binding),
-	// having previously also quit.
+	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X (Edit/Rename/toggle hidden files/Settings
-	// — see the bottom bar's own buttons) check their own preconditions
-	// before acting (see Root.acceptsGlobalShortcut) rather than always
-	// firing the way Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise
-	// step on the bash line's own typing. Ctrl+H is deliberately not one
-	// of them — it's indistinguishable from Backspace at the terminal
-	// protocol level (both send the same 0x08 byte), so Ctrl+G was used
-	// for "toggle hidden files" instead. Ctrl+X, previously left unclaimed
+	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X/Ctrl+F (Edit/Rename/toggle hidden
+	// files/Settings/Search — see the bottom bar's own buttons) check
+	// their own preconditions before acting (see
+	// Root.acceptsGlobalShortcut) rather than always firing the way
+	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
+	// bash line's own typing. Ctrl+H is deliberately not one of them —
+	// it's indistinguishable from Backspace at the terminal protocol
+	// level (both send the same 0x08 byte), so Ctrl+G was used for
+	// "toggle hidden files" instead. Ctrl+X, previously left unclaimed
 	// (it used to also quit, redundantly with Ctrl+Q, before that was
 	// cleaned up), is now Settings.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -110,6 +109,9 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlX:
 			root.SettingsShortcut()
+			return nil
+		case tcell.KeyCtrlF:
+			root.SearchShortcut()
 			return nil
 		}
 		return event
