@@ -1156,9 +1156,11 @@ func (p *Panel) previousPath() (string, bool) {
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
 // Forward button glyphs followed by the path, one clickable span per path
 // component (the leading "/" plus each name in between), e.g. clicking
-// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
-// exact for the common case but, like the rest of Phase 0/1, doesn't yet
-// account for double-width (e.g. CJK) characters in file names.
+// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are measured via
+// tview.TaggedStringWidth, not a plain rune count — a directory name
+// containing double-width (e.g. CJK) characters occupies two terminal
+// columns per character, and a rune count would silently drift the spans
+// after it out of alignment with what's actually drawn on screen.
 //
 // A click that lands in the header but doesn't hit any of these spans
 // (e.g. on a "/" separator, or in empty space after the path) is handled
@@ -1173,7 +1175,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 		col++
 		start := col
 		b.WriteString(glyph)
-		col += len([]rune(glyph))
+		col += tview.TaggedStringWidth(glyph)
 		spans = append(spans, headerSpan{start: start, end: col, action: action})
 	}
 	button("^", actionStart)
@@ -1194,7 +1196,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 		parts := strings.Split(rest, "/")
 		for i, part := range parts {
 			current += "/" + part
-			width := len([]rune(part))
+			width := tview.TaggedStringWidth(part)
 			spans = append(spans, headerSpan{start: col, end: col + width, action: actionNavigate, target: current})
 			b.WriteString(part)
 			col += width

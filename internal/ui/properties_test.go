@@ -489,6 +489,57 @@ func findPropertySpan(r *Root, field propertyField) (propertySpan, bool) {
 	return propertySpan{}, false
 }
 
+// TestPropertiesNameSpanAccountsForWideCharacters pins the fix for the
+// user's own report: a file name containing double-width (e.g. CJK)
+// characters must produce a fieldName span whose width matches how many
+// terminal columns the name actually occupies, not its rune count —
+// "文档.txt" is 6 runes but 8 terminal columns. minWidth (see
+// activatePropertyField's fieldName case) masks the gap in the inline
+// editor's own on-screen width for a name this short, but propertySpanAt
+// (used by capturePropertiesMouse to route a click) has no such floor:
+// a click on the name's real last column used to fall short of the
+// (too-narrow) span and miss it entirely.
+func TestPropertiesNameSpanAccountsForWideCharacters(t *testing.T) {
+	const name = "文档.txt"
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldName)
+	if !ok {
+		t.Fatal("no fieldName span found")
+	}
+
+	wantWidth := tview.TaggedStringWidth(name)
+	if gotWidth := span.endCol - span.startCol; gotWidth != wantWidth {
+		t.Errorf("fieldName span width = %d, want %d (real display width of %q, not its rune count of %d)", gotWidth, wantWidth, name, len([]rune(name)))
+	}
+
+	// A real click, dispatched through a genuinely drawn screen, on the
+	// name's own actual last column must still land inside its span.
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	clickX, clickY := rectX+span.endCol-1, rectY+span.row
+
+	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0))
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("click on the name field's own last column should be consumed, got action=%v event=%v", action, event)
+	}
+	if !r.propertiesEditField.HasFocus() {
+		t.Error("clicking the name field's last column should open the inline editor, not miss the span")
+	}
+}
+
 func TestOpenPropertiesInitializesStagedValues(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")

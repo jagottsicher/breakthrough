@@ -140,9 +140,17 @@ func (pb *propertiesBuilder) tag(s string) {
 	pb.b.WriteString(s)
 }
 
+// text advances col by s's display width (tview.TaggedStringWidth, the
+// same measure buildHeaderSpans uses — see its own doc comment), not a
+// plain rune count: a file name value can itself contain double-width
+// (e.g. CJK) characters, and a rune count would leave that field's own
+// span, and every span after it on the same row, misaligned with where
+// the text is actually drawn — visible as the inline editor (see
+// activateInlineTextField) or the owner/group picker (see
+// propertyFieldPosition) landing next to the real text instead of on it.
 func (pb *propertiesBuilder) text(s string) {
 	pb.b.WriteString(s)
-	pb.col += len([]rune(s))
+	pb.col += tview.TaggedStringWidth(s)
 }
 
 func (pb *propertiesBuilder) newline() {
