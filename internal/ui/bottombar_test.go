@@ -203,6 +203,7 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionEdit:         "^E Edit",
 		statusActionRename:       "^R Rename",
 		statusActionToggleHidden: "^G Hidden",
+		statusActionSearch:       "^F Search",
 		statusActionSettings:     "^X Settings",
 	}
 	found := map[statusBarAction]bool{}
