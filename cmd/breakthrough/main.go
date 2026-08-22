@@ -81,14 +81,16 @@ func run() error {
 	// deliberately left unclaimed (available for a future binding),
 	// having previously also quit.
 	//
-	// Ctrl+E/Ctrl+R/Ctrl+G (Edit/Rename/toggle hidden files — see the
-	// bottom bar's own buttons) check their own preconditions before
-	// acting (see Root.acceptsGlobalShortcut) rather than always firing
-	// the way Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step
-	// on the bash line's own typing. Ctrl+H is deliberately not one of
-	// them — it's indistinguishable from Backspace at the terminal
+	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X (Edit/Rename/toggle hidden files/Settings
+	// — see the bottom bar's own buttons) check their own preconditions
+	// before acting (see Root.acceptsGlobalShortcut) rather than always
+	// firing the way Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise
+	// step on the bash line's own typing. Ctrl+H is deliberately not one
+	// of them — it's indistinguishable from Backspace at the terminal
 	// protocol level (both send the same 0x08 byte), so Ctrl+G was used
-	// for "toggle hidden files" instead.
+	// for "toggle hidden files" instead. Ctrl+X, previously left unclaimed
+	// (it used to also quit, redundantly with Ctrl+Q, before that was
+	// cleaned up), is now Settings.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -105,6 +107,9 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlG:
 			root.ToggleHiddenShortcut()
+			return nil
+		case tcell.KeyCtrlX:
+			root.SettingsShortcut()
 			return nil
 		}
 		return event

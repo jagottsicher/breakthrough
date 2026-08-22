@@ -607,7 +607,7 @@ func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
 // TestPropertiesEditFieldUsesFocusedColor pins the fix for the user's
 // own report ("manche Felder leuchten hell auf, wenn man drin ist,
 // andere aber nicht"): the shared inline edit field always carries
-// focusedBackgroundColor, the same bright color the currently-focused
+// theme.FocusedBackground, the same bright color the currently-focused
 // field's own span in propertiesText shows (see focusTag) — before this
 // fix it used the plainer editableBackgroundColor instead, so a field
 // that opened its own editor immediately (Name/Date/Time/the octal
@@ -622,8 +622,8 @@ func TestPropertiesEditFieldUsesFocusedColor(t *testing.T) {
 	}
 
 	_, bg, _ := r.propertiesEditField.GetFieldStyle().Decompose()
-	if bg != focusedBackgroundColor {
-		t.Errorf("propertiesEditField's field background = %v, want focusedBackgroundColor (%v)", bg, focusedBackgroundColor)
+	if bg != r.theme.FocusedBackground {
+		t.Errorf("propertiesEditField's field background = %v, want theme.FocusedBackground (%v)", bg, r.theme.FocusedBackground)
 	}
 }
 
