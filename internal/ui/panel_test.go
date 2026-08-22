@@ -86,6 +86,39 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	}
 }
 
+// TestBuildHeaderSpansAccountsForWideCharacters pins the fix for the
+// user's own report: a directory name containing double-width (e.g.
+// CJK) characters must advance the column count by its real terminal
+// width, not its rune count, or every span after it (and the click
+// target it maps to) drifts out of alignment with what's actually drawn
+// on screen. "文档" is 2 runes but 4 terminal columns.
+func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
+	text, spans := buildHeaderSpans("/文档/c")
+
+	wantText := " ^ ~ < >  /文档/c"
+	if text != wantText {
+		t.Fatalf("text = %q, want %q", text, wantText)
+	}
+
+	want := []headerSpan{
+		{start: 1, end: 2, action: actionStart},
+		{start: 3, end: 4, action: actionHome},
+		{start: 5, end: 6, action: actionBack},
+		{start: 7, end: 8, action: actionForward},
+		{start: 10, end: 11, action: actionNavigate, target: "/"},
+		{start: 11, end: 15, action: actionNavigate, target: "/文档"},
+		{start: 16, end: 17, action: actionNavigate, target: "/文档/c"},
+	}
+	if len(spans) != len(want) {
+		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
+	}
+	for i := range want {
+		if spans[i] != want[i] {
+			t.Errorf("span %d = %+v, want %+v", i, spans[i], want[i])
+		}
+	}
+}
+
 // TestStartButtonReturnsToLaunchDirectory pins the Start button's
 // contract: no matter how far navigation has wandered since, it always
 // returns to the directory the Panel was first opened at (history[0]),
