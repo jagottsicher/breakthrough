@@ -261,6 +261,42 @@ func TestRunCancelStopsPromptly(t *testing.T) {
 	}
 }
 
+// TestRunErrsChannelClosesAfterResultsWithNoError pins Run's own
+// documented contract (see its doc comment): a caller that drains
+// results with a plain "for range" and only then reads errs must never
+// block doing so, even when nothing was ever sent — errs is closed no
+// later than results, so that receive returns its zero value
+// immediately instead. Uses a plain (blocking) receive specifically,
+// not a select-with-default, since that's the whole point being
+// pinned: a select-with-default would pass even if this contract were
+// broken and errs were simply never closed.
+func TestRunErrsChannelClosesAfterResultsWithNoError(t *testing.T) {
+	requireTool(t, "find")
+	dir := fixtureTree(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "apple.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind})
+
+	for range results {
+	}
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		err = <-errs
+		close(done)
+	}()
+	select {
+	case <-done:
+		if err != nil {
+			t.Errorf("err = %v, want nil", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("receiving from errs blocked — it should have been closed once results closed")
+	}
+}
+
 func TestWithinScope(t *testing.T) {
 	tests := []struct {
 		path, scope string
