@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -62,47 +63,82 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 }
 
 // Settings is breakthrough's own recognized set of "key = value" keys
-// (see ParseFile) — deliberately small for now:
+// (see ParseFile):
 //
 //   - color_scheme: the slug (JSON filename stem) of the active color
 //     scheme, resolved via LoadColorSchemes/FindColorScheme.
 //   - language: a reserved placeholder (see the package doc) — no
 //     translated strings exist behind it yet, kept here now so adding
 //     real i18n later doesn't need a config schema break.
+//   - show_hidden, size_bytes, mtime_unix: the panel's own "Globals"
+//     toggles (see internal/ui's Panel.showHidden/sizeBytes/mtimeUnix),
+//     persisted so breakthrough starts up remembering the last
+//     session's choice instead of always resetting to the built-in
+//     default — per the user's own request. Boolean values accept
+//     anything strconv.ParseBool does ("true"/"false", "1"/"0", ...) —
+//     SetKey itself always writes the canonical "true"/"false" form.
 type Settings struct {
 	ColorScheme string
 	Language    string
+	ShowHidden  bool
+	SizeBytes   bool
+	MtimeUnix   bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
-// file present.
+// file present — ShowHidden true (dotfiles shown), SizeBytes/MtimeUnix
+// false (human-readable size, formatted date), matching Panel's own
+// prior hardcoded defaults exactly, so a fresh install behaves
+// identically to before this existed.
 func DefaultSettings() Settings {
-	return Settings{ColorScheme: "default", Language: "en"}
+	return Settings{
+		ColorScheme: "default",
+		Language:    "en",
+		ShowHidden:  true,
+		SizeBytes:   false,
+		MtimeUnix:   false,
+	}
 }
 
-// apply sets the one field key names to value, reporting false if key
-// isn't recognized at all (see Load, which turns that into a warning
-// rather than silently ignoring a typo'd key).
-func (s *Settings) apply(key, value string) bool {
+// apply sets the one field key names to value, returning an error
+// (without applying anything) if key isn't recognized at all, or if a
+// boolean key's value isn't one strconv.ParseBool understands — Load
+// turns either into a warning rather than silently ignoring a typo'd
+// key or a malformed value.
+func (s *Settings) apply(key, value string) error {
+	parseBool := func(dst *bool) error {
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid boolean for %q: %q", key, value)
+		}
+		*dst = b
+		return nil
+	}
 	switch key {
 	case "color_scheme":
 		s.ColorScheme = value
 	case "language":
 		s.Language = value
+	case "show_hidden":
+		return parseBool(&s.ShowHidden)
+	case "size_bytes":
+		return parseBool(&s.SizeBytes)
+	case "mtime_unix":
+		return parseBool(&s.MtimeUnix)
 	default:
-		return false
+		return fmt.Errorf("unknown key %q", key)
 	}
-	return true
+	return nil
 }
 
 // Load reads systemPath then userPath (see ParseFile — either may not
 // exist) and merges them onto DefaultSettings key-by-key: user values
 // override system values, which override the built-in defaults — the
 // two-tier merge the package doc describes. Every parse warning from
-// either file, plus one for each key neither Settings field recognizes,
-// is returned for the caller to surface (see cmd/breakthrough); none of
-// them stop the merge — an unreadable or malformed config should degrade
-// to defaults, not prevent the program from starting.
+// either file, plus one for each key/value apply rejects, is returned
+// for the caller to surface (see cmd/breakthrough); none of them stop
+// the merge — an unreadable or malformed config should degrade to
+// defaults, not prevent the program from starting.
 func Load(systemPath, userPath string) (Settings, []string) {
 	s := DefaultSettings()
 	var warnings []string
@@ -120,8 +156,8 @@ func Load(systemPath, userPath string) (Settings, []string) {
 		}
 		sort.Strings(keys) // deterministic warning order
 		for _, k := range keys {
-			if !s.apply(k, values[k]) {
-				warnings = append(warnings, fmt.Sprintf("%s: unknown key %q", path, k))
+			if err := s.apply(k, values[k]); err != nil {
+				warnings = append(warnings, fmt.Sprintf("%s: %v", path, err))
 			}
 		}
 	}
