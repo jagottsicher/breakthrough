@@ -121,7 +121,13 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 
 	write(r.currentUser)
 	sep()
-	write(dfSummary(r.panel.path))
+	if u, ok := fetchDiskUsage(r.panel.path); ok {
+		write(diskUsageText(u))
+		sep()
+		write(inodeUsageText(u))
+	} else {
+		write("disk usage unavailable")
+	}
 	sep()
 	button("^E Edit", statusActionEdit)
 	write("  ")
@@ -138,22 +144,174 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	return b.String(), spans
 }
 
-// dfSummary runs `df -h` on dir and returns its data line (skipping the
-// header row), whitespace-collapsed to one line — deliberately not
-// parsed into named fields: GNU (Linux) and BSD (macOS/FreeBSD) df don't
-// agree on column layout, but both print exactly one header line plus
-// one data line for a single given path, so showing that line as-is
-// works the same way on every platform this project targets.
-func dfSummary(dir string) string {
-	out, err := exec.Command("df", "-h", dir).Output()
+// diskUsage is one filesystem's block and inode usage for the status
+// bar's own display (see fetchDiskUsage/diskUsageText/inodeUsageText)
+// — the labeled, color-coded replacement for what used to be dfSummary,
+// an entirely unlabeled raw df line the user themselves reported as
+// unreadable ("man weiß gar nicht was die heißen sollen").
+type diskUsage struct {
+	usedBytes, availBytes    int64
+	usedInodes, availInodes  int64
+	usePercent, inodePercent int
+}
+
+// fetchDiskUsage runs `df -k` (block usage) and `df -i` (inode usage)
+// on dir and parses each one's own data line into a diskUsage.
+//
+// Deliberately not `df -h`: -h's own human-readable formatting is
+// locale-dependent (this app's own README/CLAUDE.md target audience
+// includes non-English locales — a German one, for instance, renders
+// "1.7G" as "1,7G", a comma this app would then have no reliable way
+// to tell apart from a field separator when parsing it back out). Also
+// deliberately not `df -P`, which on GNU df guarantees a single,
+// portably-parseable data line — but means something else entirely on
+// BSD df (512-byte blocks, not "portable output format" — verified
+// against the FreeBSD/macOS df(1) man pages, not guessed: using it
+// cross-platform for parseability, the way a straight port of GNU df's
+// own convention would, is actually wrong here). Requesting raw block/
+// inode counts via -k/-i and formatting them with this app's own
+// humanSize/humanCount instead sidesteps both problems, and gets
+// exact usedBytes/availBytes/usedInodes/availInodes for free rather
+// than needing to reverse a rounded, unit-suffixed string.
+func fetchDiskUsage(dir string) (diskUsage, bool) {
+	blockLine, ok := dfLastLine("df", "-k", dir)
+	if !ok {
+		return diskUsage{}, false
+	}
+	inodeLine, ok := dfLastLine("df", "-i", dir)
+	if !ok {
+		return diskUsage{}, false
+	}
+
+	usedBlocks, availBlocks, usePercent, ok := parseDfDataLine(blockLine)
+	if !ok {
+		return diskUsage{}, false
+	}
+	usedInodes, availInodes, inodePercent, ok := parseDfDataLine(inodeLine)
+	if !ok {
+		return diskUsage{}, false
+	}
+
+	return diskUsage{
+		usedBytes:    usedBlocks * 1024,
+		availBytes:   availBlocks * 1024,
+		usedInodes:   usedInodes,
+		availInodes:  availInodes,
+		usePercent:   usePercent,
+		inodePercent: inodePercent,
+	}, true
+}
+
+// dfLastLine runs name(args...) (df, with whatever flags the caller
+// chose) and returns its own data line — the last line of output,
+// skipping the header row df always prints first. A single given path
+// always produces exactly one data line, on every platform this
+// project targets.
+func dfLastLine(name string, args ...string) (string, bool) {
+	out, err := exec.Command(name, args...).Output()
 	if err != nil {
-		return "df: unavailable"
+		return "", false
 	}
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	if len(lines) < 2 {
-		return "df: unavailable"
+		return "", false
 	}
-	return strings.Join(strings.Fields(lines[len(lines)-1]), " ")
+	return lines[len(lines)-1], true
+}
+
+// parseDfDataLine extracts Used, Available, and Capacity (Use%/IUse%)
+// from one df data line, indexed from the END of its whitespace-
+// separated fields — Mounted-on last, Capacity/Use% just before it,
+// Available before that, Used before that — rather than from the
+// start. That's what makes this robust to a wrapped Filesystem name (a
+// real, if rare, BSD df quirk for a very long device name, splitting
+// it onto its own line and shifting how many fields precede the data
+// that actually matters here) without needing to detect the wrap
+// itself. Not robust to a mount point that itself contains a space
+// (e.g. "/Volumes/My Drive") — an accepted, rare limitation, the same
+// class dfSummary's own predecessor already accepted before this.
+func parseDfDataLine(line string) (used, avail int64, percent int, ok bool) {
+	fields := strings.Fields(line)
+	if len(fields) < 4 {
+		return 0, 0, 0, false
+	}
+	percent, err := strconv.Atoi(strings.TrimSuffix(fields[len(fields)-2], "%"))
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	avail, err = strconv.ParseInt(fields[len(fields)-3], 10, 64)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	used, err = strconv.ParseInt(fields[len(fields)-4], 10, 64)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return used, avail, percent, true
+}
+
+// diskUsageWarnColor is the color a usage percentage should stand out
+// in — tcell.ColorRed at 90% or more, tcell.ColorOrange at 80% or
+// more, tcell.ColorDefault (no warning, leave the surrounding text's
+// own color alone) otherwise — the two thresholds the user asked for,
+// shared by both the disk-space and the inode percentage.
+func diskUsageWarnColor(percent int) tcell.Color {
+	switch {
+	case percent >= 90:
+		return tcell.ColorRed
+	case percent >= 80:
+		return tcell.ColorOrange
+	default:
+		return tcell.ColorDefault
+	}
+}
+
+// formatUsagePercent renders percent as "N%", wrapped in a foreground-
+// only tview color tag (see colorTag — the same "#rrggbb", not a color
+// name, so it round-trips exactly through tview's own tag parser) once
+// diskUsageWarnColor says it should stand out — "[-]" resets just the
+// foreground back to the status bar's own configured text color
+// afterward, not a hardcoded one, so this still looks right under
+// every color scheme (see Root.applyTheme).
+func formatUsagePercent(percent int) string {
+	color := diskUsageWarnColor(percent)
+	if color == tcell.ColorDefault {
+		return fmt.Sprintf("%d%%", percent)
+	}
+	return fmt.Sprintf("[%s]%d%%[-]", colorTag(color), percent)
+}
+
+// diskUsageText and inodeUsageText render one labeled "Label X used, Y
+// free (Z%)" status-bar segment each — explicit "used"/"free" labels
+// (not just two bare numbers) precisely because the user reported the
+// previous, unlabeled df dump as unreadable ("man weiß gar nicht was
+// die heißen sollen"), and explicit used *and* free numbers for
+// inodes specifically, per the user's own request, rather than just a
+// percentage.
+func diskUsageText(u diskUsage) string {
+	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.usedBytes), humanSize(u.availBytes), formatUsagePercent(u.usePercent))
+}
+
+func inodeUsageText(u diskUsage) string {
+	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.usedInodes), humanCount(u.availInodes), formatUsagePercent(u.inodePercent))
+}
+
+// humanCount renders n the same way humanSize renders a byte count
+// (1024-based grouping, one decimal above the smallest unit) but
+// without humanSize's own "B" suffix — appropriate for a plain count
+// (inodes) rather than a size in bytes, which "512B" would misleadingly
+// suggest this was.
+func humanCount(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return strconv.FormatInt(n, 10)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%c", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // clockText renders the current date, time, and the local timezone's
