@@ -507,7 +507,7 @@ func (r *Root) renderProperties() {
 		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
 		switch {
 		case r.hashInProgress:
-			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes…"
+			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
 		default:
 			text += "\n\n" + hashLines(r.propertiesHashes)
 		}
@@ -1110,6 +1110,22 @@ const hashAnimationInterval = 150 * time.Millisecond
 // already uses for searchRun/loadInitialSettings.
 var hashFile = fsops.Hash
 
+// hashProgressSuffix formats the "… NN%" fragment renderProperties
+// appends to the in-progress hash line, or "…" alone if total isn't
+// known/positive (an empty file, or a filesystem where Size came back
+// 0) — a percentage would be meaningless there. read is clamped to
+// total so a file that grows while being hashed (see Hash's own doc
+// comment on that edge case) can never show more than 100%.
+func hashProgressSuffix(read, total int64) string {
+	if total <= 0 {
+		return "…"
+	}
+	if read > total {
+		read = total
+	}
+	return fmt.Sprintf("… %d%%", read*100/total)
+}
+
 // computeHashes is the Properties overlay's hash action (see hashLines
 // and capturePropertiesKey/capturePropertiesMouse, its two triggers):
 // hashes the entry Properties is currently showing via hashFile, on a
@@ -1131,12 +1147,13 @@ func (r *Root) computeHashes() {
 	r.hashCancel = cancel
 	r.hashInProgress = true
 	r.hashAnimFrame = 0
+	r.hashBytesRead.Store(0)
 	r.rerenderProperties()
 
 	target := r.propertiesTarget
 	go r.animateHashProgress(ctx)
 	go func() {
-		hashes, err := hashFile(target)
+		hashes, err := hashFile(target, r.hashBytesRead.Store)
 		if ctx.Err() != nil {
 			return // superseded before we even got to report anything — see cancelHashComputation
 		}

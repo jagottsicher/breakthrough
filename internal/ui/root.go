@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -249,6 +250,17 @@ type Root struct {
 	hashInProgress bool
 	hashAnimFrame  int
 	hashCancel     context.CancelFunc
+
+	// hashBytesRead is how many bytes hashFile's in-flight call has
+	// streamed so far (see computeHashes' own onProgress callback),
+	// read by renderProperties to show a percentage alongside the
+	// animation whenever propertiesStat.Size is known. Unlike
+	// hashInProgress/hashAnimFrame/hashCancel above — which are only
+	// ever touched from within the tview event loop, either directly or
+	// via QueueUpdateDraw — this one is also written from hashFile's
+	// own background goroutine on every Read, so it has to stay an
+	// atomic rather than a plain int64.
+	hashBytesRead atomic.Int64
 
 	// propertySpans locates each editable region in the Properties
 	// overlay's current text (see propertiesBuilder), rebuilt on every

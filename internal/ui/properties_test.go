@@ -322,7 +322,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	r.propertiesHashes = &fsops.Hashes{
 		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
 		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
-		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde",
+		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
 	}
 	r.rerenderProperties()
 
@@ -390,7 +390,7 @@ func isolateHashFile(t *testing.T) <-chan struct{} {
 	original := hashFile
 	started := make(chan struct{})
 	unblock := make(chan struct{})
-	hashFile = func(string) (fsops.Hashes, error) {
+	hashFile = func(string, func(int64)) (fsops.Hashes, error) {
 		close(started)
 		<-unblock
 		return fsops.Hashes{}, context.Canceled
@@ -429,6 +429,57 @@ func TestComputeHashesShowsAnimationImmediately(t *testing.T) {
 	text := r.propertiesText.GetText(true)
 	if !strings.Contains(text, hashAnimationFrames[0]) || !strings.Contains(text, "Computing hashes") {
 		t.Errorf("propertiesText should show the first animation frame (%q) and \"Computing hashes\", got:\n%s", hashAnimationFrames[0], text)
+	}
+}
+
+// TestComputeHashesShowsPercentProgress pins hashProgressSuffix's own
+// contract: once hashFile's onProgress callback has reported some
+// bytes read, the in-progress line should show what fraction of the
+// file that is. Uses its own fake (rather than isolateHashFile's
+// blocking one) so it can report a specific byte count before
+// blocking, against a fixture file sized so the math comes out exact.
+func TestComputeHashesShowsPercentProgress(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "sized.txt")
+	if err := os.WriteFile(path, make([]byte, 200), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	original := hashFile
+	unblock := make(chan struct{})
+	reported := make(chan struct{})
+	hashFile = func(target string, onProgress func(int64)) (fsops.Hashes, error) {
+		onProgress(100) // half of the 200-byte fixture above
+		close(reported)
+		<-unblock
+		return fsops.Hashes{}, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		hashFile = original
+	})
+	t.Cleanup(r.cancelHashComputation)
+
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-reported // wait for onProgress(100) above before this test can safely end (see isolateHashFile's own doc comment on why)
+
+	// Nothing here drains r.app.QueueUpdateDraw, so animateHashProgress's
+	// own ticker never actually re-renders during this test (same gap
+	// noted throughout this file) — re-render explicitly to observe the
+	// byte count onProgress just stored.
+	r.rerenderProperties()
+
+	text := r.propertiesText.GetText(true)
+	if !strings.Contains(text, "50%") {
+		t.Errorf("propertiesText should show 50%% progress for a 100/200-byte read, got:\n%s", text)
 	}
 }
 

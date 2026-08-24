@@ -13,7 +13,7 @@ func TestHash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := Hash(path)
+	got, err := Hash(path, nil)
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -42,11 +42,11 @@ func TestHashDiffersByContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hashA, err := Hash(a)
+	hashA, err := Hash(a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hashB, err := Hash(b)
+	hashB, err := Hash(b, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestHashDiffersByContent(t *testing.T) {
 
 func TestHashRejectsDirectory(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := Hash(dir); err == nil {
+	if _, err := Hash(dir, nil); err == nil {
 		t.Error("Hash should refuse a directory")
 	}
 }
@@ -74,11 +74,59 @@ func TestHashFollowsSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := Hash(link)
+	got, err := Hash(link, nil)
 	if err != nil {
 		t.Fatalf("Hash(link): %v", err)
 	}
 	if got.MD5 != "5eb63bbbe01eeed093cb22bb8f5acdc3" {
 		t.Errorf("Hash(link).MD5 = %q, want the target's own MD5", got.MD5)
+	}
+}
+
+// TestHashReportsProgress pins onProgress's own contract: called after
+// every underlying Read with the running total of bytes streamed so
+// far, ending exactly at the file's size.
+func TestHashReportsProgress(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.txt")
+	content := []byte("hello world")
+	if err := os.WriteFile(path, content, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls []int64
+	if _, err := Hash(path, func(readBytes int64) {
+		calls = append(calls, readBytes)
+	}); err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+
+	if len(calls) == 0 {
+		t.Fatal("onProgress should have been called at least once for a non-empty file")
+	}
+	last := calls[len(calls)-1]
+	if last != int64(len(content)) {
+		t.Errorf("final onProgress read count = %d, want %d (the file's own size)", last, len(content))
+	}
+	for i := 1; i < len(calls); i++ {
+		if calls[i] < calls[i-1] {
+			t.Errorf("onProgress calls should never decrease, got %v", calls)
+			break
+		}
+	}
+}
+
+// TestHashNilProgressIsOptional pins that onProgress is genuinely
+// optional — passing nil (as every other test in this file does) must
+// not panic, even though Hash calls it internally whenever it's set.
+func TestHashNilProgressIsOptional(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(path, []byte("hello world"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Hash(path, nil); err != nil {
+		t.Fatalf("Hash with nil onProgress: %v", err)
 	}
 }
