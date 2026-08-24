@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -13,19 +14,22 @@ import (
 )
 
 // fakeSearchRun returns a searchRun replacement that records the
-// Request it was given in *captured and immediately closes both
-// channels with nothing sent — safe to use from a test regardless of
-// whether the real find/grep/locate binaries are installed, and never
-// reaches r.app.QueueUpdateDraw (see searchRun's own doc comment on
-// why that matters).
+// Request it was given in *captured — the channels it returns are
+// deliberately never closed. streamSearchResults' own background
+// goroutine (spawned by runSearch) would otherwise run to completion
+// and, seeing both channels close with nothing having arrived, reach
+// r.app.QueueUpdateDraw to report "no matches" (see its own doc
+// comment) — with nothing here running the event loop to drain that
+// call, it would block forever (see isolateHashFile's own doc comment
+// for the same concern elsewhere). Tests using this only ever care
+// about the Request runSearch built and/or its own synchronous side
+// effects (activePage, ctx cancellation) — never anything that depends
+// on the search actually finishing — so leaving it perpetually
+// in-flight is safe.
 func fakeSearchRun(captured *search.Request) func(context.Context, search.Request) (<-chan search.Result, <-chan error) {
 	return func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
 		*captured = req
-		results := make(chan search.Result)
-		errs := make(chan error)
-		close(results)
-		close(errs)
-		return results, errs
+		return make(chan search.Result), make(chan error)
 	}
 }
 
@@ -73,6 +77,35 @@ func TestFormatSearchResult(t *testing.T) {
 	for _, tt := range tests {
 		if got := formatSearchResult(tt.res); got != tt.want {
 			t.Errorf("%s: formatSearchResult(%+v) = %q, want %q", tt.name, tt.res, got, tt.want)
+		}
+	}
+}
+
+// TestNoSearchResultsTextMentionsStaleIndexOnlyForLocateFilenameSearch
+// pins that the extra "locate's own index may be stale" hint (a real
+// user report — see its own doc comment) only ever appears for the one
+// combination it's actually relevant to: Engine == EngineLocate,
+// Content == ContentNone. A locate-backed content search still goes
+// through grep directly (see runContentSearch), so the hint would be
+// misleading there.
+func TestNoSearchResultsTextMentionsStaleIndexOnlyForLocateFilenameSearch(t *testing.T) {
+	tests := []struct {
+		name      string
+		req       search.Request
+		wantStale bool
+	}{
+		{"locate + filenames", search.Request{Engine: search.EngineLocate, Content: search.ContentNone}, true},
+		{"locate + grep content", search.Request{Engine: search.EngineLocate, Content: search.ContentGrep}, false},
+		{"find + filenames", search.Request{Engine: search.EngineFind, Content: search.ContentNone}, false},
+	}
+	for _, tt := range tests {
+		got := noSearchResultsText(tt.req)
+		if !strings.Contains(got, "No matches found") {
+			t.Errorf("%s: noSearchResultsText(%+v) = %q, missing the base message", tt.name, tt.req, got)
+		}
+		gotStale := strings.Contains(got, "stale")
+		if gotStale != tt.wantStale {
+			t.Errorf("%s: noSearchResultsText(%+v) = %q, mentions staleness = %v, want %v", tt.name, tt.req, got, gotStale, tt.wantStale)
 		}
 	}
 }
@@ -219,11 +252,8 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 		if calls == 1 {
 			firstCtx = ctx
 		}
-		results := make(chan search.Result)
-		errs := make(chan error)
-		close(results)
-		close(errs)
-		return results, errs
+		// Deliberately never closed — see fakeSearchRun's own doc comment.
+		return make(chan search.Result), make(chan error)
 	})
 
 	r.openSearch()
@@ -246,7 +276,7 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 }
 
 // TestSearchShortcutRespectsGuard mirrors
-// TestSettingsShortcutRespectsGuard for Ctrl+F.
+// TestOptionsShortcutRespectsGuard for Ctrl+F.
 func TestSearchShortcutRespectsGuard(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
