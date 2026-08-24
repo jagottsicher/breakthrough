@@ -122,8 +122,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.searchScopeField.SetFieldBackgroundColor(theme.FocusedBackground)
 		r.searchScopeField.SetFieldTextColor(theme.Text)
 		r.searchScopeField.SetLabelColor(theme.Text)
+		r.searchContentField.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.searchContentField.SetFieldTextColor(theme.Text)
+		r.searchContentField.SetLabelColor(theme.Text)
+		r.searchResultsView.SetBackgroundColor(theme.AccentBackground)
 		r.searchList.SetBackgroundColor(theme.AccentBackground)
 		r.searchList.SetMainTextColor(theme.Text)
+		r.searchStatus.SetBackgroundColor(theme.AccentBackground)
+		r.searchStatus.SetTextColor(theme.Text)
+	}
+
+	if r.dirPicker != nil {
+		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerHeader.SetTextColor(theme.Text)
+		r.dirPickerList.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerList.SetMainTextColor(theme.Text)
+		r.dirPickerSelectBtn.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerSelectBtn.SetLabelColor(theme.Text)
+		r.dirPickerCancelBtn.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerCancelBtn.SetLabelColor(theme.Text)
 	}
 
 	r.panel.applyTheme(theme)

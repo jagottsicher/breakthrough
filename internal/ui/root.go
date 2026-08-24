@@ -91,13 +91,32 @@ type Root struct {
 	quitConfirm *tview.List
 	optionsList *tview.List // Options overlay — see openOptions
 
+	// The directory picker (see dirpicker.go/openDirPicker) — the
+	// "Tree" browse action shared by the search dialog's Start-at field
+	// and, later, the planned Copy-to/Move-to target navigation.
+	// dirPickerPath is whatever directory is currently being browsed;
+	// dirPickerOnSelect/dirPickerOnCancel are set fresh by each
+	// openDirPicker call, run by confirmDirPicker/cancelDirPicker.
+	dirPicker          *tview.Flex
+	dirPickerHeader    *tview.TextView
+	dirPickerList      *tview.List
+	dirPickerSelectBtn *tview.Button
+	dirPickerCancelBtn *tview.Button
+	dirPickerPath      string
+	dirPickerOnSelect  func(string)
+	dirPickerOnCancel  func()
+
 	// The search dialog (see search.go/newSearchDialog): searchPages
-	// wraps searchForm (the pattern/scope/mode/engine/content inputs) and
-	// searchList (the results shown once a search has run) as two pages,
-	// the same "several sub-widgets, one overlay" shape r.properties
-	// already has. searchScopeField is searchForm's own path field, kept
-	// individually addressable for Tab-completion, the same reason
-	// r.panel.headerEdit is — see captureSearchScopeKey.
+	// wraps searchForm (the Engine/Start-at/Filename/Mode/Ignored-dirs/
+	// Search-in/Content inputs) and searchResultsView (the results
+	// list plus its own animated status line, once a search has run)
+	// as two pages, the same "several sub-widgets, one overlay" shape
+	// r.properties already has. searchScopeField/searchContentField are
+	// searchForm's own Start-at/Content fields, kept individually
+	// addressable — searchScopeField for Tab-completion (the same
+	// reason r.panel.headerEdit is — see captureSearchScopeKey),
+	// searchContentField so its own disabled state can be toggled (see
+	// searchContentChanged) and its text read directly in runSearch.
 	// searchEngineOptions/searchContentOptions record which
 	// search.Engine/search.ContentMode each of their own dropdown's
 	// options actually maps to (built once, since availability —
@@ -108,14 +127,32 @@ type Root struct {
 	searchPages          *tview.Pages
 	searchForm           *tview.Form
 	searchScopeField     *tview.InputField
+	searchContentField   *tview.InputField
+	searchResultsView    *tview.Flex
 	searchList           *tview.List
+	searchStatus         *tview.TextView
 	searchEngineOptions  []searchEngineOption
 	searchContentOptions []searchContentOption
 	// searchCancel stops whatever search.Run call is currently in
-	// flight, if any — called before starting a new one, and when the
-	// dialog closes, so a slow "find /" left running never keeps working
-	// after the user has moved on (see runSearch/closeSearch).
+	// flight, if any, and its paired animateSearchProgress ticker (both
+	// share this same ctx) — called before starting a new one, and when
+	// the dialog closes, so a slow "find /" left running never keeps
+	// working after the user has moved on (see runSearch/closeSearch).
 	searchCancel context.CancelFunc
+	// searchAnimFrame/searchLastDir/searchStartDir back the results
+	// window's own status line (see renderSearchStatus):
+	// searchAnimFrame is the current "still working" animation frame
+	// (see animateSearchProgress); searchLastDir is the directory of
+	// the most recently streamed match, breakthrough's own
+	// approximation of "currently scanning" — see streamSearchResults'
+	// own doc comment on why a real one isn't available when the
+	// actual traversal happens inside an external find/locate/grep
+	// process, not breakthrough's own code; searchStartDir (Start at,
+	// as of when the search began) is shown until the first match
+	// arrives.
+	searchAnimFrame int
+	searchLastDir   string
+	searchStartDir  string
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
@@ -436,6 +473,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
+	// The directory picker (see openDirPicker) — built once and reset
+	// on every open, the same as everything else above.
+	r.dirPicker = r.newDirPicker()
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -457,6 +498,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)

@@ -110,6 +110,69 @@ func TestNoSearchResultsTextMentionsStaleIndexOnlyForLocateFilenameSearch(t *tes
 	}
 }
 
+// TestSearchContentChangedTogglesContentFieldDisabled pins the user's
+// own request: the Content field starts out unavailable (grayed) since
+// Search in defaults to "File names" (ContentNone), and only accepts
+// typed input once something else is picked. tview's own InputField
+// exposes no public getter for its disabled state, so this proves it
+// behaviorally instead: a keystroke dispatched through InputHandler is
+// silently ignored while disabled, accepted once enabled.
+func TestSearchContentChangedTogglesContentFieldDisabled(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.searchContentField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), func(tview.Primitive) {})
+	if got := r.searchContentField.GetText(); got != "" {
+		t.Errorf("Content field text = %q after a keystroke while disabled, want unchanged (empty)", got)
+	}
+
+	// Index 1 is "File contents (grep)" — see buildSearchContentOptions'
+	// own doc comment on that fixed ordering.
+	r.searchForm.GetFormItemByLabel("Search in").(*tview.DropDown).SetCurrentOption(1)
+
+	r.searchContentField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), func(tview.Primitive) {})
+	if got := r.searchContentField.GetText(); got != "x" {
+		t.Errorf("Content field text = %q after a keystroke once enabled, want %q", got, "x")
+	}
+
+	// Switching back to "File names" should re-disable it.
+	r.searchForm.GetFormItemByLabel("Search in").(*tview.DropDown).SetCurrentOption(0)
+	r.searchContentField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'y', tcell.ModNone), func(tview.Primitive) {})
+	if got := r.searchContentField.GetText(); got != "x" {
+		t.Errorf("Content field text = %q after a keystroke once re-disabled, want unchanged (%q)", got, "x")
+	}
+}
+
+func TestParseIgnoreDirs(t *testing.T) {
+	tests := []struct {
+		text string
+		want []string
+	}{
+		{"", nil},
+		{"  ", nil},
+		{".git", []string{".git"}},
+		{".git, node_modules", []string{".git", "node_modules"}},
+		{" .git ,, node_modules ,", []string{".git", "node_modules"}},
+	}
+	for _, tt := range tests {
+		got := parseIgnoreDirs(tt.text)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseIgnoreDirs(%q) = %v, want %v", tt.text, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("parseIgnoreDirs(%q) = %v, want %v", tt.text, got, tt.want)
+				break
+			}
+		}
+	}
+}
+
 func TestOpenSearchShowsFormPrefilledWithPanelScope(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -122,7 +185,7 @@ func TestOpenSearchShowsFormPrefilledWithPanelScope(t *testing.T) {
 	if r.activePage != searchPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, searchPage)
 	}
-	if got := r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).GetText(); got != "" {
+	if got := r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).GetText(); got != "" {
 		t.Errorf("Pattern = %q, want empty", got)
 	}
 	if got := r.searchScopeField.GetText(); got != dir {
@@ -159,7 +222,7 @@ func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).SetText("anything")
+	r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).SetText("anything")
 	r.runSearch() // switches to the results page
 
 	r.backToSearchForm()
@@ -208,9 +271,10 @@ func TestRunSearchBuildsRequestFromFormFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).SetText("*.go")
+	r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).SetText("*.go")
 	r.searchScopeField.SetText("/tmp")
 	r.searchForm.GetFormItemByLabel("Mode").(*tview.DropDown).SetCurrentOption(2) // Regex
+	r.searchForm.GetFormItemByLabel("Ignored dirs").(*tview.InputField).SetText(".git, node_modules")
 
 	r.runSearch()
 
@@ -229,8 +293,157 @@ func TestRunSearchBuildsRequestFromFormFields(t *testing.T) {
 	if captured.Content != search.ContentNone {
 		t.Errorf("Content = %v, want ContentNone (the default selection)", captured.Content)
 	}
+	wantIgnore := []string{".git", "node_modules"}
+	if len(captured.IgnoreDirs) != len(wantIgnore) || captured.IgnoreDirs[0] != wantIgnore[0] || captured.IgnoreDirs[1] != wantIgnore[1] {
+		t.Errorf("IgnoreDirs = %v, want %v", captured.IgnoreDirs, wantIgnore)
+	}
 	if r.activePage != searchPage {
 		t.Errorf("activePage = %q, want still open (%q) on the results page", r.activePage, searchPage)
+	}
+}
+
+// TestRunSearchUsesContentFieldWhenContentModeSelected pins the split
+// between Filename and Content (see newSearchDialog's own doc comment
+// on why there are now two separate pattern fields, not one reused for
+// both): once Search in picks anything other than "File names",
+// runSearch reads the pattern from Content, ignoring whatever Filename
+// still holds.
+func TestRunSearchUsesContentFieldWhenContentModeSelected(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).SetText("should-be-ignored")
+	r.searchForm.GetFormItemByLabel("Search in").(*tview.DropDown).SetCurrentOption(1) // grep
+	r.searchContentField.SetText("TODO")
+
+	r.runSearch()
+
+	if captured.Pattern != "TODO" {
+		t.Errorf("Pattern = %q, want %q (from Content, not Filename)", captured.Pattern, "TODO")
+	}
+	if captured.Content != search.ContentGrep {
+		t.Errorf("Content = %v, want ContentGrep", captured.Content)
+	}
+}
+
+// TestRunSearchResizesToBiggerResultsWindow and
+// TestBackToSearchFormResizesBackToFormSize pin the user's own request
+// that the results window "darf auch gerne etwas größer sein" than the
+// form that opens it (see resizeSearchPages/searchResultsWidth/Height).
+func TestRunSearchResizesToBiggerResultsWindow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
+
+	r.panel.SetRect(0, 0, 150, 50) // large enough that clampToPanel doesn't shrink either size
+	r.openSearch()
+	_, _, formWidth, formHeight := r.searchPages.GetRect()
+
+	r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).SetText("anything")
+	r.runSearch()
+
+	_, _, resultsWidth, resultsHeight := r.searchPages.GetRect()
+	if resultsWidth <= formWidth || resultsHeight <= formHeight {
+		t.Errorf("results rect = %dx%d, want bigger than the form's own %dx%d", resultsWidth, resultsHeight, formWidth, formHeight)
+	}
+}
+
+func TestBackToSearchFormResizesBackToFormSize(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
+
+	r.panel.SetRect(0, 0, 150, 50)
+	r.openSearch()
+	_, _, formWidth, formHeight := r.searchPages.GetRect()
+
+	r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField).SetText("anything")
+	r.runSearch()
+	r.backToSearchForm()
+
+	_, _, gotWidth, gotHeight := r.searchPages.GetRect()
+	if gotWidth != formWidth || gotHeight != formHeight {
+		t.Errorf("rect after backToSearchForm = %dx%d, want back to the form's own %dx%d", gotWidth, gotHeight, formWidth, formHeight)
+	}
+}
+
+// TestOpenSearchTreePickerSeedsFromScopeFieldAndWritesBack pins the
+// Tree button's own action: opens the directory picker (see
+// dirpicker_test.go for the picker's own behavior) seeded at whatever
+// Start-at currently holds, writing the chosen directory back into it.
+func TestOpenSearchTreePickerSeedsFromScopeFieldAndWritesBack(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	r.searchScopeField.SetText(dir)
+
+	r.openSearchTreePicker()
+
+	if r.dirPickerPath != dir {
+		t.Errorf("dirPickerPath = %q, want seeded from Start at (%q)", r.dirPickerPath, dir)
+	}
+
+	appData := filepath.Join(dir, "app-data")
+	r.confirmDirPicker() // picks whatever's currently browsed — still dir, since nothing navigated
+	if got := r.searchScopeField.GetText(); got != dir {
+		t.Errorf("Start at after confirming = %q, want %q", got, dir)
+	}
+
+	// Navigating into a subdirectory first and confirming that instead
+	// should write the deeper path back, not the original seed.
+	r.openSearchTreePicker()
+	r.loadDirPicker(appData)
+	r.confirmDirPicker()
+	if got := r.searchScopeField.GetText(); got != appData {
+		t.Errorf("Start at after navigating and confirming = %q, want %q", got, appData)
+	}
+}
+
+// TestRenderSearchStatusShowsAnimationFrameAndFallbackDir pins
+// renderSearchStatus' own two-source text: the current animation frame
+// (see hashAnimationFrames, reused directly) plus searchLastDir once
+// set, falling back to searchStartDir before any result has arrived.
+func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.searchAnimFrame = 2
+	r.searchStartDir = "/start"
+	r.searchLastDir = ""
+	r.renderSearchStatus()
+
+	got := r.searchStatus.GetText(true)
+	if !strings.Contains(got, hashAnimationFrames[2]) {
+		t.Errorf("status = %q, want it to contain frame %q", got, hashAnimationFrames[2])
+	}
+	if !strings.Contains(got, "/start") {
+		t.Errorf("status = %q, want the fallback searchStartDir (%q) before any result arrives", got, "/start")
+	}
+
+	r.searchLastDir = "/found/here"
+	r.renderSearchStatus()
+	got = r.searchStatus.GetText(true)
+	if !strings.Contains(got, "/found/here") {
+		t.Errorf("status = %q, want searchLastDir (%q) once a result has arrived", got, "/found/here")
 	}
 }
 
@@ -257,7 +470,7 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 	})
 
 	r.openSearch()
-	pattern := r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField)
+	pattern := r.searchForm.GetFormItemByLabel("Filename").(*tview.InputField)
 
 	pattern.SetText("first")
 	r.runSearch()
