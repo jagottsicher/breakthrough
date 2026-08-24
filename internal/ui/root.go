@@ -126,8 +126,8 @@ type Root struct {
 	// doc comments in search.go).
 	searchPages          *tview.Pages
 	searchForm           *tview.Form
-	searchScopeField     *tview.InputField
-	searchContentField   *tview.InputField
+	searchScopeField     *dimmableField
+	searchContentField   *dimmableField
 	searchResultsView    *tview.Flex
 	searchList           *tview.List
 	searchStatus         *tview.TextView

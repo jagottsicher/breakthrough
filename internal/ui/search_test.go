@@ -147,6 +147,41 @@ func TestSearchContentChangedTogglesContentFieldDisabled(t *testing.T) {
 	}
 }
 
+// TestSearchEngineChangedTogglesScopeFieldDisabled pins the user's own
+// follow-up request: Start at no longer affects locate's own results
+// (see search.Request.Scope's own doc comment) — so it should read as
+// visibly unavailable while Engine=locate is selected, the same
+// disable-while-not-applicable treatment searchContentChanged already
+// gives the Content field.
+func TestSearchEngineChangedTogglesScopeFieldDisabled(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	before := r.searchScopeField.GetText() // openSearch seeds it from the panel's own path
+
+	// Index 1 is "locate" when available — see buildSearchEngineOptions'
+	// own doc comment; skip if this platform/session has no locate.
+	if len(r.searchEngineOptions) < 2 {
+		t.Skip("locate not available in this environment")
+	}
+	r.searchForm.GetFormItemByLabel("Engine").(*tview.DropDown).SetCurrentOption(1)
+
+	r.searchScopeField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), func(tview.Primitive) {})
+	if got := r.searchScopeField.GetText(); got != before {
+		t.Errorf("Start at text = %q after a keystroke with Engine=locate, want unchanged (%q)", got, before)
+	}
+
+	// Switching back to "find" should re-enable it.
+	r.searchForm.GetFormItemByLabel("Engine").(*tview.DropDown).SetCurrentOption(0)
+	r.searchScopeField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), func(tview.Primitive) {})
+	if got := r.searchScopeField.GetText(); got != before+"x" {
+		t.Errorf("Start at text = %q after a keystroke once back on find, want %q", got, before+"x")
+	}
+}
+
 func TestParseIgnoreDirs(t *testing.T) {
 	tests := []struct {
 		text string

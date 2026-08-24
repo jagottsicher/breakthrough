@@ -25,6 +25,49 @@ const (
 	searchResultsWidth, searchResultsHeight = 96, 32
 )
 
+// dimmableField wraps *tview.InputField to make its own disabled state
+// visible. tview.Form.Draw calls SetFormAttributes on every one of its
+// items on every single redraw, unconditionally repainting label/field
+// colors from the form's own one shared style (see form.go's own
+// source, not guessed) — discarding any per-item SetLabelColor/
+// SetFieldTextColor customization the instant the next frame draws.
+// Overriding SetFormAttributes here is the only way to make one field
+// in a Form look different from the rest: while dimmed, substitute a
+// gray label/field color for whatever the form itself is asking for.
+// Used for searchScopeField/searchContentField, the search dialog's
+// two "not always applicable" fields (see searchEngineChanged/
+// searchContentChanged) — the user's own request that a disabled field
+// read as visibly unavailable ("ausgrauen"), not just silently stop
+// accepting input.
+type dimmableField struct {
+	*tview.InputField
+	dimmed bool
+}
+
+func newDimmableField() *dimmableField {
+	return &dimmableField{InputField: tview.NewInputField()}
+}
+
+// SetDisabled disables/enables the field the normal way (delegating to
+// the embedded InputField) and dims/undims its own colors to match —
+// tview's InputField exposes no public getter for its own disabled
+// state, so dimmed is tracked here instead, for SetFormAttributes' own
+// use below.
+func (f *dimmableField) SetDisabled(disabled bool) tview.FormItem {
+	f.dimmed = disabled
+	f.InputField.SetDisabled(disabled)
+	return f
+}
+
+func (f *dimmableField) SetFormAttributes(labelWidth int, labelColor, bgColor, fieldTextColor, fieldBgColor tcell.Color) tview.FormItem {
+	if f.dimmed {
+		labelColor = tcell.ColorGray
+		fieldTextColor = tcell.ColorGray
+	}
+	f.InputField.SetFormAttributes(labelWidth, labelColor, bgColor, fieldTextColor, fieldBgColor)
+	return f
+}
+
 // searchModeOptions are the Mode dropdown's own labels, in the same
 // order as search.Mode's own constants (ModeGlob, ModeKeyword,
 // ModeRegex) — always the full, fixed list, unlike Engine/Content
@@ -118,16 +161,22 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchForm = tview.NewForm()
 	r.searchForm.SetCancelFunc(r.closeSearch) // Escape while a form field has focus
 
-	r.searchForm.AddDropDown("Engine", searchOptionLabels(r.searchEngineOptions, func(o searchEngineOption) string { return o.label }), 0, nil)
-
 	// A plain tview.InputField, added via AddFormItem rather than the
 	// Form's own AddInputField convenience method — that one doesn't
 	// expose SetInputCapture, which captureSearchScopeKey needs for
 	// Tab-completion (see Panel.headerEdit/completePath for the same
-	// pattern this reuses directly).
-	r.searchScopeField = tview.NewInputField()
+	// pattern this reuses directly). Created before the Engine dropdown
+	// below, not after: Form's own AddDropDown applies initialOption
+	// immediately, which fires the selected callback (searchEngineChanged)
+	// right there during construction — searchScopeField must already
+	// exist by then, or that first call panics on a nil field (see
+	// searchContentField's own version of this ordering requirement
+	// below).
+	r.searchScopeField = newDimmableField()
 	r.searchScopeField.SetLabel("Start at")
 	r.searchScopeField.SetInputCapture(r.captureSearchScopeKey)
+
+	r.searchForm.AddDropDown("Engine", searchOptionLabels(r.searchEngineOptions, func(o searchEngineOption) string { return o.label }), 0, r.searchEngineChanged)
 	r.searchForm.AddFormItem(r.searchScopeField)
 
 	r.searchForm.AddInputField("Filename", "", 40, nil, nil)
@@ -139,7 +188,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// the selected callback (searchContentChanged) right there during
 	// construction — searchContentField must already exist by then, or
 	// that first call panics on a nil field.
-	r.searchContentField = tview.NewInputField()
+	r.searchContentField = newDimmableField()
 	r.searchContentField.SetLabel("Content")
 
 	r.searchForm.AddDropDown("Search in", searchOptionLabels(r.searchContentOptions, func(o searchContentOption) string { return o.label }), 0, r.searchContentChanged)
@@ -188,11 +237,20 @@ func (r *Root) newSearchDialog() *tview.Pages {
 // searchContentChanged is the Search in dropdown's own selected
 // callback: enables searchContentField once anything other than "File
 // names" (ContentNone, always index 0 — see buildSearchContentOptions'
-// own doc comment) is picked, disables it again if the choice moves
-// back to "File names" — see newSearchDialog's own doc comment on why
-// that field starts out grayed.
+// own doc comment) is picked, disables (and dims — see dimmableField)
+// it again if the choice moves back to "File names".
 func (r *Root) searchContentChanged(_ string, index int) {
 	r.searchContentField.SetDisabled(r.searchContentOptions[index].mode == search.ContentNone)
+}
+
+// searchEngineChanged is the Engine dropdown's own selected callback:
+// disables (and dims — see dimmableField) searchScopeField (Start at)
+// once EngineLocate is picked, since it no longer has any effect there
+// (see search.Request.Scope's own doc comment on why filtering
+// locate's results by it was removed — a real user report), re-enables
+// it back for EngineFind, where it's still the actual traversal root.
+func (r *Root) searchEngineChanged(_ string, index int) {
+	r.searchScopeField.SetDisabled(r.searchEngineOptions[index].engine == search.EngineLocate)
 }
 
 // openSearchTreePicker is the Tree button's own action: opens the
