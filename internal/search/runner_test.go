@@ -91,6 +91,24 @@ func TestRunFilenameSearchGlob(t *testing.T) {
 	}
 }
 
+// TestRunFilenameSearchIgnoreDirsPrunesSubdirectory pins IgnoreDirs end
+// to end through the real find binary: a pattern that would otherwise
+// match cherry.txt (see fixtureTree's own "sub/cherry.txt") finds
+// nothing once "sub" is ignored.
+func TestRunFilenameSearchIgnoreDirsPrunesSubdirectory(t *testing.T) {
+	requireTool(t, "find")
+	dir := fixtureTree(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "cherry.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind, IgnoreDirs: []string{"sub"}})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 0 {
+		t.Errorf("got %v, want no results — \"sub\" should have been pruned", got)
+	}
+}
+
 func TestRunFilenameSearchKeywordMatchesSubdirectories(t *testing.T) {
 	requireTool(t, "find")
 	dir := fixtureTree(t)
@@ -312,6 +330,27 @@ func TestWithinScope(t *testing.T) {
 	for _, tt := range tests {
 		if got := withinScope(tt.path, tt.scope); got != tt.want {
 			t.Errorf("withinScope(%q, %q) = %v, want %v", tt.path, tt.scope, got, tt.want)
+		}
+	}
+}
+
+func TestUnderIgnoredDir(t *testing.T) {
+	tests := []struct {
+		path       string
+		ignoreDirs []string
+		want       bool
+	}{
+		{"/home/jens/project/node_modules/pkg/index.js", []string{"node_modules"}, true},
+		{"/home/jens/project/src/index.js", []string{"node_modules"}, false},
+		// Exact-component match, not a substring: "node_modules_old"
+		// isn't "node_modules".
+		{"/home/jens/project/node_modules_old/index.js", []string{"node_modules"}, false},
+		{"/home/jens/.git/config", []string{".git", "node_modules"}, true},
+		{"/home/jens/project/file.txt", nil, false},
+	}
+	for _, tt := range tests {
+		if got := underIgnoredDir(tt.path, tt.ignoreDirs); got != tt.want {
+			t.Errorf("underIgnoredDir(%q, %v) = %v, want %v", tt.path, tt.ignoreDirs, got, tt.want)
 		}
 	}
 }

@@ -74,8 +74,10 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	return streamNullSeparated(cmd, func(path string) bool {
-		if req.Engine == EngineLocate && !withinScope(path, req.Scope) {
-			return true // keep going, just filtered out — see Request's own doc comment
+		if req.Engine == EngineLocate {
+			if !withinScope(path, req.Scope) || underIgnoredDir(path, req.IgnoreDirs) {
+				return true // keep going, just filtered out — see Request's own doc comment
+			}
 		}
 		return sendResult(ctx, results, Result{Path: path})
 	})
@@ -86,7 +88,26 @@ func filenameCommand(req Request) (name string, args []string, ok bool) {
 		a, ok := LocateArgs(runtime.GOOS, req.Pattern, req.Mode)
 		return "locate", a, ok
 	}
-	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode), true
+	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs), true
+}
+
+// underIgnoredDir reports whether path has any of ignoreDirs as one of
+// its own path components — locate's own client-side equivalent of
+// FindArgs' -prune (see Request.IgnoreDirs' own doc comment on why
+// locate needs this separate check rather than a traversal-level
+// prune: its results come from a prebuilt index, not a live walk).
+func underIgnoredDir(path string, ignoreDirs []string) bool {
+	if len(ignoreDirs) == 0 {
+		return false
+	}
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		for _, ignored := range ignoreDirs {
+			if part == ignored {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func runContentSearch(ctx context.Context, req Request, results chan<- Result) error {
@@ -112,7 +133,7 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 // top-level find/locate/grep call, this isn't the one command the
 // whole search depends on.
 func searchArchives(ctx context.Context, req Request, namePattern, tool string, buildArgs func(file string) []string, results chan<- Result) error {
-	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob)...)
+	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob, req.IgnoreDirs)...)
 	return streamNullSeparated(findCmd, func(archive string) bool {
 		if ctx.Err() != nil {
 			return false

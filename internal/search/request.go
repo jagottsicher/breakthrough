@@ -38,10 +38,19 @@ const (
 // on why a locate search's own index has no directory scope to give it
 // at the command level; internal/ui's search dialog instead filters
 // locate's results by Scope itself once they come back).
+//
+// IgnoreDirs names directories to skip entirely (e.g. ".git",
+// "node_modules") — matched by exact name, not a full path, so a
+// matching directory is skipped wherever it appears under Scope. For
+// EngineFind this is a real prune (see FindArgs), so an ignored tree is
+// never even walked; for EngineLocate, whose own index has no
+// traversal to prune, it's applied as the same kind of client-side
+// filter as Scope itself (see withinScope's own caller in Runner).
 type Request struct {
-	Pattern string
-	Scope   string
-	Mode    Mode
-	Engine  Engine
-	Content ContentMode
+	Pattern    string
+	Scope      string
+	Mode       Mode
+	Engine     Engine
+	Content    ContentMode
+	IgnoreDirs []string
 }

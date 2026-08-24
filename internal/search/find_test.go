@@ -6,7 +6,7 @@ import (
 )
 
 func TestFindArgsGlob(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob)
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, nil)
 	want := []string{"/home/jens", "-iname", "*.go", "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs glob = %v, want %v", got, want)
@@ -14,7 +14,7 @@ func TestFindArgsGlob(t *testing.T) {
 }
 
 func TestFindArgsKeywordWrapsWithWildcards(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "report", ModeKeyword)
+	got := FindArgs("linux", "/home/jens", "report", ModeKeyword, nil)
 	want := []string{"/home/jens", "-iname", "*report*", "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs keyword = %v, want %v", got, want)
@@ -27,7 +27,7 @@ func TestFindArgsKeywordWrapsWithWildcards(t *testing.T) {
 // syntax — not POSIX ERE — so -regextype posix-extended must always be
 // given explicitly for a "regex" toggle to mean what it says.
 func TestFindArgsRegexLinuxUsesRegextype(t *testing.T) {
-	got := FindArgs("linux", "/var/log", `.*\.log$`, ModeRegex)
+	got := FindArgs("linux", "/var/log", `.*\.log$`, ModeRegex, nil)
 	want := []string{"/var/log", "-regextype", "posix-extended", "-iregex", `.*\.log$`, "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs regex (linux) = %v, want %v", got, want)
@@ -40,10 +40,54 @@ func TestFindArgsRegexLinuxUsesRegextype(t *testing.T) {
 // all — passing it would be a hard usage error there.
 func TestFindArgsRegexBSDUsesEFlag(t *testing.T) {
 	for _, goos := range []string{"darwin", "freebsd"} {
-		got := FindArgs(goos, "/var/log", `.*\.log$`, ModeRegex)
+		got := FindArgs(goos, "/var/log", `.*\.log$`, ModeRegex, nil)
 		want := []string{"-E", "/var/log", "-iregex", `.*\.log$`, "-print0"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("FindArgs regex (%s) = %v, want %v", goos, got, want)
 		}
+	}
+}
+
+// TestFindArgsIgnoreDirsAddsPruneClause pins the -prune idiom (see
+// FindArgs' own doc comment): one -name per ignored directory, OR'd
+// together, pruned before the real test runs.
+func TestFindArgsIgnoreDirsAddsPruneClause(t *testing.T) {
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git", "node_modules"})
+	want := []string{
+		"/home/jens",
+		"(", "-name", ".git", "-o", "-name", "node_modules", ")", "-prune", "-o",
+		"-iname", "*.go", "-print0",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindArgs with ignoreDirs = %v, want %v", got, want)
+	}
+}
+
+// TestFindArgsIgnoreDirsSingleEntry pins the single-name case doesn't
+// grow a pointless "-o" — just "( -name D )".
+func TestFindArgsIgnoreDirsSingleEntry(t *testing.T) {
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git"})
+	want := []string{
+		"/home/jens",
+		"(", "-name", ".git", ")", "-prune", "-o",
+		"-iname", "*.go", "-print0",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindArgs with one ignoreDirs entry = %v, want %v", got, want)
+	}
+}
+
+// TestFindArgsIgnoreDirsWithRegexBSDKeepsEFlagFirst pins that the
+// -prune clause is inserted after -E/scope, not before — -E must stay
+// the very first argument on BSD find (see FindArgs' own doc comment).
+func TestFindArgsIgnoreDirsWithRegexBSDKeepsEFlagFirst(t *testing.T) {
+	got := FindArgs("darwin", "/var/log", `.*\.log$`, ModeRegex, []string{"archive"})
+	want := []string{
+		"-E", "/var/log",
+		"(", "-name", "archive", ")", "-prune", "-o",
+		"-iregex", `.*\.log$`, "-print0",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindArgs with ignoreDirs (BSD regex) = %v, want %v", got, want)
 	}
 }

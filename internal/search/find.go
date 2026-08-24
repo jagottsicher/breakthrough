@@ -32,16 +32,48 @@ package search
 // containing a newline — a real, if rare, possibility in a file name —
 // can never be mistaken for two separate results by whatever reads it
 // (see Runner).
-func FindArgs(goos, scope, pattern string, mode Mode) []string {
+//
+// ignoreDirs, if non-empty, adds find's own standard "-prune" idiom
+// ahead of the real test: "( -name D1 -o -name D2 ) -prune -o
+// <real test> -print0" — each name matched via -name (not -iname: a
+// deliberate, case-sensitive exception here, since directory names to
+// skip — .git, node_modules, vendor — are conventionally exact) against
+// find's own traversal, so a matching directory is never even descended
+// into, rather than merely filtered out of already-produced results
+// (an important difference for a large ignored tree: node_modules
+// itself never gets walked at all). -prune's own semantics — skip
+// descending, produce no output unless followed by an explicit action —
+// are POSIX-common to every find implementation this app targets, so
+// this needs no goos-specific handling the way -iregex above does.
+func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string) []string {
+	var args []string
+	if mode == ModeRegex && goos != "linux" {
+		args = append(args, "-E") // BSD find: must precede the path, see above
+	}
+	args = append(args, scope)
+
+	if len(ignoreDirs) > 0 {
+		args = append(args, "(")
+		for i, name := range ignoreDirs {
+			if i > 0 {
+				args = append(args, "-o")
+			}
+			args = append(args, "-name", name)
+		}
+		args = append(args, ")", "-prune", "-o")
+	}
+
 	switch mode {
 	case ModeRegex:
 		if goos == "linux" {
-			return []string{scope, "-regextype", "posix-extended", "-iregex", pattern, "-print0"}
+			args = append(args, "-regextype", "posix-extended", "-iregex", pattern)
+		} else {
+			args = append(args, "-iregex", pattern)
 		}
-		return []string{"-E", scope, "-iregex", pattern, "-print0"}
 	case ModeKeyword:
-		return []string{scope, "-iname", "*" + pattern + "*", "-print0"}
+		args = append(args, "-iname", "*"+pattern+"*")
 	default: // ModeGlob
-		return []string{scope, "-iname", pattern, "-print0"}
+		args = append(args, "-iname", pattern)
 	}
+	return append(args, "-print0")
 }
