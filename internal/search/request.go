@@ -33,19 +33,29 @@ const (
 // not built here to keep the search dialog itself to one pattern field
 // rather than two.
 //
-// Scope is a single directory Pattern is searched under (recursively,
-// for everything except EngineLocate — see LocateArgs' own doc comment
-// on why a locate search's own index has no directory scope to give it
-// at the command level; internal/ui's search dialog instead filters
-// locate's results by Scope itself once they come back).
+// Scope is a single directory Pattern is searched under (recursively)
+// for EngineFind. It's ignored outright for EngineLocate: locate's own
+// index has no directory-scope argument to give it at the command
+// level (see LocateArgs' own doc comment), and an earlier version of
+// this package filtered locate's own whole-system results down to
+// Scope client-side instead — which sounds reasonable but wasn't, in
+// practice: internal/ui's search dialog defaults Scope to wherever the
+// panel currently is, so that filter silently discarded almost every
+// result for almost any real search (a real user report — "locate
+// findet wieder nichts"), defeating the entire reason to pick locate
+// over find in the first place: searching the whole system fast, not
+// one directory.
 //
 // IgnoreDirs names directories to skip entirely (e.g. ".git",
 // "node_modules") — matched by exact name, not a full path, so a
-// matching directory is skipped wherever it appears under Scope. For
-// EngineFind this is a real prune (see FindArgs), so an ignored tree is
+// matching directory is skipped wherever it appears. Unlike Scope, this
+// stays in effect for EngineLocate too: a name only ends up here
+// because the user typed it in themselves, never a silent default, so
+// there's no equivalent risk of surprising, near-total filtering. For
+// EngineFind it's a real prune (see FindArgs), so an ignored tree is
 // never even walked; for EngineLocate, whose own index has no
-// traversal to prune, it's applied as the same kind of client-side
-// filter as Scope itself (see withinScope's own caller in Runner).
+// traversal to prune, it's applied as a client-side filter instead
+// (see underIgnoredDir's own caller in Runner).
 type Request struct {
 	Pattern    string
 	Scope      string

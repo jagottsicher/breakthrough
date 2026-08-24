@@ -315,25 +315,6 @@ func TestRunErrsChannelClosesAfterResultsWithNoError(t *testing.T) {
 	}
 }
 
-func TestWithinScope(t *testing.T) {
-	tests := []struct {
-		path, scope string
-		want        bool
-	}{
-		{"/home/jens/file.txt", "/home/jens", true},
-		{"/home/jens", "/home/jens", true},
-		{"/etc/passwd", "/home/jens", false},
-		// The classic filepath.Rel-vs-strings.HasPrefix trap: "/homefoo"
-		// shares a string prefix with "/home" but isn't nested under it.
-		{"/homefoo/file.txt", "/home", false},
-	}
-	for _, tt := range tests {
-		if got := withinScope(tt.path, tt.scope); got != tt.want {
-			t.Errorf("withinScope(%q, %q) = %v, want %v", tt.path, tt.scope, got, tt.want)
-		}
-	}
-}
-
 func TestUnderIgnoredDir(t *testing.T) {
 	tests := []struct {
 		path       string

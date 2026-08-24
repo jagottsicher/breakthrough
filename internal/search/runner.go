@@ -74,10 +74,18 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	return streamNullSeparated(cmd, func(path string) bool {
-		if req.Engine == EngineLocate {
-			if !withinScope(path, req.Scope) || underIgnoredDir(path, req.IgnoreDirs) {
-				return true // keep going, just filtered out — see Request's own doc comment
-			}
+		// See Request.Scope's own doc comment on why Scope no longer
+		// filters EngineLocate's own results at all (it used to): a
+		// user picks locate specifically *for* its whole-system index,
+		// and Scope defaults to wherever the panel happens to be —
+		// silently discarding every result outside that one directory
+		// made locate come back empty for almost any real search, a
+		// real user report ("locate findet wieder nichts"). IgnoreDirs
+		// stays applied even for locate: unlike Scope, it's never
+		// silently defaulted — a name only ends up there because the
+		// user typed it in themselves.
+		if req.Engine == EngineLocate && underIgnoredDir(path, req.IgnoreDirs) {
+			return true // keep going, just filtered out
 		}
 		return sendResult(ctx, results, Result{Path: path})
 	})
@@ -233,18 +241,4 @@ func parseGrepLine(line string) (path string, lineNo int, text string, ok bool) 
 		return "", 0, "", false
 	}
 	return parts[0], n, parts[2], true
-}
-
-// withinScope reports whether path is scope itself, or nested under
-// it — via filepath.Rel's own path-component comparison, not a naive
-// string prefix check (which "/home" vs "/homefoo" would get wrong).
-// Used to filter locate's own whole-system results down to the search
-// dialog's chosen scope — see Request's own doc comment on why locate
-// has no scope argument of its own to give it directly.
-func withinScope(path, scope string) bool {
-	rel, err := filepath.Rel(scope, path)
-	if err != nil {
-		return false
-	}
-	return rel == "." || !strings.HasPrefix(rel, "..")
 }
