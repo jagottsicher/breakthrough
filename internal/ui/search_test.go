@@ -52,19 +52,6 @@ func TestBuildSearchEngineOptionsAlwaysHasFindFirst(t *testing.T) {
 	}
 }
 
-func TestBuildSearchContentOptionsAlwaysHasFileNamesAndGrep(t *testing.T) {
-	opts := buildSearchContentOptions()
-	if len(opts) < 2 {
-		t.Fatalf("buildSearchContentOptions() = %+v, want at least 2 entries", opts)
-	}
-	if opts[0].label != "File names" || opts[0].mode != search.ContentNone {
-		t.Errorf("opts[0] = %+v, want {label: \"File names\", mode: ContentNone}", opts[0])
-	}
-	if opts[1].mode != search.ContentGrep {
-		t.Errorf("opts[1] = %+v, want mode ContentGrep", opts[1])
-	}
-}
-
 func TestFormatSearchResult(t *testing.T) {
 	tests := []struct {
 		name string
@@ -363,8 +350,7 @@ func TestRunSearchContentChecksMapToRequestFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchContentTypeIdx = 1 // grep — see buildSearchContentOptions' own fixed ordering
-	r.searchContentValue = "TODO"
+	r.searchContentValue = "TODO" // a filled Content field is what selects content search now — see runSearch's own doc comment
 	r.searchWholeWords = true
 	r.searchContentRegex = true
 	r.searchFirstHit = true
@@ -434,13 +420,14 @@ func TestRunSearchSkipHiddenAddsGlobToIgnoreDirs(t *testing.T) {
 	}
 }
 
-// TestRunSearchUsesContentValueWhenContentTypeSelected pins the split
-// between Filename and Content (see newSearchDialog's own doc comment
-// on why there are two separate pattern fields, not one reused for
-// both): once Search in picks anything other than "File names",
-// runSearch reads the pattern from Content, ignoring whatever Filename
-// still holds.
-func TestRunSearchUsesContentValueWhenContentTypeSelected(t *testing.T) {
+// TestRunSearchUsesContentValueWhenContentFilled pins the split between
+// Filename and Content (see newSearchDialog's own doc comment on why
+// there are two separate pattern fields, not one reused for both):
+// once Content itself is filled in, runSearch reads the pattern from
+// there, ignoring whatever Filename still holds (see runSearch's own
+// doc comment — there's no separate "Search in" choice any more, a
+// filled Content field is the only signal).
+func TestRunSearchUsesContentValueWhenContentFilled(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -451,7 +438,6 @@ func TestRunSearchUsesContentValueWhenContentTypeSelected(t *testing.T) {
 
 	r.openSearch()
 	r.searchFilenameValue = "should-be-ignored"
-	r.searchContentTypeIdx = 1 // grep — see buildSearchContentOptions' own fixed ordering
 	r.searchContentValue = "TODO"
 
 	r.runSearch()
@@ -671,10 +657,12 @@ func TestOpenSearchResultNavigatesAndCloses(t *testing.T) {
 	}
 }
 
-// TestChoiceSpanSelectsOption pins the choice group mechanism shared
-// by Engine/Search in/the various checkboxes: activating one of a
-// group's own spans selects it (updates the relevant *Idx/bool field)
-// and re-renders.
+// TestChoiceSpanSelectsOption pins the choice group mechanism shared by
+// Engine and the various checkboxes: activating one of a group's own
+// spans selects it (updates the relevant *Idx/bool field) and
+// re-renders. Uses Find recursively rather than Engine's own
+// find/locate choice — always present regardless of host, unlike
+// locate (see search.LocateAvailable's own doc comment).
 func TestChoiceSpanSelectsOption(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -683,36 +671,28 @@ func TestChoiceSpanSelectsOption(t *testing.T) {
 	}
 	r.openSearch()
 
-	if r.searchContentTypeIdx != 0 {
-		t.Fatalf("setup: searchContentTypeIdx = %d, want 0 (File names)", r.searchContentTypeIdx)
+	if !r.searchRecursive {
+		t.Fatal("setup: searchRecursive = false, want true (MC's own default — see newSearchDialog)")
 	}
 
-	// Search in's own choice spans live in searchRight — rather than
-	// hardcoding an index, find "Content (grep)" by rendered text (see
-	// buildSearchContentOptions) among searchRight's own spans; grep is
-	// always present (see buildSearchContentOptions' own doc comment),
-	// unlike locate/zgrep/zipgrep which depend on the host.
 	idx := -1
 	for i, s := range r.searchSpans {
-		if s.widget != r.searchRight {
+		if s.widget != r.searchLeft {
 			continue
 		}
 		text, _ := textAtSpan(r, s)
-		if text == "○ Content (grep)" || text == "● Content (grep)" {
+		if text == "● Find recursively" {
 			idx = i
 			break
 		}
 	}
 	if idx < 0 {
-		t.Fatal("setup: no span for the Content (grep) option found")
+		t.Fatal("setup: no span for Find recursively found")
 	}
 	r.searchSpans[idx].activate()
 
-	if r.searchContentTypeIdx == 0 {
-		t.Error("searchContentTypeIdx = 0 after activating Content (grep), want the grep option's own index")
-	}
-	if r.searchContentOptions[r.searchContentTypeIdx].mode != search.ContentGrep {
-		t.Errorf("selected content option mode = %v, want ContentGrep", r.searchContentOptions[r.searchContentTypeIdx].mode)
+	if r.searchRecursive {
+		t.Error("searchRecursive = true after activating Find recursively, want false")
 	}
 }
 
@@ -815,15 +795,14 @@ func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
 	}
 }
 
-// TestSearchEngineChangeDimsScopeField and
-// TestSearchContentTypeChangeDimsContentField pin the user's own
-// request: Start at reads as visibly unavailable while Engine=locate
-// (it no longer affects locate's own results — see
-// search.Request.Scope's own doc comment), and Content while Search in
-// is still "File names" — both via dimTag in the rendered text, not
-// (like the previous, tview.Form-based version of this dialog) a
-// SetDisabled call whose color change tview's own Form.Draw silently
-// discarded every frame.
+// TestSearchEngineChangeDimsScopeField pins the user's own request:
+// Start at reads as visibly unavailable while Engine=locate (it no
+// longer affects locate's own results — see search.Request.Scope's own
+// doc comment) — via dimTag in the rendered text, not (like the
+// previous, tview.Form-based version of this dialog) a SetDisabled
+// call whose color change tview's own Form.Draw silently discarded
+// every frame. Content has no such dimming any more — see
+// rerenderSearchDialog's own doc comment on its column.
 func TestSearchEngineChangeDimsScopeField(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -875,27 +854,11 @@ func rowIsDimmed(t *testing.T, r *Root, tagName string) bool {
 	return strings.Contains(lines[span.row], dimTag)
 }
 
-func TestSearchContentTypeChangeDimsContentField(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.openSearch()
-
-	if !strings.Contains(r.searchRight.GetText(false), dimTag) {
-		t.Fatal("setup: Content should start dimmed — Search in defaults to \"File names\"")
-	}
-
-	r.searchContentTypeIdx = 1 // grep
-	r.rerenderSearchDialog()
-	if strings.Contains(r.searchRight.GetText(false), dimTag) {
-		t.Error("Content should no longer be dimmed once Search in picks grep")
-	}
-
-	r.searchContentTypeIdx = 0 // back to "File names"
-	r.rerenderSearchDialog()
-	if !strings.Contains(r.searchRight.GetText(false), dimTag) {
-		t.Error("Content should be dimmed again once back on \"File names\"")
-	}
-}
+// Content's own field is no longer ever dimmed (there's no more
+// "Search in" choice gating it — see rerenderSearchDialog's own doc
+// comment on the Content column), so the test that used to pin its
+// dimming behavior across a Search in change is gone; nothing replaces
+// it, since "always editable" needs no test of its own beyond
+// TestRunSearchUsesContentValueWhenContentFilled already covering the
+// behavior that matters (a filled Content field selects content
+// search).

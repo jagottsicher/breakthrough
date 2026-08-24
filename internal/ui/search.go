@@ -22,28 +22,21 @@ const searchPage = "search"
 // window "darf auch gerne etwas größer sein" than the input form that
 // opens it.
 const (
-	searchFormWidth, searchFormHeight       = 84, 25
+	searchFormWidth, searchFormHeight       = 84, 19
 	searchResultsWidth, searchResultsHeight = 96, 32
 )
 
-// searchEngineOption/searchContentOption pair one Engine/Search-in
-// choice's own label with the search.Engine/search.ContentMode it
-// actually means — needed because, unlike Mode, these two choice
-// groups' own option lists are built conditionally (see
-// buildSearchEngineOptions/buildSearchContentOptions): once an option
-// in the middle is left out (e.g. no "locate" because
-// search.LocateAvailable() is false), the group's own selected index
-// no longer lines up with the corresponding enum's own numeric value,
-// so it has to be looked up through this pairing instead of cast
-// directly.
+// searchEngineOption pairs one Engine choice's own label with the
+// search.Engine it actually means — needed because, unlike a plain
+// checkbox, this choice group's own option list is built conditionally
+// (see buildSearchEngineOptions): once an option in the middle is left
+// out (e.g. no "locate" because search.LocateAvailable() is false),
+// the group's own selected index no longer lines up with the
+// corresponding enum's own numeric value, so it has to be looked up
+// through this pairing instead of cast directly.
 type searchEngineOption struct {
 	label  string
 	engine search.Engine
-}
-
-type searchContentOption struct {
-	label string
-	mode  search.ContentMode
 }
 
 // buildSearchEngineOptions lists find (always) and locate (only where
@@ -54,25 +47,6 @@ func buildSearchEngineOptions() []searchEngineOption {
 	opts := []searchEngineOption{{"find", search.EngineFind}}
 	if search.LocateAvailable() {
 		opts = append(opts, searchEngineOption{"locate", search.EngineLocate})
-	}
-	return opts
-}
-
-// buildSearchContentOptions lists file names (always, and always
-// first — see its own callers, which rely on index 0 meaning
-// ContentNone), grep (always — every platform this app targets has
-// grep), and zgrep/zipgrep only where search.ZgrepAvailable()/
-// ZipgrepAvailable() report the binary actually exists.
-func buildSearchContentOptions() []searchContentOption {
-	opts := []searchContentOption{
-		{"File names", search.ContentNone},
-		{"Content (grep)", search.ContentGrep},
-	}
-	if search.ZgrepAvailable() {
-		opts = append(opts, searchContentOption{"gzip contents (zgrep)", search.ContentGzip})
-	}
-	if search.ZipgrepAvailable() {
-		opts = append(opts, searchContentOption{"zip contents (zipgrep)", search.ContentZip})
 	}
 	return opts
 }
@@ -160,18 +134,20 @@ func (sb *searchBuilder) span(start int, activate func(), tagName string) {
 }
 
 // textField writes value (or placeholder, dimTag'd, while empty) as
-// one clickable/editable span, min-width padded so it stays clickable
-// even blank. dimmed additionally forces the gray "not applicable"
-// style regardless of focus — see dimTag. maxWidth truncates only what
-// gets DRAWN (0 means no limit) — never what the shared inline editor
-// is prefilled with on activation, which always uses the real,
-// untruncated value; a value long enough to need this (only Start-at's
-// own path realistically is) would otherwise push whatever's written
-// right after it (the Tree button) past the dialog's own edge, or —
-// worse, before SetWrap(false) was added — onto a wrapped second line,
-// silently misaligning every span's own row below it (a real bug, not
-// just a theoretical one).
-func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWidth int, set func(string), tagName string) {
+// one clickable/editable span, min-width padded (via minWidth — the
+// field's own clickable/editable region never draws narrower than
+// this, even blank) so it stays clickable even blank. dimmed
+// additionally forces the gray "not applicable" style regardless of
+// focus — see dimTag. maxWidth truncates only what gets DRAWN (0 means
+// no limit) — never what the shared inline editor is prefilled with on
+// activation, which always uses the real, untruncated value; a value
+// long enough to need this (only Start-at's own path realistically is)
+// would otherwise push whatever's written right after it (the Tree
+// button) past the dialog's own edge, or — worse, before
+// SetWrap(false) was added — onto a wrapped second line, silently
+// misaligning every span's own row below it (a real bug, not just a
+// theoretical one).
+func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWidth, minWidth int, set func(string), tagName string) {
 	idx := len(sb.root.searchSpans)
 	shown := value
 	if shown == "" {
@@ -180,7 +156,6 @@ func (sb *searchBuilder) textField(value, placeholder string, dimmed bool, maxWi
 	if maxWidth > 0 {
 		shown = truncateForDisplay(shown, maxWidth)
 	}
-	const minWidth = 22
 	for tview.TaggedStringWidth(shown) < minWidth {
 		shown += " "
 	}
@@ -260,7 +235,6 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 // problem exists here.
 func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchEngineOptions = buildSearchEngineOptions()
-	r.searchContentOptions = buildSearchContentOptions()
 	// MC's own real defaults (see its screenshot): "Find recursively"
 	// and "Using shell patterns" both start checked — every other
 	// checkbox here defaults to Go's own bool zero value, false, which
@@ -293,7 +267,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 		AddItem(r.searchRight, 0, 1, false)
 
 	fields := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.searchTop, 6, 0, true).
+		AddItem(r.searchTop, 7, 0, true).
 		AddItem(columns, 0, 1, false).
 		AddItem(r.searchButtons, 1, 0, false)
 	// Installed on fields itself, the shared ancestor of searchTop/
@@ -390,6 +364,7 @@ func (r *Root) rerenderSearchDialog() {
 	r.searchSpans = nil
 
 	top := &searchBuilder{root: r, widget: r.searchTop}
+	top.newline() // blank margin row — the dialog no longer has a border of its own to create this breathing room
 	top.text("Engine       ")
 	for i, opt := range r.searchEngineOptions {
 		i := i
@@ -406,7 +381,7 @@ func (r *Root) rerenderSearchDialog() {
 	// searchFormWidth — see textField's own doc comment on why only
 	// the *display* is ever shortened, never the value editing starts
 	// from.
-	top.textField(r.searchScopeValue, "(current directory)", scopeDimmed, 50, func(s string) {
+	top.textField(r.searchScopeValue, "(current directory)", scopeDimmed, 50, 22, func(s string) {
 		r.searchScopeValue = s
 	}, "start-at")
 	top.text("   ")
@@ -416,7 +391,7 @@ func (r *Root) rerenderSearchDialog() {
 
 	top.choice(r.searchIgnoreEnabled, "Ignore dirs:", func() { r.searchIgnoreEnabled = !r.searchIgnoreEnabled })
 	top.text(" ")
-	top.textField(r.searchIgnoreValue, "(none)", !r.searchIgnoreEnabled, 0, func(s string) {
+	top.textField(r.searchIgnoreValue, "(none)", !r.searchIgnoreEnabled, 0, 22, func(s string) {
 		r.searchIgnoreValue = s
 	}, "")
 	r.searchTop.SetText(top.b.String())
@@ -437,7 +412,7 @@ func (r *Root) rerenderSearchDialog() {
 	left := &searchBuilder{root: r, widget: r.searchLeft}
 	left.text("Filename")
 	left.newline()
-	left.textField(r.searchFilenameValue, "(type a pattern)", false, 0, func(s string) {
+	left.textField(r.searchFilenameValue, "(type a pattern)", false, 0, 36, func(s string) {
 		r.searchFilenameValue = s
 	}, "filename")
 	left.newline()
@@ -453,41 +428,29 @@ func (r *Root) rerenderSearchDialog() {
 	left.choice(r.searchSkipHidden, "Skip hidden", func() { r.searchSkipHidden = !r.searchSkipHidden })
 	r.searchLeft.SetText(left.b.String())
 
-	// Content column. Search in (this app's own addition beyond MC —
-	// MC's content search is always plain grep; this app also offers
-	// zgrep/zipgrep for compressed archives) gates Content the same way
-	// it always has. One option per line, not inline like Engine at the
-	// top: with zgrep/zipgrep both available its own labels ("gzip
-	// contents (zgrep)", "zip contents (zipgrep)") run well past what
-	// fits on one line within a column half this dialog's own width —
-	// confirmed live (options past the column's edge simply vanished,
-	// SetWrap(false) clips rather than wraps) — so this stacks the same
-	// way Filename's own checkboxes already do, rather than widening the
-	// whole dialog to fit words that only appear together on the
-	// rare/widest option combination. Whole words/Regular expression/
-	// Case sensitive/First hit, in that order, mirror MC's own real
-	// layout — Regular expression here is entirely independent of
-	// Filename's own "Using shell patterns" (MC keeps content pattern
-	// syntax and filename pattern syntax as two separate choices, never
-	// shared — see runSearch's own doc comment on why one shared Mode
-	// choice used to be wrong). Case sensitive is the *same* underlying
-	// searchCaseSensitive as Filename's own checkbox above — MC shows
-	// it in both columns, but this app never runs a filename and a
-	// content search at once (see search.Request's own doc comment),
-	// so one shared value serves both without any real behavior lost.
+	// Content column. No more "Search in" selector (this app's own
+	// earlier addition beyond MC, for choosing plain grep vs. zgrep vs.
+	// zipgrep) — removed for now per the user's own request, along with
+	// the choice of which content search tool runs: it's decided purely
+	// by whether Content itself is filled in (see runSearch), always
+	// plain grep while it stays that way. This also puts Content's own
+	// value field on the very same row as Filename's own value field to
+	// its left, with nothing above either one but its own header.
+	// Whole words/Regular expression/Case sensitive/First hit, in that
+	// order, mirror MC's own real layout — Regular expression here is
+	// entirely independent of Filename's own "Using shell patterns" (MC
+	// keeps content pattern syntax and filename pattern syntax as two
+	// separate choices, never shared — see runSearch's own doc comment
+	// on why one shared Mode choice used to be wrong). Case sensitive is
+	// the *same* underlying searchCaseSensitive as Filename's own
+	// checkbox above — MC shows it in both columns, but this app never
+	// runs a filename and a content search at once (see
+	// search.Request's own doc comment), so one shared value serves
+	// both without any real behavior lost.
 	right := &searchBuilder{root: r, widget: r.searchRight}
-	right.text("Search in")
-	right.newline()
-	for i, opt := range r.searchContentOptions {
-		i := i
-		right.choice(r.searchContentTypeIdx == i, opt.label, func() { r.searchContentTypeIdx = i })
-		right.newline()
-	}
-	right.newline()
-	contentDimmed := r.searchContentOptions[r.searchContentTypeIdx].mode == search.ContentNone
 	right.text("Content")
 	right.newline()
-	right.textField(r.searchContentValue, "(type a pattern)", contentDimmed, 0, func(s string) {
+	right.textField(r.searchContentValue, "(type a pattern)", false, 0, 36, func(s string) {
 		r.searchContentValue = s
 	}, "")
 	right.newline()
@@ -814,19 +777,24 @@ func parseIgnoreDirs(text string) []string {
 }
 
 // runSearch is the Search button's own action: builds a search.Request
-// from the dialog's current state — Filename's own value if Search in
-// is still "File names" (ContentNone), or Content's otherwise — cancels
-// whatever search was previously running (see cancelSearch), and
-// starts the new one on the bigger results page (see
-// resizeSearchPages), streaming its matches in as they're found (see
-// streamSearchResults) alongside an animated "still working" status
-// line (see animateSearchProgress). Ignored dirs combines the
+// from the dialog's current state — Filename's own value if Content is
+// left blank, or Content's otherwise (always a plain grep search — see
+// this func's own contentMode, and rerenderSearchDialog's own doc
+// comment on Content's column for why there's no explicit tool choice
+// any more) — cancels whatever search was previously running (see
+// cancelSearch), and starts the new one on the bigger results page
+// (see resizeSearchPages), streaming its matches in as they're found
+// (see streamSearchResults) alongside an animated "still working"
+// status line (see animateSearchProgress). Ignored dirs combines the
 // Ignore-dirs-enable checkbox's own field (if checked) with a ".*"
 // entry for Skip hidden (if checked) — see search.Request.IgnoreDirs'
 // own doc comment on why the latter needs no separate mechanism of its
 // own.
 func (r *Root) runSearch() {
-	contentMode := r.searchContentOptions[r.searchContentTypeIdx].mode
+	contentMode := search.ContentNone
+	if r.searchContentValue != "" {
+		contentMode = search.ContentGrep
+	}
 
 	// Filename search and content search each get their own independent
 	// Mode, computed from their own MC-style checkbox — never a shared

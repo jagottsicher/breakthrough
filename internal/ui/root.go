@@ -134,16 +134,18 @@ type Root struct {
 	// is which one currently has keyboard focus, or
 	// len(searchSpans)/len(searchSpans)+1 for Cancel/Search.
 	//
-	// searchEngineOptions/searchContentOptions record which
-	// search.Engine/search.ContentMode each of their own choice
-	// group's options actually maps to (built once, since availability
-	// — LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't
-	// change mid-session) — the group's own selected index alone isn't
-	// enough once an option is conditionally left out (see their own
-	// doc comments in search.go). searchEngineIdx/searchContentTypeIdx
-	// are those selected indices; searchScopeValue/searchFilenameValue/
+	// searchEngineOptions records which search.Engine each of Engine's
+	// own choice options actually maps to (built once, since
+	// LocateAvailable doesn't change mid-session) — the group's own
+	// selected index alone isn't enough once "locate" is conditionally
+	// left out (see its own doc comment in search.go). searchEngineIdx
+	// is that selected index; searchScopeValue/searchFilenameValue/
 	// searchIgnoreValue/searchContentValue are the dialog's own four
-	// text fields.
+	// text fields. There's no equivalent choice group for Content's own
+	// search tool any more (previously "Search in": File names/Content
+	// (grep)/gzip/zip) — removed for now per the user's own request;
+	// runSearch decides content vs. filename search, always plain grep,
+	// purely from whether searchContentValue is filled in.
 	//
 	// The rest are MC's own Find File checkboxes (verified against its
 	// real find.c source, not guessed — see rerenderSearchDialog's own
@@ -176,9 +178,7 @@ type Root struct {
 	searchList           *tview.List
 	searchStatus         *tview.TextView
 	searchEngineOptions  []searchEngineOption
-	searchContentOptions []searchContentOption
 	searchEngineIdx      int
-	searchContentTypeIdx int
 	searchScopeValue     string
 	searchFilenameValue  string
 	searchIgnoreValue    string
