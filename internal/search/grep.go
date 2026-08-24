@@ -31,10 +31,22 @@ import "regexp"
 // own case-insensitive default; this brings the two in line rather
 // than leaving that inconsistency in place now that a real toggle
 // exists to opt back into case-sensitive matching.
-func GrepArgs(pattern, scope string, mode Mode, caseSensitive bool) []string {
+//
+// wholeWords adds -w (match only whole words); firstHit adds -m 1
+// (stop after the first match in each file) — both real extensions on
+// every grep this app targets, not POSIX-mandated but confirmed
+// present in GNU grep and BSD/macOS/FreeBSD grep alike (verified
+// against the FreeBSD/macOS grep(1) man pages, not guessed).
+func GrepArgs(pattern, scope string, mode Mode, caseSensitive, wholeWords, firstHit bool) []string {
 	args := []string{"-r", "-n", "-I", "-H"}
 	if !caseSensitive {
 		args = append(args, "-i")
+	}
+	if wholeWords {
+		args = append(args, "-w")
+	}
+	if firstHit {
+		args = append(args, "-m", "1")
 	}
 	args = append(args, matchModeFlag(mode))
 	return append(args, "-e", pattern, scope)
@@ -49,10 +61,16 @@ func GrepArgs(pattern, scope string, mode Mode, caseSensitive bool) []string {
 // runs one zgrep invocation per file the caller already found via
 // FindArgs (see internal/search's own package doc and the executor
 // that drives this), not a single recursive zgrep call.
-func ZgrepArgs(pattern string, mode Mode, gzFile string, caseSensitive bool) []string {
+func ZgrepArgs(pattern string, mode Mode, gzFile string, caseSensitive, wholeWords, firstHit bool) []string {
 	args := []string{"-n", "-I", "-H"}
 	if !caseSensitive {
 		args = append(args, "-i")
+	}
+	if wholeWords {
+		args = append(args, "-w")
+	}
+	if firstHit {
+		args = append(args, "-m", "1")
 	}
 	args = append(args, matchModeFlag(mode))
 	return append(args, "-e", pattern, gzFile)
@@ -83,13 +101,19 @@ func ZgrepArgs(pattern string, mode Mode, gzFile string, caseSensitive bool) []s
 //     pattern, which is the exact same "conflicting matchers" error
 //     again. The pattern must always be passed as a bare positional
 //     argument instead — never preceded by -e.
-func ZipgrepArgs(pattern string, mode Mode, zipFile string, caseSensitive bool) []string {
+func ZipgrepArgs(pattern string, mode Mode, zipFile string, caseSensitive, wholeWords, firstHit bool) []string {
 	if mode != ModeRegex {
 		pattern = regexp.QuoteMeta(pattern)
 	}
 	args := []string{"-n"}
 	if !caseSensitive {
 		args = append(args, "-i") // egrep's own -i, passed through — see this func's own doc comment
+	}
+	if wholeWords {
+		args = append(args, "-w")
+	}
+	if firstHit {
+		args = append(args, "-m", "1")
 	}
 	return append(args, pattern, zipFile)
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestGrepArgsKeywordUsesFixedString(t *testing.T) {
-	got := GrepArgs("TODO", "/home/jens/project", ModeKeyword, false)
+	got := GrepArgs("TODO", "/home/jens/project", ModeKeyword, false, false, false)
 	want := []string{"-r", "-n", "-I", "-H", "-i", "-F", "-e", "TODO", "/home/jens/project"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GrepArgs keyword = %v, want %v", got, want)
@@ -17,7 +17,7 @@ func TestGrepArgsKeywordUsesFixedString(t *testing.T) {
 // file content (see GrepArgs' own doc comment) — treated the same as
 // Keyword, a fixed-string match.
 func TestGrepArgsGlobTreatedAsKeyword(t *testing.T) {
-	got := GrepArgs("TODO", "/home/jens/project", ModeGlob, false)
+	got := GrepArgs("TODO", "/home/jens/project", ModeGlob, false, false, false)
 	want := []string{"-r", "-n", "-I", "-H", "-i", "-F", "-e", "TODO", "/home/jens/project"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GrepArgs glob = %v, want %v", got, want)
@@ -25,7 +25,7 @@ func TestGrepArgsGlobTreatedAsKeyword(t *testing.T) {
 }
 
 func TestGrepArgsRegexUsesExtendedFlag(t *testing.T) {
-	got := GrepArgs(`func \w+\(`, "/home/jens/project", ModeRegex, false)
+	got := GrepArgs(`func \w+\(`, "/home/jens/project", ModeRegex, false, false, false)
 	want := []string{"-r", "-n", "-I", "-H", "-i", "-E", "-e", `func \w+\(`, "/home/jens/project"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GrepArgs regex = %v, want %v", got, want)
@@ -33,7 +33,7 @@ func TestGrepArgsRegexUsesExtendedFlag(t *testing.T) {
 }
 
 func TestZgrepArgsSingleFileNoRecursion(t *testing.T) {
-	got := ZgrepArgs("error", ModeKeyword, "/var/log/syslog.1.gz", false)
+	got := ZgrepArgs("error", ModeKeyword, "/var/log/syslog.1.gz", false, false, false)
 	want := []string{"-n", "-I", "-H", "-i", "-F", "-e", "error", "/var/log/syslog.1.gz"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ZgrepArgs = %v, want %v", got, want)
@@ -47,7 +47,7 @@ func TestZgrepArgsSingleFileNoRecursion(t *testing.T) {
 // its own -e handling is broken and errors out with "conflicting
 // matchers specified".
 func TestZipgrepArgsRegexPassesPatternBare(t *testing.T) {
-	got := ZipgrepArgs("TODO", ModeRegex, "/home/jens/archive.zip", false)
+	got := ZipgrepArgs("TODO", ModeRegex, "/home/jens/archive.zip", false, false, false)
 	want := []string{"-n", "-i", "TODO", "/home/jens/archive.zip"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ZipgrepArgs regex = %v, want %v", got, want)
@@ -60,7 +60,7 @@ func TestZipgrepArgsRegexPassesPatternBare(t *testing.T) {
 // with the implied -E) — escaped as a regex that can only match the
 // literal text instead.
 func TestZipgrepArgsKeywordEscapesPattern(t *testing.T) {
-	got := ZipgrepArgs("a.b*c", ModeKeyword, "/home/jens/archive.zip", false)
+	got := ZipgrepArgs("a.b*c", ModeKeyword, "/home/jens/archive.zip", false, false, false)
 	want := []string{"-n", "-i", `a\.b\*c`, "/home/jens/archive.zip"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ZipgrepArgs keyword = %v, want %v", got, want)
@@ -74,9 +74,20 @@ func TestZipgrepArgsKeywordEscapesPattern(t *testing.T) {
 // find/locate, rather than leaving grep as the one case-sensitive-by-
 // default outlier).
 func TestGrepArgsCaseSensitiveOmitsIFlag(t *testing.T) {
-	got := GrepArgs("TODO", "/home/jens/project", ModeKeyword, true)
+	got := GrepArgs("TODO", "/home/jens/project", ModeKeyword, true, false, false)
 	want := []string{"-r", "-n", "-I", "-H", "-F", "-e", "TODO", "/home/jens/project"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GrepArgs case-sensitive = %v, want %v", got, want)
+	}
+}
+
+// TestGrepArgsWholeWordsAndFirstHit pins MC's own "Whole words"/"First
+// hit" checkboxes: -w and -m 1, both real extensions confirmed present
+// on every grep this app targets (see GrepArgs' own doc comment).
+func TestGrepArgsWholeWordsAndFirstHit(t *testing.T) {
+	got := GrepArgs("TODO", "/home/jens/project", ModeKeyword, false, true, true)
+	want := []string{"-r", "-n", "-I", "-H", "-i", "-w", "-m", "1", "-F", "-e", "TODO", "/home/jens/project"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GrepArgs whole-words+first-hit = %v, want %v", got, want)
 	}
 }

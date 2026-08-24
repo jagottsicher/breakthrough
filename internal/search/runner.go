@@ -96,7 +96,7 @@ func filenameCommand(req Request) (name string, args []string, ok bool) {
 		a, ok := LocateArgs(runtime.GOOS, req.Pattern, req.Mode, req.CaseSensitive)
 		return "locate", a, ok
 	}
-	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive), true
+	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive, req.NonRecursive, req.FollowSymlinks), true
 }
 
 // underIgnoredDir reports whether path has any of ignoreDirs matching
@@ -126,12 +126,16 @@ func underIgnoredDir(path string, ignoreDirs []string) bool {
 func runContentSearch(ctx context.Context, req Request, results chan<- Result) error {
 	switch req.Content {
 	case ContentGrep:
-		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.CaseSensitive)...)
+		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.CaseSensitive, req.WholeWords, req.FirstHit)...)
 		return streamGrepLines(ctx, cmd, results)
 	case ContentGzip:
-		return searchArchives(ctx, req, "*.gz", "zgrep", func(f string) []string { return ZgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive) }, results)
+		return searchArchives(ctx, req, "*.gz", "zgrep", func(f string) []string {
+			return ZgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive, req.WholeWords, req.FirstHit)
+		}, results)
 	case ContentZip:
-		return searchArchives(ctx, req, "*.zip", "zipgrep", func(f string) []string { return ZipgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive) }, results)
+		return searchArchives(ctx, req, "*.zip", "zipgrep", func(f string) []string {
+			return ZipgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive, req.WholeWords, req.FirstHit)
+		}, results)
 	}
 	return nil
 }
@@ -151,7 +155,7 @@ func searchArchives(ctx context.Context, req Request, namePattern, tool string, 
 	// pattern (passed to buildArgs, see ZgrepArgs/ZipgrepArgs above),
 	// not about finding archives named e.g. ".GZ" — a user almost
 	// certainly wants both cases of the archive extension either way.
-	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob, req.IgnoreDirs, false)...)
+	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob, req.IgnoreDirs, false, req.NonRecursive, req.FollowSymlinks)...)
 	return streamNullSeparated(findCmd, func(archive string) bool {
 		if ctx.Err() != nil {
 			return false

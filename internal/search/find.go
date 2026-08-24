@@ -51,12 +51,25 @@ package search
 // descending, produce no output unless followed by an explicit action —
 // are POSIX-common to every find implementation this app targets, so
 // this needs no goos-specific handling the way -iregex above does.
-func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string, caseSensitive bool) []string {
+//
+// nonRecursive adds -maxdepth 1 (MC's own "Find recursively" checkbox,
+// inverted — see its own doc comment on Request for why the zero value
+// needs to mean "recursive", find's own actual default). followSymlinks
+// adds -L, which — like -E above — must precede the scope path; the two
+// are independent of each other and of goos, so their relative order
+// with -E doesn't matter, only that both come before scope.
+func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string, caseSensitive, nonRecursive, followSymlinks bool) []string {
 	var args []string
+	if followSymlinks {
+		args = append(args, "-L")
+	}
 	if mode == ModeRegex && goos != "linux" {
 		args = append(args, "-E") // BSD find: must precede the path, see above
 	}
 	args = append(args, scope)
+	if nonRecursive {
+		args = append(args, "-maxdepth", "1")
+	}
 
 	if len(ignoreDirs) > 0 {
 		args = append(args, "(")

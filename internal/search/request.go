@@ -67,12 +67,29 @@ const (
 // grep's own case-insensitive default matching (see FindArgs/
 // LocateArgs/GrepArgs) — true switches all of them to case-sensitive
 // matching instead.
+//
+// NonRecursive/FollowSymlinks only apply to EngineFind (MC's own "Find
+// recursively"/"Follow symlinks" checkboxes — see FindArgs); meaningless
+// for EngineLocate, whose own index has no live traversal to shape this
+// way. NonRecursive is named for the opposite of find's own actual
+// default (always recursive) specifically so a Request's own zero value
+// still means "recursive" — the same reason CaseSensitive above defaults
+// false rather than true.
+//
+// WholeWords/FirstHit only apply once Content is anything but
+// ContentNone (MC's own "Whole words"/"First hit" checkboxes — see
+// GrepArgs/ZgrepArgs/ZipgrepArgs): match whole words only, and stop
+// after the first match per file, respectively.
 type Request struct {
-	Pattern       string
-	Scope         string
-	Mode          Mode
-	Engine        Engine
-	Content       ContentMode
-	IgnoreDirs    []string
-	CaseSensitive bool
+	Pattern        string
+	Scope          string
+	Mode           Mode
+	Engine         Engine
+	Content        ContentMode
+	IgnoreDirs     []string
+	CaseSensitive  bool
+	NonRecursive   bool
+	FollowSymlinks bool
+	WholeWords     bool
+	FirstHit       bool
 }
