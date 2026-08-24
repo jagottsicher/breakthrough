@@ -62,7 +62,7 @@ func colorTag(c tcell.Color) string {
 // panel (see Panel.applyTheme, which additionally reloads to repaint
 // each row's own cell colors). Called once from NewRoot with whatever
 // was loaded from disk (see loadInitialSettings), and again by
-// applyColorScheme whenever the Settings overlay picks a different
+// applyColorScheme whenever the Options overlay picks a different
 // scheme.
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
@@ -107,9 +107,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.propertiesSaveBtn.SetLabelColor(theme.Text)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
-	if r.settingsList != nil {
-		r.settingsList.SetBackgroundColor(theme.AccentBackground)
-		r.settingsList.SetMainTextColor(theme.Text)
+	if r.optionsList != nil {
+		r.optionsList.SetBackgroundColor(theme.AccentBackground)
+		r.optionsList.SetMainTextColor(theme.Text)
 	}
 
 	if r.searchForm != nil {

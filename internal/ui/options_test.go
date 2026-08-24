@@ -34,7 +34,7 @@ func solarizedTheme() config.Theme {
 	return config.Theme{Name: "Solarized", AccentBackground: "#002b36"}
 }
 
-func TestOpenSettingsListsSchemesWithCurrentMarked(t *testing.T) {
+func TestOpenOptionsListsSchemesWithCurrentMarked(t *testing.T) {
 	schemes := []config.NamedTheme{
 		{Slug: "default", Theme: config.DefaultTheme()},
 		{Slug: "solarized", Theme: solarizedTheme()},
@@ -47,16 +47,16 @@ func TestOpenSettingsListsSchemesWithCurrentMarked(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.openSettings()
-	if r.activePage != settingsPage {
-		t.Fatalf("activePage = %q, want %q", r.activePage, settingsPage)
+	r.openOptions()
+	if r.activePage != optionsPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, optionsPage)
 	}
-	if got, want := r.settingsList.GetItemCount(), len(schemes); got != want {
-		t.Fatalf("settingsList has %d items, want %d", got, want)
+	if got, want := r.optionsList.GetItemCount(), len(schemes); got != want {
+		t.Fatalf("optionsList has %d items, want %d", got, want)
 	}
 
-	current := r.settingsList.GetCurrentItem()
-	label, _ := r.settingsList.GetItemText(current)
+	current := r.optionsList.GetCurrentItem()
+	label, _ := r.optionsList.GetItemText(current)
 	if label != "Solarized (current)" {
 		t.Errorf("current item label = %q, want %q", label, "Solarized (current)")
 	}
@@ -205,22 +205,22 @@ func TestApplyColorSchemeWithNoUserConfigTierDoesNotError(t *testing.T) {
 	}
 }
 
-func TestOpenSettingsCancelRunsClosesOverlay(t *testing.T) {
+func TestOpenOptionsCancelRunsClosesOverlay(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.openSettings()
-	r.settingsList.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.openOptions()
+	r.optionsList.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after Escape, want closed", r.activePage)
 	}
 }
 
-func TestSettingsListPickAppliesAndCloses(t *testing.T) {
+func TestOptionsListPickAppliesAndCloses(t *testing.T) {
 	schemes := []config.NamedTheme{
 		{Slug: "default", Theme: config.DefaultTheme()},
 		{Slug: "solarized", Theme: solarizedTheme()},
@@ -234,11 +234,11 @@ func TestSettingsListPickAppliesAndCloses(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.openSettings()
+	r.openOptions()
 	// "solarized" is the second item — see isolateInitialSettings' fixed
 	// schemes slice above (LoadColorSchemes-style slug ordering, sorted).
-	r.settingsList.SetCurrentItem(1)
-	r.settingsList.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.optionsList.SetCurrentItem(1)
+	r.optionsList.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.ColorScheme != "solarized" {
 		t.Errorf("ColorScheme = %q after picking it, want %q", r.settings.ColorScheme, "solarized")
@@ -248,10 +248,10 @@ func TestSettingsListPickAppliesAndCloses(t *testing.T) {
 	}
 }
 
-// TestSettingsShortcutRespectsGuard is SettingsShortcut's own
-// TestToggleHiddenShortcutRespectsGuard-style pin: Ctrl+X only opens
-// Settings while acceptsGlobalShortcut's guard passes.
-func TestSettingsShortcutRespectsGuard(t *testing.T) {
+// TestOptionsShortcutRespectsGuard is OptionsShortcut's own
+// TestToggleHiddenShortcutRespectsGuard-style pin: Ctrl+O only opens
+// Options while acceptsGlobalShortcut's guard passes.
+func TestOptionsShortcutRespectsGuard(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -259,15 +259,15 @@ func TestSettingsShortcutRespectsGuard(t *testing.T) {
 	}
 
 	r.app.SetFocus(r.bashLine)
-	r.SettingsShortcut()
-	if r.activePage == settingsPage {
-		t.Error("SettingsShortcut should no-op while the bash line has focus")
+	r.OptionsShortcut()
+	if r.activePage == optionsPage {
+		t.Error("OptionsShortcut should no-op while the bash line has focus")
 	}
 
 	r.app.SetFocus(r.panel)
-	r.SettingsShortcut()
-	if r.activePage != settingsPage {
-		t.Errorf("activePage = %q after SettingsShortcut with the guard passing, want %q", r.activePage, settingsPage)
+	r.OptionsShortcut()
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after OptionsShortcut with the guard passing, want %q", r.activePage, optionsPage)
 	}
 }
 
@@ -295,12 +295,12 @@ func TestApplyThemeRepaintsPanel(t *testing.T) {
 	}
 }
 
-// TestSettingsPersistDoesNotClobberOtherKeys pins that applyColorScheme's
+// TestOptionsPersistDoesNotClobberOtherKeys pins that applyColorScheme's
 // write (see config.SetKey) preserves a language key already present in
 // the user config file — the same "preserve everything else" contract
 // config.SetKey's own tests already pin at the config-package level,
 // exercised here end to end through the UI action that actually calls it.
-func TestSettingsPersistDoesNotClobberOtherKeys(t *testing.T) {
+func TestOptionsPersistDoesNotClobberOtherKeys(t *testing.T) {
 	path := isolateUserConfigFile(t)
 	if err := config.SetKey(path, "language", "de"); err != nil {
 		t.Fatalf("SetKey: %v", err)

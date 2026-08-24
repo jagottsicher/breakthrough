@@ -71,25 +71,25 @@ type Root struct {
 
 	// theme is the active color scheme, resolved once at startup (see
 	// loadInitialSettings/applyTheme) from settings.ColorScheme against
-	// colorSchemes, and again live whenever the Settings overlay (see
-	// openSettings/applyColorScheme) picks a different one. settings is
+	// colorSchemes, and again live whenever the Options overlay (see
+	// openOptions/applyColorScheme) picks a different one. settings is
 	// every other on-disk setting alongside it (currently just the
 	// reserved, not-yet-functional Language placeholder — see
 	// config.Settings' own doc comment). colorSchemes is every scheme
-	// available to pick from, loaded once at startup — see openSettings'
+	// available to pick from, loaded once at startup — see openOptions'
 	// own doc comment on why it isn't re-scanned on every open.
 	theme        config.ResolvedTheme
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	panel        *Panel
-	menu         *tview.List
-	rename       *tview.InputField
-	prompt       *tview.InputField
-	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
-	errorView    *tview.TextView
-	quitConfirm  *tview.List
-	settingsList *tview.List // Settings overlay — see openSettings
+	panel       *Panel
+	menu        *tview.List
+	rename      *tview.InputField
+	prompt      *tview.InputField
+	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
+	errorView   *tview.TextView
+	quitConfirm *tview.List
+	optionsList *tview.List // Options overlay — see openOptions
 
 	// The search dialog (see search.go/newSearchDialog): searchPages
 	// wraps searchForm (the pattern/scope/mode/engine/content inputs) and
@@ -429,9 +429,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)
 
-	// The Settings overlay (see openSettings) — same "one shared,
+	// The Options overlay (see openOptions) — same "one shared,
 	// repopulated List" pattern as r.picker above.
-	r.settingsList = r.newSettingsList()
+	r.optionsList = r.newOptionsList()
 
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
@@ -455,7 +455,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
-	r.AddPage(settingsPage, r.settingsList, false, false)
+	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
