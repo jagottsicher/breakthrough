@@ -305,7 +305,13 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// regardless of which of the three TextViews actually holds it.
 	fields.SetInputCapture(r.captureSearchKey)
 	fields.SetMouseCapture(r.captureSearchMouse)
-	fields.SetBorder(true).SetTitle(" Search ")
+	// No border, same as Properties' own overlay (see newPropertiesView):
+	// every child (searchTop/searchLeft/searchRight/searchButtons) gets
+	// its own AccentBackground fill (see applyTheme), and their own
+	// fixed/proportional sizes tile fields' whole rect exactly (6 fixed
+	// + proportional + 1 fixed, no leftover row for the Flex's own
+	// unstyled background to show through) — a border here only ate
+	// into the dialog's own content space for no visual benefit.
 
 	r.searchFieldsPages = tview.NewPages()
 	r.searchFieldsPages.AddPage("fields", fields, true, true)
@@ -330,7 +336,10 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchResultsView = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.searchList, 0, 1, true).
 		AddItem(r.searchStatus, 1, 0, false)
-	r.searchResultsView.SetBorder(true).SetTitle(" Results ") // see fields' own SetBorder above
+	// No border — see fields' own doc comment above; searchList/
+	// searchStatus's own AccentBackground fill (applyTheme) already
+	// covers the whole rect, and both together tile it exactly the same
+	// way (proportional + one fixed row, no leftover).
 
 	pages := tview.NewPages()
 	pages.AddPage("form", r.searchFieldsPages, true, true)
@@ -361,12 +370,14 @@ func (r *Root) newSearchButtons() *tview.Flex {
 	r.searchCancelBtn.SetExitFunc(exitFunc)
 	r.searchSearchBtn.SetExitFunc(exitFunc)
 
+	// Each button gets equal proportion (0, 1) and nothing else, so the
+	// two together fill the whole row edge to edge, split exactly in
+	// half — the same shape newPropertiesButtons already uses, per the
+	// user's own request that Cancel/Search match Properties' own
+	// buttons, this time width-wise too, not just their look.
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(nil, 0, 1, false).
-		AddItem(r.searchCancelBtn, 10, 0, false).
-		AddItem(nil, 2, 0, false).
-		AddItem(r.searchSearchBtn, 10, 0, false).
-		AddItem(nil, 0, 1, false)
+		AddItem(r.searchCancelBtn, 0, 1, false).
+		AddItem(r.searchSearchBtn, 0, 1, false)
 }
 
 // rerenderSearchDialog rebuilds searchTop/searchLeft/searchRight's own
