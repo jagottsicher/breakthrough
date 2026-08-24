@@ -47,20 +47,32 @@ const (
 // one directory.
 //
 // IgnoreDirs names directories to skip entirely (e.g. ".git",
-// "node_modules") — matched by exact name, not a full path, so a
-// matching directory is skipped wherever it appears. Unlike Scope, this
-// stays in effect for EngineLocate too: a name only ends up here
-// because the user typed it in themselves, never a silent default, so
-// there's no equivalent risk of surprising, near-total filtering. For
-// EngineFind it's a real prune (see FindArgs), so an ignored tree is
-// never even walked; for EngineLocate, whose own index has no
-// traversal to prune, it's applied as a client-side filter instead
-// (see underIgnoredDir's own caller in Runner).
+// "node_modules") — matched against each path component (not a full
+// path) via filepath.Match, so plain names match exactly the same as
+// before (no glob metacharacters, so only an identical component
+// matches) while also allowing a real glob pattern like ".*" — which
+// internal/ui's search dialog's own "Skip hidden" toggle appends here
+// rather than needing its own separate mechanism (see
+// underIgnoredDir's own caller in Runner for the matching, FindArgs
+// for find's own real prune, which this backs for both). Unlike Scope,
+// this stays in effect for EngineLocate too: an entry only ends up
+// here because the user typed it in or turned on Skip hidden
+// themselves, never a silent default, so there's no equivalent risk of
+// surprising, near-total filtering. For EngineFind it's a real prune,
+// so an ignored tree is never even walked; for EngineLocate, whose own
+// index has no traversal to prune, it's applied as a client-side
+// filter instead.
+//
+// CaseSensitive, false by default, matches every one of find/locate/
+// grep's own case-insensitive default matching (see FindArgs/
+// LocateArgs/GrepArgs) — true switches all of them to case-sensitive
+// matching instead.
 type Request struct {
-	Pattern    string
-	Scope      string
-	Mode       Mode
-	Engine     Engine
-	Content    ContentMode
-	IgnoreDirs []string
+	Pattern       string
+	Scope         string
+	Mode          Mode
+	Engine        Engine
+	Content       ContentMode
+	IgnoreDirs    []string
+	CaseSensitive bool
 }

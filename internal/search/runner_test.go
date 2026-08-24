@@ -328,6 +328,11 @@ func TestUnderIgnoredDir(t *testing.T) {
 		{"/home/jens/project/node_modules_old/index.js", []string{"node_modules"}, false},
 		{"/home/jens/.git/config", []string{".git", "node_modules"}, true},
 		{"/home/jens/project/file.txt", nil, false},
+		// A real glob (see Request.IgnoreDirs' own doc comment on why
+		// this matches now, not just exact names) — the "Skip hidden"
+		// UI toggle's own mechanism.
+		{"/home/jens/.config/breakthrough", []string{".*"}, true},
+		{"/home/jens/project/file.txt", []string{".*"}, false},
 	}
 	for _, tt := range tests {
 		if got := underIgnoredDir(tt.path, tt.ignoreDirs); got != tt.want {

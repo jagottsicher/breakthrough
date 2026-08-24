@@ -4,16 +4,22 @@ package search
 // itself — see Runner, which is what actually runs it) for a filename
 // search rooted at scope, matching pattern per mode.
 //
-// Glob and Keyword match just the file name (find's own -iname),
-// case-insensitively — the same scope this app's own panel filter and
-// Select+/- already use (see internal/ui's filterByText/selectByPattern).
-// Regex instead matches the WHOLE PATH (find's own -iregex) — not a
-// choice made here, but how find itself defines these primaries on
-// every platform (verified against the GNU findutils manual and the
-// FreeBSD find(1) man page, not guessed): -iname only ever sees the
-// last path component, -iregex always sees the entire path, so a
-// pattern like ".*/vendor/.*\\.go$" can match on directory structure a
-// filename-only pattern never could.
+// Glob and Keyword match just the file name (find's own -iname, or
+// -name if caseSensitive — see below), case-insensitively by default —
+// the same scope this app's own panel filter and Select+/- already use
+// (see internal/ui's filterByText/selectByPattern). Regex instead
+// matches the WHOLE PATH (find's own -iregex/-regex) — not a choice
+// made here, but how find itself defines these primaries on every
+// platform (verified against the GNU findutils manual and the FreeBSD
+// find(1) man page, not guessed): -iname only ever sees the last path
+// component, -iregex always sees the entire path, so a pattern like
+// ".*/vendor/.*\\.go$" can match on directory structure a filename-only
+// pattern never could.
+//
+// caseSensitive switches -iname/-iregex to their case-sensitive
+// counterparts, -name/-regex — a real, if lesser-used, GNU/BSD find
+// primitive on every platform this app targets, so this needs no
+// goos-specific handling the way the regex dialect below does.
 //
 // goos picks the regex dialect and flag placement, per real,
 // verified differences between GNU and BSD find — not one shared
@@ -45,7 +51,7 @@ package search
 // descending, produce no output unless followed by an explicit action —
 // are POSIX-common to every find implementation this app targets, so
 // this needs no goos-specific handling the way -iregex above does.
-func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string) []string {
+func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string, caseSensitive bool) []string {
 	var args []string
 	if mode == ModeRegex && goos != "linux" {
 		args = append(args, "-E") // BSD find: must precede the path, see above
@@ -63,17 +69,22 @@ func FindArgs(goos, scope, pattern string, mode Mode, ignoreDirs []string) []str
 		args = append(args, ")", "-prune", "-o")
 	}
 
+	nameFlag, regexFlag := "-iname", "-iregex"
+	if caseSensitive {
+		nameFlag, regexFlag = "-name", "-regex"
+	}
+
 	switch mode {
 	case ModeRegex:
 		if goos == "linux" {
-			args = append(args, "-regextype", "posix-extended", "-iregex", pattern)
+			args = append(args, "-regextype", "posix-extended", regexFlag, pattern)
 		} else {
-			args = append(args, "-iregex", pattern)
+			args = append(args, regexFlag, pattern)
 		}
 	case ModeKeyword:
-		args = append(args, "-iname", "*"+pattern+"*")
+		args = append(args, nameFlag, "*"+pattern+"*")
 	default: // ModeGlob
-		args = append(args, "-iname", pattern)
+		args = append(args, nameFlag, pattern)
 	}
 	return append(args, "-print0")
 }

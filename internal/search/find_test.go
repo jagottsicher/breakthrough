@@ -6,7 +6,7 @@ import (
 )
 
 func TestFindArgsGlob(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, nil)
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, nil, false)
 	want := []string{"/home/jens", "-iname", "*.go", "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs glob = %v, want %v", got, want)
@@ -14,7 +14,7 @@ func TestFindArgsGlob(t *testing.T) {
 }
 
 func TestFindArgsKeywordWrapsWithWildcards(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "report", ModeKeyword, nil)
+	got := FindArgs("linux", "/home/jens", "report", ModeKeyword, nil, false)
 	want := []string{"/home/jens", "-iname", "*report*", "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs keyword = %v, want %v", got, want)
@@ -27,7 +27,7 @@ func TestFindArgsKeywordWrapsWithWildcards(t *testing.T) {
 // syntax — not POSIX ERE — so -regextype posix-extended must always be
 // given explicitly for a "regex" toggle to mean what it says.
 func TestFindArgsRegexLinuxUsesRegextype(t *testing.T) {
-	got := FindArgs("linux", "/var/log", `.*\.log$`, ModeRegex, nil)
+	got := FindArgs("linux", "/var/log", `.*\.log$`, ModeRegex, nil, false)
 	want := []string{"/var/log", "-regextype", "posix-extended", "-iregex", `.*\.log$`, "-print0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs regex (linux) = %v, want %v", got, want)
@@ -40,7 +40,7 @@ func TestFindArgsRegexLinuxUsesRegextype(t *testing.T) {
 // all — passing it would be a hard usage error there.
 func TestFindArgsRegexBSDUsesEFlag(t *testing.T) {
 	for _, goos := range []string{"darwin", "freebsd"} {
-		got := FindArgs(goos, "/var/log", `.*\.log$`, ModeRegex, nil)
+		got := FindArgs(goos, "/var/log", `.*\.log$`, ModeRegex, nil, false)
 		want := []string{"-E", "/var/log", "-iregex", `.*\.log$`, "-print0"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("FindArgs regex (%s) = %v, want %v", goos, got, want)
@@ -52,7 +52,7 @@ func TestFindArgsRegexBSDUsesEFlag(t *testing.T) {
 // FindArgs' own doc comment): one -name per ignored directory, OR'd
 // together, pruned before the real test runs.
 func TestFindArgsIgnoreDirsAddsPruneClause(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git", "node_modules"})
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git", "node_modules"}, false)
 	want := []string{
 		"/home/jens",
 		"(", "-name", ".git", "-o", "-name", "node_modules", ")", "-prune", "-o",
@@ -66,7 +66,7 @@ func TestFindArgsIgnoreDirsAddsPruneClause(t *testing.T) {
 // TestFindArgsIgnoreDirsSingleEntry pins the single-name case doesn't
 // grow a pointless "-o" — just "( -name D )".
 func TestFindArgsIgnoreDirsSingleEntry(t *testing.T) {
-	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git"})
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, []string{".git"}, false)
 	want := []string{
 		"/home/jens",
 		"(", "-name", ".git", ")", "-prune", "-o",
@@ -81,7 +81,7 @@ func TestFindArgsIgnoreDirsSingleEntry(t *testing.T) {
 // -prune clause is inserted after -E/scope, not before — -E must stay
 // the very first argument on BSD find (see FindArgs' own doc comment).
 func TestFindArgsIgnoreDirsWithRegexBSDKeepsEFlagFirst(t *testing.T) {
-	got := FindArgs("darwin", "/var/log", `.*\.log$`, ModeRegex, []string{"archive"})
+	got := FindArgs("darwin", "/var/log", `.*\.log$`, ModeRegex, []string{"archive"}, false)
 	want := []string{
 		"-E", "/var/log",
 		"(", "-name", "archive", ")", "-prune", "-o",
@@ -89,5 +89,21 @@ func TestFindArgsIgnoreDirsWithRegexBSDKeepsEFlagFirst(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindArgs with ignoreDirs (BSD regex) = %v, want %v", got, want)
+	}
+}
+
+// TestFindArgsCaseSensitiveSwitchesFlags pins that caseSensitive swaps
+// -iname/-iregex for -name/-regex, both modes, both regex dialects.
+func TestFindArgsCaseSensitiveSwitchesFlags(t *testing.T) {
+	got := FindArgs("linux", "/home/jens", "*.go", ModeGlob, nil, true)
+	want := []string{"/home/jens", "-name", "*.go", "-print0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindArgs glob, case-sensitive = %v, want %v", got, want)
+	}
+
+	got = FindArgs("linux", "/var/log", `.*\.log$`, ModeRegex, nil, true)
+	want = []string{"/var/log", "-regextype", "posix-extended", "-regex", `.*\.log$`, "-print0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindArgs regex, case-sensitive = %v, want %v", got, want)
 	}
 }

@@ -93,24 +93,29 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 
 func filenameCommand(req Request) (name string, args []string, ok bool) {
 	if req.Engine == EngineLocate {
-		a, ok := LocateArgs(runtime.GOOS, req.Pattern, req.Mode)
+		a, ok := LocateArgs(runtime.GOOS, req.Pattern, req.Mode, req.CaseSensitive)
 		return "locate", a, ok
 	}
-	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs), true
+	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive), true
 }
 
-// underIgnoredDir reports whether path has any of ignoreDirs as one of
-// its own path components — locate's own client-side equivalent of
-// FindArgs' -prune (see Request.IgnoreDirs' own doc comment on why
-// locate needs this separate check rather than a traversal-level
-// prune: its results come from a prebuilt index, not a live walk).
+// underIgnoredDir reports whether path has any of ignoreDirs matching
+// one of its own path components (via filepath.Match — see
+// Request.IgnoreDirs' own doc comment on why a glob, not just an exact
+// name) — locate's own client-side equivalent of FindArgs' -prune (its
+// results come from a prebuilt index, not a live walk, so there's no
+// traversal to prune instead). A malformed pattern (filepath.Match's
+// own ErrBadPattern) is treated as simply not matching rather than
+// propagated — Request.IgnoreDirs already only ever gets there via
+// typed-in names or this package's own "Skip hidden" ".*", neither of
+// which can produce one.
 func underIgnoredDir(path string, ignoreDirs []string) bool {
 	if len(ignoreDirs) == 0 {
 		return false
 	}
 	for _, part := range strings.Split(path, string(filepath.Separator)) {
 		for _, ignored := range ignoreDirs {
-			if part == ignored {
+			if ok, _ := filepath.Match(ignored, part); ok {
 				return true
 			}
 		}
@@ -121,12 +126,12 @@ func underIgnoredDir(path string, ignoreDirs []string) bool {
 func runContentSearch(ctx context.Context, req Request, results chan<- Result) error {
 	switch req.Content {
 	case ContentGrep:
-		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode)...)
+		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.CaseSensitive)...)
 		return streamGrepLines(ctx, cmd, results)
 	case ContentGzip:
-		return searchArchives(ctx, req, "*.gz", "zgrep", func(f string) []string { return ZgrepArgs(req.Pattern, req.Mode, f) }, results)
+		return searchArchives(ctx, req, "*.gz", "zgrep", func(f string) []string { return ZgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive) }, results)
 	case ContentZip:
-		return searchArchives(ctx, req, "*.zip", "zipgrep", func(f string) []string { return ZipgrepArgs(req.Pattern, req.Mode, f) }, results)
+		return searchArchives(ctx, req, "*.zip", "zipgrep", func(f string) []string { return ZipgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive) }, results)
 	}
 	return nil
 }
@@ -141,7 +146,12 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 // top-level find/locate/grep call, this isn't the one command the
 // whole search depends on.
 func searchArchives(ctx context.Context, req Request, namePattern, tool string, buildArgs func(file string) []string, results chan<- Result) error {
-	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob, req.IgnoreDirs)...)
+	// caseSensitive is deliberately always false here, regardless of
+	// req.CaseSensitive: that setting is about the user's own content
+	// pattern (passed to buildArgs, see ZgrepArgs/ZipgrepArgs above),
+	// not about finding archives named e.g. ".GZ" — a user almost
+	// certainly wants both cases of the archive extension either way.
+	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, ModeGlob, req.IgnoreDirs, false)...)
 	return streamNullSeparated(findCmd, func(archive string) bool {
 		if ctx.Err() != nil {
 			return false

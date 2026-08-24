@@ -23,8 +23,19 @@ import "regexp"
 // (always print the file name, even if scope turns out to be a single
 // file) are all verified supported identically across GNU and BSD/
 // macOS/FreeBSD grep.
-func GrepArgs(pattern, scope string, mode Mode) []string {
+//
+// -i (case-insensitive) is added unless caseSensitive, matching
+// FindArgs/LocateArgs' own default — content search here used to
+// always be case-sensitive regardless of this flag even existing
+// (there was no toggle at all), inconsistent with filename search's
+// own case-insensitive default; this brings the two in line rather
+// than leaving that inconsistency in place now that a real toggle
+// exists to opt back into case-sensitive matching.
+func GrepArgs(pattern, scope string, mode Mode, caseSensitive bool) []string {
 	args := []string{"-r", "-n", "-I", "-H"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
 	args = append(args, matchModeFlag(mode))
 	return append(args, "-e", pattern, scope)
 }
@@ -38,8 +49,11 @@ func GrepArgs(pattern, scope string, mode Mode) []string {
 // runs one zgrep invocation per file the caller already found via
 // FindArgs (see internal/search's own package doc and the executor
 // that drives this), not a single recursive zgrep call.
-func ZgrepArgs(pattern string, mode Mode, gzFile string) []string {
+func ZgrepArgs(pattern string, mode Mode, gzFile string, caseSensitive bool) []string {
 	args := []string{"-n", "-I", "-H"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
 	args = append(args, matchModeFlag(mode))
 	return append(args, "-e", pattern, gzFile)
 }
@@ -69,11 +83,15 @@ func ZgrepArgs(pattern string, mode Mode, gzFile string) []string {
 //     pattern, which is the exact same "conflicting matchers" error
 //     again. The pattern must always be passed as a bare positional
 //     argument instead — never preceded by -e.
-func ZipgrepArgs(pattern string, mode Mode, zipFile string) []string {
+func ZipgrepArgs(pattern string, mode Mode, zipFile string, caseSensitive bool) []string {
 	if mode != ModeRegex {
 		pattern = regexp.QuoteMeta(pattern)
 	}
-	return []string{"-n", pattern, zipFile}
+	args := []string{"-n"}
+	if !caseSensitive {
+		args = append(args, "-i") // egrep's own -i, passed through — see this func's own doc comment
+	}
+	return append(args, pattern, zipFile)
 }
 
 // matchModeFlag is GrepArgs/ZgrepArgs/ZipgrepArgs' shared Mode
