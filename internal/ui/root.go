@@ -106,33 +106,74 @@ type Root struct {
 	dirPickerOnSelect  func(string)
 	dirPickerOnCancel  func()
 
-	// The search dialog (see search.go/newSearchDialog): searchPages
-	// wraps searchForm (the Engine/Start-at/Filename/Mode/Ignored-dirs/
-	// Search-in/Content inputs) and searchResultsView (the results
-	// list plus its own animated status line, once a search has run)
-	// as two pages, the same "several sub-widgets, one overlay" shape
-	// r.properties already has. searchScopeField/searchContentField are
-	// searchForm's own Start-at/Content fields, kept individually
-	// addressable — searchScopeField for Tab-completion (the same
-	// reason r.panel.headerEdit is — see captureSearchScopeKey),
-	// searchContentField so its own disabled state can be toggled (see
-	// searchContentChanged) and its text read directly in runSearch.
+	// The search dialog (see search.go/newSearchDialog) — after MC's
+	// own Find File dialog, reusing Properties' own "plain text plus a
+	// shared inline editor" editing paradigm (see newPropertiesView).
+	// searchPages wraps searchFieldsPages (the fields — see below) and
+	// searchResultsView (the results list plus its own animated status
+	// line, once a search has run) as two pages, the same "several
+	// sub-widgets, one overlay" shape r.properties already has one
+	// level up.
+	//
+	// searchFieldsPages itself wraps the fields Flex (searchTop/
+	// searchLeft/searchRight — MC's own Start-at/Ignore-dirs block
+	// above a two-column Filename/Content section, plus searchButtons)
+	// and searchEditField, the one shared inline editor repositioned
+	// over whichever field is currently being edited (see
+	// activateSearchTextField) — the same "one shared field,
+	// repositioned per use" approach propertiesEditField/Root.rename/
+	// Root.prompt all already use. searchEditCommit is that field's own
+	// pending commit callback, set fresh each time (see
+	// activateSearchTextField/finishSearchEdit).
+	//
+	// searchSpans is every clickable/keyboard-focusable region across
+	// all three of searchTop/searchLeft/searchRight, rebuilt on every
+	// render (see rerenderSearchDialog) — the same running list
+	// propertySpans is for Properties, just spanning three TextViews
+	// instead of one (see searchSpan's own doc comment). searchFocusedIdx
+	// is which one currently has keyboard focus, or
+	// len(searchSpans)/len(searchSpans)+1 for Cancel/Search.
+	//
 	// searchEngineOptions/searchContentOptions record which
-	// search.Engine/search.ContentMode each of their own dropdown's
-	// options actually maps to (built once, since availability —
-	// LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't change
-	// mid-session) — the dropdown's own selected index alone isn't
+	// search.Engine/search.ContentMode each of their own choice
+	// group's options actually maps to (built once, since availability
+	// — LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't
+	// change mid-session) — the group's own selected index alone isn't
 	// enough once an option is conditionally left out (see their own
-	// doc comments in search.go).
+	// doc comments in search.go). searchEngineIdx/searchModeIdx/
+	// searchContentTypeIdx are those selected indices;
+	// searchScopeValue/searchFilenameValue/searchIgnoreValue/
+	// searchContentValue are the dialog's own four text fields;
+	// searchIgnoreEnabled/searchCaseSensitive/searchSkipHidden are its
+	// three checkboxes (see runSearch for how each feeds into the
+	// search.Request that's actually built).
 	searchPages          *tview.Pages
-	searchForm           *tview.Form
-	searchScopeField     *dimmableField
-	searchContentField   *dimmableField
+	searchFieldsPages    *tview.Pages
+	searchTop            *tview.TextView
+	searchLeft           *tview.TextView
+	searchRight          *tview.TextView
+	searchEditField      *tview.InputField
+	searchEditCommit     func(string)
+	searchButtons        *tview.Flex
+	searchCancelBtn      *tview.Button
+	searchSearchBtn      *tview.Button
+	searchSpans          []searchSpan
+	searchFocusedIdx     int
 	searchResultsView    *tview.Flex
 	searchList           *tview.List
 	searchStatus         *tview.TextView
 	searchEngineOptions  []searchEngineOption
 	searchContentOptions []searchContentOption
+	searchEngineIdx      int
+	searchModeIdx        int
+	searchContentTypeIdx int
+	searchScopeValue     string
+	searchFilenameValue  string
+	searchIgnoreValue    string
+	searchContentValue   string
+	searchIgnoreEnabled  bool
+	searchCaseSensitive  bool
+	searchSkipHidden     bool
 	// searchCancel stops whatever search.Run call is currently in
 	// flight, if any, and its paired animateSearchProgress ticker (both
 	// share this same ctx) — called before starting a new one, and when
