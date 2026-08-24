@@ -236,6 +236,20 @@ type Root struct {
 	propertiesHashes *fsops.Hashes
 	hashSectionRow   int
 
+	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
+	// "in progress" animation (see hashAnimationFrames): hashInProgress
+	// is what renderProperties checks to show the current animation
+	// frame instead of the plain hint or the finished results;
+	// hashAnimFrame is which frame that is, advanced by a ticker on its
+	// own background goroutine; hashCancel stops that ticker (and lets a
+	// still-running fsops.Hash's own eventual result recognize it's
+	// stale — see computeHashes) once a newer hash computation, or
+	// reopening Properties for a different target (see openProperties),
+	// has superseded it.
+	hashInProgress bool
+	hashAnimFrame  int
+	hashCancel     context.CancelFunc
+
 	// propertySpans locates each editable region in the Properties
 	// overlay's current text (see propertiesBuilder), rebuilt on every
 	// renderProperties call.
