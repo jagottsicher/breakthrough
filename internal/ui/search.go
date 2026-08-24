@@ -22,14 +22,9 @@ const searchPage = "search"
 // window "darf auch gerne etwas größer sein" than the input form that
 // opens it.
 const (
-	searchFormWidth, searchFormHeight       = 84, 20
+	searchFormWidth, searchFormHeight       = 84, 25
 	searchResultsWidth, searchResultsHeight = 96, 32
 )
-
-// searchModeLabels are the Mode choice group's own labels, in the same
-// order as search.Mode's own constants (ModeGlob, ModeKeyword,
-// ModeRegex), so search.Mode(index) is a safe, direct cast.
-var searchModeLabels = []string{"Glob", "Keyword", "Regex"}
 
 // searchEngineOption/searchContentOption pair one Engine/Search-in
 // choice's own label with the search.Engine/search.ContentMode it
@@ -266,6 +261,12 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchEngineOptions = buildSearchEngineOptions()
 	r.searchContentOptions = buildSearchContentOptions()
+	// MC's own real defaults (see its screenshot): "Find recursively"
+	// and "Using shell patterns" both start checked — every other
+	// checkbox here defaults to Go's own bool zero value, false, which
+	// already matches MC's own defaults for those.
+	r.searchRecursive = true
+	r.searchShellPatterns = true
 
 	// SetWrap(false) on all three: searchSpan's own row is the count of
 	// literal '\n's written (see searchBuilder.newline), which only
@@ -292,7 +293,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 		AddItem(r.searchRight, 0, 1, false)
 
 	fields := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.searchTop, 9, 0, true).
+		AddItem(r.searchTop, 6, 0, true).
 		AddItem(columns, 0, 1, false).
 		AddItem(r.searchButtons, 1, 0, false)
 	// Installed on fields itself, the shared ancestor of searchTop/
@@ -407,17 +408,21 @@ func (r *Root) rerenderSearchDialog() {
 	top.textField(r.searchIgnoreValue, "(none)", !r.searchIgnoreEnabled, 0, func(s string) {
 		r.searchIgnoreValue = s
 	}, "")
-	top.newline()
-	top.newline()
-
-	top.text("Mode         ")
-	for i, label := range searchModeLabels {
-		i := i
-		top.choice(r.searchModeIdx == i, label, func() { r.searchModeIdx = i })
-		top.text("  ")
-	}
 	r.searchTop.SetText(top.b.String())
 
+	// Filename column — after MC's own Find File dialog (verified
+	// against its real find.c source, not guessed): Find recursively/
+	// Follow symlinks/Using shell patterns/Case sensitive/Skip hidden,
+	// in that order. "Using shell patterns" replaces this dialog's
+	// previous Glob/Keyword/Regex choice group entirely, per the user's
+	// own request — checked means a shell-glob pattern (FindArgs'
+	// ModeGlob), unchecked means a regex one (ModeRegex) — MC has no
+	// separate "keyword" concept for file names: an unanchored regex
+	// (what a bare keyword becomes) already matches as a substring
+	// search on its own. MC's own "All charsets" checkbox is
+	// deliberately not offered here: it's about MC's own internal,
+	// locale-aware matching engine, with no equivalent flag on any
+	// find/grep this app shells out to — nothing to wire it to.
 	left := &searchBuilder{root: r, widget: r.searchLeft}
 	left.text("Filename")
 	left.newline()
@@ -426,11 +431,39 @@ func (r *Root) rerenderSearchDialog() {
 	}, "filename")
 	left.newline()
 	left.newline()
+	left.choice(r.searchRecursive, "Find recursively", func() { r.searchRecursive = !r.searchRecursive })
+	left.newline()
+	left.choice(r.searchFollowSymlinks, "Follow symlinks", func() { r.searchFollowSymlinks = !r.searchFollowSymlinks })
+	left.newline()
+	left.choice(r.searchShellPatterns, "Using shell patterns", func() { r.searchShellPatterns = !r.searchShellPatterns })
+	left.newline()
 	left.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
 	left.newline()
 	left.choice(r.searchSkipHidden, "Skip hidden", func() { r.searchSkipHidden = !r.searchSkipHidden })
 	r.searchLeft.SetText(left.b.String())
 
+	// Content column. Search in (this app's own addition beyond MC —
+	// MC's content search is always plain grep; this app also offers
+	// zgrep/zipgrep for compressed archives) gates Content the same way
+	// it always has. One option per line, not inline like Engine at the
+	// top: with zgrep/zipgrep both available its own labels ("gzip
+	// contents (zgrep)", "zip contents (zipgrep)") run well past what
+	// fits on one line within a column half this dialog's own width —
+	// confirmed live (options past the column's edge simply vanished,
+	// SetWrap(false) clips rather than wraps) — so this stacks the same
+	// way Filename's own checkboxes already do, rather than widening the
+	// whole dialog to fit words that only appear together on the
+	// rare/widest option combination. Whole words/Regular expression/
+	// Case sensitive/First hit, in that order, mirror MC's own real
+	// layout — Regular expression here is entirely independent of
+	// Filename's own "Using shell patterns" (MC keeps content pattern
+	// syntax and filename pattern syntax as two separate choices, never
+	// shared — see runSearch's own doc comment on why one shared Mode
+	// choice used to be wrong). Case sensitive is the *same* underlying
+	// searchCaseSensitive as Filename's own checkbox above — MC shows
+	// it in both columns, but this app never runs a filename and a
+	// content search at once (see search.Request's own doc comment),
+	// so one shared value serves both without any real behavior lost.
 	right := &searchBuilder{root: r, widget: r.searchRight}
 	right.text("Search in")
 	right.newline()
@@ -446,6 +479,15 @@ func (r *Root) rerenderSearchDialog() {
 	right.textField(r.searchContentValue, "(type a pattern)", contentDimmed, 0, func(s string) {
 		r.searchContentValue = s
 	}, "")
+	right.newline()
+	right.newline()
+	right.choice(r.searchWholeWords, "Whole words", func() { r.searchWholeWords = !r.searchWholeWords })
+	right.newline()
+	right.choice(r.searchContentRegex, "Regular expression", func() { r.searchContentRegex = !r.searchContentRegex })
+	right.newline()
+	right.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
+	right.newline()
+	right.choice(r.searchFirstHit, "First hit", func() { r.searchFirstHit = !r.searchFirstHit })
 	r.searchRight.SetText(right.b.String())
 }
 
@@ -775,9 +817,30 @@ func parseIgnoreDirs(text string) []string {
 func (r *Root) runSearch() {
 	contentMode := r.searchContentOptions[r.searchContentTypeIdx].mode
 
+	// Filename search and content search each get their own independent
+	// Mode, computed from their own MC-style checkbox — never a shared
+	// "Glob/Keyword/Regex" selector (see this file's own history: the
+	// two were deliberately split apart to match MC's real dialog, where
+	// "Using shell patterns" only ever affects the filename match and
+	// "Regular expression" only ever affects the content match). Only
+	// one of the two ever ends up in req.Mode below, since filename and
+	// content search are mutually exclusive per search.Request's own doc
+	// comment — so nothing is lost by computing both unconditionally
+	// here rather than branching first.
+	filenameMode := search.ModeRegex
+	if r.searchShellPatterns {
+		filenameMode = search.ModeGlob
+	}
+	contentSearchMode := search.ModeKeyword
+	if r.searchContentRegex {
+		contentSearchMode = search.ModeRegex
+	}
+
 	pattern := r.searchFilenameValue
+	mode := filenameMode
 	if contentMode != search.ContentNone {
 		pattern = r.searchContentValue
+		mode = contentSearchMode
 	}
 	if pattern == "" {
 		return
@@ -793,13 +856,17 @@ func (r *Root) runSearch() {
 	}
 
 	req := search.Request{
-		Pattern:       pattern,
-		Scope:         scope,
-		Mode:          search.Mode(r.searchModeIdx),
-		Engine:        r.searchEngineOptions[r.searchEngineIdx].engine,
-		Content:       contentMode,
-		IgnoreDirs:    ignoreDirs,
-		CaseSensitive: r.searchCaseSensitive,
+		Pattern:        pattern,
+		Scope:          scope,
+		Mode:           mode,
+		Engine:         r.searchEngineOptions[r.searchEngineIdx].engine,
+		Content:        contentMode,
+		IgnoreDirs:     ignoreDirs,
+		CaseSensitive:  r.searchCaseSensitive,
+		NonRecursive:   !r.searchRecursive,
+		FollowSymlinks: r.searchFollowSymlinks,
+		WholeWords:     r.searchWholeWords,
+		FirstHit:       r.searchFirstHit,
 	}
 
 	r.cancelSearch()

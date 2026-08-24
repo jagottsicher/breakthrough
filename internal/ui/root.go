@@ -140,13 +140,26 @@ type Root struct {
 	// — LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't
 	// change mid-session) — the group's own selected index alone isn't
 	// enough once an option is conditionally left out (see their own
-	// doc comments in search.go). searchEngineIdx/searchModeIdx/
-	// searchContentTypeIdx are those selected indices;
-	// searchScopeValue/searchFilenameValue/searchIgnoreValue/
-	// searchContentValue are the dialog's own four text fields;
-	// searchIgnoreEnabled/searchCaseSensitive/searchSkipHidden are its
-	// three checkboxes (see runSearch for how each feeds into the
-	// search.Request that's actually built).
+	// doc comments in search.go). searchEngineIdx/searchContentTypeIdx
+	// are those selected indices; searchScopeValue/searchFilenameValue/
+	// searchIgnoreValue/searchContentValue are the dialog's own four
+	// text fields.
+	//
+	// The rest are MC's own Find File checkboxes (verified against its
+	// real find.c source, not guessed — see rerenderSearchDialog's own
+	// doc comment), replacing this dialog's earlier, shared Glob/
+	// Keyword/Regex choice group: searchShellPatterns (Filename's own
+	// "Using shell patterns") and searchContentRegex (Content's own
+	// "Regular expression") are independent of each other, per MC's own
+	// design — Filename's pattern syntax and Content's pattern syntax
+	// are never the same choice. searchRecursive/searchFollowSymlinks
+	// only matter for EngineFind (locate's own index has no live
+	// traversal to shape this way); searchCaseSensitive is shown in
+	// both columns but is one shared value (this app never runs a
+	// filename and a content search at once, so nothing is lost keeping
+	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
+	// each their own — see runSearch for how every one of these feeds
+	// into the search.Request that's actually built.
 	searchPages          *tview.Pages
 	searchFieldsPages    *tview.Pages
 	searchTop            *tview.TextView
@@ -165,7 +178,6 @@ type Root struct {
 	searchEngineOptions  []searchEngineOption
 	searchContentOptions []searchContentOption
 	searchEngineIdx      int
-	searchModeIdx        int
 	searchContentTypeIdx int
 	searchScopeValue     string
 	searchFilenameValue  string
@@ -174,6 +186,12 @@ type Root struct {
 	searchIgnoreEnabled  bool
 	searchCaseSensitive  bool
 	searchSkipHidden     bool
+	searchRecursive      bool
+	searchFollowSymlinks bool
+	searchShellPatterns  bool
+	searchContentRegex   bool
+	searchWholeWords     bool
+	searchFirstHit       bool
 	// searchCancel stops whatever search.Run call is currently in
 	// flight, if any, and its paired animateSearchProgress ticker (both
 	// share this same ctx) — called before starting a new one, and when

@@ -279,7 +279,7 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	r.openSearch()
 	r.searchFilenameValue = "*.go"
 	r.searchScopeValue = "/tmp"
-	r.searchModeIdx = 2 // Regex
+	r.searchShellPatterns = false // "Using shell patterns" unchecked -> filename Mode is Regex
 	r.searchIgnoreEnabled = true
 	r.searchIgnoreValue = ".git, node_modules"
 	r.searchCaseSensitive = true
@@ -310,6 +310,75 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	}
 	if r.activePage != searchPage {
 		t.Errorf("activePage = %q, want still open (%q) on the results page", r.activePage, searchPage)
+	}
+}
+
+// TestRunSearchFilenameChecksMapToRequestFields pins MC's own Filename
+// checkboxes (Find recursively / Follow symlinks / Using shell
+// patterns) each landing on their own Request field — NonRecursive
+// inverted from Find recursively (see Request.NonRecursive's own doc
+// comment on why), FollowSymlinks passed straight through, and Using
+// shell patterns feeding filenameMode rather than a Request field of
+// its own.
+func TestRunSearchFilenameChecksMapToRequestFields(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchRecursive = false
+	r.searchFollowSymlinks = true
+	r.searchShellPatterns = true
+
+	r.runSearch()
+
+	if !captured.NonRecursive {
+		t.Error("NonRecursive = false, want true (Find recursively was unchecked)")
+	}
+	if !captured.FollowSymlinks {
+		t.Error("FollowSymlinks = false, want true")
+	}
+	if captured.Mode != search.ModeGlob {
+		t.Errorf("Mode = %v, want ModeGlob (Using shell patterns was checked)", captured.Mode)
+	}
+}
+
+// TestRunSearchContentChecksMapToRequestFields pins MC's own Content
+// checkboxes (Whole words / Regular expression / First hit) — Whole
+// words and First hit pass straight through, Regular expression feeds
+// the content search's own Mode (independent from the Filename
+// column's own Mode, see runSearch's own doc comment).
+func TestRunSearchContentChecksMapToRequestFields(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchContentTypeIdx = 1 // grep — see buildSearchContentOptions' own fixed ordering
+	r.searchContentValue = "TODO"
+	r.searchWholeWords = true
+	r.searchContentRegex = true
+	r.searchFirstHit = true
+
+	r.runSearch()
+
+	if !captured.WholeWords {
+		t.Error("WholeWords = false, want true")
+	}
+	if !captured.FirstHit {
+		t.Error("FirstHit = false, want true")
+	}
+	if captured.Mode != search.ModeRegex {
+		t.Errorf("Mode = %v, want ModeRegex (Regular expression was checked)", captured.Mode)
 	}
 }
 
@@ -603,8 +672,9 @@ func TestOpenSearchResultNavigatesAndCloses(t *testing.T) {
 }
 
 // TestChoiceSpanSelectsOption pins the choice group mechanism shared
-// by Engine/Mode/Search in: activating one of a group's own spans
-// selects it (updates the relevant *Idx field) and re-renders.
+// by Engine/Search in/the various checkboxes: activating one of a
+// group's own spans selects it (updates the relevant *Idx/bool field)
+// and re-renders.
 func TestChoiceSpanSelectsOption(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -613,32 +683,36 @@ func TestChoiceSpanSelectsOption(t *testing.T) {
 	}
 	r.openSearch()
 
-	if r.searchModeIdx != 0 {
-		t.Fatalf("setup: searchModeIdx = %d, want 0 (Glob)", r.searchModeIdx)
+	if r.searchContentTypeIdx != 0 {
+		t.Fatalf("setup: searchContentTypeIdx = %d, want 0 (File names)", r.searchContentTypeIdx)
 	}
 
-	// Mode's own three choice spans follow Engine's and Start-at's and
-	// Tree's own spans in searchTop — rather than hardcoding an index,
-	// find "Keyword" by rendered text (see searchModeLabels) among
-	// searchTop's own spans.
+	// Search in's own choice spans live in searchRight — rather than
+	// hardcoding an index, find "Content (grep)" by rendered text (see
+	// buildSearchContentOptions) among searchRight's own spans; grep is
+	// always present (see buildSearchContentOptions' own doc comment),
+	// unlike locate/zgrep/zipgrep which depend on the host.
 	idx := -1
 	for i, s := range r.searchSpans {
-		if s.widget != r.searchTop {
+		if s.widget != r.searchRight {
 			continue
 		}
 		text, _ := textAtSpan(r, s)
-		if text == "○ Keyword" || text == "● Keyword" {
+		if text == "○ Content (grep)" || text == "● Content (grep)" {
 			idx = i
 			break
 		}
 	}
 	if idx < 0 {
-		t.Fatal("setup: no span for the Keyword mode option found")
+		t.Fatal("setup: no span for the Content (grep) option found")
 	}
 	r.searchSpans[idx].activate()
 
-	if r.searchModeIdx != 1 {
-		t.Errorf("searchModeIdx = %d after activating Keyword, want 1", r.searchModeIdx)
+	if r.searchContentTypeIdx == 0 {
+		t.Error("searchContentTypeIdx = 0 after activating Content (grep), want the grep option's own index")
+	}
+	if r.searchContentOptions[r.searchContentTypeIdx].mode != search.ContentGrep {
+		t.Errorf("selected content option mode = %v, want ContentGrep", r.searchContentOptions[r.searchContentTypeIdx].mode)
 	}
 }
 
