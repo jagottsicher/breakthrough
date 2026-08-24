@@ -21,8 +21,8 @@ const searchPage = "search"
 // user's own request: MC's own results window "darf auch gerne etwas
 // größer sein" than the input form that opens it.
 const (
-	searchFormWidth, searchFormHeight       = 70, 21
-	searchResultsWidth, searchResultsHeight = 96, 30
+	searchFormWidth, searchFormHeight       = 70, 23
+	searchResultsWidth, searchResultsHeight = 96, 32
 )
 
 // searchModeOptions are the Mode dropdown's own labels, in the same
@@ -149,6 +149,14 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchForm.AddButton("Start Search", r.runSearch)
 	r.searchForm.AddButton("Cancel", r.closeSearch)
 	r.searchForm.SetMouseCapture(r.searchFormMouseCapture)
+	// A visible border, the same as the directory picker (see
+	// dirpicker.go) — without one, this dialog's own background is
+	// indistinguishable from a plain terminal's own black, reading as a
+	// borderless black void with text floating in it rather than a
+	// contained overlay (a real user report). searchFormMouseCapture's
+	// own gap-swallowing logic is unaffected: it already checks against
+	// r.searchForm's own rect, which SetBorder narrows automatically.
+	r.searchForm.SetBorder(true).SetTitle(" Search ")
 
 	r.searchList = tview.NewList().ShowSecondaryText(false)
 	r.searchList.SetHighlightFullLine(true)
@@ -169,6 +177,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchResultsView = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.searchList, 0, 1, true).
 		AddItem(r.searchStatus, 1, 0, false)
+	r.searchResultsView.SetBorder(true).SetTitle(" Results ") // see searchForm's own SetBorder above
 
 	pages := tview.NewPages()
 	pages.AddPage("form", r.searchForm, true, true)
