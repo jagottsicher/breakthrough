@@ -376,12 +376,21 @@ func (r *Root) rerenderSearchDialog() {
 
 	scopeDimmed := r.searchEngineOptions[r.searchEngineIdx].engine == search.EngineLocate
 	top.text("Start at     ")
-	// maxWidth=50: long enough for most real paths in full, short
-	// enough to always leave room for "   [Tree]" after it within
-	// searchFormWidth — see textField's own doc comment on why only
-	// the *display* is ever shortened, never the value editing starts
-	// from.
-	top.textField(r.searchScopeValue, "(current directory)", scopeDimmed, 50, 22, func(s string) {
+	// The field fills exactly the rest of the row, right up to where
+	// "   [Tree]" itself starts — searchTopTextWidth is searchTop's own
+	// usable width (searchFormWidth minus its SetBorderPadding's 1 col
+	// left + 1 col right); treeSuffixWidth is "   [Tree]"'s own rendered
+	// width (3 spaces + the 6-char "[Tree]" button — see button's own
+	// doc comment on why that's visible text, not a style tag). Same
+	// value for both maxWidth and minWidth: the field never draws
+	// narrower OR wider than this, so it always reaches the button
+	// exactly, never short of it or pushing it off the row — see
+	// textField's own doc comment on why only the *display* is ever
+	// shortened, never the value editing starts from.
+	const searchTopTextWidth = searchFormWidth - 2
+	const treeSuffixWidth = 9 // len("   [Tree]")
+	fieldWidth := searchTopTextWidth - top.col - treeSuffixWidth
+	top.textField(r.searchScopeValue, "(current directory)", scopeDimmed, fieldWidth, fieldWidth, func(s string) {
 		r.searchScopeValue = s
 	}, "start-at")
 	top.text("   ")

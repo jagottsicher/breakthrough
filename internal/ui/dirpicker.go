@@ -48,7 +48,11 @@ func (r *Root) newDirPicker() *tview.Flex {
 		AddItem(r.dirPickerHeader, 1, 0, false).
 		AddItem(r.dirPickerList, 0, 1, true).
 		AddItem(buttons, 1, 0, false)
-	flex.SetBorder(true).SetTitle(" Browse ")
+	// No border — same reasoning as the search dialog's own fields/
+	// results (see newSearchDialog): flex itself and every child
+	// already get their own AccentBackground fill (see applyTheme), so
+	// a border only ate into the picker's own content space for no
+	// visual benefit.
 	return flex
 }
 
