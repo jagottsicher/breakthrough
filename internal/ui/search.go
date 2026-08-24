@@ -578,6 +578,7 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 func (r *Root) finishSearchEdit(key tcell.Key) {
 	text := r.searchEditField.GetText()
 	commit := r.searchEditCommit
+	r.searchEditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
 	r.searchFieldsPages.HidePage("editfield")
 
 	if key == tcell.KeyEnter || key == tcell.KeyTab || key == tcell.KeyBacktab {
@@ -602,15 +603,32 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 // completions/resolvePath directly rather than reimplementing it, per
 // the user's own request that every dialog with a path field support
 // it the same way.
+//
+// Tab is only ever consumed here when completion actually changes the
+// field's own text (there's something left to complete) — otherwise
+// it's returned unconsumed, falling through to the field's own
+// InputHandler and from there to finishSearchEdit's usual Tab handling
+// (commit and move to the next field). Without this, Tab was swallowed
+// unconditionally the moment Start-at was being edited — no matches at
+// all, or the text already sitting at its own longest common prefix
+// (completion has nothing left to add) — leaving no way to Tab out of
+// Start-at at all, a real bug the user ran into, not just a
+// theoretical one: it broke the same Tab-cycles-through-every-option
+// behavior every other field in this dialog already has.
 func (r *Root) captureSearchScopeKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() != tcell.KeyTab {
 		return event
 	}
-	matches := r.panel.completions(r.searchEditField.GetText())
+	current := r.searchEditField.GetText()
+	matches := r.panel.completions(current)
 	if len(matches) == 0 {
-		return nil
+		return event
 	}
-	r.searchEditField.SetText(longestCommonPrefix(matches))
+	completed := longestCommonPrefix(matches)
+	if completed == current {
+		return event
+	}
+	r.searchEditField.SetText(completed)
 	return nil
 }
 
@@ -656,16 +674,49 @@ func (r *Root) activateFocusedSearchSpan() {
 // newSearchDialog's own doc comment) — so a click that doesn't match
 // anything here is simply returned unchanged, and still gets consumed
 // normally by whichever TextView it landed in.
+//
+// commitPendingSearchEdit runs first, unconditionally: a click that
+// reaches this func at all is necessarily outside the shared inline
+// edit field's own current rect (tview routes a click on that rect
+// straight to the field itself instead — see newSearchDialog's own
+// doc comment on why "fields" and "editfield" can both be showing at
+// once), i.e. exactly a "leave the field" click, whether or not it
+// then goes on to land on another span.
 func (r *Root) captureSearchMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftClick {
 		return action, event
 	}
+	r.commitPendingSearchEdit()
 	if span, idx, ok := r.searchSpanAt(event.Position()); ok {
 		r.setSearchFocus(idx)
 		span.activate()
 		return tview.MouseConsumed, nil
 	}
 	return action, event
+}
+
+// commitPendingSearchEdit writes back whatever the shared inline edit
+// field currently holds and hides it, if it's actually showing (see
+// searchEditCommit's own nil-when-idle convention, set in
+// activateSearchTextField and cleared again in finishSearchEdit) — the
+// click-elsewhere/blur equivalent of finishSearchEdit's own Enter case
+// (commit, not discard). Without this, a click that lands on a
+// *different* span while Start-at was still being edited (e.g. right
+// after refining a Tree pick by hand, then clicking Ignore dirs) threw
+// the in-progress text away outright — captureSearchMouse's own span
+// lookup and activation never went anywhere near finishSearchEdit, so
+// nothing ever committed it — and the next render silently fell back
+// to whatever Start-at held before that edit began. A real bug the
+// user ran into, not just a theoretical one.
+func (r *Root) commitPendingSearchEdit() {
+	if r.searchEditCommit == nil {
+		return
+	}
+	commit := r.searchEditCommit
+	text := r.searchEditField.GetText()
+	r.searchEditCommit = nil
+	r.searchFieldsPages.HidePage("editfield")
+	commit(text)
 }
 
 // searchSpanAt finds whichever searchSpans entry (if any) contains

@@ -254,6 +254,97 @@ func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	}
 }
 
+// TestCaptureSearchScopeKeyLetsTabFallThroughOnceNothingLeftToComplete
+// pins the fix for a real bug: Tab used to be swallowed unconditionally
+// while editing Start-at (even with no matches at all, or the text
+// already sitting at its own longest common prefix), leaving no way to
+// Tab out of the field the way every other field in this dialog
+// already allows.
+func TestCaptureSearchScopeKeyLetsTabFallThroughOnceNothingLeftToComplete(t *testing.T) {
+	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir + "/ban")
+
+	// First Tab: "ban" has exactly one match (banana.txt) — completion
+	// still has something to add, so this one is consumed.
+	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
+		t.Fatal("first Tab should be consumed — completion still had something to add")
+	}
+	want := dir + "/banana.txt"
+	if got := r.searchEditField.GetText(); got != want {
+		t.Fatalf("after first Tab, text = %q, want %q", got, want)
+	}
+
+	// Second Tab: already at the longest common prefix — nothing left
+	// to complete, so it must fall through unconsumed (the same event
+	// value handed back) instead of being silently swallowed again.
+	event := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	if result := r.captureSearchScopeKey(event); result != event {
+		t.Error("second Tab should fall through unconsumed once nothing is left to complete")
+	}
+}
+
+// TestCommitPendingSearchEditPreservesInProgressText pins the fix for
+// a real bug: refining Start-at by hand after a Tree pick, then
+// leaving the field via a click elsewhere rather than Enter/Tab, used
+// to throw the in-progress text away outright — the next render
+// silently fell back to whatever Start-at held before that edit began.
+// commitPendingSearchEdit is captureSearchMouse's own fix for this
+// (see its own doc comment) — tested directly here since routing a
+// synthetic click through captureSearchMouse itself needs a real
+// on-screen layout this test doesn't have.
+func TestCommitPendingSearchEditPreservesInProgressText(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	r.searchScopeValue = dir // simulates a Tree pick
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate() // opens the shared inline editor, prefilled with dir
+	refined := dir + "/app-data"
+	r.searchEditField.SetText(refined) // the user refining it by hand, never pressing Enter/Tab
+
+	r.commitPendingSearchEdit()
+
+	if r.searchScopeValue != refined {
+		t.Errorf("searchScopeValue = %q, want %q (the refined value, not the original Tree pick)", r.searchScopeValue, refined)
+	}
+	if r.searchEditCommit != nil {
+		t.Error("searchEditCommit should be nil again once committed — see finishSearchEdit's own doc comment on why")
+	}
+}
+
+// TestCommitPendingSearchEditNoopWhenNotEditing pins that calling it
+// with nothing in progress (searchEditCommit nil) is a safe no-op —
+// captureSearchMouse calls it unconditionally on every click,
+// regardless of whether an edit is actually in progress.
+func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.commitPendingSearchEdit() // must not panic or change anything
+}
+
 func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
