@@ -105,6 +105,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchForm.AddDropDown("Engine", searchOptionLabels(r.searchEngineOptions, func(o searchEngineOption) string { return o.label }), 0, nil)
 	r.searchForm.AddDropDown("Search in", searchOptionLabels(r.searchContentOptions, func(o searchContentOption) string { return o.label }), 0, nil)
 	r.searchForm.AddButton("Search", r.runSearch)
+	r.searchForm.SetMouseCapture(r.searchFormMouseCapture)
 
 	r.searchList = tview.NewList().ShowSecondaryText(false)
 	r.searchList.SetHighlightFullLine(true)
@@ -186,6 +187,49 @@ func (r *Root) captureSearchScopeKey(event *tcell.EventKey) *tcell.EventKey {
 	return nil
 }
 
+// searchFormMouseCapture plugs a gap in tview.Form's own default mouse
+// handling: Form's own fallback for "the click landed on blank space,
+// not any specific field or button" (see its own MouseHandler) only
+// covers MouseLeftDown, not the MouseLeftClick tview derives right
+// after for an ordinary click — DropDown/InputField/Button all rely on
+// getting that MouseLeftClick themselves, so Form can't unconditionally
+// swallow it the way it does for Down. Left as-is, a click on any of
+// the Form's own blank space (there's plenty in a vertical form with
+// only a handful of fields) falls all the way through Pages' own
+// z-order dispatch (see its MouseHandler) to whatever's underneath:
+// the panel, which treats it as an ordinary click on whatever row
+// happens to be at those coordinates — including navigating into a
+// directory. That's the user's own report: a dialog that looks and
+// otherwise behaves like a solid overlay, but clicking "past" its
+// fields reaches through to the file list behind it.
+//
+// The fix: swallow MouseLeftClick ourselves whenever it lands inside
+// the form's own outer rect but outside every individual item/button's
+// rect — i.e. exactly the gap Form's own Down-only fallback leaves
+// open. Clicks that DO land on an item or button are returned
+// untouched, so DropDown/InputField/Button's own MouseHandler still
+// gets them exactly as it always would.
+func (r *Root) searchFormMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick {
+		return action, event
+	}
+	x, y := event.Position()
+	if !r.searchForm.InRect(x, y) {
+		return action, event
+	}
+	for i := 0; i < r.searchForm.GetFormItemCount(); i++ {
+		if primitiveContains(r.searchForm.GetFormItem(i), x, y) {
+			return action, event
+		}
+	}
+	for i := 0; i < r.searchForm.GetButtonCount(); i++ {
+		if primitiveContains(r.searchForm.GetButton(i), x, y) {
+			return action, event
+		}
+	}
+	return tview.MouseConsumed, nil
+}
+
 // runSearch is the form's own "Search" button/Enter action: builds a
 // search.Request from the form's current fields, cancels whatever
 // search was previously running (see cancelSearch), and starts the new
@@ -219,7 +263,7 @@ func (r *Root) runSearch() {
 	r.app.SetFocus(r.searchList)
 
 	results, errs := searchRun(ctx, req)
-	go r.streamSearchResults(ctx, results, errs)
+	go r.streamSearchResults(ctx, req, results, errs)
 }
 
 // searchRun is search.Run — a package-level var, not called directly,
@@ -232,6 +276,27 @@ func (r *Root) runSearch() {
 // do for config I/O).
 var searchRun = search.Run
 
+// noSearchResultsText is what the results list shows when a search
+// finished without a single match — see streamSearchResults' own doc
+// comment on why that needs to be an explicit, visible state rather
+// than just leaving the list empty. For a locate-engine filename
+// search specifically, it also names the single most likely reason:
+// locate answers entirely from its own prebuilt index (updatedb),
+// which — unlike a live find/grep — can be hours or days stale and
+// simply doesn't know about a file created (or renamed, or deleted)
+// since the last run. Combined with Scope being applied client-side
+// (see LocateArgs' own doc comment on why locate has no directory-scope
+// argument of its own to give it directly), a locate search from deep
+// in a project directory routinely comes back with everything filtered
+// out or missing outright — a silently-empty list gave no hint that
+// the search had genuinely run, let alone why it came back empty.
+func noSearchResultsText(req search.Request) string {
+	if req.Engine == search.EngineLocate && req.Content == search.ContentNone {
+		return "No matches found (locate's own index may be stale — see Engine: find for a live search instead)"
+	}
+	return "No matches found"
+}
+
 // streamSearchResults drains results/errs (see search.Run) on a
 // background goroutine, appending each match to searchList via
 // QueueUpdateDraw — the same "background work, draw updates queued
@@ -241,9 +306,16 @@ var searchRun = search.Run
 // goroutine's own updates still sitting in the queue skip themselves
 // instead of appending stale results (or a stale error) on top of the
 // new search's own, already-cleared list.
-func (r *Root) streamSearchResults(ctx context.Context, results <-chan search.Result, errs <-chan error) {
+//
+// If the search finishes with zero matches and no error, one
+// noSearchResultsText(req) item is added instead of leaving the list
+// looking exactly like it did before the search ran — easily read as
+// "the search didn't do anything" (a real user report).
+func (r *Root) streamSearchResults(ctx context.Context, req search.Request, results <-chan search.Result, errs <-chan error) {
+	found := false
 	for res := range results {
 		res := res // captured per-iteration, not the shared loop variable
+		found = true
 		r.app.QueueUpdateDraw(func() {
 			if ctx.Err() != nil {
 				return
@@ -259,6 +331,15 @@ func (r *Root) streamSearchResults(ctx context.Context, results <-chan search.Re
 				return
 			}
 			r.showError(err)
+		})
+		return
+	}
+	if !found {
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.searchList.AddItem(noSearchResultsText(req), "", 0, nil)
 		})
 	}
 }

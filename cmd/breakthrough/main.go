@@ -79,17 +79,17 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+X/Ctrl+F (Edit/Rename/toggle hidden
-	// files/Settings/Search — see the bottom bar's own buttons) check
+	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Rename/toggle hidden
+	// files/Options/Search — see the bottom bar's own buttons) check
 	// their own preconditions before acting (see
 	// Root.acceptsGlobalShortcut) rather than always firing the way
 	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
 	// bash line's own typing. Ctrl+H is deliberately not one of them —
 	// it's indistinguishable from Backspace at the terminal protocol
 	// level (both send the same 0x08 byte), so Ctrl+G was used for
-	// "toggle hidden files" instead. Ctrl+X, previously left unclaimed
-	// (it used to also quit, redundantly with Ctrl+Q, before that was
-	// cleaned up), is now Settings.
+	// "toggle hidden files" instead. Ctrl+O, previously left unclaimed,
+	// is Options (Ctrl+X used to be, before the dialog itself was
+	// renamed from Settings to Options and the shortcut moved to match).
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -107,8 +107,8 @@ func run() error {
 		case tcell.KeyCtrlG:
 			root.ToggleHiddenShortcut()
 			return nil
-		case tcell.KeyCtrlX:
-			root.SettingsShortcut()
+		case tcell.KeyCtrlO:
+			root.OptionsShortcut()
 			return nil
 		case tcell.KeyCtrlF:
 			root.SearchShortcut()

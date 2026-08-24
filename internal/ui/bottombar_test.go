@@ -335,7 +335,7 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionRename:       "^R Rename",
 		statusActionToggleHidden: "^G Hidden",
 		statusActionSearch:       "^F Search",
-		statusActionSettings:     "^X Settings",
+		statusActionOptions:      "^O Options",
 	}
 	found := map[statusBarAction]bool{}
 	for _, s := range spans {
