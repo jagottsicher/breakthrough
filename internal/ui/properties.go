@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -426,6 +427,7 @@ func (r *Root) openProperties() {
 		return
 	}
 
+	r.cancelHashComputation() // a previous target's own hash computation, if still running, is now stale
 	r.propertiesTarget = r.target
 	r.propertiesStat = info
 	r.propertiesHashes = nil
@@ -503,7 +505,12 @@ func (r *Root) renderProperties() {
 	text := pb.b.String()
 	if !isDirish(r.propertiesStat) {
 		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
-		text += "\n\n" + hashLines(r.propertiesHashes)
+		switch {
+		case r.hashInProgress:
+			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
+		default:
+			text += "\n\n" + hashLines(r.propertiesHashes)
+		}
 	}
 
 	r.propertySpans = pb.spans
@@ -552,6 +559,7 @@ func (r *Root) markPropertiesDirty() {
 // written to the real file (see savePropertiesEdit, the only place any
 // of this actually touches disk).
 func (r *Root) cancelPropertiesEdit() {
+	r.cancelHashComputation()
 	r.hideOverlay()
 }
 
@@ -563,6 +571,7 @@ func (r *Root) cancelPropertiesEdit() {
 // remaining edits is what recovering from that looks like for now, not
 // an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
+	r.cancelHashComputation()
 	target := r.propertiesTarget
 	var firstErr error
 
@@ -1074,26 +1083,135 @@ func formatChain(chain fsops.LinkChain) string {
 	return strings.Join(chain.Hops, " -> ") + suffix
 }
 
+// hashAnimationFrames is computeHashes' own "in progress" animation
+// (see hashInProgress/renderProperties) — a dot growing into a filled
+// circle, then dissolving into a larger hollow one — shown in the hash
+// section while a real hash computation (which can take a few seconds
+// on a large file) is still running, per the user's own request,
+// rather than the hint/result line just sitting frozen with nothing
+// suggesting anything is happening at all. Single-width glyphs
+// throughout (see checkboxText's own ○/● for the same "this app
+// already commits to UTF-8, but stays inside safely single-width
+// symbols" choice), not double-width ones a CJK-unaware terminal or
+// this app's own earlier column math could misjudge (see
+// buildHeaderSpans' own doc comment on that class of bug elsewhere).
+var hashAnimationFrames = []string{"·", "•", "●", "○", "◯"}
+
+// hashAnimationInterval is how often computeHashes' own ticker (see
+// animateHashProgress) advances hashAnimFrame — fast enough to read as
+// animated, slow enough not to flicker or waste redraws on something
+// purely decorative.
+const hashAnimationInterval = 150 * time.Millisecond
+
+// hashFile is fsops.Hash — a package-level var, not called directly,
+// so a test can substitute a fast, deterministic fake (see
+// properties_test.go) instead of hashing a real file and racing a real
+// background ticker, the same override-var pattern this codebase
+// already uses for searchRun/loadInitialSettings.
+var hashFile = fsops.Hash
+
+// hashProgressSuffix formats the "… NN%" fragment renderProperties
+// appends to the in-progress hash line, or "…" alone if total isn't
+// known/positive (an empty file, or a filesystem where Size came back
+// 0) — a percentage would be meaningless there. read is clamped to
+// total so a file that grows while being hashed (see Hash's own doc
+// comment on that edge case) can never show more than 100%.
+func hashProgressSuffix(read, total int64) string {
+	if total <= 0 {
+		return "…"
+	}
+	if read > total {
+		read = total
+	}
+	return fmt.Sprintf("… %d%%", read*100/total)
+}
+
 // computeHashes is the Properties overlay's hash action (see hashLines
 // and capturePropertiesKey/capturePropertiesMouse, its two triggers):
-// hashes the entry Properties is currently showing via fsops.Hash and
-// re-renders with the results in place of the hint line. A no-op if
-// Properties isn't the open overlay, or its target is a directory, or
-// resolves to one via isDirish (hashing isn't offered for those — see
-// fsops.Hash's own doc comment on why).
+// hashes the entry Properties is currently showing via hashFile, on a
+// background goroutine — paired with animateHashProgress's own ticker,
+// so the hash section shows a moving "in progress" animation for
+// however long that takes, rather than the UI just freezing or the
+// hint line sitting there with no feedback — and re-renders with the
+// results once it's done. A no-op if Properties isn't the open
+// overlay, its target is a directory or resolves to one via isDirish
+// (hashing isn't offered for those — see fsops.Hash's own doc comment
+// on why), or a computation is already running (see hashInProgress) —
+// pressing h or clicking again mid-computation doesn't restart it.
 func (r *Root) computeHashes() {
-	if r.activePage != propertiesPage || isDirish(r.propertiesStat) {
+	if r.activePage != propertiesPage || isDirish(r.propertiesStat) || r.hashInProgress {
 		return
 	}
 
-	hashes, err := fsops.Hash(r.propertiesTarget)
-	if err != nil {
-		r.showError(err)
-		return
-	}
-
-	r.propertiesHashes = &hashes
+	ctx, cancel := context.WithCancel(context.Background())
+	r.hashCancel = cancel
+	r.hashInProgress = true
+	r.hashAnimFrame = 0
+	r.hashBytesRead.Store(0)
 	r.rerenderProperties()
+
+	target := r.propertiesTarget
+	go r.animateHashProgress(ctx)
+	go func() {
+		hashes, err := hashFile(target, r.hashBytesRead.Store)
+		if ctx.Err() != nil {
+			return // superseded before we even got to report anything — see cancelHashComputation
+		}
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.cancelHashComputation()
+			if err != nil {
+				r.showError(err)
+				return
+			}
+			r.propertiesHashes = &hashes
+			r.rerenderProperties()
+		})
+	}()
+}
+
+// animateHashProgress advances hashAnimFrame every hashAnimationInterval
+// until ctx is done (see computeHashes/cancelHashComputation) — its own
+// background goroutine, paired with (but independent of) computeHashes'
+// own hashFile call, so the animation keeps moving smoothly regardless
+// of how long the actual hashing takes.
+func (r *Root) animateHashProgress(ctx context.Context) {
+	ticker := time.NewTicker(hashAnimationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
+			r.app.QueueUpdateDraw(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				r.hashAnimFrame++
+				r.rerenderProperties()
+			})
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// cancelHashComputation stops whatever computeHashes call is currently
+// in flight, if any (see hashCancel) — called once its own result
+// arrives (see computeHashes), when Properties closes via Cancel/Save
+// (see cancelPropertiesEdit/savePropertiesEdit), and when it's reopened
+// for a — possibly different — target (see openProperties), so a stale
+// animation frame or hash result can never land on the wrong file's
+// display, or keep animating after the user has moved on.
+func (r *Root) cancelHashComputation() {
+	if r.hashCancel != nil {
+		r.hashCancel()
+		r.hashCancel = nil
+	}
+	r.hashInProgress = false
 }
 
 // hashesInputCapture and hashesMouseCapture make 'h' and a click on the

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -310,10 +311,23 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
-	r.computeHashes()
+	// computeHashes itself now only ever *starts* a background
+	// computation (see its own doc comment) — the result lands via
+	// r.app.QueueUpdateDraw once hashFile returns, which nothing here
+	// drains (see isolateHashFile's own doc comment on why that's not
+	// safe to do in a test without a running event loop). What's
+	// actually being pinned here is renderProperties' own rendering of
+	// an already-computed result, so set propertiesHashes directly
+	// rather than going through the async path.
+	r.propertiesHashes = &fsops.Hashes{
+		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
+		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+	}
+	r.rerenderProperties()
 
 	after := r.propertiesText.GetText(true)
-	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") { // MD5("hello world")
+	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") {
 		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
 	if !strings.Contains(after, "SHA-256") {
@@ -345,6 +359,199 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	}
 }
 
+// isolateHashFile overrides hashFile (see computeHashes) with a fake
+// that blocks until t's own cleanup unblocks it, then returns
+// (fsops.Hashes{}, context.Canceled) — restoring the real fsops.Hash
+// afterward. Long enough that computeHashes' own background goroutine
+// never reaches r.app.QueueUpdateDraw *during* the test itself (nothing
+// runs the event loop to drain it — see StartClock's own doc comment
+// for the same concern elsewhere), so tests using this only ever check
+// computeHashes' own synchronous setup (hashInProgress, the animation's
+// first frame).
+//
+// Deliberately NOT a bare "select {}": that would leave the goroutine
+// blocked forever rather than reaped at the end of the test.
+//
+// The returned channel closes the instant the fake is actually called
+// — i.e. once computeHashes' own background goroutine has done its
+// one-time read of the package-level hashFile var. Callers MUST
+// receive from it before returning (see the call sites below): the
+// "go func(){...}()" in computeHashes only *schedules* that goroutine,
+// it doesn't run it, so without this wait the goroutine's read can
+// still be pending when the test ends and races under -race against
+// this helper's own t.Cleanup restoring hashFile. Also register
+// isolateHashFile(t) *before* t.Cleanup(r.cancelHashComputation) —
+// cleanups run in LIFO order, so cancelHashComputation (which cancels
+// this call's own ctx) runs first, and by the time the fake actually
+// unblocks, computeHashes' own ctx.Err() check already sees it as
+// cancelled and returns without touching hashFile or the UI again.
+func isolateHashFile(t *testing.T) <-chan struct{} {
+	t.Helper()
+	original := hashFile
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	hashFile = func(string, func(int64)) (fsops.Hashes, error) {
+		close(started)
+		<-unblock
+		return fsops.Hashes{}, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		hashFile = original
+	})
+	return started
+}
+
+// TestComputeHashesShowsAnimationImmediately pins the user's own
+// request: computing hashes (which can take a few seconds on a large
+// file) shows a moving "in progress" indicator right away, rather than
+// the hash section just sitting frozen with no feedback that anything
+// is happening.
+func TestComputeHashesShowsAnimationImmediately(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+
+	if !r.hashInProgress {
+		t.Fatal("hashInProgress should be true right after computeHashes starts")
+	}
+	text := r.propertiesText.GetText(true)
+	if !strings.Contains(text, hashAnimationFrames[0]) || !strings.Contains(text, "Computing hashes") {
+		t.Errorf("propertiesText should show the first animation frame (%q) and \"Computing hashes\", got:\n%s", hashAnimationFrames[0], text)
+	}
+}
+
+// TestComputeHashesShowsPercentProgress pins hashProgressSuffix's own
+// contract: once hashFile's onProgress callback has reported some
+// bytes read, the in-progress line should show what fraction of the
+// file that is. Uses its own fake (rather than isolateHashFile's
+// blocking one) so it can report a specific byte count before
+// blocking, against a fixture file sized so the math comes out exact.
+func TestComputeHashesShowsPercentProgress(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "sized.txt")
+	if err := os.WriteFile(path, make([]byte, 200), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	original := hashFile
+	unblock := make(chan struct{})
+	reported := make(chan struct{})
+	hashFile = func(target string, onProgress func(int64)) (fsops.Hashes, error) {
+		onProgress(100) // half of the 200-byte fixture above
+		close(reported)
+		<-unblock
+		return fsops.Hashes{}, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		hashFile = original
+	})
+	t.Cleanup(r.cancelHashComputation)
+
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-reported // wait for onProgress(100) above before this test can safely end (see isolateHashFile's own doc comment on why)
+
+	// Nothing here drains r.app.QueueUpdateDraw, so animateHashProgress's
+	// own ticker never actually re-renders during this test (same gap
+	// noted throughout this file) — re-render explicitly to observe the
+	// byte count onProgress just stored.
+	r.rerenderProperties()
+
+	text := r.propertiesText.GetText(true)
+	if !strings.Contains(text, "50%") {
+		t.Errorf("propertiesText should show 50%% progress for a 100/200-byte read, got:\n%s", text)
+	}
+}
+
+// TestComputeHashesIgnoresReentryWhileInProgress pins that pressing h
+// or clicking again while a computation is already running (see
+// hashInProgress) doesn't start a second, overlapping one.
+func TestComputeHashesIgnoresReentryWhileInProgress(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if r.hashCancel == nil {
+		t.Fatal("setup: hashCancel should be set after the first call")
+	}
+
+	// A real, newly-started computation always resets hashAnimFrame to 0
+	// (see computeHashes' own setup) — setting it to something else and
+	// confirming a second call leaves it alone is this test's way of
+	// observing that the second call actually no-opped, since func
+	// values (hashCancel) aren't comparable in Go and can't be checked
+	// directly for "is this still the same one".
+	r.hashAnimFrame = 3
+	r.computeHashes() // should no-op — a computation is already in flight
+	if r.hashAnimFrame != 3 {
+		t.Errorf("hashAnimFrame = %d, want unchanged at 3 — a second computeHashes call while already in progress should have no-opped", r.hashAnimFrame)
+	}
+}
+
+// TestOpenPropertiesCancelsStaleHashComputation pins that reopening
+// Properties for a — possibly different — target cancels whatever hash
+// computation was still running for the previous one (see
+// cancelHashComputation), so a stale animation frame or result can
+// never land on the new target's own display.
+func TestOpenPropertiesCancelsStaleHashComputation(t *testing.T) {
+	dir := fixtureDir(t)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+
+	r.target = filepath.Join(dir, "banana.txt")
+	r.openProperties()
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if !r.hashInProgress {
+		t.Fatal("setup: expected a hash computation to be in progress")
+	}
+
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if r.hashInProgress {
+		t.Error("hashInProgress should be false again after reopening Properties for a different target — the stale computation should have been cancelled")
+	}
+	if r.hashCancel != nil {
+		t.Error("hashCancel should be nil again after reopening Properties for a different target")
+	}
+}
+
 // TestPropertiesHPressTriggersHash pins the 'h' keyboard shortcut for
 // computing hashes, dispatched through r.properties itself (see
 // hashesInputCapture) the way a real keypress arrives, rather than
@@ -358,13 +565,24 @@ func TestPropertiesHPressTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
 	r.target = path
 	r.openProperties()
 
 	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("pressing h should have computed and shown the hash")
+	// Hashing now runs on a background goroutine (see computeHashes),
+	// with an "in progress" animation shown while it's running — the
+	// real result only ever lands via r.app.QueueUpdateDraw, which
+	// nothing here drains (see isolateHashFile's own doc comment), so
+	// this only pins that pressing h actually started a computation.
+	if !r.hashInProgress {
+		t.Error("pressing h should have started computing the hash")
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "Computing hashes") {
+		t.Errorf("propertiesText should show the in-progress animation, got:\n%s", r.propertiesText.GetText(true))
 	}
 }
 
@@ -385,6 +603,8 @@ func TestPropertiesHPressTriggersHashWhileInlineEditorOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
 	r.target = path
 	r.openProperties()
 
@@ -395,9 +615,12 @@ func TestPropertiesHPressTriggersHashWhileInlineEditorOpen(t *testing.T) {
 	nameBefore := r.propertiesEditField.GetText()
 
 	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("pressing h while the inline editor is open should still have computed and shown the hash")
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("pressing h while the inline editor is open should still have started computing the hash")
 	}
 	if got := r.propertiesEditField.GetText(); got != nameBefore {
 		t.Errorf("the inline editor's own text = %q, want unchanged %q — h should not have been typed into it", got, nameBefore)
@@ -418,6 +641,8 @@ func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
 	r.panel.SetRect(0, 0, 80, 24) // realistic — see clampToPanel's own default-rect gotcha noted elsewhere in this file
 	r.target = path
 	r.openProperties()
@@ -429,11 +654,14 @@ func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
 	clickY := y + r.hashSectionRow
 
 	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 	if !consumed {
 		t.Error("click on the hash line should be consumed")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("clicking the hash line should have computed and shown the hash")
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("clicking the hash line should have started computing the hash")
 	}
 }
 
@@ -454,6 +682,8 @@ func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
 	r.panel.SetRect(0, 0, 80, 24)
 	r.target = path
 	r.openProperties()
@@ -470,11 +700,14 @@ func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) 
 	clickY := y + r.hashSectionRow
 
 	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 	if !consumed {
 		t.Error("click on the hash line should be consumed even while the inline editor is open")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("clicking the hash line while the inline editor is open should still have computed and shown the hash")
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("clicking the hash line while the inline editor is open should still have started computing the hash")
 	}
 	if r.activePage != propertiesPage {
 		t.Errorf("activePage = %q after clicking the hash line, want Properties to still be open (%q)", r.activePage, propertiesPage)
