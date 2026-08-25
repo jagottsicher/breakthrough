@@ -637,7 +637,7 @@ func (p *Panel) renderSearchEntries() {
 	p.table.Clear()
 	for row, e := range sorted {
 		p.addRow(row, rowRef{
-			path:       e.Entry.Name, // always the result's own real path — see searchResultEntry's own doc comment
+			path:       e.Name, // always the result's own real path (Entry, embedded — see searchResultEntry's own doc comment)
 			name:       e.display,
 			isDir:      e.IsDir,
 			checkable:  true,
@@ -649,7 +649,7 @@ func (p *Panel) renderSearchEntries() {
 			size:       e.Size,
 			modTime:    e.ModTime,
 		})
-		if p.selected[e.Entry.Name] {
+		if p.selected[e.Name] {
 			p.setChecked(row, true)
 		}
 	}
