@@ -37,8 +37,26 @@ import "regexp"
 // every grep this app targets, not POSIX-mandated but confirmed
 // present in GNU grep and BSD/macOS/FreeBSD grep alike (verified
 // against the FreeBSD/macOS grep(1) man pages, not guessed).
-func GrepArgs(pattern, scope string, mode Mode, caseSensitive, wholeWords, firstHit bool) []string {
+//
+// ignoreDirs adds one --exclude-dir=NAME per entry — a real user
+// report: a plain content search (no Filename term — see runContentSearch's
+// own doc comment on why only that one case reaches GrepArgs with a
+// whole directory tree still left to walk, rather than one already-
+// approved file at a time) ran through Ignore dirs' own value entirely
+// unfiltered, since nothing here ever passed it to grep at all.
+// --exclude-dir matches a directory's own base name — the same
+// component-only contract Request.IgnoreDirs already documents for
+// FindArgs' -prune and locate's own client-side underIgnoredDir filter
+// — confirmed present under that exact flag name in GNU grep (this
+// package's own primary target) and, via its own bsdgrep(1) man page,
+// FreeBSD grep; macOS shipped the same bsdgrep-derived implementation
+// starting with macOS 12 (Monterey, 2021) — well before any macOS this
+// app's own CI, or a realistic install, would still be running.
+func GrepArgs(pattern, scope string, mode Mode, ignoreDirs []string, caseSensitive, wholeWords, firstHit bool) []string {
 	args := []string{"-r", "-n", "-I", "-H"}
+	for _, name := range ignoreDirs {
+		args = append(args, "--exclude-dir="+name)
+	}
 	if !caseSensitive {
 		args = append(args, "-i")
 	}
