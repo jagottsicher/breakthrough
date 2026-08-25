@@ -124,11 +124,6 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.searchCancelBtn.SetLabelColor(theme.Text)
 		r.searchSearchBtn.SetBackgroundColor(theme.AccentBackground)
 		r.searchSearchBtn.SetLabelColor(theme.Text)
-		r.searchResultsView.SetBackgroundColor(theme.AccentBackground)
-		r.searchList.SetBackgroundColor(theme.AccentBackground)
-		r.searchList.SetMainTextColor(theme.Text)
-		r.searchStatus.SetBackgroundColor(theme.AccentBackground)
-		r.searchStatus.SetTextColor(theme.Text)
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -147,11 +142,6 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.helpView != nil {
 		r.helpView.SetBackgroundColor(theme.AccentBackground)
 		r.helpView.SetTextColor(theme.Text)
-	}
-
-	if r.searchResultMenu != nil {
-		r.searchResultMenu.SetBackgroundColor(theme.AccentBackground)
-		r.searchResultMenu.SetMainTextColor(theme.Text)
 	}
 
 	r.panel.applyTheme(theme)

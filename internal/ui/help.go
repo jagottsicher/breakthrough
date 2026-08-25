@@ -120,8 +120,7 @@ func (r *Root) openHelp() {
 	r.pushOverlay(helpPage, r.helpView, nil)
 }
 
-// helpSize sizes Help generously against the whole terminal (like the
-// search dialog's own results page — see searchResultsSize), not
+// helpSize sizes Help generously against the whole terminal, not
 // clamped to one panel the way most overlays are (see clampToPanel):
 // it's a read-only reference, not a form tied to the current panel's
 // own context, and its content is long enough that more visible room

@@ -110,11 +110,10 @@ type Root struct {
 	// The search dialog (see search.go/newSearchDialog) — after MC's
 	// own Find File dialog, reusing Properties' own "plain text plus a
 	// shared inline editor" editing paradigm (see newPropertiesView).
-	// searchPages wraps searchFieldsPages (the fields — see below) and
-	// searchResultsView (the results list plus its own animated status
-	// line, once a search has run) as two pages, the same "several
-	// sub-widgets, one overlay" shape r.properties already has one
-	// level up.
+	// searchPages wraps searchFieldsPages (the fields — see below) as
+	// its own single page — results themselves show directly in the
+	// panel's own normal file overview area instead of a second page
+	// here (see Panel.showSearchResults), per the user's own request.
 	//
 	// searchFieldsPages itself wraps the fields Flex (searchTop/
 	// searchLeft/searchRight — MC's own Start-at/Ignore-dirs block
@@ -163,31 +162,18 @@ type Root struct {
 	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
 	// each their own — see runSearch for how every one of these feeds
 	// into the search.Request that's actually built.
-	searchPages       *tview.Pages
-	searchFieldsPages *tview.Pages
-	searchTop         *tview.TextView
-	searchLeft        *tview.TextView
-	searchRight       *tview.TextView
-	searchEditField   *tview.InputField
-	searchEditCommit  func(string)
-	searchButtons     *tview.Flex
-	searchCancelBtn   *tview.Button
-	searchSearchBtn   *tview.Button
-	searchSpans       []searchSpan
-	searchFocusedIdx  int
-	searchResultsView *tview.Flex
-	searchList        *tview.List
-	searchStatus      *tview.TextView
-	// searchResultPaths mirrors searchList's own items, index for
-	// index — the full path each row's own click target closes over
-	// (see streamSearchResults), looked up separately for a right-click
-	// (see captureSearchListMouse/openSearchResultMenu) since tview.List
-	// has no way to read back what an item's own selected func closure
-	// captured. Reset to nil everywhere searchList.Clear() is (see
-	// runSearch/showSearchError), kept in lockstep by only ever being
-	// appended to right alongside a real AddItem call.
-	searchResultPaths    []string
-	searchResultMenu     *tview.List // the search results' own right-click context menu — see newSearchResultMenu
+	searchPages          *tview.Pages
+	searchFieldsPages    *tview.Pages
+	searchTop            *tview.TextView
+	searchLeft           *tview.TextView
+	searchRight          *tview.TextView
+	searchEditField      *tview.InputField
+	searchEditCommit     func(string)
+	searchButtons        *tview.Flex
+	searchCancelBtn      *tview.Button
+	searchSearchBtn      *tview.Button
+	searchSpans          []searchSpan
+	searchFocusedIdx     int
 	searchEngineOptions  []searchEngineOption
 	searchEngineIdx      int
 	searchScopeValue     string
@@ -552,10 +538,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reset or repopulate on open).
 	r.helpView = r.newHelpView()
 
-	// The search results' own right-click context menu (see
-	// search.go/newSearchResultMenu/openSearchResultMenu) — repopulated
-	// fresh on every open, the same as r.menu.
-	r.searchResultMenu = r.newSearchResultMenu()
+	// "Esc: back to search" while search results are showing (see
+	// Panel.onSearchEscape's own doc comment) — a right-click on a
+	// search-result row already reaches r.menu the exact same way a
+	// real row's does (see captureMouse's MouseRightClick case, never
+	// mode-specific to begin with), so there's no separate context menu
+	// to build here any more.
+	panel.onSearchEscape = r.backToSearchForm
 
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
@@ -580,7 +569,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
-	r.AddPage(searchResultMenuPage, r.searchResultMenu, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -620,8 +608,8 @@ func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, resto
 
 // pushOverlay adds page/widget as a new layer on top of whatever's
 // already open, without closing it — see openOwnerGroupPicker
-// (owner/group picker over Properties), openHelp (help screen over
-// anything), and openPropertiesFloating (Properties over search results).
+// (owner/group picker over Properties) and openHelp (help screen over
+// anything).
 //
 // tview.Pages.ShowPage only flips a page's Visible flag — it does NOT
 // reorder Pages' own internal page list, and Pages.Draw always walks that
@@ -768,11 +756,10 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 
 // clampToScreen is clampToPanel's own logic, bounded against the whole
 // screen (Root's own rect) instead of just the current panel's inner
-// rect — used only by the search results page (see
-// searchResultsSize), deliberately allowed to span wider than one
-// panel now that it's sized as a fraction of the terminal's own width,
-// per the user's own request. Every other overlay in this app stays
-// within one panel — see clampToPanel's own doc comment.
+// rect — used only by the Help overlay (see helpSize), a read-only
+// reference deliberately allowed to span wider than one panel. Every
+// other overlay in this app stays within one panel — see clampToPanel's
+// own doc comment.
 func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
 	_, _, sw, sh := r.GetRect()
 	if sw <= 0 || sh <= 0 {
@@ -1226,17 +1213,30 @@ func (r *Root) cutToClipboard() {
 // pasteClipboard is "Paste": copies or moves (per clipboardCut)
 // whatever Copy/Cut last captured into the directory currently on
 // screen — pasteInto's own thin wrapper for that common case.
+//
+// While search results are showing (see Panel.searchMode), "the
+// directory currently on screen" has no single meaning any more — the
+// rows visible are scattered across however many real directories a
+// search touched, and r.panel.path itself stays whatever real
+// directory was current *before* the search ran (see
+// Panel.showSearchResults' own doc comment), not any of them. Pasting
+// there instead of alongside the row that was actually right-clicked
+// (r.target, set by Root.captureMouse's MouseRightClick case the exact
+// same way for a search result as for a real row) would silently land
+// in an unrelated directory the user never asked about.
 func (r *Root) pasteClipboard() {
-	r.pasteInto(r.panel.path)
+	dir := r.panel.path
+	if r.panel.searchMode {
+		dir = filepath.Dir(r.target)
+	}
+	r.pasteInto(dir)
 }
 
 // pasteInto is pasteClipboard's own shared implementation, generalized
-// to an explicit destination directory — used directly by the search
-// results' own context menu (see newSearchResultMenu), which pastes
-// alongside a result rather than into whatever the panel itself
-// happens to be showing (a search result's own directory and the
-// panel's current one are frequently different). A no-op if nothing
-// was ever copied/cut.
+// to an explicit destination directory — pasteClipboard itself is the
+// only caller, picking a search result's own directory instead of
+// r.panel.path while search results are showing (see its own doc
+// comment). A no-op if nothing was ever copied/cut.
 //
 // Each target that would collide with an existing entry in dir is
 // skipped with an error — asking "overwrite?" once per colliding file

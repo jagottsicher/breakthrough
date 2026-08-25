@@ -14,6 +14,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
@@ -1318,5 +1319,418 @@ func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
 	row, _ := r.panel.table.GetSelection()
 	if row != 2 {
 		t.Errorf("selected row after a same-directory refresh = %d, want unchanged 2", row)
+	}
+}
+
+// TestShowSearchResultsClearsTableAndEntersSearchMode pins
+// showSearchResults' own basic contract: an empty table, searchMode
+// true, and — critically — p.path itself left completely untouched
+// (see its own doc comment on why every other Panel method depends on
+// that).
+func TestShowSearchResultsClearsTableAndEntersSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	realPath := p.path
+
+	p.showSearchResults()
+
+	if !p.searchMode {
+		t.Error("searchMode = false after showSearchResults, want true")
+	}
+	if got := p.table.GetRowCount(); got != 0 {
+		t.Errorf("table has %d rows right after showSearchResults, want 0", got)
+	}
+	if p.path != realPath {
+		t.Errorf("p.path = %q after showSearchResults, want unchanged %q", p.path, realPath)
+	}
+	if p.searchRestorePath != realPath {
+		t.Errorf("searchRestorePath = %q, want %q", p.searchRestorePath, realPath)
+	}
+}
+
+// TestAppendSearchResultClassifiesAndUsesFullPathAsName pins the two
+// things appendSearchResult adds on top of a bare path string: real
+// fsops classification (a symlink here, to prove it's not just
+// defaulting to TypeFile) via DescribeEntry, and Name overwritten to
+// the result's own full path rather than DescribeEntry's usual
+// basename — see both functions' own doc comments.
+func TestAppendSearchResultClassifiesAndUsesFullPathAsName(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+	link := filepath.Join(dir, "link-to-apple")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: link})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.name != link {
+		t.Errorf("name = %q, want the full path %q", ref.name, link)
+	}
+	if ref.path != link {
+		t.Errorf("path = %q, want %q", ref.path, link)
+	}
+	if ref.entryType != fsops.TypeSymlinkFile {
+		t.Errorf("entryType = %v, want TypeSymlinkFile — DescribeEntry should have classified this as a real symlink", ref.entryType)
+	}
+	if ref.linkTarget != target {
+		t.Errorf("linkTarget = %q, want %q", ref.linkTarget, target)
+	}
+}
+
+// TestAppendSearchResultSortsGroupedByFullPath pins the user's own
+// stated reason for preferring full-path-as-name over a bare basename:
+// results scattered across different directories sort coherently
+// (directories-first, then alphabetically by full path) rather than
+// being interleaved by basename alone.
+func TestAppendSearchResultSortsGroupedByFullPath(t *testing.T) {
+	dir := fixtureDir(t)
+	sub := filepath.Join(dir, "app-data") // already exists, see fixtureDir
+	for _, name := range []string{"zzz.txt", "aaa.txt"} {
+		if err := os.WriteFile(filepath.Join(sub, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	subDir := filepath.Join(dir, "app-data", "nested")
+	if err := os.Mkdir(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	// Deliberately appended out of any sorted order.
+	for _, path := range []string{
+		filepath.Join(sub, "zzz.txt"),
+		subDir,
+		filepath.Join(sub, "aaa.txt"),
+	} {
+		p.appendSearchResult(search.Result{Path: path})
+	}
+
+	var gotOrder []string
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, _ := p.rowRef(row)
+		gotOrder = append(gotOrder, ref.path)
+	}
+	wantOrder := []string{
+		subDir, // the one directory result — directories always group first, same as a real listing
+		filepath.Join(sub, "aaa.txt"),
+		filepath.Join(sub, "zzz.txt"),
+	}
+	if len(gotOrder) != len(wantOrder) {
+		t.Fatalf("got %d rows, want %d: %v", len(gotOrder), len(wantOrder), gotOrder)
+	}
+	for i := range wantOrder {
+		if gotOrder[i] != wantOrder[i] {
+			t.Errorf("row %d = %q, want %q (full order: got %v, want %v)", i, gotOrder[i], wantOrder[i], gotOrder, wantOrder)
+		}
+	}
+}
+
+// TestAppendSearchResultShowsLineAndTextForContentMatch pins a content
+// (grep) match's own display text — "path:line: text" — while its
+// underlying rowRef.path stays the real, bare path throughout: only
+// display should ever carry the line/text suffix (see
+// searchResultEntry's own doc comment), never what activateRow or the
+// context menu actually acts on.
+func TestAppendSearchResultShowsLineAndTextForContentMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: target, Line: 42, Text: "needle found here"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != target {
+		t.Errorf("path = %q, want the bare real path %q", ref.path, target)
+	}
+	wantName := target + ":42: needle found here"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+}
+
+// TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches
+// pins the reason searchResultEntry carries display separately from
+// Entry.Name at all: a content search without "First hit" checked can
+// legitimately report the same file more than once, once per matching
+// line — both must show up as their own row, each with its own
+// distinct line/text, not collapse into one or silently overwrite each
+// other.
+func TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: target, Line: 3, Text: "first hit"})
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "second hit"})
+
+	if got := p.table.GetRowCount(); got != 2 {
+		t.Fatalf("got %d rows for two matches in the same file, want 2", got)
+	}
+	var gotNames []string
+	for row := 0; row < 2; row++ {
+		ref, ok := p.rowRef(row)
+		if !ok {
+			t.Fatalf("no rowRef for row %d", row)
+		}
+		if ref.path != target {
+			t.Errorf("row %d: path = %q, want %q", row, ref.path, target)
+		}
+		gotNames = append(gotNames, ref.name)
+	}
+	wantNames := []string{target + ":3: first hit", target + ":9: second hit"}
+	for _, want := range wantNames {
+		found := false
+		for _, got := range gotNames {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("gotNames = %v, missing %q", gotNames, want)
+		}
+	}
+}
+
+// TestSetSearchStatusPaintsHeaderWithNoClickableSpans pins that the
+// header, while showing search status text, has nothing left in
+// headerSpans — see captureHeaderMouse's own searchMode guard, which
+// depends on this to avoid falling through to openEdit.
+func TestSetSearchStatusPaintsHeaderWithNoClickableSpans(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+
+	p.setSearchStatus("⠋ searching…")
+
+	if got := p.header.GetText(true); got != "⠋ searching…" {
+		t.Errorf("header text = %q, want %q", got, "⠋ searching…")
+	}
+	if len(p.headerSpans) != 0 {
+		t.Errorf("headerSpans = %v after setSearchStatus, want empty", p.headerSpans)
+	}
+}
+
+// TestSetSortKeyInSearchModeReRendersWithoutTouchingRealDirectory pins
+// setSortKey's own searchMode branch: it re-sorts and redraws
+// searchEntries in place (renderSearchEntries), never calling load()
+// (which would fail here anyway, and would incorrectly reset
+// p.path/cursor if it somehow didn't) — the result count before and
+// after is the same, and p.path (never touched by search mode to begin
+// with) stays whatever the real directory already was.
+func TestSetSortKeyInSearchModeReRendersWithoutTouchingRealDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	realPath := p.path
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "banana.txt")})
+
+	p.setSortKey(sortBySize) // any key different from the default is enough to exercise the branch
+
+	if !p.searchMode {
+		t.Error("searchMode = false after a sort-key change, want still true")
+	}
+	if p.path != realPath {
+		t.Errorf("p.path = %q after a sort-key change in search mode, want unchanged %q", p.path, realPath)
+	}
+	if got := p.table.GetRowCount(); got != 2 {
+		t.Errorf("got %d rows after re-sorting, want still 2", got)
+	}
+}
+
+// TestRenderSearchEntriesPreservesCheckedStateAcrossSort pins the fix
+// renderSearchEntries needed on top of addRow's own usual behavior:
+// addRow always draws a fresh checkbox unchecked (correct for load(),
+// which resets p.selected right before calling it — see load's own
+// doc comment), so a search-mode re-render (triggered by a new result
+// streaming in, or a sort-key change) must explicitly restore each
+// row's own checked glyph from p.selected afterward, or a previously
+// checked result would silently render as unchecked again.
+func TestRenderSearchEntriesPreservesCheckedStateAcrossSort(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target})
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "banana.txt")})
+
+	var row int
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.path == target {
+			row = i
+			break
+		}
+	}
+	p.setChecked(row, true)
+
+	p.setSortKey(sortBySize) // forces a full renderSearchEntries re-render
+
+	if !p.selected[target] {
+		t.Fatalf("p.selected lost %q across a sort-key change", target)
+	}
+	var newRow int
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.path == target {
+			newRow = i
+			break
+		}
+	}
+	if cell := p.table.GetCell(newRow, colCheckbox); cell.Text != checkboxText(true) {
+		t.Errorf("checkbox glyph for %q = %q after re-sorting, want %q (still checked)", target, cell.Text, checkboxText(true))
+	}
+}
+
+// TestExitSearchResultsRestoresRealDirectoryAndCursor pins
+// exitSearchResults' own full round trip: leaving search mode brings
+// back exactly the real directory and cursor row the panel was showing
+// right before showSearchResults switched it over, per the user's own
+// explicit request that this look like nothing ever happened.
+func TestExitSearchResultsRestoresRealDirectoryAndCursor(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.focusRow(2)
+	realRowCount := p.table.GetRowCount()
+
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+
+	if err := p.exitSearchResults(); err != nil {
+		t.Fatalf("exitSearchResults: %v", err)
+	}
+
+	if p.searchMode {
+		t.Error("searchMode still true after exitSearchResults")
+	}
+	if got := p.table.GetRowCount(); got != realRowCount {
+		t.Errorf("got %d rows after exiting search results, want the real directory's own %d back", got, realRowCount)
+	}
+	row, _ := p.table.GetSelection()
+	if row != 2 {
+		t.Errorf("selected row after exitSearchResults = %d, want restored 2", row)
+	}
+}
+
+// TestActivateRowInSearchModeJumpsToResultInstead pins activateRow's
+// own searchMode branch: unlike a real directory row (where only a
+// directory does anything, and it's "cd into it"), any result — file
+// or directory alike — leaves search mode and jumps straight to the
+// result's real location, the same "Go to file/folder" meaning
+// left-click on a result has always had.
+func TestActivateRowInSearchModeJumpsToResultInstead(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt") // a file — activateRow on a real row would ignore this entirely
+	p.appendSearchResult(search.Result{Path: target})
+
+	p.activateRow(0)
+
+	if p.searchMode {
+		t.Error("searchMode still true after activating a search result")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q after activating the result, want its own real directory %q", p.path, dir)
+	}
+	row, _ := p.table.GetSelection()
+	ref, ok := p.rowRef(row)
+	if !ok || ref.path != target {
+		t.Errorf("selected row after activating the result = %+v, want it focused on %q", ref, target)
+	}
+}
+
+// TestFilterFieldInertWhileSearchMode pins the deliberate scope
+// boundary documented on filterField/filterRegexBtn's own guards:
+// neither touches filterText/filterRegex, and neither reloads
+// anything, while search results are showing — the search dialog
+// already has its own Filename/Content fields for that need.
+func TestFilterFieldInertWhileSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	rowsBefore := p.table.GetRowCount()
+
+	// SetText alone doesn't fire SetChangedFunc in tview unless the
+	// text actually differs from before — it does here, since
+	// filterField starts blank.
+	p.filterField.SetText("apple")
+
+	if p.filterText != "" {
+		t.Errorf("filterText = %q after typing while searchMode, want untouched %q", p.filterText, "")
+	}
+	if got := p.table.GetRowCount(); got != rowsBefore {
+		t.Errorf("got %d rows after typing in the filter field while searchMode, want unchanged %d (no reload)", got, rowsBefore)
+	}
+}
+
+// TestCaptureTableKeyEscapeCallsOnSearchEscapeOnlyInSearchMode pins
+// where "Esc: back to search" is actually wired now that results live
+// in the panel itself rather than a separate overlay — see
+// onSearchEscape's own doc comment.
+func TestCaptureTableKeyEscapeCallsOnSearchEscapeOnlyInSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onSearchEscape = func() { called = true }
+
+	p.captureTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if called {
+		t.Error("onSearchEscape ran while showing a real directory, want only in search mode")
+	}
+
+	p.showSearchResults()
+	p.captureTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if !called {
+		t.Error("onSearchEscape did not run for Escape while searchMode")
 	}
 }

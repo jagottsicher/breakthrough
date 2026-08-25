@@ -252,3 +252,60 @@ func TestListDirLarge(t *testing.T) {
 		}
 	}
 }
+
+// TestDescribeEntryMatchesListDir pins DescribeEntry's own central
+// claim: classifying one path in isolation comes back byte-for-byte
+// identical to what ListDir already reports for that same path as one
+// of a directory's many children — including LinkTarget/IsDir/MountPoint
+// for a directory symlink specifically, the one case that depends on
+// DescribeEntry resolving its own parentDev correctly (see its own doc
+// comment) rather than being handed one by a caller that already read
+// the whole directory.
+func TestDescribeEntryMatchesListDir(t *testing.T) {
+	dir := t.TempDir()
+
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target-dir")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	links := map[string]string{
+		"link-to-file.txt": target,
+		"link-to-dir":      targetDir,
+		"link-broken":      filepath.Join(dir, "does-not-exist"),
+	}
+	for name, dst := range links {
+		if err := os.Symlink(dst, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	entries, err := ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+
+	for _, want := range entries {
+		got := DescribeEntry(filepath.Join(dir, want.Name))
+		if got != want {
+			t.Errorf("DescribeEntry(%q) = %+v, want %+v (from ListDir)", want.Name, got, want)
+		}
+	}
+}
+
+// TestDescribeEntryNonExistent pins the same "vanished/never existed"
+// fallback describeEntry already gives ListDir for a race between
+// os.ReadDir and Lstat — DescribeEntry has no ReadDir step to race
+// with, but a search result can just as easily name a path that's been
+// deleted since the search that found it ran, so the same graceful
+// fallback (a plain TypeFile, not an error) matters here too.
+func TestDescribeEntryNonExistent(t *testing.T) {
+	got := DescribeEntry(filepath.Join(t.TempDir(), "does-not-exist"))
+	want := Entry{Name: "does-not-exist", Type: TypeFile}
+	if got != want {
+		t.Errorf("DescribeEntry(nonexistent) = %+v, want %+v", got, want)
+	}
+}
