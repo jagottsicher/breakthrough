@@ -1853,3 +1853,91 @@ func TestActivateRowOnFilenameMatchIgnoresOpenCallback(t *testing.T) {
 		t.Error("searchMode still true after activating a filename match, want the jump to have left it")
 	}
 }
+
+// TestActivateRowOnFilenameMatchCallsOnExitSearchResults pins the real
+// user report onExitSearchResults exists to fix: without it, a search
+// still running in the background (a slow archive listing especially —
+// see internal/search's own archive.go) kept streaming further results
+// into appendSearchResult/renderSearchEntries after the user had
+// already clicked a match and moved on, silently overwriting the real
+// directory the click just landed on with search results again. Root
+// wires this to cancelSearch (see NewRoot) — checked here only as "was
+// it called", not against the real search.Run machinery.
+func TestActivateRowOnFilenameMatchCallsOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target}) // Line == 0: a filename match
+
+	p.activateRow(0)
+
+	if !called {
+		t.Error("onExitSearchResults did not run for a filename match leaving search mode")
+	}
+}
+
+// TestActivateRowOnArchiveMatchCallsOnExitSearchResults is the same
+// pin, specifically for an archive-member match (ArchiveMember != "",
+// see appendSearchResult) — the case the user actually ran into: Path
+// is the real containing archive, still a plain filename-shaped match
+// (Line == 0), so it takes the exact same activateRow branch as any
+// other filename match.
+func TestActivateRowOnArchiveMatchCallsOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.showSearchResults()
+	archivePath := filepath.Join(dir, "docs.zip")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil { // must really exist: navigateAndSelect reloads dir for real and looks for it by name
+		t.Fatal(err)
+	}
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	p.activateRow(0)
+
+	if !called {
+		t.Error("onExitSearchResults did not run for an archive-member match leaving search mode")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q, want the jump to have landed on %q (the archive's own parent dir)", p.path, dir)
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row = (%d, %q, %v), want the real archive %q selected", row, path, ok, archivePath)
+	}
+}
+
+// TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults pins the
+// deliberate exception: a content match stays in search mode (see
+// TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode), so
+// nothing was actually exited — onExitSearchResults must not fire for
+// it, or a still-legitimately-running search would be cancelled out
+// from under a user still paging through its own matches.
+func TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.onOpenSearchResult = func(string, int) {}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if called {
+		t.Error("onExitSearchResults ran for a content match, want it left alone (search mode still showing)")
+	}
+}
