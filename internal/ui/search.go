@@ -1098,10 +1098,30 @@ func (r *Root) runSearch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.searchCancel = cancel
 
+	// Set here, not inside the req literal above: it closes over ctx,
+	// which doesn't exist yet at that point. Runs on whichever
+	// background goroutine is actually doing the work (the directory-
+	// progress walk, or one of several concurrent archive-listing
+	// workers — see search.Request.OnProgress's own doc comment), so
+	// the ctx.Err() check guards against a stale update landing after
+	// this same search has already been cancelled or superseded by a
+	// newer one — the same guard every other post-search UI update in
+	// this file already applies (see e.g. streamSearchResults).
+	req.OnProgress = func(path string) {
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.searchCurrentPos = path
+			r.renderSearchStatus()
+		})
+	}
+
 	r.hideOverlay() // close the form, revealing the panel underneath
 	r.panel.showSearchResults()
 	r.panel.setSearchStatusColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
+	r.searchCurrentPos = ""
 	r.searchLastDir = ""
 	r.searchStartDir = scope
 	r.renderSearchStatus()
@@ -1149,13 +1169,19 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 }
 
 // renderSearchStatus paints the panel's own header status line (see
-// Panel.setSearchStatus): the current animation frame plus whatever
-// directory streamSearchResults last saw a match in (searchLastDir),
-// falling back to Start at's own value (searchStartDir) until the
-// first result arrives.
+// Panel.setSearchStatus): the current animation frame plus wherever the
+// search actually is right now — searchCurrentPos, live from
+// search.Request.OnProgress (see runSearch), whenever there is one;
+// falling back to whatever directory streamSearchResults last saw a
+// match in (searchLastDir) once progress has nothing to show (locate,
+// or the search has already finished), and finally to Start at's own
+// value (searchStartDir) until either one has anything at all.
 func (r *Root) renderSearchStatus() {
 	frame := hashAnimationFrames[r.searchAnimFrame%len(hashAnimationFrames)]
-	dir := r.searchLastDir
+	dir := r.searchCurrentPos
+	if dir == "" {
+		dir = r.searchLastDir
+	}
 	if dir == "" {
 		dir = r.searchStartDir
 	}

@@ -820,6 +820,32 @@ func TestRunSearchIncludeArchivesIgnoredForContentSearch(t *testing.T) {
 	}
 }
 
+// TestRunSearchWiresOnProgress pins that runSearch actually sets
+// search.Request.OnProgress (see renderSearchStatus/searchCurrentPos) —
+// not exercised end to end here (that would need the real
+// tview.Application event loop actually running to drain
+// QueueUpdateDraw, which this package's own tests deliberately avoid
+// needing — see StartClock's own doc comment for the identical
+// concern), just that the wiring itself is actually in place rather
+// than silently left nil.
+func TestRunSearchWiresOnProgress(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.runSearch()
+
+	if captured.OnProgress == nil {
+		t.Error("OnProgress = nil, want it wired for the status line's live progress")
+	}
+}
+
 // TestRunSearchStripsSlashesFromIgnoreDirs pins the real user report
 // end to end, through the actual dialog field runSearch reads (not
 // just parseIgnoreDirs in isolation — see its own test): typing
@@ -1103,9 +1129,11 @@ func TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack(t *testing.T) {
 }
 
 // TestRenderSearchStatusShowsAnimationFrameAndFallbackDir pins
-// renderSearchStatus' own two-source text: the current animation frame
-// (see hashAnimationFrames, reused directly) plus searchLastDir once
-// set, falling back to searchStartDir before any result has arrived.
+// renderSearchStatus' own three-source text, most-specific first: the
+// current animation frame (see hashAnimationFrames, reused directly)
+// plus searchCurrentPos (live OnProgress) once set, falling back to
+// searchLastDir once a result has arrived, and finally to
+// searchStartDir before either one has anything at all.
 func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -1117,6 +1145,7 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	r.searchAnimFrame = 2
 	r.searchStartDir = "/start"
 	r.searchLastDir = ""
+	r.searchCurrentPos = ""
 	r.renderSearchStatus()
 
 	got := r.panel.header.GetText(true)
@@ -1132,6 +1161,16 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	got = r.panel.header.GetText(true)
 	if !strings.Contains(got, "/found/here") {
 		t.Errorf("status = %q, want searchLastDir (%q) once a result has arrived", got, "/found/here")
+	}
+
+	r.searchCurrentPos = "/currently/scanning/this"
+	r.renderSearchStatus()
+	got = r.panel.header.GetText(true)
+	if !strings.Contains(got, "/currently/scanning/this") {
+		t.Errorf("status = %q, want live searchCurrentPos (%q) to win over searchLastDir", got, "/currently/scanning/this")
+	}
+	if strings.Contains(got, "/found/here") {
+		t.Errorf("status = %q, want searchLastDir not shown once searchCurrentPos is set", got)
 	}
 }
 
