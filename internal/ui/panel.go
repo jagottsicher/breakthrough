@@ -417,7 +417,24 @@ func (p *Panel) applyTheme(theme config.ResolvedTheme) {
 //     it's whatever row a previous, unrelated directory's listing had
 //     it on, not necessarily even a valid row in this one) reads as
 //     arbitrary, not "here's the directory you just opened".
+//
+// Also always exits search mode first, unconditionally: showing a real
+// directory (what load does, definitionally) and showing search
+// results (searchMode) are mutually exclusive states, and a great many
+// existing actions elsewhere (Rename, chown/chmod, Properties' own
+// Save, every "Globals" toggle, ...) already refresh via this exact
+// p.load(p.path) idiom without knowing anything about search mode at
+// all — right-clicking a search-result row for any of them reaches
+// r.menu's own real, ordinary items unchanged (see Root.captureMouse's
+// MouseRightClick case, which never treated a search-mode row any
+// differently to begin with). Without this, one of those would leave
+// searchMode still true while the table itself had already been
+// silently overwritten with a real directory's rows — activateRow,
+// setSortKey, and the filter box would all keep taking their own
+// searchMode branch against rows that, by then, are not search results
+// at all.
 func (p *Panel) load(dir string) error {
+	p.searchMode = false
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -566,6 +583,17 @@ func (p *Panel) appendSearchResult(res search.Result) {
 func (p *Panel) setSearchStatus(text string) {
 	p.header.SetText(text)
 	p.headerSpans = nil
+}
+
+// setSearchStatusColor overrides the header's text color while showing
+// search status — normally left at its usual paintStaticChrome color
+// (theme.Text), but set to theme.EntryError for a search that was
+// refused before it ever ran (see Root.showSearchError) — the same red
+// a broken symlink already gets in a real listing (see entryColor).
+// Root.runSearch resets it back to theme.Text before a real search
+// begins, in case a previous one left it red.
+func (p *Panel) setSearchStatusColor(c tcell.Color) {
+	p.header.SetTextColor(c)
 }
 
 // renderSearchEntries re-sorts (per whatever sortKey/sortDescending are
@@ -1445,10 +1473,9 @@ func (p *Panel) navigate(dir string) error {
 // produced one (see the same filter/showHidden rules any other row is
 // subject to — a target the current filter or a hidden-files toggle
 // would exclude simply isn't found here, not an error), gets the
-// cursor. Used by the search dialog's own results list (see
-// Root.openSearchResult) to jump straight to a match instead of just
-// opening the directory it's in and leaving the cursor whichever entry
-// load()'s own top-of-listing reset already put it on.
+// cursor. Used by activateRow's own searchMode branch to jump straight
+// to a search result instead of just opening the directory it's in and
+// leaving the cursor wherever load()'s own top-of-listing reset put it.
 func (p *Panel) navigateAndSelect(target string) error {
 	if err := p.navigate(filepath.Dir(target)); err != nil {
 		return err
