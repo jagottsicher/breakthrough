@@ -945,8 +945,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
-		p.activateRow(row)
-		return false // still let the row become selected/highlighted
+		return p.activateRow(row)
 	})
 	p.table.SetCell(row, colName, name)
 
@@ -1403,27 +1402,47 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // instead this leaves search mode entirely and jumps to the result's
 // real location (see navigateAndSelect), the same "Go to file/folder"
 // meaning left-click on a result has always had otherwise.
-func (p *Panel) activateRow(row int) {
+//
+// Returns whether IT already settled the table's own selection itself
+// (a real user report: it always did, but the caller — addRow's own
+// name.SetClickedFunc — used to unconditionally tell tview.Table to
+// *also* select whatever cell the click's own screen position landed
+// on. Table.MouseHandler computes that position before ever calling
+// this func at all, so once navigate/navigateAndSelect has gone on to
+// clear and rebuild the whole table underneath it — a genuinely
+// different directory, with completely different rows now sitting at
+// that same numeric index — tview's own follow-up selection silently
+// overwrote a correct, deliberate one (e.g. landing exactly on a
+// search result's own real archive file) with whatever row happened to
+// occupy the *old* table's row/column index instead, typically the
+// wrong entry entirely (verified against tview's own Table.MouseHandler
+// source, not guessed). Only the two branches that never touch the
+// table itself (a content match, and any click activateRow otherwise
+// no-ops on) return false, letting tview's own default selection still
+// provide the "row highlights" feedback a real file click's own no-op
+// would otherwise leave invisible.
+func (p *Panel) activateRow(row int) (handledSelection bool) {
 	ref, ok := p.rowRef(row)
 	if !ok {
-		return
+		return false
 	}
 	if p.searchMode {
 		if ref.searchLine > 0 && p.onOpenSearchResult != nil {
 			p.onOpenSearchResult(ref.path, ref.searchLine)
-			return
+			return false
 		}
 		p.searchMode = false
 		if p.onExitSearchResults != nil {
 			p.onExitSearchResults()
 		}
 		p.reportError(p.navigateAndSelect(ref.path))
-		return
+		return true
 	}
 	if !ref.isDir {
-		return
+		return false
 	}
 	p.reportError(p.navigate(ref.path))
+	return true
 }
 
 // nameCellRect returns the on-screen position and width row's name cell
