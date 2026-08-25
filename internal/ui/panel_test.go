@@ -1916,6 +1916,67 @@ func TestActivateRowOnArchiveMatchCallsOnExitSearchResults(t *testing.T) {
 	}
 }
 
+// TestArchiveResultRealClickSelectsArchiveNotStaleIndex is a real
+// click, dispatched through p.table's own MouseHandler the way an
+// actual click arrives — the same rigor TestColumnHeaderClickSortsBySize
+// already applies, for the exact same reason: this is coordinate-
+// dependent click routing, not something a direct activateRow(row)
+// call alone can catch.
+//
+// The bug this pins (a real user report): Table.MouseHandler computes
+// (row, column) from the click's own screen position *before* calling
+// the clicked cell's own ClickedFunc, then — unless that func returns
+// true — calls t.Select(row, column) with those same, now-stale
+// coordinates *after* it returns (verified against tview's own
+// table.go source, not guessed). Activating a search result rebuilds
+// the whole table into a different, real directory first (see
+// navigateAndSelect) — by the time MouseHandler's own follow-up
+// t.Select ran, it was silently overwriting a correct, deliberate
+// selection (the archive itself) with whatever row happened to occupy
+// that same numeric index in the *new* table instead (here: row 0,
+// the ".." entry — search-mode's own listing has no such row at all,
+// so index 0 there is the archive itself). activateRow's own
+// handledSelection return value (see its doc comment) is what
+// SetClickedFunc now reports back, suppressing that follow-up call.
+func TestArchiveResultRealClickSelectsArchiveNotStaleIndex(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "docs.zip")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(120, 24)
+	p.table.SetRect(0, 0, 120, 20)
+	p.table.Draw(screen) // populates GetLastPosition for nameCellRect below
+
+	x, y, _, ok := p.nameCellRect(0) // row 0: the one archive result, before the click
+	if !ok {
+		t.Fatal("nameCellRect(0) not ok")
+	}
+
+	handler := p.table.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if p.path != dir {
+		t.Errorf("p.path = %q, want %q", p.path, dir)
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row after a real click = (%d, %q, %v), want the archive %q selected, not the stale row-0 index", row, path, ok, archivePath)
+	}
+}
+
 // TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults pins the
 // deliberate exception: a content match stays in search mode (see
 // TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode), so
