@@ -234,10 +234,17 @@ func TestDirCompletionsExcludesFiles(t *testing.T) {
 // differing purely in case.
 func TestDirCompletionsIsCaseSensitive(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"Foo", "foo"} {
-		if err := os.Mkdir(filepath.Join(dir, name), 0755); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.Mkdir(filepath.Join(dir, "Foo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "foo"), 0755); err != nil {
+		// A case-insensitive-but-preserving filesystem (macOS' own
+		// default APFS mode, unlike Linux' usual ext4/xfs/btrfs) treats
+		// "Foo" and "foo" as the very same entry — "Foo" already exists
+		// by the time this one runs, so this isn't a real failure, just
+		// this test's own premise (two directories differing only in
+		// case coexisting) not holding on this filesystem.
+		t.Skipf("can't create \"foo\" alongside \"Foo\" — case-insensitive filesystem? %v", err)
 	}
 
 	var p Panel
