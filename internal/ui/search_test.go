@@ -1172,15 +1172,23 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	if strings.Contains(got, "/found/here") {
 		t.Errorf("status = %q, want searchLastDir not shown once searchCurrentPos is set", got)
 	}
+	// The real user report this pins: with searchCurrentPos changing
+	// length on every live update, an Esc hint placed after it visibly
+	// jumped left/right along with it — see setSearchStatusLive's own
+	// doc comment. The hint's own position must stay right after the
+	// animation frame instead, never after the live-changing detail.
+	if hintIdx, detailIdx := strings.Index(got, "Esc"), strings.Index(got, "/currently/scanning/this"); hintIdx < 0 || detailIdx < 0 || hintIdx > detailIdx {
+		t.Errorf("status = %q, want the Esc hint before searchCurrentPos, not after (hintIdx=%d, detailIdx=%d)", got, hintIdx, detailIdx)
+	}
 }
 
 // TestSetSearchStatusAlwaysAppendsEscHint pins the user's own explicit
 // request: the panel's own search-status line always reminds that
 // Escape goes back to the search, regardless of the search's own
-// outcome — checked directly against setSearchStatus, the one place
-// all of its own callers (renderSearchStatus, streamSearchResults,
-// showSearchError) actually set that status text, so the hint can
-// never be left off some future fourth one.
+// outcome — checked directly against setSearchStatus, used by
+// streamSearchResults' own final status and showSearchError (see
+// setSearchStatusLive's own doc comment for renderSearchStatus's own,
+// differently-ordered variant, covered by its own test below).
 func TestSetSearchStatusAlwaysAppendsEscHint(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -1197,6 +1205,38 @@ func TestSetSearchStatusAlwaysAppendsEscHint(t *testing.T) {
 	r.setSearchStatus("") // showSearchError's own case — no other status text at all
 	if got := r.panel.header.GetText(true); !strings.Contains(got, "Esc") {
 		t.Errorf("status with no other text = %q, want it to still mention Esc", got)
+	}
+}
+
+// TestSetSearchStatusLiveKeepsHintBeforeDetail pins the real user
+// report renderSearchStatus's own doc comment describes: with the Esc
+// hint appended at the very end (setSearchStatus's own shape), a
+// continuously changing, variable-length detail (searchCurrentPos)
+// pushed the hint's own on-screen position left and right on every
+// single live update. setSearchStatusLive instead keeps the hint
+// sandwiched right after prefix, before detail, so the hint's own
+// position stays fixed regardless of how long detail currently is.
+func TestSetSearchStatusLiveKeepsHintBeforeDetail(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.setSearchStatusLive("|", "/very/long/currently/scanning/path")
+	got := r.panel.header.GetText(true)
+
+	hintIdx := strings.Index(got, "Esc")
+	detailIdx := strings.Index(got, "/very/long/currently/scanning/path")
+	if hintIdx < 0 || detailIdx < 0 {
+		t.Fatalf("status = %q, want both the Esc hint and the detail present", got)
+	}
+	if hintIdx > detailIdx {
+		t.Errorf("status = %q, want the Esc hint before the detail, not after", got)
+	}
+	if !strings.HasPrefix(got, "|") {
+		t.Errorf("status = %q, want it to start with prefix %q", got, "|")
 	}
 }
 
