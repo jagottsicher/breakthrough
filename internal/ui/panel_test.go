@@ -212,6 +212,65 @@ func TestCompletionsNoMatch(t *testing.T) {
 	}
 }
 
+// TestDirCompletionsExcludesFiles pins dirCompletions' own first
+// difference from completions — per the user's own explicit request:
+// apple.txt/apricot.txt (files, matching "ap" too) are excluded
+// outright, leaving only the one real directory that starts with it.
+func TestDirCompletionsExcludesFiles(t *testing.T) {
+	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+
+	var p Panel
+	got := p.dirCompletions(dir + "/ap")
+
+	want := []string{dir + "/app-data/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (files excluded)", got, want)
+	}
+}
+
+// TestDirCompletionsIsCaseSensitive pins dirCompletions' own second
+// difference from completions — per the user's own explicit request: a
+// lowercase prefix matches only a same-case directory, not one
+// differing purely in case.
+func TestDirCompletionsIsCaseSensitive(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"Foo", "foo"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var p Panel
+	got := p.dirCompletions(dir + "/F")
+
+	want := []string{dir + "/Foo/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (\"foo/\" differs only in case, shouldn't match \"F\")", got, want)
+	}
+}
+
+// TestDirCompletionsIncludesDirSymlinks pins that a symlink resolving
+// to a directory is treated the same as a real directory (Entry.IsDir
+// already accounts for this — see its own doc comment), not excluded
+// alongside plain files.
+func TestDirCompletionsIncludesDirSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "realdir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "realdir"), filepath.Join(dir, "linkdir")); err != nil {
+		t.Fatal(err)
+	}
+
+	var p Panel
+	got := p.dirCompletions(dir + "/link")
+
+	want := []string{dir + "/linkdir/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (a directory symlink should match like a real directory)", got, want)
+	}
+}
+
 func TestLongestCommonPrefix(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -225,6 +284,14 @@ func TestLongestCommonPrefix(t *testing.T) {
 		{"nothing in common", []string{"apple", "banana"}, ""},
 		// Compared by rune, so a multi-byte character is never cut in half.
 		{"multi-byte", []string{"äpfel", "äpril"}, "äp"},
+		// Case-insensitive comparison (matching completions' own
+		// case-insensitive matching — see this func's own doc comment):
+		// these two only share "Download" case-insensitively, diverging
+		// at the 9th character ('s' vs '-') — a case-sensitive compare
+		// would have collapsed this all the way back to "" the moment it
+		// hit the very first differing-case letter ('D' vs 'd'), a real
+		// bug this pins the fix for.
+		{"case-insensitive divergence", []string{"Downloads", "download-thing.sh"}, "Download"},
 	}
 
 	for _, tt := range tests {
