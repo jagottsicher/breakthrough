@@ -335,11 +335,14 @@ type Root struct {
 	// is what renderProperties checks to show the current animation
 	// frame instead of the plain hint or the finished results;
 	// hashAnimFrame is which frame that is, advanced by a ticker on its
-	// own background goroutine; hashCancel stops that ticker (and lets a
-	// still-running fsops.Hash's own eventual result recognize it's
-	// stale — see computeHashes) once a newer hash computation, or
-	// reopening Properties for a different target (see openProperties),
-	// has superseded it.
+	// own background goroutine; hashCancel stops that ticker and — via
+	// the same ctx — an in-flight fsops.Hash call itself, promptly, not
+	// just its eventual reporting (see fsops.Hash's own doc comment on
+	// why that distinction is what actually stops it from still reading
+	// and reporting progress into hashBytesRead well after being
+	// "cancelled" — a real bug this fixed) — once a newer hash
+	// computation, or reopening Properties for a different target (see
+	// openProperties), has superseded it.
 	hashInProgress bool
 	hashAnimFrame  int
 	hashCancel     context.CancelFunc
