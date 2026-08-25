@@ -1734,3 +1734,86 @@ func TestCaptureTableKeyEscapeCallsOnSearchEscapeOnlyInSearchMode(t *testing.T) 
 		t.Error("onSearchEscape did not run for Escape while searchMode")
 	}
 }
+
+// TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode pins
+// the user's own explicit request: activating a content-search result
+// (Line > 0 — see rowRef.searchLine) calls onOpenSearchResult with its
+// real path and matched line instead of just jumping to it, and —
+// deliberately, unlike a filename match — leaves search mode showing
+// afterward, so the next match is still right there to try.
+func TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	var gotPath string
+	var gotLine int
+	p.onOpenSearchResult = func(path string, line int) {
+		gotPath, gotLine = path, line
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if gotPath != target || gotLine != 9 {
+		t.Errorf("onOpenSearchResult got (%q, %d), want (%q, %d)", gotPath, gotLine, target, 9)
+	}
+	if !p.searchMode {
+		t.Error("searchMode = false after opening a content match, want still true")
+	}
+}
+
+// TestActivateRowOnContentMatchFallsBackWithoutOpenCallback pins the
+// same nil-safety onSearchEscape already has: with onOpenSearchResult
+// left nil (e.g. a Panel built without Root wiring it — see its own
+// doc comment), a content match still falls back to the ordinary
+// jump-to-result behavior rather than silently doing nothing.
+func TestActivateRowOnContentMatchFallsBackWithoutOpenCallback(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if p.searchMode {
+		t.Error("searchMode still true after activating a content match with no onOpenSearchResult, want the fallback jump to have left it")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q, want the fallback jump to have landed on %q", p.path, dir)
+	}
+}
+
+// TestActivateRowOnFilenameMatchIgnoresOpenCallback pins that
+// onOpenSearchResult is only ever consulted for a content match
+// (searchLine > 0) — a filename match (Line == 0) always jumps to its
+// real location instead, even with a callback set, since there's no
+// specific line to open it at in the first place.
+func TestActivateRowOnFilenameMatchIgnoresOpenCallback(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onOpenSearchResult = func(string, int) { called = true }
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target}) // Line == 0: a filename match
+
+	p.activateRow(0)
+
+	if called {
+		t.Error("onOpenSearchResult ran for a filename match, want it only ever consulted for a content match")
+	}
+	if p.searchMode {
+		t.Error("searchMode still true after activating a filename match, want the jump to have left it")
+	}
+}
