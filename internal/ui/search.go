@@ -935,9 +935,31 @@ func (r *Root) runSearch() {
 	scope := r.panel.resolvePath(r.searchScopeValue)
 	engine := r.searchEngineOptions[r.searchEngineIdx].engine
 
-	// Only checked for EngineFind: EngineLocate never uses Scope at all
-	// (see Request.Scope's own doc comment — its own dimmed, disabled-
-	// looking Start-at field in this dialog already signals that).
+	// locate has no directory-scope concept of its own at all (see
+	// search.Request.Scope's own doc comment) — Start-at sits dimmed
+	// and inert in this dialog whenever Engine is locate, for exactly
+	// that reason, and a locate-narrowed search (Filename filled in
+	// too) doesn't need Scope for anything either way (see
+	// search.listThenGrep). A *plain* content search under locate —
+	// Filename left blank, nothing for locate itself to narrow with —
+	// is different: runContentSearch still has to grep something
+	// recursively, and Start-at's own stale, dimmed-and-inert value is
+	// the wrong thing to grep from. Per the user's own explicit
+	// request: the panel's own actual current directory is what "start
+	// point" means once there's no real Start-at to speak of, not
+	// whatever text happens to still be sitting in that field.
+	if engine == search.EngineLocate && contentMode != search.ContentNone && r.searchFilenameValue == "" {
+		scope = r.panel.path
+	}
+
+	// Only checked for EngineFind: whenever EngineLocate actually ends
+	// up using scope for anything (the plain-content-search override
+	// just above), it's always r.panel.path — a real, currently-loaded
+	// directory that can't fail this check — and every other EngineLocate
+	// case still doesn't use scope at all (see Request.Scope's own doc
+	// comment — its own dimmed, disabled-looking Start-at field in this
+	// dialog already signals that).
+	//
 	// Without this, a typo'd or since-deleted Start-at directory ran
 	// find(1) anyway — it exits complaining to stderr, this app's own
 	// runner.go deliberately never treats a non-zero exit as an error

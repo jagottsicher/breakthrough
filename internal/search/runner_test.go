@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -477,5 +479,59 @@ func TestUnderIgnoredDir(t *testing.T) {
 		if got := underIgnoredDir(tt.path, tt.ignoreDirs); got != tt.want {
 			t.Errorf("underIgnoredDir(%q, %v) = %v, want %v", tt.path, tt.ignoreDirs, got, tt.want)
 		}
+	}
+}
+
+// TestFilenameCommandDispatchesOnEngine pins filenameCommand's own
+// central decision, now that it takes explicit pattern/mode/
+// caseSensitive parameters instead of reading them off a Request
+// directly (see its own doc comment on why: listThenGrep needs to call
+// it for a name-*narrowing* pattern, never the Request's own Pattern/
+// Mode, which for a content search means something else entirely) —
+// engine alone decides "find" vs "locate", and each carries its own
+// real args, not just an empty placeholder for the other's sake. A
+// pure, no-subprocess test: real locate/find execution is
+// environment-dependent (locate's own index, in particular, can't be
+// controlled from a test — see this package's own locate_test.go,
+// which is exactly this same "test the args, not a real invocation"
+// boundary for LocateArgs itself).
+func TestFilenameCommandDispatchesOnEngine(t *testing.T) {
+	name, args, ok := filenameCommand(EngineLocate, "/ignored/for/locate", "*.go", ModeGlob, nil, false, false, false)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if name != "locate" {
+		t.Errorf("name = %q, want %q", name, "locate")
+	}
+	wantArgs, _ := LocateArgs("linux", "*.go", ModeGlob, false)
+	if runtime.GOOS == "linux" && !reflect.DeepEqual(args, wantArgs) {
+		t.Errorf("args = %v, want %v (matching LocateArgs directly)", args, wantArgs)
+	}
+
+	name, args, ok = filenameCommand(EngineFind, "/some/scope", "*.go", ModeGlob, nil, false, false, false)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if name != "find" {
+		t.Errorf("name = %q, want %q", name, "find")
+	}
+	wantArgs = FindArgs(runtime.GOOS, "/some/scope", "*.go", ModeGlob, nil, false, false, false)
+	if !reflect.DeepEqual(args, wantArgs) {
+		t.Errorf("args = %v, want %v (matching FindArgs directly)", args, wantArgs)
+	}
+}
+
+// TestFilenameCommandPropagatesLocateRegexUnavailable pins that
+// filenameCommand's own ok=false (see LocateArgs' identical case)
+// survives the refactor to explicit parameters — a regex search under
+// locate on a platform with no regex support of its own must still be
+// refused, not silently build a command that would just fail with a
+// usage error.
+func TestFilenameCommandPropagatesLocateRegexUnavailable(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("regex is available for locate on linux — see LocateArgs' own doc comment")
+	}
+	if _, _, ok := filenameCommand(EngineLocate, "", `.*\.go$`, ModeRegex, nil, false, false, false); ok {
+		t.Error("ok = true, want false — this platform's locate has no regex support")
 	}
 }
