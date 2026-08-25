@@ -27,26 +27,68 @@ terminal.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
-- A right-click context menu: an editable Properties view (name,
-  permissions — click a bit or type the octal value directly, owner and
-  group via a scrollable picker of every local user/group, modified
-  date and time), Rename, checkbox-based multi-selection (including
-  glob-pattern Select +/-), Copy/Cut/Paste, chmod, and chown.
+- A right-click context menu: Properties (editable — name, permissions,
+  click a bit or type the octal value directly, owner and group via a
+  scrollable picker of every local user/group, modified date and time),
+  Edit, Rename, checkbox-based multi-selection (including glob-pattern
+  Select +/-), Copy/Cut/Paste, chmod, and chown.
 - A bottom bar: a real shell command line (with its own history, shared
   with your regular shell's `$HISTFILE`, and `cd` handled directly
   rather than uselessly changing a subshell's own directory) plus quick
-  actions — Edit (`^E`, opens `$VISUAL`/`$EDITOR` on the selected file),
-  Rename (`^R`), toggle hidden files (`^G`) — alongside the current
-  user, disk usage for the directory on screen, and a clock.
+  actions — Edit (`^E`, opens `$VISUAL`/`$EDITOR`, or
+  [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
+  own pick if set, on the selected file), Rename (`^R`), toggle hidden
+  files (`^G`), Search (`^F`, see below), Settings (`^X`) — alongside
+  the current user, disk usage for the directory on screen, and a clock.
+  Hidden-files/size-format/mtime-format toggles are remembered across
+  restarts.
+- Color schemes: JSON files under `colorschemes/` in either config tier
+  (see below), switchable live from the Settings overlay (`^X` or the
+  bottom bar's own button) — no restart needed, and the pick is
+  remembered for next time.
+- Search (`^F`, or the bottom bar's own button): by file name (glob, a
+  plain keyword, or regex — via `find`, or `locate` where its own index
+  is available) or by file content (`grep`, and — where installed —
+  `zgrep`/`zipgrep` for gzip/zip contents), scoped to any directory,
+  with real-time streamed results you can jump straight to. Runs the
+  real system tools rather than a reimplemented search, so it inherits
+  whatever's already indexed by `locate`'s own `updatedb`.
 
 ## Status
 
 Actively developed. The single-panel core above is functional and
-tested; a second panel, a session-scoped trash, and a settings/config
-layer (`/etc/breakthrough` + `~/.config/breakthrough`) are planned next
-— see [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
+tested; a second panel, a session-scoped trash, and the rest of the
+settings layer beyond color schemes are planned next — see
+[docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
+
+## Color schemes
+
+breakthrough ships with one built-in scheme ("Default") and reads
+further ones from `colorschemes/*.json` in either config tier —
+`/etc/breakthrough/colorschemes/` for system-wide schemes,
+`~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
+if set) for your own; a user file with the same name replaces a system
+one. Switch between whatever's found via the Settings overlay (`^X`, or
+its button in the bottom bar) — the pick applies immediately and is
+saved to your own `~/.config/breakthrough/config`.
+
+Two ready-made examples ship in [`examples/colorschemes/`](examples/colorschemes/)
+— a dark Solarized-based scheme and a light one:
+
+```sh
+mkdir -p ~/.config/breakthrough/colorschemes
+cp examples/colorschemes/*.json ~/.config/breakthrough/colorschemes/
+```
+
+A scheme file only needs to set the fields it actually wants to change —
+anything left out falls back to the Default scheme's own value. Each
+color is either a `#rrggbb` hex value or a
+[W3C color name](https://pkg.go.dev/github.com/gdamore/tcell/v2#pkg-variables)
+(e.g. `"darkslategray"`). See
+[`examples/colorschemes/solarized.json`](examples/colorschemes/solarized.json)
+for every field a scheme can set.
 
 ## Installing
 

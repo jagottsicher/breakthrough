@@ -10,9 +10,10 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestContextMenuStructure pins the menu's grouping: Info/Rename, then a
-// "Selection" section, a "Commands" section, and a "Globals" section, in
-// that order — the shape Root.NewRoot builds it in.
+// TestContextMenuStructure pins the menu's grouping: Properties/Edit/
+// Rename, then a "Selection" section, a "Commands" section, and a
+// "Globals" section, in that order — the shape Root.NewRoot builds it
+// in.
 func TestContextMenuStructure(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -21,15 +22,15 @@ func TestContextMenuStructure(t *testing.T) {
 	}
 
 	want := []string{
-		"Properties", "Rename",
+		"Properties", "Edit", "Rename",
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod",
 		menuSectionLabel("Globals"),
-		"Hide hidden files",               // dotfiles are shown by default now
-		"Show size in bytes",              // human-readable is the default
-		"Show modified date as timestamp", // formatted is the default
+		"Hide hidden files",       // dotfiles are shown by default now
+		"Show size in bytes",      // human-readable is the default
+		"Show mtime as timestamp", // formatted is the default
 	}
 	if got := r.menu.GetItemCount(); got != len(want) {
 		t.Fatalf("menu has %d items, want %d", got, len(want))
@@ -38,6 +39,45 @@ func TestContextMenuStructure(t *testing.T) {
 		if main, _ := r.menu.GetItemText(i); main != wantText {
 			t.Errorf("item %d = %q, want %q", i, main, wantText)
 		}
+	}
+}
+
+// TestContextMenuEditRunsEditCurrentEntry pins the new "Edit" menu item
+// (see NewRoot): it's wired to editCurrentEntry, the same action the
+// bottom bar's own Edit button/Ctrl+E already runs — see
+// editCurrentEntry's own doc comment for why reading
+// Panel.CurrentRowPath there already targets whichever row the context
+// menu was opened for, without this item needing r.target itself.
+// app.Suspend is a no-op here (no real screen behind r.app — see
+// runEditor's own doc comment), so this only pins that selecting the
+// item reaches editCurrentEntry/runEditor and the panel reloads
+// cleanly afterwards, not that an editor actually ran.
+func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
+	r.target = filepath.Join(dir, "apple.txt")
+	r.showMenu(0, 0) // open the context menu the way a real right-click would
+
+	editIdx := -1
+	for i := 0; i < r.menu.GetItemCount(); i++ {
+		if main, _ := r.menu.GetItemText(i); main == "Edit" {
+			editIdx = i
+			break
+		}
+	}
+	if editIdx < 0 {
+		t.Fatal(`no "Edit" item found in the context menu`)
+	}
+
+	r.menu.SetCurrentItem(editIdx)
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage == errorPage {
+		t.Errorf("selecting Edit should not report an error here, got: %q", r.errorView.GetText(true))
 	}
 }
 
@@ -122,8 +162,8 @@ func TestToggleMtimeUnixViaMenu(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date as timestamp" {
-		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show modified date as timestamp")
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show mtime as timestamp" {
+		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show mtime as timestamp")
 	}
 
 	r.toggleMtimeUnix()
@@ -131,8 +171,8 @@ func TestToggleMtimeUnixViaMenu(t *testing.T) {
 	if !r.panel.mtimeUnix {
 		t.Error("mtimeUnix should be true after toggling once")
 	}
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show modified date formatted" {
-		t.Errorf("mtime-format label = %q, want %q", main, "Show modified date formatted")
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show mtime formatted" {
+		t.Errorf("mtime-format label = %q, want %q", main, "Show mtime formatted")
 	}
 
 	r.toggleMtimeUnix()

@@ -1,14 +1,19 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -64,6 +69,19 @@ type Root struct {
 
 	app *tview.Application
 
+	// theme is the active color scheme, resolved once at startup (see
+	// loadInitialSettings/applyTheme) from settings.ColorScheme against
+	// colorSchemes, and again live whenever the Options overlay (see
+	// openOptions/applyColorScheme) picks a different one. settings is
+	// every other on-disk setting alongside it (currently just the
+	// reserved, not-yet-functional Language placeholder — see
+	// config.Settings' own doc comment). colorSchemes is every scheme
+	// available to pick from, loaded once at startup — see openOptions'
+	// own doc comment on why it isn't re-scanned on every open.
+	theme        config.ResolvedTheme
+	settings     config.Settings
+	colorSchemes []config.NamedTheme
+
 	panel       *Panel
 	menu        *tview.List
 	rename      *tview.InputField
@@ -71,6 +89,126 @@ type Root struct {
 	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
+	optionsList *tview.List     // Options overlay — see openOptions
+	helpView    *tview.TextView // Help overlay — see help.go/openHelp
+
+	// The directory picker (see dirpicker.go/openDirPicker) — the
+	// "Tree" browse action shared by the search dialog's Start-at field
+	// and, later, the planned Copy-to/Move-to target navigation.
+	// dirPickerPath is whatever directory is currently being browsed;
+	// dirPickerOnSelect/dirPickerOnCancel are set fresh by each
+	// openDirPicker call, run by confirmDirPicker/cancelDirPicker.
+	dirPicker          *tview.Flex
+	dirPickerHeader    *tview.TextView
+	dirPickerList      *tview.List
+	dirPickerSelectBtn *tview.Button
+	dirPickerCancelBtn *tview.Button
+	dirPickerPath      string
+	dirPickerOnSelect  func(string)
+	dirPickerOnCancel  func()
+
+	// The search dialog (see search.go/newSearchDialog) — after MC's
+	// own Find File dialog, reusing Properties' own "plain text plus a
+	// shared inline editor" editing paradigm (see newPropertiesView).
+	// searchPages wraps searchFieldsPages (the fields — see below) as
+	// its own single page — results themselves show directly in the
+	// panel's own normal file overview area instead of a second page
+	// here (see Panel.showSearchResults), per the user's own request.
+	//
+	// searchFieldsPages itself wraps the fields Flex (searchTop/
+	// searchLeft/searchRight — MC's own Start-at/Ignore-dirs block
+	// above a two-column Filename/Content section, plus searchButtons)
+	// and searchEditField, the one shared inline editor repositioned
+	// over whichever field is currently being edited (see
+	// activateSearchTextField) — the same "one shared field,
+	// repositioned per use" approach propertiesEditField/Root.rename/
+	// Root.prompt all already use. searchEditCommit is that field's own
+	// pending commit callback, set fresh each time (see
+	// activateSearchTextField/finishSearchEdit).
+	//
+	// searchSpans is every clickable/keyboard-focusable region across
+	// all three of searchTop/searchLeft/searchRight, rebuilt on every
+	// render (see rerenderSearchDialog) — the same running list
+	// propertySpans is for Properties, just spanning three TextViews
+	// instead of one (see searchSpan's own doc comment). searchFocusedIdx
+	// is which one currently has keyboard focus, or
+	// len(searchSpans)/len(searchSpans)+1 for Cancel/Search.
+	//
+	// searchEngineOptions records which search.Engine each of Engine's
+	// own choice options actually maps to (built once, since
+	// LocateAvailable doesn't change mid-session) — the group's own
+	// selected index alone isn't enough once "locate" is conditionally
+	// left out (see its own doc comment in search.go). searchEngineIdx
+	// is that selected index; searchScopeValue/searchFilenameValue/
+	// searchIgnoreValue/searchContentValue are the dialog's own four
+	// text fields. There's no equivalent choice group for Content's own
+	// search tool any more (previously "Search in": File names/Content
+	// (grep)/gzip/zip) — removed for now per the user's own request;
+	// runSearch decides content vs. filename search, always plain grep,
+	// purely from whether searchContentValue is filled in.
+	//
+	// The rest are MC's own Find File checkboxes (verified against its
+	// real find.c source, not guessed — see rerenderSearchDialog's own
+	// doc comment), replacing this dialog's earlier, shared Glob/
+	// Keyword/Regex choice group: searchShellPatterns (Filename's own
+	// "Using shell patterns") and searchContentRegex (Content's own
+	// "Regular expression") are independent of each other, per MC's own
+	// design — Filename's pattern syntax and Content's pattern syntax
+	// are never the same choice. searchRecursive/searchFollowSymlinks
+	// only matter for EngineFind (locate's own index has no live
+	// traversal to shape this way); searchCaseSensitive is shown in
+	// both columns but is one shared value (this app never runs a
+	// filename and a content search at once, so nothing is lost keeping
+	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
+	// each their own — see runSearch for how every one of these feeds
+	// into the search.Request that's actually built.
+	searchPages          *tview.Pages
+	searchFieldsPages    *tview.Pages
+	searchTop            *tview.TextView
+	searchLeft           *tview.TextView
+	searchRight          *tview.TextView
+	searchEditField      *tview.InputField
+	searchEditCommit     func(string)
+	searchButtons        *tview.Flex
+	searchCancelBtn      *tview.Button
+	searchSearchBtn      *tview.Button
+	searchSpans          []searchSpan
+	searchFocusedIdx     int
+	searchEngineOptions  []searchEngineOption
+	searchEngineIdx      int
+	searchScopeValue     string
+	searchFilenameValue  string
+	searchIgnoreValue    string
+	searchContentValue   string
+	searchIgnoreEnabled  bool
+	searchCaseSensitive  bool
+	searchSkipHidden     bool
+	searchRecursive      bool
+	searchFollowSymlinks bool
+	searchShellPatterns  bool
+	searchContentRegex   bool
+	searchWholeWords     bool
+	searchFirstHit       bool
+	// searchCancel stops whatever search.Run call is currently in
+	// flight, if any, and its paired animateSearchProgress ticker (both
+	// share this same ctx) — called before starting a new one, and when
+	// the dialog closes, so a slow "find /" left running never keeps
+	// working after the user has moved on (see runSearch/closeSearch).
+	searchCancel context.CancelFunc
+	// searchAnimFrame/searchLastDir/searchStartDir back the results
+	// window's own status line (see renderSearchStatus):
+	// searchAnimFrame is the current "still working" animation frame
+	// (see animateSearchProgress); searchLastDir is the directory of
+	// the most recently streamed match, breakthrough's own
+	// approximation of "currently scanning" — see streamSearchResults'
+	// own doc comment on why a real one isn't available when the
+	// actual traversal happens inside an external find/locate/grep
+	// process, not breakthrough's own code; searchStartDir (Start at,
+	// as of when the search began) is shown until the first match
+	// arrives.
+	searchAnimFrame int
+	searchLastDir   string
+	searchStartDir  string
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
@@ -192,6 +330,34 @@ type Root struct {
 	propertiesHashes *fsops.Hashes
 	hashSectionRow   int
 
+	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
+	// "in progress" animation (see hashAnimationFrames): hashInProgress
+	// is what renderProperties checks to show the current animation
+	// frame instead of the plain hint or the finished results;
+	// hashAnimFrame is which frame that is, advanced by a ticker on its
+	// own background goroutine; hashCancel stops that ticker and — via
+	// the same ctx — an in-flight fsops.Hash call itself, promptly, not
+	// just its eventual reporting (see fsops.Hash's own doc comment on
+	// why that distinction is what actually stops it from still reading
+	// and reporting progress into hashBytesRead well after being
+	// "cancelled" — a real bug this fixed) — once a newer hash
+	// computation, or reopening Properties for a different target (see
+	// openProperties), has superseded it.
+	hashInProgress bool
+	hashAnimFrame  int
+	hashCancel     context.CancelFunc
+
+	// hashBytesRead is how many bytes hashFile's in-flight call has
+	// streamed so far (see computeHashes' own onProgress callback),
+	// read by renderProperties to show a percentage alongside the
+	// animation whenever propertiesStat.Size is known. Unlike
+	// hashInProgress/hashAnimFrame/hashCancel above — which are only
+	// ever touched from within the tview event loop, either directly or
+	// via QueueUpdateDraw — this one is also written from hashFile's
+	// own background goroutine on every Read, so it has to stay an
+	// atomic rather than a plain int64.
+	hashBytesRead atomic.Int64
+
 	// propertySpans locates each editable region in the Properties
 	// overlay's current text (see propertiesBuilder), rebuilt on every
 	// renderProperties call.
@@ -256,15 +422,21 @@ type Root struct {
 // the Panel, which needs it to move keyboard focus into its header's edit
 // field — see Panel.openEdit.
 func NewRoot(app *tview.Application, path string) (*Root, error) {
-	panel, err := NewPanel(app, path)
+	settings, colorSchemes, configWarnings := loadInitialSettings()
+	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
+
+	panel, err := NewPanel(app, path, theme, settings)
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Root{
-		Pages: tview.NewPages(),
-		app:   app,
-		panel: panel,
+		Pages:        tview.NewPages(),
+		app:          app,
+		panel:        panel,
+		settings:     settings,
+		colorSchemes: colorSchemes,
+		theme:        theme,
 		// -1: "nothing focused yet" — see focusedPropertyField/
 		// setPropertiesFocus. Set here rather than only in openProperties
 		// so it's already correct for anything that renders Properties
@@ -275,13 +447,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// No borders on the floating elements below — a background color set
 	// apart from the plain panel does the same job without the
-	// box-drawing look.
+	// box-drawing look (colors themselves are applied once, uniformly,
+	// by applyTheme near the end of this function, not per widget here).
 	r.menu = tview.NewList().ShowSecondaryText(false)
-	r.menu.SetBackgroundColor(accentBackgroundColor)
-	r.menu.SetMainTextColor(tcell.ColorWhite)
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
+	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
@@ -312,20 +484,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// openRename, so it reads as "the row itself became editable" rather
 	// than a separate prompt.
 	r.rename = tview.NewInputField()
-	r.rename.SetFieldBackgroundColor(accentBackgroundColor)
-	r.rename.SetBackgroundColor(accentBackgroundColor)
-	r.rename.SetLabelColor(tcell.ColorWhite)
-	r.rename.SetFieldTextColor(tcell.ColorWhite)
 	r.rename.SetDoneFunc(r.finishRename) // Enter or Escape
 
 	// Backs Select +/-/chown/chmod: a single labelled field, centered on
 	// screen (unlike rename, it's not tied to any one row) — see
 	// openPrompt.
 	r.prompt = tview.NewInputField()
-	r.prompt.SetFieldBackgroundColor(accentBackgroundColor)
-	r.prompt.SetBackgroundColor(accentBackgroundColor)
-	r.prompt.SetLabelColor(tcell.ColorWhite)
-	r.prompt.SetFieldTextColor(tcell.ColorWhite)
 	r.prompt.SetDoneFunc(r.finishPrompt) // Enter or Escape
 
 	r.properties = r.newPropertiesView()
@@ -348,8 +512,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	panel.onLoad = func(string) { r.refreshStatusBar() }
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
-	r.quitConfirm.SetBackgroundColor(accentBackgroundColor)
-	r.quitConfirm.SetMainTextColor(tcell.ColorWhite)
 	r.quitConfirm.SetHighlightFullLine(true)
 	r.quitConfirm.SetBorderPadding(0, 0, 1, 1)
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
@@ -360,10 +522,37 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated and repositioned per open, the same pattern rename/
 	// prompt/propertiesEditField already use.
 	r.picker = tview.NewList().ShowSecondaryText(false)
-	r.picker.SetBackgroundColor(accentBackgroundColor)
-	r.picker.SetMainTextColor(tcell.ColorWhite)
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)
+
+	// The Options overlay (see openOptions) — same "one shared,
+	// repopulated List" pattern as r.picker above.
+	r.optionsList = r.newOptionsList()
+
+	// The search dialog (see openSearch).
+	r.searchPages = r.newSearchDialog()
+
+	// The directory picker (see openDirPicker) — built once and reset
+	// on every open, the same as everything else above.
+	r.dirPicker = r.newDirPicker()
+
+	// The Help overlay (see help.go/openHelp) — a single, static,
+	// read-only TextView, the simplest of all of these (nothing to
+	// reset or repopulate on open).
+	r.helpView = r.newHelpView()
+
+	// "Esc: back to search" while search results are showing (see
+	// Panel.onSearchEscape's own doc comment) — a right-click on a
+	// search-result row already reaches r.menu the exact same way a
+	// real row's does (see captureMouse's MouseRightClick case, never
+	// mode-specific to begin with), so there's no separate context menu
+	// to build here any more.
+	panel.onSearchEscape = r.backToSearchForm
+
+	// A content-search match opens in the configured editor, at its
+	// own matched line, instead of just jumping to it (see
+	// Panel.onOpenSearchResult's own doc comment).
+	panel.onOpenSearchResult = r.runEditor
 
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
@@ -384,11 +573,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
+	r.AddPage(optionsPage, r.optionsList, false, false)
+	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(dirPickerPage, r.dirPicker, false, false)
+	r.AddPage(helpPage, r.helpView, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
 
+	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
+
+	if len(configWarnings) > 0 {
+		r.showError(fmt.Errorf("config: %s", strings.Join(configWarnings, "; ")))
+	}
 
 	return r, nil
 }
@@ -417,14 +615,26 @@ func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, resto
 }
 
 // pushOverlay adds page/widget as a new layer on top of whatever's
-// already open, without closing it — see openOwnerGroupPicker, the only
-// current use: the owner/group picker floats on top of Properties rather
-// than replacing it.
+// already open, without closing it — see openOwnerGroupPicker
+// (owner/group picker over Properties) and openHelp (help screen over
+// anything).
+//
+// tview.Pages.ShowPage only flips a page's Visible flag — it does NOT
+// reorder Pages' own internal page list, and Pages.Draw always walks that
+// list in original AddPage registration order (verified by reading
+// tview's pages.go directly). So without SendToFront here, a page that
+// happened to be registered earlier in NewRoot (e.g. propertiesPage) would
+// draw underneath — and get fully covered by — a page registered later
+// (e.g. searchPage), even though pushOverlay just made it the topmost,
+// most-recently-shown layer. SendToFront moves it to the end of Pages' own
+// list so draw order actually matches stacking order, regardless of which
+// page happened to be AddPage'd first.
 func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) {
 	r.overlayStack = append(r.overlayStack, overlayFrame{page: page, widget: widget, restore: restore})
 	r.activePage = page
 	r.activeWidget = widget
 	r.ShowPage(page)
+	r.SendToFront(page)
 	if restore != nil {
 		restore()
 	} else {
@@ -547,6 +757,40 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 	}
 	if y < py {
 		y = py
+	}
+
+	return x, y, width, height
+}
+
+// clampToScreen is clampToPanel's own logic, bounded against the whole
+// screen (Root's own rect) instead of just the current panel's inner
+// rect — used only by the Help overlay (see helpSize), a read-only
+// reference deliberately allowed to span wider than one panel. Every
+// other overlay in this app stays within one panel — see clampToPanel's
+// own doc comment.
+func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
+	_, _, sw, sh := r.GetRect()
+	if sw <= 0 || sh <= 0 {
+		return x, y, width, height
+	}
+
+	if width > sw {
+		width = sw
+	}
+	if height > sh {
+		height = sh
+	}
+	if x+width > sw {
+		x = sw - width
+	}
+	if y+height > sh {
+		y = sh - height
+	}
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
 	}
 
 	return x, y, width, height
@@ -761,6 +1005,8 @@ func (r *Root) toggleHidden() {
 	r.panel.showHidden = !r.panel.showHidden
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+	r.settings.ShowHidden = r.panel.showHidden
+	r.persistSetting("show_hidden", strconv.FormatBool(r.panel.showHidden))
 }
 
 // hiddenToggleLabel renders the hidden-files toggle's label as the
@@ -784,6 +1030,8 @@ func (r *Root) toggleSizeBytes() {
 	r.panel.sizeBytes = !r.panel.sizeBytes
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
+	r.settings.SizeBytes = r.panel.sizeBytes
+	r.persistSetting("size_bytes", strconv.FormatBool(r.panel.sizeBytes))
 }
 
 // sizeFormatToggleLabel is sizeBytes's own toggleHidden-style label.
@@ -802,14 +1050,16 @@ func (r *Root) toggleMtimeUnix() {
 	r.panel.mtimeUnix = !r.panel.mtimeUnix
 	r.showError(r.panel.load(r.panel.path))
 	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
+	r.settings.MtimeUnix = r.panel.mtimeUnix
+	r.persistSetting("mtime_unix", strconv.FormatBool(r.panel.mtimeUnix))
 }
 
 // mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
 func mtimeFormatToggleLabel(mtimeUnix bool) string {
 	if mtimeUnix {
-		return "Show modified date formatted"
+		return "Show mtime formatted"
 	}
-	return "Show modified date as timestamp"
+	return "Show mtime as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
@@ -968,25 +1218,49 @@ func (r *Root) cutToClipboard() {
 	r.clipboardCut = true
 }
 
-// pasteClipboard is "Paste": copies or moves (per clipboardCut) whatever
-// Copy/Cut last captured into the directory currently on screen. A no-op
-// if nothing was ever copied/cut.
+// pasteClipboard is "Paste": copies or moves (per clipboardCut)
+// whatever Copy/Cut last captured into the directory currently on
+// screen — pasteInto's own thin wrapper for that common case.
 //
-// Each target that would collide with an existing entry in the current
-// directory is skipped with an error — asking "overwrite?" once per
-// colliding file in a multi-file paste isn't built yet (a known
-// simplification; fsops.Copy/Move's force parameter is where that would
-// hook in). Only the first error is reported, to avoid stacking one error
+// While search results are showing (see Panel.searchMode), "the
+// directory currently on screen" has no single meaning any more — the
+// rows visible are scattered across however many real directories a
+// search touched, and r.panel.path itself stays whatever real
+// directory was current *before* the search ran (see
+// Panel.showSearchResults' own doc comment), not any of them. Pasting
+// there instead of alongside the row that was actually right-clicked
+// (r.target, set by Root.captureMouse's MouseRightClick case the exact
+// same way for a search result as for a real row) would silently land
+// in an unrelated directory the user never asked about.
+func (r *Root) pasteClipboard() {
+	dir := r.panel.path
+	if r.panel.searchMode {
+		dir = filepath.Dir(r.target)
+	}
+	r.pasteInto(dir)
+}
+
+// pasteInto is pasteClipboard's own shared implementation, generalized
+// to an explicit destination directory — pasteClipboard itself is the
+// only caller, picking a search result's own directory instead of
+// r.panel.path while search results are showing (see its own doc
+// comment). A no-op if nothing was ever copied/cut.
+//
+// Each target that would collide with an existing entry in dir is
+// skipped with an error — asking "overwrite?" once per colliding file
+// in a multi-file paste isn't built yet (a known simplification;
+// fsops.Copy/Move's force parameter is where that would hook in).
+// Only the first error is reported, to avoid stacking one error
 // overlay per failed file; the rest of the paste still runs to
 // completion rather than stopping at the first collision.
-func (r *Root) pasteClipboard() {
+func (r *Root) pasteInto(dir string) {
 	if len(r.clipboard) == 0 {
 		return
 	}
 
 	var firstErr error
 	for _, src := range r.clipboard {
-		dst := filepath.Join(r.panel.path, filepath.Base(src))
+		dst := filepath.Join(dir, filepath.Base(src))
 		var err error
 		if r.clipboardCut {
 			err = fsops.Move(src, dst, false)
@@ -998,10 +1272,18 @@ func (r *Root) pasteClipboard() {
 		}
 	}
 
-	if err := r.panel.load(r.panel.path); err != nil {
-		firstErr = err // the reload failing is more urgent to report than a copy conflict
-	} else if r.clipboardCut && firstErr == nil {
+	if r.clipboardCut && firstErr == nil {
 		r.clipboard = nil // moved away cleanly; nothing left to paste again
+	}
+
+	// Only reload if the panel actually happens to be showing dir right
+	// now — pasting into a search result's own directory, elsewhere,
+	// shouldn't force-navigate or otherwise disturb whatever the panel
+	// currently has on screen.
+	if r.panel.path == dir {
+		if err := r.panel.load(r.panel.path); err != nil {
+			firstErr = err // the reload failing is more urgent to report than a copy conflict
+		}
 	}
 
 	if firstErr != nil {

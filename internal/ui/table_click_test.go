@@ -5,6 +5,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // TestCheckboxClickTogglesDisplay reproduces an actual mouse click on the
@@ -15,7 +17,7 @@ import (
 // (per its own doc, it needs the table to have actually been drawn).
 func TestCheckboxClickTogglesDisplay(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
