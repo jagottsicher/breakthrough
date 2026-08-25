@@ -62,9 +62,58 @@ func TestFormatSearchResult(t *testing.T) {
 		{"content match", search.Result{Path: "/home/jens/a.go", Line: 12, Text: "func main() {"}, "/home/jens/a.go:12: func main() {"},
 	}
 	for _, tt := range tests {
-		if got := formatSearchResult(tt.res); got != tt.want {
+		if got := formatSearchResult(tt.res, 0); got != tt.want {
 			t.Errorf("%s: formatSearchResult(%+v) = %q, want %q", tt.name, tt.res, got, tt.want)
 		}
+	}
+}
+
+// TestTruncateMiddleKeepsBothEnds pins the user's own request: a
+// results-list line that's too long for the list's own current width
+// gets shortened in its own middle, with "..." marking where —
+// keeping the start (a long path's own leading directories) and the
+// end (its own filename, or a content match's own matched text) both
+// visible, unlike the search dialog's own form fields (see
+// truncateForDisplay), which only ever trim from the front.
+func TestTruncateMiddleKeepsBothEnds(t *testing.T) {
+	s := "/home/jens/development/chatgpthelps/breakthrough/breakthrough/internal/ui/search.go"
+	got := truncateMiddle(s, 40)
+	if len([]rune(got)) != 40 {
+		t.Fatalf("truncateMiddle(%q, 40) = %q (len %d), want exactly 40 runes", s, got, len([]rune(got)))
+	}
+	if !strings.HasPrefix(got, "/home/jens") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want the original start kept", s, got)
+	}
+	if !strings.HasSuffix(got, "search.go") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want the original end kept", s, got)
+	}
+	if !strings.Contains(got, "...") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want a \"...\" marking the cut", s, got)
+	}
+}
+
+// TestTruncateMiddleLeavesShortStringsAlone pins that nothing happens
+// when s already fits — no needless "..." inserted into text that was
+// never too long to show in full.
+func TestTruncateMiddleLeavesShortStringsAlone(t *testing.T) {
+	s := "short.go"
+	if got := truncateMiddle(s, 40); got != s {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want unchanged", s, got)
+	}
+}
+
+// TestFormatSearchResultTruncatesToMaxWidth pins that formatSearchResult
+// itself applies the same middle-truncation to whatever it renders
+// (path alone, or "path:line: text"), never past maxWidth — and that
+// maxWidth == 0 means no limit at all (the dialog's own default before
+// a real list width is known).
+func TestFormatSearchResultTruncatesToMaxWidth(t *testing.T) {
+	res := search.Result{Path: "/home/jens/development/chatgpthelps/breakthrough/breakthrough/internal/ui/search.go"}
+	if got := formatSearchResult(res, 20); len([]rune(got)) != 20 {
+		t.Errorf("formatSearchResult(res, 20) = %q (len %d), want exactly 20 runes", got, len([]rune(got)))
+	}
+	if got := formatSearchResult(res, 0); got != res.Path {
+		t.Errorf("formatSearchResult(res, 0) = %q, want the full, untruncated path %q", got, res.Path)
 	}
 }
 
@@ -221,12 +270,12 @@ func TestActivateSearchTextFieldAndCommit(t *testing.T) {
 }
 
 // TestCaptureSearchScopeKeyCompletesPath pins Tab-completion while
-// editing Start-at, reusing Panel.completions/longestCommonPrefix
-// directly — the same behavior Panel's own path header already has,
-// per the user's own request that every dialog with a path field
-// support it. Wired in only while editing Start-at specifically (see
-// activateSearchTextField) — this activates that field's own span to
-// pin the wiring, not just the completion function in isolation.
+// editing Start-at, reusing Panel.dirCompletions/longestCommonPrefix
+// directly — see dirCompletions' own doc comment on why Start-at gets
+// its own directory-only, case-sensitive variant rather than Panel's
+// plain completions. Wired in only while editing Start-at specifically
+// (see activateSearchTextField) — this activates that field's own span
+// to pin the wiring, not just the completion function in isolation.
 func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -243,25 +292,30 @@ func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	r.searchEditField.SetText(dir + "/ap")
 	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	// "ap" is common to apple.txt, apricot.txt, and app-data/ — their
-	// longest shared prefix is "ap" itself, same as
-	// TestCompletions/TestLongestCommonPrefix already pin at the Panel
-	// level; this just pins that the search dialog's own editor reaches
-	// the same completions call while editing Start-at.
-	want := dir + "/ap"
+	// apple.txt/apricot.txt are files, excluded outright by
+	// dirCompletions — app-data/ is the only directory starting with
+	// "ap", so completion goes straight there instead of stopping at
+	// "ap" itself the way Panel's own plain (file-inclusive) completion
+	// would (see TestCompletions at the Panel level for that).
+	want := dir + "/app-data/"
 	if got := r.searchEditField.GetText(); got != want {
 		t.Errorf("Start-at editor text after Tab = %q, want %q", got, want)
 	}
 }
 
-// TestCaptureSearchScopeKeyLetsTabFallThroughOnceNothingLeftToComplete
-// pins the fix for a real bug: Tab used to be swallowed unconditionally
-// while editing Start-at (even with no matches at all, or the text
-// already sitting at its own longest common prefix), leaving no way to
-// Tab out of the field the way every other field in this dialog
-// already allows.
-func TestCaptureSearchScopeKeyLetsTabFallThroughOnceNothingLeftToComplete(t *testing.T) {
-	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+// TestCaptureSearchScopeKeyAlwaysConsumesTab pins the user's own
+// explicit request: Start-at is deliberately exempted from the
+// Tab-cycles-through-every-option behavior every other field in this
+// dialog has — Tab here always means "complete", even once there's
+// nothing left to add, never "leave the field" (Backtab or a click
+// elsewhere are how you actually leave it — see commitPendingSearchEdit).
+func TestCaptureSearchScopeKeyAlwaysConsumesTab(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"appdata1", "appdata2"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
@@ -273,24 +327,127 @@ func TestCaptureSearchScopeKeyLetsTabFallThroughOnceNothingLeftToComplete(t *tes
 		t.Fatal("setup: no span tagged \"start-at\"")
 	}
 	r.searchSpans[idx].activate()
-	r.searchEditField.SetText(dir + "/ban")
+	r.searchEditField.SetText(dir + "/app")
 
-	// First Tab: "ban" has exactly one match (banana.txt) — completion
-	// still has something to add, so this one is consumed.
+	// First Tab: "app" is shared by appdata1/ and appdata2/, extending
+	// to "appdata" — consumed.
 	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
-		t.Fatal("first Tab should be consumed — completion still had something to add")
+		t.Fatal("Tab should always be consumed")
 	}
-	want := dir + "/banana.txt"
+	want := dir + "/appdata"
 	if got := r.searchEditField.GetText(); got != want {
 		t.Fatalf("after first Tab, text = %q, want %q", got, want)
 	}
 
-	// Second Tab: already at the longest common prefix — nothing left
-	// to complete, so it must fall through unconsumed (the same event
-	// value handed back) instead of being silently swallowed again.
-	event := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-	if result := r.captureSearchScopeKey(event); result != event {
-		t.Error("second Tab should fall through unconsumed once nothing is left to complete")
+	// Second Tab: still ambiguous between appdata1/ and appdata2/ —
+	// nothing left to complete, but it must still be consumed (a no-op
+	// on the text, not a fall-through to field navigation).
+	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
+		t.Error("Tab should still be consumed once nothing is left to complete")
+	}
+	if got := r.searchEditField.GetText(); got != want {
+		t.Errorf("after second Tab, text = %q, want unchanged %q", got, want)
+	}
+}
+
+// TestCaptureSearchScopeKeyExcludesFiles pins the user's own explicit
+// request, and the real bug report behind it: completing Start-at used
+// to stop at "Download" (not the full "Downloads/") because a
+// same-directory file, "download-thing.sh", was still in the running
+// as a candidate purely on account of its name, despite Start-at never
+// being able to hold a file in the first place. dirCompletions'
+// directory-only filtering (see its own doc comment) resolves this on
+// its own — the file is gone from the candidate list before the two
+// names' shared prefix ever matters, so completion goes straight to
+// the one real directory that's actually a valid Start-at value.
+func TestCaptureSearchScopeKeyExcludesFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "Downloads"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "download-thing.sh"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir + "/Down")
+
+	r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	want := dir + "/Downloads/"
+	if got := r.searchEditField.GetText(); got != want {
+		t.Errorf("Start-at editor text after Tab = %q, want %q (download-thing.sh, a file, should never have been a candidate)", got, want)
+	}
+}
+
+// TestEnterInFilenameFieldRunsSearch pins the user's own request:
+// Enter while editing Filename specifically runs the search
+// immediately, the same as clicking Search.
+func TestEnterInFilenameFieldRunsSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch() // first focus is already Filename — see its own doc comment
+	idx, ok := r.searchSpanIndex("filename")
+	if !ok {
+		t.Fatal("setup: no span tagged \"filename\"")
+	}
+	r.searchSpans[idx].activate() // opens the shared inline editor
+	r.searchEditField.SetText("*.go")
+	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if captured.Pattern != "*.go" {
+		t.Errorf("Pattern = %q, want %q — Enter in Filename should have run the search", captured.Pattern, "*.go")
+	}
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q, want still open (%q) on the results page", r.activePage, searchPage)
+	}
+}
+
+// TestEnterInOtherFieldsDoesNotRunSearch pins that the Enter-runs-
+// search behavior is scoped to Filename alone — Start-at's own Enter
+// still just commits and stays on the form.
+func TestEnterInOtherFieldsDoesNotRunSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	searchRunCalled := false
+	isolateSearchRun(t, func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
+		searchRunCalled = true
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir)
+	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if searchRunCalled {
+		t.Error("Enter in Start-at should not have run the search")
+	}
+	if r.searchScopeValue != dir {
+		t.Errorf("searchScopeValue = %q, want %q — Enter should still commit", r.searchScopeValue, dir)
 	}
 }
 
@@ -343,6 +500,90 @@ func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
 	r.openSearch()
 
 	r.commitPendingSearchEdit() // must not panic or change anything
+}
+
+// TestRunSearchRejectsNonexistentStartAt pins the user's own request:
+// searching from a Start-at directory that doesn't actually exist
+// reports a clear error instead of silently running find(1) anyway and
+// coming back with an empty, indistinguishable-from-a-real-empty-
+// result "No matches found" (find itself exits non-zero on a missing
+// path, but this app's own runner.go deliberately never treats a
+// non-zero exit as an error — see its own doc comment).
+func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	searchRunCalled := false
+	isolateSearchRun(t, func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
+		searchRunCalled = true
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+
+	r.runSearch()
+
+	if searchRunCalled {
+		t.Error("runSearch should not have shelled out to find at all for a non-existent Start-at")
+	}
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want %q (the error overlay)", r.activePage, errorPage)
+	}
+	// wrapText (see errors.go) may have broken this onto several short
+	// lines in a headless test's own near-zero-width panel — collapse
+	// those back to spaces before checking, rather than depending on
+	// exactly where it happened to wrap.
+	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
+	if !strings.Contains(got, "does not exist") {
+		t.Errorf("error text = %q, want it to mention the directory doesn't exist", got)
+	}
+}
+
+// TestRunSearchAllowsNonexistentStartAtForLocate pins that the
+// existence check only applies to EngineFind — EngineLocate never uses
+// Scope at all (see Request.Scope's own doc comment), so there's
+// nothing to validate against it.
+func TestRunSearchAllowsNonexistentStartAtForLocate(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+
+	r.runSearch()
+
+	if r.activePage == errorPage {
+		t.Errorf("locate shouldn't be blocked by a non-existent Start-at, got error overlay: %q", r.errorView.GetText(true))
+	}
+	if captured.Engine != search.EngineLocate {
+		t.Errorf("Engine = %v, want EngineLocate", captured.Engine)
+	}
+}
+
+// searchEngineIndex finds the index into r.searchEngineOptions whose
+// own engine matches want, skipping the test if it isn't available on
+// this host (e.g. locate — see search.LocateAvailable's own doc
+// comment).
+func searchEngineIndex(t *testing.T, r *Root, want search.Engine) int {
+	t.Helper()
+	for i, opt := range r.searchEngineOptions {
+		if opt.engine == want {
+			return i
+		}
+	}
+	t.Skipf("%v not available in this environment", want)
+	return -1
 }
 
 func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
@@ -553,7 +794,8 @@ func TestRunSearchResizesToBiggerResultsWindow(t *testing.T) {
 	}
 	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
 
-	r.panel.SetRect(0, 0, 150, 50) // large enough that clampToPanel doesn't shrink either size
+	r.SetRect(0, 0, 200, 60)       // the results page's own size is a fraction of this now — see searchResultsSize
+	r.panel.SetRect(0, 0, 150, 50) // large enough that clampToPanel doesn't shrink the fields page
 	r.openSearch()
 	_, _, formWidth, formHeight := r.searchPages.GetRect()
 

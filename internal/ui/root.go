@@ -731,6 +731,41 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 	return x, y, width, height
 }
 
+// clampToScreen is clampToPanel's own logic, bounded against the whole
+// screen (Root's own rect) instead of just the current panel's inner
+// rect — used only by the search results page (see
+// searchResultsSize), deliberately allowed to span wider than one
+// panel now that it's sized as a fraction of the terminal's own width,
+// per the user's own request. Every other overlay in this app stays
+// within one panel — see clampToPanel's own doc comment.
+func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
+	_, _, sw, sh := r.GetRect()
+	if sw <= 0 || sh <= 0 {
+		return x, y, width, height
+	}
+
+	if width > sw {
+		width = sw
+	}
+	if height > sh {
+		height = sh
+	}
+	if x+width > sw {
+		x = sw - width
+	}
+	if y+height > sh {
+		y = sh - height
+	}
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+
+	return x, y, width, height
+}
+
 // RequestQuit shows a confirmation overlay instead of quitting right
 // away — Ctrl+Q (see cmd/breakthrough) is easy to hit by accident, so the
 // application only actually stops once the user picks "Quit breakthrough"

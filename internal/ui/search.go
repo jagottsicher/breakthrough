@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,12 +16,13 @@ import (
 
 const searchPage = "search"
 
-// searchFormWidth/Height and searchResultsWidth/Height are the search
-// dialog's own two sizes — one for the fields page (see newSearchDialog),
-// a noticeably bigger one for the results window (see runSearch/
-// backToSearchForm), per the user's own request: MC's own results
-// window "darf auch gerne etwas größer sein" than the input form that
-// opens it.
+// searchFormWidth/Height is the search dialog's own fixed size for the
+// fields page (see newSearchDialog). searchResultsWidth/Height is the
+// *floor* for the results window (see runSearch/backToSearchForm) —
+// results are normally sized well above this, as a fraction of the
+// terminal's own width (see searchResultsSize); this only keeps a
+// small terminal from shrinking the results window down below what
+// used to be its fixed size.
 const (
 	searchFormWidth, searchFormHeight       = 84, 19
 	searchResultsWidth, searchResultsHeight = 96, 32
@@ -295,6 +297,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchList.SetHighlightFullLine(true)
 	r.searchList.SetBorderPadding(0, 0, 1, 1)
 	r.searchList.SetDoneFunc(r.backToSearchForm) // Escape while the results list has focus
+	r.searchList.SetMouseCapture(r.captureSearchListMouse)
 
 	// searchStatus is the results window's own bottom line: an
 	// animated "still working" indicator naming the directory of the
@@ -575,9 +578,21 @@ func (r *Root) activateSearchTextField(idx int, prefill string, commit func(stri
 // finishPropertyEdit already has, including Tab/Backtab committing
 // (not discarding) before continuing the outer navigation they were
 // already asking for.
+//
+// Enter specifically in Filename also runs the search immediately,
+// per the user's own request — scoped to that one field alone (not
+// Content, Start-at, or Ignored dirs): Filename is the field first
+// focus lands on (see openSearch), the one MC's own dialog treats as
+// the "type it and go" field, so Enter there matching Search's own
+// button is the one place it reads as obviously intended rather than
+// surprising.
 func (r *Root) finishSearchEdit(key tcell.Key) {
 	text := r.searchEditField.GetText()
 	commit := r.searchEditCommit
+	editedTag := ""
+	if r.searchFocusedIdx >= 0 && r.searchFocusedIdx < len(r.searchSpans) {
+		editedTag = r.searchSpans[r.searchFocusedIdx].tag
+	}
 	r.searchEditCommit = nil // see commitPendingSearchEdit's own doc comment on why this must go back to nil, not just get overwritten on the next activate
 	r.searchFieldsPages.HidePage("editfield")
 
@@ -585,6 +600,11 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 		if commit != nil {
 			commit(text)
 		}
+	}
+
+	if key == tcell.KeyEnter && editedTag == "filename" {
+		r.runSearch()
+		return
 	}
 
 	switch key {
@@ -599,36 +619,34 @@ func (r *Root) finishSearchEdit(key tcell.Key) {
 
 // captureSearchScopeKey adds bash-style Tab completion while editing
 // Start-at — the same longest-common-prefix completion Panel's own
-// path header already has (see Panel.completePath), reusing its own
-// completions/resolvePath directly rather than reimplementing it, per
-// the user's own request that every dialog with a path field support
-// it the same way.
+// path header already has (see Panel.completePath), but through
+// Panel.dirCompletions rather than its own plain completions: Start-at
+// can only ever be a directory, never a file, so completion here is
+// both directory-only and case-sensitive — see dirCompletions' own doc
+// comment for why, including a real user report its own
+// directory-only filtering fixes on its own.
 //
-// Tab is only ever consumed here when completion actually changes the
-// field's own text (there's something left to complete) — otherwise
-// it's returned unconsumed, falling through to the field's own
-// InputHandler and from there to finishSearchEdit's usual Tab handling
-// (commit and move to the next field). Without this, Tab was swallowed
-// unconditionally the moment Start-at was being edited — no matches at
-// all, or the text already sitting at its own longest common prefix
-// (completion has nothing left to add) — leaving no way to Tab out of
-// Start-at at all, a real bug the user ran into, not just a
-// theoretical one: it broke the same Tab-cycles-through-every-option
-// behavior every other field in this dialog already has.
+// Tab is always consumed here, whether or not completion has anything
+// left to add — Start-at is deliberately exempted from the Tab-cycles-
+// through-every-option behavior every other field in this dialog has
+// (see finishSearchEdit), per the user's own explicit request: Tab
+// here means "complete", full stop, never "leave the field" — Backtab
+// (untouched by this capture) or a click elsewhere (see
+// commitPendingSearchEdit) are how you actually leave it. An earlier
+// version let Tab fall through to field-navigation once nothing was
+// left to complete, but that made a *second*, disambiguating Tab press
+// (typing further and pressing Tab again) impossible to tell apart
+// from "done editing, move on" — completion kept silently losing the
+// keystroke to navigation instead.
 func (r *Root) captureSearchScopeKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() != tcell.KeyTab {
 		return event
 	}
-	current := r.searchEditField.GetText()
-	matches := r.panel.completions(current)
+	matches := r.panel.dirCompletions(r.searchEditField.GetText())
 	if len(matches) == 0 {
-		return event
+		return nil
 	}
-	completed := longestCommonPrefix(matches)
-	if completed == current {
-		return event
-	}
-	r.searchEditField.SetText(completed)
+	r.searchEditField.SetText(longestCommonPrefix(matches))
 	return nil
 }
 
@@ -719,6 +737,36 @@ func (r *Root) commitPendingSearchEdit() {
 	commit(text)
 }
 
+// searchListScrollStep is how many rows one wheel notch moves the
+// results list — see captureSearchListMouse's own doc comment on why
+// this moves the *selection*, not just the visible window.
+const searchListScrollStep = 3
+
+// captureSearchListMouse replaces tview.List's own built-in mouse-wheel
+// handling with one that actually scrolls: List.Draw itself force-
+// resets its own scroll offset back to wherever the *selected* item
+// is, every single redraw ("Adjust offsets to keep the current item in
+// view" — see its own source) — so a plain wheel notch, which only
+// ever touches the offset and never the selection, gets silently
+// undone the moment the very next Draw call runs right after
+// (confirmed directly: itemOffset genuinely incremented, then dropped
+// back to 0 by the next frame — not a routing/rect bug, a real
+// upstream behavior). Moving the *selection* along with the wheel
+// avoids the fight entirely — Draw's own "keep it in view" logic then
+// pulls the offset along for free, in the same direction, instead of
+// against it.
+func (r *Root) captureSearchListMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	switch action {
+	case tview.MouseScrollUp:
+		r.searchList.SetCurrentItem(r.searchList.GetCurrentItem() - searchListScrollStep)
+		return tview.MouseConsumed, nil
+	case tview.MouseScrollDown:
+		r.searchList.SetCurrentItem(r.searchList.GetCurrentItem() + searchListScrollStep)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
 // searchSpanAt finds whichever searchSpans entry (if any) contains
 // (x, y) — checked against its own widget's InRect first, then its
 // exact row/column range within that widget's inner rect, the same
@@ -770,20 +818,50 @@ func (r *Root) openSearch() {
 		r.setSearchFocus(idx)
 	}
 
-	r.resizeSearchPages(searchFormWidth, searchFormHeight)
+	r.resizeSearchPages(searchFormWidth, searchFormHeight, false)
 	r.showOverlay(searchPage, r.searchPages)
 }
 
-// resizeSearchPages centers a width x height rect on screen (clamped
-// to the panel — see clampToPanel) and applies it to r.searchPages —
-// shared by openSearch (the fields' own smaller size) and runSearch/
-// backToSearchForm (the results window's own bigger one), so the
-// dialog's footprint always matches whichever of its two pages is
-// currently showing rather than staying pinned to the fields' size.
-func (r *Root) resizeSearchPages(width, height int) {
+// resizeSearchPages centers a width x height rect on screen and
+// applies it to r.searchPages — shared by openSearch (the fields' own
+// smaller size) and runSearch/backToSearchForm (the results window's
+// own bigger one), so the dialog's footprint always matches whichever
+// of its two pages is currently showing rather than staying pinned to
+// the fields' size. wide selects which of the two clamps bounds the
+// result: false (the fields page, and the results page's own previous
+// fixed size) clamps to the current panel like every other overlay in
+// this app (see clampToPanel); true (the results page's own current
+// size — see searchResultsSize) clamps to the whole screen instead
+// (see clampToScreen), since results are now deliberately sized as a
+// fraction of the terminal's own width, per the user's own request,
+// and would otherwise just get clamped straight back down to
+// panel-width regardless of the fraction requested.
+func (r *Root) resizeSearchPages(width, height int, wide bool) {
 	x, y := r.centeredOnScreen(width, height)
-	x, y, w, h := r.clampToPanel(x, y, width, height)
+	var w, h int
+	if wide {
+		x, y, w, h = r.clampToScreen(x, y, width, height)
+	} else {
+		x, y, w, h = r.clampToPanel(x, y, width, height)
+	}
 	r.searchPages.SetRect(x, y, w, h)
+}
+
+// searchResultsSize returns the results page's own width/height: at
+// least 90% of the terminal's own current width, per the user's own
+// request — long paths need real room before ever having to truncate
+// at all (see formatSearchResult's own middle-truncation once even
+// that isn't enough). searchResultsWidth/Height is only a floor, for a
+// small terminal where 90% would be narrower than that. Height stays
+// fixed — how many rows fit isn't tied to path length the way column
+// width is, so there's no equivalent reason to scale it.
+func (r *Root) searchResultsSize() (width, height int) {
+	_, _, screenWidth, _ := r.GetRect()
+	width = screenWidth * 9 / 10
+	if width < searchResultsWidth {
+		width = searchResultsWidth
+	}
+	return width, searchResultsHeight
 }
 
 // closeSearch cancels any in-flight search (see cancelSearch) and
@@ -803,7 +881,7 @@ func (r *Root) backToSearchForm() {
 	r.cancelSearch()
 	r.searchPages.SwitchToPage("form")
 	r.searchFieldsPages.SwitchToPage("fields")
-	r.resizeSearchPages(searchFormWidth, searchFormHeight)
+	r.resizeSearchPages(searchFormWidth, searchFormHeight, false)
 	r.setSearchFocus(r.searchFocusedIdx)
 }
 
@@ -837,11 +915,14 @@ func parseIgnoreDirs(text string) []string {
 }
 
 // runSearch is the Search button's own action: builds a search.Request
-// from the dialog's current state — Filename's own value if Content is
-// left blank, or Content's otherwise (always a plain grep search — see
+// from the dialog's current state — Content left blank means a plain
+// filename search on Filename's own value; Content filled in means a
+// grep content search on Content's own value (always plain grep — see
 // this func's own contentMode, and rerenderSearchDialog's own doc
 // comment on Content's column for why there's no explicit tool choice
-// any more) — cancels whatever search was previously running (see
+// any more), additionally restricted to files matching Filename first
+// if that's *also* filled in (see Request.NamePattern's own doc
+// comment) — cancels whatever search was previously running (see
 // cancelSearch), and starts the new one on the bigger results page
 // (see resizeSearchPages), streaming its matches in as they're found
 // (see streamSearchResults) alongside an animated "still working"
@@ -861,11 +942,7 @@ func (r *Root) runSearch() {
 	// "Glob/Keyword/Regex" selector (see this file's own history: the
 	// two were deliberately split apart to match MC's real dialog, where
 	// "Using shell patterns" only ever affects the filename match and
-	// "Regular expression" only ever affects the content match). Only
-	// one of the two ever ends up in req.Mode below, since filename and
-	// content search are mutually exclusive per search.Request's own doc
-	// comment — so nothing is lost by computing both unconditionally
-	// here rather than branching first.
+	// "Regular expression" only ever affects the content match).
 	filenameMode := search.ModeRegex
 	if r.searchShellPatterns {
 		filenameMode = search.ModeGlob
@@ -875,16 +952,31 @@ func (r *Root) runSearch() {
 		contentSearchMode = search.ModeRegex
 	}
 
-	pattern := r.searchFilenameValue
-	mode := filenameMode
-	if contentMode != search.ContentNone {
-		pattern = r.searchContentValue
-		mode = contentSearchMode
-	}
-	if pattern == "" {
+	if r.searchFilenameValue == "" && r.searchContentValue == "" {
 		return
 	}
 	scope := r.panel.resolvePath(r.searchScopeValue)
+	engine := r.searchEngineOptions[r.searchEngineIdx].engine
+
+	// Only checked for EngineFind: EngineLocate never uses Scope at all
+	// (see Request.Scope's own doc comment — its own dimmed, disabled-
+	// looking Start-at field in this dialog already signals that).
+	// Without this, a typo'd or since-deleted Start-at directory ran
+	// find(1) anyway — it exits complaining to stderr, this app's own
+	// runner.go deliberately never treats a non-zero exit as an error
+	// (see its own doc comment on why), so the search "succeeded" and
+	// silently came back with nothing, indistinguishable from a real,
+	// well-formed search that simply found no matches. The user's own
+	// report: typing a real but non-existent path and searching just
+	// says "No matches found" — this catches that case explicitly,
+	// before ever shelling out, with a message that actually says what
+	// went wrong.
+	if engine == search.EngineFind {
+		if info, err := os.Stat(scope); err != nil || !info.IsDir() {
+			r.showError(fmt.Errorf("search directory does not exist: %s", scope))
+			return
+		}
+	}
 
 	var ignoreDirs []string
 	if r.searchIgnoreEnabled {
@@ -895,10 +987,8 @@ func (r *Root) runSearch() {
 	}
 
 	req := search.Request{
-		Pattern:        pattern,
 		Scope:          scope,
-		Mode:           mode,
-		Engine:         r.searchEngineOptions[r.searchEngineIdx].engine,
+		Engine:         engine,
 		Content:        contentMode,
 		IgnoreDirs:     ignoreDirs,
 		CaseSensitive:  r.searchCaseSensitive,
@@ -906,6 +996,23 @@ func (r *Root) runSearch() {
 		FollowSymlinks: r.searchFollowSymlinks,
 		WholeWords:     r.searchWholeWords,
 		FirstHit:       r.searchFirstHit,
+	}
+	// Content == ContentNone: Pattern is the filename match itself, run
+	// through Engine directly. Otherwise: Pattern is what grep actually
+	// searches for, and — per the user's own explicit request — a
+	// Filename value alongside it additionally restricts *which* files
+	// get grepped (NamePattern/NameMode — see Request's own doc comment)
+	// rather than being silently ignored the moment Content has
+	// anything typed into it; left blank, a content search still runs
+	// across every file under Scope exactly as before.
+	if contentMode == search.ContentNone {
+		req.Pattern = r.searchFilenameValue
+		req.Mode = filenameMode
+	} else {
+		req.Pattern = r.searchContentValue
+		req.Mode = contentSearchMode
+		req.NamePattern = r.searchFilenameValue
+		req.NameMode = filenameMode
 	}
 
 	r.cancelSearch()
@@ -918,7 +1025,8 @@ func (r *Root) runSearch() {
 	r.searchStartDir = scope
 	r.renderSearchStatus()
 	r.searchPages.SwitchToPage("results")
-	r.resizeSearchPages(searchResultsWidth, searchResultsHeight)
+	resultsWidth, resultsHeight := r.searchResultsSize()
+	r.resizeSearchPages(resultsWidth, resultsHeight, true)
 	r.app.SetFocus(r.searchList)
 
 	go r.animateSearchProgress(ctx)
@@ -1019,7 +1127,8 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 				return
 			}
 			r.searchLastDir = filepath.Dir(res.Path)
-			r.searchList.AddItem(formatSearchResult(res), "", 0, func() {
+			_, _, listWidth, _ := r.searchList.GetInnerRect()
+			r.searchList.AddItem(formatSearchResult(res, listWidth), "", 0, func() {
 				r.openSearchResult(res)
 			})
 		})
@@ -1063,12 +1172,53 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 
 // formatSearchResult renders one search.Result as a searchList item:
 // just the path for a filename match (Line == 0), or
-// "path:line: text" for a content match.
-func formatSearchResult(res search.Result) string {
+// "path:line: text" for a content match — middle-truncated (see
+// truncateMiddle) to maxWidth (0 means no limit), per the user's own
+// request. This only ever affects what's drawn: the search.Result a
+// list item's own callback closes over (see streamSearchResults)
+// always keeps the real, untruncated Path for actually opening it.
+func formatSearchResult(res search.Result, maxWidth int) string {
+	var s string
 	if res.Line == 0 {
-		return res.Path
+		s = res.Path
+	} else {
+		s = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
 	}
-	return fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
+	if maxWidth > 0 {
+		s = truncateMiddle(s, maxWidth)
+	}
+	return s
+}
+
+// truncateMiddle shortens s to at most maxWidth runes by dropping
+// characters from its own middle, replacing them with "..." — unlike
+// truncateForDisplay's own front-truncation (used for the search
+// dialog's own short, single-line form fields, where only the
+// trailing/most-specific part matters), a results-list line reads
+// better keeping both ends: a long path's own leading directories AND
+// its own trailing filename (or, for a content match, the matched text
+// at the very end) — see formatSearchResult's own doc comment. Runes,
+// not bytes, so a multi-byte character is never cut in half.
+func truncateMiddle(s string, maxWidth int) string {
+	const ellipsis = "..."
+	runes := []rune(s)
+	if len(runes) <= maxWidth {
+		return s
+	}
+	if maxWidth <= len(ellipsis) {
+		// Too narrow for the ellipsis itself to fit alongside anything
+		// real — nothing meaningful to show either way, so just hand
+		// back a same-width slice of the original rather than only
+		// dots.
+		if maxWidth < 0 {
+			maxWidth = 0
+		}
+		return string(runes[:maxWidth])
+	}
+	keep := maxWidth - len(ellipsis)
+	head := keep / 2
+	tail := keep - head
+	return string(runes[:head]) + ellipsis + string(runes[len(runes)-tail:])
 }
 
 // openSearchResult is what picking a result does: closes the dialog
