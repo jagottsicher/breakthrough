@@ -12,7 +12,7 @@ import (
 // Engine the search dialog has selected shouldn't change what a Glob
 // pattern matches against.
 func TestLocateArgsGlobLinuxAddsBasename(t *testing.T) {
-	got, ok := LocateArgs("linux", "*.go", ModeGlob)
+	got, ok := LocateArgs("linux", "*.go", ModeGlob, false)
 	if !ok {
 		t.Fatal("ok = false, want true")
 	}
@@ -29,7 +29,7 @@ func TestLocateArgsGlobLinuxAddsBasename(t *testing.T) {
 // to ask for anything narrower.
 func TestLocateArgsGlobBSDHasNoBasenameFlag(t *testing.T) {
 	for _, goos := range []string{"darwin", "freebsd"} {
-		got, ok := LocateArgs(goos, "*.go", ModeGlob)
+		got, ok := LocateArgs(goos, "*.go", ModeGlob, false)
 		if !ok {
 			t.Fatalf("(%s) ok = false, want true", goos)
 		}
@@ -41,7 +41,7 @@ func TestLocateArgsGlobBSDHasNoBasenameFlag(t *testing.T) {
 }
 
 func TestLocateArgsKeywordWrapsWithWildcards(t *testing.T) {
-	got, ok := LocateArgs("linux", "report", ModeKeyword)
+	got, ok := LocateArgs("linux", "report", ModeKeyword, false)
 	if !ok {
 		t.Fatal("ok = false, want true")
 	}
@@ -52,7 +52,7 @@ func TestLocateArgsKeywordWrapsWithWildcards(t *testing.T) {
 }
 
 func TestLocateArgsRegexLinux(t *testing.T) {
-	got, ok := LocateArgs("linux", `.*\.log$`, ModeRegex)
+	got, ok := LocateArgs("linux", `.*\.log$`, ModeRegex, false)
 	if !ok {
 		t.Fatal("ok = false, want true")
 	}
@@ -68,8 +68,22 @@ func TestLocateArgsRegexLinux(t *testing.T) {
 // than build a command that would just fail with a usage error.
 func TestLocateArgsRegexBSDUnavailable(t *testing.T) {
 	for _, goos := range []string{"darwin", "freebsd"} {
-		if _, ok := LocateArgs(goos, `.*\.log$`, ModeRegex); ok {
+		if _, ok := LocateArgs(goos, `.*\.log$`, ModeRegex, false); ok {
 			t.Errorf("(%s) ok = true, want false — BSD locate has no regex support", goos)
 		}
+	}
+}
+
+// TestLocateArgsCaseSensitiveOmitsIFlag pins that caseSensitive drops
+// -i — locate's own default (no -i) is already case-sensitive, so
+// there's nothing else to add.
+func TestLocateArgsCaseSensitiveOmitsIFlag(t *testing.T) {
+	got, ok := LocateArgs("linux", "*.go", ModeGlob, true)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	want := []string{"-0", "-b", "*.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("LocateArgs case-sensitive = %v, want %v", got, want)
 	}
 }

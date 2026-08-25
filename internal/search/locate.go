@@ -35,9 +35,17 @@ package search
 // -0 (not the newline-separated default) throughout: null-separated
 // output, the same reason FindArgs uses -print0 — see its own doc
 // comment.
-func LocateArgs(goos, pattern string, mode Mode) (args []string, ok bool) {
+//
+// -i (case-insensitive) is added unless caseSensitive — locate's own
+// default (no -i) is case-sensitive, so this is what actually needs
+// adding for the common case, the reverse of FindArgs' -iname/-name
+// choice below.
+func LocateArgs(goos, pattern string, mode Mode, caseSensitive bool) (args []string, ok bool) {
 	linux := goos == "linux"
-	args = []string{"-0", "-i"}
+	args = []string{"-0"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
 
 	switch mode {
 	case ModeRegex:
