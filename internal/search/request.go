@@ -101,6 +101,19 @@ const (
 // scope decision, not a limitation of the approach (see
 // internal/search's own archive.go). A match here is reported with
 // Result.ArchiveMember set.
+//
+// OnProgress, if set, is called from a background goroutine — possibly
+// several different ones at once, and never the goroutine Run/Range
+// itself was called from — with the path currently being visited: a
+// directory the EngineFind traversal has just entered, or an archive
+// file about to be opened and listed (see internal/search's own
+// archive.go). Callers must be safe for concurrent calls (internal/ui's
+// own handler is, via Application.QueueUpdateDraw) and must return
+// quickly — this is called synchronously from whichever goroutine is
+// doing the actual work, so a slow OnProgress stalls that work.
+// Meaningless for EngineLocate: locate answers entirely from a
+// prebuilt index (see LocateDatabaseCaveat), with no live traversal of
+// its own to report progress on at all.
 type Request struct {
 	Pattern         string
 	NamePattern     string
@@ -116,4 +129,5 @@ type Request struct {
 	WholeWords      bool
 	FirstHit        bool
 	IncludeArchives bool
+	OnProgress      func(path string)
 }

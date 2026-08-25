@@ -202,20 +202,27 @@ type Root struct {
 	// the dialog closes, so a slow "find /" left running never keeps
 	// working after the user has moved on (see runSearch/closeSearch).
 	searchCancel context.CancelFunc
-	// searchAnimFrame/searchLastDir/searchStartDir back the results
-	// window's own status line (see renderSearchStatus):
-	// searchAnimFrame is the current "still working" animation frame
-	// (see animateSearchProgress); searchLastDir is the directory of
-	// the most recently streamed match, breakthrough's own
-	// approximation of "currently scanning" — see streamSearchResults'
-	// own doc comment on why a real one isn't available when the
-	// actual traversal happens inside an external find/locate/grep
-	// process, not breakthrough's own code; searchStartDir (Start at,
-	// as of when the search began) is shown until the first match
-	// arrives.
-	searchAnimFrame int
-	searchLastDir   string
-	searchStartDir  string
+	// searchAnimFrame/searchCurrentPos/searchLastDir/searchStartDir
+	// back the results window's own status line (see
+	// renderSearchStatus): searchAnimFrame is the current "still
+	// working" animation frame (see animateSearchProgress).
+	// searchCurrentPos is the real, live "where are we right now" —
+	// set from search.Request.OnProgress (see runSearch), which for
+	// EngineFind actually is breakthrough's own code watching the
+	// traversal happen (a second, lightweight find -type d — see
+	// internal/search's own startDirectoryProgress), not a guess.
+	// searchLastDir, the directory of the most recently streamed
+	// match, is the fallback once searchCurrentPos has nothing to show
+	// — EngineLocate (OnProgress is never called for it — see its own
+	// doc comment: locate has no live traversal to report on at all)
+	// or once the search has already finished and progress has
+	// stopped arriving. searchStartDir (Start at, as of when the
+	// search began) is the last resort, shown until either one has
+	// anything at all.
+	searchAnimFrame  int
+	searchCurrentPos string
+	searchLastDir    string
+	searchStartDir   string
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel

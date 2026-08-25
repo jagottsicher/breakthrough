@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -225,6 +226,45 @@ func TestRunIncludeArchivesFindsZipMember(t *testing.T) {
 	}
 	if got[0].ArchiveMember != "notes/abcdefg.txt" {
 		t.Errorf("ArchiveMember = %q, want %q", got[0].ArchiveMember, "notes/abcdefg.txt")
+	}
+}
+
+// TestRunIncludeArchivesReportsOpenedArchiveAsProgress pins
+// listArchiveAndSend's own OnProgress call: opening an archive to list
+// it is reported the same way a directory being walked is, so the
+// status line can show "now looking inside docs.zip" while a slow
+// tar.gz is being listed.
+func TestRunIncludeArchivesReportsOpenedArchiveAsProgress(t *testing.T) {
+	requireTool(t, "find")
+	requireTool(t, "unzip")
+	dir := t.TempDir()
+	zipPath := makeZipFixture(t, dir, "docs.zip", "abcdefg.txt")
+
+	var mu sync.Mutex
+	var seen []string
+	onProgress := func(path string) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, path)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern: "abc*", Scope: dir, Mode: ModeGlob, Engine: EngineFind, IncludeArchives: true, OnProgress: onProgress,
+	})
+	collectResults(t, results, errs)
+
+	mu.Lock()
+	defer mu.Unlock()
+	var sawArchive bool
+	for _, p := range seen {
+		if p == zipPath {
+			sawArchive = true
+		}
+	}
+	if !sawArchive {
+		t.Errorf("seen = %v, want it to include the opened archive %q", seen, zipPath)
 	}
 }
 
