@@ -334,7 +334,7 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionEdit:         "^E Edit",
 		statusActionRename:       "^R Rename",
 		statusActionToggleHidden: "^G Hidden",
-		statusActionSearch:       "^F Search",
+		statusActionSearch:       "^F Find",
 		statusActionOptions:      "^O Options",
 		statusActionHelp:         "F1 Help",
 	}

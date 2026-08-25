@@ -136,7 +136,7 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	write("  ")
 	button("^G Hidden", statusActionToggleHidden)
 	write("  ")
-	button("^F Search", statusActionSearch)
+	button("^F Find", statusActionSearch)
 	write("  ")
 	button("^O Options", statusActionOptions)
 	write("  ")
