@@ -864,6 +864,36 @@ func (r *Root) searchResultsSize() (width, height int) {
 	return width, searchResultsHeight
 }
 
+// showSearchError shows msg as the results page's own sole line, in
+// EntryError's own red (the same color a broken symlink gets in the
+// panel itself — see entryColor) — used for a search that was refused
+// before it ever ran (see runSearch's own non-existent-Start-at check)
+// rather than Root's own global error overlay (see showError), which
+// used to close the whole search dialog outright over what's typically
+// just a typo — discarding whatever was already typed into Filename/
+// Content/Start-at and needing the entire dialog reopened from scratch
+// just to fix it. Per the user's own explicit request: showing it here
+// instead means Escape (searchList's own DoneFunc, unchanged — see
+// newSearchDialog) goes straight back to the form, with everything
+// exactly as it was left.
+//
+// Deliberately skips starting animateSearchProgress/streamSearchResults
+// (searchCancel stays nil) — there's no real search running here for
+// either of those to track, only this one static line to show; the
+// next real runSearch resets searchList's own color back to normal
+// (see its own SetMainTextColor call) before adding anything else.
+func (r *Root) showSearchError(msg string) {
+	r.cancelSearch()
+	r.searchList.Clear()
+	r.searchList.SetMainTextColor(r.theme.EntryError)
+	r.searchList.AddItem(msg, "", 0, nil)
+	r.searchStatus.SetText("")
+	r.searchPages.SwitchToPage("results")
+	resultsWidth, resultsHeight := r.searchResultsSize()
+	r.resizeSearchPages(resultsWidth, resultsHeight, true)
+	r.app.SetFocus(r.searchList)
+}
+
 // closeSearch cancels any in-flight search (see cancelSearch) and
 // closes the dialog entirely — Escape from the fields page, or picking
 // a result (see openSearchResult).
@@ -970,10 +1000,13 @@ func (r *Root) runSearch() {
 	// report: typing a real but non-existent path and searching just
 	// says "No matches found" — this catches that case explicitly,
 	// before ever shelling out, with a message that actually says what
-	// went wrong.
+	// went wrong — via showSearchError, not Root's own global error
+	// overlay (see its own doc comment on why: closing the whole dialog
+	// over a typo'd path was "so ein Game-Killer" for a real mistake
+	// this cheap to fix).
 	if engine == search.EngineFind {
 		if info, err := os.Stat(scope); err != nil || !info.IsDir() {
-			r.showError(fmt.Errorf("search directory does not exist: %s", scope))
+			r.showSearchError(fmt.Sprintf("Search directory does not exist: %s", scope))
 			return
 		}
 	}
@@ -1020,6 +1053,7 @@ func (r *Root) runSearch() {
 	r.searchCancel = cancel
 
 	r.searchList.Clear()
+	r.searchList.SetMainTextColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
 	r.searchLastDir = ""
 	r.searchStartDir = scope

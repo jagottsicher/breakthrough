@@ -508,7 +508,13 @@ func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
 // coming back with an empty, indistinguishable-from-a-real-empty-
 // result "No matches found" (find itself exits non-zero on a missing
 // path, but this app's own runner.go deliberately never treats a
-// non-zero exit as an error — see its own doc comment).
+// non-zero exit as an error — see its own doc comment) — and, per a
+// second, follow-up request, does so on the results page itself
+// (searchList's own sole line, in red) rather than Root's own global
+// error overlay, which used to close the whole search dialog outright
+// and discard whatever was already typed in ("das ist doof... das muss
+// ja nicht so ein Game-Killer sein"). Escape from there (searchList's
+// own DoneFunc) goes straight back to the still-intact form.
 func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -530,16 +536,25 @@ func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 	if searchRunCalled {
 		t.Error("runSearch should not have shelled out to find at all for a non-existent Start-at")
 	}
-	if r.activePage != errorPage {
-		t.Fatalf("activePage = %q, want %q (the error overlay)", r.activePage, errorPage)
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q, want still open (%q), not the global error overlay", r.activePage, searchPage)
 	}
-	// wrapText (see errors.go) may have broken this onto several short
-	// lines in a headless test's own near-zero-width panel — collapse
-	// those back to spaces before checking, rather than depending on
-	// exactly where it happened to wrap.
-	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
-	if !strings.Contains(got, "does not exist") {
-		t.Errorf("error text = %q, want it to mention the directory doesn't exist", got)
+	if r.searchList.GetItemCount() != 1 {
+		t.Fatalf("searchList item count = %d, want exactly 1 (the error line)", r.searchList.GetItemCount())
+	}
+	main, _ := r.searchList.GetItemText(0)
+	if !strings.Contains(main, "does not exist") {
+		t.Errorf("searchList's own error line = %q, want it to mention the directory doesn't exist", main)
+	}
+
+	// Escape from the results list must return to the still-intact
+	// form, with Filename untouched.
+	r.searchList.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q after Escape, want still open (%q)", r.activePage, searchPage)
+	}
+	if r.searchFilenameValue != "*.go" {
+		t.Errorf("searchFilenameValue = %q after Escape, want it preserved (%q)", r.searchFilenameValue, "*.go")
 	}
 }
 
