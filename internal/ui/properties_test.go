@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -310,10 +311,23 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
-	r.computeHashes()
+	// computeHashes itself now only ever *starts* a background
+	// computation (see its own doc comment) — the result lands via
+	// r.app.QueueUpdateDraw once hashFile returns, which nothing here
+	// drains (see isolateHashFile's own doc comment on why that's not
+	// safe to do in a test without a running event loop). What's
+	// actually being pinned here is renderProperties' own rendering of
+	// an already-computed result, so set propertiesHashes directly
+	// rather than going through the async path.
+	r.propertiesHashes = &fsops.Hashes{
+		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
+		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+	}
+	r.rerenderProperties()
 
 	after := r.propertiesText.GetText(true)
-	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") { // MD5("hello world")
+	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") {
 		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
 	if !strings.Contains(after, "SHA-256") {
@@ -345,7 +359,55 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	}
 }
 
-func TestCapturePropertiesKeyTriggersHash(t *testing.T) {
+// isolateHashFile overrides hashFile (see computeHashes) with a fake
+// that blocks until t's own cleanup unblocks it, then returns
+// (fsops.Hashes{}, context.Canceled) — restoring the real fsops.Hash
+// afterward. Long enough that computeHashes' own background goroutine
+// never reaches r.app.QueueUpdateDraw *during* the test itself (nothing
+// runs the event loop to drain it — see StartClock's own doc comment
+// for the same concern elsewhere), so tests using this only ever check
+// computeHashes' own synchronous setup (hashInProgress, the animation's
+// first frame).
+//
+// Deliberately NOT a bare "select {}": that would leave the goroutine
+// blocked forever rather than reaped at the end of the test.
+//
+// The returned channel closes the instant the fake is actually called
+// — i.e. once computeHashes' own background goroutine has done its
+// one-time read of the package-level hashFile var. Callers MUST
+// receive from it before returning (see the call sites below): the
+// "go func(){...}()" in computeHashes only *schedules* that goroutine,
+// it doesn't run it, so without this wait the goroutine's read can
+// still be pending when the test ends and races under -race against
+// this helper's own t.Cleanup restoring hashFile. Also register
+// isolateHashFile(t) *before* t.Cleanup(r.cancelHashComputation) —
+// cleanups run in LIFO order, so cancelHashComputation (which cancels
+// this call's own ctx) runs first, and by the time the fake actually
+// unblocks, computeHashes' own ctx.Err() check already sees it as
+// cancelled and returns without touching hashFile or the UI again.
+func isolateHashFile(t *testing.T) <-chan struct{} {
+	t.Helper()
+	original := hashFile
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	hashFile = func(context.Context, string, func(int64)) (fsops.Hashes, error) {
+		close(started)
+		<-unblock
+		return fsops.Hashes{}, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		hashFile = original
+	})
+	return started
+}
+
+// TestComputeHashesShowsAnimationImmediately pins the user's own
+// request: computing hashes (which can take a few seconds on a large
+// file) shows a moving "in progress" indicator right away, rather than
+// the hash section just sitting frozen with no feedback that anything
+// is happening.
+func TestComputeHashesShowsAnimationImmediately(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -353,23 +415,78 @@ func TestCapturePropertiesKeyTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
 	r.target = path
 	r.openProperties()
 
-	if got := r.capturePropertiesKey(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone)); got != nil {
-		t.Error("capturePropertiesKey should consume the 'h' key")
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+
+	if !r.hashInProgress {
+		t.Fatal("hashInProgress should be true right after computeHashes starts")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("pressing h should have computed and shown the hash")
+	text := r.propertiesText.GetText(true)
+	if !strings.Contains(text, hashAnimationFrames[0]) || !strings.Contains(text, "Computing hashes") {
+		t.Errorf("propertiesText should show the first animation frame (%q) and \"Computing hashes\", got:\n%s", hashAnimationFrames[0], text)
 	}
 }
 
-// TestCapturePropertiesMouseClickOnHashLineTriggersHash pins the click
-// affordance: a click landing on (or below) the hash hint line computes
-// the hash, dispatched through capturePropertiesMouse the way a real
-// click arrives, with a genuinely drawn overlay (tcell.SimulationScreen)
-// behind the coordinates rather than assumed ones.
-func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
+// TestComputeHashesShowsPercentProgress pins hashProgressSuffix's own
+// contract: once hashFile's onProgress callback has reported some
+// bytes read, the in-progress line should show what fraction of the
+// file that is. Uses its own fake (rather than isolateHashFile's
+// blocking one) so it can report a specific byte count before
+// blocking, against a fixture file sized so the math comes out exact.
+func TestComputeHashesShowsPercentProgress(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "sized.txt")
+	if err := os.WriteFile(path, make([]byte, 200), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	original := hashFile
+	unblock := make(chan struct{})
+	reported := make(chan struct{})
+	hashFile = func(ctx context.Context, target string, onProgress func(int64)) (fsops.Hashes, error) {
+		onProgress(100) // half of the 200-byte fixture above
+		close(reported)
+		<-unblock
+		return fsops.Hashes{}, context.Canceled
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		hashFile = original
+	})
+	t.Cleanup(r.cancelHashComputation)
+
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-reported // wait for onProgress(100) above before this test can safely end (see isolateHashFile's own doc comment on why)
+
+	// Nothing here drains r.app.QueueUpdateDraw, so animateHashProgress's
+	// own ticker never actually re-renders during this test (same gap
+	// noted throughout this file) — re-render explicitly to observe the
+	// byte count onProgress just stored.
+	r.rerenderProperties()
+
+	text := r.propertiesText.GetText(true)
+	if !strings.Contains(text, "50%") {
+		t.Errorf("propertiesText should show 50%% progress for a 100/200-byte read, got:\n%s", text)
+	}
+}
+
+// TestComputeHashesIgnoresReentryWhileInProgress pins that pressing h
+// or clicking again while a computation is already running (see
+// hashInProgress) doesn't start a second, overlapping one.
+func TestComputeHashesIgnoresReentryWhileInProgress(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -377,6 +494,156 @@ func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if r.hashCancel == nil {
+		t.Fatal("setup: hashCancel should be set after the first call")
+	}
+
+	// A real, newly-started computation always resets hashAnimFrame to 0
+	// (see computeHashes' own setup) — setting it to something else and
+	// confirming a second call leaves it alone is this test's way of
+	// observing that the second call actually no-opped, since func
+	// values (hashCancel) aren't comparable in Go and can't be checked
+	// directly for "is this still the same one".
+	r.hashAnimFrame = 3
+	r.computeHashes() // should no-op — a computation is already in flight
+	if r.hashAnimFrame != 3 {
+		t.Errorf("hashAnimFrame = %d, want unchanged at 3 — a second computeHashes call while already in progress should have no-opped", r.hashAnimFrame)
+	}
+}
+
+// TestOpenPropertiesCancelsStaleHashComputation pins that reopening
+// Properties for a — possibly different — target cancels whatever hash
+// computation was still running for the previous one (see
+// cancelHashComputation), so a stale animation frame or result can
+// never land on the new target's own display.
+func TestOpenPropertiesCancelsStaleHashComputation(t *testing.T) {
+	dir := fixtureDir(t)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+
+	r.target = filepath.Join(dir, "banana.txt")
+	r.openProperties()
+	r.computeHashes()
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if !r.hashInProgress {
+		t.Fatal("setup: expected a hash computation to be in progress")
+	}
+
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if r.hashInProgress {
+		t.Error("hashInProgress should be false again after reopening Properties for a different target — the stale computation should have been cancelled")
+	}
+	if r.hashCancel != nil {
+		t.Error("hashCancel should be nil again after reopening Properties for a different target")
+	}
+}
+
+// TestPropertiesHPressTriggersHash pins the 'h' keyboard shortcut for
+// computing hashes, dispatched through r.properties itself (see
+// hashesInputCapture) the way a real keypress arrives, rather than
+// calling capturePropertiesKey directly — that's no longer where this
+// is handled (see its own doc comment on why).
+func TestPropertiesHPressTriggersHash(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+
+	// Hashing now runs on a background goroutine (see computeHashes),
+	// with an "in progress" animation shown while it's running — the
+	// real result only ever lands via r.app.QueueUpdateDraw, which
+	// nothing here drains (see isolateHashFile's own doc comment), so
+	// this only pins that pressing h actually started a computation.
+	if !r.hashInProgress {
+		t.Error("pressing h should have started computing the hash")
+	}
+	if !strings.Contains(r.propertiesText.GetText(true), "Computing hashes") {
+		t.Errorf("propertiesText should show the in-progress animation, got:\n%s", r.propertiesText.GetText(true))
+	}
+}
+
+// TestPropertiesHPressTriggersHashWhileInlineEditorOpen pins the fix for
+// the user's own report: pressing h stopped working once you'd tabbed
+// onto an auto-editing field (see isAutoEditField — Name, the octal
+// permission value, either half of Modified), since real keyboard focus
+// moves to propertiesEditField then, not propertiesText, where 'h' used
+// to be handled — it would just get typed into whatever field was open
+// instead. hashesInputCapture (installed on r.properties, the shared
+// ancestor of both) fixes this by running before propertiesEditField's
+// own InputHandler ever gets a chance to.
+func TestPropertiesHPressTriggersHashWhileInlineEditorOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.target = path
+	r.openProperties()
+
+	r.setPropertiesFocus(0) // fieldName is propertyFieldOrder[0] — auto-opens the inline editor
+	if !r.propertiesEditField.HasFocus() {
+		t.Fatal("setup: expected the inline editor to have opened and taken focus")
+	}
+	nameBefore := r.propertiesEditField.GetText()
+
+	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("pressing h while the inline editor is open should still have started computing the hash")
+	}
+	if got := r.propertiesEditField.GetText(); got != nameBefore {
+		t.Errorf("the inline editor's own text = %q, want unchanged %q — h should not have been typed into it", got, nameBefore)
+	}
+}
+
+// TestPropertiesHashLineClickTriggersHash pins the click affordance: a
+// click landing on (or below) the hash hint line computes the hash,
+// dispatched through r.properties itself (see hashesMouseCapture) the
+// way a real click arrives, with a genuinely drawn overlay
+// (tcell.SimulationScreen) behind the coordinates rather than assumed
+// ones.
+func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.panel.SetRect(0, 0, 80, 24) // realistic — see clampToPanel's own default-rect gotcha noted elsewhere in this file
 	r.target = path
 	r.openProperties()
 
@@ -386,12 +653,116 @@ func TestCapturePropertiesMouseClickOnHashLineTriggersHash(t *testing.T) {
 	x, y, _, _ := r.propertiesText.GetInnerRect()
 	clickY := y + r.hashSectionRow
 
-	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0))
-	if action != tview.MouseConsumed || event != nil {
-		t.Errorf("click on the hash line should be consumed, got action=%v event=%v", action, event)
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if !consumed {
+		t.Error("click on the hash line should be consumed")
 	}
-	if !strings.Contains(r.propertiesText.GetText(true), "MD5:") {
-		t.Error("clicking the hash line should have computed and shown the hash")
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("clicking the hash line should have started computing the hash")
+	}
+}
+
+// TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen pins the
+// fix for the user's own report: clicking the hash line used to instead
+// land on whichever of Properties' several other sub-widgets (an
+// auto-opened inline editor, or the Cancel/Save button row) happened to
+// occupy that screen position once a field had already been tabbed to —
+// closing the overlay via Cancel/Save instead of computing hashes, even
+// though nothing had actually been changed. hashesMouseCapture (also
+// installed on r.properties) runs before any of that, so this now finds
+// the hash line regardless.
+func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+
+	r.setPropertiesFocus(0) // auto-opens the inline editor over Name
+	if !r.propertiesEditField.HasFocus() {
+		t.Fatal("setup: expected the inline editor to have opened and taken focus")
+	}
+
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+
+	x, y, _, _ := r.propertiesText.GetInnerRect()
+	clickY := y + r.hashSectionRow
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
+	if !consumed {
+		t.Error("click on the hash line should be consumed even while the inline editor is open")
+	}
+	// See TestPropertiesHPressTriggersHash's own doc comment on why this
+	// checks that a computation started, not a finished "MD5:" result.
+	if !r.hashInProgress {
+		t.Error("clicking the hash line while the inline editor is open should still have started computing the hash")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q after clicking the hash line, want Properties to still be open (%q)", r.activePage, propertiesPage)
+	}
+}
+
+// TestSavingUntouchedFieldsDoesNotWriteAnything pins the user's own
+// expectation ("das Fenster sollte keine Werte schreiben, wenn sie nicht
+// geändert wurden"): tabbing all the way through every field stop —
+// which auto-opens an inline editor pre-filled with the current value
+// for Name/the octal permission/either half of Modified (see
+// isAutoEditField), and commits it right back, unchanged, on the very
+// next Tab — without ever typing anything new, then Save, must leave the
+// file exactly as it was. savePropertiesEdit already only applies a
+// field whose staged value differs from the original (see its own doc
+// comment); this pins that a real Tab-through-everything sequence,
+// dispatched the way real keypresses arrive rather than by calling
+// internal methods directly, never disturbs that.
+func TestSavingUntouchedFieldsDoesNotWriteAnything(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	for i := 0; i < len(propertyFieldOrder); i++ {
+		r.properties.InputHandler()(tab, func(tview.Primitive) {})
+	}
+
+	r.savePropertiesEdit()
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Name() != before.Name() {
+		t.Errorf("name changed from %q to %q despite no edit", before.Name(), after.Name())
+	}
+	if after.Mode() != before.Mode() {
+		t.Errorf("mode changed from %v to %v despite no edit", before.Mode(), after.Mode())
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("mtime changed from %v to %v despite no edit", before.ModTime(), after.ModTime())
 	}
 }
 
@@ -408,6 +779,33 @@ func drawProperties(t *testing.T, r *Root) tcell.SimulationScreen {
 	}
 	screen.SetSize(80, 24)
 	r.properties.SetRect(0, 0, 60, 20)
+	r.properties.Draw(screen)
+	return screen
+}
+
+// drawPropertiesAtCurrentRect is drawProperties' counterpart for tests
+// that need r.properties' own real, already-computed rect (see
+// resizeProperties) left alone rather than overridden to a fixed
+// 60x20. That matters specifically for the Cancel/Save row: its own
+// rect (see newPropertiesView's "buttons" page, added with resize:
+// false) is never touched by tview.Pages' own per-Draw resizing, so it
+// stays whatever resizeProperties last computed — which, against a
+// realistic (wide) panel rect and a long enough t.TempDir() path in the
+// rendered "Path:" line, can end up wider than drawProperties' fixed 60
+// columns. Overriding to a narrower rect then leaves the button row's
+// own already-computed position extending past r.properties' new
+// (narrower) bounds, so a click there gets rejected by Pages' own
+// InRect check before ever reaching the button underneath it — not a
+// real app bug, just this fixed-size test helper being too narrow for
+// realistic content.
+func drawPropertiesAtCurrentRect(t *testing.T, r *Root) tcell.SimulationScreen {
+	t.Helper()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(120, 40) // generous enough for any realistic content width against an 80x24 panel
 	r.properties.Draw(screen)
 	return screen
 }
@@ -489,6 +887,57 @@ func findPropertySpan(r *Root, field propertyField) (propertySpan, bool) {
 	return propertySpan{}, false
 }
 
+// TestPropertiesNameSpanAccountsForWideCharacters pins the fix for the
+// user's own report: a file name containing double-width (e.g. CJK)
+// characters must produce a fieldName span whose width matches how many
+// terminal columns the name actually occupies, not its rune count —
+// "文档.txt" is 6 runes but 8 terminal columns. minWidth (see
+// activatePropertyField's fieldName case) masks the gap in the inline
+// editor's own on-screen width for a name this short, but propertySpanAt
+// (used by capturePropertiesMouse to route a click) has no such floor:
+// a click on the name's real last column used to fall short of the
+// (too-narrow) span and miss it entirely.
+func TestPropertiesNameSpanAccountsForWideCharacters(t *testing.T) {
+	const name = "文档.txt"
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldName)
+	if !ok {
+		t.Fatal("no fieldName span found")
+	}
+
+	wantWidth := tview.TaggedStringWidth(name)
+	if gotWidth := span.endCol - span.startCol; gotWidth != wantWidth {
+		t.Errorf("fieldName span width = %d, want %d (real display width of %q, not its rune count of %d)", gotWidth, wantWidth, name, len([]rune(name)))
+	}
+
+	// A real click, dispatched through a genuinely drawn screen, on the
+	// name's own actual last column must still land inside its span.
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	clickX, clickY := rectX+span.endCol-1, rectY+span.row
+
+	action, event := r.capturePropertiesMouse(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0))
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("click on the name field's own last column should be consumed, got action=%v event=%v", action, event)
+	}
+	if !r.propertiesEditField.HasFocus() {
+		t.Error("clicking the name field's last column should open the inline editor, not miss the span")
+	}
+}
+
 func TestOpenPropertiesInitializesStagedValues(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
@@ -556,7 +1005,7 @@ func TestTogglePermBitFlipsStagedModeAndMarksDirty(t *testing.T) {
 // TestPropertiesEditFieldUsesFocusedColor pins the fix for the user's
 // own report ("manche Felder leuchten hell auf, wenn man drin ist,
 // andere aber nicht"): the shared inline edit field always carries
-// focusedBackgroundColor, the same bright color the currently-focused
+// theme.FocusedBackground, the same bright color the currently-focused
 // field's own span in propertiesText shows (see focusTag) — before this
 // fix it used the plainer editableBackgroundColor instead, so a field
 // that opened its own editor immediately (Name/Date/Time/the octal
@@ -571,8 +1020,8 @@ func TestPropertiesEditFieldUsesFocusedColor(t *testing.T) {
 	}
 
 	_, bg, _ := r.propertiesEditField.GetFieldStyle().Decompose()
-	if bg != focusedBackgroundColor {
-		t.Errorf("propertiesEditField's field background = %v, want focusedBackgroundColor (%v)", bg, focusedBackgroundColor)
+	if bg != r.theme.FocusedBackground {
+		t.Errorf("propertiesEditField's field background = %v, want theme.FocusedBackground (%v)", bg, r.theme.FocusedBackground)
 	}
 }
 
@@ -1121,6 +1570,88 @@ func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o644 {
 		t.Errorf("mode = %o after Cancel, want unchanged 0644", fi.Mode().Perm())
+	}
+}
+
+// TestPropertiesCancelButtonClickStillClosesOverlay pins the fix for a
+// real regression: hashesMouseCapture (installed on r.properties itself
+// — see its own doc comment) used to swallow a click meant for Cancel
+// into computeHashes instead, and leave Properties open — because
+// tview.Pages gives every visible page (propertiesText included) the
+// same rect as the Pages itself, covering the Cancel/Save row too, not
+// just propertiesText's own content lines. Dispatched through
+// r.properties.MouseHandler() the way a real click arrives — the
+// existing TestCancelPropertiesEditDiscardsChanges calls
+// cancelPropertiesEdit directly, which bypasses this routing entirely
+// and so never would have caught it.
+func TestPropertiesCancelButtonClickStillClosesOverlay(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+
+	screen := drawPropertiesAtCurrentRect(t, r)
+	defer screen.Fini()
+
+	x, y, w, h := r.propertiesCancelBtn.GetRect()
+	clickX, clickY := x+w/2, y+h/2
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on Cancel should be consumed")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after clicking Cancel, want closed", r.activePage)
+	}
+	if strings.Contains(r.propertiesText.GetText(true), "MD5:") {
+		t.Error("clicking Cancel should not have computed hashes")
+	}
+}
+
+// TestPropertiesSaveButtonClickStillSaves is
+// TestPropertiesCancelButtonClickStillClosesOverlay's Save-button
+// counterpart, pinning the same fix.
+func TestPropertiesSaveButtonClickStillSaves(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // a real, staged change for Save to actually apply
+
+	screen := drawPropertiesAtCurrentRect(t, r)
+	defer screen.Fini()
+
+	x, y, w, h := r.propertiesSaveBtn.GetRect()
+	clickX, clickY := x+w/2, y+h/2
+
+	consumed, _ := r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(clickX, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if !consumed {
+		t.Error("click on Save should be consumed")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after clicking Save, want closed", r.activePage)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o after Save, want the staged change applied (0640 — other-read toggled off from 0644)", fi.Mode().Perm())
 	}
 }
 

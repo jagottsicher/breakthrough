@@ -12,7 +12,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
 func TestBuildHeaderSpans(t *testing.T) {
@@ -86,13 +88,46 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	}
 }
 
+// TestBuildHeaderSpansAccountsForWideCharacters pins the fix for the
+// user's own report: a directory name containing double-width (e.g.
+// CJK) characters must advance the column count by its real terminal
+// width, not its rune count, or every span after it (and the click
+// target it maps to) drifts out of alignment with what's actually drawn
+// on screen. "文档" is 2 runes but 4 terminal columns.
+func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
+	text, spans := buildHeaderSpans("/文档/c")
+
+	wantText := " ^ ~ < >  /文档/c"
+	if text != wantText {
+		t.Fatalf("text = %q, want %q", text, wantText)
+	}
+
+	want := []headerSpan{
+		{start: 1, end: 2, action: actionStart},
+		{start: 3, end: 4, action: actionHome},
+		{start: 5, end: 6, action: actionBack},
+		{start: 7, end: 8, action: actionForward},
+		{start: 10, end: 11, action: actionNavigate, target: "/"},
+		{start: 11, end: 15, action: actionNavigate, target: "/文档"},
+		{start: 16, end: 17, action: actionNavigate, target: "/文档/c"},
+	}
+	if len(spans) != len(want) {
+		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
+	}
+	for i := range want {
+		if spans[i] != want[i] {
+			t.Errorf("span %d = %+v, want %+v", i, spans[i], want[i])
+		}
+	}
+}
+
 // TestStartButtonReturnsToLaunchDirectory pins the Start button's
 // contract: no matter how far navigation has wandered since, it always
 // returns to the directory the Panel was first opened at (history[0]),
 // distinct from the OS home directory the Home button uses.
 func TestStartButtonReturnsToLaunchDirectory(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -178,6 +213,72 @@ func TestCompletionsNoMatch(t *testing.T) {
 	}
 }
 
+// TestDirCompletionsExcludesFiles pins dirCompletions' own first
+// difference from completions — per the user's own explicit request:
+// apple.txt/apricot.txt (files, matching "ap" too) are excluded
+// outright, leaving only the one real directory that starts with it.
+func TestDirCompletionsExcludesFiles(t *testing.T) {
+	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+
+	var p Panel
+	got := p.dirCompletions(dir + "/ap")
+
+	want := []string{dir + "/app-data/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (files excluded)", got, want)
+	}
+}
+
+// TestDirCompletionsIsCaseSensitive pins dirCompletions' own second
+// difference from completions — per the user's own explicit request: a
+// lowercase prefix matches only a same-case directory, not one
+// differing purely in case.
+func TestDirCompletionsIsCaseSensitive(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "Foo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "foo"), 0755); err != nil {
+		// A case-insensitive-but-preserving filesystem (macOS' own
+		// default APFS mode, unlike Linux' usual ext4/xfs/btrfs) treats
+		// "Foo" and "foo" as the very same entry — "Foo" already exists
+		// by the time this one runs, so this isn't a real failure, just
+		// this test's own premise (two directories differing only in
+		// case coexisting) not holding on this filesystem.
+		t.Skipf("can't create \"foo\" alongside \"Foo\" — case-insensitive filesystem? %v", err)
+	}
+
+	var p Panel
+	got := p.dirCompletions(dir + "/F")
+
+	want := []string{dir + "/Foo/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (\"foo/\" differs only in case, shouldn't match \"F\")", got, want)
+	}
+}
+
+// TestDirCompletionsIncludesDirSymlinks pins that a symlink resolving
+// to a directory is treated the same as a real directory (Entry.IsDir
+// already accounts for this — see its own doc comment), not excluded
+// alongside plain files.
+func TestDirCompletionsIncludesDirSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "realdir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "realdir"), filepath.Join(dir, "linkdir")); err != nil {
+		t.Fatal(err)
+	}
+
+	var p Panel
+	got := p.dirCompletions(dir + "/link")
+
+	want := []string{dir + "/linkdir/"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("got %v, want %v (a directory symlink should match like a real directory)", got, want)
+	}
+}
+
 func TestLongestCommonPrefix(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -191,6 +292,14 @@ func TestLongestCommonPrefix(t *testing.T) {
 		{"nothing in common", []string{"apple", "banana"}, ""},
 		// Compared by rune, so a multi-byte character is never cut in half.
 		{"multi-byte", []string{"äpfel", "äpril"}, "äp"},
+		// Case-insensitive comparison (matching completions' own
+		// case-insensitive matching — see this func's own doc comment):
+		// these two only share "Download" case-insensitively, diverging
+		// at the 9th character ('s' vs '-') — a case-sensitive compare
+		// would have collapsed this all the way back to "" the moment it
+		// hit the very first differing-case letter ('D' vs 'd'), a real
+		// bug this pins the fix for.
+		{"case-insensitive divergence", []string{"Downloads", "download-thing.sh"}, "Download"},
 	}
 
 	for _, tt := range tests {
@@ -243,7 +352,7 @@ func TestCheckboxText(t *testing.T) {
 func TestPanelLoadPopulatesTable(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -272,7 +381,7 @@ func TestPanelLoadPopulatesTable(t *testing.T) {
 
 func TestToggleCheckbox(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -466,7 +575,7 @@ func TestFormatModTimeCell(t *testing.T) {
 // TestSetSortKeyReversesOrderAndPersistsAcrossNavigation).
 func TestSetSortKeySwitchingColumnStartsAscending(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -491,7 +600,7 @@ func TestSetSortKeySwitchingColumnStartsAscending(t *testing.T) {
 // arrow appears only next to the current sort key's own label.
 func TestBuildColumnHeaderShowsArrowOnActiveColumnOnly(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -532,7 +641,7 @@ func TestColumnHeaderClickSortsBySize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -570,7 +679,7 @@ func TestColumnHeaderClickSortsBySize(t *testing.T) {
 
 func TestAllSelected(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -596,7 +705,7 @@ func TestAllSelected(t *testing.T) {
 // context menu already offer.
 func TestToggleSelectAllViaHeader(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -618,7 +727,7 @@ func TestToggleSelectAllViaHeader(t *testing.T) {
 // of them funnel through (see its own doc comment).
 func TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt: rows 1-4
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -647,7 +756,7 @@ func TestRefreshHeaderCheckboxStaysInSyncWithIndividualToggles(t *testing.T) {
 // same reason: real coordinate-dependent click routing.
 func TestColumnHeaderCheckboxClickSelectsAll(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -678,7 +787,7 @@ func TestColumnHeaderCheckboxClickSelectsAll(t *testing.T) {
 // blank out for that row).
 func TestColumnSeparatorsPresent(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -711,7 +820,7 @@ func TestLoadShowsDotfilesByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -735,7 +844,7 @@ func TestToggleHiddenOffHidesDotfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -764,7 +873,7 @@ func TestSelectAllExcludesHiddenFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -800,7 +909,7 @@ func TestSelectAllIncludesHiddenFilesWhenShown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -826,7 +935,7 @@ func TestSetSortKeyReversesOrderAndPersistsAcrossNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -879,17 +988,19 @@ func TestTypeGlyph(t *testing.T) {
 }
 
 func TestEntryColor(t *testing.T) {
-	if got := entryColor(rowRef{entryType: fsops.TypeSymlinkBroken}); got != tcell.ColorRed {
-		t.Errorf("broken symlink color = %v, want red", got)
+	p := Panel{theme: config.DefaultTheme().Resolve()}
+
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken}); got != p.theme.EntryError {
+		t.Errorf("broken symlink color = %v, want %v (EntryError)", got, p.theme.EntryError)
 	}
-	if got := entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755}); got != tcell.ColorGreen {
-		t.Errorf("executable file color = %v, want green", got)
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755}); got != p.theme.EntryExecutable {
+		t.Errorf("executable file color = %v, want %v (EntryExecutable)", got, p.theme.EntryExecutable)
 	}
-	if got := entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o644}); got != tcell.ColorWhite {
-		t.Errorf("non-executable file color = %v, want white", got)
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o644}); got != p.theme.EntryNormal {
+		t.Errorf("non-executable file color = %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
 	}
-	if got := entryColor(rowRef{entryType: fsops.TypeDir}); got != tcell.ColorWhite {
-		t.Errorf("directory color = %v, want white", got)
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir}); got != p.theme.EntryNormal {
+		t.Errorf("directory color = %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
 	}
 }
 
@@ -932,7 +1043,7 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 		t.Skipf("hard links not supported here: %v", err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -986,7 +1097,7 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1016,7 +1127,7 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 // the ".." row (not checkable) is left alone either way.
 func TestSelectAllDeselectAll(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1040,7 +1151,7 @@ func TestSelectAllDeselectAll(t *testing.T) {
 // semantics; an unmatched pattern is not an error, a malformed one is.
 func TestSelectByPattern(t *testing.T) {
 	dir := fixtureDir(t) // app-data/, apple.txt, apricot.txt, banana.txt
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1077,7 +1188,7 @@ func TestSelectByPattern(t *testing.T) {
 // rows, absolute paths, in whatever order the underlying map yields.
 func TestSelectedPaths(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1108,7 +1219,7 @@ func TestSelectedPaths(t *testing.T) {
 // loading a new directory must not carry old checkmarks forward.
 func TestPanelLoadResetsSelection(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1133,7 +1244,7 @@ func TestPanelLoadResetsSelection(t *testing.T) {
 // the whole row.
 func TestNameCellRectExcludesCheckboxColumn(t *testing.T) {
 	dir := fixtureDir(t)
-	p, err := NewPanel(tview.NewApplication(), dir)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
@@ -1208,5 +1319,501 @@ func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
 	row, _ := r.panel.table.GetSelection()
 	if row != 2 {
 		t.Errorf("selected row after a same-directory refresh = %d, want unchanged 2", row)
+	}
+}
+
+// TestShowSearchResultsClearsTableAndEntersSearchMode pins
+// showSearchResults' own basic contract: an empty table, searchMode
+// true, and — critically — p.path itself left completely untouched
+// (see its own doc comment on why every other Panel method depends on
+// that).
+func TestShowSearchResultsClearsTableAndEntersSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	realPath := p.path
+
+	p.showSearchResults()
+
+	if !p.searchMode {
+		t.Error("searchMode = false after showSearchResults, want true")
+	}
+	if got := p.table.GetRowCount(); got != 0 {
+		t.Errorf("table has %d rows right after showSearchResults, want 0", got)
+	}
+	if p.path != realPath {
+		t.Errorf("p.path = %q after showSearchResults, want unchanged %q", p.path, realPath)
+	}
+	if p.searchRestorePath != realPath {
+		t.Errorf("searchRestorePath = %q, want %q", p.searchRestorePath, realPath)
+	}
+}
+
+// TestAppendSearchResultClassifiesAndUsesFullPathAsName pins the two
+// things appendSearchResult adds on top of a bare path string: real
+// fsops classification (a symlink here, to prove it's not just
+// defaulting to TypeFile) via DescribeEntry, and Name overwritten to
+// the result's own full path rather than DescribeEntry's usual
+// basename — see both functions' own doc comments.
+func TestAppendSearchResultClassifiesAndUsesFullPathAsName(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+	link := filepath.Join(dir, "link-to-apple")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: link})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.name != link {
+		t.Errorf("name = %q, want the full path %q", ref.name, link)
+	}
+	if ref.path != link {
+		t.Errorf("path = %q, want %q", ref.path, link)
+	}
+	if ref.entryType != fsops.TypeSymlinkFile {
+		t.Errorf("entryType = %v, want TypeSymlinkFile — DescribeEntry should have classified this as a real symlink", ref.entryType)
+	}
+	if ref.linkTarget != target {
+		t.Errorf("linkTarget = %q, want %q", ref.linkTarget, target)
+	}
+}
+
+// TestAppendSearchResultSortsGroupedByFullPath pins the user's own
+// stated reason for preferring full-path-as-name over a bare basename:
+// results scattered across different directories sort coherently
+// (directories-first, then alphabetically by full path) rather than
+// being interleaved by basename alone.
+func TestAppendSearchResultSortsGroupedByFullPath(t *testing.T) {
+	dir := fixtureDir(t)
+	sub := filepath.Join(dir, "app-data") // already exists, see fixtureDir
+	for _, name := range []string{"zzz.txt", "aaa.txt"} {
+		if err := os.WriteFile(filepath.Join(sub, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	subDir := filepath.Join(dir, "app-data", "nested")
+	if err := os.Mkdir(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	// Deliberately appended out of any sorted order.
+	for _, path := range []string{
+		filepath.Join(sub, "zzz.txt"),
+		subDir,
+		filepath.Join(sub, "aaa.txt"),
+	} {
+		p.appendSearchResult(search.Result{Path: path})
+	}
+
+	var gotOrder []string
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, _ := p.rowRef(row)
+		gotOrder = append(gotOrder, ref.path)
+	}
+	wantOrder := []string{
+		subDir, // the one directory result — directories always group first, same as a real listing
+		filepath.Join(sub, "aaa.txt"),
+		filepath.Join(sub, "zzz.txt"),
+	}
+	if len(gotOrder) != len(wantOrder) {
+		t.Fatalf("got %d rows, want %d: %v", len(gotOrder), len(wantOrder), gotOrder)
+	}
+	for i := range wantOrder {
+		if gotOrder[i] != wantOrder[i] {
+			t.Errorf("row %d = %q, want %q (full order: got %v, want %v)", i, gotOrder[i], wantOrder[i], gotOrder, wantOrder)
+		}
+	}
+}
+
+// TestAppendSearchResultShowsLineAndTextForContentMatch pins a content
+// (grep) match's own display text — "path:line: text" — while its
+// underlying rowRef.path stays the real, bare path throughout: only
+// display should ever carry the line/text suffix (see
+// searchResultEntry's own doc comment), never what activateRow or the
+// context menu actually acts on.
+func TestAppendSearchResultShowsLineAndTextForContentMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: target, Line: 42, Text: "needle found here"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != target {
+		t.Errorf("path = %q, want the bare real path %q", ref.path, target)
+	}
+	wantName := target + ":42: needle found here"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+}
+
+// TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches
+// pins the reason searchResultEntry carries display separately from
+// Entry.Name at all: a content search without "First hit" checked can
+// legitimately report the same file more than once, once per matching
+// line — both must show up as their own row, each with its own
+// distinct line/text, not collapse into one or silently overwrite each
+// other.
+func TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "apple.txt")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: target, Line: 3, Text: "first hit"})
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "second hit"})
+
+	if got := p.table.GetRowCount(); got != 2 {
+		t.Fatalf("got %d rows for two matches in the same file, want 2", got)
+	}
+	var gotNames []string
+	for row := 0; row < 2; row++ {
+		ref, ok := p.rowRef(row)
+		if !ok {
+			t.Fatalf("no rowRef for row %d", row)
+		}
+		if ref.path != target {
+			t.Errorf("row %d: path = %q, want %q", row, ref.path, target)
+		}
+		gotNames = append(gotNames, ref.name)
+	}
+	wantNames := []string{target + ":3: first hit", target + ":9: second hit"}
+	for _, want := range wantNames {
+		found := false
+		for _, got := range gotNames {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("gotNames = %v, missing %q", gotNames, want)
+		}
+	}
+}
+
+// TestSetSearchStatusPaintsHeaderWithNoClickableSpans pins that the
+// header, while showing search status text, has nothing left in
+// headerSpans — see captureHeaderMouse's own searchMode guard, which
+// depends on this to avoid falling through to openEdit.
+func TestSetSearchStatusPaintsHeaderWithNoClickableSpans(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+
+	p.setSearchStatus("⠋ searching…")
+
+	if got := p.header.GetText(true); got != "⠋ searching…" {
+		t.Errorf("header text = %q, want %q", got, "⠋ searching…")
+	}
+	if len(p.headerSpans) != 0 {
+		t.Errorf("headerSpans = %v after setSearchStatus, want empty", p.headerSpans)
+	}
+}
+
+// TestSetSortKeyInSearchModeReRendersWithoutTouchingRealDirectory pins
+// setSortKey's own searchMode branch: it re-sorts and redraws
+// searchEntries in place (renderSearchEntries), never calling load()
+// (which would fail here anyway, and would incorrectly reset
+// p.path/cursor if it somehow didn't) — the result count before and
+// after is the same, and p.path (never touched by search mode to begin
+// with) stays whatever the real directory already was.
+func TestSetSortKeyInSearchModeReRendersWithoutTouchingRealDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	realPath := p.path
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "banana.txt")})
+
+	p.setSortKey(sortBySize) // any key different from the default is enough to exercise the branch
+
+	if !p.searchMode {
+		t.Error("searchMode = false after a sort-key change, want still true")
+	}
+	if p.path != realPath {
+		t.Errorf("p.path = %q after a sort-key change in search mode, want unchanged %q", p.path, realPath)
+	}
+	if got := p.table.GetRowCount(); got != 2 {
+		t.Errorf("got %d rows after re-sorting, want still 2", got)
+	}
+}
+
+// TestRenderSearchEntriesPreservesCheckedStateAcrossSort pins the fix
+// renderSearchEntries needed on top of addRow's own usual behavior:
+// addRow always draws a fresh checkbox unchecked (correct for load(),
+// which resets p.selected right before calling it — see load's own
+// doc comment), so a search-mode re-render (triggered by a new result
+// streaming in, or a sort-key change) must explicitly restore each
+// row's own checked glyph from p.selected afterward, or a previously
+// checked result would silently render as unchecked again.
+func TestRenderSearchEntriesPreservesCheckedStateAcrossSort(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target})
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "banana.txt")})
+
+	var row int
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.path == target {
+			row = i
+			break
+		}
+	}
+	p.setChecked(row, true)
+
+	p.setSortKey(sortBySize) // forces a full renderSearchEntries re-render
+
+	if !p.selected[target] {
+		t.Fatalf("p.selected lost %q across a sort-key change", target)
+	}
+	var newRow int
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.path == target {
+			newRow = i
+			break
+		}
+	}
+	if cell := p.table.GetCell(newRow, colCheckbox); cell.Text != checkboxText(true) {
+		t.Errorf("checkbox glyph for %q = %q after re-sorting, want %q (still checked)", target, cell.Text, checkboxText(true))
+	}
+}
+
+// TestExitSearchResultsRestoresRealDirectoryAndCursor pins
+// exitSearchResults' own full round trip: leaving search mode brings
+// back exactly the real directory and cursor row the panel was showing
+// right before showSearchResults switched it over, per the user's own
+// explicit request that this look like nothing ever happened.
+func TestExitSearchResultsRestoresRealDirectoryAndCursor(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.focusRow(2)
+	realRowCount := p.table.GetRowCount()
+
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+
+	if err := p.exitSearchResults(); err != nil {
+		t.Fatalf("exitSearchResults: %v", err)
+	}
+
+	if p.searchMode {
+		t.Error("searchMode still true after exitSearchResults")
+	}
+	if got := p.table.GetRowCount(); got != realRowCount {
+		t.Errorf("got %d rows after exiting search results, want the real directory's own %d back", got, realRowCount)
+	}
+	row, _ := p.table.GetSelection()
+	if row != 2 {
+		t.Errorf("selected row after exitSearchResults = %d, want restored 2", row)
+	}
+}
+
+// TestActivateRowInSearchModeJumpsToResultInstead pins activateRow's
+// own searchMode branch: unlike a real directory row (where only a
+// directory does anything, and it's "cd into it"), any result — file
+// or directory alike — leaves search mode and jumps straight to the
+// result's real location, the same "Go to file/folder" meaning
+// left-click on a result has always had.
+func TestActivateRowInSearchModeJumpsToResultInstead(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt") // a file — activateRow on a real row would ignore this entirely
+	p.appendSearchResult(search.Result{Path: target})
+
+	p.activateRow(0)
+
+	if p.searchMode {
+		t.Error("searchMode still true after activating a search result")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q after activating the result, want its own real directory %q", p.path, dir)
+	}
+	row, _ := p.table.GetSelection()
+	ref, ok := p.rowRef(row)
+	if !ok || ref.path != target {
+		t.Errorf("selected row after activating the result = %+v, want it focused on %q", ref, target)
+	}
+}
+
+// TestFilterFieldInertWhileSearchMode pins the deliberate scope
+// boundary documented on filterField/filterRegexBtn's own guards:
+// neither touches filterText/filterRegex, and neither reloads
+// anything, while search results are showing — the search dialog
+// already has its own Filename/Content fields for that need.
+func TestFilterFieldInertWhileSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	rowsBefore := p.table.GetRowCount()
+
+	// SetText alone doesn't fire SetChangedFunc in tview unless the
+	// text actually differs from before — it does here, since
+	// filterField starts blank.
+	p.filterField.SetText("apple")
+
+	if p.filterText != "" {
+		t.Errorf("filterText = %q after typing while searchMode, want untouched %q", p.filterText, "")
+	}
+	if got := p.table.GetRowCount(); got != rowsBefore {
+		t.Errorf("got %d rows after typing in the filter field while searchMode, want unchanged %d (no reload)", got, rowsBefore)
+	}
+}
+
+// TestCaptureTableKeyEscapeCallsOnSearchEscapeOnlyInSearchMode pins
+// where "Esc: back to search" is actually wired now that results live
+// in the panel itself rather than a separate overlay — see
+// onSearchEscape's own doc comment.
+func TestCaptureTableKeyEscapeCallsOnSearchEscapeOnlyInSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onSearchEscape = func() { called = true }
+
+	p.captureTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if called {
+		t.Error("onSearchEscape ran while showing a real directory, want only in search mode")
+	}
+
+	p.showSearchResults()
+	p.captureTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if !called {
+		t.Error("onSearchEscape did not run for Escape while searchMode")
+	}
+}
+
+// TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode pins
+// the user's own explicit request: activating a content-search result
+// (Line > 0 — see rowRef.searchLine) calls onOpenSearchResult with its
+// real path and matched line instead of just jumping to it, and —
+// deliberately, unlike a filename match — leaves search mode showing
+// afterward, so the next match is still right there to try.
+func TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	var gotPath string
+	var gotLine int
+	p.onOpenSearchResult = func(path string, line int) {
+		gotPath, gotLine = path, line
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if gotPath != target || gotLine != 9 {
+		t.Errorf("onOpenSearchResult got (%q, %d), want (%q, %d)", gotPath, gotLine, target, 9)
+	}
+	if !p.searchMode {
+		t.Error("searchMode = false after opening a content match, want still true")
+	}
+}
+
+// TestActivateRowOnContentMatchFallsBackWithoutOpenCallback pins the
+// same nil-safety onSearchEscape already has: with onOpenSearchResult
+// left nil (e.g. a Panel built without Root wiring it — see its own
+// doc comment), a content match still falls back to the ordinary
+// jump-to-result behavior rather than silently doing nothing.
+func TestActivateRowOnContentMatchFallsBackWithoutOpenCallback(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if p.searchMode {
+		t.Error("searchMode still true after activating a content match with no onOpenSearchResult, want the fallback jump to have left it")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q, want the fallback jump to have landed on %q", p.path, dir)
+	}
+}
+
+// TestActivateRowOnFilenameMatchIgnoresOpenCallback pins that
+// onOpenSearchResult is only ever consulted for a content match
+// (searchLine > 0) — a filename match (Line == 0) always jumps to its
+// real location instead, even with a callback set, since there's no
+// specific line to open it at in the first place.
+func TestActivateRowOnFilenameMatchIgnoresOpenCallback(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onOpenSearchResult = func(string, int) { called = true }
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target}) // Line == 0: a filename match
+
+	p.activateRow(0)
+
+	if called {
+		t.Error("onOpenSearchResult ran for a filename match, want it only ever consulted for a content match")
+	}
+	if p.searchMode {
+		t.Error("searchMode still true after activating a filename match, want the jump to have left it")
 	}
 }

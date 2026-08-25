@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,23 +11,11 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 const propertiesPage = "properties"
-
-// focusedBackgroundColor sets apart whichever field propertiesFocusIndex
-// currently points at (see focusTag/setPropertiesFocus) from every other
-// editable field's plain slategray shade (see focusTag) — brighter, so
-// "this is the one keyboard focus is on right now" reads as a distinct
-// state from "this is merely editable". Also propertiesEditField's own
-// color (see newPropertiesView): unlike the plain shade, which many
-// spans in the read-only text all share, the inline edit field is only
-// ever shown for whichever field is currently focused — every time it's
-// visible, that's what it's covering, so it should always look focused
-// too, not fall back to the duller "editable" look the field underneath
-// no longer shows once its own text is covered.
-const focusedBackgroundColor = tcell.ColorDarkCyan
 
 // propertyField identifies one editable region within the Properties
 // overlay — see propertySpan and propertiesBuilder.
@@ -134,15 +123,28 @@ type propertiesBuilder struct {
 	row   int
 	col   int
 	spans []propertySpan
+
+	// theme drives focusTag's own colors — set once when pb is
+	// constructed (see renderProperties), from whatever Root.theme
+	// currently is.
+	theme config.ResolvedTheme
 }
 
 func (pb *propertiesBuilder) tag(s string) {
 	pb.b.WriteString(s)
 }
 
+// text advances col by s's display width (tview.TaggedStringWidth, the
+// same measure buildHeaderSpans uses — see its own doc comment), not a
+// plain rune count: a file name value can itself contain double-width
+// (e.g. CJK) characters, and a rune count would leave that field's own
+// span, and every span after it on the same row, misaligned with where
+// the text is actually drawn — visible as the inline editor (see
+// activateInlineTextField) or the owner/group picker (see
+// propertyFieldPosition) landing next to the real text instead of on it.
 func (pb *propertiesBuilder) text(s string) {
 	pb.b.WriteString(s)
-	pb.col += len([]rune(s))
+	pb.col += tview.TaggedStringWidth(s)
 }
 
 func (pb *propertiesBuilder) newline() {
@@ -160,17 +162,21 @@ func (pb *propertiesBuilder) field(label, value string) {
 }
 
 // focusTag returns the style tag/reset pair a span for field should use:
-// a brighter, bolder "this one has keyboard focus" style if it's the one
-// propertiesFocusIndex currently points at (focused — see
-// focusedPropertyField), otherwise the plain "this is editable" style
-// (plain slategray) every field already had. Neither ever
-// touches the foreground color, only background/bold, so the reset tag
-// never needs to restore anything beyond what it changed.
-func focusTag(field, focused propertyField) (tag, reset string) {
+// a brighter, bolder "this one has keyboard focus" style (pb.theme's own
+// FocusedBackground) if it's the one propertiesFocusIndex currently
+// points at (focused — see focusedPropertyField), otherwise the plain
+// "this is editable" style (pb.theme's EditableBackground) every field
+// already had. Neither ever touches the foreground color, only
+// background/bold, so the reset tag never needs to restore anything
+// beyond what it changed. Colors are rendered as "#rrggbb" (see
+// colorTag), not a color name, so a themed value always round-trips
+// exactly through tview's own tag parser rather than depending on it
+// recognizing the same names tcell.GetColor does.
+func (pb *propertiesBuilder) focusTag(field, focused propertyField) (tag, reset string) {
 	if field == focused {
-		return "[:darkcyan:b]", "[:-:-]" // matches focusedBackgroundColor
+		return fmt.Sprintf("[:%s:b]", colorTag(pb.theme.FocusedBackground)), "[:-:-]"
 	}
-	return "[:slategray]", "[:-]"
+	return fmt.Sprintf("[:%s]", colorTag(pb.theme.EditableBackground)), "[:-]"
 }
 
 // editableField writes one "Label: value" line with value highlighted
@@ -179,7 +185,7 @@ func focusTag(field, focused propertyField) (tag, reset string) {
 // under field.
 func (pb *propertiesBuilder) editableField(label, value string, field, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", label+":"))
-	tag, reset := focusTag(field, focused)
+	tag, reset := pb.focusTag(field, focused)
 	pb.tag(tag)
 	start := pb.col
 	pb.text(value)
@@ -210,7 +216,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	const rwx = "rwxrwxrwx"
 
 	for i, f := range bitFields {
-		tag, reset := focusTag(f, focused)
+		tag, reset := pb.focusTag(f, focused)
 		pb.tag(tag)
 		start := pb.col
 		ch := byte('-')
@@ -223,7 +229,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	}
 
 	pb.text(" (")
-	octalTag, octalReset := focusTag(fieldPermOctal, focused)
+	octalTag, octalReset := pb.focusTag(fieldPermOctal, focused)
 	pb.tag(octalTag)
 	octalStart := pb.col
 	pb.text(fmt.Sprintf("%04o", mode.Perm()))
@@ -242,7 +248,7 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 	pb.text(fmt.Sprintf("%-13s", "Modified:"))
 
-	dateTag, dateReset := focusTag(fieldMtimeDate, focused)
+	dateTag, dateReset := pb.focusTag(fieldMtimeDate, focused)
 	pb.tag(dateTag)
 	dateStart := pb.col
 	pb.text(t.Format("2006-01-02"))
@@ -251,7 +257,7 @@ func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 
 	pb.text(" ")
 
-	timeTag, timeReset := focusTag(fieldMtimeTime, focused)
+	timeTag, timeReset := pb.focusTag(fieldMtimeTime, focused)
 	pb.tag(timeTag)
 	timeStart := pb.col
 	pb.text(t.Format("15:04:05"))
@@ -295,22 +301,19 @@ func (pb *propertiesBuilder) mtimeField(t time.Time, focused propertyField) {
 // thing for Enter; SetInputCapture adds the same for Space, per the
 // user's own request that either activate a focused button.
 func (r *Root) newPropertiesView() *tview.Pages {
-	r.propertiesText = tview.NewTextView().SetTextColor(tcell.ColorWhite)
-	r.propertiesText.SetBackgroundColor(accentBackgroundColor)
+	r.propertiesText = tview.NewTextView()
 	r.propertiesText.SetBorderPadding(0, 0, 1, 1)
 	r.propertiesText.SetDynamicColors(true) // needed for focusTag's style tags
 	r.propertiesText.SetInputCapture(r.capturePropertiesKey)
 	r.propertiesText.SetMouseCapture(r.capturePropertiesMouse)
 
+	// Colored via r.theme.FocusedBackground (see Root.applyTheme), not
+	// r.theme.EditableBackground: this field is only ever shown for
+	// whichever field is currently focused (see focusTag's own doc
+	// comment), so it should always carry that look, not the plainer
+	// "merely editable" one the span underneath no longer shows once
+	// this covers it.
 	r.propertiesEditField = tview.NewInputField()
-	// focusedBackgroundColor, not editableBackgroundColor: this field is
-	// only ever shown for whichever field is currently focused (see
-	// focusedBackgroundColor's own doc comment), so it should always
-	// carry that look, not the plainer "merely editable" one the span
-	// underneath no longer shows once this covers it.
-	r.propertiesEditField.SetFieldBackgroundColor(focusedBackgroundColor)
-	r.propertiesEditField.SetBackgroundColor(focusedBackgroundColor)
-	r.propertiesEditField.SetFieldTextColor(tcell.ColorWhite)
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
 
 	r.propertiesButtons = r.newPropertiesButtons()
@@ -319,6 +322,14 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	pages.AddPage("text", r.propertiesText, true, true)
 	pages.AddPage("editfield", r.propertiesEditField, false, false)
 	pages.AddPage("buttons", r.propertiesButtons, false, true)
+
+	// Installed on pages itself, the shared ancestor of all three pages
+	// above — see hashesInputCapture/hashesMouseCapture's own doc
+	// comment for why that's what makes 'h' and a hash-section click
+	// keep working no matter which of the three currently has focus.
+	pages.SetInputCapture(r.hashesInputCapture)
+	pages.SetMouseCapture(r.hashesMouseCapture)
+
 	return pages
 }
 
@@ -330,10 +341,6 @@ func (r *Root) newPropertiesView() *tview.Pages {
 func (r *Root) newPropertiesButtons() *tview.Flex {
 	r.propertiesCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelPropertiesEdit)
 	r.propertiesSaveBtn = tview.NewButton("Save").SetSelectedFunc(r.savePropertiesEdit)
-	for _, b := range []*tview.Button{r.propertiesCancelBtn, r.propertiesSaveBtn} {
-		b.SetBackgroundColor(accentBackgroundColor)
-		b.SetLabelColor(tcell.ColorWhite)
-	}
 	r.propertiesCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
 	r.propertiesSaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
 
@@ -379,7 +386,6 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	})
 
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
-	flex.SetBackgroundColor(accentBackgroundColor)
 	flex.AddItem(r.propertiesCancelBtn, 0, 1, false)
 	flex.AddItem(r.propertiesSaveBtn, 0, 1, false)
 	return flex
@@ -414,13 +420,28 @@ func spaceAlsoActivates(action func()) func(event *tcell.EventKey) *tcell.EventK
 // field once — not just an actual change — locks the overlay into
 // "Cancel or Save to leave" mode.
 func (r *Root) openProperties() {
-	info, err := fsops.Stat(r.target)
-	if err != nil {
+	if err := r.loadPropertiesTarget(); err != nil {
 		r.hideOverlay() // close the context menu before reporting
 		r.showError(err)
 		return
 	}
 
+	x, y, _, _ := r.menu.GetRect()
+	r.resizeProperties(x, y)
+
+	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
+}
+
+// loadPropertiesTarget does openProperties' own state-population half
+// (stat r.target, stage every editable field, render the text), kept
+// separate from its own positioning/overlay logic below.
+func (r *Root) loadPropertiesTarget() error {
+	info, err := fsops.Stat(r.target)
+	if err != nil {
+		return err
+	}
+
+	r.cancelHashComputation() // a previous target's own hash computation, if still running, is now stale
 	r.propertiesTarget = r.target
 	r.propertiesStat = info
 	r.propertiesHashes = nil
@@ -433,13 +454,8 @@ func (r *Root) openProperties() {
 	r.stagedGroup = info.Group
 
 	r.renderProperties()
-
-	x, y, _, _ := r.menu.GetRect()
-	r.resizeProperties(x, y)
-
 	r.properties.HidePage("editfield")
-
-	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
+	return nil
 }
 
 // renderProperties rebuilds the Properties overlay's text from
@@ -451,7 +467,7 @@ func (r *Root) openProperties() {
 // text field, computing hashes, a focus change) to keep the display,
 // propertySpans, and the focus highlight all in sync with current state.
 func (r *Root) renderProperties() {
-	pb := &propertiesBuilder{}
+	pb := &propertiesBuilder{theme: r.theme}
 	focused := r.focusedPropertyField()
 
 	pb.editableField("Name", r.stagedName, fieldName, focused)
@@ -498,7 +514,12 @@ func (r *Root) renderProperties() {
 	text := pb.b.String()
 	if !isDirish(r.propertiesStat) {
 		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
-		text += "\n\n" + hashLines(r.propertiesHashes)
+		switch {
+		case r.hashInProgress:
+			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
+		default:
+			text += "\n\n" + hashLines(r.propertiesHashes)
+		}
 	}
 
 	r.propertySpans = pb.spans
@@ -547,6 +568,7 @@ func (r *Root) markPropertiesDirty() {
 // written to the real file (see savePropertiesEdit, the only place any
 // of this actually touches disk).
 func (r *Root) cancelPropertiesEdit() {
+	r.cancelHashComputation()
 	r.hideOverlay()
 }
 
@@ -558,6 +580,7 @@ func (r *Root) cancelPropertiesEdit() {
 // remaining edits is what recovering from that looks like for now, not
 // an automatic retry or rollback.
 func (r *Root) savePropertiesEdit() {
+	r.cancelHashComputation()
 	target := r.propertiesTarget
 	var firstErr error
 
@@ -574,7 +597,16 @@ func (r *Root) savePropertiesEdit() {
 			firstErr = err
 		}
 	}
-	if firstErr == nil && !r.stagedMtime.Equal(r.propertiesStat.ModTime) {
+	// Compared at whole-second precision, not with Equal directly: the
+	// Modified date/time fields (see parseDate/parseTime) only ever
+	// show and edit whole seconds, zeroing out whatever sub-second
+	// precision propertiesStat.ModTime originally had the moment either
+	// half is committed — including by just tabbing through it without
+	// actually typing a new value. Comparing at full precision would
+	// treat that precision loss alone as a real change and write it,
+	// even though nothing the user could see or intentionally edit
+	// here actually differs.
+	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.propertiesStat.ModTime.Truncate(time.Second)) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
 			firstErr = err
 		}
@@ -1060,26 +1092,208 @@ func formatChain(chain fsops.LinkChain) string {
 	return strings.Join(chain.Hops, " -> ") + suffix
 }
 
+// hashAnimationFrames is computeHashes' own "in progress" animation
+// (see hashInProgress/renderProperties) — a dot growing into a filled
+// circle, then dissolving into a larger hollow one — shown in the hash
+// section while a real hash computation (which can take a few seconds
+// on a large file) is still running, per the user's own request,
+// rather than the hint/result line just sitting frozen with nothing
+// suggesting anything is happening at all. Single-width glyphs
+// throughout (see checkboxText's own ○/● for the same "this app
+// already commits to UTF-8, but stays inside safely single-width
+// symbols" choice), not double-width ones a CJK-unaware terminal or
+// this app's own earlier column math could misjudge (see
+// buildHeaderSpans' own doc comment on that class of bug elsewhere).
+var hashAnimationFrames = []string{"·", "•", "●", "○", "◯"}
+
+// hashAnimationInterval is how often computeHashes' own ticker (see
+// animateHashProgress) advances hashAnimFrame — fast enough to read as
+// animated, slow enough not to flicker or waste redraws on something
+// purely decorative.
+const hashAnimationInterval = 150 * time.Millisecond
+
+// hashFile is fsops.Hash — a package-level var, not called directly,
+// so a test can substitute a fast, deterministic fake (see
+// properties_test.go) instead of hashing a real file and racing a real
+// background ticker, the same override-var pattern this codebase
+// already uses for searchRun/loadInitialSettings.
+var hashFile = fsops.Hash
+
+// hashProgressSuffix formats the "… NN%" fragment renderProperties
+// appends to the in-progress hash line, or "…" alone if total isn't
+// known/positive (an empty file, or a filesystem where Size came back
+// 0) — a percentage would be meaningless there. read is clamped to
+// total so a file that grows while being hashed (see Hash's own doc
+// comment on that edge case) can never show more than 100%.
+func hashProgressSuffix(read, total int64) string {
+	if total <= 0 {
+		return "…"
+	}
+	if read > total {
+		read = total
+	}
+	return fmt.Sprintf("… %d%%", read*100/total)
+}
+
 // computeHashes is the Properties overlay's hash action (see hashLines
 // and capturePropertiesKey/capturePropertiesMouse, its two triggers):
-// hashes the entry Properties is currently showing via fsops.Hash and
-// re-renders with the results in place of the hint line. A no-op if
-// Properties isn't the open overlay, or its target is a directory, or
-// resolves to one via isDirish (hashing isn't offered for those — see
-// fsops.Hash's own doc comment on why).
+// hashes the entry Properties is currently showing via hashFile, on a
+// background goroutine — paired with animateHashProgress's own ticker,
+// so the hash section shows a moving "in progress" animation for
+// however long that takes, rather than the UI just freezing or the
+// hint line sitting there with no feedback — and re-renders with the
+// results once it's done. A no-op if Properties isn't the open
+// overlay, its target is a directory or resolves to one via isDirish
+// (hashing isn't offered for those — see fsops.Hash's own doc comment
+// on why), or a computation is already running (see hashInProgress) —
+// pressing h or clicking again mid-computation doesn't restart it.
 func (r *Root) computeHashes() {
-	if r.activePage != propertiesPage || isDirish(r.propertiesStat) {
+	if r.activePage != propertiesPage || isDirish(r.propertiesStat) || r.hashInProgress {
 		return
 	}
 
-	hashes, err := fsops.Hash(r.propertiesTarget)
-	if err != nil {
-		r.showError(err)
-		return
-	}
-
-	r.propertiesHashes = &hashes
+	ctx, cancel := context.WithCancel(context.Background())
+	r.hashCancel = cancel
+	r.hashInProgress = true
+	r.hashAnimFrame = 0
+	r.hashBytesRead.Store(0)
 	r.rerenderProperties()
+
+	target := r.propertiesTarget
+	go r.animateHashProgress(ctx)
+	go func() {
+		// hashFile itself stops reading — and stops calling
+		// r.hashBytesRead.Store — as soon as ctx is cancelled (see
+		// fsops.Hash's own doc comment); this check only covers the
+		// narrow gap between that happening and this goroutine actually
+		// getting to run again, not a possibly-still-running old
+		// computation. Without hashFile's own cancellation (a real bug,
+		// fixed there — see progressReader.Read), a cancelled call kept
+		// reading (and reporting into the same r.hashBytesRead a *new*
+		// call might already have reset to 0) for as long as its own
+		// read loop still happened to take, the two visibly racing over
+		// what the hash section showed.
+		hashes, err := hashFile(ctx, target, r.hashBytesRead.Store)
+		if ctx.Err() != nil {
+			return // superseded before we even got to report anything — see cancelHashComputation
+		}
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.cancelHashComputation()
+			if err != nil {
+				r.showError(err)
+				return
+			}
+			r.propertiesHashes = &hashes
+			r.rerenderProperties()
+		})
+	}()
+}
+
+// animateHashProgress advances hashAnimFrame every hashAnimationInterval
+// until ctx is done (see computeHashes/cancelHashComputation) — its own
+// background goroutine, paired with (but independent of) computeHashes'
+// own hashFile call, so the animation keeps moving smoothly regardless
+// of how long the actual hashing takes.
+func (r *Root) animateHashProgress(ctx context.Context) {
+	ticker := time.NewTicker(hashAnimationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
+			r.app.QueueUpdateDraw(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				r.hashAnimFrame++
+				r.rerenderProperties()
+			})
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// cancelHashComputation stops whatever computeHashes call is currently
+// in flight, if any (see hashCancel) — called once its own result
+// arrives (see computeHashes), when Properties closes via Cancel/Save
+// (see cancelPropertiesEdit/savePropertiesEdit), and when it's reopened
+// for a — possibly different — target (see openProperties), so a stale
+// animation frame or hash result can never land on the wrong file's
+// display, or keep animating after the user has moved on.
+func (r *Root) cancelHashComputation() {
+	if r.hashCancel != nil {
+		r.hashCancel()
+		r.hashCancel = nil
+	}
+	r.hashInProgress = false
+}
+
+// hashesInputCapture and hashesMouseCapture make 'h' and a click on the
+// hash section compute hashes (see computeHashes) unconditionally,
+// regardless of which of Properties' several sub-widgets currently has
+// real keyboard/mouse focus — installed directly on r.properties (see
+// newPropertiesView), the shared ancestor of propertiesText/
+// propertiesEditField/propertiesButtons, so both run before whichever of
+// those three would otherwise claim the event on its own (a Box-based
+// primitive's own SetInputCapture/SetMouseCapture always runs before it
+// delegates to whatever currently has focus underneath it — see
+// Box.WrapInputHandler/WrapMouseHandler). Without this, landing keyboard
+// focus on an auto-editing field (see isAutoEditField — Name, the octal
+// permission value, either half of Modified) via Tab hands real focus to
+// propertiesEditField instead of propertiesText, and neither 'h'
+// (previously handled in capturePropertiesKey, installed on
+// propertiesText itself) nor a hash-section click (previously handled in
+// capturePropertiesMouse, likewise) would ever run — per the user's own
+// explicit report and request that either work "jederzeit", not just
+// before the first field is touched.
+//
+// The accepted trade-off for the keyboard half: 'h' can no longer be
+// typed as a literal character while editing Name, or Owner/Group's own
+// text fallback — a narrow cost (renaming to something containing "h")
+// against a much more commonly wanted action.
+func (r *Root) hashesInputCapture(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
+		r.computeHashes()
+		return nil
+	}
+	return event
+}
+
+func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
+		return action, event
+	}
+	x, y := event.Position()
+
+	// Checked first, and independently of the row math below: tview.Pages
+	// gives every visible page the SAME rect as the Pages itself (see
+	// newPropertiesView's own doc comment on why propertiesText,
+	// propertiesEditField, and propertiesButtons all share r.properties'
+	// rect) — so propertiesText.InRect is true for the Cancel/Save row
+	// too, not just its own content lines. Without this check, a real
+	// regression: hashSectionRow can, once the overlay is short enough,
+	// numerically coincide with the button row's own screen row, and a
+	// click meant for Cancel or Save gets swallowed into computeHashes
+	// instead of ever reaching the button underneath it.
+	if primitiveContains(r.propertiesButtons, x, y) {
+		return action, event
+	}
+	if !r.propertiesText.InRect(x, y) {
+		return action, event
+	}
+
+	_, rectY, _, _ := r.propertiesText.GetInnerRect()
+	if y-rectY < r.hashSectionRow {
+		return action, event
+	}
+	r.computeHashes()
+	return tview.MouseConsumed, nil
 }
 
 // capturePropertiesKey is Properties' own keyboard-navigation dispatch,
@@ -1107,7 +1321,11 @@ func (r *Root) computeHashes() {
 // rather than needing Enter first, per the user's own request: Space
 // toggles it, same as Enter; Delete or '-' explicitly clears it; the
 // matching letter (r/w/x — see permFieldLetter) explicitly sets it.
-// 'h' (compute hashes) is unrelated to any of that and unchanged.
+// 'h' (compute hashes) is handled a level up now (see
+// hashesInputCapture on r.properties itself), not here — it needs to
+// keep working even while propertiesText doesn't have focus at all
+// (e.g. an auto-opened inline editor), which is exactly the case this
+// handler, installed on propertiesText specifically, can never see.
 func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -1146,21 +1364,19 @@ func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 			r.activateFocusedPropertyStop() // toggle target aside, Space is Enter's equivalent everywhere else too (e.g. Owner/Group's picker)
 			return nil
 		}
-		if event.Rune() == 'h' {
-			r.computeHashes()
-			return nil
-		}
 	}
 	return event
 }
 
 // capturePropertiesMouse routes a click within the Properties overlay's
 // read-only text: a propertySpan (Name, a permission bit, or half of
-// Modified) activates that field (see activatePropertyField); missing
-// all of those, a click on the hash hint/result section computes hashes,
-// the same action the 'h' key triggers. A click that misses everything
-// just does nothing — unlike Panel's header, there's no default TextView
-// behavior here worth pre-empting.
+// Modified) activates that field (see activatePropertyField). A hash-
+// section click is handled a level up now (see hashesMouseCapture on
+// r.properties itself, for the same reason capturePropertiesKey no
+// longer handles 'h' — see its own doc comment), so by the time a click
+// reaches here it's already past that check. A click that misses
+// everything just does nothing — unlike Panel's header, there's no
+// default TextView behavior here worth pre-empting.
 func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftClick || !r.propertiesText.InRect(event.Position()) {
 		return action, event
@@ -1172,11 +1388,6 @@ func (r *Root) capturePropertiesMouse(action tview.MouseAction, event *tcell.Eve
 
 	if span, ok := r.propertySpanAt(row, col); ok {
 		r.activatePropertyField(span)
-		return tview.MouseConsumed, nil
-	}
-
-	if !isDirish(r.propertiesStat) && row >= r.hashSectionRow {
-		r.computeHashes()
 		return tview.MouseConsumed, nil
 	}
 	return action, event
