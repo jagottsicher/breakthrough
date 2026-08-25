@@ -546,6 +546,9 @@ func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
 	if !strings.Contains(main, "does not exist") {
 		t.Errorf("searchList's own error line = %q, want it to mention the directory doesn't exist", main)
 	}
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status = %q, want the Esc-back-to-search hint even for this error case (see setSearchStatus)", got)
+	}
 
 	// Escape from the results list must return to the still-intact
 	// form, with Filename untouched.
@@ -910,6 +913,32 @@ func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
 	got = r.searchStatus.GetText(true)
 	if !strings.Contains(got, "/found/here") {
 		t.Errorf("status = %q, want searchLastDir (%q) once a result has arrived", got, "/found/here")
+	}
+}
+
+// TestSetSearchStatusAlwaysAppendsEscHint pins the user's own explicit
+// request: the results page's own status line always reminds that
+// Escape goes back to the search, regardless of the search's own
+// outcome — checked directly against setSearchStatus, the one place
+// all of its own callers (renderSearchStatus, streamSearchResults,
+// showSearchError) actually set searchStatus' own text, so the hint
+// can never be left off some future fourth one.
+func TestSetSearchStatusAlwaysAppendsEscHint(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.setSearchStatus("Done — 3 found")
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status = %q, want it to mention Esc", got)
+	}
+
+	r.setSearchStatus("") // showSearchError's own case — no other status text at all
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status with no other text = %q, want it to still mention Esc", got)
 	}
 }
 

@@ -887,7 +887,7 @@ func (r *Root) showSearchError(msg string) {
 	r.searchList.Clear()
 	r.searchList.SetMainTextColor(r.theme.EntryError)
 	r.searchList.AddItem(msg, "", 0, nil)
-	r.searchStatus.SetText("")
+	r.setSearchStatus("")
 	r.searchPages.SwitchToPage("results")
 	resultsWidth, resultsHeight := r.searchResultsSize()
 	r.resizeSearchPages(resultsWidth, resultsHeight, true)
@@ -1115,7 +1115,20 @@ func (r *Root) renderSearchStatus() {
 	if dir == "" {
 		dir = r.searchStartDir
 	}
-	r.searchStatus.SetText(frame + " " + dir)
+	r.setSearchStatus(frame + " " + dir)
+}
+
+// searchEscHint reminds the user, regardless of a search's own outcome
+// (still running, done, no matches, or the non-existent-Start-at error
+// — see showSearchError) that Escape goes back to the form — per the
+// user's own explicit request. setSearchStatus is the one place
+// searchStatus' own text actually gets set (see its three call sites:
+// here, streamSearchResults, showSearchError), so the hint can never
+// be left off some future fourth one.
+const searchEscHint = "(Esc: back to search)"
+
+func (r *Root) setSearchStatus(text string) {
+	r.searchStatus.SetText(strings.TrimSpace(text + " " + searchEscHint))
 }
 
 // noSearchResultsText is what the results list shows when a search
@@ -1192,7 +1205,7 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 		if ctx.Err() != nil {
 			return
 		}
-		r.searchStatus.SetText(fmt.Sprintf("Done — %d found", count))
+		r.setSearchStatus(fmt.Sprintf("Done — %d found", count))
 		// The search itself is over, but nothing else would ever stop
 		// animateSearchProgress's own ticker on its own — cancelSearch
 		// is otherwise only called by a *newer* search starting, or the
