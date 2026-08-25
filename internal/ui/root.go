@@ -89,7 +89,8 @@ type Root struct {
 	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
-	optionsList *tview.List // Options overlay — see openOptions
+	optionsList *tview.List     // Options overlay — see openOptions
+	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
@@ -536,6 +537,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// on every open, the same as everything else above.
 	r.dirPicker = r.newDirPicker()
 
+	// The Help overlay (see help.go/openHelp) — a single, static,
+	// read-only TextView, the simplest of all of these (nothing to
+	// reset or repopulate on open).
+	r.helpView = r.newHelpView()
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -558,6 +564,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
+	r.AddPage(helpPage, r.helpView, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)

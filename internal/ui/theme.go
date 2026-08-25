@@ -144,5 +144,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.dirPickerCancelBtn.SetLabelColor(theme.Text)
 	}
 
+	if r.helpView != nil {
+		r.helpView.SetBackgroundColor(theme.AccentBackground)
+		r.helpView.SetTextColor(theme.Text)
+	}
+
 	r.panel.applyTheme(theme)
 }
