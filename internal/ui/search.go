@@ -392,7 +392,19 @@ func (r *Root) rerenderSearchDialog() {
 	top.newline()
 	top.newline()
 
-	scopeDimmed := r.searchEngineOptions[r.searchEngineIdx].engine == search.EngineLocate
+	// Dimmed whenever locate itself would ignore Start-at entirely — a
+	// plain filename search (Content empty), or Filename filled in
+	// (locate's own index does the narrowing there, Scope still never
+	// enters into it — see search.listThenGrep). The one exception: a
+	// *plain* content search (Content filled in, Filename left blank —
+	// nothing for locate to narrow with) still runs a live grep from
+	// Start-at exactly the same way EngineFind's own content search
+	// always has — see runSearch's own doc comment on why Engine is
+	// meant to be irrelevant there entirely, per the user's own
+	// explicit request — so the field showing as genuinely active
+	// (not dimmed) here is accurate, not a leftover oversight.
+	plainContentSearch := r.searchContentValue != "" && r.searchFilenameValue == ""
+	scopeDimmed := r.searchEngineOptions[r.searchEngineIdx].engine == search.EngineLocate && !plainContentSearch
 	top.text("Start at     ")
 	// The field fills exactly the rest of the row, right up to where
 	// "   [Tree]" itself starts — searchTopTextWidth is searchTop's own
@@ -971,30 +983,27 @@ func (r *Root) runSearch() {
 	scope := r.panel.resolvePath(r.searchScopeValue)
 	engine := r.searchEngineOptions[r.searchEngineIdx].engine
 
-	// locate has no directory-scope concept of its own at all (see
-	// search.Request.Scope's own doc comment) — Start-at sits dimmed
-	// and inert in this dialog whenever Engine is locate, for exactly
-	// that reason, and a locate-narrowed search (Filename filled in
-	// too) doesn't need Scope for anything either way (see
-	// search.listThenGrep). A *plain* content search under locate —
-	// Filename left blank, nothing for locate itself to narrow with —
-	// is different: runContentSearch still has to grep something
-	// recursively, and Start-at's own stale, dimmed-and-inert value is
-	// the wrong thing to grep from. Per the user's own explicit
-	// request: the panel's own actual current directory is what "start
-	// point" means once there's no real Start-at to speak of, not
-	// whatever text happens to still be sitting in that field.
-	if engine == search.EngineLocate && contentMode != search.ContentNone && r.searchFilenameValue == "" {
-		scope = r.panel.path
-	}
+	// A *plain* content search (Content filled in, Filename left blank
+	// — nothing for locate itself to narrow with, so there's no
+	// name-matching step for Engine to drive at all — see
+	// runContentSearch's own doc comment) always uses Start-at exactly
+	// the same way EngineFind's own content search already does,
+	// completely regardless of which Engine is actually selected — per
+	// the user's own explicit, repeated request that Engine be entirely
+	// irrelevant here, not just "less relevant." An earlier version of
+	// this tried to special-case locate by substituting the panel's own
+	// current directory instead — wrong, and a real regression: Start-at
+	// is exactly what a user reasonably expects a "start point" field to
+	// mean, typed value and all, whether or not it happens to match
+	// wherever the panel itself is currently sitting.
+	plainContentSearch := contentMode != search.ContentNone && r.searchFilenameValue == ""
 
-	// Only checked for EngineFind: whenever EngineLocate actually ends
-	// up using scope for anything (the plain-content-search override
-	// just above), it's always r.panel.path — a real, currently-loaded
-	// directory that can't fail this check — and every other EngineLocate
-	// case still doesn't use scope at all (see Request.Scope's own doc
-	// comment — its own dimmed, disabled-looking Start-at field in this
-	// dialog already signals that).
+	// Checked for EngineFind, and now also for locate's own plain
+	// content search (plainContentSearch, just above) — the one
+	// EngineLocate case that genuinely uses scope for anything (every
+	// other EngineLocate case leaves it dimmed and unused — see
+	// scopeDimmed's own identical condition in rerenderSearchDialog,
+	// which must stay in sync with this one).
 	//
 	// Without this, a typo'd or since-deleted Start-at directory ran
 	// find(1) anyway — it exits complaining to stderr, this app's own
@@ -1009,7 +1018,7 @@ func (r *Root) runSearch() {
 	// overlay (see its own doc comment on why: closing the whole dialog
 	// over a typo'd path was "so ein Game-Killer" for a real mistake
 	// this cheap to fix).
-	if engine == search.EngineFind {
+	if engine == search.EngineFind || plainContentSearch {
 		if info, err := os.Stat(scope); err != nil || !info.IsDir() {
 			r.showSearchError(fmt.Sprintf("Search directory does not exist: %s", scope))
 			return
