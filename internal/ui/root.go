@@ -568,6 +568,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// Panel.onOpenSearchResult's own doc comment).
 	panel.onOpenSearchResult = r.runEditor
 
+	// Jumping to a filename/archive-member match's own real location
+	// stops the search itself, not just the panel's own display of it
+	// (see Panel.onExitSearchResults' own doc comment) — cancelSearch is
+	// exactly what Escape/closing the dialog already does for the same
+	// reason (see closeSearch), just reached from a result click now.
+	panel.onExitSearchResults = r.cancelSearch
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
