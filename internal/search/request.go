@@ -26,12 +26,22 @@ const (
 // Request describes one search to run (see Run). Pattern is matched
 // against either file names (Content == ContentNone, via Engine — find
 // or locate) or file content (any other Content value, via grep/zgrep/
-// zipgrep) — never both at once: this is a deliberate scope decision
-// for a first version, not a limitation of the underlying tools
-// (find/grep genuinely could be composed, e.g. only grep within
-// find's own results) — combining them is a reasonable later addition,
-// not built here to keep the search dialog itself to one pattern field
-// rather than two.
+// zipgrep).
+//
+// NamePattern/NameMode additionally restrict a *content* search
+// (Content != ContentNone) to files matching a name pattern first,
+// searched via Engine the same as a filename search would be, before
+// ever grepping anything — per the user's own explicit request: typing
+// something into both Filename and Content used to search Content's
+// own pattern across every single file under Scope, silently ignoring
+// Filename outright the moment Content had anything in it. Left empty
+// (the zero value), a content search still runs across every file
+// under Scope exactly as before — this is filtering *additional* to
+// Content, not a replacement for the Filename/Content-are-mutually-
+// exclusive split above, which stays: a search is still never both "by
+// name alone" and "by content alone" — NamePattern only ever narrows a
+// content search, it never runs standalone the way Pattern does for
+// Content == ContentNone.
 //
 // Scope is a single directory Pattern is searched under (recursively)
 // for EngineFind. It's ignored outright for EngineLocate: locate's own
@@ -82,6 +92,8 @@ const (
 // after the first match per file, respectively.
 type Request struct {
 	Pattern        string
+	NamePattern    string
+	NameMode       Mode
 	Scope          string
 	Mode           Mode
 	Engine         Engine

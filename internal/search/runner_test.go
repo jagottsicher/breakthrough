@@ -139,6 +139,87 @@ func TestRunFilenameSearchRegex(t *testing.T) {
 	}
 }
 
+// TestRunFilenameSearchShallowFirst pins the user's own explicit
+// request: a recursive search reports files directly in Scope before
+// anything in a subdirectory, rather than in whatever order find's own
+// directory traversal happens to produce — checked on arrival order
+// from the results channel itself (unlike this file's other tests,
+// which sort before comparing, since order is exactly what's being
+// pinned here).
+func TestRunFilenameSearchShallowFirst(t *testing.T) {
+	requireTool(t, "find")
+	dir := t.TempDir()
+	write := func(rel string) {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt")
+	write("b.txt")
+	write(filepath.Join("sub", "c.txt"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "*.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind})
+
+	var order []string
+	for r := range results {
+		order = append(order, r.Path)
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(order) != 3 {
+		t.Fatalf("got %v, want 3 results", order)
+	}
+
+	deepIdx := -1
+	for i, p := range order {
+		if filepath.Dir(p) != dir {
+			deepIdx = i
+			break
+		}
+	}
+	if deepIdx != 2 {
+		t.Errorf("order = %v, want the two Scope-level files (a.txt, b.txt) reported before sub/c.txt", order)
+	}
+}
+
+// TestRunFilenameSearchShallowFirstStillNonRecursiveWhenAsked pins
+// that the shallow-first restructuring doesn't change NonRecursive's
+// own meaning: it's still a single -maxdepth 1 pass, never a second,
+// deeper one — the two-pass behavior only ever applies to a genuinely
+// recursive search.
+func TestRunFilenameSearchShallowFirstStillNonRecursiveWhenAsked(t *testing.T) {
+	requireTool(t, "find")
+	dir := t.TempDir()
+	write := func(rel string) {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt")
+	write(filepath.Join("sub", "c.txt"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "*.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind, NonRecursive: true})
+
+	got := paths(collectResults(t, results, errs))
+	want := []string{filepath.Join(dir, "a.txt")}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("got %v, want %v (sub/c.txt should stay excluded)", got, want)
+	}
+}
+
 func TestRunContentSearchGrep(t *testing.T) {
 	requireTool(t, "grep")
 	dir := t.TempDir()
@@ -177,6 +258,64 @@ func TestRunContentSearchGrepRegex(t *testing.T) {
 	got := collectResults(t, results, errs)
 	if len(got) != 1 || got[0].Line != 1 {
 		t.Errorf("got %+v, want exactly one match on line 1", got)
+	}
+}
+
+// TestRunContentSearchWithNamePatternRestrictsFiles pins the user's own
+// explicit request: filling in both a name pattern and a content
+// pattern narrows the content search to files matching the name first
+// (via find, the same as a filename search would use), rather than
+// grepping every file under Scope regardless of name.
+func TestRunContentSearchWithNamePatternRestrictsFiles(t *testing.T) {
+	requireTool(t, "find")
+	requireTool(t, "grep")
+	dir := t.TempDir()
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "TODO: fix a\n")
+	write("a.log", "TODO: fix a\n") // same content, wrong name — must be excluded
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern:     "TODO",
+		NamePattern: "*.txt",
+		NameMode:    ModeGlob,
+		Scope:       dir,
+		Mode:        ModeKeyword,
+		Content:     ContentGrep,
+	})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 1 || got[0].Path != filepath.Join(dir, "a.txt") {
+		t.Errorf("got %+v, want exactly one match in a.txt (not a.log, despite matching content)", got)
+	}
+}
+
+// TestRunContentSearchWithoutNamePatternSearchesEverything pins that
+// leaving NamePattern blank (its own zero value) still searches every
+// file under Scope, the same as before it existed.
+func TestRunContentSearchWithoutNamePatternSearchesEverything(t *testing.T) {
+	requireTool(t, "grep")
+	dir := t.TempDir()
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "TODO: fix a\n")
+	write("a.log", "TODO: fix a\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "TODO", Scope: dir, Mode: ModeKeyword, Content: ContentGrep})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 2 {
+		t.Errorf("got %d results, want 2 (both files, no name filter applied): %+v", len(got), got)
 	}
 }
 
