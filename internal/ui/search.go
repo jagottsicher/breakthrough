@@ -372,6 +372,21 @@ func (r *Root) rerenderSearchDialog() {
 	for i, opt := range r.searchEngineOptions {
 		i := i
 		top.choice(r.searchEngineIdx == i, opt.label, func() { r.searchEngineIdx = i })
+		if opt.engine == search.EngineLocate {
+			// Plain informational text, not a span — nothing to click
+			// or focus here. Locate answers entirely from updatedb's own
+			// prebuilt index, which — since Ubuntu 10.04 — never
+			// includes an eCryptfs-encrypted home directory at all (not
+			// just stale, permanently excluded — see PRUNEFS in
+			// /etc/updatedb.conf): a deliberate security decision, since
+			// indexing it would mean storing real, decrypted filenames
+			// in a plaintext database outside the encrypted volume. Per
+			// a real user report — searching their own home directory
+			// with locate found nothing, for exactly this reason.
+			top.tag(dimTag)
+			top.text(" (skips eCryptfs by design)")
+			top.tag("[-:-:-]")
+		}
 		top.text("   ")
 	}
 	top.newline()

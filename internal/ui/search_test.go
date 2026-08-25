@@ -1073,6 +1073,29 @@ func TestChoiceSpanSelectsOption(t *testing.T) {
 	}
 }
 
+// TestRerenderSearchDialogHintsAtEcryptfsNextToLocate pins the user's
+// own explicit request: a plain-text (non-interactive) reminder next
+// to the locate option itself, not just in a result screen's own
+// wording, since locate silently finds nothing at all under an
+// eCryptfs-encrypted home directory (see updatedb's own PRUNEFS) — a
+// real user report.
+func TestRerenderSearchDialogHintsAtEcryptfsNextToLocate(t *testing.T) {
+	if !search.LocateAvailable() {
+		t.Skip("locate not available in this environment")
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	got := r.searchTop.GetText(true)
+	if !strings.Contains(got, "eCryptfs") {
+		t.Errorf("searchTop text = %q, want it to mention eCryptfs next to locate", got)
+	}
+}
+
 // textAtSpan reads the literal text a searchSpan's own row/column range
 // covers, from its widget's current (tag-stripped) rendered text — used
 // by TestChoiceSpanSelectsOption to find a specific option by its own
