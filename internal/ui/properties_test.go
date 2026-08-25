@@ -390,7 +390,7 @@ func isolateHashFile(t *testing.T) <-chan struct{} {
 	original := hashFile
 	started := make(chan struct{})
 	unblock := make(chan struct{})
-	hashFile = func(string, func(int64)) (fsops.Hashes, error) {
+	hashFile = func(context.Context, string, func(int64)) (fsops.Hashes, error) {
 		close(started)
 		<-unblock
 		return fsops.Hashes{}, context.Canceled
@@ -453,7 +453,7 @@ func TestComputeHashesShowsPercentProgress(t *testing.T) {
 	original := hashFile
 	unblock := make(chan struct{})
 	reported := make(chan struct{})
-	hashFile = func(target string, onProgress func(int64)) (fsops.Hashes, error) {
+	hashFile = func(ctx context.Context, target string, onProgress func(int64)) (fsops.Hashes, error) {
 		onProgress(100) // half of the 200-byte fixture above
 		close(reported)
 		<-unblock

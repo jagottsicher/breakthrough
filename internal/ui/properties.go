@@ -1162,7 +1162,18 @@ func (r *Root) computeHashes() {
 	target := r.propertiesTarget
 	go r.animateHashProgress(ctx)
 	go func() {
-		hashes, err := hashFile(target, r.hashBytesRead.Store)
+		// hashFile itself stops reading — and stops calling
+		// r.hashBytesRead.Store — as soon as ctx is cancelled (see
+		// fsops.Hash's own doc comment); this check only covers the
+		// narrow gap between that happening and this goroutine actually
+		// getting to run again, not a possibly-still-running old
+		// computation. Without hashFile's own cancellation (a real bug,
+		// fixed there — see progressReader.Read), a cancelled call kept
+		// reading (and reporting into the same r.hashBytesRead a *new*
+		// call might already have reset to 0) for as long as its own
+		// read loop still happened to take, the two visibly racing over
+		// what the hash section showed.
+		hashes, err := hashFile(ctx, target, r.hashBytesRead.Store)
 		if ctx.Err() != nil {
 			return // superseded before we even got to report anything — see cancelHashComputation
 		}
