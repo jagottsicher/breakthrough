@@ -1425,6 +1425,102 @@ func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
 	}
 }
 
+// TestFocusedSearchButtonActivatesViaEnterAndSpace is a regression test
+// for a real bug: Cancel/Search, once given real keyboard focus via
+// Tab, silently did nothing on Enter or Space. Calling
+// captureSearchKey directly (as most of this file's other tests do)
+// could never have caught it — the bug was one level up, in *where*
+// that capture was installed, not in what it does. It used to sit on
+// fields, the shared ancestor of both the span area AND searchButtons;
+// tview.Application dispatches every key event to a.root and lets each
+// ancestor's own SetInputCapture run before delegating further down
+// to whichever descendant actually has focus (see application.go's own
+// "Pass other key events to the root primitive" and Box.
+// WrapInputHandler) — so captureSearchKey's unconditional KeyEnter/' '
+// cases swallowed the event before it ever reached the focused
+// button's own SetSelectedFunc/spaceAlsoActivates. Fixed by moving the
+// capture down onto spanArea, a sibling of searchButtons rather than
+// an ancestor of it (see newSearchDialog's own doc comment).
+//
+// So this dispatches through r.searchFieldsPages.InputHandler() —
+// the real ancestor chain tview.Application itself would use, not a
+// direct call to the button's own InputHandler — to actually exercise
+// that chain and catch a regression if the capture ever migrates back
+// up to an ancestor of the buttons.
+func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
+	noop := func(tview.Primitive) {}
+
+	t.Run("Enter on Cancel closes the dialog", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		r.openSearch()
+		r.setSearchFocus(len(r.searchSpans)) // Cancel
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+
+		if r.activePage != "" {
+			t.Errorf("activePage = %q after Enter on a focused Cancel, want closed", r.activePage)
+		}
+	})
+
+	t.Run("Space on Cancel closes the dialog", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		r.openSearch()
+		r.setSearchFocus(len(r.searchSpans)) // Cancel
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
+
+		if r.activePage != "" {
+			t.Errorf("activePage = %q after Space on a focused Cancel, want closed", r.activePage)
+		}
+	})
+
+	t.Run("Enter on Search runs the search", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		var captured search.Request
+		isolateSearchRun(t, fakeSearchRun(&captured))
+		r.openSearch()
+		r.searchFilenameValue = "anything"
+		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), noop)
+
+		if name, _ := r.searchPages.GetFrontPage(); name != "results" {
+			t.Errorf("front page after Enter on a focused Search = %q, want %q", name, "results")
+		}
+	})
+
+	t.Run("Space on Search runs the search", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		var captured search.Request
+		isolateSearchRun(t, fakeSearchRun(&captured))
+		r.openSearch()
+		r.searchFilenameValue = "anything"
+		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), noop)
+
+		if name, _ := r.searchPages.GetFrontPage(); name != "results" {
+			t.Errorf("front page after Space on a focused Search = %q, want %q", name, "results")
+		}
+	})
+}
+
 // TestSearchEngineChangeDimsScopeField pins the user's own request:
 // Start at reads as visibly unavailable while Engine=locate (it no
 // longer affects locate's own results — see search.Request.Scope's own
