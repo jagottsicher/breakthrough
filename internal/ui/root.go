@@ -162,33 +162,40 @@ type Root struct {
 	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
 	// each their own — see runSearch for how every one of these feeds
 	// into the search.Request that's actually built.
-	searchPages          *tview.Pages
-	searchFieldsPages    *tview.Pages
-	searchTop            *tview.TextView
-	searchLeft           *tview.TextView
-	searchRight          *tview.TextView
-	searchEditField      *tview.InputField
-	searchEditCommit     func(string)
-	searchButtons        *tview.Flex
-	searchCancelBtn      *tview.Button
-	searchSearchBtn      *tview.Button
-	searchSpans          []searchSpan
-	searchFocusedIdx     int
-	searchEngineOptions  []searchEngineOption
-	searchEngineIdx      int
-	searchScopeValue     string
-	searchFilenameValue  string
-	searchIgnoreValue    string
-	searchContentValue   string
-	searchIgnoreEnabled  bool
-	searchCaseSensitive  bool
-	searchSkipHidden     bool
-	searchRecursive      bool
-	searchFollowSymlinks bool
-	searchShellPatterns  bool
-	searchContentRegex   bool
-	searchWholeWords     bool
-	searchFirstHit       bool
+	//
+	// searchIncludeArchives is Filename's own "Include zip, tar (gz,
+	// bz2, xz)" checkbox — search.Request.IncludeArchives, a plain
+	// filename search only (meaningless once Content is filled in, the
+	// same as searchRecursive/searchFollowSymlinks are meaningless for
+	// EngineLocate — see its own doc comment).
+	searchPages           *tview.Pages
+	searchFieldsPages     *tview.Pages
+	searchTop             *tview.TextView
+	searchLeft            *tview.TextView
+	searchRight           *tview.TextView
+	searchEditField       *tview.InputField
+	searchEditCommit      func(string)
+	searchButtons         *tview.Flex
+	searchCancelBtn       *tview.Button
+	searchSearchBtn       *tview.Button
+	searchSpans           []searchSpan
+	searchFocusedIdx      int
+	searchEngineOptions   []searchEngineOption
+	searchEngineIdx       int
+	searchScopeValue      string
+	searchFilenameValue   string
+	searchIgnoreValue     string
+	searchContentValue    string
+	searchIgnoreEnabled   bool
+	searchCaseSensitive   bool
+	searchSkipHidden      bool
+	searchRecursive       bool
+	searchFollowSymlinks  bool
+	searchShellPatterns   bool
+	searchContentRegex    bool
+	searchWholeWords      bool
+	searchFirstHit        bool
+	searchIncludeArchives bool
 	// searchCancel stops whatever search.Run call is currently in
 	// flight, if any, and its paired animateSearchProgress ticker (both
 	// share this same ctx) — called before starting a new one, and when
