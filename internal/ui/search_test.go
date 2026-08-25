@@ -543,18 +543,92 @@ func TestRunSearchAllowsNonexistentStartAtForLocate(t *testing.T) {
 	}
 }
 
-// TestRunSearchUsesPanelPathForLocatePlainContentSearch pins the
-// user's own explicit request: a *plain* content search (Content
-// filled in, Filename left blank — nothing for locate itself to
-// narrow with) under Engine=locate greps from the panel's own actual
-// current directory, never whatever Start-at happens to still hold —
-// dimmed and inert for locate otherwise (see Request.Scope's own doc
-// comment), so grepping from it here would silently use a stale value
-// the user has no reason to expect still applies. Start-at is
-// deliberately set to something else entirely below, to prove it's
-// genuinely ignored, not just coincidentally equal to the panel's own
-// path.
-func TestRunSearchUsesPanelPathForLocatePlainContentSearch(t *testing.T) {
+// TestRunSearchRejectsNonexistentStartAtForLocatePlainContentSearch
+// pins the same non-existent-Start-at check TestRunSearchAllowsNonexistentStartAtForLocate
+// just pinned as *skipped* for a locate filename search, now correctly
+// *applying* for a plain content search under locate instead — the one
+// EngineLocate case that genuinely uses Start-at as a real grep scope
+// (see runSearch's own plainContentSearch), so a typo'd or
+// since-deleted directory needs exactly the same catch EngineFind
+// already gets, not a silent "0 found" indistinguishable from a real
+// empty result.
+func TestRunSearchRejectsNonexistentStartAtForLocatePlainContentSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	searchRunCalled := false
+	isolateSearchRun(t, func(context.Context, search.Request) (<-chan search.Result, <-chan error) {
+		searchRunCalled = true
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	r.searchContentValue = "needle" // Content only — Filename left blank
+	r.searchScopeValue = dir + "/does-not-exist"
+	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+
+	r.runSearch()
+
+	if searchRunCalled {
+		t.Error("runSearch should not have shelled out to grep at all for a non-existent Start-at")
+	}
+	if !r.panel.searchMode {
+		t.Error("panel.searchMode = false, want true — the error shows on the panel itself, same as EngineFind's own identical case")
+	}
+	if got := r.panel.header.GetText(true); !strings.Contains(got, "does not exist") {
+		t.Errorf("panel status = %q, want it to mention the directory doesn't exist", got)
+	}
+}
+
+// TestRerenderSearchDialogUndimsStartAtForLocatePlainContentSearch
+// pins that Start-at's own visible dimming (see rerenderSearchDialog's
+// own scopeDimmed) stays in sync with whether it's actually used —
+// the same "Engine=locate dims it" behavior
+// TestSearchEngineChangeDimsScopeField already pins, refined for the
+// one case that's now an exception to it: dimmed for locate's usual
+// "Start-at means nothing" cases (a filename search, pinned here),
+// but NOT for a plain content search, where it's now a real, active
+// grep scope — a field showing as inert while actually driving the
+// search would be exactly the kind of visual-versus-actual mismatch
+// that caused this whole area's confusion in the first place.
+func TestRerenderSearchDialogUndimsStartAtForLocatePlainContentSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+
+	r.searchFilenameValue = "*.go"
+	r.searchContentValue = ""
+	r.rerenderSearchDialog()
+	if !rowIsDimmed(t, r, "start-at") {
+		t.Error("Start at should be dimmed for a locate filename search")
+	}
+
+	r.searchFilenameValue = ""
+	r.searchContentValue = "needle"
+	r.rerenderSearchDialog()
+	if rowIsDimmed(t, r, "start-at") {
+		t.Error("Start at should NOT be dimmed for locate's own plain content search — it's a real, active scope here")
+	}
+}
+
+// TestRunSearchUsesStartAtForLocatePlainContentSearchToo pins the
+// user's own explicit, twice-repeated request — the second time after
+// an earlier attempt at this got it backwards (see this test's own
+// git history): a *plain* content search (Content filled in, Filename
+// left blank — nothing for locate itself to narrow with, so there's no
+// name-matching step for Engine to drive at all) greps from Start-at's
+// own real, typed value, exactly the same as it already does under
+// Engine=find — Engine is meant to be entirely irrelevant here, not
+// "irrelevant except Scope." Start-at is deliberately set to something
+// other than the panel's own current directory below, to prove the
+// panel's own path is never silently substituted in its place.
+func TestRunSearchUsesStartAtForLocatePlainContentSearchToo(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -563,26 +637,27 @@ func TestRunSearchUsesPanelPathForLocatePlainContentSearch(t *testing.T) {
 	var captured search.Request
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
+	altScope := filepath.Join(dir, "app-data") // deliberately NOT r.panel.path — must still be used, not silently swapped out
 	r.openSearch()
 	r.searchContentValue = "needle"
-	r.searchScopeValue = filepath.Join(dir, "app-data") // deliberately NOT r.panel.path — must be ignored
+	r.searchScopeValue = altScope
 	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
 
 	r.runSearch()
 
-	if captured.Scope != dir {
-		t.Errorf("Scope = %q, want the panel's own actual current directory %q, not Start-at's own %q", captured.Scope, dir, r.searchScopeValue)
+	if captured.Scope != altScope {
+		t.Errorf("Scope = %q, want Start-at's own real value %q, not the panel's own current directory %q", captured.Scope, altScope, dir)
 	}
 }
 
 // TestRunSearchKeepsStartAtScopeForLocateWithFilenameNarrowing pins
-// that the panel-path override just above is scoped to a *plain*
-// content search specifically: with Filename also filled in (locate
-// itself now has something to narrow with — see search.listThenGrep),
-// Scope is left as whatever Start-at/resolvePath produced, same as
-// before — Scope genuinely doesn't matter for locate's own narrowing
-// step either way (see Request.Scope's own doc comment), so there's no
-// reason to override it here, unlike the plain-content-search case.
+// that a locate-narrowed search (Filename also filled in — locate
+// itself now has something to narrow with, see search.listThenGrep)
+// still passes Start-at's own resolved value through as Scope even
+// though nothing downstream actually reads it for that case — Scope
+// genuinely doesn't matter for locate's own narrowing step either way
+// (see Request.Scope's own doc comment), but there's no reason to
+// special-case leaving it out just because it happens to go unused.
 func TestRunSearchKeepsStartAtScopeForLocateWithFilenameNarrowing(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
