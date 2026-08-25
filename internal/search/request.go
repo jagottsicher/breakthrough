@@ -90,18 +90,30 @@ const (
 // ContentNone (MC's own "Whole words"/"First hit" checkboxes — see
 // GrepArgs/ZgrepArgs/ZipgrepArgs): match whole words only, and stop
 // after the first match per file, respectively.
+//
+// IncludeArchives additionally searches inside every zip/tar(.gz/.bz2/
+// .xz) archive found under Scope for a member whose own name matches
+// Pattern — a plain filename search only (Content == ContentNone);
+// meaningless otherwise, the same as NamePattern/NameMode only ever
+// narrowing a content search rather than running standalone (see this
+// struct's own doc comment above). One level deep only: an archive
+// inside another archive isn't itself opened — a deliberate "Stufe A"
+// scope decision, not a limitation of the approach (see
+// internal/search's own archive.go). A match here is reported with
+// Result.ArchiveMember set.
 type Request struct {
-	Pattern        string
-	NamePattern    string
-	NameMode       Mode
-	Scope          string
-	Mode           Mode
-	Engine         Engine
-	Content        ContentMode
-	IgnoreDirs     []string
-	CaseSensitive  bool
-	NonRecursive   bool
-	FollowSymlinks bool
-	WholeWords     bool
-	FirstHit       bool
+	Pattern         string
+	NamePattern     string
+	NameMode        Mode
+	Scope           string
+	Mode            Mode
+	Engine          Engine
+	Content         ContentMode
+	IgnoreDirs      []string
+	CaseSensitive   bool
+	NonRecursive    bool
+	FollowSymlinks  bool
+	WholeWords      bool
+	FirstHit        bool
+	IncludeArchives bool
 }

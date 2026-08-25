@@ -1002,6 +1002,9 @@ func TestEntryColor(t *testing.T) {
 	if got := p.entryColor(rowRef{entryType: fsops.TypeDir}); got != p.theme.EntryNormal {
 		t.Errorf("directory color = %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
 	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755, archiveHit: true}); got != p.theme.PlaceholderText {
+		t.Errorf("archive-member hit color = %v, want %v (PlaceholderText) even for an executable archive file", got, p.theme.PlaceholderText)
+	}
 }
 
 func TestModifierGlyph(t *testing.T) {
@@ -1469,6 +1472,39 @@ func TestAppendSearchResultShowsLineAndTextForContentMatch(t *testing.T) {
 	wantName := target + ":42: needle found here"
 	if ref.name != wantName {
 		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+}
+
+// TestAppendSearchResultShowsArrowForArchiveMatch pins an archive-member
+// match's own display text — "path -> member" (the same "-> target"
+// shape a symlink's own name already gets, see addRow) — while
+// rowRef.path stays the real, containing archive file throughout (so
+// activateRow's usual "Go to file/folder" still lands on something
+// real), and rowRef.archiveHit is set for entryColor (see TestEntryColor).
+func TestAppendSearchResultShowsArrowForArchiveMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	archivePath := filepath.Join(dir, "docs.zip")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != archivePath {
+		t.Errorf("path = %q, want the real archive path %q", ref.path, archivePath)
+	}
+	wantName := archivePath + " -> notes/abcdefg.txt"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+	if !ref.archiveHit {
+		t.Error("archiveHit = false, want true")
 	}
 }
 
