@@ -489,6 +489,13 @@ func (r *Root) rerenderSearchDialog() {
 	left.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
 	left.newline()
 	left.choice(r.searchSkipHidden, "Skip hidden", func() { r.searchSkipHidden = !r.searchSkipHidden })
+	left.newline()
+	// search.Request.IncludeArchives — see its own doc comment. Its own
+	// checkbox lives here, in Filename's own column, not Content's:
+	// this matches inside a zip/tar's own member *names*, never their
+	// content, so it's an extension of a filename search specifically,
+	// per the user's own explicit design decision.
+	left.choice(r.searchIncludeArchives, "Include zip, tar (gz, bz2, xz)", func() { r.searchIncludeArchives = !r.searchIncludeArchives })
 	r.searchLeft.SetText(left.b.String())
 
 	// Content column. No more "Search in" selector (this app's own
@@ -1058,15 +1065,16 @@ func (r *Root) runSearch() {
 	}
 
 	req := search.Request{
-		Scope:          scope,
-		Engine:         engine,
-		Content:        contentMode,
-		IgnoreDirs:     ignoreDirs,
-		CaseSensitive:  r.searchCaseSensitive,
-		NonRecursive:   !r.searchRecursive,
-		FollowSymlinks: r.searchFollowSymlinks,
-		WholeWords:     r.searchWholeWords,
-		FirstHit:       r.searchFirstHit,
+		Scope:           scope,
+		Engine:          engine,
+		Content:         contentMode,
+		IgnoreDirs:      ignoreDirs,
+		CaseSensitive:   r.searchCaseSensitive,
+		NonRecursive:    !r.searchRecursive,
+		FollowSymlinks:  r.searchFollowSymlinks,
+		WholeWords:      r.searchWholeWords,
+		FirstHit:        r.searchFirstHit,
+		IncludeArchives: contentMode == search.ContentNone && r.searchIncludeArchives,
 	}
 	// Content == ContentNone: Pattern is the filename match itself, run
 	// through Engine directly. Otherwise: Pattern is what grep actually
