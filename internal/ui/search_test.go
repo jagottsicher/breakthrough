@@ -81,6 +81,14 @@ func TestNoSearchResultsTextMentionsStaleIndexOnlyForLocateFilenameSearch(t *tes
 	}
 }
 
+// TestParseIgnoreDirs also pins a real user report: "/development"
+// (a leading slash) used to silently exclude nothing at all — find's
+// own -name test matches a bare basename, which never contains a "/",
+// so that pattern could never match anything — rather than being
+// treated the same as the "development" the user almost certainly
+// meant. Both a leading and a trailing slash are stripped, and a
+// bare "/" on its own (nothing left once stripped) drops out
+// entirely, the same as an empty entry already does.
 func TestParseIgnoreDirs(t *testing.T) {
 	tests := []struct {
 		text string
@@ -91,6 +99,11 @@ func TestParseIgnoreDirs(t *testing.T) {
 		{".git", []string{".git"}},
 		{".git, node_modules", []string{".git", "node_modules"}},
 		{" .git ,, node_modules ,", []string{".git", "node_modules"}},
+		{"/development", []string{"development"}},
+		{"development/", []string{"development"}},
+		{"/development/", []string{"development"}},
+		{"/", nil},
+		{"/.git, /node_modules/", []string{".git", "node_modules"}},
 	}
 	for _, tt := range tests {
 		got := parseIgnoreDirs(tt.text)
@@ -681,6 +694,37 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	}
 	if !r.panel.searchMode {
 		t.Error("panel.searchMode = false, want true")
+	}
+}
+
+// TestRunSearchStripsSlashesFromIgnoreDirs pins the real user report
+// end to end, through the actual dialog field runSearch reads (not
+// just parseIgnoreDirs in isolation — see its own test): typing
+// "/development" into Ignore dirs used to build a Request whose
+// IgnoreDirs held that leading slash intact, silently excluding
+// nothing at all (find's own -name test can't match a basename against
+// a pattern containing "/") — captured.IgnoreDirs must hold the
+// stripped "development" instead, the same directory name Find
+// recursively would actually prune.
+func TestRunSearchStripsSlashesFromIgnoreDirs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "hangman.*"
+	r.searchIgnoreEnabled = true
+	r.searchIgnoreValue = "/development"
+
+	r.runSearch()
+
+	want := []string{"development"}
+	if len(captured.IgnoreDirs) != len(want) || captured.IgnoreDirs[0] != want[0] {
+		t.Errorf("IgnoreDirs = %v, want %v (the leading slash stripped)", captured.IgnoreDirs, want)
 	}
 }
 
@@ -1309,6 +1353,76 @@ func TestFocusedSearchButtonActivatesViaEnterAndSpace(t *testing.T) {
 
 		if !r.panel.searchMode {
 			t.Error("panel.searchMode = false after Space on a focused Search, want true")
+		}
+	})
+}
+
+// TestEscapeClosesSearchRegardlessOfFocus pins the user's own explicit
+// request: Escape means Cancel in this dialog, the same as it already
+// does in Properties (see capturePropertiesKey/newPropertiesButtons'
+// own identical SetExitFunc cases) — no matter which of the three
+// different places real keyboard focus might currently be (a span/
+// checkbox/field, reached via captureSearchKey; Cancel or Search
+// itself, reached via each button's own SetExitFunc instead, the exact
+// same "ancestor capture never sees a focused button's own keys" split
+// TestFocusedSearchButtonActivatesViaEnterAndSpace already pins for
+// Enter/Space).
+func TestEscapeClosesSearchRegardlessOfFocus(t *testing.T) {
+	noop := func(tview.Primitive) {}
+
+	t.Run("Escape on a span closes the dialog", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		r.openSearch() // first focus is the Filename span — see its own doc comment
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+
+		if r.activePage != "" {
+			t.Errorf("activePage = %q after Escape on a focused span, want closed", r.activePage)
+		}
+	})
+
+	t.Run("Escape on Cancel closes the dialog", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		r.openSearch()
+		r.setSearchFocus(len(r.searchSpans)) // Cancel
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+
+		if r.activePage != "" {
+			t.Errorf("activePage = %q after Escape on a focused Cancel, want closed", r.activePage)
+		}
+	})
+
+	t.Run("Escape on Search closes the dialog without running it", func(t *testing.T) {
+		dir := fixtureDir(t)
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		searchRunCalled := false
+		isolateSearchRun(t, func(context.Context, search.Request) (<-chan search.Result, <-chan error) {
+			searchRunCalled = true
+			return make(chan search.Result), make(chan error)
+		})
+		r.openSearch()
+		r.searchFilenameValue = "anything"
+		r.setSearchFocus(len(r.searchSpans) + 1) // Search
+
+		r.searchFieldsPages.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), noop)
+
+		if r.activePage != "" {
+			t.Errorf("activePage = %q after Escape on a focused Search, want closed", r.activePage)
+		}
+		if searchRunCalled {
+			t.Error("Escape on a focused Search should close the dialog, not run the search")
 		}
 	})
 }
