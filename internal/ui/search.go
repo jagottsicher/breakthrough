@@ -122,6 +122,21 @@ func (sb *searchBuilder) focusTag(idx int) (tag, reset string) {
 // story).
 const dimTag = "[gray]"
 
+// hintText writes s as short, plain informational text — never a span,
+// nothing to click or focus — in theme.PlaceholderText's own color:
+// the same lighter gray Panel's own quick-filter placeholder already
+// uses (see Panel.filterField/theme.PlaceholderText's own doc comment),
+// deliberately not dimTag's own darker "not applicable right now" gray.
+// A hint (e.g. "(skips eCryptfs by design)", "(comma separated)") is
+// always relevant regardless of anything else in the dialog, unlike a
+// dimmed field/value, so per the user's own explicit request it reads a
+// shade brighter than dimTag rather than sharing its color.
+func (sb *searchBuilder) hintText(s string) {
+	sb.tag(fmt.Sprintf("[%s]", colorTag(sb.root.theme.PlaceholderText)))
+	sb.text(s)
+	sb.tag("[-]")
+}
+
 // span appends one clickable region for whatever was just written
 // between start and sb.col, under activate — the shared tail every
 // span-producing builder method below ends with.
@@ -319,7 +334,7 @@ func (r *Root) newSearchDialog() *tview.Pages {
 // a focused button.
 func (r *Root) newSearchButtons() *tview.Flex {
 	r.searchCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.closeSearch)
-	r.searchSearchBtn = tview.NewButton("Search").SetSelectedFunc(r.runSearch)
+	r.searchSearchBtn = tview.NewButton("Find").SetSelectedFunc(r.runSearch)
 	r.searchCancelBtn.SetInputCapture(spaceAlsoActivates(r.closeSearch))
 	r.searchSearchBtn.SetInputCapture(spaceAlsoActivates(r.runSearch))
 
@@ -383,9 +398,8 @@ func (r *Root) rerenderSearchDialog() {
 			// in a plaintext database outside the encrypted volume. Per
 			// a real user report — searching their own home directory
 			// with locate found nothing, for exactly this reason.
-			top.tag(dimTag)
-			top.text(" (skips eCryptfs by design)")
-			top.tag("[-:-:-]")
+			top.text(" ")
+			top.hintText("(skips eCryptfs by design)")
 		}
 		top.text("   ")
 	}
@@ -433,6 +447,16 @@ func (r *Root) rerenderSearchDialog() {
 	top.textField(r.searchIgnoreValue, "(none)", !r.searchIgnoreEnabled, 0, 22, func(s string) {
 		r.searchIgnoreValue = s
 	}, "")
+	// Reminds what parseIgnoreDirs actually expects (comma-separated
+	// directory names/patterns — see its own doc comment), per the
+	// user's own explicit request; only really visible while the field
+	// is still short/empty, same as any placeholder-style hint — a long
+	// typed value pushes it past the dialog's own right edge exactly
+	// like Start-at's own path already can (see textField's own doc
+	// comment), which is fine: that's also exactly when it's least
+	// needed.
+	top.text(" ")
+	top.hintText("(comma separated)")
 	r.searchTop.SetText(top.b.String())
 
 	// Filename column — after MC's own Find File dialog (verified

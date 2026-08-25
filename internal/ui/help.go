@@ -35,7 +35,7 @@ var helpText = strings.TrimLeft(`
   Ctrl+E          Edit the selected file
   Ctrl+R          Rename the selected file
   Ctrl+G          Toggle hidden files
-  Ctrl+F          Search
+  Ctrl+F          Find
   Ctrl+O          Options
   Enter           Open the selected directory
   Space           Select/deselect the selected file
@@ -65,7 +65,7 @@ var helpText = strings.TrimLeft(`
   Tab / Shift+Tab   Move between fields
   Enter             Commit a field and stay — except in Filename,
                     where Enter runs the search immediately, same
-                    as clicking Search
+                    as clicking Find
   Escape            Cancel and close; from the results page, back
                     to the form instead, with everything exactly as
                     it was left
