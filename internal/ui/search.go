@@ -16,6 +16,10 @@ import (
 
 const searchPage = "search"
 
+// searchResultMenuPage is the search results' own right-click context
+// menu — see newSearchResultMenu/openSearchResultMenu.
+const searchResultMenuPage = "search-result-menu"
+
 // searchFormWidth/Height is the search dialog's own fixed size for the
 // fields page (see newSearchDialog). searchResultsWidth/Height is the
 // *floor* for the results window (see runSearch/backToSearchForm) —
@@ -778,8 +782,128 @@ func (r *Root) captureSearchListMouse(action tview.MouseAction, event *tcell.Eve
 	case tview.MouseScrollDown:
 		r.searchList.SetCurrentItem(r.searchList.GetCurrentItem() + searchListScrollStep)
 		return tview.MouseConsumed, nil
+	case tview.MouseRightClick:
+		// Per the user's own explicit request: right-click a result for
+		// a context menu, rather than only ever left-click-to-open (see
+		// openSearchResultMenu).
+		if path, ok := r.searchResultPathAt(event.Position()); ok {
+			x, y := event.Position()
+			r.openSearchResultMenu(path, x, y)
+			return tview.MouseConsumed, nil
+		}
 	}
 	return action, event
+}
+
+// searchResultPathAt returns the path of whichever result row is at
+// (x, y), or ok=false if there isn't one — outside searchList
+// entirely, or landing on a non-result row (the "No matches found"/
+// error placeholder, or blank space below the last real result: both
+// leave searchResultPaths shorter than the row index computed here).
+// The same row-index-from-position math tview.List's own (private)
+// indexAtPoint uses internally, reimplemented here since nothing
+// exported reaches it: the vertical position within the list's own
+// inner rect, offset by however far it's currently scrolled (see
+// GetOffset — searchListScrollStep's own doc comment on why a plain
+// click position alone isn't enough once the list has been scrolled).
+func (r *Root) searchResultPathAt(x, y int) (string, bool) {
+	if !r.searchList.InRect(x, y) {
+		return "", false
+	}
+	_, rectY, _, _ := r.searchList.GetInnerRect()
+	offset, _ := r.searchList.GetOffset()
+	idx := (y - rectY) + offset
+	if idx < 0 || idx >= len(r.searchResultPaths) {
+		return "", false
+	}
+	return r.searchResultPaths[idx], true
+}
+
+// newSearchResultMenu builds the search results' own right-click
+// context menu — a much smaller, more focused set than the panel's
+// own (see NewRoot's own menu construction), picked from what one
+// arbitrary path — which might not even be the panel's own current
+// directory — can sensibly do, rather than reusing the panel's full
+// menu (whose own Selection/Globals sections don't mean anything here
+// at all). Repopulated fresh on every open (see openSearchResultMenu)
+// rather than built once with items reading r.target the way the
+// panel's own menu does: a search result's path has no equivalent to
+// r.target/r.targetRow being kept in sync by the table's own cursor,
+// so every item's own closure captures its path directly instead.
+func (r *Root) newSearchResultMenu() *tview.List {
+	l := tview.NewList().ShowSecondaryText(false)
+	l.SetHighlightFullLine(true)
+	l.SetBorderPadding(0, 0, 1, 1)
+	l.SetDoneFunc(r.hideOverlay) // Escape
+	return l
+}
+
+// openSearchResultMenu shows path's own context menu at (x, y) — see
+// captureSearchListMouse's own MouseRightClick case. "Go to
+// file/folder" is first and pre-selected, per the user's own explicit
+// request — the same action a plain left-click already performs (see
+// openSearchResult).
+//
+// Copy/Cut/Paste/Properties all act on path directly and leave the
+// results page open afterward — no need for the panel to be showing
+// (or to ever visit) its own directory at all, the same "floats on
+// top rather than replacing" shape openHelp already has (see
+// openPropertiesFloating/pasteInto's own doc comments on why those two
+// specifically needed their own counterparts to make that possible).
+// Copy/Cut/Paste leave the menu itself open afterward too, same as the
+// panel's own context menu already does for its own identical three
+// items; Properties closes just the menu layer first (hideOverlay),
+// since — unlike Copy/Cut/Paste — it opens another overlay of its own
+// on top of the results.
+//
+// Rename is the one exception that closes the results outright: its
+// own inline edit field is drawn *at* a real row's on-screen position
+// (see openRename/nameCellRect), which only exists once the panel
+// actually navigates there — so Rename here means "go to it, then
+// rename it" (the same as picking "Go to file/folder" and then
+// pressing Ctrl+R), not "rename it without leaving the results",
+// which there's no way to draw at all.
+func (r *Root) openSearchResultMenu(path string, x, y int) {
+	l := r.searchResultMenu
+	l.Clear()
+
+	goToFolder := func() {
+		r.cancelSearch()
+		r.closeAllOverlays()
+		r.showError(r.panel.navigateAndSelect(path))
+	}
+	l.AddItem("Go to file/folder", "", 0, goToFolder)
+	l.AddItem("Copy", "", 0, func() {
+		r.clipboard = []string{path}
+		r.clipboardCut = false
+	})
+	l.AddItem("Cut", "", 0, func() {
+		r.clipboard = []string{path}
+		r.clipboardCut = true
+	})
+	l.AddItem("Paste", "", 0, func() {
+		r.pasteInto(filepath.Dir(path))
+	})
+	l.AddItem("Properties", "", 0, func() {
+		r.hideOverlay() // close just the menu — Properties floats on top of the results, not replacing them
+		r.target = path
+		r.openPropertiesFloating()
+	})
+	l.AddItem("Rename", "", 0, func() {
+		r.cancelSearch()
+		r.closeAllOverlays()
+		if err := r.panel.navigateAndSelect(path); err != nil {
+			r.showError(err)
+			return
+		}
+		r.renameCurrentEntry()
+	})
+
+	width, height := listSize(l)
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+	l.SetRect(x, y, width, height)
+	l.SetCurrentItem(0)
+	r.pushOverlay(searchResultMenuPage, l, nil)
 }
 
 // searchSpanAt finds whichever searchSpans entry (if any) contains
@@ -900,6 +1024,7 @@ func (r *Root) searchResultsSize() (width, height int) {
 func (r *Root) showSearchError(msg string) {
 	r.cancelSearch()
 	r.searchList.Clear()
+	r.searchResultPaths = nil
 	r.searchList.SetMainTextColor(r.theme.EntryError)
 	r.searchList.AddItem(msg, "", 0, nil)
 	r.setSearchStatus("")
@@ -1068,6 +1193,7 @@ func (r *Root) runSearch() {
 	r.searchCancel = cancel
 
 	r.searchList.Clear()
+	r.searchResultPaths = nil
 	r.searchList.SetMainTextColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
 	r.searchLastDir = ""
@@ -1190,6 +1316,7 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 			}
 			r.searchLastDir = filepath.Dir(res.Path)
 			_, _, listWidth, _ := r.searchList.GetInnerRect()
+			r.searchResultPaths = append(r.searchResultPaths, res.Path)
 			r.searchList.AddItem(formatSearchResult(res, listWidth), "", 0, func() {
 				r.openSearchResult(res)
 			})

@@ -1034,6 +1034,236 @@ func TestOpenSearchResultNavigatesAndCloses(t *testing.T) {
 	}
 }
 
+// seedSearchResultPaths puts paths directly into r.searchResultPaths
+// without running a real search — the tests below only care about
+// searchResultPathAt/openSearchResultMenu's own behavior once a path
+// is already known, not streamSearchResults' own end-to-end streaming
+// (already covered by TestOpenSearchResultNavigatesAndCloses and the
+// runner package's own tests).
+func seedSearchResultPaths(r *Root, paths ...string) {
+	r.searchResultPaths = paths
+}
+
+// selectSearchResultMenuItem triggers item idx's own selected func —
+// the same SetCurrentItem-then-Enter pattern this file's own
+// TestChoiceSpanSelectsOption-adjacent tests and root_test.go's own
+// context-menu tests already use.
+func selectSearchResultMenuItem(r *Root, idx int) {
+	r.searchResultMenu.SetCurrentItem(idx)
+	r.searchResultMenu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+}
+
+// TestSearchResultPathAtFindsCorrectRow pins the row-index-from-
+// position math searchResultPathAt reimplements (see its own doc
+// comment on why: nothing exported reaches tview.List's own private
+// indexAtPoint) — checked against a real, drawn list rather than just
+// arithmetic in isolation, so an actual layout/scroll-offset mismatch
+// would show up here too.
+func TestSearchResultPathAtFindsCorrectRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.searchList.SetRect(0, 0, 40, 10)
+	r.searchList.AddItem("first", "", 0, nil)
+	r.searchList.AddItem("second", "", 0, nil)
+	r.searchList.AddItem("third", "", 0, nil)
+	seedSearchResultPaths(r, "/a/first", "/a/second", "/a/third")
+
+	rectX, rectY, _, _ := r.searchList.GetInnerRect()
+
+	if got, ok := r.searchResultPathAt(rectX, rectY+1); !ok || got != "/a/second" {
+		t.Errorf("searchResultPathAt(row 1) = (%q, %v), want (\"/a/second\", true)", got, ok)
+	}
+	if _, ok := r.searchResultPathAt(rectX, rectY+50); ok {
+		t.Error("searchResultPathAt past the last real result should report ok=false")
+	}
+	if _, ok := r.searchResultPathAt(100, 100); ok {
+		t.Error("searchResultPathAt outside searchList's own rect should report ok=false")
+	}
+}
+
+// TestOpenSearchResultMenuGoToFolder pins the context menu's own first,
+// pre-selected item — per the user's own explicit request — doing
+// exactly what a plain left-click already does: navigate there and
+// close the whole search dialog (menu included).
+func TestOpenSearchResultMenuGoToFolder(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	if r.activePage != searchResultMenuPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, searchResultMenuPage)
+	}
+	if r.searchResultMenu.GetCurrentItem() != 0 {
+		t.Errorf("initial current item = %d, want 0 (\"Go to file/folder\")", r.searchResultMenu.GetCurrentItem())
+	}
+
+	selectSearchResultMenuItem(r, 0)
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after \"Go to file/folder\", want closed", r.activePage)
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok || path != target {
+		t.Errorf("CurrentRowPath() = (%q, %v), want (%q, true)", path, ok, target)
+	}
+}
+
+// TestOpenSearchResultMenuCopySetsClipboardToResultPath pins that Copy
+// always targets the result itself — never whatever might already be
+// checkbox-selected in the panel (clipboardTargets' own priority order
+// would otherwise pick that up instead — see its own doc comment) —
+// and leaves the results (and the menu) open, matching the panel's
+// own context menu's identical Copy item.
+func TestOpenSearchResultMenuCopySetsClipboardToResultPath(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+	// Something unrelated already selected in the panel — Copy must
+	// still target the result, not this.
+	r.panel.setChecked(1, true)
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 1) // "Copy"
+
+	if len(r.clipboard) != 1 || r.clipboard[0] != target {
+		t.Errorf("clipboard = %v, want [%q]", r.clipboard, target)
+	}
+	if r.clipboardCut {
+		t.Error("clipboardCut = true, want false for Copy")
+	}
+	if r.activePage != searchResultMenuPage {
+		t.Errorf("activePage = %q after Copy, want still %q (menu stays open, same as the panel's own)", r.activePage, searchResultMenuPage)
+	}
+}
+
+// TestOpenSearchResultMenuCutSetsClipboardCut pins Cut's own one
+// difference from Copy.
+func TestOpenSearchResultMenuCutSetsClipboardCut(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 2) // "Cut"
+
+	if len(r.clipboard) != 1 || r.clipboard[0] != target {
+		t.Errorf("clipboard = %v, want [%q]", r.clipboard, target)
+	}
+	if !r.clipboardCut {
+		t.Error("clipboardCut = false, want true for Cut")
+	}
+}
+
+// TestOpenSearchResultMenuPastePastesIntoResultsOwnDirectory pins
+// Paste's own destination: the directory containing the result, not
+// wherever the panel itself happens to be showing (see pasteInto's
+// own doc comment on why those are frequently different) — the
+// result's own directory here is deliberately not the panel's current
+// one.
+func TestOpenSearchResultMenuPastePastesIntoResultsOwnDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	sub := filepath.Join(dir, "app-data")
+	src := filepath.Join(dir, "banana.txt")
+	target := filepath.Join(sub, "nested.txt") // the "result" — its own parent is sub, not dir
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.clipboard = []string{src}
+	r.clipboardCut = false
+	r.openSearch() // panel.path is still dir here, not sub
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 3) // "Paste"
+
+	pasted := filepath.Join(sub, "banana.txt")
+	if _, err := os.Stat(pasted); err != nil {
+		t.Errorf("expected %q to exist after Paste: %v", pasted, err)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("Copy-paste should have left the original in place: %v", err)
+	}
+}
+
+// TestOpenSearchResultMenuPropertiesFloatsOverResults pins the user's
+// own explicit request: Properties from the results' own context menu
+// floats on top of the results (see openPropertiesFloating), closing
+// just the menu layer first — not the global "replace everything" (see
+// openProperties) the panel's own context menu uses. Escape from
+// Properties returns to the results, still open.
+func TestOpenSearchResultMenuPropertiesFloatsOverResults(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 4) // "Properties"
+
+	if r.activePage != propertiesPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, propertiesPage)
+	}
+	if r.propertiesTarget != target {
+		t.Errorf("propertiesTarget = %q, want %q", r.propertiesTarget, target)
+	}
+
+	r.hideOverlay() // Escape's own action
+	if r.activePage != searchPage {
+		t.Errorf("activePage after closing Properties = %q, want back to %q, still open", r.activePage, searchPage)
+	}
+}
+
+// TestOpenSearchResultMenuRenameNavigatesFirst pins Rename's own
+// exception (see openSearchResultMenu's own doc comment on why): it
+// closes the search results outright and navigates there first, since
+// its own inline edit field needs a real, visible table row to draw
+// itself at.
+func TestOpenSearchResultMenuRenameNavigatesFirst(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 5) // "Rename"
+
+	if r.activePage != renamePage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+	if r.target != target {
+		t.Errorf("target = %q, want %q", r.target, target)
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok || path != target {
+		t.Errorf("CurrentRowPath() = (%q, %v), want (%q, true) — the panel should already have navigated there", path, ok, target)
+	}
+}
+
 // TestChoiceSpanSelectsOption pins the choice group mechanism shared by
 // Engine and the various checkboxes: activating one of a group's own
 // spans selects it (updates the relevant *Idx/bool field) and

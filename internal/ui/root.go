@@ -163,21 +163,31 @@ type Root struct {
 	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
 	// each their own — see runSearch for how every one of these feeds
 	// into the search.Request that's actually built.
-	searchPages          *tview.Pages
-	searchFieldsPages    *tview.Pages
-	searchTop            *tview.TextView
-	searchLeft           *tview.TextView
-	searchRight          *tview.TextView
-	searchEditField      *tview.InputField
-	searchEditCommit     func(string)
-	searchButtons        *tview.Flex
-	searchCancelBtn      *tview.Button
-	searchSearchBtn      *tview.Button
-	searchSpans          []searchSpan
-	searchFocusedIdx     int
-	searchResultsView    *tview.Flex
-	searchList           *tview.List
-	searchStatus         *tview.TextView
+	searchPages       *tview.Pages
+	searchFieldsPages *tview.Pages
+	searchTop         *tview.TextView
+	searchLeft        *tview.TextView
+	searchRight       *tview.TextView
+	searchEditField   *tview.InputField
+	searchEditCommit  func(string)
+	searchButtons     *tview.Flex
+	searchCancelBtn   *tview.Button
+	searchSearchBtn   *tview.Button
+	searchSpans       []searchSpan
+	searchFocusedIdx  int
+	searchResultsView *tview.Flex
+	searchList        *tview.List
+	searchStatus      *tview.TextView
+	// searchResultPaths mirrors searchList's own items, index for
+	// index — the full path each row's own click target closes over
+	// (see streamSearchResults), looked up separately for a right-click
+	// (see captureSearchListMouse/openSearchResultMenu) since tview.List
+	// has no way to read back what an item's own selected func closure
+	// captured. Reset to nil everywhere searchList.Clear() is (see
+	// runSearch/showSearchError), kept in lockstep by only ever being
+	// appended to right alongside a real AddItem call.
+	searchResultPaths    []string
+	searchResultMenu     *tview.List // the search results' own right-click context menu — see newSearchResultMenu
 	searchEngineOptions  []searchEngineOption
 	searchEngineIdx      int
 	searchScopeValue     string
@@ -542,6 +552,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reset or repopulate on open).
 	r.helpView = r.newHelpView()
 
+	// The search results' own right-click context menu (see
+	// search.go/newSearchResultMenu/openSearchResultMenu) — repopulated
+	// fresh on every open, the same as r.menu.
+	r.searchResultMenu = r.newSearchResultMenu()
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -565,6 +580,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(searchResultMenuPage, r.searchResultMenu, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -603,14 +619,26 @@ func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, resto
 }
 
 // pushOverlay adds page/widget as a new layer on top of whatever's
-// already open, without closing it — see openOwnerGroupPicker, the only
-// current use: the owner/group picker floats on top of Properties rather
-// than replacing it.
+// already open, without closing it — see openOwnerGroupPicker
+// (owner/group picker over Properties), openHelp (help screen over
+// anything), and openPropertiesFloating (Properties over search results).
+//
+// tview.Pages.ShowPage only flips a page's Visible flag — it does NOT
+// reorder Pages' own internal page list, and Pages.Draw always walks that
+// list in original AddPage registration order (verified by reading
+// tview's pages.go directly). So without SendToFront here, a page that
+// happened to be registered earlier in NewRoot (e.g. propertiesPage) would
+// draw underneath — and get fully covered by — a page registered later
+// (e.g. searchPage), even though pushOverlay just made it the topmost,
+// most-recently-shown layer. SendToFront moves it to the end of Pages' own
+// list so draw order actually matches stacking order, regardless of which
+// page happened to be AddPage'd first.
 func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) {
 	r.overlayStack = append(r.overlayStack, overlayFrame{page: page, widget: widget, restore: restore})
 	r.activePage = page
 	r.activeWidget = widget
 	r.ShowPage(page)
+	r.SendToFront(page)
 	if restore != nil {
 		restore()
 	} else {
@@ -1195,25 +1223,36 @@ func (r *Root) cutToClipboard() {
 	r.clipboardCut = true
 }
 
-// pasteClipboard is "Paste": copies or moves (per clipboardCut) whatever
-// Copy/Cut last captured into the directory currently on screen. A no-op
-// if nothing was ever copied/cut.
+// pasteClipboard is "Paste": copies or moves (per clipboardCut)
+// whatever Copy/Cut last captured into the directory currently on
+// screen — pasteInto's own thin wrapper for that common case.
+func (r *Root) pasteClipboard() {
+	r.pasteInto(r.panel.path)
+}
+
+// pasteInto is pasteClipboard's own shared implementation, generalized
+// to an explicit destination directory — used directly by the search
+// results' own context menu (see newSearchResultMenu), which pastes
+// alongside a result rather than into whatever the panel itself
+// happens to be showing (a search result's own directory and the
+// panel's current one are frequently different). A no-op if nothing
+// was ever copied/cut.
 //
-// Each target that would collide with an existing entry in the current
-// directory is skipped with an error — asking "overwrite?" once per
-// colliding file in a multi-file paste isn't built yet (a known
-// simplification; fsops.Copy/Move's force parameter is where that would
-// hook in). Only the first error is reported, to avoid stacking one error
+// Each target that would collide with an existing entry in dir is
+// skipped with an error — asking "overwrite?" once per colliding file
+// in a multi-file paste isn't built yet (a known simplification;
+// fsops.Copy/Move's force parameter is where that would hook in).
+// Only the first error is reported, to avoid stacking one error
 // overlay per failed file; the rest of the paste still runs to
 // completion rather than stopping at the first collision.
-func (r *Root) pasteClipboard() {
+func (r *Root) pasteInto(dir string) {
 	if len(r.clipboard) == 0 {
 		return
 	}
 
 	var firstErr error
 	for _, src := range r.clipboard {
-		dst := filepath.Join(r.panel.path, filepath.Base(src))
+		dst := filepath.Join(dir, filepath.Base(src))
 		var err error
 		if r.clipboardCut {
 			err = fsops.Move(src, dst, false)
@@ -1225,10 +1264,18 @@ func (r *Root) pasteClipboard() {
 		}
 	}
 
-	if err := r.panel.load(r.panel.path); err != nil {
-		firstErr = err // the reload failing is more urgent to report than a copy conflict
-	} else if r.clipboardCut && firstErr == nil {
+	if r.clipboardCut && firstErr == nil {
 		r.clipboard = nil // moved away cleanly; nothing left to paste again
+	}
+
+	// Only reload if the panel actually happens to be showing dir right
+	// now — pasting into a search result's own directory, elsewhere,
+	// shouldn't force-navigate or otherwise disturb whatever the panel
+	// currently has on screen.
+	if r.panel.path == dir {
+		if err := r.panel.load(r.panel.path); err != nil {
+			firstErr = err // the reload failing is more urgent to report than a copy conflict
+		}
 	}
 
 	if firstErr != nil {

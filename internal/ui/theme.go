@@ -149,5 +149,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpView.SetTextColor(theme.Text)
 	}
 
+	if r.searchResultMenu != nil {
+		r.searchResultMenu.SetBackgroundColor(theme.AccentBackground)
+		r.searchResultMenu.SetMainTextColor(theme.Text)
+	}
+
 	r.panel.applyTheme(theme)
 }
