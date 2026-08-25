@@ -820,6 +820,52 @@ func TestRunSearchIncludeArchivesIgnoredForContentSearch(t *testing.T) {
 	}
 }
 
+// TestRunSearchIncludeCompressedReachesRequest pins that the "Include
+// compressed files" checkbox actually reaches
+// search.Request.IncludeCompressed for a content search.
+func TestRunSearchIncludeCompressedReachesRequest(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchContentValue = "TODO"
+	r.searchIncludeCompressed = true
+	r.runSearch()
+
+	if !captured.IncludeCompressed {
+		t.Error("IncludeCompressed = false, want true")
+	}
+}
+
+// TestRunSearchIncludeCompressedIgnoredForFilenameSearch is
+// TestRunSearchIncludeArchivesIgnoredForContentSearch's own mirror:
+// Include Compressed only ever means something for a content search —
+// checking it while Content is left blank (a plain filename search)
+// must not reach IncludeCompressed as true.
+func TestRunSearchIncludeCompressedIgnoredForFilenameSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchIncludeCompressed = true
+	r.runSearch()
+
+	if captured.IncludeCompressed {
+		t.Error("IncludeCompressed = true, want false for a plain filename search")
+	}
+}
+
 // TestRunSearchWiresOnProgress pins that runSearch actually sets
 // search.Request.OnProgress (see renderSearchStatus/searchCurrentPos) —
 // not exercised end to end here (that would need the real
@@ -1400,6 +1446,7 @@ func TestCheckboxSpansToggle(t *testing.T) {
 		{"Case sensitive", func() bool { return r.searchCaseSensitive }},
 		{"Skip hidden", func() bool { return r.searchSkipHidden }},
 		{"Include zip, tar (gz, bz2, xz)", func() bool { return r.searchIncludeArchives }},
+		{"Include compressed files", func() bool { return r.searchIncludeCompressed }},
 	}
 	for _, tt := range tests {
 		if tt.get() {

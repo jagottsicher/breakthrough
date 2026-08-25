@@ -94,6 +94,60 @@ func ZgrepArgs(pattern string, mode Mode, gzFile string, caseSensitive, wholeWor
 	return append(args, "-e", pattern, gzFile)
 }
 
+// BzgrepArgs builds bzgrep's own argument list (not including
+// "bzgrep" itself) for a single bzip2-compressed file. Same
+// -n/-I/-H/-i/-w/-m passthrough and -r/--recursive restriction as
+// ZgrepArgs (verified by reading bzgrep's own script, /usr/bin/bzgrep,
+// not guessed — it's literally "Adapted from zgrep of the Debian gzip
+// package" per its own header comment) — but with one real difference,
+// also only found by reading and running the actual script, not
+// documented anywhere and not present in the current zgrep/xzgrep
+// (verified — neither has this block at all): this bzgrep build is an
+// old (1998–2002) snapshot that still carries a "grep is buggy with -e
+// on SVR4" workaround forcing $grep to egrep the moment -e or -f is
+// used — which then conflicts with -F/-E's own matcher flag ("grep:
+// conflicting matchers specified"), the exact same class of bug
+// ZipgrepArgs' own doc comment already documents for zipgrep. Passing
+// pattern as a bare positional argument instead of via -e sidesteps
+// the trigger entirely (confirmed by running it directly): $grep stays
+// plain grep, so -F/-E keep working normally, unlike ZipgrepArgs' own
+// case, which had to give up flag-based mode control altogether.
+func BzgrepArgs(pattern string, mode Mode, bz2File string, caseSensitive, wholeWords, firstHit bool) []string {
+	args := []string{"-n", "-I", "-H"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
+	if wholeWords {
+		args = append(args, "-w")
+	}
+	if firstHit {
+		args = append(args, "-m", "1")
+	}
+	args = append(args, matchModeFlag(mode))
+	return append(args, pattern, bz2File)
+}
+
+// XzgrepArgs builds xzgrep's own argument list (not including
+// "xzgrep" itself) for a single xz- or lzma-compressed file —
+// structurally identical to ZgrepArgs (verified by reading xzgrep's
+// own script, /usr/bin/xzgrep, part of XZ Utils: the exact same
+// option-parsing shape as zgrep's own script, same -r/--recursive
+// rejection, same -n/-I/-H/-i/-w/-m/-e passthrough).
+func XzgrepArgs(pattern string, mode Mode, xzFile string, caseSensitive, wholeWords, firstHit bool) []string {
+	args := []string{"-n", "-I", "-H"}
+	if !caseSensitive {
+		args = append(args, "-i")
+	}
+	if wholeWords {
+		args = append(args, "-w")
+	}
+	if firstHit {
+		args = append(args, "-m", "1")
+	}
+	args = append(args, matchModeFlag(mode))
+	return append(args, "-e", pattern, xzFile)
+}
+
 // ZipgrepArgs builds zipgrep's own argument list (not including
 // "zipgrep" itself) for a single zip archive. Like zgrep, zipgrep
 // takes exactly one archive per invocation — verified against its own
