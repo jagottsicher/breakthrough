@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -1482,6 +1483,50 @@ func (p *Panel) completions(currentText string) []string {
 	return matches
 }
 
+// dirCompletions is completions' own directory-only, case-sensitive
+// counterpart — used only by the search dialog's own Start-at field
+// (see internal/ui/search.go's captureSearchScopeKey), which can only
+// ever be a directory, never a file. Two differences from completions,
+// both per the user's own explicit request:
+//
+//   - Files are excluded outright, not just deprioritized — Entry.IsDir
+//     already accounts for a directory symlink too (see its own doc
+//     comment), so no separate symlink handling is needed here. A real
+//     user report: typing "Down" with a "Downloads/" directory *and* an
+//     unrelated "download-thing.sh" file both present used to keep
+//     completing only as far as their shared prefix ("Download"),
+//     because the file was still in the running as a candidate — for a
+//     field that can only ever hold a directory, that file was always a
+//     false ambiguity.
+//   - Matched case-sensitively, unlike completions' own deliberately
+//     case-insensitive matching. Directory-only filtering alone already
+//     resolves the specific "Downloads/" vs. "download-thing.sh" case
+//     above (the file is simply gone from the candidate list before
+//     case ever matters) — this is a second, independent request: two
+//     directories differing only in case should no longer both match a
+//     lowercase (or differently-cased) prefix here the way completions'
+//     own case-insensitive matching still allows for the header.
+func (p *Panel) dirCompletions(currentText string) []string {
+	dir, prefix := "", currentText
+	if idx := strings.LastIndex(currentText, "/"); idx >= 0 {
+		dir, prefix = currentText[:idx+1], currentText[idx+1:]
+	}
+
+	entries, err := fsops.ListDir(p.resolvePath(dir))
+	if err != nil {
+		return nil
+	}
+
+	var matches []string
+	for _, e := range entries {
+		if !e.IsDir || !strings.HasPrefix(e.Name, prefix) {
+			continue
+		}
+		matches = append(matches, dir+e.Name+"/")
+	}
+	return matches
+}
+
 // resolvePath turns text typed into the header into an absolute path: a
 // leading "~" expands to the user's home directory (the header has a "~"
 // button doing the same thing, so users reasonably expect it), and a
@@ -1507,7 +1552,19 @@ func (p *Panel) resolvePath(input string) string {
 }
 
 // longestCommonPrefix returns the longest prefix shared by all values,
-// compared by rune so it can never cut a multi-byte character in half.
+// compared by rune (so it can never cut a multi-byte character in
+// half) and case-insensitively — matching completions' own
+// case-insensitive matching (see its own doc comment). Comparing
+// case-*sensitively* here was a real bug: completions() can legitimately
+// return two entries that only differ in case (e.g. "Downloads/" and
+// "download-thing.sh", both matching a typed "Down"), and a
+// case-sensitive compare then collapses the shared prefix all the way
+// back to before their very first differing-case letter — "Down" itself
+// vanishes, completing back to the parent directory instead of forward.
+// The output text still uses values[0]'s own actual casing throughout
+// (never a mix of the different candidates' casing), so what's typed
+// back is always something that's genuinely one of the real matches'
+// own spelling, up to the point they diverge.
 func longestCommonPrefix(values []string) string {
 	if len(values) == 0 {
 		return ""
@@ -1520,7 +1577,7 @@ func longestCommonPrefix(values []string) string {
 			prefix = prefix[:len(runes)]
 		}
 		for i := range prefix {
-			if prefix[i] != runes[i] {
+			if unicode.ToLower(prefix[i]) != unicode.ToLower(runes[i]) {
 				prefix = prefix[:i]
 				break
 			}

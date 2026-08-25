@@ -89,33 +89,140 @@ type Root struct {
 	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
-	optionsList *tview.List // Options overlay — see openOptions
+	optionsList *tview.List     // Options overlay — see openOptions
+	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 
-	// The search dialog (see search.go/newSearchDialog): searchPages
-	// wraps searchForm (the pattern/scope/mode/engine/content inputs) and
-	// searchList (the results shown once a search has run) as two pages,
-	// the same "several sub-widgets, one overlay" shape r.properties
-	// already has. searchScopeField is searchForm's own path field, kept
-	// individually addressable for Tab-completion, the same reason
-	// r.panel.headerEdit is — see captureSearchScopeKey.
-	// searchEngineOptions/searchContentOptions record which
-	// search.Engine/search.ContentMode each of their own dropdown's
-	// options actually maps to (built once, since availability —
-	// LocateAvailable/ZgrepAvailable/ZipgrepAvailable — doesn't change
-	// mid-session) — the dropdown's own selected index alone isn't
-	// enough once an option is conditionally left out (see their own
-	// doc comments in search.go).
-	searchPages          *tview.Pages
-	searchForm           *tview.Form
-	searchScopeField     *tview.InputField
-	searchList           *tview.List
+	// The directory picker (see dirpicker.go/openDirPicker) — the
+	// "Tree" browse action shared by the search dialog's Start-at field
+	// and, later, the planned Copy-to/Move-to target navigation.
+	// dirPickerPath is whatever directory is currently being browsed;
+	// dirPickerOnSelect/dirPickerOnCancel are set fresh by each
+	// openDirPicker call, run by confirmDirPicker/cancelDirPicker.
+	dirPicker          *tview.Flex
+	dirPickerHeader    *tview.TextView
+	dirPickerList      *tview.List
+	dirPickerSelectBtn *tview.Button
+	dirPickerCancelBtn *tview.Button
+	dirPickerPath      string
+	dirPickerOnSelect  func(string)
+	dirPickerOnCancel  func()
+
+	// The search dialog (see search.go/newSearchDialog) — after MC's
+	// own Find File dialog, reusing Properties' own "plain text plus a
+	// shared inline editor" editing paradigm (see newPropertiesView).
+	// searchPages wraps searchFieldsPages (the fields — see below) and
+	// searchResultsView (the results list plus its own animated status
+	// line, once a search has run) as two pages, the same "several
+	// sub-widgets, one overlay" shape r.properties already has one
+	// level up.
+	//
+	// searchFieldsPages itself wraps the fields Flex (searchTop/
+	// searchLeft/searchRight — MC's own Start-at/Ignore-dirs block
+	// above a two-column Filename/Content section, plus searchButtons)
+	// and searchEditField, the one shared inline editor repositioned
+	// over whichever field is currently being edited (see
+	// activateSearchTextField) — the same "one shared field,
+	// repositioned per use" approach propertiesEditField/Root.rename/
+	// Root.prompt all already use. searchEditCommit is that field's own
+	// pending commit callback, set fresh each time (see
+	// activateSearchTextField/finishSearchEdit).
+	//
+	// searchSpans is every clickable/keyboard-focusable region across
+	// all three of searchTop/searchLeft/searchRight, rebuilt on every
+	// render (see rerenderSearchDialog) — the same running list
+	// propertySpans is for Properties, just spanning three TextViews
+	// instead of one (see searchSpan's own doc comment). searchFocusedIdx
+	// is which one currently has keyboard focus, or
+	// len(searchSpans)/len(searchSpans)+1 for Cancel/Search.
+	//
+	// searchEngineOptions records which search.Engine each of Engine's
+	// own choice options actually maps to (built once, since
+	// LocateAvailable doesn't change mid-session) — the group's own
+	// selected index alone isn't enough once "locate" is conditionally
+	// left out (see its own doc comment in search.go). searchEngineIdx
+	// is that selected index; searchScopeValue/searchFilenameValue/
+	// searchIgnoreValue/searchContentValue are the dialog's own four
+	// text fields. There's no equivalent choice group for Content's own
+	// search tool any more (previously "Search in": File names/Content
+	// (grep)/gzip/zip) — removed for now per the user's own request;
+	// runSearch decides content vs. filename search, always plain grep,
+	// purely from whether searchContentValue is filled in.
+	//
+	// The rest are MC's own Find File checkboxes (verified against its
+	// real find.c source, not guessed — see rerenderSearchDialog's own
+	// doc comment), replacing this dialog's earlier, shared Glob/
+	// Keyword/Regex choice group: searchShellPatterns (Filename's own
+	// "Using shell patterns") and searchContentRegex (Content's own
+	// "Regular expression") are independent of each other, per MC's own
+	// design — Filename's pattern syntax and Content's pattern syntax
+	// are never the same choice. searchRecursive/searchFollowSymlinks
+	// only matter for EngineFind (locate's own index has no live
+	// traversal to shape this way); searchCaseSensitive is shown in
+	// both columns but is one shared value (this app never runs a
+	// filename and a content search at once, so nothing is lost keeping
+	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
+	// each their own — see runSearch for how every one of these feeds
+	// into the search.Request that's actually built.
+	searchPages       *tview.Pages
+	searchFieldsPages *tview.Pages
+	searchTop         *tview.TextView
+	searchLeft        *tview.TextView
+	searchRight       *tview.TextView
+	searchEditField   *tview.InputField
+	searchEditCommit  func(string)
+	searchButtons     *tview.Flex
+	searchCancelBtn   *tview.Button
+	searchSearchBtn   *tview.Button
+	searchSpans       []searchSpan
+	searchFocusedIdx  int
+	searchResultsView *tview.Flex
+	searchList        *tview.List
+	searchStatus      *tview.TextView
+	// searchResultPaths mirrors searchList's own items, index for
+	// index — the full path each row's own click target closes over
+	// (see streamSearchResults), looked up separately for a right-click
+	// (see captureSearchListMouse/openSearchResultMenu) since tview.List
+	// has no way to read back what an item's own selected func closure
+	// captured. Reset to nil everywhere searchList.Clear() is (see
+	// runSearch/showSearchError), kept in lockstep by only ever being
+	// appended to right alongside a real AddItem call.
+	searchResultPaths    []string
+	searchResultMenu     *tview.List // the search results' own right-click context menu — see newSearchResultMenu
 	searchEngineOptions  []searchEngineOption
-	searchContentOptions []searchContentOption
+	searchEngineIdx      int
+	searchScopeValue     string
+	searchFilenameValue  string
+	searchIgnoreValue    string
+	searchContentValue   string
+	searchIgnoreEnabled  bool
+	searchCaseSensitive  bool
+	searchSkipHidden     bool
+	searchRecursive      bool
+	searchFollowSymlinks bool
+	searchShellPatterns  bool
+	searchContentRegex   bool
+	searchWholeWords     bool
+	searchFirstHit       bool
 	// searchCancel stops whatever search.Run call is currently in
-	// flight, if any — called before starting a new one, and when the
-	// dialog closes, so a slow "find /" left running never keeps working
-	// after the user has moved on (see runSearch/closeSearch).
+	// flight, if any, and its paired animateSearchProgress ticker (both
+	// share this same ctx) — called before starting a new one, and when
+	// the dialog closes, so a slow "find /" left running never keeps
+	// working after the user has moved on (see runSearch/closeSearch).
 	searchCancel context.CancelFunc
+	// searchAnimFrame/searchLastDir/searchStartDir back the results
+	// window's own status line (see renderSearchStatus):
+	// searchAnimFrame is the current "still working" animation frame
+	// (see animateSearchProgress); searchLastDir is the directory of
+	// the most recently streamed match, breakthrough's own
+	// approximation of "currently scanning" — see streamSearchResults'
+	// own doc comment on why a real one isn't available when the
+	// actual traversal happens inside an external find/locate/grep
+	// process, not breakthrough's own code; searchStartDir (Start at,
+	// as of when the search began) is shown until the first match
+	// arrives.
+	searchAnimFrame int
+	searchLastDir   string
+	searchStartDir  string
 
 	// mainLayout wraps panel, bashLine, and statusBar into the vertical
 	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
@@ -436,6 +543,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
+	// The directory picker (see openDirPicker) — built once and reset
+	// on every open, the same as everything else above.
+	r.dirPicker = r.newDirPicker()
+
+	// The Help overlay (see help.go/openHelp) — a single, static,
+	// read-only TextView, the simplest of all of these (nothing to
+	// reset or repopulate on open).
+	r.helpView = r.newHelpView()
+
+	// The search results' own right-click context menu (see
+	// search.go/newSearchResultMenu/openSearchResultMenu) — repopulated
+	// fresh on every open, the same as r.menu.
+	r.searchResultMenu = r.newSearchResultMenu()
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -457,6 +578,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(dirPickerPage, r.dirPicker, false, false)
+	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(searchResultMenuPage, r.searchResultMenu, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -495,14 +619,26 @@ func (r *Root) showOverlayWithRestore(page string, widget tview.Primitive, resto
 }
 
 // pushOverlay adds page/widget as a new layer on top of whatever's
-// already open, without closing it — see openOwnerGroupPicker, the only
-// current use: the owner/group picker floats on top of Properties rather
-// than replacing it.
+// already open, without closing it — see openOwnerGroupPicker
+// (owner/group picker over Properties), openHelp (help screen over
+// anything), and openPropertiesFloating (Properties over search results).
+//
+// tview.Pages.ShowPage only flips a page's Visible flag — it does NOT
+// reorder Pages' own internal page list, and Pages.Draw always walks that
+// list in original AddPage registration order (verified by reading
+// tview's pages.go directly). So without SendToFront here, a page that
+// happened to be registered earlier in NewRoot (e.g. propertiesPage) would
+// draw underneath — and get fully covered by — a page registered later
+// (e.g. searchPage), even though pushOverlay just made it the topmost,
+// most-recently-shown layer. SendToFront moves it to the end of Pages' own
+// list so draw order actually matches stacking order, regardless of which
+// page happened to be AddPage'd first.
 func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) {
 	r.overlayStack = append(r.overlayStack, overlayFrame{page: page, widget: widget, restore: restore})
 	r.activePage = page
 	r.activeWidget = widget
 	r.ShowPage(page)
+	r.SendToFront(page)
 	if restore != nil {
 		restore()
 	} else {
@@ -625,6 +761,41 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 	}
 	if y < py {
 		y = py
+	}
+
+	return x, y, width, height
+}
+
+// clampToScreen is clampToPanel's own logic, bounded against the whole
+// screen (Root's own rect) instead of just the current panel's inner
+// rect — used only by the search results page (see
+// searchResultsSize), deliberately allowed to span wider than one
+// panel now that it's sized as a fraction of the terminal's own width,
+// per the user's own request. Every other overlay in this app stays
+// within one panel — see clampToPanel's own doc comment.
+func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
+	_, _, sw, sh := r.GetRect()
+	if sw <= 0 || sh <= 0 {
+		return x, y, width, height
+	}
+
+	if width > sw {
+		width = sw
+	}
+	if height > sh {
+		height = sh
+	}
+	if x+width > sw {
+		x = sw - width
+	}
+	if y+height > sh {
+		y = sh - height
+	}
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
 	}
 
 	return x, y, width, height
@@ -1052,25 +1223,36 @@ func (r *Root) cutToClipboard() {
 	r.clipboardCut = true
 }
 
-// pasteClipboard is "Paste": copies or moves (per clipboardCut) whatever
-// Copy/Cut last captured into the directory currently on screen. A no-op
-// if nothing was ever copied/cut.
+// pasteClipboard is "Paste": copies or moves (per clipboardCut)
+// whatever Copy/Cut last captured into the directory currently on
+// screen — pasteInto's own thin wrapper for that common case.
+func (r *Root) pasteClipboard() {
+	r.pasteInto(r.panel.path)
+}
+
+// pasteInto is pasteClipboard's own shared implementation, generalized
+// to an explicit destination directory — used directly by the search
+// results' own context menu (see newSearchResultMenu), which pastes
+// alongside a result rather than into whatever the panel itself
+// happens to be showing (a search result's own directory and the
+// panel's current one are frequently different). A no-op if nothing
+// was ever copied/cut.
 //
-// Each target that would collide with an existing entry in the current
-// directory is skipped with an error — asking "overwrite?" once per
-// colliding file in a multi-file paste isn't built yet (a known
-// simplification; fsops.Copy/Move's force parameter is where that would
-// hook in). Only the first error is reported, to avoid stacking one error
+// Each target that would collide with an existing entry in dir is
+// skipped with an error — asking "overwrite?" once per colliding file
+// in a multi-file paste isn't built yet (a known simplification;
+// fsops.Copy/Move's force parameter is where that would hook in).
+// Only the first error is reported, to avoid stacking one error
 // overlay per failed file; the rest of the paste still runs to
 // completion rather than stopping at the first collision.
-func (r *Root) pasteClipboard() {
+func (r *Root) pasteInto(dir string) {
 	if len(r.clipboard) == 0 {
 		return
 	}
 
 	var firstErr error
 	for _, src := range r.clipboard {
-		dst := filepath.Join(r.panel.path, filepath.Base(src))
+		dst := filepath.Join(dir, filepath.Base(src))
 		var err error
 		if r.clipboardCut {
 			err = fsops.Move(src, dst, false)
@@ -1082,10 +1264,18 @@ func (r *Root) pasteClipboard() {
 		}
 	}
 
-	if err := r.panel.load(r.panel.path); err != nil {
-		firstErr = err // the reload failing is more urgent to report than a copy conflict
-	} else if r.clipboardCut && firstErr == nil {
+	if r.clipboardCut && firstErr == nil {
 		r.clipboard = nil // moved away cleanly; nothing left to paste again
+	}
+
+	// Only reload if the panel actually happens to be showing dir right
+	// now — pasting into a search result's own directory, elsewhere,
+	// shouldn't force-navigate or otherwise disturb whatever the panel
+	// currently has on screen.
+	if r.panel.path == dir {
+		if err := r.panel.load(r.panel.path); err != nil {
+			firstErr = err // the reload failing is more urgent to report than a copy conflict
+		}
 	}
 
 	if firstErr != nil {

@@ -90,6 +90,15 @@ func run() error {
 	// "toggle hidden files" instead. Ctrl+O, previously left unclaimed,
 	// is Options (Ctrl+X used to be, before the dialog itself was
 	// renamed from Settings to Options and the shortcut moved to match).
+	//
+	// F1 (Help) sits alongside Ctrl+Q/Ctrl+C, not the five above: it
+	// works from literally anywhere, including in the middle of typing
+	// a bash command or editing a field in another dialog, the same
+	// "always fires" reasoning as those two — see Root.HelpShortcut's
+	// own doc comment. F1, not a Ctrl combination, both sidesteps ever
+	// needing a free letter (every obvious one is already claimed) and
+	// matches the one keybinding this app's own stated inspiration,
+	// Midnight Commander, uses for exactly the same purpose.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -112,6 +121,9 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlF:
 			root.SearchShortcut()
+			return nil
+		case tcell.KeyF1:
+			root.HelpShortcut()
 			return nil
 		}
 		return event

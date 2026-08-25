@@ -52,19 +52,6 @@ func TestBuildSearchEngineOptionsAlwaysHasFindFirst(t *testing.T) {
 	}
 }
 
-func TestBuildSearchContentOptionsAlwaysHasFileNamesAndGrep(t *testing.T) {
-	opts := buildSearchContentOptions()
-	if len(opts) < 2 {
-		t.Fatalf("buildSearchContentOptions() = %+v, want at least 2 entries", opts)
-	}
-	if opts[0].label != "File names" || opts[0].mode != search.ContentNone {
-		t.Errorf("opts[0] = %+v, want {label: \"File names\", mode: ContentNone}", opts[0])
-	}
-	if opts[1].label != "File contents (grep)" || opts[1].mode != search.ContentGrep {
-		t.Errorf("opts[1] = %+v, want {label: \"File contents (grep)\", mode: ContentGrep}", opts[1])
-	}
-}
-
 func TestFormatSearchResult(t *testing.T) {
 	tests := []struct {
 		name string
@@ -75,9 +62,58 @@ func TestFormatSearchResult(t *testing.T) {
 		{"content match", search.Result{Path: "/home/jens/a.go", Line: 12, Text: "func main() {"}, "/home/jens/a.go:12: func main() {"},
 	}
 	for _, tt := range tests {
-		if got := formatSearchResult(tt.res); got != tt.want {
+		if got := formatSearchResult(tt.res, 0); got != tt.want {
 			t.Errorf("%s: formatSearchResult(%+v) = %q, want %q", tt.name, tt.res, got, tt.want)
 		}
+	}
+}
+
+// TestTruncateMiddleKeepsBothEnds pins the user's own request: a
+// results-list line that's too long for the list's own current width
+// gets shortened in its own middle, with "..." marking where —
+// keeping the start (a long path's own leading directories) and the
+// end (its own filename, or a content match's own matched text) both
+// visible, unlike the search dialog's own form fields (see
+// truncateForDisplay), which only ever trim from the front.
+func TestTruncateMiddleKeepsBothEnds(t *testing.T) {
+	s := "/home/jens/development/chatgpthelps/breakthrough/breakthrough/internal/ui/search.go"
+	got := truncateMiddle(s, 40)
+	if len([]rune(got)) != 40 {
+		t.Fatalf("truncateMiddle(%q, 40) = %q (len %d), want exactly 40 runes", s, got, len([]rune(got)))
+	}
+	if !strings.HasPrefix(got, "/home/jens") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want the original start kept", s, got)
+	}
+	if !strings.HasSuffix(got, "search.go") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want the original end kept", s, got)
+	}
+	if !strings.Contains(got, "...") {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want a \"...\" marking the cut", s, got)
+	}
+}
+
+// TestTruncateMiddleLeavesShortStringsAlone pins that nothing happens
+// when s already fits — no needless "..." inserted into text that was
+// never too long to show in full.
+func TestTruncateMiddleLeavesShortStringsAlone(t *testing.T) {
+	s := "short.go"
+	if got := truncateMiddle(s, 40); got != s {
+		t.Errorf("truncateMiddle(%q, 40) = %q, want unchanged", s, got)
+	}
+}
+
+// TestFormatSearchResultTruncatesToMaxWidth pins that formatSearchResult
+// itself applies the same middle-truncation to whatever it renders
+// (path alone, or "path:line: text"), never past maxWidth — and that
+// maxWidth == 0 means no limit at all (the dialog's own default before
+// a real list width is known).
+func TestFormatSearchResultTruncatesToMaxWidth(t *testing.T) {
+	res := search.Result{Path: "/home/jens/development/chatgpthelps/breakthrough/breakthrough/internal/ui/search.go"}
+	if got := formatSearchResult(res, 20); len([]rune(got)) != 20 {
+		t.Errorf("formatSearchResult(res, 20) = %q (len %d), want exactly 20 runes", got, len([]rune(got)))
+	}
+	if got := formatSearchResult(res, 0); got != res.Path {
+		t.Errorf("formatSearchResult(res, 0) = %q, want the full, untruncated path %q", got, res.Path)
 	}
 }
 
@@ -110,7 +146,33 @@ func TestNoSearchResultsTextMentionsStaleIndexOnlyForLocateFilenameSearch(t *tes
 	}
 }
 
-func TestOpenSearchShowsFormPrefilledWithPanelScope(t *testing.T) {
+func TestParseIgnoreDirs(t *testing.T) {
+	tests := []struct {
+		text string
+		want []string
+	}{
+		{"", nil},
+		{"  ", nil},
+		{".git", []string{".git"}},
+		{".git, node_modules", []string{".git", "node_modules"}},
+		{" .git ,, node_modules ,", []string{".git", "node_modules"}},
+	}
+	for _, tt := range tests {
+		got := parseIgnoreDirs(tt.text)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseIgnoreDirs(%q) = %v, want %v", tt.text, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("parseIgnoreDirs(%q) = %v, want %v", tt.text, got, tt.want)
+				break
+			}
+		}
+	}
+}
+
+func TestOpenSearchShowsFieldsPrefilledWithPanelScopeAndFocusesFilename(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -122,11 +184,20 @@ func TestOpenSearchShowsFormPrefilledWithPanelScope(t *testing.T) {
 	if r.activePage != searchPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, searchPage)
 	}
-	if got := r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).GetText(); got != "" {
-		t.Errorf("Pattern = %q, want empty", got)
+	if r.searchFilenameValue != "" {
+		t.Errorf("Filename = %q, want empty", r.searchFilenameValue)
 	}
-	if got := r.searchScopeField.GetText(); got != dir {
-		t.Errorf("Scope = %q, want the panel's own current directory %q", got, dir)
+	if r.searchScopeValue != dir {
+		t.Errorf("Start at = %q, want the panel's own current directory %q", r.searchScopeValue, dir)
+	}
+
+	// The user's own request: Filename, not Engine, has first focus.
+	wantIdx, ok := r.searchSpanIndex("filename")
+	if !ok {
+		t.Fatal("setup: no span tagged \"filename\"")
+	}
+	if r.searchFocusedIdx != wantIdx {
+		t.Errorf("searchFocusedIdx = %d, want %d (the Filename span)", r.searchFocusedIdx, wantIdx)
 	}
 }
 
@@ -146,9 +217,9 @@ func TestCloseSearchHidesOverlay(t *testing.T) {
 }
 
 // TestBackToSearchFormReturnsToFormWithoutClosing pins Escape's own
-// two-stage behavior: from the results page, it returns to the form
+// two-stage behavior: from the results page, it returns to the fields
 // (see backToSearchForm) rather than closing the whole dialog the way
-// Escape from the form page itself does (see closeSearch).
+// Escape from the fields page itself does (see closeSearch).
 func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -159,7 +230,7 @@ func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).SetText("anything")
+	r.searchFilenameValue = "anything"
 	r.runSearch() // switches to the results page
 
 	r.backToSearchForm()
@@ -167,15 +238,44 @@ func TestBackToSearchFormReturnsToFormWithoutClosing(t *testing.T) {
 	if r.activePage != searchPage {
 		t.Errorf("activePage = %q, want still open (%q)", r.activePage, searchPage)
 	}
-	if !r.searchForm.HasFocus() {
-		t.Error("backToSearchForm should have moved focus back to the form")
+}
+
+// TestActivateSearchTextFieldAndCommit pins the Properties-style
+// editing paradigm end to end: activating a text span opens the shared
+// inline editor positioned over it, and committing via Enter stages
+// the typed text into that field's own value.
+func TestActivateSearchTextFieldAndCommit(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	idx, ok := r.searchSpanIndex("filename")
+	if !ok {
+		t.Fatal("setup: no span tagged \"filename\"")
+	}
+	r.searchSpans[idx].activate()
+
+	if !r.searchEditField.HasFocus() {
+		t.Fatal("activating a text span should have focused the shared inline editor")
+	}
+	r.searchEditField.SetText("*.go")
+	r.finishSearchEdit(tcell.KeyEnter)
+
+	if r.searchFilenameValue != "*.go" {
+		t.Errorf("searchFilenameValue = %q, want %q", r.searchFilenameValue, "*.go")
 	}
 }
 
-// TestCaptureSearchScopeKeyCompletesPath pins Tab-completion in the
-// Scope field, reusing Panel.completions/longestCommonPrefix directly
-// — the same behavior Panel's own path header already has, per the
-// user's own request that every dialog with a path field support it.
+// TestCaptureSearchScopeKeyCompletesPath pins Tab-completion while
+// editing Start-at, reusing Panel.dirCompletions/longestCommonPrefix
+// directly — see dirCompletions' own doc comment on why Start-at gets
+// its own directory-only, case-sensitive variant rather than Panel's
+// plain completions. Wired in only while editing Start-at specifically
+// (see activateSearchTextField) — this activates that field's own span
+// to pin the wiring, not just the completion function in isolation.
 func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -184,21 +284,288 @@ func TestCaptureSearchScopeKeyCompletesPath(t *testing.T) {
 	}
 	r.openSearch()
 
-	r.searchScopeField.SetText(dir + "/ap")
-	r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir + "/ap")
+	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
 
-	// "ap" is common to apple.txt, apricot.txt, and app-data/ — their
-	// longest shared prefix is "ap" itself, same as
-	// TestCompletions/TestLongestCommonPrefix already pin at the Panel
-	// level; this just pins that the search dialog's own Scope field
-	// reaches the same completions call.
-	want := dir + "/ap"
-	if got := r.searchScopeField.GetText(); got != want {
-		t.Errorf("Scope after Tab = %q, want %q", got, want)
+	// apple.txt/apricot.txt are files, excluded outright by
+	// dirCompletions — app-data/ is the only directory starting with
+	// "ap", so completion goes straight there instead of stopping at
+	// "ap" itself the way Panel's own plain (file-inclusive) completion
+	// would (see TestCompletions at the Panel level for that).
+	want := dir + "/app-data/"
+	if got := r.searchEditField.GetText(); got != want {
+		t.Errorf("Start-at editor text after Tab = %q, want %q", got, want)
 	}
 }
 
-func TestRunSearchBuildsRequestFromFormFields(t *testing.T) {
+// TestCaptureSearchScopeKeyAlwaysConsumesTab pins the user's own
+// explicit request: Start-at is deliberately exempted from the
+// Tab-cycles-through-every-option behavior every other field in this
+// dialog has — Tab here always means "complete", even once there's
+// nothing left to add, never "leave the field" (Backtab or a click
+// elsewhere are how you actually leave it — see commitPendingSearchEdit).
+func TestCaptureSearchScopeKeyAlwaysConsumesTab(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"appdata1", "appdata2"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir + "/app")
+
+	// First Tab: "app" is shared by appdata1/ and appdata2/, extending
+	// to "appdata" — consumed.
+	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
+		t.Fatal("Tab should always be consumed")
+	}
+	want := dir + "/appdata"
+	if got := r.searchEditField.GetText(); got != want {
+		t.Fatalf("after first Tab, text = %q, want %q", got, want)
+	}
+
+	// Second Tab: still ambiguous between appdata1/ and appdata2/ —
+	// nothing left to complete, but it must still be consumed (a no-op
+	// on the text, not a fall-through to field navigation).
+	if result := r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); result != nil {
+		t.Error("Tab should still be consumed once nothing is left to complete")
+	}
+	if got := r.searchEditField.GetText(); got != want {
+		t.Errorf("after second Tab, text = %q, want unchanged %q", got, want)
+	}
+}
+
+// TestCaptureSearchScopeKeyExcludesFiles pins the user's own explicit
+// request, and the real bug report behind it: completing Start-at used
+// to stop at "Download" (not the full "Downloads/") because a
+// same-directory file, "download-thing.sh", was still in the running
+// as a candidate purely on account of its name, despite Start-at never
+// being able to hold a file in the first place. dirCompletions'
+// directory-only filtering (see its own doc comment) resolves this on
+// its own — the file is gone from the candidate list before the two
+// names' shared prefix ever matters, so completion goes straight to
+// the one real directory that's actually a valid Start-at value.
+func TestCaptureSearchScopeKeyExcludesFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "Downloads"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "download-thing.sh"), nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir + "/Down")
+
+	r.captureSearchScopeKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	want := dir + "/Downloads/"
+	if got := r.searchEditField.GetText(); got != want {
+		t.Errorf("Start-at editor text after Tab = %q, want %q (download-thing.sh, a file, should never have been a candidate)", got, want)
+	}
+}
+
+// TestEnterInFilenameFieldRunsSearch pins the user's own request:
+// Enter while editing Filename specifically runs the search
+// immediately, the same as clicking Search.
+func TestEnterInFilenameFieldRunsSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch() // first focus is already Filename — see its own doc comment
+	idx, ok := r.searchSpanIndex("filename")
+	if !ok {
+		t.Fatal("setup: no span tagged \"filename\"")
+	}
+	r.searchSpans[idx].activate() // opens the shared inline editor
+	r.searchEditField.SetText("*.go")
+	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if captured.Pattern != "*.go" {
+		t.Errorf("Pattern = %q, want %q — Enter in Filename should have run the search", captured.Pattern, "*.go")
+	}
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q, want still open (%q) on the results page", r.activePage, searchPage)
+	}
+}
+
+// TestEnterInOtherFieldsDoesNotRunSearch pins that the Enter-runs-
+// search behavior is scoped to Filename alone — Start-at's own Enter
+// still just commits and stays on the form.
+func TestEnterInOtherFieldsDoesNotRunSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	searchRunCalled := false
+	isolateSearchRun(t, func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
+		searchRunCalled = true
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate()
+	r.searchEditField.SetText(dir)
+	r.searchEditField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if searchRunCalled {
+		t.Error("Enter in Start-at should not have run the search")
+	}
+	if r.searchScopeValue != dir {
+		t.Errorf("searchScopeValue = %q, want %q — Enter should still commit", r.searchScopeValue, dir)
+	}
+}
+
+// TestCommitPendingSearchEditPreservesInProgressText pins the fix for
+// a real bug: refining Start-at by hand after a Tree pick, then
+// leaving the field via a click elsewhere rather than Enter/Tab, used
+// to throw the in-progress text away outright — the next render
+// silently fell back to whatever Start-at held before that edit began.
+// commitPendingSearchEdit is captureSearchMouse's own fix for this
+// (see its own doc comment) — tested directly here since routing a
+// synthetic click through captureSearchMouse itself needs a real
+// on-screen layout this test doesn't have.
+func TestCommitPendingSearchEditPreservesInProgressText(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	r.searchScopeValue = dir // simulates a Tree pick
+
+	idx, ok := r.searchSpanIndex("start-at")
+	if !ok {
+		t.Fatal("setup: no span tagged \"start-at\"")
+	}
+	r.searchSpans[idx].activate() // opens the shared inline editor, prefilled with dir
+	refined := dir + "/app-data"
+	r.searchEditField.SetText(refined) // the user refining it by hand, never pressing Enter/Tab
+
+	r.commitPendingSearchEdit()
+
+	if r.searchScopeValue != refined {
+		t.Errorf("searchScopeValue = %q, want %q (the refined value, not the original Tree pick)", r.searchScopeValue, refined)
+	}
+	if r.searchEditCommit != nil {
+		t.Error("searchEditCommit should be nil again once committed — see finishSearchEdit's own doc comment on why")
+	}
+}
+
+// TestCommitPendingSearchEditNoopWhenNotEditing pins that calling it
+// with nothing in progress (searchEditCommit nil) is a safe no-op —
+// captureSearchMouse calls it unconditionally on every click,
+// regardless of whether an edit is actually in progress.
+func TestCommitPendingSearchEditNoopWhenNotEditing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.commitPendingSearchEdit() // must not panic or change anything
+}
+
+// TestRunSearchRejectsNonexistentStartAt pins the user's own request:
+// searching from a Start-at directory that doesn't actually exist
+// reports a clear error instead of silently running find(1) anyway and
+// coming back with an empty, indistinguishable-from-a-real-empty-
+// result "No matches found" (find itself exits non-zero on a missing
+// path, but this app's own runner.go deliberately never treats a
+// non-zero exit as an error — see its own doc comment) — and, per a
+// second, follow-up request, does so on the results page itself
+// (searchList's own sole line, in red) rather than Root's own global
+// error overlay, which used to close the whole search dialog outright
+// and discard whatever was already typed in ("das ist doof... das muss
+// ja nicht so ein Game-Killer sein"). Escape from there (searchList's
+// own DoneFunc) goes straight back to the still-intact form.
+func TestRunSearchRejectsNonexistentStartAt(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	searchRunCalled := false
+	isolateSearchRun(t, func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
+		searchRunCalled = true
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+
+	r.runSearch()
+
+	if searchRunCalled {
+		t.Error("runSearch should not have shelled out to find at all for a non-existent Start-at")
+	}
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q, want still open (%q), not the global error overlay", r.activePage, searchPage)
+	}
+	if r.searchList.GetItemCount() != 1 {
+		t.Fatalf("searchList item count = %d, want exactly 1 (the error line)", r.searchList.GetItemCount())
+	}
+	main, _ := r.searchList.GetItemText(0)
+	if !strings.Contains(main, "does not exist") {
+		t.Errorf("searchList's own error line = %q, want it to mention the directory doesn't exist", main)
+	}
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status = %q, want the Esc-back-to-search hint even for this error case (see setSearchStatus)", got)
+	}
+
+	// Escape from the results list must return to the still-intact
+	// form, with Filename untouched.
+	r.searchList.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage != searchPage {
+		t.Errorf("activePage = %q after Escape, want still open (%q)", r.activePage, searchPage)
+	}
+	if r.searchFilenameValue != "*.go" {
+		t.Errorf("searchFilenameValue = %q after Escape, want it preserved (%q)", r.searchFilenameValue, "*.go")
+	}
+}
+
+// TestRunSearchAllowsNonexistentStartAtForLocate pins that the
+// existence check only applies to EngineFind — EngineLocate never uses
+// Scope at all (see Request.Scope's own doc comment), so there's
+// nothing to validate against it.
+func TestRunSearchAllowsNonexistentStartAtForLocate(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -208,9 +575,51 @@ func TestRunSearchBuildsRequestFromFormFields(t *testing.T) {
 	isolateSearchRun(t, fakeSearchRun(&captured))
 
 	r.openSearch()
-	r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField).SetText("*.go")
-	r.searchScopeField.SetText("/tmp")
-	r.searchForm.GetFormItemByLabel("Mode").(*tview.DropDown).SetCurrentOption(2) // Regex
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+	r.searchEngineIdx = searchEngineIndex(t, r, search.EngineLocate)
+
+	r.runSearch()
+
+	if r.activePage == errorPage {
+		t.Errorf("locate shouldn't be blocked by a non-existent Start-at, got error overlay: %q", r.errorView.GetText(true))
+	}
+	if captured.Engine != search.EngineLocate {
+		t.Errorf("Engine = %v, want EngineLocate", captured.Engine)
+	}
+}
+
+// searchEngineIndex finds the index into r.searchEngineOptions whose
+// own engine matches want, skipping the test if it isn't available on
+// this host (e.g. locate — see search.LocateAvailable's own doc
+// comment).
+func searchEngineIndex(t *testing.T, r *Root, want search.Engine) int {
+	t.Helper()
+	for i, opt := range r.searchEngineOptions {
+		if opt.engine == want {
+			return i
+		}
+	}
+	t.Skipf("%v not available in this environment", want)
+	return -1
+}
+
+func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = "/tmp"
+	r.searchShellPatterns = false // "Using shell patterns" unchecked -> filename Mode is Regex
+	r.searchIgnoreEnabled = true
+	r.searchIgnoreValue = ".git, node_modules"
+	r.searchCaseSensitive = true
 
 	r.runSearch()
 
@@ -229,8 +638,307 @@ func TestRunSearchBuildsRequestFromFormFields(t *testing.T) {
 	if captured.Content != search.ContentNone {
 		t.Errorf("Content = %v, want ContentNone (the default selection)", captured.Content)
 	}
+	wantIgnore := []string{".git", "node_modules"}
+	if len(captured.IgnoreDirs) != len(wantIgnore) || captured.IgnoreDirs[0] != wantIgnore[0] || captured.IgnoreDirs[1] != wantIgnore[1] {
+		t.Errorf("IgnoreDirs = %v, want %v", captured.IgnoreDirs, wantIgnore)
+	}
+	if !captured.CaseSensitive {
+		t.Error("CaseSensitive = false, want true")
+	}
 	if r.activePage != searchPage {
 		t.Errorf("activePage = %q, want still open (%q) on the results page", r.activePage, searchPage)
+	}
+}
+
+// TestRunSearchFilenameChecksMapToRequestFields pins MC's own Filename
+// checkboxes (Find recursively / Follow symlinks / Using shell
+// patterns) each landing on their own Request field — NonRecursive
+// inverted from Find recursively (see Request.NonRecursive's own doc
+// comment on why), FollowSymlinks passed straight through, and Using
+// shell patterns feeding filenameMode rather than a Request field of
+// its own.
+func TestRunSearchFilenameChecksMapToRequestFields(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchRecursive = false
+	r.searchFollowSymlinks = true
+	r.searchShellPatterns = true
+
+	r.runSearch()
+
+	if !captured.NonRecursive {
+		t.Error("NonRecursive = false, want true (Find recursively was unchecked)")
+	}
+	if !captured.FollowSymlinks {
+		t.Error("FollowSymlinks = false, want true")
+	}
+	if captured.Mode != search.ModeGlob {
+		t.Errorf("Mode = %v, want ModeGlob (Using shell patterns was checked)", captured.Mode)
+	}
+}
+
+// TestRunSearchContentChecksMapToRequestFields pins MC's own Content
+// checkboxes (Whole words / Regular expression / First hit) — Whole
+// words and First hit pass straight through, Regular expression feeds
+// the content search's own Mode (independent from the Filename
+// column's own Mode, see runSearch's own doc comment).
+func TestRunSearchContentChecksMapToRequestFields(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchContentValue = "TODO" // a filled Content field is what selects content search now — see runSearch's own doc comment
+	r.searchWholeWords = true
+	r.searchContentRegex = true
+	r.searchFirstHit = true
+
+	r.runSearch()
+
+	if !captured.WholeWords {
+		t.Error("WholeWords = false, want true")
+	}
+	if !captured.FirstHit {
+		t.Error("FirstHit = false, want true")
+	}
+	if captured.Mode != search.ModeRegex {
+		t.Errorf("Mode = %v, want ModeRegex (Regular expression was checked)", captured.Mode)
+	}
+}
+
+// TestRunSearchIgnoresIgnoreValueWhenDisabled pins that the Ignored
+// dirs value only feeds into the Request while its own enable
+// checkbox is on — typing something there first and only then
+// disabling it shouldn't leave it silently still applied.
+func TestRunSearchIgnoresIgnoreValueWhenDisabled(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchIgnoreValue = ".git"
+	r.searchIgnoreEnabled = false
+
+	r.runSearch()
+
+	if len(captured.IgnoreDirs) != 0 {
+		t.Errorf("IgnoreDirs = %v, want none — the enable checkbox is off", captured.IgnoreDirs)
+	}
+}
+
+// TestRunSearchSkipHiddenAddsGlobToIgnoreDirs pins Skip hidden's own
+// mechanism (see search.Request.IgnoreDirs' own doc comment): it
+// appends ".*" rather than needing a separate Request field, combining
+// with an explicit Ignored dirs list rather than replacing it.
+func TestRunSearchSkipHiddenAddsGlobToIgnoreDirs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchIgnoreEnabled = true
+	r.searchIgnoreValue = "node_modules"
+	r.searchSkipHidden = true
+
+	r.runSearch()
+
+	want := []string{"node_modules", ".*"}
+	if len(captured.IgnoreDirs) != len(want) || captured.IgnoreDirs[0] != want[0] || captured.IgnoreDirs[1] != want[1] {
+		t.Errorf("IgnoreDirs = %v, want %v", captured.IgnoreDirs, want)
+	}
+}
+
+// TestRunSearchUsesContentValueWhenContentFilled pins the split between
+// Filename and Content (see newSearchDialog's own doc comment on why
+// there are two separate pattern fields, not one reused for both):
+// once Content itself is filled in, runSearch reads the pattern from
+// there, ignoring whatever Filename still holds (see runSearch's own
+// doc comment — there's no separate "Search in" choice any more, a
+// filled Content field is the only signal).
+func TestRunSearchUsesContentValueWhenContentFilled(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "should-be-ignored"
+	r.searchContentValue = "TODO"
+
+	r.runSearch()
+
+	if captured.Pattern != "TODO" {
+		t.Errorf("Pattern = %q, want %q (from Content, not Filename)", captured.Pattern, "TODO")
+	}
+	if captured.Content != search.ContentGrep {
+		t.Errorf("Content = %v, want ContentGrep", captured.Content)
+	}
+}
+
+// TestRunSearchResizesToBiggerResultsWindow and
+// TestBackToSearchFormResizesBackToFormSize pin the user's own request
+// that the results window "darf auch gerne etwas größer sein" than the
+// fields that open it (see resizeSearchPages/searchResultsWidth/Height).
+func TestRunSearchResizesToBiggerResultsWindow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
+
+	r.SetRect(0, 0, 200, 60)       // the results page's own size is a fraction of this now — see searchResultsSize
+	r.panel.SetRect(0, 0, 150, 50) // large enough that clampToPanel doesn't shrink the fields page
+	r.openSearch()
+	_, _, formWidth, formHeight := r.searchPages.GetRect()
+
+	r.searchFilenameValue = "anything"
+	r.runSearch()
+
+	_, _, resultsWidth, resultsHeight := r.searchPages.GetRect()
+	if resultsWidth <= formWidth || resultsHeight <= formHeight {
+		t.Errorf("results rect = %dx%d, want bigger than the fields' own %dx%d", resultsWidth, resultsHeight, formWidth, formHeight)
+	}
+}
+
+func TestBackToSearchFormResizesBackToFormSize(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateSearchRun(t, fakeSearchRun(new(search.Request)))
+
+	r.panel.SetRect(0, 0, 150, 50)
+	r.openSearch()
+	_, _, formWidth, formHeight := r.searchPages.GetRect()
+
+	r.searchFilenameValue = "anything"
+	r.runSearch()
+	r.backToSearchForm()
+
+	_, _, gotWidth, gotHeight := r.searchPages.GetRect()
+	if gotWidth != formWidth || gotHeight != formHeight {
+		t.Errorf("rect after backToSearchForm = %dx%d, want back to the fields' own %dx%d", gotWidth, gotHeight, formWidth, formHeight)
+	}
+}
+
+// TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack pins the
+// Tree button's own action: opens the directory picker (see
+// dirpicker_test.go for the picker's own behavior) seeded at whatever
+// Start-at currently holds, writing the chosen directory back into it.
+func TestOpenSearchTreePickerSeedsFromScopeValueAndWritesBack(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	r.searchScopeValue = dir
+
+	r.openSearchTreePicker()
+
+	if r.dirPickerPath != dir {
+		t.Errorf("dirPickerPath = %q, want seeded from Start at (%q)", r.dirPickerPath, dir)
+	}
+
+	appData := filepath.Join(dir, "app-data")
+	r.confirmDirPicker() // picks whatever's currently browsed — still dir, since nothing navigated
+	if r.searchScopeValue != dir {
+		t.Errorf("Start at after confirming = %q, want %q", r.searchScopeValue, dir)
+	}
+
+	// Navigating into a subdirectory first and confirming that instead
+	// should write the deeper path back, not the original seed.
+	r.openSearchTreePicker()
+	r.loadDirPicker(appData)
+	r.confirmDirPicker()
+	if r.searchScopeValue != appData {
+		t.Errorf("Start at after navigating and confirming = %q, want %q", r.searchScopeValue, appData)
+	}
+}
+
+// TestRenderSearchStatusShowsAnimationFrameAndFallbackDir pins
+// renderSearchStatus' own two-source text: the current animation frame
+// (see hashAnimationFrames, reused directly) plus searchLastDir once
+// set, falling back to searchStartDir before any result has arrived.
+func TestRenderSearchStatusShowsAnimationFrameAndFallbackDir(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.searchAnimFrame = 2
+	r.searchStartDir = "/start"
+	r.searchLastDir = ""
+	r.renderSearchStatus()
+
+	got := r.searchStatus.GetText(true)
+	if !strings.Contains(got, hashAnimationFrames[2]) {
+		t.Errorf("status = %q, want it to contain frame %q", got, hashAnimationFrames[2])
+	}
+	if !strings.Contains(got, "/start") {
+		t.Errorf("status = %q, want the fallback searchStartDir (%q) before any result arrives", got, "/start")
+	}
+
+	r.searchLastDir = "/found/here"
+	r.renderSearchStatus()
+	got = r.searchStatus.GetText(true)
+	if !strings.Contains(got, "/found/here") {
+		t.Errorf("status = %q, want searchLastDir (%q) once a result has arrived", got, "/found/here")
+	}
+}
+
+// TestSetSearchStatusAlwaysAppendsEscHint pins the user's own explicit
+// request: the results page's own status line always reminds that
+// Escape goes back to the search, regardless of the search's own
+// outcome — checked directly against setSearchStatus, the one place
+// all of its own callers (renderSearchStatus, streamSearchResults,
+// showSearchError) actually set searchStatus' own text, so the hint
+// can never be left off some future fourth one.
+func TestSetSearchStatusAlwaysAppendsEscHint(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	r.setSearchStatus("Done — 3 found")
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status = %q, want it to mention Esc", got)
+	}
+
+	r.setSearchStatus("") // showSearchError's own case — no other status text at all
+	if got := r.searchStatus.GetText(true); !strings.Contains(got, "Esc") {
+		t.Errorf("status with no other text = %q, want it to still mention Esc", got)
 	}
 }
 
@@ -257,15 +965,14 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 	})
 
 	r.openSearch()
-	pattern := r.searchForm.GetFormItemByLabel("Pattern").(*tview.InputField)
 
-	pattern.SetText("first")
+	r.searchFilenameValue = "first"
 	r.runSearch()
 	if firstCtx.Err() != nil {
 		t.Fatal("setup: the first search's context should not be cancelled yet")
 	}
 
-	pattern.SetText("second")
+	r.searchFilenameValue = "second"
 	r.runSearch()
 	if firstCtx.Err() == nil {
 		t.Error("starting a second search should have cancelled the first one's own context")
@@ -326,3 +1033,462 @@ func TestOpenSearchResultNavigatesAndCloses(t *testing.T) {
 		t.Errorf("CurrentRowPath() = (%q, %v), want (%q, true) — the cursor should have landed on the result itself", path, ok, target)
 	}
 }
+
+// seedSearchResultPaths puts paths directly into r.searchResultPaths
+// without running a real search — the tests below only care about
+// searchResultPathAt/openSearchResultMenu's own behavior once a path
+// is already known, not streamSearchResults' own end-to-end streaming
+// (already covered by TestOpenSearchResultNavigatesAndCloses and the
+// runner package's own tests).
+func seedSearchResultPaths(r *Root, paths ...string) {
+	r.searchResultPaths = paths
+}
+
+// selectSearchResultMenuItem triggers item idx's own selected func —
+// the same SetCurrentItem-then-Enter pattern this file's own
+// TestChoiceSpanSelectsOption-adjacent tests and root_test.go's own
+// context-menu tests already use.
+func selectSearchResultMenuItem(r *Root, idx int) {
+	r.searchResultMenu.SetCurrentItem(idx)
+	r.searchResultMenu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+}
+
+// TestSearchResultPathAtFindsCorrectRow pins the row-index-from-
+// position math searchResultPathAt reimplements (see its own doc
+// comment on why: nothing exported reaches tview.List's own private
+// indexAtPoint) — checked against a real, drawn list rather than just
+// arithmetic in isolation, so an actual layout/scroll-offset mismatch
+// would show up here too.
+func TestSearchResultPathAtFindsCorrectRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.searchList.SetRect(0, 0, 40, 10)
+	r.searchList.AddItem("first", "", 0, nil)
+	r.searchList.AddItem("second", "", 0, nil)
+	r.searchList.AddItem("third", "", 0, nil)
+	seedSearchResultPaths(r, "/a/first", "/a/second", "/a/third")
+
+	rectX, rectY, _, _ := r.searchList.GetInnerRect()
+
+	if got, ok := r.searchResultPathAt(rectX, rectY+1); !ok || got != "/a/second" {
+		t.Errorf("searchResultPathAt(row 1) = (%q, %v), want (\"/a/second\", true)", got, ok)
+	}
+	if _, ok := r.searchResultPathAt(rectX, rectY+50); ok {
+		t.Error("searchResultPathAt past the last real result should report ok=false")
+	}
+	if _, ok := r.searchResultPathAt(100, 100); ok {
+		t.Error("searchResultPathAt outside searchList's own rect should report ok=false")
+	}
+}
+
+// TestOpenSearchResultMenuGoToFolder pins the context menu's own first,
+// pre-selected item — per the user's own explicit request — doing
+// exactly what a plain left-click already does: navigate there and
+// close the whole search dialog (menu included).
+func TestOpenSearchResultMenuGoToFolder(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	if r.activePage != searchResultMenuPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, searchResultMenuPage)
+	}
+	if r.searchResultMenu.GetCurrentItem() != 0 {
+		t.Errorf("initial current item = %d, want 0 (\"Go to file/folder\")", r.searchResultMenu.GetCurrentItem())
+	}
+
+	selectSearchResultMenuItem(r, 0)
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after \"Go to file/folder\", want closed", r.activePage)
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok || path != target {
+		t.Errorf("CurrentRowPath() = (%q, %v), want (%q, true)", path, ok, target)
+	}
+}
+
+// TestOpenSearchResultMenuCopySetsClipboardToResultPath pins that Copy
+// always targets the result itself — never whatever might already be
+// checkbox-selected in the panel (clipboardTargets' own priority order
+// would otherwise pick that up instead — see its own doc comment) —
+// and leaves the results (and the menu) open, matching the panel's
+// own context menu's identical Copy item.
+func TestOpenSearchResultMenuCopySetsClipboardToResultPath(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+	// Something unrelated already selected in the panel — Copy must
+	// still target the result, not this.
+	r.panel.setChecked(1, true)
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 1) // "Copy"
+
+	if len(r.clipboard) != 1 || r.clipboard[0] != target {
+		t.Errorf("clipboard = %v, want [%q]", r.clipboard, target)
+	}
+	if r.clipboardCut {
+		t.Error("clipboardCut = true, want false for Copy")
+	}
+	if r.activePage != searchResultMenuPage {
+		t.Errorf("activePage = %q after Copy, want still %q (menu stays open, same as the panel's own)", r.activePage, searchResultMenuPage)
+	}
+}
+
+// TestOpenSearchResultMenuCutSetsClipboardCut pins Cut's own one
+// difference from Copy.
+func TestOpenSearchResultMenuCutSetsClipboardCut(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 2) // "Cut"
+
+	if len(r.clipboard) != 1 || r.clipboard[0] != target {
+		t.Errorf("clipboard = %v, want [%q]", r.clipboard, target)
+	}
+	if !r.clipboardCut {
+		t.Error("clipboardCut = false, want true for Cut")
+	}
+}
+
+// TestOpenSearchResultMenuPastePastesIntoResultsOwnDirectory pins
+// Paste's own destination: the directory containing the result, not
+// wherever the panel itself happens to be showing (see pasteInto's
+// own doc comment on why those are frequently different) — the
+// result's own directory here is deliberately not the panel's current
+// one.
+func TestOpenSearchResultMenuPastePastesIntoResultsOwnDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	sub := filepath.Join(dir, "app-data")
+	src := filepath.Join(dir, "banana.txt")
+	target := filepath.Join(sub, "nested.txt") // the "result" — its own parent is sub, not dir
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.clipboard = []string{src}
+	r.clipboardCut = false
+	r.openSearch() // panel.path is still dir here, not sub
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 3) // "Paste"
+
+	pasted := filepath.Join(sub, "banana.txt")
+	if _, err := os.Stat(pasted); err != nil {
+		t.Errorf("expected %q to exist after Paste: %v", pasted, err)
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Errorf("Copy-paste should have left the original in place: %v", err)
+	}
+}
+
+// TestOpenSearchResultMenuPropertiesFloatsOverResults pins the user's
+// own explicit request: Properties from the results' own context menu
+// floats on top of the results (see openPropertiesFloating), closing
+// just the menu layer first — not the global "replace everything" (see
+// openProperties) the panel's own context menu uses. Escape from
+// Properties returns to the results, still open.
+func TestOpenSearchResultMenuPropertiesFloatsOverResults(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 4) // "Properties"
+
+	if r.activePage != propertiesPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, propertiesPage)
+	}
+	if r.propertiesTarget != target {
+		t.Errorf("propertiesTarget = %q, want %q", r.propertiesTarget, target)
+	}
+
+	r.hideOverlay() // Escape's own action
+	if r.activePage != searchPage {
+		t.Errorf("activePage after closing Properties = %q, want back to %q, still open", r.activePage, searchPage)
+	}
+}
+
+// TestOpenSearchResultMenuRenameNavigatesFirst pins Rename's own
+// exception (see openSearchResultMenu's own doc comment on why): it
+// closes the search results outright and navigates there first, since
+// its own inline edit field needs a real, visible table row to draw
+// itself at.
+func TestOpenSearchResultMenuRenameNavigatesFirst(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.openSearch()
+
+	r.openSearchResultMenu(target, 5, 5)
+	selectSearchResultMenuItem(r, 5) // "Rename"
+
+	if r.activePage != renamePage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+	if r.target != target {
+		t.Errorf("target = %q, want %q", r.target, target)
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok || path != target {
+		t.Errorf("CurrentRowPath() = (%q, %v), want (%q, true) — the panel should already have navigated there", path, ok, target)
+	}
+}
+
+// TestChoiceSpanSelectsOption pins the choice group mechanism shared by
+// Engine and the various checkboxes: activating one of a group's own
+// spans selects it (updates the relevant *Idx/bool field) and
+// re-renders. Uses Find recursively rather than Engine's own
+// find/locate choice — always present regardless of host, unlike
+// locate (see search.LocateAvailable's own doc comment).
+func TestChoiceSpanSelectsOption(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	if !r.searchRecursive {
+		t.Fatal("setup: searchRecursive = false, want true (MC's own default — see newSearchDialog)")
+	}
+
+	idx := -1
+	for i, s := range r.searchSpans {
+		if s.widget != r.searchLeft {
+			continue
+		}
+		text, _ := textAtSpan(r, s)
+		if text == "● Find recursively" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatal("setup: no span for Find recursively found")
+	}
+	r.searchSpans[idx].activate()
+
+	if r.searchRecursive {
+		t.Error("searchRecursive = true after activating Find recursively, want false")
+	}
+}
+
+// TestRerenderSearchDialogHintsAtEcryptfsNextToLocate pins the user's
+// own explicit request: a plain-text (non-interactive) reminder next
+// to the locate option itself, not just in a result screen's own
+// wording, since locate silently finds nothing at all under an
+// eCryptfs-encrypted home directory (see updatedb's own PRUNEFS) — a
+// real user report.
+func TestRerenderSearchDialogHintsAtEcryptfsNextToLocate(t *testing.T) {
+	if !search.LocateAvailable() {
+		t.Skip("locate not available in this environment")
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	got := r.searchTop.GetText(true)
+	if !strings.Contains(got, "eCryptfs") {
+		t.Errorf("searchTop text = %q, want it to mention eCryptfs next to locate", got)
+	}
+}
+
+// textAtSpan reads the literal text a searchSpan's own row/column range
+// covers, from its widget's current (tag-stripped) rendered text — used
+// by TestChoiceSpanSelectsOption to find a specific option by its own
+// rendered label without hardcoding its span index, which shifts if
+// the dialog's own layout changes.
+func textAtSpan(r *Root, s searchSpan) (string, bool) {
+	lines := strings.Split(s.widget.GetText(true), "\n")
+	if s.row < 0 || s.row >= len(lines) {
+		return "", false
+	}
+	runes := []rune(lines[s.row])
+	if s.startCol < 0 || s.endCol > len(runes) || s.startCol > s.endCol {
+		return "", false
+	}
+	return string(runes[s.startCol:s.endCol]), true
+}
+
+// TestCheckboxSpansToggle pins Ignore-dirs-enable/Case sensitive/Skip
+// hidden: each is a single-option choice group (see searchBuilder.choice)
+// that flips its own bool on activation.
+func TestCheckboxSpansToggle(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	tests := []struct {
+		name string
+		get  func() bool
+	}{
+		{"Ignore dirs:", func() bool { return r.searchIgnoreEnabled }},
+		{"Case sensitive", func() bool { return r.searchCaseSensitive }},
+		{"Skip hidden", func() bool { return r.searchSkipHidden }},
+	}
+	for _, tt := range tests {
+		if tt.get() {
+			t.Fatalf("setup: %q should start unchecked", tt.name)
+		}
+		idx := -1
+		for i, s := range r.searchSpans {
+			text, ok := textAtSpan(r, s)
+			if ok && strings.HasSuffix(text, tt.name) {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			t.Fatalf("no span found for %q", tt.name)
+		}
+		r.searchSpans[idx].activate()
+		if !tt.get() {
+			t.Errorf("%q should be checked after activating its span", tt.name)
+		}
+	}
+}
+
+// TestMoveSearchFocusWrapsThroughButtons pins Tab/Backtab's own
+// wraparound: past the last span reaches Cancel then Search, past
+// Search wraps back to the first span; Backtab from the first span
+// wraps to Search — the same shape movePropertiesFocus already has.
+func TestMoveSearchFocusWrapsThroughButtons(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+	n := len(r.searchSpans)
+
+	r.setSearchFocus(n - 1) // the last real span
+	r.moveSearchFocus(1)
+	if r.searchFocusedIdx != n {
+		t.Errorf("focus after Tab past the last span = %d, want %d (Cancel)", r.searchFocusedIdx, n)
+	}
+	if !r.searchCancelBtn.HasFocus() {
+		t.Error("real focus should be on Cancel")
+	}
+
+	r.moveSearchFocus(1)
+	if r.searchFocusedIdx != n+1 {
+		t.Errorf("focus after Tab from Cancel = %d, want %d (Search)", r.searchFocusedIdx, n+1)
+	}
+	if !r.searchSearchBtn.HasFocus() {
+		t.Error("real focus should be on Search")
+	}
+
+	r.moveSearchFocus(1)
+	if r.searchFocusedIdx != 0 {
+		t.Errorf("focus after Tab from Search = %d, want 0 (wraps to the first span)", r.searchFocusedIdx)
+	}
+
+	r.moveSearchFocus(-1)
+	if r.searchFocusedIdx != n+1 {
+		t.Errorf("focus after Backtab from the first span = %d, want %d (wraps to Search)", r.searchFocusedIdx, n+1)
+	}
+}
+
+// TestSearchEngineChangeDimsScopeField pins the user's own request:
+// Start at reads as visibly unavailable while Engine=locate (it no
+// longer affects locate's own results — see search.Request.Scope's own
+// doc comment) — via dimTag in the rendered text, not (like the
+// previous, tview.Form-based version of this dialog) a SetDisabled
+// call whose color change tview's own Form.Draw silently discarded
+// every frame. Content has no such dimming any more — see
+// rerenderSearchDialog's own doc comment on its column.
+func TestSearchEngineChangeDimsScopeField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openSearch()
+
+	// Checked on Start-at's own row specifically, not searchTop's whole
+	// text: Ignore dirs' own value lives in the same TextView and is
+	// dimmed by default too (its own enable checkbox starts off), so a
+	// whole-text check can't tell which field the dimming belongs to.
+	if rowIsDimmed(t, r, "start-at") {
+		t.Fatal("setup: Start at should not be dimmed while Engine=find")
+	}
+	if len(r.searchEngineOptions) < 2 {
+		t.Skip("locate not available in this environment")
+	}
+
+	r.searchEngineIdx = 1 // locate
+	r.rerenderSearchDialog()
+
+	if !rowIsDimmed(t, r, "start-at") {
+		t.Error("Start at should be dimmed while Engine=locate")
+	}
+
+	r.searchEngineIdx = 0 // back to find
+	r.rerenderSearchDialog()
+	if rowIsDimmed(t, r, "start-at") {
+		t.Error("Start at should no longer be dimmed once back on find")
+	}
+}
+
+// rowIsDimmed reports whether the raw (tag-included) text of the row
+// tagName's own span sits on contains dimTag — see
+// TestSearchEngineChangeDimsScopeField's own doc comment on why a
+// whole-TextView check isn't precise enough.
+func rowIsDimmed(t *testing.T, r *Root, tagName string) bool {
+	t.Helper()
+	idx, ok := r.searchSpanIndex(tagName)
+	if !ok {
+		t.Fatalf("no span tagged %q", tagName)
+	}
+	span := r.searchSpans[idx]
+	lines := strings.Split(span.widget.GetText(false), "\n")
+	if span.row < 0 || span.row >= len(lines) {
+		t.Fatalf("span row %d out of range for %q (%d lines)", span.row, tagName, len(lines))
+	}
+	return strings.Contains(lines[span.row], dimTag)
+}
+
+// Content's own field is no longer ever dimmed (there's no more
+// "Search in" choice gating it — see rerenderSearchDialog's own doc
+// comment on the Content column), so the test that used to pin its
+// dimming behavior across a Search in change is gone; nothing replaces
+// it, since "always editable" needs no test of its own beyond
+// TestRunSearchUsesContentValueWhenContentFilled already covering the
+// behavior that matters (a filled Content field selects content
+// search).
