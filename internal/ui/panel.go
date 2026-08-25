@@ -16,6 +16,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
 const (
@@ -179,6 +180,37 @@ type Panel struct {
 	// know whether a click landing outside the edit field should cancel
 	// editing.
 	editing bool
+
+	// searchMode is true exactly while the panel is showing search
+	// results in place of its own real directory — see
+	// showSearchResults and its related methods just below rowRef.
+	// Every other method here that would otherwise misbehave against a
+	// virtual, scattered-directories listing (activateRow's usual "cd
+	// into it" meaning, setSortKey's usual "re-read from disk" meaning,
+	// the filter box, a header click) checks this first.
+	searchMode bool
+
+	// searchEntries holds every result gathered so far while
+	// searchMode is true — see appendSearchResult/renderSearchEntries.
+	searchEntries []searchResultEntry
+
+	// searchRestorePath/searchRestoreRow are the real directory (and
+	// cursor row within it) the panel was showing right before
+	// showSearchResults first switched it over — restored by
+	// exitSearchResults, so leaving search results behind looks exactly
+	// like nothing ever happened, not a fresh load() of wherever the
+	// panel happened to land.
+	searchRestorePath string
+	searchRestoreRow  int
+
+	// onSearchEscape reports Escape while searchMode is true and the
+	// table itself has focus (see captureTableKey) — Root wires this to
+	// reopening the search form, the same "Esc: back to search"
+	// contract the dialog already promises, just reached from inside
+	// the panel itself now rather than a separate results overlay. Left
+	// nil (a no-op) in tests that construct a Panel without wiring Root
+	// to it at all.
+	onSearchEscape func()
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -272,6 +304,9 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
 	p.filterRegexBtn.SetSelectedFunc(func() {
+		if p.searchMode {
+			return // the filter box doesn't apply to search results — see Panel's own searchMode doc comment
+		}
 		p.filterRegex = !p.filterRegex
 		p.filterRegexBtn.SetLabel(filterModeLabel(p.filterRegex))
 		p.reportError(p.load(p.path))
@@ -282,6 +317,9 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.filterField.SetChangedFunc(func(text string) {
 		if text == p.filterText {
 			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
+		}
+		if p.searchMode {
+			return // see filterRegexBtn's own identical guard just above
 		}
 		p.filterText = text
 		p.reportError(p.load(p.path))
@@ -379,7 +417,24 @@ func (p *Panel) applyTheme(theme config.ResolvedTheme) {
 //     it's whatever row a previous, unrelated directory's listing had
 //     it on, not necessarily even a valid row in this one) reads as
 //     arbitrary, not "here's the directory you just opened".
+//
+// Also always exits search mode first, unconditionally: showing a real
+// directory (what load does, definitionally) and showing search
+// results (searchMode) are mutually exclusive states, and a great many
+// existing actions elsewhere (Rename, chown/chmod, Properties' own
+// Save, every "Globals" toggle, ...) already refresh via this exact
+// p.load(p.path) idiom without knowing anything about search mode at
+// all — right-clicking a search-result row for any of them reaches
+// r.menu's own real, ordinary items unchanged (see Root.captureMouse's
+// MouseRightClick case, which never treated a search-mode row any
+// differently to begin with). Without this, one of those would leave
+// searchMode still true while the table itself had already been
+// silently overwritten with a real directory's rows — activateRow,
+// setSortKey, and the filter box would all keep taking their own
+// searchMode branch against rows that, by then, are not search results
+// at all.
 func (p *Panel) load(dir string) error {
+	p.searchMode = false
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -444,6 +499,226 @@ func (p *Panel) load(dir string) error {
 	if p.onLoad != nil {
 		p.onLoad(p.path)
 	}
+	return nil
+}
+
+// showSearchResults switches the panel from its own real directory to
+// an initially empty search-results listing — see appendSearchResult
+// (called once per streamed result), setSearchStatus (the header's own
+// progress/outcome text), and exitSearchResults/activateRow for the
+// rest of this mode's lifecycle. Safe to call again while search
+// results are already showing (a second search replacing the first):
+// searchRestorePath/Row, captured once on the way in, are left alone
+// on a repeat call so they still point at the real directory from
+// before the *first* search, not the results a second search is about
+// to replace.
+//
+// p.path itself is deliberately never touched here or anywhere else in
+// this mode: every other Panel method (navigate, history, back/
+// forward) stays completely unaware search mode ever happened, and
+// exitSearchResults' own restore ends up being nothing more than a
+// plain, ordinary reload of whatever p.path still is.
+func (p *Panel) showSearchResults() {
+	if !p.searchMode {
+		p.searchRestorePath = p.path
+		p.searchRestoreRow, _, _ = p.CurrentRowPath() // ok=false (e.g. cursor on "..") just leaves this at its zero value, 0 — a safe fallback
+	}
+	p.searchMode = true
+	p.searchEntries = nil
+	p.selected = make(map[string]bool) // selection scoped to what's on screen, same rule load() already follows for a real directory
+	p.table.Clear()
+	p.buildColumnHeader()
+}
+
+// searchResultEntry pairs one result's real fsops classification
+// (Entry — Name always the result's own real full path, never
+// overwritten) with the text actually shown for it (display):
+// identical to Entry.Name for a filename match, or "path:line: text"
+// for a content match (see appendSearchResult). Kept separate from
+// Entry.Name itself, rather than folding the line/text into it,
+// specifically because a content search can report the *same* path
+// more than once — once per matching line, unless "First hit" is
+// checked — and Entry.Name staying the bare path throughout means
+// every one of those still sorts/groups exactly where it belongs, next
+// to each other and next to whatever else shares its own directory,
+// rather than each carrying a different fabricated "name" that
+// scatters them apart from one another.
+type searchResultEntry struct {
+	fsops.Entry
+	display string
+}
+
+// appendSearchResult adds one streamed result — classified via
+// fsops.DescribeEntry, the exact same per-entry classification a real
+// directory listing gives each of its own children (symlink
+// resolution, broken-symlink detection, mount-point check — see its
+// own doc comment). display is res.Path itself for a filename match
+// (Line == 0), or "path:line: text" for a content match — see
+// search.Result's own Line/Text fields, populated only by a content
+// (grep) search.
+//
+// Re-renders immediately, one result at a time: search results arrive
+// slowly enough (one find/grep process, one match at a time) that
+// re-sorting and redrawing on every single one stays imperceptible,
+// and immediate feedback — rows appearing one by one as they're found
+// — matches this dialog's own existing "watch it stream in" feel,
+// unchanged from before this mode existed.
+func (p *Panel) appendSearchResult(res search.Result) {
+	entry := fsops.DescribeEntry(res.Path)
+	entry.Name = res.Path
+	display := res.Path
+	if res.Line > 0 {
+		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
+	}
+	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display})
+	p.renderSearchEntries()
+}
+
+// setSearchStatus paints the header's own status line — the animated
+// "still searching" indicator, then a final "Done — N found" — in
+// place of the real breadcrumb path bar search mode otherwise shows
+// there (see buildHeaderSpans/load). No spans: unlike the breadcrumb,
+// none of this text is a click target (see captureHeaderMouse's own
+// searchMode guard).
+func (p *Panel) setSearchStatus(text string) {
+	p.header.SetText(text)
+	p.headerSpans = nil
+}
+
+// setSearchStatusColor overrides the header's text color while showing
+// search status — normally left at its usual paintStaticChrome color
+// (theme.Text), but set to theme.EntryError for a search that was
+// refused before it ever ran (see Root.showSearchError) — the same red
+// a broken symlink already gets in a real listing (see entryColor).
+// Root.runSearch resets it back to theme.Text before a real search
+// begins, in case a previous one left it red.
+func (p *Panel) setSearchStatusColor(c tcell.Color) {
+	p.header.SetTextColor(c)
+}
+
+// renderSearchEntries re-sorts (per whatever sortKey/sortDescending are
+// currently set to — the exact same two fields a real directory
+// listing's own column-header click already drives, see setSortKey)
+// and redraws every row from searchEntries. There's no ListDir call to
+// repeat the way a real directory's own sort change re-triggers one
+// (see load's own doc comment) — searchEntries already holds
+// everything there is to show; appendSearchResult and a sort-key
+// change while search results are showing (see setSortKey) both just
+// call this again directly.
+//
+// sortSearchEntries/sortSearchGroup, not applySortPreference/sortGroup:
+// those operate on []fsops.Entry directly, but a content search can
+// carry the same path more than once (see searchResultEntry's own doc
+// comment) — this mirrors their exact two-pass shape (establish a
+// directories-first, name-sorted base the same way ListDir does before
+// a real directory's own load() ever calls applySortPreference, then
+// refine within each group for a non-name sort key) against
+// searchResultEntry instead, since Go generics aren't in play here and
+// duplicating roughly a dozen lines is simpler than making those two
+// take an interface.
+//
+// Explicitly re-applies each row's own checked state from p.selected
+// afterward: unlike load() (which always resets p.selected right
+// before its own addRow loop, so addRow's own hardcoded "unchecked"
+// starting glyph is already correct there), this re-render must
+// preserve whatever was already checked across a sort-key change or a
+// newly-streamed-in result — addRow itself has no way to know that on
+// its own; it always draws a fresh checkbox unchecked.
+func (p *Panel) renderSearchEntries() {
+	sorted := append([]searchResultEntry(nil), p.searchEntries...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].IsDir != sorted[j].IsDir {
+			return sorted[i].IsDir // directories before files
+		}
+		return strings.ToLower(sorted[i].Name) < strings.ToLower(sorted[j].Name)
+	})
+	sortSearchEntries(sorted, p.sortKey, p.sortDescending)
+
+	p.table.Clear()
+	for row, e := range sorted {
+		p.addRow(row, rowRef{
+			path:       e.Name, // always the result's own real path (Entry, embedded — see searchResultEntry's own doc comment)
+			name:       e.display,
+			isDir:      e.IsDir,
+			checkable:  true,
+			entryType:  e.Type,
+			linkTarget: e.LinkTarget,
+			nlink:      e.Nlink,
+			mountPoint: e.MountPoint,
+			mode:       e.Mode,
+			size:       e.Size,
+			modTime:    e.ModTime,
+		})
+		if p.selected[e.Name] {
+			p.setChecked(row, true)
+		}
+	}
+	p.buildColumnHeader()
+}
+
+// sortSearchEntries is applySortPreference's own []searchResultEntry
+// counterpart — see renderSearchEntries' own doc comment on why it's a
+// duplicate rather than a shared, parameterized implementation.
+func sortSearchEntries(entries []searchResultEntry, key sortKey, descending bool) {
+	split := len(entries)
+	for i, e := range entries {
+		if !e.IsDir {
+			split = i
+			break
+		}
+	}
+	sortSearchGroup(entries[:split], key, descending)
+	sortSearchGroup(entries[split:], key, descending)
+}
+
+// sortSearchGroup is sortGroup's own []searchResultEntry counterpart —
+// same three keys (size, modified, name as the tiebreaker and the
+// whole comparison for sortByName itself), same stable sort so ties
+// keep whatever relative order they already arrived in.
+func sortSearchGroup(entries []searchResultEntry, key sortKey, descending bool) {
+	less := func(i, j int) bool {
+		switch key {
+		case sortBySize:
+			if entries[i].Size != entries[j].Size {
+				return entries[i].Size < entries[j].Size
+			}
+		case sortByModified:
+			if !entries[i].ModTime.Equal(entries[j].ModTime) {
+				return entries[i].ModTime.Before(entries[j].ModTime)
+			}
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	}
+	if descending {
+		asc := less
+		less = func(i, j int) bool { return asc(j, i) }
+	}
+	sort.SliceStable(entries, less)
+}
+
+// exitSearchResults restores the real directory the panel was showing
+// before showSearchResults first switched it over (see
+// searchRestorePath/Row) — a no-op if search results aren't showing at
+// all. Reloads rather than assuming the table's own current state is
+// still meaningful, but that reload is nothing more than an ordinary,
+// already-idiomatic "refresh in place" (the same p.load(p.path) call
+// setSortKey/the filter box/toggleHidden all already use): p.path
+// itself was never touched by search mode (see showSearchResults' own
+// doc comment), so this always resolves to reloading the one directory
+// that was already current, just with search results no longer
+// covering it — restoreRow is applied afterward since load() only
+// resets the cursor to row 0 for a *genuinely new* directory (abs !=
+// p.path — see its own doc comment), which this deliberately never is.
+func (p *Panel) exitSearchResults() error {
+	if !p.searchMode {
+		return nil
+	}
+	p.searchMode = false
+	restoreRow := p.searchRestoreRow
+	if err := p.load(p.searchRestorePath); err != nil {
+		return err
+	}
+	p.focusRow(restoreRow)
 	return nil
 }
 
@@ -772,6 +1047,13 @@ func (p *Panel) setSortKey(key sortKey) {
 		p.sortKey = key
 		p.sortDescending = false
 	}
+	if p.searchMode {
+		// Nothing to re-read from disk (see renderSearchEntries' own
+		// doc comment) — searchEntries already holds everything there
+		// is; a sort-key change here just re-renders it.
+		p.renderSearchEntries()
+		return
+	}
 	p.reportError(p.load(p.path))
 }
 
@@ -1028,17 +1310,37 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 		p.toggleCheckbox(row)
 		return nil
 	}
+	if event.Key() == tcell.KeyEscape && p.searchMode && p.onSearchEscape != nil {
+		p.onSearchEscape()
+		return nil
+	}
 	return event
 }
 
-// activateRow is what Enter and a click on the name cell both do: enter
-// the row's directory, or do nothing for a regular file — opening/viewing
-// files is a later phase. Ignores the checkbox column: a click there is
-// handled by its own TableCell.ClickedFunc instead (see addRow), which
-// returns true specifically so this never also runs for it.
+// activateRow is what Enter and a click on the name cell both do. While
+// showing a real directory: enter the row's directory, or do nothing
+// for a regular file — opening/viewing files is a later phase. Ignores
+// the checkbox column: a click there is handled by its own
+// TableCell.ClickedFunc instead (see addRow), which returns true
+// specifically so this never also runs for it.
+//
+// While showing search results (searchMode): a result is never "this
+// panel's own directory" the way a real row's target always is, so
+// there's nothing to navigate *into* — instead, for a file or a
+// directory result alike, this leaves search mode entirely and jumps
+// to the result's real location (see navigateAndSelect), the same
+// "Go to file/folder" meaning left-click on a result has always had.
 func (p *Panel) activateRow(row int) {
 	ref, ok := p.rowRef(row)
-	if !ok || !ref.isDir {
+	if !ok {
+		return
+	}
+	if p.searchMode {
+		p.searchMode = false
+		p.reportError(p.navigateAndSelect(ref.path))
+		return
+	}
+	if !ref.isDir {
 		return
 	}
 	p.reportError(p.navigate(ref.path))
@@ -1171,10 +1473,9 @@ func (p *Panel) navigate(dir string) error {
 // produced one (see the same filter/showHidden rules any other row is
 // subject to — a target the current filter or a hidden-files toggle
 // would exclude simply isn't found here, not an error), gets the
-// cursor. Used by the search dialog's own results list (see
-// Root.openSearchResult) to jump straight to a match instead of just
-// opening the directory it's in and leaving the cursor whichever entry
-// load()'s own top-of-listing reset already put it on.
+// cursor. Used by activateRow's own searchMode branch to jump straight
+// to a search result instead of just opening the directory it's in and
+// leaving the cursor wherever load()'s own top-of-listing reset put it.
 func (p *Panel) navigateAndSelect(target string) error {
 	if err := p.navigate(filepath.Dir(target)); err != nil {
 		return err
@@ -1310,6 +1611,14 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if !p.header.InRect(event.Position()) {
 		return action, event
+	}
+	if p.searchMode {
+		// The header shows search status text while searchMode (see
+		// setSearchStatus) — headerSpans is empty throughout, so
+		// without this a click here would fall through to openEdit
+		// below, opening a raw path editor over status text that was
+		// never a real path to begin with.
+		return tview.MouseConsumed, nil
 	}
 
 	if action == tview.MouseLeftClick {

@@ -433,9 +433,8 @@ func (r *Root) openProperties() {
 }
 
 // loadPropertiesTarget does openProperties' own state-population half
-// only (stat r.target, stage every editable field, render the text) —
-// shared with openPropertiesFloating below, which only differs in how
-// the result actually gets shown on screen.
+// (stat r.target, stage every editable field, render the text), kept
+// separate from its own positioning/overlay logic below.
 func (r *Root) loadPropertiesTarget() error {
 	info, err := fsops.Stat(r.target)
 	if err != nil {
@@ -457,30 +456,6 @@ func (r *Root) loadPropertiesTarget() error {
 	r.renderProperties()
 	r.properties.HidePage("editfield")
 	return nil
-}
-
-// openPropertiesFloating is openProperties' own counterpart for the
-// search results' context menu (see newSearchResultMenu): floats on
-// top of the results (pushOverlay) instead of replacing everything
-// (showOverlayWithRestore, what the panel's own context menu uses) —
-// per the user's own explicit request that acting on a search result
-// shouldn't lose the results themselves, the same "floats on top"
-// shape openHelp already has over whatever's open underneath. Centered
-// on screen rather than positioned near a context menu's own rect
-// (unlike openProperties): the search results' own context menu is a
-// separate, unrelated widget from r.menu.
-func (r *Root) openPropertiesFloating() {
-	if err := r.loadPropertiesTarget(); err != nil {
-		r.showError(err)
-		return
-	}
-
-	width, height := textSize(r.propertiesText.GetText(true))
-	height++ // reserved button row — see resizeProperties
-	x, y := r.centeredOnScreen(width, height)
-	r.resizeProperties(x, y)
-
-	r.pushOverlay(propertiesPage, r.properties, r.restoreProperties)
 }
 
 // renderProperties rebuilds the Properties overlay's text from

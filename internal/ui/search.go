@@ -16,20 +16,13 @@ import (
 
 const searchPage = "search"
 
-// searchResultMenuPage is the search results' own right-click context
-// menu — see newSearchResultMenu/openSearchResultMenu.
-const searchResultMenuPage = "search-result-menu"
-
-// searchFormWidth/Height is the search dialog's own fixed size for the
-// fields page (see newSearchDialog). searchResultsWidth/Height is the
-// *floor* for the results window (see runSearch/backToSearchForm) —
-// results are normally sized well above this, as a fraction of the
-// terminal's own width (see searchResultsSize); this only keeps a
-// small terminal from shrinking the results window down below what
-// used to be its fixed size.
+// searchFormWidth/Height is the search dialog's own fixed size — the
+// dialog is always this one size now: results show directly in the
+// panel's own normal file overview area instead of a second, bigger
+// page of this same overlay (see runSearch/Panel.showSearchResults),
+// per the user's own request.
 const (
-	searchFormWidth, searchFormHeight       = 84, 19
-	searchResultsWidth, searchResultsHeight = 96, 32
+	searchFormWidth, searchFormHeight = 84, 19
 )
 
 // searchEngineOption pairs one Engine choice's own label with the
@@ -312,34 +305,8 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchFieldsPages.AddPage("fields", fields, true, true)
 	r.searchFieldsPages.AddPage("editfield", r.searchEditField, false, false)
 
-	r.searchList = tview.NewList().ShowSecondaryText(false)
-	r.searchList.SetHighlightFullLine(true)
-	r.searchList.SetBorderPadding(0, 0, 1, 1)
-	r.searchList.SetDoneFunc(r.backToSearchForm) // Escape while the results list has focus
-	r.searchList.SetMouseCapture(r.captureSearchListMouse)
-
-	// searchStatus is the results window's own bottom line: an
-	// animated "still working" indicator naming the directory of the
-	// most recently found match as a stand-in for "currently scanning"
-	// (see streamSearchResults/animateSearchProgress) — the closest
-	// approximation available without breakthrough doing its own
-	// directory traversal instead of shelling out to find/locate/grep,
-	// which don't report that kind of progress themselves. Once the
-	// search finishes, this shows a final "Done — N found" instead.
-	r.searchStatus = tview.NewTextView().SetDynamicColors(true)
-	r.searchStatus.SetBorderPadding(0, 0, 1, 1)
-
-	r.searchResultsView = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.searchList, 0, 1, true).
-		AddItem(r.searchStatus, 1, 0, false)
-	// No border — see fields' own doc comment above; searchList/
-	// searchStatus's own AccentBackground fill (applyTheme) already
-	// covers the whole rect, and both together tile it exactly the same
-	// way (proportional + one fixed row, no leftover).
-
 	pages := tview.NewPages()
 	pages.AddPage("form", r.searchFieldsPages, true, true)
-	pages.AddPage("results", r.searchResultsView, true, false)
 	return pages
 }
 
@@ -771,156 +738,6 @@ func (r *Root) commitPendingSearchEdit() {
 	commit(text)
 }
 
-// searchListScrollStep is how many rows one wheel notch moves the
-// results list — see captureSearchListMouse's own doc comment on why
-// this moves the *selection*, not just the visible window.
-const searchListScrollStep = 3
-
-// captureSearchListMouse replaces tview.List's own built-in mouse-wheel
-// handling with one that actually scrolls: List.Draw itself force-
-// resets its own scroll offset back to wherever the *selected* item
-// is, every single redraw ("Adjust offsets to keep the current item in
-// view" — see its own source) — so a plain wheel notch, which only
-// ever touches the offset and never the selection, gets silently
-// undone the moment the very next Draw call runs right after
-// (confirmed directly: itemOffset genuinely incremented, then dropped
-// back to 0 by the next frame — not a routing/rect bug, a real
-// upstream behavior). Moving the *selection* along with the wheel
-// avoids the fight entirely — Draw's own "keep it in view" logic then
-// pulls the offset along for free, in the same direction, instead of
-// against it.
-func (r *Root) captureSearchListMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	switch action {
-	case tview.MouseScrollUp:
-		r.searchList.SetCurrentItem(r.searchList.GetCurrentItem() - searchListScrollStep)
-		return tview.MouseConsumed, nil
-	case tview.MouseScrollDown:
-		r.searchList.SetCurrentItem(r.searchList.GetCurrentItem() + searchListScrollStep)
-		return tview.MouseConsumed, nil
-	case tview.MouseRightClick:
-		// Per the user's own explicit request: right-click a result for
-		// a context menu, rather than only ever left-click-to-open (see
-		// openSearchResultMenu).
-		if path, ok := r.searchResultPathAt(event.Position()); ok {
-			x, y := event.Position()
-			r.openSearchResultMenu(path, x, y)
-			return tview.MouseConsumed, nil
-		}
-	}
-	return action, event
-}
-
-// searchResultPathAt returns the path of whichever result row is at
-// (x, y), or ok=false if there isn't one — outside searchList
-// entirely, or landing on a non-result row (the "No matches found"/
-// error placeholder, or blank space below the last real result: both
-// leave searchResultPaths shorter than the row index computed here).
-// The same row-index-from-position math tview.List's own (private)
-// indexAtPoint uses internally, reimplemented here since nothing
-// exported reaches it: the vertical position within the list's own
-// inner rect, offset by however far it's currently scrolled (see
-// GetOffset — searchListScrollStep's own doc comment on why a plain
-// click position alone isn't enough once the list has been scrolled).
-func (r *Root) searchResultPathAt(x, y int) (string, bool) {
-	if !r.searchList.InRect(x, y) {
-		return "", false
-	}
-	_, rectY, _, _ := r.searchList.GetInnerRect()
-	offset, _ := r.searchList.GetOffset()
-	idx := (y - rectY) + offset
-	if idx < 0 || idx >= len(r.searchResultPaths) {
-		return "", false
-	}
-	return r.searchResultPaths[idx], true
-}
-
-// newSearchResultMenu builds the search results' own right-click
-// context menu — a much smaller, more focused set than the panel's
-// own (see NewRoot's own menu construction), picked from what one
-// arbitrary path — which might not even be the panel's own current
-// directory — can sensibly do, rather than reusing the panel's full
-// menu (whose own Selection/Globals sections don't mean anything here
-// at all). Repopulated fresh on every open (see openSearchResultMenu)
-// rather than built once with items reading r.target the way the
-// panel's own menu does: a search result's path has no equivalent to
-// r.target/r.targetRow being kept in sync by the table's own cursor,
-// so every item's own closure captures its path directly instead.
-func (r *Root) newSearchResultMenu() *tview.List {
-	l := tview.NewList().ShowSecondaryText(false)
-	l.SetHighlightFullLine(true)
-	l.SetBorderPadding(0, 0, 1, 1)
-	l.SetDoneFunc(r.hideOverlay) // Escape
-	return l
-}
-
-// openSearchResultMenu shows path's own context menu at (x, y) — see
-// captureSearchListMouse's own MouseRightClick case. "Go to
-// file/folder" is first and pre-selected, per the user's own explicit
-// request — the same action a plain left-click already performs (see
-// openSearchResult).
-//
-// Copy/Cut/Paste/Properties all act on path directly and leave the
-// results page open afterward — no need for the panel to be showing
-// (or to ever visit) its own directory at all, the same "floats on
-// top rather than replacing" shape openHelp already has (see
-// openPropertiesFloating/pasteInto's own doc comments on why those two
-// specifically needed their own counterparts to make that possible).
-// Copy/Cut/Paste leave the menu itself open afterward too, same as the
-// panel's own context menu already does for its own identical three
-// items; Properties closes just the menu layer first (hideOverlay),
-// since — unlike Copy/Cut/Paste — it opens another overlay of its own
-// on top of the results.
-//
-// Rename is the one exception that closes the results outright: its
-// own inline edit field is drawn *at* a real row's on-screen position
-// (see openRename/nameCellRect), which only exists once the panel
-// actually navigates there — so Rename here means "go to it, then
-// rename it" (the same as picking "Go to file/folder" and then
-// pressing Ctrl+R), not "rename it without leaving the results",
-// which there's no way to draw at all.
-func (r *Root) openSearchResultMenu(path string, x, y int) {
-	l := r.searchResultMenu
-	l.Clear()
-
-	goToFolder := func() {
-		r.cancelSearch()
-		r.closeAllOverlays()
-		r.showError(r.panel.navigateAndSelect(path))
-	}
-	l.AddItem("Go to file/folder", "", 0, goToFolder)
-	l.AddItem("Copy", "", 0, func() {
-		r.clipboard = []string{path}
-		r.clipboardCut = false
-	})
-	l.AddItem("Cut", "", 0, func() {
-		r.clipboard = []string{path}
-		r.clipboardCut = true
-	})
-	l.AddItem("Paste", "", 0, func() {
-		r.pasteInto(filepath.Dir(path))
-	})
-	l.AddItem("Properties", "", 0, func() {
-		r.hideOverlay() // close just the menu — Properties floats on top of the results, not replacing them
-		r.target = path
-		r.openPropertiesFloating()
-	})
-	l.AddItem("Rename", "", 0, func() {
-		r.cancelSearch()
-		r.closeAllOverlays()
-		if err := r.panel.navigateAndSelect(path); err != nil {
-			r.showError(err)
-			return
-		}
-		r.renameCurrentEntry()
-	})
-
-	width, height := listSize(l)
-	x, y, width, height = r.clampToScreen(x, y, width, height)
-	l.SetRect(x, y, width, height)
-	l.SetCurrentItem(0)
-	r.pushOverlay(searchResultMenuPage, l, nil)
-}
-
 // searchSpanAt finds whichever searchSpans entry (if any) contains
 // (x, y) — checked against its own widget's InRect first, then its
 // exact row/column range within that widget's inner rect, the same
@@ -949,22 +766,25 @@ func (r *Root) openSearchTreePicker() {
 	}, nil)
 }
 
-// openSearch shows the search dialog, centered on screen, on its own
-// "form" page, sized for the fields (see searchFormWidth/Height —
-// runSearch resizes up to searchResultsWidth/Height once it switches
-// to the results page). Filename/Content always start empty; Start at
-// always resets to wherever the panel currently is (the far more
-// common starting point than whatever was typed the last time the
-// dialog was open); Engine/Mode/Ignored dirs/Search in/Case sensitive/
-// Skip hidden are left exactly as they were, since there's no
-// similarly obvious reason to reset those every time. First focus goes
-// to Filename (the "filename" tagged span — see searchSpanIndex),
-// per the user's own request, not Engine.
+// openSearch shows the search dialog, centered on screen. Filename/
+// Content/Start-at reset to blank/the panel's current directory only
+// when this opens *fresh* — the panel isn't already showing search
+// results (see Panel.searchMode) — the far more common case; reopening
+// it to refine an already-running or already-finished search (Ctrl+F
+// again, or Escape — see backToSearchForm, this func's only other
+// caller) leaves everything exactly as it was left instead, per the
+// user's own explicit request that this not reinitialize. Engine/Mode/
+// Ignored dirs/Search in/Case sensitive/Skip hidden are never reset
+// either way — there's no similarly obvious reason to. First focus
+// goes to Filename (the "filename" tagged span — see
+// searchSpanIndex), per the user's own request, not Engine — even when
+// refining, since it's still the field most searches start from.
 func (r *Root) openSearch() {
-	r.searchFilenameValue = ""
-	r.searchContentValue = ""
-	r.searchScopeValue = r.panel.path
-	r.searchPages.SwitchToPage("form")
+	if !r.panel.searchMode {
+		r.searchFilenameValue = ""
+		r.searchContentValue = ""
+		r.searchScopeValue = r.panel.path
+	}
 	r.searchFieldsPages.SwitchToPage("fields")
 
 	r.rerenderSearchDialog()
@@ -972,102 +792,74 @@ func (r *Root) openSearch() {
 		r.setSearchFocus(idx)
 	}
 
-	r.resizeSearchPages(searchFormWidth, searchFormHeight, false)
+	r.resizeSearchPages()
 	r.showOverlay(searchPage, r.searchPages)
 }
 
-// resizeSearchPages centers a width x height rect on screen and
-// applies it to r.searchPages — shared by openSearch (the fields' own
-// smaller size) and runSearch/backToSearchForm (the results window's
-// own bigger one), so the dialog's footprint always matches whichever
-// of its two pages is currently showing rather than staying pinned to
-// the fields' size. wide selects which of the two clamps bounds the
-// result: false (the fields page, and the results page's own previous
-// fixed size) clamps to the current panel like every other overlay in
-// this app (see clampToPanel); true (the results page's own current
-// size — see searchResultsSize) clamps to the whole screen instead
-// (see clampToScreen), since results are now deliberately sized as a
-// fraction of the terminal's own width, per the user's own request,
-// and would otherwise just get clamped straight back down to
-// panel-width regardless of the fraction requested.
-func (r *Root) resizeSearchPages(width, height int, wide bool) {
-	x, y := r.centeredOnScreen(width, height)
-	var w, h int
-	if wide {
-		x, y, w, h = r.clampToScreen(x, y, width, height)
-	} else {
-		x, y, w, h = r.clampToPanel(x, y, width, height)
-	}
+// resizeSearchPages centers the dialog's own fixed searchFormWidth/
+// Height on screen, clamped to the current panel like every other
+// overlay in this app (see clampToPanel) — results no longer resize
+// this overlay at all now that they show directly in the panel's own
+// area instead (see Panel.showSearchResults), so there's only ever
+// this one size to apply.
+func (r *Root) resizeSearchPages() {
+	x, y := r.centeredOnScreen(searchFormWidth, searchFormHeight)
+	x, y, w, h := r.clampToPanel(x, y, searchFormWidth, searchFormHeight)
 	r.searchPages.SetRect(x, y, w, h)
 }
 
-// searchResultsSize returns the results page's own width/height: at
-// least 90% of the terminal's own current width, per the user's own
-// request — long paths need real room before ever having to truncate
-// at all (see formatSearchResult's own middle-truncation once even
-// that isn't enough). searchResultsWidth/Height is only a floor, for a
-// small terminal where 90% would be narrower than that. Height stays
-// fixed — how many rows fit isn't tied to path length the way column
-// width is, so there's no equivalent reason to scale it.
-func (r *Root) searchResultsSize() (width, height int) {
-	_, _, screenWidth, _ := r.GetRect()
-	width = screenWidth * 9 / 10
-	if width < searchResultsWidth {
-		width = searchResultsWidth
-	}
-	return width, searchResultsHeight
-}
-
-// showSearchError shows msg as the results page's own sole line, in
-// EntryError's own red (the same color a broken symlink gets in the
-// panel itself — see entryColor) — used for a search that was refused
-// before it ever ran (see runSearch's own non-existent-Start-at check)
-// rather than Root's own global error overlay (see showError), which
-// used to close the whole search dialog outright over what's typically
-// just a typo — discarding whatever was already typed into Filename/
-// Content/Start-at and needing the entire dialog reopened from scratch
-// just to fix it. Per the user's own explicit request: showing it here
-// instead means Escape (searchList's own DoneFunc, unchanged — see
-// newSearchDialog) goes straight back to the form, with everything
-// exactly as it was left.
+// showSearchError shows msg as the panel's own (otherwise empty)
+// search-results status line, in EntryError's own red (the same color
+// a broken symlink gets in the panel itself — see entryColor) — used
+// for a search that was refused before it ever ran (see runSearch's
+// own non-existent-Start-at check) rather than Root's own global error
+// overlay (see showError), which used to close the whole search dialog
+// outright over what's typically just a typo — discarding whatever was
+// already typed into Filename/Content/Start-at and needing the entire
+// dialog reopened from scratch just to fix it. Per the user's own
+// explicit request: showing it here instead means Escape (see Panel.
+// onSearchEscape, wired to backToSearchForm) goes straight back to the
+// form, with everything exactly as it was left.
 //
 // Deliberately skips starting animateSearchProgress/streamSearchResults
 // (searchCancel stays nil) — there's no real search running here for
 // either of those to track, only this one static line to show; the
-// next real runSearch resets searchList's own color back to normal
-// (see its own SetMainTextColor call) before adding anything else.
+// next real runSearch resets the header's own color back to normal
+// (see Panel.setSearchStatusColor) before showing anything else.
 func (r *Root) showSearchError(msg string) {
 	r.cancelSearch()
-	r.searchList.Clear()
-	r.searchResultPaths = nil
-	r.searchList.SetMainTextColor(r.theme.EntryError)
-	r.searchList.AddItem(msg, "", 0, nil)
-	r.setSearchStatus("")
-	r.searchPages.SwitchToPage("results")
-	resultsWidth, resultsHeight := r.searchResultsSize()
-	r.resizeSearchPages(resultsWidth, resultsHeight, true)
-	r.app.SetFocus(r.searchList)
+	r.hideOverlay() // close the form, revealing the panel underneath
+	r.panel.showSearchResults()
+	r.panel.setSearchStatusColor(r.theme.EntryError)
+	r.setSearchStatus(msg)
 }
 
-// closeSearch cancels any in-flight search (see cancelSearch) and
-// closes the dialog entirely — Escape from the fields page, or picking
-// a result (see openSearchResult).
+// closeSearch cancels any in-flight search (see cancelSearch), closes
+// the dialog, and — if search results are currently showing (see
+// Panel.searchMode) — discards them, restoring the real directory the
+// panel was showing before the search that produced them ever ran (see
+// Panel.exitSearchResults). Escape/Cancel from the fields page: "I
+// don't want this search, or these results, any more" — the one
+// explicit way out of search mode that isn't picking a result (see
+// Panel.activateRow's own searchMode branch).
 func (r *Root) closeSearch() {
 	r.cancelSearch()
 	r.hideOverlay()
+	r.showError(r.panel.exitSearchResults())
 }
 
-// backToSearchForm cancels any in-flight search and returns to the
-// fields page (back to the smaller of the dialog's two sizes — see
-// resizeSearchPages) without closing the dialog — Escape from the
-// results page, so refining a search that came back wrong (or empty)
-// doesn't need reopening the whole dialog from scratch.
+// backToSearchForm cancels any in-flight search and reopens the form
+// (see openSearch, which — since the panel is already showing search
+// results by the time this runs, see Panel.onSearchEscape — leaves
+// every field exactly as it already was, not reset) without touching
+// whatever the panel currently has on screen: Escape while search
+// results are showing (wired as Panel.onSearchEscape in NewRoot), so
+// refining a search that came back wrong (or empty) doesn't lose the
+// results already gathered, and doesn't need reopening the whole
+// dialog from scratch either.
 func (r *Root) backToSearchForm() {
 	r.cancelSearch()
-	r.searchPages.SwitchToPage("form")
-	r.searchFieldsPages.SwitchToPage("fields")
-	r.resizeSearchPages(searchFormWidth, searchFormHeight, false)
-	r.setSearchFocus(r.searchFocusedIdx)
+	r.openSearch()
 }
 
 // cancelSearch stops whatever search.Run call is currently in flight,
@@ -1207,17 +999,13 @@ func (r *Root) runSearch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.searchCancel = cancel
 
-	r.searchList.Clear()
-	r.searchResultPaths = nil
-	r.searchList.SetMainTextColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
+	r.hideOverlay() // close the form, revealing the panel underneath
+	r.panel.showSearchResults()
+	r.panel.setSearchStatusColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
 	r.searchLastDir = ""
 	r.searchStartDir = scope
 	r.renderSearchStatus()
-	r.searchPages.SwitchToPage("results")
-	resultsWidth, resultsHeight := r.searchResultsSize()
-	r.resizeSearchPages(resultsWidth, resultsHeight, true)
-	r.app.SetFocus(r.searchList)
 
 	go r.animateSearchProgress(ctx)
 	results, errs := searchRun(ctx, req)
@@ -1261,10 +1049,11 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 	}
 }
 
-// renderSearchStatus paints searchStatus' own text: the current
-// animation frame plus whatever directory streamSearchResults last saw
-// a match in (searchLastDir), falling back to Start at's own value
-// (searchStartDir) until the first result arrives.
+// renderSearchStatus paints the panel's own header status line (see
+// Panel.setSearchStatus): the current animation frame plus whatever
+// directory streamSearchResults last saw a match in (searchLastDir),
+// falling back to Start at's own value (searchStartDir) until the
+// first result arrives.
 func (r *Root) renderSearchStatus() {
 	frame := hashAnimationFrames[r.searchAnimFrame%len(hashAnimationFrames)]
 	dir := r.searchLastDir
@@ -1277,49 +1066,49 @@ func (r *Root) renderSearchStatus() {
 // searchEscHint reminds the user, regardless of a search's own outcome
 // (still running, done, no matches, or the non-existent-Start-at error
 // — see showSearchError) that Escape goes back to the form — per the
-// user's own explicit request. setSearchStatus is the one place
-// searchStatus' own text actually gets set (see its three call sites:
-// here, streamSearchResults, showSearchError), so the hint can never
-// be left off some future fourth one.
+// user's own explicit request. setSearchStatus is the one place the
+// panel's own header status text actually gets set while search
+// results are showing (see its two call sites: here and
+// streamSearchResults' own final status — showSearchError goes through
+// this too), so the hint can never be left off some future third one.
 const searchEscHint = "(Esc: back to search)"
 
 func (r *Root) setSearchStatus(text string) {
-	r.searchStatus.SetText(strings.TrimSpace(text + " " + searchEscHint))
+	r.panel.setSearchStatus(strings.TrimSpace(text + " " + searchEscHint))
 }
 
-// noSearchResultsText is what the results list shows when a search
-// finished without a single match — see streamSearchResults' own doc
-// comment on why that needs to be an explicit, visible state rather
-// than just leaving the list empty. For a locate-engine filename
-// search specifically, it also names the single most likely reason:
-// locate answers entirely from its own prebuilt index (updatedb),
-// which — unlike a live find/grep — can be hours or days stale and
-// simply doesn't know about a file created (or renamed, or deleted)
-// since the last run.
+// noSearchResultsText is folded into the final status line (see
+// streamSearchResults) when a search finishes without a single match,
+// instead of just "Done — 0 found" on its own — easily read as "the
+// search didn't do anything" otherwise (a real user report). For a
+// locate-engine filename search specifically, it also names the single
+// most likely reason: locate answers entirely from its own prebuilt
+// index (updatedb), which — unlike a live find/grep — can be hours or
+// days stale and simply doesn't know about a file created (or
+// renamed, or deleted) since the last run.
 func noSearchResultsText(req search.Request) string {
 	if req.Engine == search.EngineLocate && req.Content == search.ContentNone {
-		return "No matches found (locate's own index may be stale — see Engine: find for a live search instead)"
+		return "Done — 0 found (locate's own index may be stale — see Engine: find for a live search instead)"
 	}
-	return "No matches found"
+	return "Done — 0 found"
 }
 
 // streamSearchResults drains results/errs (see search.Run) on a
-// background goroutine, appending each match to searchList via
+// background goroutine, appending each match to the panel via
 // QueueUpdateDraw — the same "background work, draw updates queued
 // onto the UI goroutine" shape StartClock's own ticker already uses.
 // Every queued update first checks ctx.Err(): once a newer search has
 // cancelled this one (see cancelSearch/runSearch), any of this
 // goroutine's own updates still sitting in the queue skip themselves
 // instead of appending stale results (or a stale error) on top of the
-// new search's own, already-cleared list. Each arriving result also
+// new search's own, already-cleared listing. Each arriving result also
 // updates searchLastDir — see renderSearchStatus.
 //
-// If the search finishes with zero matches and no error, one
-// noSearchResultsText(req) item is added instead of leaving the list
-// looking exactly like it did before the search ran — easily read as
-// "the search didn't do anything" (a real user report). Either way,
-// the status line's own animation stops and settles on a final
-// "Done — N found" once the search is over.
+// The status line's own animation stops and settles on a final
+// "Done — N found" once the search is over — noSearchResultsText(req)
+// instead, specifically for N == 0, since an empty listing on its own
+// reads exactly like a real directory that's simply empty, not "your
+// search found nothing" (see its own doc comment).
 func (r *Root) streamSearchResults(ctx context.Context, req search.Request, results <-chan search.Result, errs <-chan error) {
 	count := 0
 	for res := range results {
@@ -1330,11 +1119,7 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 				return
 			}
 			r.searchLastDir = filepath.Dir(res.Path)
-			_, _, listWidth, _ := r.searchList.GetInnerRect()
-			r.searchResultPaths = append(r.searchResultPaths, res.Path)
-			r.searchList.AddItem(formatSearchResult(res, listWidth), "", 0, func() {
-				r.openSearchResult(res)
-			})
+			r.panel.appendSearchResult(res)
 		})
 	}
 	if err := <-errs; err != nil {
@@ -1350,19 +1135,15 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 		})
 		return
 	}
-	if count == 0 {
-		r.app.QueueUpdateDraw(func() {
-			if ctx.Err() != nil {
-				return
-			}
-			r.searchList.AddItem(noSearchResultsText(req), "", 0, nil)
-		})
-	}
 	r.app.QueueUpdateDraw(func() {
 		if ctx.Err() != nil {
 			return
 		}
-		r.setSearchStatus(fmt.Sprintf("Done — %d found", count))
+		status := fmt.Sprintf("Done — %d found", count)
+		if count == 0 {
+			status = noSearchResultsText(req)
+		}
+		r.setSearchStatus(status)
 		// The search itself is over, but nothing else would ever stop
 		// animateSearchProgress's own ticker on its own — cancelSearch
 		// is otherwise only called by a *newer* search starting, or the
@@ -1372,65 +1153,4 @@ func (r *Root) streamSearchResults(ctx context.Context, req search.Request, resu
 		// hashAnimationInterval.
 		r.cancelSearch()
 	})
-}
-
-// formatSearchResult renders one search.Result as a searchList item:
-// just the path for a filename match (Line == 0), or
-// "path:line: text" for a content match — middle-truncated (see
-// truncateMiddle) to maxWidth (0 means no limit), per the user's own
-// request. This only ever affects what's drawn: the search.Result a
-// list item's own callback closes over (see streamSearchResults)
-// always keeps the real, untruncated Path for actually opening it.
-func formatSearchResult(res search.Result, maxWidth int) string {
-	var s string
-	if res.Line == 0 {
-		s = res.Path
-	} else {
-		s = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
-	}
-	if maxWidth > 0 {
-		s = truncateMiddle(s, maxWidth)
-	}
-	return s
-}
-
-// truncateMiddle shortens s to at most maxWidth runes by dropping
-// characters from its own middle, replacing them with "..." — unlike
-// truncateForDisplay's own front-truncation (used for the search
-// dialog's own short, single-line form fields, where only the
-// trailing/most-specific part matters), a results-list line reads
-// better keeping both ends: a long path's own leading directories AND
-// its own trailing filename (or, for a content match, the matched text
-// at the very end) — see formatSearchResult's own doc comment. Runes,
-// not bytes, so a multi-byte character is never cut in half.
-func truncateMiddle(s string, maxWidth int) string {
-	const ellipsis = "..."
-	runes := []rune(s)
-	if len(runes) <= maxWidth {
-		return s
-	}
-	if maxWidth <= len(ellipsis) {
-		// Too narrow for the ellipsis itself to fit alongside anything
-		// real — nothing meaningful to show either way, so just hand
-		// back a same-width slice of the original rather than only
-		// dots.
-		if maxWidth < 0 {
-			maxWidth = 0
-		}
-		return string(runes[:maxWidth])
-	}
-	keep := maxWidth - len(ellipsis)
-	head := keep / 2
-	tail := keep - head
-	return string(runes[:head]) + ellipsis + string(runes[len(runes)-tail:])
-}
-
-// openSearchResult is what picking a result does: closes the dialog
-// and jumps the panel straight to it (see Panel.navigateAndSelect) —
-// for both a filename and a content match, since neither this app nor
-// the panel itself can yet open a file to a specific line (a job for
-// the "View" action instead).
-func (r *Root) openSearchResult(res search.Result) {
-	r.closeSearch()
-	r.showError(r.panel.navigateAndSelect(res.Path))
 }
