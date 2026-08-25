@@ -208,12 +208,23 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	// name-matching step for it to drive.
 	if req.NamePattern != "" && req.Content == ContentGrep {
 		return listThenGrep(ctx, req, req.NamePattern, req.NameMode, req.CaseSensitive, "grep", func(f string) []string {
-			return GrepArgs(req.Pattern, f, req.Mode, req.CaseSensitive, req.WholeWords, req.FirstHit)
+			// nil, not req.IgnoreDirs: f is already one single, already-
+			// approved file by the time it gets here (see listThenGrep's
+			// own doc comment) — IgnoreDirs already did its real work one
+			// level up, pruning whole subtrees out of the find/locate
+			// listing step before grep ever runs at all; --exclude-dir on
+			// a single-file invocation would have nothing left to match
+			// against.
+			return GrepArgs(req.Pattern, f, req.Mode, nil, req.CaseSensitive, req.WholeWords, req.FirstHit)
 		}, results)
 	}
 	switch req.Content {
 	case ContentGrep:
-		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.CaseSensitive, req.WholeWords, req.FirstHit)...)
+		// Unlike the NamePattern-narrowed call just above, this walks
+		// req.Scope directly — grep itself is the only thing that will
+		// ever see, and so the only thing that can skip, an ignored
+		// subtree here (see GrepArgs' own doc comment on --exclude-dir).
+		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.IgnoreDirs, req.CaseSensitive, req.WholeWords, req.FirstHit)...)
 		return streamGrepLines(ctx, cmd, results)
 	case ContentGzip:
 		return listThenGrep(ctx, req, "*.gz", ModeGlob, false, "zgrep", func(f string) []string {

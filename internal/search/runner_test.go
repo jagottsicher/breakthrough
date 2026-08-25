@@ -246,6 +246,49 @@ func TestRunContentSearchGrep(t *testing.T) {
 	}
 }
 
+// TestRunContentSearchGrepAppliesIgnoreDirs pins a real user report: a
+// plain content search (no Filename term at all — nothing for
+// listThenGrep to narrow the file list with first, so this is the one
+// path that ever hands req.IgnoreDirs to GrepArgs directly — see its
+// own doc comment) used to walk right through an ignored subdirectory
+// as if IgnoreDirs had never been set, since nothing here ever passed
+// it to grep. A real subprocess invocation, not just an args-building
+// check (see TestGrepArgsIgnoreDirsAddsExcludeDirFlags for that) —
+// proving --exclude-dir actually does what its own name says on a
+// real grep, not just that this app asked for it.
+func TestRunContentSearchGrepAppliesIgnoreDirs(t *testing.T) {
+	requireTool(t, "grep")
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "development"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("hangman.go", "func main() {}\n")
+	write(filepath.Join("development", "hangman.go"), "func main() {}\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern:    "func main",
+		Scope:      dir,
+		Mode:       ModeKeyword,
+		Content:    ContentGrep,
+		IgnoreDirs: []string{"development"},
+	})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1 (development/ excluded): %+v", len(got), got)
+	}
+	if got[0].Path != filepath.Join(dir, "hangman.go") {
+		t.Errorf("got %+v, want the top-level hangman.go only, not development/hangman.go", got[0])
+	}
+}
+
 func TestRunContentSearchGrepRegex(t *testing.T) {
 	requireTool(t, "grep")
 	dir := t.TempDir()
