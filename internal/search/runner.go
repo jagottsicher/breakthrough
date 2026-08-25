@@ -78,7 +78,7 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 		return runFilenameSearchShallowFirst(ctx, req, results)
 	}
 
-	name, args, ok := filenameCommand(req)
+	name, args, ok := filenameCommand(req.Engine, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive, req.NonRecursive, req.FollowSymlinks)
 	if !ok {
 		return fmt.Errorf("locate: regex search isn't available on %s", runtime.GOOS)
 	}
@@ -120,9 +120,7 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 // compare per result is cheap enough that it isn't worth that
 // complexity.
 func runFilenameSearchShallowFirst(ctx context.Context, req Request, results chan<- Result) error {
-	shallow := req
-	shallow.NonRecursive = true
-	name, args, ok := filenameCommand(shallow)
+	name, args, ok := filenameCommand(req.Engine, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive, true, req.FollowSymlinks) // true: NonRecursive, the shallow pass
 	if !ok {
 		return fmt.Errorf("locate: regex search isn't available on %s", runtime.GOOS)
 	}
@@ -136,7 +134,7 @@ func runFilenameSearchShallowFirst(ctx context.Context, req Request, results cha
 	}
 
 	scope := filepath.Clean(req.Scope)
-	name, args, ok = filenameCommand(req) // the real request, still fully recursive
+	name, args, ok = filenameCommand(req.Engine, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive, req.NonRecursive, req.FollowSymlinks) // the real request, still fully recursive
 	if !ok {
 		return fmt.Errorf("locate: regex search isn't available on %s", runtime.GOOS)
 	}
@@ -148,12 +146,21 @@ func runFilenameSearchShallowFirst(ctx context.Context, req Request, results cha
 	})
 }
 
-func filenameCommand(req Request) (name string, args []string, ok bool) {
-	if req.Engine == EngineLocate {
-		a, ok := LocateArgs(runtime.GOOS, req.Pattern, req.Mode, req.CaseSensitive)
+// filenameCommand builds the actual command line for one Engine-driven
+// filename match — find or locate, depending on engine — against
+// pattern/mode/caseSensitive. Takes these as explicit parameters
+// rather than a Request directly: listThenGrep below needs to build
+// this same command for a *name-narrowing* pattern (Request.NamePattern/
+// NameMode/its own separate case-sensitivity), never Request.Pattern/
+// Mode itself (the content pattern, for that caller) — a single
+// Request-shaped signature couldn't serve both without a caller having
+// to fake up a second Request just to swap those three fields.
+func filenameCommand(engine Engine, scope, pattern string, mode Mode, ignoreDirs []string, caseSensitive, nonRecursive, followSymlinks bool) (name string, args []string, ok bool) {
+	if engine == EngineLocate {
+		a, ok := LocateArgs(runtime.GOOS, pattern, mode, caseSensitive)
 		return "locate", a, ok
 	}
-	return "find", FindArgs(runtime.GOOS, req.Scope, req.Pattern, req.Mode, req.IgnoreDirs, req.CaseSensitive, req.NonRecursive, req.FollowSymlinks), true
+	return "find", FindArgs(runtime.GOOS, scope, pattern, mode, ignoreDirs, caseSensitive, nonRecursive, followSymlinks), true
 }
 
 // underIgnoredDir reports whether path has any of ignoreDirs matching
@@ -184,13 +191,23 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	// NamePattern narrows a grep-backed content search to files matching
 	// it first (see Request's own doc comment on NamePattern) — checked
 	// ahead of the Content switch below since it changes ContentGrep's
-	// own strategy entirely (findThenGrep instead of one recursive grep
-	// call); ContentGzip/ContentZip already always go through
-	// findThenGrep for their own, unrelated reason (zgrep/zipgrep can't
-	// recurse at all — see findThenGrep's own doc comment), so
-	// NamePattern doesn't change anything for those two.
+	// own strategy entirely (listThenGrep instead of one recursive grep
+	// call over req.Scope directly); ContentGzip/ContentZip already
+	// always go through listThenGrep for their own, unrelated reason
+	// (zgrep/zipgrep can't recurse at all — see listThenGrep's own doc
+	// comment), so NamePattern doesn't change anything for those two.
+	//
+	// Only this — a NamePattern-narrowed (or archive) search — and a
+	// plain filename search (see runFilenameSearch) ever consult
+	// req.Engine at all: a *plain* content search below (Content ==
+	// ContentGrep, NamePattern empty) has no file list of its own to
+	// build in the first place — nothing for locate to narrow — so it
+	// always runs one live, recursive grep over req.Scope regardless of
+	// Engine, the same as it always has. Per the user's own explicit
+	// request: Engine only ever means something once there's an actual
+	// name-matching step for it to drive.
 	if req.NamePattern != "" && req.Content == ContentGrep {
-		return findThenGrep(ctx, req, req.NamePattern, req.NameMode, req.CaseSensitive, "grep", func(f string) []string {
+		return listThenGrep(ctx, req, req.NamePattern, req.NameMode, req.CaseSensitive, "grep", func(f string) []string {
 			return GrepArgs(req.Pattern, f, req.Mode, req.CaseSensitive, req.WholeWords, req.FirstHit)
 		}, results)
 	}
@@ -199,30 +216,32 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 		cmd := exec.CommandContext(ctx, "grep", GrepArgs(req.Pattern, req.Scope, req.Mode, req.CaseSensitive, req.WholeWords, req.FirstHit)...)
 		return streamGrepLines(ctx, cmd, results)
 	case ContentGzip:
-		return findThenGrep(ctx, req, "*.gz", ModeGlob, false, "zgrep", func(f string) []string {
+		return listThenGrep(ctx, req, "*.gz", ModeGlob, false, "zgrep", func(f string) []string {
 			return ZgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive, req.WholeWords, req.FirstHit)
 		}, results)
 	case ContentZip:
-		return findThenGrep(ctx, req, "*.zip", ModeGlob, false, "zipgrep", func(f string) []string {
+		return listThenGrep(ctx, req, "*.zip", ModeGlob, false, "zipgrep", func(f string) []string {
 			return ZipgrepArgs(req.Pattern, req.Mode, f, req.CaseSensitive, req.WholeWords, req.FirstHit)
 		}, results)
 	}
 	return nil
 }
 
-// findThenGrep finds every file under req.Scope matching namePattern
+// listThenGrep lists every file under req.Scope matching namePattern
 // (an archive extension glob for ContentGzip/ContentZip, or the user's
-// own NamePattern — see runContentSearch), then runs one tool
-// invocation per file found, streaming each one's matches as they're
-// found. Originally just for zgrep/zipgrep, neither of which supports
-// recursing a directory tree itself (see their own doc comments in
-// grep.go) — reused for a NamePattern-narrowed plain grep too, since
-// it's the exact same shape: find the candidates first, run the
-// content tool once per candidate rather than once across the whole
-// tree. A single file that fails to start (a corrupt archive, an odd
-// permission) is skipped rather than aborting the rest of the search:
-// unlike the top-level find/locate/grep call, this isn't the one
-// command the whole search depends on.
+// own NamePattern — see runContentSearch) via req.Engine — find or
+// locate, the exact same choice filenameCommand already makes for a
+// plain filename search, reused here rather than hardcoding find —
+// then runs one tool invocation per file found, streaming each one's
+// matches as they're found. Originally just for zgrep/zipgrep, neither
+// of which supports recursing a directory tree itself (see their own
+// doc comments in grep.go) — reused for a NamePattern-narrowed plain
+// grep too, since it's the exact same shape: list the candidates
+// first, run the content tool once per candidate rather than once
+// across the whole tree. A single file that fails to start (a corrupt
+// archive, an odd permission) is skipped rather than aborting the rest
+// of the search: unlike the top-level find/locate/grep call, this
+// isn't the one command the whole search depends on.
 //
 // nameCaseSensitive is separate from req.CaseSensitive (used for the
 // content pattern itself, passed to buildArgs): for the archive-glob
@@ -231,9 +250,21 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 // NamePattern it should follow the same toggle the user actually
 // checked, so callers pass it explicitly rather than this func
 // assuming either default.
-func findThenGrep(ctx context.Context, req Request, namePattern string, nameMode Mode, nameCaseSensitive bool, tool string, buildArgs func(file string) []string, results chan<- Result) error {
-	findCmd := exec.CommandContext(ctx, "find", FindArgs(runtime.GOOS, req.Scope, namePattern, nameMode, req.IgnoreDirs, nameCaseSensitive, req.NonRecursive, req.FollowSymlinks)...)
-	return streamNullSeparated(findCmd, func(file string) bool {
+func listThenGrep(ctx context.Context, req Request, namePattern string, nameMode Mode, nameCaseSensitive bool, tool string, buildArgs func(file string) []string, results chan<- Result) error {
+	name, args, ok := filenameCommand(req.Engine, req.Scope, namePattern, nameMode, req.IgnoreDirs, nameCaseSensitive, req.NonRecursive, req.FollowSymlinks)
+	if !ok {
+		return fmt.Errorf("locate: regex search isn't available on %s", runtime.GOOS)
+	}
+	listCmd := exec.CommandContext(ctx, name, args...)
+	return streamNullSeparated(listCmd, func(file string) bool {
+		// locate has no prune step of its own — its results come from a
+		// prebuilt index, not a live walk — so it needs the exact same
+		// client-side IgnoreDirs filter runFilenameSearch's own locate
+		// branch already applies, for the same reason (see its own doc
+		// comment).
+		if req.Engine == EngineLocate && underIgnoredDir(file, req.IgnoreDirs) {
+			return true // keep going, just filtered out
+		}
 		if ctx.Err() != nil {
 			return false
 		}
