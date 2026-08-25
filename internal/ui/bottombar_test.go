@@ -460,6 +460,35 @@ func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
 	}
 }
 
+// TestRunEditorSkipsReloadWhileSearchResultsShowing pins the reload
+// guard runEditor gained alongside the search-results-open-in-editor
+// feature (see Panel.onOpenSearchResult's own doc comment):
+// r.panel.path stays whatever real directory was current before the
+// search that produced the results being edited ever ran, completely
+// unrelated to whatever file was actually opened, so reloading it
+// would both do nothing useful and — since Panel.load always exits
+// search mode (see its own doc comment) — silently discard the results
+// themselves the moment the editor closes. searchMode staying true
+// here is exactly what proves no reload happened: app.Suspend never
+// actually runs the editor in this environment (see
+// TestCaptureStatusBarMouseEditClickRunsEditAction's own doc comment
+// just above), so this pins runEditor's own post-Suspend guard
+// specifically, not anything about the editor invocation itself.
+func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.showSearchResults()
+
+	r.runEditor(filepath.Join(dir, "apple.txt"), 0)
+
+	if !r.panel.searchMode {
+		t.Error("searchMode = false after runEditor while search results were showing, want still true (no reload)")
+	}
+}
+
 // TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks is
 // TestCaptureStatusBarMouseEditClickRunsEditAction's counterpart with a
 // double-width (CJK) username ahead of the buttons on the same row —

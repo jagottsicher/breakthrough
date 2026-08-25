@@ -381,7 +381,7 @@ func (r *Root) editCurrentEntry() {
 	if !ok {
 		return
 	}
-	r.runEditor(path)
+	r.runEditor(path, 0)
 }
 
 // renameCurrentEntry is the Rename button/Ctrl+R's actual action — the
@@ -706,23 +706,57 @@ func selectedEditor() string {
 }
 
 // runEditor suspends the TUI (see runShellCommand's own doc comment for
-// why) and runs editorCommand on path. Run through the shell (via "$1",
-// not a literal exec argument) rather than exec'd directly: $VISUAL/
-// $EDITOR can legitimately be more than one word (e.g. "emacsclient
-// -t"), and only the shell can be trusted to split that the way the
-// user intended while still passing path through exactly as typed,
-// spaces and all.
-func (r *Root) runEditor(path string) {
+// why) and runs editorCommand on path, at line if it's > 0 (see
+// Panel.activateRow's own searchMode branch — a content-search match's
+// own line number, 0 for every other caller, including
+// editCurrentEntry). Run through the shell (via "$@", not a literal
+// exec argument) rather than exec'd directly: $VISUAL/$EDITOR can
+// legitimately be more than one word (e.g. "emacsclient -t"), and only
+// the shell can be trusted to split that the way the user intended
+// while still passing each of its own remaining arguments through
+// exactly as given, spaces and all.
+//
+// A line is passed as a leading "+N" argument, vi/vim/nvim/nano/
+// emacs' own shared convention for "open already positioned at line
+// N" — the overwhelming majority of terminal $EDITOR values in this
+// app's own POSIX-focused audience (see CLAUDE.md's own target
+// platforms) already understand it; there's no attempt at a per-editor
+// lookup table for anything fancier (e.g. VS Code's own "-g file:N")
+// — an editor that doesn't recognize "+N" is no worse off than not
+// jumping to a line at all, just a leading argument it happens to
+// ignore or, at worst, visibly complain about once, on-screen, exactly
+// where the user would see and understand why.
+//
+// Skips its own usual post-edit reload if search results are currently
+// showing (see Panel.searchMode): r.panel.path stays whatever real
+// directory was current before the search that produced them ran (see
+// Panel.showSearchResults' own doc comment), completely unrelated to
+// path here, so reloading it would be both useless (refreshing a
+// directory the file being edited isn't even in) and would silently
+// discard the results themselves (Panel.load always exits search mode
+// — see its own doc comment) the moment the editor closes — the
+// opposite of the "stay in the results, jump straight back into the
+// editor for the next match" flow this exists for. Editing a real row
+// still refreshes the real directory afterward, unchanged.
+func (r *Root) runEditor(path string, line int) {
 	var runErr error
 	r.app.Suspend(func() {
-		script := editorCommand() + ` "$1"`
-		cmd := exec.Command(userShell(), "-c", script, "sh", path)
+		script := editorCommand() + ` "$@"`
+		args := []string{"-c", script, "sh"}
+		if line > 0 {
+			args = append(args, fmt.Sprintf("+%d", line))
+		}
+		args = append(args, path)
+		cmd := exec.Command(userShell(), args...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
 	})
 
 	if runErr != nil {
 		r.showError(fmt.Errorf("edit %s: %w", path, runErr))
+		return
+	}
+	if r.panel.searchMode {
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))

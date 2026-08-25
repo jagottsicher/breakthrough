@@ -546,6 +546,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// to build here any more.
 	panel.onSearchEscape = r.backToSearchForm
 
+	// A content-search match opens in the configured editor, at its
+	// own matched line, instead of just jumping to it (see
+	// Panel.onOpenSearchResult's own doc comment).
+	panel.onOpenSearchResult = r.runEditor
+
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's

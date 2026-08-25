@@ -211,6 +211,15 @@ type Panel struct {
 	// nil (a no-op) in tests that construct a Panel without wiring Root
 	// to it at all.
 	onSearchEscape func()
+
+	// onOpenSearchResult reports activateRow (Enter/left-click) on a
+	// content-search result specifically (see rowRef.searchLine) — Root
+	// wires this to opening the file in the configured editor, at that
+	// line, per the user's own explicit request that a content match
+	// open the file instead of just jumping to it in its own real
+	// directory the way a filename match still does (see activateRow's
+	// own searchMode branch). Left nil the same as onSearchEscape.
+	onOpenSearchResult func(path string, line int)
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -259,6 +268,13 @@ type rowRef struct {
 	// columns (see addRow/formatSizeCell/formatModTimeCell).
 	size    int64
 	modTime time.Time
+
+	// searchLine is > 0 for a content-search result row specifically
+	// (see searchResultEntry/renderSearchEntries) — the matched line
+	// number, read by activateRow's own searchMode branch to open the
+	// file there instead of just jumping to it. Always 0 for every
+	// other row: a real directory entry, or a filename-search result.
+	searchLine int
 }
 
 // NewPanel creates a Panel rooted at path, themed per theme (see
@@ -546,6 +562,7 @@ func (p *Panel) showSearchResults() {
 type searchResultEntry struct {
 	fsops.Entry
 	display string
+	line    int // > 0 for a content match — see rowRef.searchLine's own doc comment
 }
 
 // appendSearchResult adds one streamed result — classified via
@@ -570,7 +587,7 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	if res.Line > 0 {
 		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
 	}
-	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display})
+	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display, line: res.Line})
 	p.renderSearchEntries()
 }
 
@@ -648,6 +665,7 @@ func (p *Panel) renderSearchEntries() {
 			mode:       e.Mode,
 			size:       e.Size,
 			modTime:    e.ModTime,
+			searchLine: e.line,
 		})
 		if p.selected[e.Name] {
 			p.setChecked(row, true)
@@ -1324,18 +1342,29 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // TableCell.ClickedFunc instead (see addRow), which returns true
 // specifically so this never also runs for it.
 //
-// While showing search results (searchMode): a result is never "this
-// panel's own directory" the way a real row's target always is, so
-// there's nothing to navigate *into* — instead, for a file or a
-// directory result alike, this leaves search mode entirely and jumps
-// to the result's real location (see navigateAndSelect), the same
-// "Go to file/folder" meaning left-click on a result has always had.
+// While showing search results (searchMode): a content-search match
+// (ref.searchLine > 0 — see rowRef's own doc comment) opens the file
+// in the configured editor, at that line, via onOpenSearchResult —
+// per the user's own explicit request, and deliberately without
+// leaving search mode: unlike a plain jump, this reads as "peek at
+// this match," and a content search often has several, each worth
+// checking in turn without losing the list between them. Every other
+// result — a filename match, or a content match with onOpenSearchResult
+// left nil — is never "this panel's own directory" the way a real
+// row's target always is, so there's nothing to navigate *into*;
+// instead this leaves search mode entirely and jumps to the result's
+// real location (see navigateAndSelect), the same "Go to file/folder"
+// meaning left-click on a result has always had otherwise.
 func (p *Panel) activateRow(row int) {
 	ref, ok := p.rowRef(row)
 	if !ok {
 		return
 	}
 	if p.searchMode {
+		if ref.searchLine > 0 && p.onOpenSearchResult != nil {
+			p.onOpenSearchResult(ref.path, ref.searchLine)
+			return
+		}
 		p.searchMode = false
 		p.reportError(p.navigateAndSelect(ref.path))
 		return
