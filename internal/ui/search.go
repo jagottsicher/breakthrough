@@ -1169,13 +1169,21 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 }
 
 // renderSearchStatus paints the panel's own header status line (see
-// Panel.setSearchStatus): the current animation frame plus wherever the
-// search actually is right now — searchCurrentPos, live from
-// search.Request.OnProgress (see runSearch), whenever there is one;
-// falling back to whatever directory streamSearchResults last saw a
-// match in (searchLastDir) once progress has nothing to show (locate,
-// or the search has already finished), and finally to Start at's own
-// value (searchStartDir) until either one has anything at all.
+// Panel.setSearchStatus): the current animation frame, the Esc hint,
+// then wherever the search actually is right now — searchCurrentPos,
+// live from search.Request.OnProgress (see runSearch), whenever there
+// is one; falling back to whatever directory streamSearchResults last
+// saw a match in (searchLastDir) once progress has nothing to show
+// (locate, or the search has already finished), and finally to Start
+// at's own value (searchStartDir) until either one has anything at
+// all.
+//
+// Goes through setSearchStatusLive, not the plain setSearchStatus every
+// other caller uses (see its own doc comment): this line's own last
+// part (dir) changes length on every single live update — a real user
+// report that a trailing hint visibly jumped left and right along with
+// it, distracting enough to be worse than not having a fixed position
+// for it at all.
 func (r *Root) renderSearchStatus() {
 	frame := hashAnimationFrames[r.searchAnimFrame%len(hashAnimationFrames)]
 	dir := r.searchCurrentPos
@@ -1185,21 +1193,40 @@ func (r *Root) renderSearchStatus() {
 	if dir == "" {
 		dir = r.searchStartDir
 	}
-	r.setSearchStatus(frame + " " + dir)
+	r.setSearchStatusLive(frame, dir)
 }
 
 // searchEscHint reminds the user, regardless of a search's own outcome
 // (still running, done, no matches, or the non-existent-Start-at error
 // — see showSearchError) that Escape goes back to the form — per the
-// user's own explicit request. setSearchStatus is the one place the
-// panel's own header status text actually gets set while search
-// results are showing (see its two call sites: here and
-// streamSearchResults' own final status — showSearchError goes through
-// this too), so the hint can never be left off some future third one.
+// user's own explicit request. setSearchStatus/setSearchStatusLive are
+// the only two places the panel's own header status text actually gets
+// set while search results are showing (see their own doc comments),
+// so the hint can never be left off some future third one, whichever
+// of the two it ends up using.
 const searchEscHint = "(Esc: back to search)"
 
+// setSearchStatus sets the panel's own header status to text, with
+// searchEscHint appended at the end — streamSearchResults' own final
+// "Done — N found" and showSearchError's own error message, both a
+// single, one-time value with nothing long and live-changing after it,
+// so a trailing hint never visibly moves once it's shown (see
+// renderSearchStatus's own doc comment on why its own live line needs
+// setSearchStatusLive instead).
 func (r *Root) setSearchStatus(text string) {
 	r.panel.setSearchStatus(strings.TrimSpace(text + " " + searchEscHint))
+}
+
+// setSearchStatusLive is renderSearchStatus's own variant: prefix (the
+// animation frame) and detail (dir) are composed with searchEscHint
+// sandwiched between them — "prefix hint detail" — rather than
+// appended at the very end the way setSearchStatus does, per the
+// user's own explicit request: detail changes length on every live
+// update, so keeping the hint right after the (fixed-width) animation
+// frame instead keeps its own on-screen position stable regardless of
+// how long detail currently is.
+func (r *Root) setSearchStatusLive(prefix, detail string) {
+	r.panel.setSearchStatus(strings.TrimSpace(prefix + " " + searchEscHint + " " + detail))
 }
 
 // noSearchResultsText is folded into the final status line (see
