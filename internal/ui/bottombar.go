@@ -28,6 +28,7 @@ const (
 	statusActionToggleHidden
 	statusActionOptions
 	statusActionSearch
+	statusActionHelp
 )
 
 // statusBarSpan is one clickable region within the status bar's text —
@@ -138,6 +139,8 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	button("^F Search", statusActionSearch)
 	write("  ")
 	button("^O Options", statusActionOptions)
+	write("  ")
+	button("F1 Help", statusActionHelp)
 	sep()
 	write(clockText())
 
@@ -360,6 +363,8 @@ func (r *Root) runStatusBarAction(action statusBarAction) {
 		r.openOptions()
 	case statusActionSearch:
 		r.openSearch()
+	case statusActionHelp:
+		r.openHelp()
 	}
 }
 

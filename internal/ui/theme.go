@@ -112,18 +112,46 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.optionsList.SetMainTextColor(theme.Text)
 	}
 
-	if r.searchForm != nil {
-		r.searchForm.SetBackgroundColor(theme.AccentBackground)
-		r.searchForm.SetLabelColor(theme.Text)
-		r.searchForm.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.searchForm.SetFieldTextColor(theme.Text)
-		r.searchForm.SetButtonBackgroundColor(theme.AccentBackground)
-		r.searchForm.SetButtonTextColor(theme.Text)
-		r.searchScopeField.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.searchScopeField.SetFieldTextColor(theme.Text)
-		r.searchScopeField.SetLabelColor(theme.Text)
+	if r.searchTop != nil {
+		r.searchTop.SetBackgroundColor(theme.AccentBackground)
+		r.searchLeft.SetBackgroundColor(theme.AccentBackground)
+		r.searchRight.SetBackgroundColor(theme.AccentBackground)
+		r.searchEditField.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.searchEditField.SetBackgroundColor(theme.FocusedBackground)
+		r.searchEditField.SetFieldTextColor(theme.Text)
+		r.searchButtons.SetBackgroundColor(theme.AccentBackground)
+		r.searchCancelBtn.SetBackgroundColor(theme.AccentBackground)
+		r.searchCancelBtn.SetLabelColor(theme.Text)
+		r.searchSearchBtn.SetBackgroundColor(theme.AccentBackground)
+		r.searchSearchBtn.SetLabelColor(theme.Text)
+		r.searchResultsView.SetBackgroundColor(theme.AccentBackground)
 		r.searchList.SetBackgroundColor(theme.AccentBackground)
 		r.searchList.SetMainTextColor(theme.Text)
+		r.searchStatus.SetBackgroundColor(theme.AccentBackground)
+		r.searchStatus.SetTextColor(theme.Text)
+		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
+	}
+
+	if r.dirPicker != nil {
+		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerHeader.SetTextColor(theme.Text)
+		r.dirPickerList.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerList.SetMainTextColor(theme.Text)
+		r.dirPickerSelectBtn.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerSelectBtn.SetLabelColor(theme.Text)
+		r.dirPickerCancelBtn.SetBackgroundColor(theme.AccentBackground)
+		r.dirPickerCancelBtn.SetLabelColor(theme.Text)
+	}
+
+	if r.helpView != nil {
+		r.helpView.SetBackgroundColor(theme.AccentBackground)
+		r.helpView.SetTextColor(theme.Text)
+	}
+
+	if r.searchResultMenu != nil {
+		r.searchResultMenu.SetBackgroundColor(theme.AccentBackground)
+		r.searchResultMenu.SetMainTextColor(theme.Text)
 	}
 
 	r.panel.applyTheme(theme)
