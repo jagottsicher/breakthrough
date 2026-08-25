@@ -532,6 +532,14 @@ func (r *Root) rerenderSearchDialog() {
 	right.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
 	right.newline()
 	right.choice(r.searchFirstHit, "First hit", func() { r.searchFirstHit = !r.searchFirstHit })
+	right.newline()
+	// search.Request.IncludeCompressed — see its own doc comment. Own
+	// checkbox in Content's own column, not Filename's: unlike Include
+	// Archives (member *names*), this searches decompressed *content*,
+	// via the matching grep wrapper (zgrep/bzgrep/xzgrep/zipgrep) —
+	// exactly the formats grep itself has a dedicated wrapper for, per
+	// the user's own explicit design decision.
+	right.choice(r.searchIncludeCompressed, "Include compressed files", func() { r.searchIncludeCompressed = !r.searchIncludeCompressed })
 	r.searchRight.SetText(right.b.String())
 }
 
@@ -1065,16 +1073,17 @@ func (r *Root) runSearch() {
 	}
 
 	req := search.Request{
-		Scope:           scope,
-		Engine:          engine,
-		Content:         contentMode,
-		IgnoreDirs:      ignoreDirs,
-		CaseSensitive:   r.searchCaseSensitive,
-		NonRecursive:    !r.searchRecursive,
-		FollowSymlinks:  r.searchFollowSymlinks,
-		WholeWords:      r.searchWholeWords,
-		FirstHit:        r.searchFirstHit,
-		IncludeArchives: contentMode == search.ContentNone && r.searchIncludeArchives,
+		Scope:             scope,
+		Engine:            engine,
+		Content:           contentMode,
+		IgnoreDirs:        ignoreDirs,
+		CaseSensitive:     r.searchCaseSensitive,
+		NonRecursive:      !r.searchRecursive,
+		FollowSymlinks:    r.searchFollowSymlinks,
+		WholeWords:        r.searchWholeWords,
+		FirstHit:          r.searchFirstHit,
+		IncludeArchives:   contentMode == search.ContentNone && r.searchIncludeArchives,
+		IncludeCompressed: contentMode != search.ContentNone && r.searchIncludeCompressed,
 	}
 	// Content == ContentNone: Pattern is the filename match itself, run
 	// through Engine directly. Otherwise: Pattern is what grep actually

@@ -114,20 +114,34 @@ const (
 // Meaningless for EngineLocate: locate answers entirely from a
 // prebuilt index (see LocateDatabaseCaveat), with no live traversal of
 // its own to report progress on at all.
+//
+// IncludeCompressed additionally searches the decompressed content of
+// every .gz/.bz2/.xz/.zip file found under Scope, via the matching
+// grep wrapper (zgrep/bzgrep/xzgrep/zipgrep — see internal/search's own
+// compressed.go) — a *plain* content search only (Content == ContentGrep,
+// NamePattern empty, mirroring the exact condition runContentSearch
+// already uses for a plain grep -r over Scope); meaningless otherwise.
+// Deliberately scoped to formats grep itself has a dedicated wrapper
+// for, not archive *containers* like tar.gz/tar.bz2/tar.xz — those
+// hold multiple member files behind one compressed stream, which none
+// of zgrep/bzgrep/xzgrep can meaningfully search into (see
+// IncludeArchives for member *names* instead — content is a
+// separate, larger feature this doesn't attempt).
 type Request struct {
-	Pattern         string
-	NamePattern     string
-	NameMode        Mode
-	Scope           string
-	Mode            Mode
-	Engine          Engine
-	Content         ContentMode
-	IgnoreDirs      []string
-	CaseSensitive   bool
-	NonRecursive    bool
-	FollowSymlinks  bool
-	WholeWords      bool
-	FirstHit        bool
-	IncludeArchives bool
-	OnProgress      func(path string)
+	Pattern           string
+	NamePattern       string
+	NameMode          Mode
+	Scope             string
+	Mode              Mode
+	Engine            Engine
+	Content           ContentMode
+	IgnoreDirs        []string
+	CaseSensitive     bool
+	NonRecursive      bool
+	FollowSymlinks    bool
+	WholeWords        bool
+	FirstHit          bool
+	IncludeArchives   bool
+	IncludeCompressed bool
+	OnProgress        func(path string)
 }
