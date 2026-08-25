@@ -220,6 +220,16 @@ type Panel struct {
 	// directory the way a filename match still does (see activateRow's
 	// own searchMode branch). Left nil the same as onSearchEscape.
 	onOpenSearchResult func(path string, line int)
+
+	// onExitSearchResults reports activateRow leaving search mode by
+	// jumping to a filename (or archive-member) match's own real
+	// location — every case besides onOpenSearchResult's own "stay in
+	// search mode" one above. Root wires this to cancelSearch: a real
+	// user report — clicking a result to jump to it, then watching the
+	// still-running search silently overwrite the panel with search
+	// results again moments later, because nothing had actually told it
+	// to stop. Left nil the same as onSearchEscape/onOpenSearchResult.
+	onExitSearchResults func()
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -1404,6 +1414,9 @@ func (p *Panel) activateRow(row int) {
 			return
 		}
 		p.searchMode = false
+		if p.onExitSearchResults != nil {
+			p.onExitSearchResults()
+		}
 		p.reportError(p.navigateAndSelect(ref.path))
 		return
 	}
