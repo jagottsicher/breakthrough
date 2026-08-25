@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -10,23 +11,62 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // TestMain isolates every test in this package from whatever the real
-// machine's $HISTFILE/~/.bash_history actually contains — Root now
-// loads real bash history at construction (see historyFilePath/
-// loadBashHistory), and no test here should depend on, or be thrown off
-// by, this developer's or CI runner's own command history. Pointed at a
-// path that doesn't exist rather than a real (even if temporary) file:
-// loadBashHistory already treats "doesn't exist" as "start empty", the
-// same as a first run would. Tests that specifically exercise
-// runShellCommand — the only thing that ever writes to this path (see
-// appendBashHistory) — additionally isolate themselves with their own
-// t.TempDir()-scoped HISTFILE, so they can't contaminate each other
-// either, regardless of run order.
+// machine's own state might actually be:
+//
+//   - $HISTFILE/~/.bash_history: Root loads real bash history at
+//     construction (see historyFilePath/loadBashHistory), and no test
+//     here should depend on, or be thrown off by, this developer's or CI
+//     runner's own command history. Pointed at a path that doesn't exist
+//     rather than a real (even if temporary) file: loadBashHistory
+//     already treats "doesn't exist" as "start empty", the same as a
+//     first run would. Tests that specifically exercise
+//     runShellCommand — the only thing that ever writes to this path
+//     (see appendBashHistory) — additionally isolate themselves with
+//     their own t.TempDir()-scoped HISTFILE (see isolateHistoryFile), so
+//     they can't contaminate each other either, regardless of run order.
+//   - /etc/breakthrough and ~/.config/breakthrough: Root now also loads
+//     on-disk settings and color schemes at construction (see
+//     loadInitialSettings in theme.go) — the same class of problem, and
+//     the same fix: loadInitialSettings is a package-level var, reset
+//     here to a fixed DefaultSettings()/DefaultTheme() (via
+//     LoadColorSchemes("", ""), which still always includes "default" —
+//     see its own doc comment) rather than anything actually read from
+//     disk. Tests that exercise applyColorScheme's own persistence (the
+//     one thing that writes anywhere here) isolate themselves further via
+//     isolateUserConfigFile.
 func TestMain(m *testing.M) {
 	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
+
+	loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
+		return config.DefaultSettings(), config.LoadColorSchemes("", ""), nil
+	}
+	userConfigFilePath = func() string {
+		return filepath.Join(os.TempDir(), "breakthrough-test-config-does-not-exist")
+	}
+
 	os.Exit(m.Run())
+}
+
+// isolateUserConfigFile points userConfigFilePath (see applyColorScheme
+// in settings.go) at a fresh path within t's own TempDir for the
+// duration of t — TestMain's own override already points it somewhere
+// that doesn't exist, safe for tests that only read it, but a test that
+// actually writes through it needs its own isolated path, the same
+// reason isolateHistoryFile exists alongside TestMain's own HISTFILE
+// override. Returns the path, for a test that wants to inspect the
+// written file afterward.
+func isolateUserConfigFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config")
+	original := userConfigFilePath
+	userConfigFilePath = func() string { return path }
+	t.Cleanup(func() { userConfigFilePath = original })
+	return path
 }
 
 // t.Setenv (not os.Setenv/os.Unsetenv) throughout: it restores the
@@ -35,6 +75,7 @@ func TestMain(m *testing.M) {
 // `!= ""` checks are concerned, so it doubles as this test's way of
 // clearing a variable mid-test too.
 func TestEditorCommandPrecedence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // isolate from a real ~/.selected_editor on the machine running this test — see TestSelectedEditorParsesRealFileFormat
 	t.Setenv("VISUAL", "visual-editor")
 	t.Setenv("EDITOR", "editor-editor")
 	if got := editorCommand(); got != "visual-editor" {
@@ -48,7 +89,59 @@ func TestEditorCommandPrecedence(t *testing.T) {
 
 	t.Setenv("EDITOR", "")
 	if got := editorCommand(); got != "vi" {
-		t.Errorf("editorCommand() = %q, want the last-resort fallback %q", got, "vi")
+		t.Errorf("editorCommand() = %q, want the last-resort fallback %q (no ~/.selected_editor in this isolated HOME)", got, "vi")
+	}
+}
+
+// TestEditorCommandPrefersSelectedEditorOverFallback pins select-editor(1)'s
+// own documented precedence (see editorCommand's own doc comment):
+// SELECTED_EDITOR wins over the hardcoded "vi" fallback, but VISUAL/
+// EDITOR still win over it.
+func TestEditorCommandPrefersSelectedEditorOverFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	writeSelectedEditor(t, home, "/usr/bin/nano")
+
+	if got := editorCommand(); got != "/usr/bin/nano" {
+		t.Errorf("editorCommand() = %q, want the SELECTED_EDITOR value %q", got, "/usr/bin/nano")
+	}
+
+	t.Setenv("EDITOR", "editor-editor")
+	if got := editorCommand(); got != "editor-editor" {
+		t.Errorf("editorCommand() = %q, want EDITOR to still win over SELECTED_EDITOR (%q)", got, "editor-editor")
+	}
+}
+
+// TestSelectedEditorParsesRealFileFormat pins selectedEditor's parser
+// against select-editor(1)'s own real, observed output format (see its
+// own doc comment) — a leading comment line, then the quoted assignment.
+func TestSelectedEditorParsesRealFileFormat(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeSelectedEditor(t, home, "/usr/bin/vim.basic")
+
+	if got := selectedEditor(); got != "/usr/bin/vim.basic" {
+		t.Errorf("selectedEditor() = %q, want %q", got, "/usr/bin/vim.basic")
+	}
+}
+
+func TestSelectedEditorMissingFileIsEmpty(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if got := selectedEditor(); got != "" {
+		t.Errorf("selectedEditor() = %q, want \"\" with no ~/.selected_editor present", got)
+	}
+}
+
+// writeSelectedEditor writes home/.selected_editor in select-editor(1)'s
+// own real format (see selectedEditor's own doc comment) — verified
+// against its actual source and a live example file, not guessed.
+func writeSelectedEditor(t *testing.T, home, editor string) {
+	t.Helper()
+	content := "# Generated by /usr/bin/select-editor\nSELECTED_EDITOR=\"" + editor + "\"\n"
+	if err := os.WriteFile(filepath.Join(home, ".selected_editor"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -83,20 +176,150 @@ func TestClockTextFormat(t *testing.T) {
 	}
 }
 
-// TestDfSummaryReturnsNonEmptyLine pins that dfSummary either returns a
-// real df data line for a real directory, or its own "unavailable"
-// fallback — never empty, never just the header row misread as data.
-func TestDfSummaryReturnsNonEmptyLine(t *testing.T) {
-	got := dfSummary(t.TempDir())
-	if strings.TrimSpace(got) == "" {
-		t.Error("dfSummary should never return an empty string")
+// TestFetchDiskUsageRealFilesystem runs the real df binary against a
+// real, if throwaway, directory — sanity-checking shape (non-negative
+// values, a 0-100 percent) rather than exact numbers, which depend on
+// whatever this machine's own disk state happens to be.
+func TestFetchDiskUsageRealFilesystem(t *testing.T) {
+	requireCommand(t, "df")
+	u, ok := fetchDiskUsage(t.TempDir())
+	if !ok {
+		t.Fatal("fetchDiskUsage should succeed against a real, existing directory")
+	}
+	if u.usedBytes < 0 || u.availBytes < 0 || u.usedInodes < 0 || u.availInodes < 0 {
+		t.Errorf("negative usage: %+v", u)
+	}
+	if u.usePercent < 0 || u.usePercent > 100 || u.inodePercent < 0 || u.inodePercent > 100 {
+		t.Errorf("percent out of [0,100]: %+v", u)
 	}
 }
 
-// TestBuildStatusBarSpansLocateButtons pins that each of the three
-// button spans in buildStatusBar's output actually covers that button's
-// own rendered label, and nothing else — the click-routing tests below
-// rely on this being right.
+// TestParseDfDataLine pins the field layout against real df output
+// captured on this machine (GNU df, df -k and df -i) plus a simulated
+// BSD-style wrapped line (Filesystem name on its own line, so the data
+// line itself starts one field short) — parseDfDataLine indexes from
+// the end specifically so that second case still works.
+func TestParseDfDataLine(t *testing.T) {
+	tests := []struct {
+		name        string
+		line        string
+		wantUsed    int64
+		wantAvail   int64
+		wantPercent int
+	}{
+		{
+			name:        "GNU df -k",
+			line:        "/dev/md0       480149504 454345216  1782272  97% /",
+			wantUsed:    454345216,
+			wantAvail:   1782272,
+			wantPercent: 97,
+		},
+		{
+			name:        "GNU df -i",
+			line:        "/dev/md0        30515200 1316665 29198535    5% /",
+			wantUsed:    1316665,
+			wantAvail:   29198535,
+			wantPercent: 5,
+		},
+		{
+			name:        "wrapped Filesystem name (BSD-style, own line above)",
+			line:        "        480149504 454345216  1782272  97% /",
+			wantUsed:    454345216,
+			wantAvail:   1782272,
+			wantPercent: 97,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			used, avail, percent, ok := parseDfDataLine(tt.line)
+			if !ok {
+				t.Fatalf("parseDfDataLine(%q) ok = false, want true", tt.line)
+			}
+			if used != tt.wantUsed || avail != tt.wantAvail || percent != tt.wantPercent {
+				t.Errorf("parseDfDataLine(%q) = (%d, %d, %d), want (%d, %d, %d)",
+					tt.line, used, avail, percent, tt.wantUsed, tt.wantAvail, tt.wantPercent)
+			}
+		})
+	}
+}
+
+func TestParseDfDataLineMalformed(t *testing.T) {
+	for _, line := range []string{"", "too few fields", "not numbers at all here really"} {
+		if _, _, _, ok := parseDfDataLine(line); ok {
+			t.Errorf("parseDfDataLine(%q) ok = true, want false", line)
+		}
+	}
+}
+
+func TestDiskUsageWarnColor(t *testing.T) {
+	tests := []struct {
+		percent int
+		want    tcell.Color
+	}{
+		{0, tcell.ColorDefault},
+		{79, tcell.ColorDefault},
+		{80, tcell.ColorOrange},
+		{89, tcell.ColorOrange},
+		{90, tcell.ColorRed},
+		{100, tcell.ColorRed},
+	}
+	for _, tt := range tests {
+		if got := diskUsageWarnColor(tt.percent); got != tt.want {
+			t.Errorf("diskUsageWarnColor(%d) = %v, want %v", tt.percent, got, tt.want)
+		}
+	}
+}
+
+func TestFormatUsagePercentColorsAboveThresholds(t *testing.T) {
+	if got := formatUsagePercent(50); got != "50%" {
+		t.Errorf("formatUsagePercent(50) = %q, want plain %q (no warning)", got, "50%")
+	}
+	got := formatUsagePercent(95)
+	if !strings.Contains(got, "95%") || !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "[-]") {
+		t.Errorf("formatUsagePercent(95) = %q, want a color-tagged \"95%%\"", got)
+	}
+}
+
+func TestHumanCount(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"},
+		{512, "512"},
+		{1024, "1.0K"},
+		{1536, "1.5K"},
+		{1316665, "1.3M"},
+	}
+	for _, tt := range tests {
+		if got := humanCount(tt.n); got != tt.want {
+			t.Errorf("humanCount(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
+	u := diskUsage{usedBytes: 1024, availBytes: 2048, usedInodes: 10, availInodes: 20, usePercent: 50, inodePercent: 50}
+	if got := diskUsageText(u); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+		t.Errorf("diskUsageText(%+v) = %q, want it labeled with \"Disk\"/\"used\"/\"free\"", u, got)
+	}
+	if got := inodeUsageText(u); !strings.HasPrefix(got, "Inodes ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+		t.Errorf("inodeUsageText(%+v) = %q, want it labeled with \"Inodes\"/\"used\"/\"free\"", u, got)
+	}
+}
+
+// requireCommand skips t unless name is on $PATH.
+func requireCommand(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("%s not available in this environment: %v", name, err)
+	}
+}
+
+// TestBuildStatusBarSpansLocateButtons pins that each of the four button
+// spans in buildStatusBar's output actually covers that button's own
+// rendered label, and nothing else — the click-routing tests below rely
+// on this being right.
 func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -111,6 +334,9 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionEdit:         "^E Edit",
 		statusActionRename:       "^R Rename",
 		statusActionToggleHidden: "^G Hidden",
+		statusActionSearch:       "^F Find",
+		statusActionOptions:      "^O Options",
+		statusActionHelp:         "F1 Help",
 	}
 	found := map[statusBarAction]bool{}
 	for _, s := range spans {
@@ -138,6 +364,48 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 	}
 }
 
+// TestBuildStatusBarSpansAccountForWideCharacters pins the fix for the
+// user's own report: a current username containing double-width (e.g.
+// CJK) characters must still leave every button span's start column at
+// that button's real display width offset, not short by however many
+// extra columns those characters occupy beyond their rune count (2
+// runes, 4 terminal columns for "文档"). dfSummary shells out to the
+// real, platform-specific df, so its output length isn't fixed across
+// machines — the expected column is derived from the returned text
+// itself via tview.TaggedStringWidth (the same measure buildStatusBar
+// now uses), not a hardcoded offset.
+func TestBuildStatusBarSpansAccountForWideCharacters(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.currentUser = "文档"
+
+	text, spans := r.buildStatusBar()
+
+	idx := strings.Index(text, "^E Edit")
+	if idx < 0 {
+		t.Fatalf("status bar text %q doesn't contain the Edit button label", text)
+	}
+	wantStart := tview.TaggedStringWidth(text[:idx])
+
+	var editSpan statusBarSpan
+	found := false
+	for _, s := range spans {
+		if s.action == statusActionEdit {
+			editSpan, found = s, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("no span for statusActionEdit")
+	}
+	if editSpan.startCol != wantStart {
+		t.Errorf("edit span startCol = %d, want %d (real display width of %q, not its rune count)", editSpan.startCol, wantStart, text[:idx])
+	}
+}
+
 // clickStatusBar simulates a real left-click on the status bar at the
 // given column, the same way capturePropertiesMouse's own tests draw a
 // real screen first so InRect/GetInnerRect have real layout to resolve
@@ -152,7 +420,7 @@ func clickStatusBar(t *testing.T, r *Root, col int) {
 	// a real macOS CI runner to push the later buttons past its edge,
 	// making InRect reject clicks on them that a wider screen accepts
 	// fine.
-	width := len([]rune(r.statusBar.GetText(true))) + 10
+	width := tview.TaggedStringWidth(r.statusBar.GetText(true)) + 10
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {
 		t.Fatalf("screen.Init: %v", err)
@@ -185,6 +453,62 @@ func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
 	// the actual editor invocation), so this only pins that the click
 	// reaches editCurrentEntry/runEditor and the panel reloads cleanly
 	// afterwards, not that an editor actually ran.
+	clickStatusBar(t, r, span.startCol)
+
+	if r.activePage == errorPage {
+		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestRunEditorSkipsReloadWhileSearchResultsShowing pins the reload
+// guard runEditor gained alongside the search-results-open-in-editor
+// feature (see Panel.onOpenSearchResult's own doc comment):
+// r.panel.path stays whatever real directory was current before the
+// search that produced the results being edited ever ran, completely
+// unrelated to whatever file was actually opened, so reloading it
+// would both do nothing useful and — since Panel.load always exits
+// search mode (see its own doc comment) — silently discard the results
+// themselves the moment the editor closes. searchMode staying true
+// here is exactly what proves no reload happened: app.Suspend never
+// actually runs the editor in this environment (see
+// TestCaptureStatusBarMouseEditClickRunsEditAction's own doc comment
+// just above), so this pins runEditor's own post-Suspend guard
+// specifically, not anything about the editor invocation itself.
+func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.showSearchResults()
+
+	r.runEditor(filepath.Join(dir, "apple.txt"), 0)
+
+	if !r.panel.searchMode {
+		t.Error("searchMode = false after runEditor while search results were showing, want still true (no reload)")
+	}
+}
+
+// TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks is
+// TestCaptureStatusBarMouseEditClickRunsEditAction's counterpart with a
+// double-width (CJK) username ahead of the buttons on the same row —
+// exercising the fix end to end (real Draw, real column math) rather
+// than just the span numbers a plain unit test would check.
+func TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.currentUser = "文档使用者" // 5 runes, 10 terminal columns
+	r.refreshStatusBar()
+	r.panel.focusRow(1) // off ".." onto a real entry, so editCurrentEntry has something to act on
+
+	span, ok := statusBarSpanFor(r, statusActionEdit)
+	if !ok {
+		t.Fatal("no Edit span found")
+	}
+
 	clickStatusBar(t, r, span.startCol)
 
 	if r.activePage == errorPage {

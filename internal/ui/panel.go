@@ -9,17 +9,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/search"
 )
-
-// accentBackgroundColor sets the header bar and floating elements (context
-// menu, rename prompt) apart from the plain listing by background color —
-// deliberately chosen over a box-drawing border, which reads as dated.
-const accentBackgroundColor = tcell.ColorDarkSlateGray
 
 const (
 	headerDisplayPage = "display"
@@ -52,7 +50,9 @@ const (
 // one sorts by it. The table itself is navigable with the arrow keys
 // (built into tview.Table) and Enter, has a clickable checkbox column for
 // marking entries, and (via Root) a right-click context menu. No borders
-// anywhere — see accentBackgroundColor.
+// anywhere — a background color set apart from the plain panel (see
+// theme/paintStaticChrome) does the same job without the box-drawing
+// look, which reads as dated.
 //
 // A tview.Table, not tview.List: a checkbox column needs a second column
 // at all, which List doesn't have, and Table.CellAt/TableCell.Reference
@@ -63,6 +63,13 @@ type Panel struct {
 	*tview.Flex
 
 	app *tview.Application
+
+	// theme is the panel's own copy of the active color scheme (see
+	// paintStaticChrome/applyTheme, and Root's own theme field) — needed
+	// here too, not just on Root, since entryColor/columnSeparator/addRow
+	// color each row's cells directly rather than through a shared parent
+	// widget's own single color.
+	theme config.ResolvedTheme
 
 	headerPages *tview.Pages
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
@@ -119,6 +126,8 @@ type Panel struct {
 	// buildColumnHeader/setSortKey for how a column-header click changes
 	// them. Directories always stay grouped first either way; only the
 	// order within that group (and within the files that follow) changes.
+	// Not persisted across restarts, unlike the three below — sorting by
+	// something other than name is more of a one-off, in-the-moment need.
 	//
 	// sizeBytes/mtimeUnix pick the Size/Modified columns' display format
 	// — see formatSizeCell/formatModTimeCell — toggled via Root's
@@ -126,14 +135,21 @@ type Panel struct {
 	// column header itself: a click there is unambiguously "sort by this
 	// column", with no separate click zone competing for the same cell.
 	//
-	// showHidden defaults to true (set in NewPanel) — dotfiles are shown
-	// unless toggled off. When false, dotfile entries (name starting with
-	// ".") are filtered out of the listing entirely in load() — see
+	// showHidden: when false, dotfile entries (name starting with ".")
+	// are filtered out of the listing entirely in load() — see
 	// filterHidden — rather than kept as rows that are merely skipped
 	// elsewhere. That's what makes every row-based operation (selectAll,
 	// selectByPattern, arrow-key navigation, ...) exclude them for free
 	// once hidden, without each one needing its own "is this row actually
 	// hidden right now" check.
+	//
+	// All three are seeded in NewPanel from the on-disk settings (see
+	// config.Settings.ShowHidden/SizeBytes/MtimeUnix, and
+	// config.DefaultSettings for what a fresh install starts with), and
+	// persisted back to it on every toggle (see Root.toggleHidden/
+	// toggleSizeBytes/toggleMtimeUnix) — per the user's own request,
+	// breakthrough remembers the last session's choice for these three
+	// specifically, rather than always resetting to the built-in default.
 	sortKey        sortKey
 	sortDescending bool
 	sizeBytes      bool
@@ -164,6 +180,46 @@ type Panel struct {
 	// know whether a click landing outside the edit field should cancel
 	// editing.
 	editing bool
+
+	// searchMode is true exactly while the panel is showing search
+	// results in place of its own real directory — see
+	// showSearchResults and its related methods just below rowRef.
+	// Every other method here that would otherwise misbehave against a
+	// virtual, scattered-directories listing (activateRow's usual "cd
+	// into it" meaning, setSortKey's usual "re-read from disk" meaning,
+	// the filter box, a header click) checks this first.
+	searchMode bool
+
+	// searchEntries holds every result gathered so far while
+	// searchMode is true — see appendSearchResult/renderSearchEntries.
+	searchEntries []searchResultEntry
+
+	// searchRestorePath/searchRestoreRow are the real directory (and
+	// cursor row within it) the panel was showing right before
+	// showSearchResults first switched it over — restored by
+	// exitSearchResults, so leaving search results behind looks exactly
+	// like nothing ever happened, not a fresh load() of wherever the
+	// panel happened to land.
+	searchRestorePath string
+	searchRestoreRow  int
+
+	// onSearchEscape reports Escape while searchMode is true and the
+	// table itself has focus (see captureTableKey) — Root wires this to
+	// reopening the search form, the same "Esc: back to search"
+	// contract the dialog already promises, just reached from inside
+	// the panel itself now rather than a separate results overlay. Left
+	// nil (a no-op) in tests that construct a Panel without wiring Root
+	// to it at all.
+	onSearchEscape func()
+
+	// onOpenSearchResult reports activateRow (Enter/left-click) on a
+	// content-search result specifically (see rowRef.searchLine) — Root
+	// wires this to opening the file in the configured editor, at that
+	// line, per the user's own explicit request that a content match
+	// open the file instead of just jumping to it in its own real
+	// directory the way a filename match still does (see activateRow's
+	// own searchMode branch). Left nil the same as onSearchEscape.
+	onOpenSearchResult func(path string, line int)
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -212,18 +268,36 @@ type rowRef struct {
 	// columns (see addRow/formatSizeCell/formatModTimeCell).
 	size    int64
 	modTime time.Time
+
+	// searchLine is > 0 for a content-search result row specifically
+	// (see searchResultEntry/renderSearchEntries) — the matched line
+	// number, read by activateRow's own searchMode branch to open the
+	// file there instead of just jumping to it. Always 0 for every
+	// other row: a real directory entry, or a filename-search result.
+	searchLine int
 }
 
-// NewPanel creates a Panel rooted at path. app is needed to move keyboard
-// focus into the header's edit field on click and back to the list
-// afterwards — see Panel.openEdit.
-func NewPanel(app *tview.Application, path string) (*Panel, error) {
+// NewPanel creates a Panel rooted at path, themed per theme (see
+// paintStaticChrome/applyTheme — Root resolves this once at startup from
+// the on-disk color scheme, see loadInitialSettings, and again on a live
+// scheme switch), with the "Globals" toggles (see Panel.showHidden/
+// sizeBytes/mtimeUnix) seeded from settings — the same on-disk source as
+// theme, so breakthrough starts up remembering the last session's
+// choice (see Root.toggleHidden/toggleSizeBytes/toggleMtimeUnix, which
+// persist a change back to it) instead of always resetting to
+// config.DefaultSettings' own built-in default. app is needed to move
+// keyboard focus into the header's edit field on click and back to the
+// list afterwards — see Panel.openEdit.
+func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
 		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
 		app:          app,
+		theme:        theme,
 		table:        tview.NewTable(),
 		columnHeader: tview.NewTable(),
-		showHidden:   true, // default: dotfiles shown — see the field's own doc comment
+		showHidden:   settings.ShowHidden,
+		sizeBytes:    settings.SizeBytes,
+		mtimeUnix:    settings.MtimeUnix,
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
@@ -231,18 +305,13 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
 
 	p.columnHeader.SetBorders(false)
-	p.columnHeader.SetBackgroundColor(accentBackgroundColor)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
 
-	p.header = tview.NewTextView().SetTextColor(tcell.ColorWhite)
+	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
-	p.header.SetBackgroundColor(accentBackgroundColor)
 	p.header.SetMouseCapture(p.captureHeaderMouse)
 
 	p.headerEdit = tview.NewInputField()
-	p.headerEdit.SetFieldBackgroundColor(accentBackgroundColor)
-	p.headerEdit.SetBackgroundColor(accentBackgroundColor)
-	p.headerEdit.SetFieldTextColor(tcell.ColorWhite)
 	p.headerEdit.SetDoneFunc(p.finishEdit)
 
 	p.headerPages = tview.NewPages()
@@ -250,9 +319,10 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	p.headerPages.AddPage(headerEditPage, p.headerEdit, true, false)
 
 	p.filterRegexBtn = tview.NewButton(filterModeLabel(false))
-	p.filterRegexBtn.SetBackgroundColor(accentBackgroundColor)
-	p.filterRegexBtn.SetLabelColor(tcell.ColorWhite)
 	p.filterRegexBtn.SetSelectedFunc(func() {
+		if p.searchMode {
+			return // the filter box doesn't apply to search results — see Panel's own searchMode doc comment
+		}
 		p.filterRegex = !p.filterRegex
 		p.filterRegexBtn.SetLabel(filterModeLabel(p.filterRegex))
 		p.reportError(p.load(p.path))
@@ -260,18 +330,19 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 
 	p.filterField = tview.NewInputField()
 	p.filterField.SetPlaceholder("filter")
-	p.filterField.SetPlaceholderTextColor(tcell.ColorLightGray)
-	p.filterField.SetFieldBackgroundColor(accentBackgroundColor)
-	p.filterField.SetBackgroundColor(accentBackgroundColor)
-	p.filterField.SetFieldTextColor(tcell.ColorWhite)
 	p.filterField.SetChangedFunc(func(text string) {
 		if text == p.filterText {
 			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
+		}
+		if p.searchMode {
+			return // see filterRegexBtn's own identical guard just above
 		}
 		p.filterText = text
 		p.reportError(p.load(p.path))
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+
+	p.paintStaticChrome()
 
 	// headerRow puts the path bar and the filter side by side in the
 	// same top line, per the user's own request — headerPages keeps
@@ -292,6 +363,51 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 	}
 
 	return p, nil
+}
+
+// paintStaticChrome applies p.theme's colors to every widget that exists
+// for the panel's whole lifetime — as opposed to per-row table cells
+// (see addRow/entryColor), which are baked in at construction and only
+// get repainted by a full reload (see applyTheme). Called once from
+// NewPanel (p.theme already set to the caller's initial value) and again,
+// after p.theme changes, from applyTheme (a live color-scheme switch).
+func (p *Panel) paintStaticChrome() {
+	p.columnHeader.SetBackgroundColor(p.theme.AccentBackground)
+
+	p.header.SetTextColor(p.theme.Text)
+	p.header.SetBackgroundColor(p.theme.AccentBackground)
+
+	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
+	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
+	p.headerEdit.SetFieldTextColor(p.theme.Text)
+
+	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
+	p.filterRegexBtn.SetLabelColor(p.theme.Text)
+
+	p.filterField.SetPlaceholderTextColor(p.theme.PlaceholderText)
+	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
+	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
+	p.filterField.SetFieldTextColor(p.theme.Text)
+
+	// The panel's one other themed color, the current row's own
+	// highlight — tview.Table's own default (StyleDefault, an inverted
+	// fg/bg rather than a fixed color pair) is never quite what a color
+	// scheme means by "selection", so this is set explicitly instead of
+	// left alone.
+	p.table.SetSelectedStyle(tcell.StyleDefault.
+		Background(p.theme.SelectionBackground).
+		Foreground(p.theme.Text))
+}
+
+// applyTheme switches the panel to theme live: every already-built
+// widget (see paintStaticChrome), plus a full reload — the simplest way
+// to repaint each row's own cell colors (see addRow/entryColor), which
+// are baked into their TableCells at construction rather than looked up
+// from p.theme on every draw.
+func (p *Panel) applyTheme(theme config.ResolvedTheme) {
+	p.theme = theme
+	p.paintStaticChrome()
+	p.reportError(p.load(p.path))
 }
 
 // load replaces the panel's contents with the entries of dir. It only
@@ -317,7 +433,24 @@ func NewPanel(app *tview.Application, path string) (*Panel, error) {
 //     it's whatever row a previous, unrelated directory's listing had
 //     it on, not necessarily even a valid row in this one) reads as
 //     arbitrary, not "here's the directory you just opened".
+//
+// Also always exits search mode first, unconditionally: showing a real
+// directory (what load does, definitionally) and showing search
+// results (searchMode) are mutually exclusive states, and a great many
+// existing actions elsewhere (Rename, chown/chmod, Properties' own
+// Save, every "Globals" toggle, ...) already refresh via this exact
+// p.load(p.path) idiom without knowing anything about search mode at
+// all — right-clicking a search-result row for any of them reaches
+// r.menu's own real, ordinary items unchanged (see Root.captureMouse's
+// MouseRightClick case, which never treated a search-mode row any
+// differently to begin with). Without this, one of those would leave
+// searchMode still true while the table itself had already been
+// silently overwritten with a real directory's rows — activateRow,
+// setSortKey, and the filter box would all keep taking their own
+// searchMode branch against rows that, by then, are not search results
+// at all.
 func (p *Panel) load(dir string) error {
+	p.searchMode = false
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
@@ -382,6 +515,228 @@ func (p *Panel) load(dir string) error {
 	if p.onLoad != nil {
 		p.onLoad(p.path)
 	}
+	return nil
+}
+
+// showSearchResults switches the panel from its own real directory to
+// an initially empty search-results listing — see appendSearchResult
+// (called once per streamed result), setSearchStatus (the header's own
+// progress/outcome text), and exitSearchResults/activateRow for the
+// rest of this mode's lifecycle. Safe to call again while search
+// results are already showing (a second search replacing the first):
+// searchRestorePath/Row, captured once on the way in, are left alone
+// on a repeat call so they still point at the real directory from
+// before the *first* search, not the results a second search is about
+// to replace.
+//
+// p.path itself is deliberately never touched here or anywhere else in
+// this mode: every other Panel method (navigate, history, back/
+// forward) stays completely unaware search mode ever happened, and
+// exitSearchResults' own restore ends up being nothing more than a
+// plain, ordinary reload of whatever p.path still is.
+func (p *Panel) showSearchResults() {
+	if !p.searchMode {
+		p.searchRestorePath = p.path
+		p.searchRestoreRow, _, _ = p.CurrentRowPath() // ok=false (e.g. cursor on "..") just leaves this at its zero value, 0 — a safe fallback
+	}
+	p.searchMode = true
+	p.searchEntries = nil
+	p.selected = make(map[string]bool) // selection scoped to what's on screen, same rule load() already follows for a real directory
+	p.table.Clear()
+	p.buildColumnHeader()
+}
+
+// searchResultEntry pairs one result's real fsops classification
+// (Entry — Name always the result's own real full path, never
+// overwritten) with the text actually shown for it (display):
+// identical to Entry.Name for a filename match, or "path:line: text"
+// for a content match (see appendSearchResult). Kept separate from
+// Entry.Name itself, rather than folding the line/text into it,
+// specifically because a content search can report the *same* path
+// more than once — once per matching line, unless "First hit" is
+// checked — and Entry.Name staying the bare path throughout means
+// every one of those still sorts/groups exactly where it belongs, next
+// to each other and next to whatever else shares its own directory,
+// rather than each carrying a different fabricated "name" that
+// scatters them apart from one another.
+type searchResultEntry struct {
+	fsops.Entry
+	display string
+	line    int // > 0 for a content match — see rowRef.searchLine's own doc comment
+}
+
+// appendSearchResult adds one streamed result — classified via
+// fsops.DescribeEntry, the exact same per-entry classification a real
+// directory listing gives each of its own children (symlink
+// resolution, broken-symlink detection, mount-point check — see its
+// own doc comment). display is res.Path itself for a filename match
+// (Line == 0), or "path:line: text" for a content match — see
+// search.Result's own Line/Text fields, populated only by a content
+// (grep) search.
+//
+// Re-renders immediately, one result at a time: search results arrive
+// slowly enough (one find/grep process, one match at a time) that
+// re-sorting and redrawing on every single one stays imperceptible,
+// and immediate feedback — rows appearing one by one as they're found
+// — matches this dialog's own existing "watch it stream in" feel,
+// unchanged from before this mode existed.
+func (p *Panel) appendSearchResult(res search.Result) {
+	entry := fsops.DescribeEntry(res.Path)
+	entry.Name = res.Path
+	display := res.Path
+	if res.Line > 0 {
+		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
+	}
+	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display, line: res.Line})
+	p.renderSearchEntries()
+}
+
+// setSearchStatus paints the header's own status line — the animated
+// "still searching" indicator, then a final "Done — N found" — in
+// place of the real breadcrumb path bar search mode otherwise shows
+// there (see buildHeaderSpans/load). No spans: unlike the breadcrumb,
+// none of this text is a click target (see captureHeaderMouse's own
+// searchMode guard).
+func (p *Panel) setSearchStatus(text string) {
+	p.header.SetText(text)
+	p.headerSpans = nil
+}
+
+// setSearchStatusColor overrides the header's text color while showing
+// search status — normally left at its usual paintStaticChrome color
+// (theme.Text), but set to theme.EntryError for a search that was
+// refused before it ever ran (see Root.showSearchError) — the same red
+// a broken symlink already gets in a real listing (see entryColor).
+// Root.runSearch resets it back to theme.Text before a real search
+// begins, in case a previous one left it red.
+func (p *Panel) setSearchStatusColor(c tcell.Color) {
+	p.header.SetTextColor(c)
+}
+
+// renderSearchEntries re-sorts (per whatever sortKey/sortDescending are
+// currently set to — the exact same two fields a real directory
+// listing's own column-header click already drives, see setSortKey)
+// and redraws every row from searchEntries. There's no ListDir call to
+// repeat the way a real directory's own sort change re-triggers one
+// (see load's own doc comment) — searchEntries already holds
+// everything there is to show; appendSearchResult and a sort-key
+// change while search results are showing (see setSortKey) both just
+// call this again directly.
+//
+// sortSearchEntries/sortSearchGroup, not applySortPreference/sortGroup:
+// those operate on []fsops.Entry directly, but a content search can
+// carry the same path more than once (see searchResultEntry's own doc
+// comment) — this mirrors their exact two-pass shape (establish a
+// directories-first, name-sorted base the same way ListDir does before
+// a real directory's own load() ever calls applySortPreference, then
+// refine within each group for a non-name sort key) against
+// searchResultEntry instead, since Go generics aren't in play here and
+// duplicating roughly a dozen lines is simpler than making those two
+// take an interface.
+//
+// Explicitly re-applies each row's own checked state from p.selected
+// afterward: unlike load() (which always resets p.selected right
+// before its own addRow loop, so addRow's own hardcoded "unchecked"
+// starting glyph is already correct there), this re-render must
+// preserve whatever was already checked across a sort-key change or a
+// newly-streamed-in result — addRow itself has no way to know that on
+// its own; it always draws a fresh checkbox unchecked.
+func (p *Panel) renderSearchEntries() {
+	sorted := append([]searchResultEntry(nil), p.searchEntries...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].IsDir != sorted[j].IsDir {
+			return sorted[i].IsDir // directories before files
+		}
+		return strings.ToLower(sorted[i].Name) < strings.ToLower(sorted[j].Name)
+	})
+	sortSearchEntries(sorted, p.sortKey, p.sortDescending)
+
+	p.table.Clear()
+	for row, e := range sorted {
+		p.addRow(row, rowRef{
+			path:       e.Name, // always the result's own real path (Entry, embedded — see searchResultEntry's own doc comment)
+			name:       e.display,
+			isDir:      e.IsDir,
+			checkable:  true,
+			entryType:  e.Type,
+			linkTarget: e.LinkTarget,
+			nlink:      e.Nlink,
+			mountPoint: e.MountPoint,
+			mode:       e.Mode,
+			size:       e.Size,
+			modTime:    e.ModTime,
+			searchLine: e.line,
+		})
+		if p.selected[e.Name] {
+			p.setChecked(row, true)
+		}
+	}
+	p.buildColumnHeader()
+}
+
+// sortSearchEntries is applySortPreference's own []searchResultEntry
+// counterpart — see renderSearchEntries' own doc comment on why it's a
+// duplicate rather than a shared, parameterized implementation.
+func sortSearchEntries(entries []searchResultEntry, key sortKey, descending bool) {
+	split := len(entries)
+	for i, e := range entries {
+		if !e.IsDir {
+			split = i
+			break
+		}
+	}
+	sortSearchGroup(entries[:split], key, descending)
+	sortSearchGroup(entries[split:], key, descending)
+}
+
+// sortSearchGroup is sortGroup's own []searchResultEntry counterpart —
+// same three keys (size, modified, name as the tiebreaker and the
+// whole comparison for sortByName itself), same stable sort so ties
+// keep whatever relative order they already arrived in.
+func sortSearchGroup(entries []searchResultEntry, key sortKey, descending bool) {
+	less := func(i, j int) bool {
+		switch key {
+		case sortBySize:
+			if entries[i].Size != entries[j].Size {
+				return entries[i].Size < entries[j].Size
+			}
+		case sortByModified:
+			if !entries[i].ModTime.Equal(entries[j].ModTime) {
+				return entries[i].ModTime.Before(entries[j].ModTime)
+			}
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	}
+	if descending {
+		asc := less
+		less = func(i, j int) bool { return asc(j, i) }
+	}
+	sort.SliceStable(entries, less)
+}
+
+// exitSearchResults restores the real directory the panel was showing
+// before showSearchResults first switched it over (see
+// searchRestorePath/Row) — a no-op if search results aren't showing at
+// all. Reloads rather than assuming the table's own current state is
+// still meaningful, but that reload is nothing more than an ordinary,
+// already-idiomatic "refresh in place" (the same p.load(p.path) call
+// setSortKey/the filter box/toggleHidden all already use): p.path
+// itself was never touched by search mode (see showSearchResults' own
+// doc comment), so this always resolves to reloading the one directory
+// that was already current, just with search results no longer
+// covering it — restoreRow is applied afterward since load() only
+// resets the cursor to row 0 for a *genuinely new* directory (abs !=
+// p.path — see its own doc comment), which this deliberately never is.
+func (p *Panel) exitSearchResults() error {
+	if !p.searchMode {
+		return nil
+	}
+	p.searchMode = false
+	restoreRow := p.searchRestoreRow
+	if err := p.load(p.searchRestorePath); err != nil {
+		return err
+	}
+	p.focusRow(restoreRow)
 	return nil
 }
 
@@ -520,7 +875,7 @@ func sortGroup(entries []fsops.Entry, key sortKey, descending bool) {
 
 // addRow renders one table row for ref at the given row index.
 func (p *Panel) addRow(row int, ref rowRef) {
-	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(tcell.ColorWhite)
+	checkbox := tview.NewTableCell(checkboxText(false)).SetTextColor(p.theme.Text)
 	if !ref.checkable {
 		checkbox.SetText(" ")
 	} else {
@@ -534,12 +889,12 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
 
-	color := entryColor(ref)
+	color := p.entryColor(ref)
 
 	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
 	p.table.SetCell(row, colType, typeCell)
 
-	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(tcell.ColorWhite)
+	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
 	label := ref.name
@@ -566,22 +921,22 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	p.table.SetCell(row, colSizeSep, columnSeparator())
-	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(tcell.ColorWhite))
-	p.table.SetCell(row, colModifiedSep, columnSeparator())
-	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(tcell.ColorWhite))
+	p.table.SetCell(row, colSizeSep, p.columnSeparator())
+	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
+	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
+	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
 }
 
 // columnSeparator is a new cell for the bare "│" columns dividing
 // Name/Size/Modified (colSizeSep/colModifiedSep) — a thin rule between
-// columns rather than a full box-drawing border around them (see
-// accentBackgroundColor's own doc comment on why this codebase avoids
-// those generally; this is the one deliberate exception, at the user's
-// own request, scoped to just these column boundaries). Always present,
-// even on the ".." row: it's structural, not data, so there's nothing to
-// blank out the way Size/Modified's own values are for that row.
-func columnSeparator() *tview.TableCell {
-	return tview.NewTableCell("│").SetTextColor(tcell.ColorWhite)
+// columns rather than a full box-drawing border around them (see the
+// Panel doc comment on why this codebase avoids those generally; this is
+// the one deliberate exception, at the user's own request, scoped to
+// just these column boundaries). Always present, even on the ".." row:
+// it's structural, not data, so there's nothing to blank out the way
+// Size/Modified's own values are for that row.
+func (p *Panel) columnSeparator() *tview.TableCell {
+	return tview.NewTableCell("│").SetTextColor(p.theme.Text)
 }
 
 // sizeColumnWidth is the fixed width every Size cell — data or header —
@@ -601,11 +956,14 @@ func formatSizeCell(size int64, bytesMode bool) string {
 	return fmt.Sprintf("%*s", sizeColumnWidth, s)
 }
 
-// modColumnWidth is Modified's counterpart to sizeColumnWidth: the
-// width of "2026-08-19 09:12:03" (19 characters), which a Unix
-// timestamp (10 digits until the year 2286) comfortably fits within too
-// — so, again, toggling the format never reflows the column.
-const modColumnWidth = 19
+// modColumnWidth is Modified's counterpart to sizeColumnWidth: wide
+// enough for the column header's own "Modify time (mtime) ↓/↑" (21
+// characters, the widest of the two — see buildColumnHeader/sortArrow),
+// which comfortably fits "2026-08-19 09:12:03" (19 characters) or a
+// Unix timestamp (10 digits until the year 2286) within it too — so
+// toggling the data format, or which column is sorted, never reflows
+// the column.
+const modColumnWidth = 21
 
 // formatModTimeCell renders t right-aligned within modColumnWidth, as
 // either a Unix timestamp (unixMode) or the same "2006-01-02 15:04:05"
@@ -654,20 +1012,20 @@ func sortArrow(descending bool) string {
 func (p *Panel) buildColumnHeader() {
 	p.columnHeader.Clear()
 
-	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(tcell.ColorWhite)
+	checkboxHeader := tview.NewTableCell(checkboxText(p.allSelected())).SetTextColor(p.theme.Text)
 	checkboxHeader.SetClickedFunc(func() bool {
 		p.toggleSelectAllViaHeader()
 		return false
 	})
 	p.columnHeader.SetCell(0, colCheckbox, checkboxHeader)
-	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
-	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(tcell.ColorWhite))
+	p.columnHeader.SetCell(0, colType, tview.NewTableCell(" ").SetTextColor(p.theme.Text))
+	p.columnHeader.SetCell(0, colModifier, tview.NewTableCell(" ").SetTextColor(p.theme.Text))
 
 	nameLabel := "Name"
 	if p.sortKey == sortByName {
 		nameLabel += sortArrow(p.sortDescending)
 	}
-	nameCell := tview.NewTableCell(nameLabel).SetTextColor(tcell.ColorWhite)
+	nameCell := tview.NewTableCell(nameLabel).SetTextColor(p.theme.Text)
 	nameCell.SetExpansion(1)
 	nameCell.SetClickedFunc(func() bool {
 		p.setSortKey(sortByName)
@@ -675,10 +1033,10 @@ func (p *Panel) buildColumnHeader() {
 	})
 	p.columnHeader.SetCell(0, colName, nameCell)
 
-	p.columnHeader.SetCell(0, colSizeSep, columnSeparator())
+	p.columnHeader.SetCell(0, colSizeSep, p.columnSeparator())
 	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
-	p.columnHeader.SetCell(0, colModifiedSep, columnSeparator())
-	p.setColumnHeaderCell(colModified, modColumnWidth, "Modified", sortByModified)
+	p.columnHeader.SetCell(0, colModifiedSep, p.columnSeparator())
+	p.setColumnHeaderCell(colModified, modColumnWidth, "Modify time (mtime)", sortByModified)
 }
 
 // setColumnHeaderCell builds one of columnHeader's fixed-width, right-
@@ -688,7 +1046,7 @@ func (p *Panel) setColumnHeaderCell(col, width int, label string, key sortKey) {
 	if p.sortKey == key {
 		text += sortArrow(p.sortDescending)
 	}
-	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(tcell.ColorWhite)
+	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(p.theme.Text)
 	cell.SetClickedFunc(func() bool {
 		p.setSortKey(key)
 		return false
@@ -706,6 +1064,13 @@ func (p *Panel) setSortKey(key sortKey) {
 	} else {
 		p.sortKey = key
 		p.sortDescending = false
+	}
+	if p.searchMode {
+		// Nothing to re-read from disk (see renderSearchEntries' own
+		// doc comment) — searchEntries already holds everything there
+		// is; a sort-key change here just re-renders it.
+		p.renderSearchEntries()
+		return
 	}
 	p.reportError(p.load(p.path))
 }
@@ -769,21 +1134,22 @@ func typeGlyph(ref rowRef) byte {
 }
 
 // entryColor sets a row's type character and name apart by color for the
-// two cases worth flagging beyond the glyph alone — a broken symlink in
-// red (something that will fail if acted on) and an executable file in
-// green, matching Midnight Commander's own default skin, which colors an
-// executable's whole name, not just its '*'. Applied to both the type
+// two cases worth flagging beyond the glyph alone — a broken symlink
+// (something that will fail if acted on) and an executable file, per
+// p.theme's own EntryError/EntryExecutable (the default scheme's red/
+// green match Midnight Commander's own default skin, which colors an
+// executable's whole name, not just its '*'). Applied to both the type
 // cell and the name cell (see addRow) for the same reason MC colors the
 // whole entry rather than a lone prefix character: it reads at a glance
 // across the row, not just in the narrow type column.
-func entryColor(ref rowRef) tcell.Color {
+func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
-		return tcell.ColorRed
+		return p.theme.EntryError
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
-		return tcell.ColorGreen
+		return p.theme.EntryExecutable
 	default:
-		return tcell.ColorWhite
+		return p.theme.EntryNormal
 	}
 }
 
@@ -962,17 +1328,48 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 		p.toggleCheckbox(row)
 		return nil
 	}
+	if event.Key() == tcell.KeyEscape && p.searchMode && p.onSearchEscape != nil {
+		p.onSearchEscape()
+		return nil
+	}
 	return event
 }
 
-// activateRow is what Enter and a click on the name cell both do: enter
-// the row's directory, or do nothing for a regular file — opening/viewing
-// files is a later phase. Ignores the checkbox column: a click there is
-// handled by its own TableCell.ClickedFunc instead (see addRow), which
-// returns true specifically so this never also runs for it.
+// activateRow is what Enter and a click on the name cell both do. While
+// showing a real directory: enter the row's directory, or do nothing
+// for a regular file — opening/viewing files is a later phase. Ignores
+// the checkbox column: a click there is handled by its own
+// TableCell.ClickedFunc instead (see addRow), which returns true
+// specifically so this never also runs for it.
+//
+// While showing search results (searchMode): a content-search match
+// (ref.searchLine > 0 — see rowRef's own doc comment) opens the file
+// in the configured editor, at that line, via onOpenSearchResult —
+// per the user's own explicit request, and deliberately without
+// leaving search mode: unlike a plain jump, this reads as "peek at
+// this match," and a content search often has several, each worth
+// checking in turn without losing the list between them. Every other
+// result — a filename match, or a content match with onOpenSearchResult
+// left nil — is never "this panel's own directory" the way a real
+// row's target always is, so there's nothing to navigate *into*;
+// instead this leaves search mode entirely and jumps to the result's
+// real location (see navigateAndSelect), the same "Go to file/folder"
+// meaning left-click on a result has always had otherwise.
 func (p *Panel) activateRow(row int) {
 	ref, ok := p.rowRef(row)
-	if !ok || !ref.isDir {
+	if !ok {
+		return
+	}
+	if p.searchMode {
+		if ref.searchLine > 0 && p.onOpenSearchResult != nil {
+			p.onOpenSearchResult(ref.path, ref.searchLine)
+			return
+		}
+		p.searchMode = false
+		p.reportError(p.navigateAndSelect(ref.path))
+		return
+	}
+	if !ref.isDir {
 		return
 	}
 	p.reportError(p.navigate(ref.path))
@@ -1099,6 +1496,29 @@ func (p *Panel) navigate(dir string) error {
 	return nil
 }
 
+// navigateAndSelect is navigate's own "and land on this specific entry"
+// variant — target's parent directory becomes the panel's new current
+// directory (see navigate), and target's own row, if load() actually
+// produced one (see the same filter/showHidden rules any other row is
+// subject to — a target the current filter or a hidden-files toggle
+// would exclude simply isn't found here, not an error), gets the
+// cursor. Used by activateRow's own searchMode branch to jump straight
+// to a search result instead of just opening the directory it's in and
+// leaving the cursor wherever load()'s own top-of-listing reset put it.
+func (p *Panel) navigateAndSelect(target string) error {
+	if err := p.navigate(filepath.Dir(target)); err != nil {
+		return err
+	}
+	name := filepath.Base(target)
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.name == name {
+			p.focusRow(row)
+			break
+		}
+	}
+	return nil
+}
+
 // reportError hands err to whoever is displaying errors, if anyone is.
 // A nil error is ignored, so callers can pass a result through directly.
 func (p *Panel) reportError(err error) {
@@ -1156,9 +1576,11 @@ func (p *Panel) previousPath() (string, bool) {
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
 // Forward button glyphs followed by the path, one clickable span per path
 // component (the leading "/" plus each name in between), e.g. clicking
-// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are in runes, which is
-// exact for the common case but, like the rest of Phase 0/1, doesn't yet
-// account for double-width (e.g. CJK) characters in file names.
+// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are measured via
+// tview.TaggedStringWidth, not a plain rune count — a directory name
+// containing double-width (e.g. CJK) characters occupies two terminal
+// columns per character, and a rune count would silently drift the spans
+// after it out of alignment with what's actually drawn on screen.
 //
 // A click that lands in the header but doesn't hit any of these spans
 // (e.g. on a "/" separator, or in empty space after the path) is handled
@@ -1173,7 +1595,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 		col++
 		start := col
 		b.WriteString(glyph)
-		col += len([]rune(glyph))
+		col += tview.TaggedStringWidth(glyph)
 		spans = append(spans, headerSpan{start: start, end: col, action: action})
 	}
 	button("^", actionStart)
@@ -1194,7 +1616,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 		parts := strings.Split(rest, "/")
 		for i, part := range parts {
 			current += "/" + part
-			width := len([]rune(part))
+			width := tview.TaggedStringWidth(part)
 			spans = append(spans, headerSpan{start: col, end: col + width, action: actionNavigate, target: current})
 			b.WriteString(part)
 			col += width
@@ -1218,6 +1640,14 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if !p.header.InRect(event.Position()) {
 		return action, event
+	}
+	if p.searchMode {
+		// The header shows search status text while searchMode (see
+		// setSearchStatus) — headerSpans is empty throughout, so
+		// without this a click here would fall through to openEdit
+		// below, opening a raw path editor over status text that was
+		// never a real path to begin with.
+		return tview.MouseConsumed, nil
 	}
 
 	if action == tview.MouseLeftClick {
@@ -1391,6 +1821,50 @@ func (p *Panel) completions(currentText string) []string {
 	return matches
 }
 
+// dirCompletions is completions' own directory-only, case-sensitive
+// counterpart — used only by the search dialog's own Start-at field
+// (see internal/ui/search.go's captureSearchScopeKey), which can only
+// ever be a directory, never a file. Two differences from completions,
+// both per the user's own explicit request:
+//
+//   - Files are excluded outright, not just deprioritized — Entry.IsDir
+//     already accounts for a directory symlink too (see its own doc
+//     comment), so no separate symlink handling is needed here. A real
+//     user report: typing "Down" with a "Downloads/" directory *and* an
+//     unrelated "download-thing.sh" file both present used to keep
+//     completing only as far as their shared prefix ("Download"),
+//     because the file was still in the running as a candidate — for a
+//     field that can only ever hold a directory, that file was always a
+//     false ambiguity.
+//   - Matched case-sensitively, unlike completions' own deliberately
+//     case-insensitive matching. Directory-only filtering alone already
+//     resolves the specific "Downloads/" vs. "download-thing.sh" case
+//     above (the file is simply gone from the candidate list before
+//     case ever matters) — this is a second, independent request: two
+//     directories differing only in case should no longer both match a
+//     lowercase (or differently-cased) prefix here the way completions'
+//     own case-insensitive matching still allows for the header.
+func (p *Panel) dirCompletions(currentText string) []string {
+	dir, prefix := "", currentText
+	if idx := strings.LastIndex(currentText, "/"); idx >= 0 {
+		dir, prefix = currentText[:idx+1], currentText[idx+1:]
+	}
+
+	entries, err := fsops.ListDir(p.resolvePath(dir))
+	if err != nil {
+		return nil
+	}
+
+	var matches []string
+	for _, e := range entries {
+		if !e.IsDir || !strings.HasPrefix(e.Name, prefix) {
+			continue
+		}
+		matches = append(matches, dir+e.Name+"/")
+	}
+	return matches
+}
+
 // resolvePath turns text typed into the header into an absolute path: a
 // leading "~" expands to the user's home directory (the header has a "~"
 // button doing the same thing, so users reasonably expect it), and a
@@ -1416,7 +1890,19 @@ func (p *Panel) resolvePath(input string) string {
 }
 
 // longestCommonPrefix returns the longest prefix shared by all values,
-// compared by rune so it can never cut a multi-byte character in half.
+// compared by rune (so it can never cut a multi-byte character in
+// half) and case-insensitively — matching completions' own
+// case-insensitive matching (see its own doc comment). Comparing
+// case-*sensitively* here was a real bug: completions() can legitimately
+// return two entries that only differ in case (e.g. "Downloads/" and
+// "download-thing.sh", both matching a typed "Down"), and a
+// case-sensitive compare then collapses the shared prefix all the way
+// back to before their very first differing-case letter — "Down" itself
+// vanishes, completing back to the parent directory instead of forward.
+// The output text still uses values[0]'s own actual casing throughout
+// (never a mix of the different candidates' casing), so what's typed
+// back is always something that's genuinely one of the real matches'
+// own spelling, up to the point they diverge.
 func longestCommonPrefix(values []string) string {
 	if len(values) == 0 {
 		return ""
@@ -1429,7 +1915,7 @@ func longestCommonPrefix(values []string) string {
 			prefix = prefix[:len(runes)]
 		}
 		for i := range prefix {
-			if prefix[i] != runes[i] {
+			if unicode.ToLower(prefix[i]) != unicode.ToLower(runes[i]) {
 				prefix = prefix[:i]
 				break
 			}

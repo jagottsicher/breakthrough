@@ -193,3 +193,28 @@ func describeEntry(entryPath, name string, parentDev uint64, haveParentDev bool)
 	}
 	return base
 }
+
+// DescribeEntry classifies a single arbitrary path exactly the way
+// ListDir classifies each child of a directory it reads — same symlink
+// resolution, same broken-symlink detection, same mount-point check —
+// without requiring path's own siblings to be listed at all. Built for
+// the UI's search-results display (see ui.Panel's own search-results
+// mode): a search result is one path picked out of however many
+// directories a recursive find/grep touched, never a directory's whole,
+// known set of children the way every other DescribeEntry/ListDir
+// caller works with, so there's no single parentDev ListDir could look
+// up once up front the way it does for a real listing — this resolves
+// its own, from path's own parent, mirroring isMountPoint's identical
+// one-off lookup for the same reason.
+//
+// Entry.Name comes back as path's own base name, the same meaning it
+// always has from ListDir — never the full path itself. A caller that
+// wants the full path as what's actually displayed (see Panel's own
+// search-results rendering) sets that explicitly afterward; that's a
+// display decision for whoever's rendering the entry, not something
+// this function — which only ever describes what's really on disk —
+// should bake in.
+func DescribeEntry(path string) Entry {
+	parentDev, haveParentDev := deviceOf(filepath.Dir(path))
+	return describeEntry(path, filepath.Base(path), parentDev, haveParentDev)
+}
