@@ -87,6 +87,7 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 	// or after it.
 	wait := startArchiveSearch(ctx, req, results)
 	defer wait()
+	startDirectoryProgress(ctx, req)
 
 	// A recursive EngineFind search reports files shallow-first — see
 	// runFilenameSearchShallowFirst's own doc comment — rather than
@@ -147,6 +148,85 @@ func startArchiveSearch(ctx context.Context, req Request, results chan<- Result)
 		searchArchives(ctx, req, results)
 	}()
 	return func() { <-done }
+}
+
+// startDirectoryProgress kicks off a second, lightweight "find -type d"
+// traversal of the same Scope/IgnoreDirs — purely to report live
+// progress via req.OnProgress, never producing a real Result — running
+// concurrently with, and independent of, whatever real search is also
+// in flight. A no-op when req.OnProgress is nil (the common case —
+// internal/ui's search dialog is currently the only caller that sets
+// it) or Engine isn't EngineFind — see Request.OnProgress's own doc
+// comment on why locate has nothing to report here at all. Also serves
+// as the progress indicator while IncludeArchives' own archive-candidate
+// find call (see archiveCandidates) is running: that walks the exact
+// same Scope/IgnoreDirs, so one shared "where are we" indicator covers
+// both rather than needing a second, redundant walk just for that.
+//
+// A second walk rather than folding this into the primary find command
+// itself: doing both in a single process is possible on GNU find (its
+// own "," operator evaluates two expressions per entry, discarding the
+// first's own result — exactly this use case, per its own manual) but
+// has no equivalent on BSD/macOS find at all (verified against the real
+// FreeBSD find(1) manual, not guessed: only (), !/-not, -and, and -or
+// are documented operators there, no comma — and -or's own
+// short-circuiting means a plain OR would skip whichever side comes
+// second for any entry where the first side already evaluated true, so
+// it can't substitute either). One portable implementation, accepting
+// a second, cheaper (no stat-heavy match test, no -prune skip logic
+// beyond IgnoreDirs itself) directory walk, beats a GNU-only fast path
+// plus an entirely separate BSD implementation to maintain and verify.
+//
+// Not waited on before runFilenameSearch returns (unlike
+// startArchiveSearch's own wait func): this never sends on results/errs,
+// only calls req.OnProgress directly, so there's no channel-closing-
+// order hazard to guard against here — a stray, late progress call
+// right as, or just after, the real search ends is harmless (internal/ui
+// discards it once its own ctx is already done, the same guard every
+// other post-search UI update already applies).
+func startDirectoryProgress(ctx context.Context, req Request) {
+	if req.OnProgress == nil || req.Engine != EngineFind {
+		return
+	}
+	cmd := exec.CommandContext(ctx, "find", directoryProgressArgs(req.Scope, req.IgnoreDirs, req.NonRecursive, req.FollowSymlinks)...)
+	go func() {
+		_ = streamNullSeparated(cmd, func(path string) bool {
+			req.OnProgress(path)
+			return ctx.Err() == nil
+		})
+	}()
+}
+
+// directoryProgressArgs builds a plain "list every directory under
+// scope" find command — no name/extension test of any kind, unlike
+// FindArgs/findArchiveArgs, since this walk's only job is reporting
+// where the walk currently is, not matching anything against Pattern.
+// Mirrors FindArgs' own ignoreDirs-prune-clause structure exactly (see
+// its own doc comment) so a pruned tree is never even descended into
+// here either, keeping this walk's own cost roughly proportional to the
+// real search's rather than needlessly larger.
+func directoryProgressArgs(scope string, ignoreDirs []string, nonRecursive, followSymlinks bool) []string {
+	var args []string
+	if followSymlinks {
+		args = append(args, "-L")
+	}
+	args = append(args, scope)
+	if nonRecursive {
+		args = append(args, "-maxdepth", "1")
+	}
+
+	if len(ignoreDirs) > 0 {
+		args = append(args, "(")
+		for i, name := range ignoreDirs {
+			if i > 0 {
+				args = append(args, "-o")
+			}
+			args = append(args, "-name", name)
+		}
+		args = append(args, ")", "-prune", "-o")
+	}
+
+	return append(args, "-type", "d", "-print0")
 }
 
 // runFilenameSearchShallowFirst runs a recursive EngineFind filename

@@ -126,6 +126,9 @@ func listArchiveAndSend(ctx context.Context, req Request, candidatePath string, 
 	if !ok {
 		return
 	}
+	if req.OnProgress != nil {
+		req.OnProgress(candidatePath) // "now opening this archive" — reported regardless of Engine, unlike directoryProgressArgs (see Request.OnProgress's own doc comment)
+	}
 	members, err := listArchiveMembers(ctx, kind, candidatePath)
 	if err != nil {
 		return
