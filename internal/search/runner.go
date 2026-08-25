@@ -348,6 +348,12 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	}
 	switch req.Content {
 	case ContentGrep:
+		// IncludeCompressed runs concurrently with the plain grep call
+		// right below it, not before or after — see
+		// startCompressedContentSearch's own doc comment on why.
+		wait := startCompressedContentSearch(ctx, req, results)
+		defer wait()
+
 		// Unlike the NamePattern-narrowed call just above, this walks
 		// req.Scope directly — grep itself is the only thing that will
 		// ever see, and so the only thing that can skip, an ignored
