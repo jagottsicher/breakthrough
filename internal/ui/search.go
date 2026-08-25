@@ -272,24 +272,39 @@ func (r *Root) newSearchDialog() *tview.Pages {
 		AddItem(r.searchLeft, 0, 1, false).
 		AddItem(r.searchRight, 0, 1, false)
 
-	fields := tview.NewFlex().SetDirection(tview.FlexRow).
+	// spanArea wraps searchTop/columns (i.e. searchLeft/searchRight)
+	// only — deliberately NOT searchButtons — and carries
+	// captureSearchKey/captureSearchMouse, still shared between all
+	// three TextViews the same way as before. It has to stop above
+	// searchButtons, not above it: an ancestor's own SetInputCapture
+	// runs before delegating to whichever descendant currently has
+	// real focus (confirmed by reading tview's own WrapInputHandler
+	// source), so installing it one level higher, on fields itself
+	// (the shared ancestor of spanArea AND searchButtons), meant
+	// Enter/Space bound for a focused Cancel/Search button (see
+	// newSearchButtons' own SetSelectedFunc/spaceAlsoActivates) never
+	// reached the button at all — captureSearchKey's own unconditional
+	// KeyEnter/' ' cases swallowed them first. Properties never had
+	// this bug for the same structural reason: capturePropertiesKey
+	// sits on propertiesText alone, already a sibling of
+	// propertiesButtons rather than an ancestor of it (see
+	// newPropertiesView).
+	spanArea := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.searchTop, 7, 0, true).
-		AddItem(columns, 0, 1, false).
+		AddItem(columns, 0, 1, false)
+	spanArea.SetInputCapture(r.captureSearchKey)
+	spanArea.SetMouseCapture(r.captureSearchMouse)
+
+	fields := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(spanArea, 0, 1, true).
 		AddItem(r.searchButtons, 1, 0, false)
-	// Installed on fields itself, the shared ancestor of searchTop/
-	// searchLeft/searchRight/searchButtons — an ancestor's own
-	// SetInputCapture/SetMouseCapture runs before delegating to
-	// whichever descendant currently has real focus (confirmed by
-	// reading tview's own WrapInputHandler/WrapMouseHandler source),
-	// which is what makes Tab/Enter/Space and clicks work the same
-	// regardless of which of the three TextViews actually holds it.
-	fields.SetInputCapture(r.captureSearchKey)
-	fields.SetMouseCapture(r.captureSearchMouse)
 	// No border, same as Properties' own overlay (see newPropertiesView):
-	// every child (searchTop/searchLeft/searchRight/searchButtons) gets
-	// its own AccentBackground fill (see applyTheme), and their own
-	// fixed/proportional sizes tile fields' whole rect exactly (6 fixed
-	// + proportional + 1 fixed, no leftover row for the Flex's own
+	// every child (searchTop/searchLeft/searchRight, nested inside
+	// spanArea, and searchButtons alongside it) gets its own
+	// AccentBackground fill (see applyTheme), and their own fixed/
+	// proportional sizes tile fields' whole rect exactly (7 fixed +
+	// proportional, nested inside spanArea's own proportional slot,
+	// + 1 fixed for searchButtons — no leftover row for the Flex's own
 	// unstyled background to show through) — a border here only ate
 	// into the dialog's own content space for no visual benefit.
 
