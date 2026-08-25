@@ -275,6 +275,15 @@ type rowRef struct {
 	// file there instead of just jumping to it. Always 0 for every
 	// other row: a real directory entry, or a filename-search result.
 	searchLine int
+
+	// archiveHit is true for a filename-search result found *inside* an
+	// archive (search.Result.ArchiveMember — see appendSearchResult) —
+	// path is still the real, containing archive file (activateRow's
+	// usual "Go to file/folder" already does the right thing with it
+	// unchanged, see its own doc comment), only entryColor reads this,
+	// to set such a row's own name apart from a real file/directory
+	// match, per the user's own explicit request.
+	archiveHit bool
 }
 
 // NewPanel creates a Panel rooted at path, themed per theme (see
@@ -561,18 +570,30 @@ func (p *Panel) showSearchResults() {
 // scatters them apart from one another.
 type searchResultEntry struct {
 	fsops.Entry
-	display string
-	line    int // > 0 for a content match — see rowRef.searchLine's own doc comment
+	display    string
+	line       int  // > 0 for a content match — see rowRef.searchLine's own doc comment
+	archiveHit bool // true for an archive-member match — see rowRef.archiveHit's own doc comment
 }
 
 // appendSearchResult adds one streamed result — classified via
 // fsops.DescribeEntry, the exact same per-entry classification a real
 // directory listing gives each of its own children (symlink
 // resolution, broken-symlink detection, mount-point check — see its
-// own doc comment). display is res.Path itself for a filename match
-// (Line == 0), or "path:line: text" for a content match — see
-// search.Result's own Line/Text fields, populated only by a content
-// (grep) search.
+// own doc comment). display is res.Path itself for a plain filename
+// match (Line == 0, ArchiveMember == ""), "path:line: text" for a
+// content match (see search.Result's own Line/Text fields, populated
+// only by a content/grep search), or "path -> member" for an
+// archive-member match (search.Result.ArchiveMember, populated only
+// when Request.IncludeArchives is on) — the same "-> target" shape a
+// symlink's own name already gets (see addRow), reused here rather
+// than inventing a second arrow convention.
+//
+// fsops.DescribeEntry(res.Path) always describes the real, containing
+// archive file itself for an archive-member match, never something
+// synthetic for the virtual member path inside it — there's nothing on
+// disk to stat there — which is also exactly right for entry.IsDir/
+// entry.Size/etc. below: this is deliberately the archive's own real
+// classification, not a guess at the matched member's.
 //
 // Re-renders immediately, one result at a time: search results arrive
 // slowly enough (one find/grep process, one match at a time) that
@@ -584,10 +605,15 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	entry := fsops.DescribeEntry(res.Path)
 	entry.Name = res.Path
 	display := res.Path
-	if res.Line > 0 {
+	switch {
+	case res.Line > 0:
 		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
+	case res.ArchiveMember != "":
+		display = res.Path + " -> " + res.ArchiveMember
 	}
-	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display, line: res.Line})
+	p.searchEntries = append(p.searchEntries, searchResultEntry{
+		Entry: entry, display: display, line: res.Line, archiveHit: res.ArchiveMember != "",
+	})
 	p.renderSearchEntries()
 }
 
@@ -666,6 +692,7 @@ func (p *Panel) renderSearchEntries() {
 			size:       e.Size,
 			modTime:    e.ModTime,
 			searchLine: e.line,
+			archiveHit: e.archiveHit,
 		})
 		if p.selected[e.Name] {
 			p.setChecked(row, true)
@@ -1146,6 +1173,17 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
 		return p.theme.EntryError
+	case ref.archiveHit:
+		// The same lighter, "auxiliary information" gray the search
+		// dialog's own hint texts use (see internal/ui/search.go's
+		// hintText) rather than a dedicated new theme color — an
+		// archive-member row isn't a real file/directory match the way
+		// every other row here is, so it reads a shade less prominent,
+		// per the user's own explicit request. Checked ahead of the
+		// executable-bit case below: an archive found via a matching
+		// member is shown this way regardless of the archive file's own
+		// permissions.
+		return p.theme.PlaceholderText
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
 		return p.theme.EntryExecutable
 	default:

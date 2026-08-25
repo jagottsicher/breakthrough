@@ -772,6 +772,54 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	}
 }
 
+// TestRunSearchIncludeArchivesReachesRequest pins that the "Include
+// zip, tar (gz, bz2, xz)" checkbox actually reaches
+// search.Request.IncludeArchives for a plain filename search.
+func TestRunSearchIncludeArchivesReachesRequest(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "abc*"
+	r.searchIncludeArchives = true
+	r.runSearch()
+
+	if !captured.IncludeArchives {
+		t.Error("IncludeArchives = false, want true")
+	}
+}
+
+// TestRunSearchIncludeArchivesIgnoredForContentSearch pins the same
+// scope decision NamePattern/NameMode already document on Request
+// itself: Include Archives only ever means something for a plain
+// filename search — checking it and also typing something into Content
+// must not reach IncludeArchives as true, the same as it has no
+// checkbox of its own in Content's own column to begin with (see
+// rerenderSearchDialog).
+func TestRunSearchIncludeArchivesIgnoredForContentSearch(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchContentValue = "TODO"
+	r.searchIncludeArchives = true
+	r.runSearch()
+
+	if captured.IncludeArchives {
+		t.Error("IncludeArchives = true, want false once Content is filled in")
+	}
+}
+
 // TestRunSearchStripsSlashesFromIgnoreDirs pins the real user report
 // end to end, through the actual dialog field runSearch reads (not
 // just parseIgnoreDirs in isolation — see its own test): typing
@@ -1272,6 +1320,7 @@ func TestCheckboxSpansToggle(t *testing.T) {
 		{"Ignore dirs:", func() bool { return r.searchIgnoreEnabled }},
 		{"Case sensitive", func() bool { return r.searchCaseSensitive }},
 		{"Skip hidden", func() bool { return r.searchSkipHidden }},
+		{"Include zip, tar (gz, bz2, xz)", func() bool { return r.searchIncludeArchives }},
 	}
 	for _, tt := range tests {
 		if tt.get() {

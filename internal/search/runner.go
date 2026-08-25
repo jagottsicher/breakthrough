@@ -12,12 +12,24 @@ import (
 	"strings"
 )
 
-// Result is one match: a plain filename hit (Line == 0), or a content
-// hit — a specific line within Path, Text its own matching content.
+// Result is one match: a plain filename hit (Line == 0, ArchiveMember
+// == ""), a content hit (Line > 0 — a specific line within Path, Text
+// its own matching content), or an archive-member filename hit
+// (ArchiveMember != "", set only when Request.IncludeArchives is on) —
+// Path is then the real archive file that was found and opened, and
+// ArchiveMember is the internal member name that actually matched,
+// exactly as the listing tool reported it (see
+// internal/search/archive.go's own listArchiveMembers). Path always
+// stays a real, directly-openable filesystem path either way — never a
+// synthetic combination of the two — so every existing use of Path
+// elsewhere (sorting, "which directory is this in", Properties, ...)
+// keeps working unchanged; only internal/ui's own display formatting
+// needs to know about ArchiveMember at all.
 type Result struct {
-	Path string
-	Line int
-	Text string
+	Path          string
+	Line          int
+	Text          string
+	ArchiveMember string
 }
 
 // Run starts req in a background goroutine and streams each match it
@@ -68,6 +80,14 @@ func Run(ctx context.Context, req Request) (<-chan Result, <-chan error) {
 }
 
 func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) error {
+	// Started before either branch below, and waited on (via the
+	// deferred wait func) only once this whole func is otherwise ready
+	// to return — see startArchiveSearch's own doc comment on why this
+	// runs concurrently with the primary find/locate call, not before
+	// or after it.
+	wait := startArchiveSearch(ctx, req, results)
+	defer wait()
+
 	// A recursive EngineFind search reports files shallow-first — see
 	// runFilenameSearchShallowFirst's own doc comment — rather than
 	// whatever order find's own directory traversal happens to produce.
@@ -99,6 +119,34 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 		}
 		return sendResult(ctx, results, Result{Path: path})
 	})
+}
+
+// startArchiveSearch kicks off searchArchives in the background when
+// req.IncludeArchives is set — running concurrently with whichever of
+// runFilenameSearch's own two branches actually executes right after
+// it, rather than before or after either: searchArchives' own
+// tar-listing step (see its doc comment) is the potentially slow part
+// here, not the primary find/locate call, so per the user's own
+// explicit request neither one should have to wait for the other to
+// even start.
+//
+// Returns a func that blocks until searchArchives is actually done —
+// meant to be called via defer right where it's returned (see
+// runFilenameSearch), so runFilenameSearch never returns, and Run's own
+// results channel never closes, while a member-listing goroutine
+// underneath it might still be sending on it. A no-op wait func when
+// IncludeArchives is false, so the caller never needs its own separate
+// branch for that case.
+func startArchiveSearch(ctx context.Context, req Request, results chan<- Result) (wait func()) {
+	if !req.IncludeArchives {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		searchArchives(ctx, req, results)
+	}()
+	return func() { <-done }
 }
 
 // runFilenameSearchShallowFirst runs a recursive EngineFind filename
