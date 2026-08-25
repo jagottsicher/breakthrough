@@ -323,10 +323,24 @@ func (r *Root) newSearchButtons() *tview.Flex {
 	r.searchCancelBtn.SetInputCapture(spaceAlsoActivates(r.closeSearch))
 	r.searchSearchBtn.SetInputCapture(spaceAlsoActivates(r.runSearch))
 
+	// Escape reaches here (not captureSearchKey — that only ever runs
+	// while a span/checkbox/field has real focus, never a button, the
+	// exact same reason Enter/Space needed their own case on each
+	// button too, not just captureSearchKey's) whenever Cancel or
+	// Search itself currently has focus — tview.Button's own
+	// InputHandler routes Escape to SetExitFunc, the same as Tab/
+	// Backtab, not to whatever's watching from an ancestor's own
+	// SetInputCapture. Without this case, Escape here fell into the
+	// same branch as Tab, silently just moving focus onward instead of
+	// closing anything — matching Properties' own identical two-button
+	// SetExitFunc cases (see newPropertiesButtons) exactly.
 	exitFunc := func(key tcell.Key) {
-		if key == tcell.KeyBacktab {
+		switch key {
+		case tcell.KeyBacktab:
 			r.moveSearchFocus(-1)
-		} else {
+		case tcell.KeyEscape:
+			r.closeSearch()
+		default:
 			r.moveSearchFocus(1)
 		}
 	}
@@ -667,6 +681,15 @@ func (r *Root) captureSearchKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEnter:
 		r.activateFocusedSearchSpan()
 		return nil
+	case tcell.KeyEscape:
+		// Per the user's own explicit request: Escape means Cancel here,
+		// the same as everywhere else in this app (Properties' own
+		// capturePropertiesKey has the identical case) — closes the
+		// dialog outright rather than doing nothing, which is what a
+		// span/checkbox/field having focus (as opposed to a button —
+		// see newSearchButtons' own matching case) left it doing before.
+		r.closeSearch()
+		return nil
 	case tcell.KeyRune:
 		if event.Rune() == ' ' {
 			r.activateFocusedSearchSpan()
@@ -877,13 +900,26 @@ func (r *Root) cancelSearch() {
 
 // parseIgnoreDirs splits the Ignored dirs field's comma-separated text
 // into individual directory names/patterns (see search.Request.
-// IgnoreDirs' own doc comment on how each is matched) — surrounding
-// whitespace trimmed, empty entries (a trailing comma, or the field
-// left blank) dropped.
+// IgnoreDirs' own doc comment on how each is matched — against a
+// single path *component*, via find's own -name test for EngineFind or
+// filepath.Match for EngineLocate, never a full or partial path) —
+// surrounding whitespace trimmed, empty entries (a trailing comma, or
+// the field left blank) dropped.
+//
+// Also trims any leading/trailing "/" from each entry — a real user
+// report: typing "/development" (reasonably expecting it to mean "the
+// development directory") silently excluded nothing at all, since
+// find's own -name test matches a bare basename, which can never
+// contain a "/" to begin with — "/development" and "development/" are
+// both patterns nothing could ever match, not stricter versions of
+// "development". This can't turn a genuinely different exclusion into
+// the wrong one (a bare name never had significant leading/trailing
+// slashes to begin with), only turn an entry that could never match
+// anything into the one the user almost certainly meant.
 func parseIgnoreDirs(text string) []string {
 	var dirs []string
 	for _, part := range strings.Split(text, ",") {
-		part = strings.TrimSpace(part)
+		part = strings.Trim(strings.TrimSpace(part), "/")
 		if part != "" {
 			dirs = append(dirs, part)
 		}
