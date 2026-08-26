@@ -10,5 +10,9 @@
   "placeholder_text": "#657b83",
   "entry_normal": "#93a1a1",
   "entry_executable": "#859900",
-  "entry_error": "#dc322f"
+  "entry_error": "#dc322f",
+  "entry_symlink": "#2aa198",
+  "entry_special": "#cb4b16",
+  "entry_unreadable": "#96221c",
+  "entry_archive": "#d33682"
 }

@@ -59,6 +59,36 @@ type Theme struct {
 	EntryNormal     string `json:"entry_normal"`
 	EntryExecutable string `json:"entry_executable"`
 	EntryError      string `json:"entry_error"`
+	// EntrySymlink colors a working symlink that resolves to a plain
+	// file — not a directory symlink, which DirectoryBackground already
+	// marks, and not a broken one, which stays EntryError.
+	EntrySymlink string `json:"entry_symlink"`
+	// EntrySpecial colors the four rarer filesystem entry types a
+	// listing can contain: sockets, FIFOs, and character/block devices
+	// (see fsops.EntryType) — one color for all four, the same way
+	// DirectoryBackground covers several related EntryTypes with one
+	// color, since none of them is a file whose content you'd normally
+	// open or edit the way EntryNormal/EntryExecutable/EntrySymlink
+	// entries are.
+	EntrySpecial string `json:"entry_special"`
+	// EntryUnreadable colors an entry the invoking user can't actually
+	// read — a permission-denied file, or a directory they can't list —
+	// per fsops.Entry.Unreadable (see its own doc comment on how that's
+	// determined). Deliberately not EntryError's own red: that color
+	// already means "broken symlink", a different, more specific
+	// problem; this is a dimmer, distinct red so the two don't read as
+	// the same thing at a glance.
+	EntryUnreadable string `json:"entry_unreadable"`
+	// EntryArchive colors a file whose name matches a recognized
+	// archive/compression extension (see isArchiveName in internal/ui) —
+	// a purely visual "you can probably search inside this" cue,
+	// deliberately not tied to which formats internal/search's own
+	// Include Archives option can actually search (see
+	// archiveHighlightExtensions' own doc comment on why that list is
+	// broader). Never applied to a directory, even one literally named
+	// like an archive (e.g. "backup.tar.gz/"): DirectoryBackground
+	// already marks it as a folder, and it isn't actually an archive.
+	EntryArchive string `json:"entry_archive"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -77,6 +107,10 @@ type ResolvedTheme struct {
 	EntryNormal     tcell.Color
 	EntryExecutable tcell.Color
 	EntryError      tcell.Color
+	EntrySymlink    tcell.Color
+	EntrySpecial    tcell.Color
+	EntryUnreadable tcell.Color
+	EntryArchive    tcell.Color
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -99,6 +133,10 @@ func DefaultTheme() Theme {
 		EntryNormal:     "white",
 		EntryExecutable: "green",
 		EntryError:      "red",
+		EntrySymlink:    "aqua",
+		EntrySpecial:    "orange",
+		EntryUnreadable: "indianred",
+		EntryArchive:    "fuchsia",
 	}
 }
 
@@ -132,6 +170,10 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntryNormal:     resolve(t.EntryNormal, def.EntryNormal),
 		EntryExecutable: resolve(t.EntryExecutable, def.EntryExecutable),
 		EntryError:      resolve(t.EntryError, def.EntryError),
+		EntrySymlink:    resolve(t.EntrySymlink, def.EntrySymlink),
+		EntrySpecial:    resolve(t.EntrySpecial, def.EntrySpecial),
+		EntryUnreadable: resolve(t.EntryUnreadable, def.EntryUnreadable),
+		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
 	}
 }
 

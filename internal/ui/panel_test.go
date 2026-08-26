@@ -1005,6 +1005,76 @@ func TestEntryColor(t *testing.T) {
 	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755, archiveHit: true}); got != p.theme.PlaceholderText {
 		t.Errorf("archive-member hit color = %v, want %v (PlaceholderText) even for an executable archive file", got, p.theme.PlaceholderText)
 	}
+
+	for _, typ := range []fsops.EntryType{fsops.TypeSocket, fsops.TypeFIFO, fsops.TypeCharDevice, fsops.TypeBlockDevice} {
+		if got := p.entryColor(rowRef{entryType: typ}); got != p.theme.EntrySpecial {
+			t.Errorf("entry type %v color = %v, want %v (EntrySpecial)", typ, got, p.theme.EntrySpecial)
+		}
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkFile}); got != p.theme.EntrySymlink {
+		t.Errorf("working symlink-to-file color = %v, want %v (EntrySymlink)", got, p.theme.EntrySymlink)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "backup.tar.gz"}); got != p.theme.EntryArchive {
+		t.Errorf("archive-named file color = %v, want %v (EntryArchive)", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "BACKUP.TAR.GZ"}); got != p.theme.EntryArchive {
+		t.Errorf("archive-named file color should be case-insensitive, got %v, want %v (EntryArchive)", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: "backup.tar.gz"}); got != p.theme.EntryNormal {
+		t.Errorf("a directory merely named like an archive should NOT get EntryArchive, got %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "installer.tar.gz", mode: 0o755}); got != p.theme.EntryArchive {
+		t.Errorf("an executable archive-named file should still show EntryArchive (checked ahead of EntryExecutable), got %v, want %v", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("unreadable file color = %v, want %v (EntryUnreadable)", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("unreadable directory color = %v, want %v (EntryUnreadable)", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "backup.tar.gz", unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable archive-named file should show EntryUnreadable, not EntryArchive — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkFile, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable symlink-to-file should show EntryUnreadable, not EntrySymlink — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken, unreadable: true}); got != p.theme.EntryError {
+		t.Errorf("a broken symlink should still show EntryError even if also flagged unreadable, got %v, want %v", got, p.theme.EntryError)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSocket, unreadable: true}); got != p.theme.EntrySpecial {
+		t.Errorf("a special file's own color should win regardless of unreadable, got %v, want %v (EntrySpecial)", got, p.theme.EntrySpecial)
+	}
+}
+
+func TestIsArchiveName(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"archive.zip", true},
+		{"ARCHIVE.ZIP", true},
+		{"backup.tar", true},
+		{"backup.tar.gz", true},
+		{"backup.tar.bz2", true},
+		{"backup.tar.xz", true},
+		{"backup.tgz", true},
+		{"backup.tbz2", true},
+		{"backup.txz", true},
+		{"data.7z", true},
+		{"data.rar", true},
+		{"data.zst", true},
+		{"lonely.gz", true},
+		{"lonely.bz2", true},
+		{"lonely.xz", true},
+		{"plain.txt", false},
+		{"noextension", false},
+		{"zipper.go", false}, // contains "zip" but doesn't end in ".zip"
+	}
+	for _, tt := range tests {
+		if got := isArchiveName(tt.name); got != tt.want {
+			t.Errorf("isArchiveName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
 }
 
 func TestModifierGlyph(t *testing.T) {
