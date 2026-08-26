@@ -46,14 +46,12 @@ terminal.
 - A bottom bar: a real shell command line (with its own history, shared
   with your regular shell's `$HISTFILE`, and `cd` handled directly
   rather than uselessly changing a subshell's own directory), which
-  expands into a small console when clicked into — full width, no
-  prompt, growing upward toward mid-screen — for multi-line bash
-  scripting (Enter runs the buffer, Alt+Enter inserts a newline instead)
-  and to see a command's own output right there, scrollable
-  (`PageUp`/`PageDown`), instead of a full-screen flash. A short list of
-  known-interactive programs (`vim`, `less`, `top`, `ssh`, ...) still get
-  the real terminal, exactly as before; `Ctrl+C` interrupts whatever's
-  currently running captured. Plus quick actions — Edit (`^E`, opens
+  expands when clicked into — full width, no prompt, growing upward
+  toward mid-screen — for multi-line bash scripting (Enter runs the
+  buffer, Alt+Enter inserts a newline instead). Every command runs
+  through a real terminal, the same way Midnight Commander's own
+  command line handles every command — no attempt to guess which
+  programs need one and which don't. Plus quick actions — Edit (`^E`, opens
   `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
   own pick if set, on the selected file), Look (`^L`, see below), Rename
