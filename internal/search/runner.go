@@ -19,7 +19,7 @@ import (
 // is on), or a content hit *inside* an archive member (Line > 0 AND
 // ArchiveMember != "" both set, from Request.IncludeCompressed finding
 // a match inside a tar/tar.gz/tar.bz2/tar.xz archive — see
-// internal/search/tarcontent.go; a plain .zip's own content match never
+// internal/search/archivecontent.go; a plain .zip's own content match never
 // sets ArchiveMember, since ContentZip/zipgrep greps a member directly
 // without this package ever listing members itself). Path is then the
 // real archive file that was found and opened either way, and
@@ -342,6 +342,20 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	// request: Engine only ever means something once there's an actual
 	// name-matching step for it to drive.
 	if req.NamePattern != "" && req.Content == ContentGrep {
+		// IncludeCompressed additionally narrows every zip/tar-family
+		// archive found under Scope to just the members whose own name
+		// matches NamePattern too, searching only those for content (a
+		// real user report: Filename "fstab" + Content "leere" used to
+		// find nothing inside any archive at all, since IncludeCompressed
+		// was never even consulted once NamePattern was set — see
+		// startArchiveContentSearchNarrowed in archivecontent.go). Runs
+		// concurrently with the plain NamePattern-narrowed grep right
+		// below it, not before or after — same "don't block one on the
+		// other" reasoning startCompressedContentSearch's own doc comment
+		// gives for the un-narrowed case.
+		waitArchives := startArchiveContentSearchNarrowed(ctx, req, results)
+		defer waitArchives()
+
 		return listThenGrep(ctx, req, req.NamePattern, req.NameMode, req.CaseSensitive, "grep", func(f string) []string {
 			// nil, not req.IgnoreDirs: f is already one single, already-
 			// approved file by the time it gets here (see listThenGrep's
@@ -359,7 +373,7 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 		// right below it, not before or after — see
 		// startCompressedContentSearch's own doc comment on why. Its tar-
 		// family counterpart (tar/tar.gz/tar.bz2/tar.xz — see
-		// tarcontent.go) runs the same way, for the same reason.
+		// archivecontent.go) runs the same way, for the same reason.
 		wait := startCompressedContentSearch(ctx, req, results)
 		defer wait()
 		waitTar := startTarContentSearch(ctx, req, results)

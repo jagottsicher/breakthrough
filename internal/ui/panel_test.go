@@ -1511,7 +1511,7 @@ func TestAppendSearchResultShowsArrowForArchiveMatch(t *testing.T) {
 // TestAppendSearchResultShowsArrowAndLineForArchiveContentMatch pins the
 // display text for a content match found *inside* an archive member
 // (Line and ArchiveMember both set — see internal/search's own
-// tarcontent.go): "path -> member:line: text", combining both the
+// archivecontent.go): "path -> member:line: text", combining both the
 // arrow shape a filename-only archive match already gets and the
 // line/text suffix a plain content match already gets, rather than
 // either one alone dropping the other's information.
@@ -1953,7 +1953,7 @@ func TestActivateRowOnArchiveMatchCallsOnExitSearchResults(t *testing.T) {
 // TestActivateRowOnArchiveContentMatchFallsBackInsteadOfOpeningEditor
 // pins activateRow's own exception for a content match found *inside*
 // an archive member (Line > 0 AND ArchiveMember != "" both set — see
-// internal/search's own tarcontent.go): unlike a plain content match,
+// internal/search's own archivecontent.go): unlike a plain content match,
 // this must NOT call onOpenSearchResult (ref.path is the containing
 // archive itself, not the matched member's own extracted content —
 // opening the raw archive in a text editor at ref.searchLine would

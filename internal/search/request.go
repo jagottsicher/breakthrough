@@ -119,18 +119,21 @@ const (
 // every .gz/.bz2/.xz/.zip file found under Scope, via the matching
 // grep wrapper (zgrep/bzgrep/xzgrep/zipgrep — see internal/search's own
 // compressed.go), and every tar/tar.gz/tar.bz2/tar.xz archive's own
-// member files (see tarcontent.go — none of zgrep/bzgrep/xzgrep can
+// member files (see archivecontent.go — none of zgrep/bzgrep/xzgrep can
 // meaningfully search a tar *container* directly, so this decompresses
-// each one once and greps its members individually instead) — a
-// *plain* content search only (Content == ContentGrep, NamePattern
-// empty, mirroring the exact condition runContentSearch already uses
-// for a plain grep -r over Scope); meaningless otherwise. A
-// NamePattern-narrowed search (Filename also filled in) never reaches
-// either path (see runContentSearch's own early branch for that case)
-// — matching an archive member's own name against NamePattern, rather
-// than just the archive's outer filename, is a separate, larger
-// feature this doesn't attempt (see IncludeArchives for member *names*
-// on their own, independent of any content search).
+// each one once and greps its members individually instead); meaningless
+// when Content isn't ContentGrep.
+//
+// With NamePattern also set (Filename filled in alongside Content —
+// see runContentSearch's own early branch), this instead narrows every
+// zip/tar-family archive's own members to just the ones whose name
+// also matches NamePattern before searching their content (see
+// startArchiveContentSearchNarrowed) — matching Include Archives' own
+// member-name matching (see IncludeArchives), just feeding into a
+// content search instead of a filename-only one. A lone .gz/.bz2/.xz
+// has no members of its own to narrow this way in either case, so it's
+// left out of both paths, same as IncludeArchives' own
+// archiveExtensions already excludes it.
 type Request struct {
 	Pattern           string
 	NamePattern       string

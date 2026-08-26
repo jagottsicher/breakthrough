@@ -539,7 +539,7 @@ func (r *Root) rerenderSearchDialog() {
 	// a single compressed file via the matching grep wrapper (zgrep/
 	// bzgrep/xzgrep/zipgrep), or a tar/tar.gz/tar.bz2/tar.xz archive's
 	// own member files, decompressed once and grepped individually (see
-	// internal/search's own tarcontent.go) — covering the same set of
+	// internal/search's own archivecontent.go) — covering the same set of
 	// formats Include Archives itself covers, just for content instead
 	// of member names.
 	right.choice(r.searchIncludeCompressed, "Include compressed files", func() { r.searchIncludeCompressed = !r.searchIncludeCompressed })

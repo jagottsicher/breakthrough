@@ -359,6 +359,137 @@ func TestMaterializePlainTarDecompressesGzipToTempFile(t *testing.T) {
 	}
 }
 
+// makeZipContentFixtureMulti is makeZipContentFixture's own multi-member
+// counterpart (see tarMember) — needed to pin that the NamePattern-
+// narrowed archive search (see startArchiveContentSearchNarrowed)
+// really filters by member name, not just by whether the archive as a
+// whole contains a match anywhere.
+func makeZipContentFixtureMulti(t *testing.T, dir, name string, members []tarMember) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	for _, m := range members {
+		w, err := zw.Create(m.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(m.content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestRunNamePatternNarrowedFindsMatchInTarMember pins the user's own
+// real report: Filename "fstab" + Content "leere" together used to find
+// nothing inside any archive at all (IncludeCompressed was never
+// consulted once NamePattern was set) — now the tar member whose own
+// name matches NamePattern is both listed and grepped.
+func TestRunNamePatternNarrowedFindsMatchInTarMember(t *testing.T) {
+	requireTool(t, "find")
+	requireTool(t, "tar")
+	requireTool(t, "grep")
+	dir := t.TempDir()
+	tarPath := makePlainTarContentFixture(t, dir, "etc.tar", []tarMember{
+		{"etc/fstab", "UUID=abc / ext4 defaults 0 1\nLeere Zeile folgt\n"},
+		{"etc/hostname", "Leere Zeile folgt\n"}, // matching content, but the WRONG name — must be excluded
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern:           "leere",
+		NamePattern:       "fstab",
+		NameMode:          ModeKeyword,
+		Scope:             dir,
+		Mode:              ModeKeyword,
+		Content:           ContentGrep,
+		IncludeCompressed: true,
+	})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want exactly 1: %+v", len(got), got)
+	}
+	if got[0].Path != tarPath || got[0].ArchiveMember != "etc/fstab" || got[0].Line != 2 {
+		t.Errorf("got %+v, want Path=%q ArchiveMember=%q Line=2", got[0], tarPath, "etc/fstab")
+	}
+}
+
+// TestRunNamePatternNarrowedFindsMatchInZipMember is
+// TestRunNamePatternNarrowedFindsMatchInTarMember's own zip counterpart
+// — via grepZipMember/unzip -p rather than the tar pipeline.
+func TestRunNamePatternNarrowedFindsMatchInZipMember(t *testing.T) {
+	requireTool(t, "find")
+	requireTool(t, "unzip")
+	requireTool(t, "grep")
+	dir := t.TempDir()
+	zipPath := makeZipContentFixtureMulti(t, dir, "etc.zip", []tarMember{
+		{"etc/fstab", "UUID=abc / ext4 defaults 0 1\nLeere Zeile folgt\n"},
+		{"etc/hostname", "Leere Zeile folgt\n"}, // matching content, wrong name — must be excluded
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern:           "leere",
+		NamePattern:       "fstab",
+		NameMode:          ModeKeyword,
+		Scope:             dir,
+		Mode:              ModeKeyword,
+		Content:           ContentGrep,
+		IncludeCompressed: true,
+	})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want exactly 1: %+v", len(got), got)
+	}
+	if got[0].Path != zipPath || got[0].ArchiveMember != "etc/fstab" || got[0].Line != 2 {
+		t.Errorf("got %+v, want Path=%q ArchiveMember=%q Line=2", got[0], zipPath, "etc/fstab")
+	}
+}
+
+// TestRunNamePatternNarrowedOffLeavesArchivesUnopened pins that the
+// narrowed archive search stays gated on IncludeCompressed, same as the
+// plain (un-narrowed) case — Filename+Content alone, without the
+// checkbox, must not open any archive at all.
+func TestRunNamePatternNarrowedOffLeavesArchivesUnopened(t *testing.T) {
+	requireTool(t, "find")
+	requireTool(t, "tar")
+	dir := t.TempDir()
+	makePlainTarContentFixture(t, dir, "etc.tar", []tarMember{
+		{"etc/fstab", "Leere Zeile folgt\n"},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern:           "leere",
+		NamePattern:       "fstab",
+		NameMode:          ModeKeyword,
+		Scope:             dir,
+		Mode:              ModeKeyword,
+		Content:           ContentGrep,
+		IncludeCompressed: false,
+	})
+
+	got := collectResults(t, results, errs)
+	if len(got) != 0 {
+		t.Errorf("got %+v, want no results with IncludeCompressed off", got)
+	}
+}
+
 func TestParseGrepStdinLine(t *testing.T) {
 	tests := []struct {
 		line     string

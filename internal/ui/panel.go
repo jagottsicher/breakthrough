@@ -600,7 +600,7 @@ type searchResultEntry struct {
 // populated when Request.IncludeArchives is on), or "path -> member:
 // line: text" for a content match found *inside* an archive member
 // (both Line and ArchiveMember set — see internal/search's own
-// tarcontent.go, populated when Request.IncludeCompressed finds a
+// archivecontent.go, populated when Request.IncludeCompressed finds a
 // match inside a tar/tar.gz/tar.bz2/tar.xz archive) — the same "->
 // target" shape a symlink's own name already gets (see addRow), reused
 // here rather than inventing a second arrow convention.
@@ -1407,7 +1407,7 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // checking in turn without losing the list between them. Every other
 // result — a filename match, a content match with onOpenSearchResult
 // left nil, or a content match *inside* an archive member
-// (ref.archiveHit — see tarcontent.go's own Result.ArchiveMember,
+// (ref.archiveHit — see archivecontent.go's own Result.ArchiveMember,
 // which can now be set alongside a real Line/Text too, not just for a
 // filename-only archive-member hit) — is never "this panel's own
 // directory" the way a real row's target always is, so there's nothing

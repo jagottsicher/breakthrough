@@ -13,7 +13,7 @@ import (
 // shape — see BzgrepArgs/XzgrepArgs/ZgrepArgs/ZipgrepArgs' own doc
 // comments), not archive *containers* like tar.gz/tar.bz2/tar.xz — none
 // of those four tools can meaningfully search inside one directly (see
-// tarcontent.go for how those are covered instead: decompressed once,
+// archivecontent.go for how those are covered instead: decompressed once,
 // then each member grepped on its own).
 var compressedTools = []struct {
 	glob string
