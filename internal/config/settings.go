@@ -77,12 +77,22 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     default — per the user's own request. Boolean values accept
 //     anything strconv.ParseBool does ("true"/"false", "1"/"0", ...) —
 //     SetKey itself always writes the canonical "true"/"false" form.
+//   - pager: which of Look's two rendering paths internal/ui uses (see
+//     its own openLook/showBuiltinLook/runExternalPager) — "builtin"
+//     (the default: breakthrough's own dependency-free text viewer) or
+//     "external" (bat/less/$PAGER/more, via internal/ui's
+//     externalPagerCommand). Any value other than exactly "external" is
+//     treated as "builtin" — the same forgiving, unvalidated-at-parse-
+//     time handling color_scheme already gets (an unrecognized scheme
+//     slug just falls back to Default via FindColorScheme, rather than
+//     Load itself rejecting it).
 type Settings struct {
 	ColorScheme string
 	Language    string
 	ShowHidden  bool
 	SizeBytes   bool
 	MtimeUnix   bool
+	Pager       string
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -97,6 +107,7 @@ func DefaultSettings() Settings {
 		ShowHidden:  true,
 		SizeBytes:   false,
 		MtimeUnix:   false,
+		Pager:       "builtin",
 	}
 }
 
@@ -125,6 +136,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.SizeBytes)
 	case "mtime_unix":
 		return parseBool(&s.MtimeUnix)
+	case "pager":
+		s.Pager = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
