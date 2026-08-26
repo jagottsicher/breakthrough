@@ -33,6 +33,12 @@ func TestNeedsRealTerminal(t *testing.T) {
 		{"ssh example.com", true},
 		{"top", true},
 		{"watch -n1 date", true},
+		// mc itself — regression pin for the user's own direct report:
+		// this was missing from interactivePrograms, so "mc" silently
+		// ran captured instead of going full-screen.
+		{"mc", true},
+		{"ranger", true},
+		{"tig", true},
 		{"", false},
 		// A known-interactive name appearing only as another command's own
 		// argument (not as a command itself) still matches — see
