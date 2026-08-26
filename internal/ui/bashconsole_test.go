@@ -266,6 +266,38 @@ func TestRunShellCommandCapturedIgnoresSecondWhileRunning(t *testing.T) {
 	}
 }
 
+// TestRunShellCommandCapturedDoesNotBlurBashLine pins the fix for the
+// user's own report: the console was closing right after every command
+// — starting a captured command used to call bashLine.SetDisabled(true),
+// and TextArea's own SetDisabled unconditionally re-fires its
+// FinishedFunc, which newBashConsole wires to hand focus back to the
+// panel — collapsing bashConsole (via bashLine's own BlurFunc) the
+// instant a command started, not on Escape/click-away as intended (see
+// runShellCommandCaptured's own doc comment on why SetDisabled isn't
+// used here anymore).
+func TestRunShellCommandCapturedDoesNotBlurBashLine(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.app.SetFocus(r.bashLine)
+	if !r.bashLine.HasFocus() {
+		t.Fatal("setup: bashLine should have focus")
+	}
+
+	r.runShellCommandCaptured("sleep 30")
+	if r.bashRunningCmd == nil {
+		t.Skip("sleep not available in this environment (or failed to start)")
+	}
+	defer r.bashRunningCmd.Process.Kill() //nolint:errcheck
+
+	if !r.bashLine.HasFocus() {
+		t.Error("bashLine lost focus merely from starting a captured command — the console would have collapsed out from under the user")
+	}
+}
+
 // TestInterruptBashCommand pins interruptBashCommand's own two cases —
 // false with nothing running, true (and a real SIGINT actually
 // delivered) with something running — the same signal a real shell's
