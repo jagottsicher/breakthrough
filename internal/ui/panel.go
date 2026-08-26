@@ -943,7 +943,12 @@ func (p *Panel) addRow(row int, ref rowRef) {
 
 	color := p.entryColor(ref)
 
-	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
+	// The type-indicator glyph itself stays the plain Text color — only
+	// the name (below) picks up entryColor's own distinction, per the
+	// user's own explicit request. MC's own skin colors both; this app
+	// deliberately doesn't, so the narrow type column reads as pure
+	// punctuation rather than a second, redundant color cue.
+	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
@@ -1215,15 +1220,14 @@ func typeGlyph(ref rowRef) byte {
 	return ' '
 }
 
-// entryColor sets a row's type character and name apart by color for
-// every case worth flagging beyond the glyph alone, per p.theme's own
-// Entry* fields (the default scheme's red/green for
-// EntryError/EntryExecutable match Midnight Commander's own default
-// skin, which colors an executable's whole name, not just its '*').
-// Applied to both the type cell and the name cell (see addRow) for the
-// same reason MC colors the whole entry rather than a lone prefix
-// character: it reads at a glance across the row, not just in the
-// narrow type column. Checked in this order, most specific/urgent first:
+// entryColor sets a row's name apart by color for every case worth
+// flagging beyond the type glyph alone, per p.theme's own Entry* fields
+// (the default scheme's red/green for EntryError/EntryExecutable match
+// Midnight Commander's own default skin). Unlike MC, this is applied
+// only to the name cell, not the narrow type-indicator column (see
+// addRow) — the glyph itself stays plain Text, so the type column reads
+// as punctuation rather than a second, redundant color cue. Checked in
+// this order, most specific/urgent first:
 //
 //  1. A broken symlink — nothing to open at all.
 //  2. archiveHit — a search-mode display concern (see its own doc

@@ -1170,6 +1170,61 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	}
 }
 
+// TestAddRowTypeCellStaysPlainText pins that entryColor's distinctions —
+// green for executable, red for broken, etc. — land on the name cell
+// only, per the user's own explicit request: the narrow type-indicator
+// column always stays theme.Text, regardless of what the row's own type
+// or state is.
+func TestAddRowTypeCellStaysPlainText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "broken-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int)
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+
+	cellForeground := func(cell *tview.TableCell) tcell.Color {
+		fg, _, _ := cell.Style.Decompose()
+		return fg
+	}
+
+	execRow, ok := byName["run.sh"]
+	if !ok {
+		t.Fatal("run.sh row not found")
+	}
+	if got := cellForeground(p.table.GetCell(execRow, colType)); got != theme.Text {
+		t.Errorf("executable file's type cell foreground = %v, want theme.Text (%v), not EntryExecutable", got, theme.Text)
+	}
+	if got := cellForeground(p.table.GetCell(execRow, colName)); got != theme.EntryExecutable {
+		t.Errorf("executable file's name cell foreground = %v, want theme.EntryExecutable (%v)", got, theme.EntryExecutable)
+	}
+
+	brokenRow, ok := byName["broken-link"]
+	if !ok {
+		t.Fatal("broken-link row not found")
+	}
+	if got := cellForeground(p.table.GetCell(brokenRow, colType)); got != theme.Text {
+		t.Errorf("broken symlink's type cell foreground = %v, want theme.Text (%v), not EntryError", got, theme.Text)
+	}
+	if got := cellForeground(p.table.GetCell(brokenRow, colName)); got != theme.EntryError {
+		t.Errorf("broken symlink's name cell foreground = %v, want theme.EntryError (%v)", got, theme.EntryError)
+	}
+}
+
 // TestNameHighlightTagsSetsOnlyBackground pins the exact tag string
 // nameHighlightTags produces for the default theme's own
 // DirectoryBackground (darkgoldenrod, W3C value #b8860b): a background-only
