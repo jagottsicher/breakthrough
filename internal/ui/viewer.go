@@ -141,9 +141,11 @@ func (r *Root) showBuiltinLook(path string) {
 		// internal/viewer stays tview-free the same way it does for
 		// text (see above) — ScaleForTerminal only ever hands back
 		// pixels, renderImageHalfBlocks (syntax.go's own neighbor,
-		// image.go) is what knows how to turn those into tview markup.
+		// image.go) is what knows how to turn those into tview markup,
+		// centered within the same innerWidth×innerHeight box it was
+		// scaled to fit inside.
 		scaled := viewer.ScaleForTerminal(result.Image, innerWidth, innerHeight)
-		r.viewerView.SetText(renderImageHalfBlocks(scaled))
+		r.viewerView.SetText(renderImageHalfBlocks(scaled, innerWidth, innerHeight))
 
 	default: // viewer.KindUnsupported
 		if !r.showUnsupportedLook(path, result, innerWidth, innerHeight) {

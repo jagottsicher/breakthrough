@@ -17,7 +17,7 @@ func TestRenderImageHalfBlocksPairsRowsIntoOneLine(t *testing.T) {
 	img.Set(0, 0, color.RGBA{R: 255, A: 255})
 	img.Set(0, 1, color.RGBA{B: 255, A: 255})
 
-	got := renderImageHalfBlocks(img)
+	got := renderImageHalfBlocks(img, 1, 1) // box == image size: no centering padding to account for
 
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	if len(lines) != 1 {
@@ -36,7 +36,7 @@ func TestRenderImageHalfBlocksPairsRowsIntoOneLine(t *testing.T) {
 // silently dropping the last row.
 func TestRenderImageHalfBlocksHandlesOddHeight(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 3))
-	got := renderImageHalfBlocks(img)
+	got := renderImageHalfBlocks(img, 1, 2) // box == image size (2 = ceil(3/2)): no centering padding
 
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	if len(lines) != 2 {
@@ -58,13 +58,52 @@ func TestRenderImageHalfBlocksProducesValidTviewMarkup(t *testing.T) {
 	}
 
 	v := tview.NewTextView().SetDynamicColors(true)
-	v.SetText(renderImageHalfBlocks(img))
+	v.SetText(renderImageHalfBlocks(img, 3, 2)) // box == image size: no centering padding
 	// GetText(true) strips tags — if the markup were malformed this
 	// wouldn't panic, but a stray unclosed tag would visibly eat into
 	// what should have been the "▀" glyphs. Just confirming it runs at
 	// all, without panicking, is most of what this test is for.
 	if got := v.GetText(true); !strings.Contains(got, "▀") {
 		t.Errorf("rendered text lost its own glyphs after tview tag parsing: %q", got)
+	}
+}
+
+// TestRenderImageHalfBlocksCentersHorizontally pins that a box wider
+// than the image gets even left/right padding — each line starts with
+// the expected number of leading spaces before its own first color
+// tag, rather than the image hugging the left edge.
+func TestRenderImageHalfBlocksCentersHorizontally(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2)) // 2 cols wide, 1 cell row tall
+	got := renderImageHalfBlocks(img, 10, 1)     // (10-2)/2 = 4 leading spaces
+
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("got %d lines, want 1", len(lines))
+	}
+	want := strings.Repeat(" ", 4)
+	if !strings.HasPrefix(lines[0], want) {
+		t.Errorf("line = %q, want it to start with %d leading spaces", lines[0], 4)
+	}
+}
+
+// TestRenderImageHalfBlocksCentersVertically pins that a box taller
+// than the image's own cell-row count gets blank lines both above and
+// below it, split evenly, rather than the image hugging the top edge.
+func TestRenderImageHalfBlocksCentersVertically(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 2)) // 1 cell row tall
+	got := renderImageHalfBlocks(img, 1, 5)      // (5-1)/2 = 2 above, 2 below
+
+	lines := strings.Split(got, "\n")
+	// 2 blank + 1 image row + 2 blank = 5 lines, plus one trailing ""
+	// from the final "\n" strings.Split always adds.
+	if len(lines) != 6 || lines[len(lines)-1] != "" {
+		t.Fatalf("got %d lines %q, want 5 content lines plus one trailing empty split", len(lines), lines)
+	}
+	for i, want := range []bool{true, true, false, true, true} {
+		isBlank := lines[i] == ""
+		if isBlank != want {
+			t.Errorf("line %d blank=%v, want blank=%v (content: %q)", i, isBlank, want, lines[i])
+		}
 	}
 }
 
