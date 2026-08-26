@@ -144,5 +144,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpView.SetTextColor(theme.Text)
 	}
 
+	if r.viewerView != nil {
+		r.viewerView.SetBackgroundColor(theme.AccentBackground)
+		r.viewerView.SetTextColor(theme.Text)
+	}
+
 	r.panel.applyTheme(theme)
 }

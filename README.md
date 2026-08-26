@@ -30,18 +30,18 @@ terminal.
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
-  Edit, Rename, checkbox-based multi-selection (including glob-pattern
-  Select +/-), Copy/Cut/Paste, chmod, and chown.
+  Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
+  glob-pattern Select +/-), Copy/Cut/Paste, chmod, and chown.
 - A bottom bar: a real shell command line (with its own history, shared
   with your regular shell's `$HISTFILE`, and `cd` handled directly
   rather than uselessly changing a subshell's own directory) plus quick
   actions — Edit (`^E`, opens `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
-  own pick if set, on the selected file), Rename (`^R`), toggle hidden
-  files (`^G`), Search (`^F`, see below), Settings (`^X`) — alongside
-  the current user, disk usage for the directory on screen, and a clock.
-  Hidden-files/size-format/mtime-format toggles are remembered across
-  restarts.
+  own pick if set, on the selected file), Look (`^L`, see below), Rename
+  (`^R`), toggle hidden files (`^G`), Search (`^F`, see below), Options
+  (`^O`) — alongside the current user, disk usage for the directory on
+  screen, and a clock. Hidden-files/size-format/mtime-format toggles are
+  remembered across restarts.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Settings overlay (`^X` or the
   bottom bar's own button) — no restart needed, and the pick is
@@ -53,6 +53,19 @@ terminal.
   with real-time streamed results you can jump straight to. Runs the
   real system tools rather than a reimplemented search, so it inherits
   whatever's already indexed by `locate`'s own `updatedb`.
+- Look (`^L`, the bottom bar's own button, or the context menu): a
+  read-only preview of the selected file's content, in breakthrough's
+  own scrollable overlay — no external dependency required for plain
+  text, source code, config files, diffs/patches, or logs (large files
+  show their own first 8 MiB rather than being fully loaded). Set
+  `pager = external` in your config instead (see
+  [Color schemes](#color-schemes) below for the file itself) to open
+  `bat`/`batcat` (for syntax highlighting), `$PAGER`, or `less`/`more`
+  in your real terminal. "Tail -f", right next to Look in the context
+  menu, follows a growing log live via the real `tail -f` instead. A
+  file type Look doesn't recognize as text (an image, a PDF, ...)
+  reports that plainly rather than dumping binary content on screen —
+  support for more file types is planned.
 
 ## Status
 
