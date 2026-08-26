@@ -261,18 +261,22 @@ type rowRef struct {
 	isDir     bool
 	checkable bool // false for "..", which can't be a file operation target
 
-	// entryType/linkTarget/nlink/mountPoint/mode mirror the corresponding
-	// fsops.Entry fields — see typeGlyph and modifierGlyph, the only
-	// things that read them, to render the type and modifier columns. The
-	// ".." row gets a plain TypeDir with nothing else set (see load):
-	// distinguishing whether going up crosses a filesystem boundary would
-	// need an extra stat purely for that row, not worth it for what's
-	// otherwise always just "..".
+	// entryType/linkTarget/nlink/mountPoint/mode/unreadable mirror the
+	// corresponding fsops.Entry fields — see typeGlyph, modifierGlyph,
+	// and entryColor, the only things that read them, to render the type
+	// and modifier columns and pick the name's own color. The ".." row
+	// gets a plain TypeDir with nothing else set (see load): distinguishing
+	// whether going up crosses a filesystem boundary, or isn't listable,
+	// would need an extra stat purely for that row, not worth it for
+	// what's otherwise always just "..". unreadable's own zero value
+	// (false) is the deliberately safe default here for exactly that
+	// reason — see fsops.Entry.Unreadable's own doc comment.
 	entryType  fsops.EntryType
 	linkTarget string
 	nlink      uint64
 	mountPoint bool
 	mode       os.FileMode
+	unreadable bool
 
 	// size/modTime mirror fsops.Entry's own fields, for the Size/Modified
 	// columns (see addRow/formatSizeCell/formatModTimeCell).
@@ -517,6 +521,7 @@ func (p *Panel) load(dir string) error {
 			nlink:      e.Nlink,
 			mountPoint: e.MountPoint,
 			mode:       e.Mode,
+			unreadable: e.Unreadable,
 			size:       e.Size,
 			modTime:    e.ModTime,
 		})
@@ -708,6 +713,7 @@ func (p *Panel) renderSearchEntries() {
 			nlink:      e.Nlink,
 			mountPoint: e.MountPoint,
 			mode:       e.Mode,
+			unreadable: e.Unreadable,
 			size:       e.Size,
 			modTime:    e.ModTime,
 			searchLine: e.line,
@@ -1209,15 +1215,32 @@ func typeGlyph(ref rowRef) byte {
 	return ' '
 }
 
-// entryColor sets a row's type character and name apart by color for the
-// two cases worth flagging beyond the glyph alone — a broken symlink
-// (something that will fail if acted on) and an executable file, per
-// p.theme's own EntryError/EntryExecutable (the default scheme's red/
-// green match Midnight Commander's own default skin, which colors an
-// executable's whole name, not just its '*'). Applied to both the type
-// cell and the name cell (see addRow) for the same reason MC colors the
-// whole entry rather than a lone prefix character: it reads at a glance
-// across the row, not just in the narrow type column.
+// entryColor sets a row's type character and name apart by color for
+// every case worth flagging beyond the glyph alone, per p.theme's own
+// Entry* fields (the default scheme's red/green for
+// EntryError/EntryExecutable match Midnight Commander's own default
+// skin, which colors an executable's whole name, not just its '*').
+// Applied to both the type cell and the name cell (see addRow) for the
+// same reason MC colors the whole entry rather than a lone prefix
+// character: it reads at a glance across the row, not just in the
+// narrow type column. Checked in this order, most specific/urgent first:
+//
+//  1. A broken symlink — nothing to open at all.
+//  2. archiveHit — a search-mode display concern (see its own doc
+//     comment on rowRef), unrelated to the entry's own file type, so it
+//     stays ahead of every type-based case below.
+//  3. The four special types (socket/FIFO/char/block device) — not
+//     really "readable content" in the EntryNormal/EntryExecutable
+//     sense at all, regardless of what ref.unreadable says.
+//  4. ref.unreadable — the invoking user can't actually read this
+//     entry's content, which matters more than whether it also happens
+//     to look like an archive or be executable.
+//  5. A recognized archive extension (never for a directory, even one
+//     literally named like an archive — see isArchiveName).
+//  6. A working symlink to a file (TypeSymlinkBroken, the one other
+//     symlink case, was already handled in step 1).
+//  7. An executable TypeFile.
+//  8. Everything else: EntryNormal.
 func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
@@ -1228,16 +1251,53 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 		// hintText) rather than a dedicated new theme color — an
 		// archive-member row isn't a real file/directory match the way
 		// every other row here is, so it reads a shade less prominent,
-		// per the user's own explicit request. Checked ahead of the
-		// executable-bit case below: an archive found via a matching
-		// member is shown this way regardless of the archive file's own
-		// permissions.
+		// per the user's own explicit request.
 		return p.theme.PlaceholderText
+	case ref.entryType == fsops.TypeSocket, ref.entryType == fsops.TypeFIFO,
+		ref.entryType == fsops.TypeCharDevice, ref.entryType == fsops.TypeBlockDevice:
+		return p.theme.EntrySpecial
+	case ref.unreadable:
+		return p.theme.EntryUnreadable
+	case !ref.isDir && isArchiveName(ref.name):
+		return p.theme.EntryArchive
+	case ref.entryType == fsops.TypeSymlinkFile:
+		return p.theme.EntrySymlink
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
 		return p.theme.EntryExecutable
 	default:
 		return p.theme.EntryNormal
 	}
+}
+
+// archiveHighlightExtensions is the set of filename suffixes
+// isArchiveName recognizes — deliberately broader than
+// internal/search's own archiveExtensions (see that var's own doc
+// comment on its "Stufe A" scope): this is a purely visual "this looks
+// like an archive" cue, not a claim that Search's own Include Archives
+// option can look inside it, so it also covers formats Search doesn't
+// support yet (7z, rar, zstd, a lone gzip/bzip2/xz/lzma) alongside the
+// zip/tar family Search already handles.
+var archiveHighlightExtensions = []string{
+	".zip", ".tar", ".tgz", ".tbz", ".tbz2", ".txz",
+	".tar.gz", ".tar.bz2", ".tar.xz",
+	".gz", ".bz2", ".xz", ".lzma", ".lz",
+	".7z", ".rar", ".zst",
+}
+
+// isArchiveName reports whether name's own extension (checked
+// case-insensitively, matching every other extension check in this
+// codebase — see internal/search's own classifyArchive) matches one of
+// archiveHighlightExtensions. Only ever consulted for a non-directory
+// entry (see entryColor) — a directory literally named e.g.
+// "backup.tar.gz" isn't actually an archive, just confusingly named one.
+func isArchiveName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, ext := range archiveHighlightExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // modifierGlyph renders ref's modifier column — information MC's own
