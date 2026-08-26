@@ -10,6 +10,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 // buildMinimalPDF is internal/ui's own copy of internal/viewer's own
@@ -181,5 +183,129 @@ func TestCaptureViewerKeyTurnsPageForPDF(t *testing.T) {
 	// only confirms turnPDFPage was actually reached, not skipped.
 	if r.viewerPDFPage != 1 {
 		t.Errorf("viewerPDFPage = %d, want still 1 (single-page fixture, boundary no-op)", r.viewerPDFPage)
+	}
+}
+
+// TestSetPDFViewModeSwitchesToText pins 't' forcing the text tier —
+// works regardless of whether pdftoppm happens to be installed in this
+// environment, since PDFViewText skips rasterization outright (see
+// viewer.LoadPDFPage's own doc comment).
+func TestSetPDFViewModeSwitchesToText(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF text mode")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showBuiltinLook(path)
+
+	r.setPDFViewMode(viewer.PDFViewText)
+
+	if r.viewerPDFMode != viewer.PDFViewText {
+		t.Errorf("viewerPDFMode = %v, want PDFViewText", r.viewerPDFMode)
+	}
+	if got := r.viewerView.GetText(true); !strings.Contains(got, "Hello PDF") {
+		t.Errorf("viewerView text doesn't contain the page's own real text after switching to text mode: %q", got)
+	}
+}
+
+// TestSetPDFViewModeGraphicWithoutPdftoppmReportsFailure pins 'g'
+// forcing the graphic tier and reporting a real failure — not
+// silently falling back to text — when pdftoppm genuinely can't be
+// found ($PATH isolated, the same approach internal/viewer's own
+// TestLoadPDFPageGraphicModeReportsFailureInsteadOfFallingBack uses).
+func TestSetPDFViewModeGraphicWithoutPdftoppmReportsFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showBuiltinLook(path)
+
+	empty := t.TempDir()
+	t.Setenv("PATH", empty)
+
+	r.setPDFViewMode(viewer.PDFViewGraphic)
+
+	if r.viewerPDFMode != viewer.PDFViewGraphic {
+		t.Errorf("viewerPDFMode = %v, want PDFViewGraphic", r.viewerPDFMode)
+	}
+	got := r.viewerView.GetText(true)
+	if strings.Contains(got, "Hello PDF") {
+		t.Errorf("viewerView text shows the page's own text content, want a failure message instead (PDFViewGraphic must not fall back): %q", got)
+	}
+	if !strings.Contains(got, "poppler-utils") {
+		t.Errorf("viewerView text doesn't explain the graphic-view failure: %q", got)
+	}
+}
+
+// TestCaptureViewerKeyHandlesTextKey pins that pressing 't' while
+// viewing a PDF is consumed (nil returned, so TextView never sees it
+// as ordinary input) and switches the mode.
+func TestCaptureViewerKeyHandlesTextKey(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showBuiltinLook(path)
+
+	event := tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone)
+	if got := r.captureViewerKey(event); got != nil {
+		t.Error("captureViewerKey should consume 't' (return nil) while viewing a PDF")
+	}
+	if r.viewerPDFMode != viewer.PDFViewText {
+		t.Errorf("viewerPDFMode = %v, want PDFViewText after 't'", r.viewerPDFMode)
+	}
+}
+
+// TestCaptureViewerKeyGraphicTextKeysPassThroughWithoutPDF pins that
+// 'g'/'t' are left alone for TextView's own default handling whenever
+// Look isn't currently showing a PDF — a plain text file's own real
+// content might legitimately contain the letter g or t, and this must
+// never intercept ordinary typing/scrolling in that case.
+func TestCaptureViewerKeyGraphicTextKeysPassThroughWithoutPDF(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.viewerPDFPath = ""
+
+	for _, ch := range []rune{'g', 't'} {
+		event := tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone)
+		if got := r.captureViewerKey(event); got != event {
+			t.Errorf("captureViewerKey should pass %q through unchanged when not viewing a PDF", ch)
+		}
+	}
+}
+
+// TestShowBuiltinLookResetsPDFModeForNewFile pins that a 'g'/'t'
+// choice made on one PDF doesn't carry over to the next one opened —
+// see showBuiltinLook's own reset, right alongside viewerPDFPath.
+func TestShowBuiltinLookResetsPDFModeForNewFile(t *testing.T) {
+	dir := t.TempDir()
+	firstPath := writePDFFixture(t, dir, "first.pdf", "First PDF")
+	secondPath := writePDFFixture(t, dir, "second.pdf", "Second PDF")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showBuiltinLook(firstPath)
+	r.setPDFViewMode(viewer.PDFViewText)
+	if r.viewerPDFMode != viewer.PDFViewText {
+		t.Fatal("setup: viewerPDFMode should be PDFViewText after explicitly switching")
+	}
+
+	r.showBuiltinLook(secondPath)
+
+	if r.viewerPDFMode != viewer.PDFViewAuto {
+		t.Errorf("viewerPDFMode = %v, want PDFViewAuto (the default) after opening a different PDF", r.viewerPDFMode)
 	}
 }

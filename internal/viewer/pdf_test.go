@@ -138,7 +138,7 @@ func TestLoadPDFPageFallsBackToTextWithoutPdftoppm(t *testing.T) {
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)
 
-	result, err := LoadPDFPage(path, 1)
+	result, err := LoadPDFPage(path, 1, PDFViewAuto)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,12 +160,79 @@ func TestLoadPDFPageOnCorruptFileIsUnsupported(t *testing.T) {
 	empty := t.TempDir() // isolate from a real pdftoppm too, so this only exercises the text-extraction failure path
 	t.Setenv("PATH", empty)
 
-	result, err := LoadPDFPage(path, 1)
+	result, err := LoadPDFPage(path, 1, PDFViewAuto)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Kind != KindUnsupported {
 		t.Errorf("Kind = %v, want KindUnsupported for a file neither tier can process", result.Kind)
+	}
+	if result.Reason == "" {
+		t.Error("Reason is empty, want an explanation")
+	}
+}
+
+// TestLoadPDFPageGraphicModeReportsFailureInsteadOfFallingBack pins
+// PDFViewGraphic's own explicit-choice semantics: unlike PDFViewAuto,
+// a failed rasterization attempt is reported directly as
+// KindUnsupported rather than silently handing back extracted text —
+// the user asked for graphic view specifically.
+func TestLoadPDFPageGraphicModeReportsFailureInsteadOfFallingBack(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF")
+
+	empty := t.TempDir()
+	t.Setenv("PATH", empty) // no pdftoppm — rasterization must fail
+
+	result, err := LoadPDFPage(path, 1, PDFViewGraphic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != KindUnsupported {
+		t.Errorf("Kind = %v, want KindUnsupported (PDFViewGraphic must not fall back to text)", result.Kind)
+	}
+	if result.Reason == "" {
+		t.Error("Reason is empty, want an explanation naming the failed rasterization")
+	}
+}
+
+// TestLoadPDFPageTextModeSkipsRasterizationEvenIfAvailable pins that
+// PDFViewText always uses the text tier, never attempting to
+// rasterize at all — checked by requiring a real pdftoppm to be
+// present (see requireTool) and confirming the result is still
+// KindText, not KindImage.
+func TestLoadPDFPageTextModeSkipsRasterizationEvenIfAvailable(t *testing.T) {
+	requireTool(t, "pdftoppm")
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF text mode")
+
+	result, err := LoadPDFPage(path, 1, PDFViewText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != KindText {
+		t.Fatalf("Kind = %v, want KindText even with pdftoppm available (PDFViewText forces the text tier)", result.Kind)
+	}
+	if !bytes.Contains([]byte(result.Content), []byte("Hello PDF")) {
+		t.Errorf("Content = %q, want it to contain the page's own real text", result.Content)
+	}
+}
+
+// TestLoadPDFPageEmptyTextIsReportedNotBlank pins that a page whose
+// extracted text is empty (or all whitespace) — the real fixture here
+// uses an empty Tj string, standing in for a scanned page with no
+// text layer — is reported as KindUnsupported with a Reason rather
+// than silently showing nothing.
+func TestLoadPDFPageEmptyTextIsReportedNotBlank(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "blank.pdf", "   ") // whitespace-only content string
+
+	result, err := LoadPDFPage(path, 1, PDFViewText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != KindUnsupported {
+		t.Errorf("Kind = %v, want KindUnsupported for a page with no real extractable text", result.Kind)
 	}
 	if result.Reason == "" {
 		t.Error("Reason is empty, want an explanation")
