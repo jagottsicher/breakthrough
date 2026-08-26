@@ -91,6 +91,7 @@ type Root struct {
 	quitConfirm *tview.List
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
+	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
@@ -474,6 +475,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
 	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.AddItem("Look", "", 0, r.lookCurrentEntry)
+	r.menu.AddItem("Tail -f", "", 0, r.tailCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
@@ -561,6 +564,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reset or repopulate on open).
 	r.helpView = r.newHelpView()
 
+	// The Look overlay's built-in pager (see viewer.go/openLook) — same
+	// single-static-TextView shape as Help, just with its own text set
+	// fresh on every open instead of once here.
+	r.viewerView = r.newViewerView()
+
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -604,6 +612,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(viewerPage, r.viewerView, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
