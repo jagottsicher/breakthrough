@@ -694,7 +694,7 @@ func isolateHistoryFile(t *testing.T) {
 	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
 }
 
-func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
+func TestBashLineRunsThroughRunBashCommand(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -702,18 +702,27 @@ func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.bashLine.SetText("echo hello")
+	// "echo hello" isn't in interactivePrograms, so this exercises the
+	// captured path (see runShellCommandCaptured), not Suspend — a real
+	// (if trivial) subprocess actually starts here, its own completion
+	// handled by a background goroutine this test never waits for (see
+	// finishCapturedCommand's own doc comment on why that part is tested
+	// separately, directly, instead).
+	r.bashLine.SetText("echo hello", true)
 	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.bashLine.GetText(); got != "" {
 		t.Errorf("bash line text = %q after Enter, want cleared", got)
 	}
+	if got := r.bashHistoryView.GetText(true); !strings.Contains(got, "$ echo hello") {
+		t.Errorf("bashHistoryView = %q, want it to contain the echoed command", got)
+	}
 }
 
-// TestRunShellCommandEmptyIsNoop pins that submitting a blank (or
-// whitespace-only) command does nothing — no Suspend, no panel reload,
-// no error.
-func TestRunShellCommandEmptyIsNoop(t *testing.T) {
+// TestRunBashCommandEmptyIsNoop pins that submitting a blank (or
+// whitespace-only) command does nothing — no Suspend, no captured run,
+// no panel reload, no error.
+func TestRunBashCommandEmptyIsNoop(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -721,7 +730,7 @@ func TestRunShellCommandEmptyIsNoop(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("   ")
+	r.runBashCommand("   ")
 
 	if r.activePage == errorPage {
 		t.Error("an empty command should not report an error")
@@ -778,7 +787,7 @@ func TestRunShellCommandCdNavigatesPanelDirectly(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("cd app-data")
+	r.runBashCommand("cd app-data")
 
 	if r.panel.path != target {
 		t.Errorf("panel.path = %q, want %q", r.panel.path, target)
@@ -882,8 +891,8 @@ func TestRunShellCommandRecordsHistory(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("echo one")
-	r.runShellCommand("echo two")
+	r.runBashCommand("echo one")
+	r.runBashCommand("echo two")
 
 	want := []string{"echo one", "echo two"}
 	if len(r.bashHistory) != len(want) {
@@ -900,9 +909,12 @@ func TestRunShellCommandRecordsHistory(t *testing.T) {
 }
 
 // TestBashHistoryUpDownNavigation pins the full readline-style
-// interaction: Up recalls older entries one at a time and stops at the
-// oldest; Down recalls newer entries and restores whatever was being
-// typed (the draft) once it moves past the newest one.
+// interaction — now Ctrl+P/Ctrl+N, not Up/Down, which TextArea's own
+// default handling needs for moving the cursor between lines instead
+// (see captureBashLineKey's own doc comment): Ctrl+P recalls older
+// entries one at a time and stops at the oldest; Ctrl+N recalls newer
+// entries and restores whatever was being typed (the draft) once it
+// moves past the newest one.
 func TestBashHistoryUpDownNavigation(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
@@ -911,42 +923,42 @@ func TestBashHistoryUpDownNavigation(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("first")
-	r.runShellCommand("second")
-	r.bashLine.SetText("in progress")
+	r.runBashCommand("first")
+	r.runBashCommand("second")
+	r.bashLine.SetText("in progress", true)
 
-	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-	down := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+	up := tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone)
+	down := tcell.NewEventKey(tcell.KeyCtrlN, 0, tcell.ModNone)
 
 	r.captureBashLineKey(up) // -> "second" (newest), remembering "in progress" as the draft
 	if got := r.bashLine.GetText(); got != "second" {
-		t.Errorf("after one Up, text = %q, want %q", got, "second")
+		t.Errorf("after one Ctrl+P, text = %q, want %q", got, "second")
 	}
 
 	r.captureBashLineKey(up) // -> "first" (oldest)
 	if got := r.bashLine.GetText(); got != "first" {
-		t.Errorf("after two Ups, text = %q, want %q", got, "first")
+		t.Errorf("after two Ctrl+Ps, text = %q, want %q", got, "first")
 	}
 
 	r.captureBashLineKey(up) // already at the oldest entry — stays put, does not wrap
 	if got := r.bashLine.GetText(); got != "first" {
-		t.Errorf("Up past the oldest entry = %q, want it to stay at %q", got, "first")
+		t.Errorf("Ctrl+P past the oldest entry = %q, want it to stay at %q", got, "first")
 	}
 
 	r.captureBashLineKey(down) // -> "second"
 	if got := r.bashLine.GetText(); got != "second" {
-		t.Errorf("after one Down, text = %q, want %q", got, "second")
+		t.Errorf("after one Ctrl+N, text = %q, want %q", got, "second")
 	}
 
 	r.captureBashLineKey(down) // -> back past the newest entry: restores the draft
 	if got := r.bashLine.GetText(); got != "in progress" {
-		t.Errorf("Down past the newest entry = %q, want the draft %q restored", got, "in progress")
+		t.Errorf("Ctrl+N past the newest entry = %q, want the draft %q restored", got, "in progress")
 	}
 }
 
-// TestBashHistoryDownWithNoHistoryIsNoop pins that Down is harmless when
-// nothing has been recalled yet (no history at all, or history exists
-// but Up was never pressed).
+// TestBashHistoryDownWithNoHistoryIsNoop pins that Ctrl+N is harmless
+// when nothing has been recalled yet (no history at all, or history
+// exists but Ctrl+P was never pressed).
 func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
@@ -955,11 +967,11 @@ func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.bashLine.SetText("untouched")
-	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+	r.bashLine.SetText("untouched", true)
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyCtrlN, 0, tcell.ModNone))
 
 	if got := r.bashLine.GetText(); got != "untouched" {
-		t.Errorf("text = %q after a stray Down, want unchanged %q", got, "untouched")
+		t.Errorf("text = %q after a stray Ctrl+N, want unchanged %q", got, "untouched")
 	}
 }
 
@@ -1037,9 +1049,10 @@ func TestAppendBashHistoryThenLoadRoundTrips(t *testing.T) {
 }
 
 // TestNewRootLoadsExistingHistory pins the end-to-end wiring: a
-// pre-existing history file is what Up recalls from the moment Root is
-// constructed, before any command has been run in this session at all
-// — inheriting an old session's history, not just recording a new one.
+// pre-existing history file is what Ctrl+P recalls from the moment Root
+// is constructed, before any command has been run in this session at
+// all — inheriting an old session's history, not just recording a new
+// one.
 func TestNewRootLoadsExistingHistory(t *testing.T) {
 	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
 	if err := appendBashHistory(os.Getenv("HISTFILE"), "old session command"); err != nil {
@@ -1052,8 +1065,8 @@ func TestNewRootLoadsExistingHistory(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone))
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone))
 	if got := r.bashLine.GetText(); got != "old session command" {
-		t.Errorf("Up right after startup = %q, want the pre-existing history entry %q", got, "old session command")
+		t.Errorf("Ctrl+P right after startup = %q, want the pre-existing history entry %q", got, "old session command")
 	}
 }
