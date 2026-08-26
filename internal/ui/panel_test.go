@@ -1044,6 +1044,25 @@ func TestEntryColor(t *testing.T) {
 	if got := p.entryColor(rowRef{entryType: fsops.TypeSocket, unreadable: true}); got != p.theme.EntrySpecial {
 		t.Errorf("a special file's own color should win regardless of unreadable, got %v, want %v (EntrySpecial)", got, p.theme.EntrySpecial)
 	}
+
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".bashrc"}); got != p.theme.EntryHidden {
+		t.Errorf("dotfile color = %v, want %v (EntryHidden)", got, p.theme.EntryHidden)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: ".config"}); got != p.theme.EntryHidden {
+		t.Errorf("dotdir color = %v, want %v (EntryHidden)", got, p.theme.EntryHidden)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: ".."}); got != p.theme.EntryNormal {
+		t.Errorf(`".." should NOT count as hidden (it already gets DirectoryBackground), got %v, want %v (EntryNormal)`, got, p.theme.EntryNormal)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".secrets", unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable dotfile should show EntryUnreadable, not EntryHidden — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".run.sh", mode: 0o755}); got != p.theme.EntryExecutable {
+		t.Errorf("an executable dotfile should show EntryExecutable, not EntryHidden — got %v, want %v", got, p.theme.EntryExecutable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken, name: ".old-link"}); got != p.theme.EntryError {
+		t.Errorf("a broken symlink that's also a dotfile should still show EntryError, got %v, want %v", got, p.theme.EntryError)
+	}
 }
 
 func TestIsArchiveName(t *testing.T) {
