@@ -702,21 +702,10 @@ func TestBashLineRunsThroughRunBashCommand(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	// "echo hello" isn't in interactivePrograms, so this exercises the
-	// captured path (see runShellCommandCaptured), not Suspend — a real
-	// (if trivial) subprocess actually starts here, its stdout wired
-	// directly to bashHistoryView (cmd.Stdout = r.bashHistoryView) and
-	// copied into it by exec's own internal goroutine. Deliberately not
-	// asserting on bashHistoryView's own content here the way the "$
-	// echo hello" echo line alone might suggest is safe: that write
-	// happens on this goroutine before Start(), but exec's copy
-	// goroutine can still be mid-Write (a real, -race-caught race
-	// against TextView.GetText, which — unlike TextView.Write — isn't
-	// lock-protected) by the time this test would read it back, and
-	// this test never waits for that copy to finish (see
-	// finishCapturedCommand's own doc comment on why the exit-handling
-	// part is tested separately, directly, instead of racing it here
-	// too).
+	// app.Suspend is a no-op here (no real screen behind r.app — see
+	// TestCaptureStatusBarMouseEditClickRunsEditAction's own doc
+	// comment), so this only pins that Enter reaches runBashCommand and
+	// the line clears afterwards, not that a command actually ran.
 	r.bashLine.SetText("echo hello", true)
 	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 

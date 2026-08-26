@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -249,40 +248,30 @@ type Root struct {
 	searchLastDir    string
 	searchStartDir   string
 
-	// mainLayout wraps panel, bashConsole, and statusBar into the
-	// vertical stack registered as panelPage (see newBottomBar/NewRoot)
-	// — panel still owns its own rect the same way it always has
-	// (clampToPanel and everything else reading panel.GetInnerRect() is
-	// unaffected), just resized to leave the bottom rows free.
+	// mainLayout wraps panel, bashLine, and statusBar into the vertical
+	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
+	// still owns its own rect the same way it always has (clampToPanel
+	// and everything else reading panel.GetInnerRect() is unaffected),
+	// just resized to leave the bottom rows free.
 	mainLayout *tview.Flex
 
-	// bashConsole is the second-to-last row: an expandable console (see
-	// bashconsole.go) — bashLine, a multi-line shell command/script
-	// editor, plus bashHistoryView, a scrollable transcript of what's
-	// run and its captured output, both wrapped in their own nested
-	// Flex so the pair can grow together (see expandBashConsole) without
-	// disturbing mainLayout's own three-row split. Collapsed to a single
-	// row (just bashLine, bashHistoryView hidden) until bashLine gains
-	// focus. Pasting into bashLine works because cmd/breakthrough
-	// enables tview's bracketed-paste support (Application.EnablePaste),
-	// not anything Root itself does.
+	// bashLine is the second-to-last row: a multi-line shell command/
+	// script editor (see bashconsole.go) that grows upward on focus (see
+	// expandBashConsole) so a longer script stays visible while it's
+	// being written, back to a single row on blur (see
+	// collapseBashConsole). Every command runs full-screen, via a real
+	// terminal (see runShellCommandFullScreen) — see newBashConsole's
+	// own doc comment on why this doesn't try to distinguish which
+	// commands "need" that. Pasting into bashLine works because
+	// cmd/breakthrough enables tview's bracketed-paste support
+	// (Application.EnablePaste), not anything Root itself does.
 	//
 	// statusBar is the last row: user/disk-usage/quick-action buttons/
 	// clock (see buildStatusBar), with statusBarSpans locating each
 	// button the same way propertySpans do for Properties.
-	bashConsole     *tview.Flex
-	bashLine        *tview.TextArea
-	bashHistoryView *tview.TextView
-	statusBar       *tview.TextView
-	statusBarSpans  []statusBarSpan
-
-	// bashRunningCmd is the currently in-flight captured command (see
-	// runShellCommandCaptured), nil whenever nothing is running —
-	// RequestCancel's own Ctrl+C sends it SIGINT (see
-	// interruptBashCommand) instead of its usual "back out of whatever's
-	// open" action, the same way a real shell's own Ctrl+C interrupts
-	// the foreground job rather than doing nothing.
-	bashRunningCmd *exec.Cmd
+	bashLine       *tview.TextArea
+	statusBar      *tview.TextView
+	statusBarSpans []statusBarSpan
 
 	// bashHistory is every command available for the bash line's
 	// Ctrl+P/Ctrl+N navigation (see bashHistoryUp/Down — not Up/Down
@@ -628,14 +617,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
-	// own "focus" parameter); bashConsole/statusBar are each pinned to
+	// own "focus" parameter); bashLine/statusBar are each pinned to
 	// exactly one row (1, 0) and never auto-focused — reaching bashLine
 	// is a deliberate click, not something Tab should stumble into.
-	// bashConsole's own row grows past that single row once bashLine is
-	// actually focused (see expandBashConsole/collapseBashConsole).
+	// bashLine's own row grows past that single row once it's actually
+	// focused (see expandBashConsole/collapseBashConsole).
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(panel, 0, 1, true)
-	r.mainLayout.AddItem(r.bashConsole, 1, 0, false)
+	r.mainLayout.AddItem(r.bashLine, 1, 0, false)
 	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
 
 	r.AddPage(panelPage, r.mainLayout, true, true)
@@ -898,19 +887,8 @@ func (r *Root) RequestQuit() {
 // while the path header is being edited — Ctrl+C is the keyboard way out
 // of that, where otherwise only a mouse click would do.
 //
-// Checked first, ahead of every other case: a captured bash console
-// command currently running (see runShellCommandCaptured/
-// bashRunningCmd) gets interrupted instead — a real shell's own Ctrl+C
-// stops the foreground job rather than doing nothing, and this is the
-// only key that can reach here at all while bashLine has focus (see
-// acceptsGlobalShortcut's own doc comment on why every other shortcut
-// checks that and no-ops instead).
-//
 // It never quits: stopping breakthrough is Ctrl+Q plus a confirmation.
 func (r *Root) RequestCancel() {
-	if r.interruptBashCommand() {
-		return
-	}
 	if r.activePage != "" {
 		r.hideOverlay()
 		return

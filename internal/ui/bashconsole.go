@@ -7,40 +7,31 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
-// bashConsoleInputRows is how many rows bashLine itself keeps once the
-// console is expanded (see expandBashConsole) — one, per the user's own
-// explicit request (the original 3 left too little of the expanded
-// region for bashHistoryView's own share). A multi-line script in
-// progress still scrolls within that one row's own width via TextArea's
-// own default cursor handling; it just doesn't get a taller box to show
-// more than the current line at once.
-const bashConsoleInputRows = 1
-
-// newBashConsole builds bashLine (a multi-line shell command/script
-// editor — no "$ " label, full width, per the user's own explicit
-// request) and bashHistoryView (its scrollable output transcript),
-// wrapped together in bashConsole, a small nested Flex that
-// expandBashConsole/collapseBashConsole resize as one unit. Called from
-// newBottomBar.
+// newBashConsole builds bashLine, a multi-line shell command/script
+// editor (no "$ " label, full width, per the user's own explicit
+// request) that grows upward on focus (see expandBashConsole/
+// collapseBashConsole) so a longer, multi-line script (composed via
+// Alt+Enter — see captureBashLineKey) stays visible while it's being
+// written. Called from newBottomBar.
+//
+// Every command runs the same way: full-screen, via a real terminal
+// (see runShellCommandFullScreen) — the same as Midnight Commander's
+// own command line handles every command, and the same as this app did
+// before an earlier attempt at also capturing non-interactive commands'
+// output inline here. That attempt needed a list of which programs
+// need a real terminal to work at all (vim, less, top, mc, ...) to
+// decide when *not* to capture — no such list can ever be complete (the
+// user's own report: "wir können nicht eine komplette Liste aller
+// Programme haben"), and getting it wrong for a program that assumes
+// real terminal control produces a broken, garbled result, not just a
+// cosmetic one. Always going full-screen sidesteps the classification
+// problem entirely, the same way MC's own design does.
 func (r *Root) newBashConsole() {
-	r.bashHistoryView = tview.NewTextView()
-	r.bashHistoryView.SetWrap(true)
-	r.bashHistoryView.SetScrollable(true)
-	// Dynamic colors deliberately left off: bashHistoryView's own text
-	// is arbitrary captured command output (see runShellCommandCaptured),
-	// not this app's own — a literal "[" in it (regexp output, JSON,
-	// anything) would otherwise risk being misread as a style tag the
-	// same way an unescaped filename would (see nameHighlightTags's own
-	// doc comment on that class of bug). Leaving tag parsing off entirely
-	// sidesteps it rather than escaping every byte that flows through.
-	r.bashHistoryView.SetChangedFunc(func() { r.app.Draw() })
-
 	r.bashLine = tview.NewTextArea()
 	r.bashLine.SetInputCapture(r.captureBashLineKey)
 	r.bashLine.SetFinishedFunc(func(tcell.Key) {
@@ -60,46 +51,30 @@ func (r *Root) newBashConsole() {
 	r.bashHistoryFile = historyFilePath()
 	r.bashHistory = loadBashHistory(r.bashHistoryFile)
 	r.bashHistoryIdx = len(r.bashHistory)
-
-	r.bashConsole = tview.NewFlex().SetDirection(tview.FlexRow)
-	r.bashConsole.AddItem(r.bashHistoryView, 0, 0, false) // hidden (0,0) until expanded
-	r.bashConsole.AddItem(r.bashLine, 1, 0, true)
 }
 
-// expandBashConsole grows bashConsole upward — full width, already
-// true, since it's stacked directly in mainLayout's own FlexRow rather
-// than nested in a FlexColumn — up to just under half the terminal's
-// current height, per the user's own explicit request: "als eine art
-// bash overlay das nach oben wegscrollt". Wired as bashLine's own
+// expandBashConsole grows bashLine upward — full width, already true,
+// since it's stacked directly in mainLayout's own FlexRow rather than
+// nested in a FlexColumn — up to just under half the terminal's
+// current height, so a multi-line script being composed (see
+// captureBashLineKey's own Alt+Enter case) stays visible as it grows,
+// rather than scrolling out of a single row. Wired as bashLine's own
 // FocusFunc, so this runs the moment it's clicked into or otherwise
-// gains focus. bashHistoryView's own scrollback (whatever was already
-// captured — see runShellCommandCaptured) survives a collapse/expand
-// cycle unchanged: it's resized, never torn down or cleared.
+// gains focus.
 func (r *Root) expandBashConsole() {
 	_, _, _, screenHeight := r.GetRect() // Root fills the whole screen
 	target := screenHeight / 2
-	if target < bashConsoleInputRows+1 {
-		target = bashConsoleInputRows + 1 // always leave bashHistoryView at least one row
+	if target < 1 {
+		target = 1
 	}
-
-	r.mainLayout.ResizeItem(r.bashConsole, target, 0)
-	r.bashConsole.ResizeItem(r.bashHistoryView, 0, 1) // fills whatever's left of target
-	r.bashConsole.ResizeItem(r.bashLine, bashConsoleInputRows, 0)
-	r.bashHistoryView.ScrollToEnd()
+	r.mainLayout.ResizeItem(r.bashLine, target, 0)
 }
 
 // collapseBashConsole is expandBashConsole's counterpart, wired as
-// bashLine's own BlurFunc: back to a single row, bashHistoryView
-// hidden. Runs every time focus leaves bashLine, including while a
-// captured command is still streaming output in the background (see
-// runShellCommandCaptured) — that keeps writing to bashHistoryView
-// regardless of whether it's currently visible; clicking back into
-// bashLine (re-expanding) shows whatever accumulated meanwhile,
-// scrolled to the end.
+// bashLine's own BlurFunc: back to a single row. Runs every time focus
+// leaves bashLine — Escape, or a click elsewhere.
 func (r *Root) collapseBashConsole() {
-	r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
-	r.bashConsole.ResizeItem(r.bashHistoryView, 0, 0)
-	r.bashConsole.ResizeItem(r.bashLine, 1, 0)
+	r.mainLayout.ResizeItem(r.bashLine, 1, 0)
 }
 
 // captureBashLineKey handles everything bashLine's own default TextArea
@@ -116,11 +91,6 @@ func (r *Root) collapseBashConsole() {
 //     bashHistoryUp/Down) — not Up/Down, which TextArea already uses to
 //     move the cursor between lines, needed now that the buffer can
 //     genuinely span more than one.
-//   - PageUp / PageDown: scroll bashHistoryView (see scrollBashHistory)
-//     instead of TextArea's own default of moving the cursor a page at a
-//     time within the buffer — reading back through what's already run
-//     matters more here than paging through a multi-line script that
-//     rarely runs more than a screen's worth of lines anyway.
 func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0:
@@ -134,38 +104,8 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyCtrlN:
 		r.bashHistoryDown()
 		return nil
-	case event.Key() == tcell.KeyPgUp:
-		r.scrollBashHistory(-1)
-		return nil
-	case event.Key() == tcell.KeyPgDn:
-		r.scrollBashHistory(1)
-		return nil
 	}
 	return event
-}
-
-// scrollBashHistory moves bashHistoryView by one page (its own current
-// height, at least 1) in dir's direction (-1 up, +1 down) — the same
-// "one screenful" page size a real pager uses, without needing to
-// (and without wanting to — see captureBashLineKey) move keyboard focus
-// away from bashLine to do it. A negative starting offset (tview.
-// TextView's own "never scrolled yet" sentinel, -1 — see its own
-// lineOffset field) is treated as 0 first, or the very first PageDown
-// would land one row short.
-func (r *Root) scrollBashHistory(dir int) {
-	_, _, _, height := r.bashHistoryView.GetInnerRect()
-	if height < 1 {
-		height = 1
-	}
-	row, col := r.bashHistoryView.GetScrollOffset()
-	if row < 0 {
-		row = 0
-	}
-	row += dir * height
-	if row < 0 {
-		row = 0
-	}
-	r.bashHistoryView.ScrollTo(row, col)
 }
 
 // bashHistoryUp recalls the previous (older) history entry, the same as
@@ -202,11 +142,10 @@ func (r *Root) bashHistoryDown() {
 	}
 }
 
-// userShell returns $SHELL, or "/bin/sh" if it isn't set — used by
-// runShellCommandFullScreen/runShellCommandCaptured and runEditor (see
-// editorCommand's own doc comment for why the editor is run through the
-// shell too) as the interpreter for whatever the user typed or
-// configured.
+// userShell returns $SHELL, or "/bin/sh" if it isn't set — used by both
+// runShellCommandFullScreen and runEditor (see editorCommand's own doc
+// comment for why the editor is run through the shell too) as the
+// interpreter for whatever the user typed or configured.
 func userShell() string {
 	if s := os.Getenv("SHELL"); s != "" {
 		return s
@@ -298,72 +237,14 @@ func appendBashHistory(path, command string) (err error) {
 	return err
 }
 
-// interactivePrograms is the set of command names that need a real
-// terminal to work at all — they open /dev/tty directly, or otherwise
-// assume full control of the screen (cursor positioning, raw mode, an
-// alternate screen buffer), which capturing their output into a plain
-// buffer would just show as garbled escape codes rather than the actual
-// program (see needsRealTerminal/runShellCommandFullScreen).
-//
-// Not exhaustive — deliberately erring toward including a program here
-// rather than not: capturing something that actually needs a real
-// terminal produces a broken, confusing result, while sending a
-// perfectly capturable command (needlessly) to the full-screen handoff
-// only costs the same brief screen flip every command already used to
-// cost before this. Well-behaved non-interactive tools (git log/diff,
-// ls --color, ...) usually already detect a non-terminal stdout on
-// their own and adjust (e.g. git disables its own pager, ls disables
-// color) — this list only needs to cover what doesn't.
-var interactivePrograms = map[string]bool{
-	"vim": true, "vi": true, "nvim": true, "view": true,
-	"nano": true, "pico": true, "emacs": true, "joe": true, "jed": true,
-	"less": true, "more": true, "most": true, "man": true,
-	"top": true, "htop": true, "btop": true, "atop": true, "iotop": true,
-	"watch": true, "tmux": true, "screen": true,
-	"ssh": true, "mosh": true, "telnet": true, "ftp": true, "sftp": true,
-	"mysql": true, "psql": true, "sqlite3": true, "redis-cli": true,
-	"python": true, "python2": true, "python3": true, "irb": true, "node": true,
-	"gdb": true, "lldb": true,
-	"sudo": true, "su": true, "passwd": true,
-	"visudo": true, "crontab": true,
-	// TUI file managers — breakthrough's own closest relatives, per
-	// CLAUDE.md's own "inspired by Midnight Commander" framing. Missing
-	// "mc" itself here was an embarrassing gap, per the user's own
-	// direct report: it silently ran captured instead of full-screen.
-	"mc": true, "ranger": true, "nnn": true, "lf": true, "vifm": true,
-	// Other common full-screen terminal tools this app's own POSIX/
-	// sysadmin-leaning audience (see CLAUDE.md) is likely to reach for
-	// from here.
-	"tig": true, "ncdu": true, "w3m": true, "lynx": true, "links": true,
-	"alsamixer": true, "nmtui": true, "weechat": true, "irssi": true,
-	"mutt": true, "neomutt": true,
-}
-
-// needsRealTerminal reports whether command contains any word matching
-// interactivePrograms — checked against every whitespace/shell-
-// metacharacter-separated token, not just the first, so "cat file |
-// less" and "sudo vim /etc/hosts" are both caught, not just a bare
-// "less"/"sudo" typed on its own.
-func needsRealTerminal(command string) bool {
-	tokens := strings.FieldsFunc(command, func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '\n' || strings.ContainsRune("|;&()<>", r)
-	})
-	for _, tok := range tokens {
-		if interactivePrograms[tok] {
-			return true
-		}
-	}
-	return false
-}
-
 // runBashCommand is bashLine's own Enter action (see captureBashLineKey):
 // records command in history, special-cases "cd" the same way Midnight
 // Commander's own command line does (see parseCdCommand/changeDirectory
 // — a "cd" run in a child shell/process only ever changes that child's
 // own working directory, with no way to affect the panel once it exits),
-// and otherwise runs it either full-screen (see
-// runShellCommandFullScreen) or captured into bashHistoryView (see
-// runShellCommandCaptured), whichever needsRealTerminal says it needs.
+// and otherwise always runs it full-screen (see runShellCommandFullScreen
+// — see newBashConsole's own doc comment on why this doesn't try to
+// distinguish "needs a real terminal" from "doesn't" any more).
 //
 // command is recorded in bashHistory before it runs, unconditionally
 // (not only once it succeeds) — the same as a real shell, which
@@ -384,21 +265,15 @@ func (r *Root) runBashCommand(command string) {
 		return
 	}
 
-	if needsRealTerminal(command) {
-		r.runShellCommandFullScreen(command)
-		return
-	}
-	r.runShellCommandCaptured(command)
+	r.runShellCommandFullScreen(command)
 }
 
 // runShellCommandFullScreen suspends the TUI (see
 // tview.Application.Suspend) and runs command through userShell, with
 // the real terminal handed over for the duration and the panel's
 // current directory as its working directory — full interactivity,
-// including interactive programs like vim or less, exactly like
-// Midnight Commander's own command line (and exactly what every command
-// did before this — see runBashCommand/needsRealTerminal for when this
-// is still used instead of a captured run). The panel reloads once the
+// including interactive programs like vim, less, or mc, exactly like
+// Midnight Commander's own command line. The panel reloads once the
 // command exits, in case it changed anything in the directory currently
 // on screen.
 func (r *Root) runShellCommandFullScreen(command string) {
@@ -416,101 +291,6 @@ func (r *Root) runShellCommandFullScreen(command string) {
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))
-}
-
-// runShellCommandCaptured runs command with its stdout/stderr streamed
-// directly into bashHistoryView (see TextView.Write's own doc comment:
-// safe to call from another goroutine, which is exactly what this does
-// — SetChangedFunc, wired in newBashConsole, redraws as output arrives)
-// instead of handing over the real terminal — breakthrough stays fully
-// in control of the screen throughout, per the user's own explicit
-// request to see a command's own output "innerhalb dieses Fensters",
-// scrollable, rather than a brief full-screen flash. Asynchronous: the
-// command runs in its own goroutine so the UI stays responsive (and so
-// a non-terminating command, e.g. "tail -f", doesn't hang the whole
-// application — see interruptBashCommand for how to stop one early).
-//
-// bashRunningCmd tracks the in-flight process for that interrupt, and
-// also guards against a second captured command starting while one is
-// already running: silently ignored here rather than started, so a
-// second Enter while one is in flight (e.g. runBashCommand invoked
-// directly, as some tests do, or just typing ahead) can't overwrite
-// bashRunningCmd out from under the first command's own still-pending
-// finishCapturedCommand. Deliberately NOT enforced via
-// bashLine.SetDisabled: TextArea.SetDisabled unconditionally re-fires
-// its own FinishedFunc (see tview's own SetDisabled — "if t.finished !=
-// nil { t.finished(-1) }"), which newBashConsole wires to hand focus
-// back to the panel — meaning disabling bashLine here would itself
-// trigger collapseBashConsole (via bashLine's own BlurFunc) the instant
-// a captured command starts, closing the console the user just opened
-// to watch it run. bashLine stays fully interactive throughout; this
-// guard alone is what actually matters for correctness.
-func (r *Root) runShellCommandCaptured(command string) {
-	if r.bashRunningCmd != nil {
-		return
-	}
-
-	_, _ = fmt.Fprintf(r.bashHistoryView, "$ %s\n", command) // TextView.Write on an in-memory buffer: never meaningfully fails
-	r.bashHistoryView.ScrollToEnd()
-
-	cmd := exec.Command(userShell(), "-c", command)
-	cmd.Dir = r.panel.path
-	cmd.Stdout = r.bashHistoryView
-	cmd.Stderr = r.bashHistoryView
-	if err := cmd.Start(); err != nil {
-		_, _ = fmt.Fprintf(r.bashHistoryView, "%s: %v\n", command, err) // see the "$ " echo just above on why this is never checked
-		r.bashLine.SetText("", true)
-		return
-	}
-
-	r.bashRunningCmd = cmd
-	r.bashLine.SetText("", true)
-
-	go func() {
-		err := cmd.Wait()
-		r.app.QueueUpdateDraw(func() {
-			r.finishCapturedCommand(command, err)
-		})
-	}()
-}
-
-// finishCapturedCommand is runShellCommandCaptured's own completion
-// handler — split out on its own specifically so it's callable directly
-// (see bashconsole_test.go), without needing a real Application event
-// loop behind QueueUpdateDraw to reach it. Clears bashRunningCmd
-// (interruptBashCommand's own guard against a stale reference, and
-// runShellCommandCaptured's own guard against a second command starting
-// too early).
-//
-// cd's own effect, if the captured command included one (e.g. "cd
-// /foo && ls" — parseCdCommand only recognizes a *bare* cd, see
-// runBashCommand, so a compound command like this really did run in
-// its own child shell, same as before), can't be reflected in the
-// panel for the same "cd only changes the child's own directory"
-// reason runBashCommand's own doc comment gives — reloading here would
-// be a silent no-op for that case anyway, so this deliberately doesn't
-// try, unlike runShellCommandFullScreen, which only ever reaches this
-// kind of cleanup for its own (real, TTY-requiring) commands.
-func (r *Root) finishCapturedCommand(command string, runErr error) {
-	r.bashRunningCmd = nil
-	if runErr != nil {
-		_, _ = fmt.Fprintf(r.bashHistoryView, "[%s exited: %v]\n", command, runErr) // see runShellCommandCaptured's own "$ " echo on why this is never checked
-	}
-}
-
-// interruptBashCommand sends SIGINT to the currently running captured
-// command (see runShellCommandCaptured/bashRunningCmd), the same signal
-// a real shell's own Ctrl+C sends its foreground job — called from
-// RequestCancel, ahead of its usual "back out of whatever's open"
-// behavior. Reports true if a command was actually running (and so was
-// interrupted), false otherwise — RequestCancel falls through to its
-// normal behavior in that case.
-func (r *Root) interruptBashCommand() bool {
-	if r.bashRunningCmd == nil || r.bashRunningCmd.Process == nil {
-		return false
-	}
-	_ = r.bashRunningCmd.Process.Signal(syscall.SIGINT) // best-effort — a process that already exited is not an error worth reporting
-	return true
 }
 
 // parseCdCommand reports whether command is exactly a "cd" invocation —
