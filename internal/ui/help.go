@@ -86,12 +86,10 @@ var helpText = strings.TrimLeft(`
   Click to expand         Grows upward toward mid-screen while focused,
                            collapses back to one row on Escape/click away
   Enter                    Run the buffer (a real terminal, briefly, for
-                           vim/less/top/... — otherwise captured right
-                           here, scrollable)
+                           every command, the same as Midnight Commander's
+                           own command line)
   Alt+Enter                Insert a newline (compose a multi-line script)
   Ctrl+P / Ctrl+N          Recall the previous/next command from history
-  PageUp / PageDown        Scroll the output above without losing focus
-  Ctrl+C                   Interrupt the currently running command
 `, "\n")
 
 // newHelpView builds the Help overlay: a single, scrollable, read-only
