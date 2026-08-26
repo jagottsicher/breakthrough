@@ -933,28 +933,40 @@ func (p *Panel) addRow(row int, ref rowRef) {
 			// on its own, especially if the click landed a column off.
 		})
 	}
-	p.markDirectory(checkbox, ref)
 	p.table.SetCell(row, colCheckbox, checkbox)
 
 	color := p.entryColor(ref)
 
 	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
-	p.markDirectory(typeCell, ref)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
-	p.markDirectory(modCell, ref)
 	p.table.SetCell(row, colModifier, modCell)
 
-	label := ref.name
+	// tview.TableCell.Text is parsed for style tags (see tview.Print), so
+	// any literal "[" in an entry's own name — an unusual but entirely
+	// legal filename character — must be escaped before it's used here,
+	// or it would be misread as (the start of) a tag and corrupt this and
+	// every tag after it. This applies to every row, not just directories.
+	label := tview.Escape(ref.name)
+	if ref.isDir {
+		// Wrap just the name itself in a style tag that sets its
+		// background to DirectoryBackground, leaving the foreground
+		// untouched (see nameHighlightTags's own doc comment) — not the
+		// trailing "/" or the symlink arrow appended below, and not the
+		// column's own blank padding out to the row's right edge, the
+		// way SetBackgroundColor on the whole cell would (that column
+		// has SetExpansion(1), see below, so it consumes whatever's left
+		// of the row's width).
+		label = nameHighlightTags(label, p.theme.DirectoryBackground)
+	}
 	if ref.entryType == fsops.TypeDir {
 		label += "/"
 	}
 	if ref.linkTarget != "" {
-		label += " -> " + ref.linkTarget
+		label += " -> " + tview.Escape(ref.linkTarget)
 	}
 	name := tview.NewTableCell(label).SetTextColor(color)
-	p.markDirectory(name, ref)
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
@@ -970,34 +982,25 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	sizeSep := p.columnSeparator()
-	p.markDirectory(sizeSep, ref)
-	p.table.SetCell(row, colSizeSep, sizeSep)
-	sizeCell := tview.NewTableCell(sizeText).SetTextColor(p.theme.Text)
-	p.markDirectory(sizeCell, ref)
-	p.table.SetCell(row, colSize, sizeCell)
-	modSep := p.columnSeparator()
-	p.markDirectory(modSep, ref)
-	p.table.SetCell(row, colModifiedSep, modSep)
-	mtimeCell := tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text)
-	p.markDirectory(mtimeCell, ref)
-	p.table.SetCell(row, colModified, mtimeCell)
+	p.table.SetCell(row, colSizeSep, p.columnSeparator())
+	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
+	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
+	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
 }
 
-// markDirectory gives cell a DirectoryBackground fill when ref represents
-// something Enter navigates into — a directory, a symlink to one, a mount
-// point, or ".." itself (rowRef.isDir already covers exactly that set, see
-// its own doc comment) — so folders read as folders at a glance, before
-// the cursor ever reaches them. Plain files keep the table's own
-// transparent cell background (see tview.NewTableCell), so nothing changes
-// for them. The cursor row's own SelectedStyle (see the Table setup in
-// New) is table-wide and always paints over this once a row is selected,
-// directory or not — the intended effect: dark-yellow marks "this is a
-// folder", the cursor highlight still marks "this is where you are".
-func (p *Panel) markDirectory(cell *tview.TableCell, ref rowRef) {
-	if ref.isDir {
-		cell.SetBackgroundColor(p.theme.DirectoryBackground)
-	}
+// nameHighlightTags wraps escapedName (see addRow's own escaping, right
+// before this is called) in a tview style tag that sets only its
+// background to bg — "[:#rrggbb:]" leaves the foreground field empty,
+// which tview's tag parser reads as "no change" rather than "reset" (see
+// parseTag in tview/strings.go), so the entry's own EntryNormal/
+// EntryExecutable/EntryError text color (set via SetTextColor on the
+// whole cell, see addRow) still shows through unchanged. "[-:-:-]" then
+// resets background (and everything else) back to the cell's base style
+// for whatever text follows — the trailing "/" or " -> target" arrow, and
+// the column's own blank padding, all stay in the table's ordinary
+// background rather than picking up bg too.
+func nameHighlightTags(escapedName string, bg tcell.Color) string {
+	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(bg.Hex())&0xffffff, escapedName)
 }
 
 // columnSeparator is a new cell for the bare "│" columns dividing
