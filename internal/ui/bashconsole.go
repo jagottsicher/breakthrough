@@ -14,11 +14,13 @@ import (
 )
 
 // bashConsoleInputRows is how many rows bashLine itself keeps once the
-// console is expanded (see expandBashConsole) — enough to see a handful
-// of lines of a script being composed without eating into
-// bashHistoryView's own share of the expanded region, which gets
-// whatever's left.
-const bashConsoleInputRows = 3
+// console is expanded (see expandBashConsole) — one, per the user's own
+// explicit request (the original 3 left too little of the expanded
+// region for bashHistoryView's own share). A multi-line script in
+// progress still scrolls within that one row's own width via TextArea's
+// own default cursor handling; it just doesn't get a taller box to show
+// more than the current line at once.
+const bashConsoleInputRows = 1
 
 // newBashConsole builds bashLine (a multi-line shell command/script
 // editor — no "$ " label, full width, per the user's own explicit
@@ -417,15 +419,21 @@ func (r *Root) runShellCommandFullScreen(command string) {
 // a non-terminating command, e.g. "tail -f", doesn't hang the whole
 // application — see interruptBashCommand for how to stop one early).
 //
-// bashRunningCmd tracks the in-flight process for that interrupt.
-// Guards against a second captured command starting while one is
-// already running: bashLine.SetDisabled(true), set once this one
-// starts, already stops the UI from submitting another in the normal
-// course of things, but a caller going around that (e.g. runBashCommand
-// invoked directly, as some tests do) could otherwise overwrite
+// bashRunningCmd tracks the in-flight process for that interrupt, and
+// also guards against a second captured command starting while one is
+// already running: silently ignored here rather than started, so a
+// second Enter while one is in flight (e.g. runBashCommand invoked
+// directly, as some tests do, or just typing ahead) can't overwrite
 // bashRunningCmd out from under the first command's own still-pending
-// finishCapturedCommand — silently ignored here instead, the same way
-// the disabled input would silently just not submit.
+// finishCapturedCommand. Deliberately NOT enforced via
+// bashLine.SetDisabled: TextArea.SetDisabled unconditionally re-fires
+// its own FinishedFunc (see tview's own SetDisabled — "if t.finished !=
+// nil { t.finished(-1) }"), which newBashConsole wires to hand focus
+// back to the panel — meaning disabling bashLine here would itself
+// trigger collapseBashConsole (via bashLine's own BlurFunc) the instant
+// a captured command starts, closing the console the user just opened
+// to watch it run. bashLine stays fully interactive throughout; this
+// guard alone is what actually matters for correctness.
 func (r *Root) runShellCommandCaptured(command string) {
 	if r.bashRunningCmd != nil {
 		return
@@ -446,7 +454,6 @@ func (r *Root) runShellCommandCaptured(command string) {
 
 	r.bashRunningCmd = cmd
 	r.bashLine.SetText("", true)
-	r.bashLine.SetDisabled(true)
 
 	go func() {
 		err := cmd.Wait()
@@ -460,8 +467,9 @@ func (r *Root) runShellCommandCaptured(command string) {
 // handler — split out on its own specifically so it's callable directly
 // (see bashconsole_test.go), without needing a real Application event
 // loop behind QueueUpdateDraw to reach it. Clears bashRunningCmd
-// (interruptBashCommand's own guard against a stale reference) and
-// re-enables bashLine.
+// (interruptBashCommand's own guard against a stale reference, and
+// runShellCommandCaptured's own guard against a second command starting
+// too early).
 //
 // cd's own effect, if the captured command included one (e.g. "cd
 // /foo && ls" — parseCdCommand only recognizes a *bare* cd, see
@@ -474,7 +482,6 @@ func (r *Root) runShellCommandCaptured(command string) {
 // kind of cleanup for its own (real, TTY-requiring) commands.
 func (r *Root) finishCapturedCommand(command string, runErr error) {
 	r.bashRunningCmd = nil
-	r.bashLine.SetDisabled(false)
 	if runErr != nil {
 		_, _ = fmt.Fprintf(r.bashHistoryView, "[%s exited: %v]\n", command, runErr) // see runShellCommandCaptured's own "$ " echo on why this is never checked
 	}
