@@ -24,9 +24,10 @@ terminal.
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.
-  Every row Enter can navigate into — a directory, a symlink to one, a
-  mount point, or `..` itself — gets a dark-yellow row background, so
-  folders stand out from plain files at a glance.
+  Every entry Enter can navigate into — a directory, a symlink to one, a
+  mount point, or `..` itself — gets its own name highlighted dark
+  yellow (just the name, not the trailing `/` or a symlink's `-> target`
+  arrow), so folders stand out from plain files at a glance.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.

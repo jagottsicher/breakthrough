@@ -35,12 +35,13 @@ type Theme struct {
 	ErrorBackground string `json:"error_background"`
 	// SelectionBackground highlights the panel's currently selected row.
 	SelectionBackground string `json:"selection_background"`
-	// DirectoryBackground marks every row that Enter navigates into —
-	// directories, symlinks to directories, mount points, and ".." itself
-	// (see rowRef.isDir in internal/ui) — so it's visually obvious which
-	// rows are folders before the cursor ever reaches them. It applies
-	// underneath SelectionBackground: the cursor row's own highlight still
-	// wins once a directory row is selected.
+	// DirectoryBackground highlights an entry's own name — not the
+	// trailing "/" beside it, nor a symlink's " -> target" arrow, nor the
+	// rest of the row — whenever Enter navigates into it: directories,
+	// symlinks to directories, mount points, and ".." itself (see
+	// rowRef.isDir in internal/ui). So "Downloads/" shows the highlight
+	// only on "Downloads", and a directory symlink like "pictures ->
+	// /home/jens/Pictures" shows it only on "pictures".
 	DirectoryBackground string `json:"directory_background"`
 
 	// Text is this app's one primary foreground color, used almost
