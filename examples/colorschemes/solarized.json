@@ -13,6 +13,7 @@
   "entry_error": "#dc322f",
   "entry_symlink": "#2aa198",
   "entry_special": "#cb4b16",
-  "entry_unreadable": "#96221c",
-  "entry_archive": "#d33682"
+  "entry_unreadable": "#e5756b",
+  "entry_archive": "#d33682",
+  "entry_hidden": "#4b5960"
 }

@@ -1240,7 +1240,12 @@ func typeGlyph(ref rowRef) byte {
 //  6. A working symlink to a file (TypeSymlinkBroken, the one other
 //     symlink case, was already handled in step 1).
 //  7. An executable TypeFile.
-//  8. Everything else: EntryNormal.
+//  8. A dotfile/dotdir name (anything starting with "." except ".."
+//     itself — see EntryHidden's own doc comment) — checked dead last:
+//     every case above says something more specific and more worth
+//     noticing than "this is hidden", so none of them are ever dimmed
+//     by this instead.
+//  9. Everything else: EntryNormal.
 func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
@@ -1264,6 +1269,8 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 		return p.theme.EntrySymlink
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
 		return p.theme.EntryExecutable
+	case ref.name != ".." && strings.HasPrefix(ref.name, "."):
+		return p.theme.EntryHidden
 	default:
 		return p.theme.EntryNormal
 	}
