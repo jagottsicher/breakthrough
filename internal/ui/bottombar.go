@@ -40,29 +40,14 @@ type statusBarSpan struct {
 	action           statusBarAction
 }
 
-// newBottomBar builds the two rows below the panel: bashLine, a plain
-// InputField for shell commands (see runShellCommand), and statusBar, a
-// hand-built single line showing who/df/quick-action buttons/the clock
-// (see refreshStatusBar). NewRoot adds both to mainLayout beneath the
-// panel.
+// newBottomBar builds the two rows below the panel: bashConsole (see
+// newBashConsole, in bashconsole.go — bashLine, a multi-line shell
+// command/script editor, plus bashHistoryView, its scrollable output
+// transcript), and statusBar, a hand-built single line showing who/df/
+// quick-action buttons/the clock (see refreshStatusBar). NewRoot adds
+// both to mainLayout beneath the panel.
 func (r *Root) newBottomBar() {
-	r.bashLine = tview.NewInputField()
-	r.bashLine.SetLabel("$ ")
-	r.bashLine.SetDoneFunc(func(key tcell.Key) {
-		if key != tcell.KeyEnter {
-			return
-		}
-		r.runShellCommand(r.bashLine.GetText())
-	})
-	r.bashLine.SetInputCapture(r.captureBashLineKey)
-
-	// Inherit whatever real command history already exists (see
-	// historyFilePath/loadBashHistory), the same way a real shell starts
-	// a new session with Up already recalling what earlier sessions ran
-	// — not just what's typed into this one.
-	r.bashHistoryFile = historyFilePath()
-	r.bashHistory = loadBashHistory(r.bashHistoryFile)
-	r.bashHistoryIdx = len(r.bashHistory)
+	r.newBashConsole()
 
 	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
@@ -414,13 +399,15 @@ func (r *Root) renameCurrentEntry() {
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
-// on top of whatever's already open. Critically, this also
-// keeps them out of the bash line's way: tview's plain InputField
-// doesn't implement any readline-style keybindings of its own, but real
-// bash/readline uses Ctrl+E for end-of-line, Ctrl+R for reverse-search,
-// and Ctrl+F to move forward a character — letting these global
-// shortcuts fire while typing a command there would silently defeat
-// muscle memory this line is explicitly meant to feel like bash.
+// on top of whatever's already open. Critically, this also keeps them
+// out of the bash line's way: tview's TextArea already implements
+// several readline-style keybindings of its own (Ctrl+A/Home,
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these six are captured
+// globally, at the Application level (see cmd/breakthrough), they'd
+// reach and consume the keystroke before bashLine's own InputCapture or
+// TextArea's own default handling ever saw it, silently defeating both
+// that and the muscle memory this line is explicitly meant to feel like
+// bash — hence checking this first and no-op'ing instead.
 func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
@@ -458,199 +445,6 @@ func (r *Root) OptionsShortcut() {
 func (r *Root) SearchShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openSearch()
-	}
-}
-
-// userShell returns $SHELL, or "/bin/sh" if it isn't set — used by both
-// runShellCommand and runEditor (see editorCommand's own doc comment for
-// why the editor is run through the shell too) as the interpreter for
-// whatever the user typed or configured.
-func userShell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	return "/bin/sh"
-}
-
-// historyFilePath returns where bash-style command history lives:
-// $HISTFILE if set (an explicit override, honored regardless of what
-// $SHELL actually is), otherwise "~/.bash_history" — bash's own
-// hardcoded default. That default is used even if $SHELL isn't bash: a
-// "bash Eingabezeile" inheriting history "wie in einer normalen bash
-// Session" is specifically what was asked for, not whatever the current
-// shell's own (possibly different, e.g. zsh's ~/.zsh_history) history
-// file convention happens to be. Empty if the home directory can't be
-// resolved.
-func historyFilePath() string {
-	if f := os.Getenv("HISTFILE"); f != "" {
-		return f
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".bash_history")
-}
-
-// loadBashHistory reads path's existing command history, oldest first
-// — one command per line, skipping bash's own optional "#<unix
-// timestamp>" comment lines (written when HISTTIMEFORMAT is set) rather
-// than mistaking them for commands. A missing or unreadable file isn't
-// an error worth reporting: an empty history is exactly what a first
-// run — or one where $HISTFILE genuinely doesn't exist yet — should
-// start with.
-func loadBashHistory(path string) []string {
-	if path == "" {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	var history []string
-	for _, line := range strings.Split(string(data), "\n") {
-		if line == "" || isHistoryTimestampComment(line) {
-			continue
-		}
-		history = append(history, line)
-	}
-	return history
-}
-
-// isHistoryTimestampComment reports whether line is one of bash's own
-// "#<unix timestamp>" history-file comment lines (see loadBashHistory).
-func isHistoryTimestampComment(line string) bool {
-	rest, ok := strings.CutPrefix(line, "#")
-	if !ok {
-		return false
-	}
-	_, err := strconv.ParseInt(rest, 10, 64)
-	return err == nil
-}
-
-// appendBashHistory appends command to path as bash itself would — one
-// line — so a later real bash session (or another breakthrough one)
-// inherits it too, the same way runShellCommand's caller inherited
-// whatever was already there (see loadBashHistory). Best-effort: called
-// via "_ = appendBashHistory(...)" in runShellCommand — a failure here
-// (a missing home directory, a permissions problem) shouldn't stop the
-// command that was just run from having run, or get reported as if it
-// were that command's own failure.
-func appendBashHistory(path, command string) (err error) {
-	if path == "" {
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		// Only overrides err if the write itself succeeded — a failure
-		// there is the more relevant one to report.
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-	}()
-	_, err = fmt.Fprintln(f, command)
-	return err
-}
-
-// runShellCommand is the bash line's Enter action: suspends the TUI (see
-// tview.Application.Suspend) and runs command through userShell, with
-// the real terminal handed over for the duration and the panel's
-// current directory as its working directory — full interactivity,
-// including interactive programs like vim or less, exactly like
-// Midnight Commander's own command line. The panel reloads once the
-// command exits, in case it changed anything in the directory currently
-// on screen.
-//
-// "cd", "cd <path>", and "cd -" are special-cased instead (see
-// parseCdCommand/Root.changeDirectory) — the same as Midnight
-// Commander's own command line does it, and for the same reason: a "cd"
-// run inside the subshell above only ever changes that child process's
-// own working directory, which has no way to affect the panel once the
-// child exits. No subshell, and no Suspend, is involved for these —
-// updating which directory the panel shows is instant, the same as
-// clicking a breadcrumb already is.
-//
-// command is recorded in bashHistory before it runs, unconditionally
-// (not only once it succeeds) — the same as a real shell, which
-// remembers what you typed regardless of the exit code.
-func (r *Root) runShellCommand(command string) {
-	if strings.TrimSpace(command) == "" {
-		return
-	}
-
-	r.bashHistory = append(r.bashHistory, command)
-	r.bashHistoryIdx = len(r.bashHistory)
-	r.bashHistoryDraft = ""
-	_ = appendBashHistory(r.bashHistoryFile, command) // best-effort — see its own doc comment
-
-	if target, ok := parseCdCommand(command); ok {
-		r.bashLine.SetText("")
-		r.showError(r.changeDirectory(target))
-		return
-	}
-
-	var runErr error
-	r.app.Suspend(func() {
-		cmd := exec.Command(userShell(), "-c", command)
-		cmd.Dir = r.panel.path
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		runErr = cmd.Run()
-	})
-
-	r.bashLine.SetText("")
-	if runErr != nil {
-		r.showError(fmt.Errorf("%s: %w", command, runErr))
-		return
-	}
-	r.showError(r.panel.load(r.panel.path))
-}
-
-// parseCdCommand reports whether command is exactly a "cd" invocation —
-// "cd", "cd <path>", or "cd -" — and if so, whatever followed it ("" for
-// a bare "cd"). Deliberately narrow: a compound command like
-// "cd /foo && ls" or "cd /foo; ls" is left alone and runs in the
-// subshell as usual, rather than this trying to parse general shell
-// syntax to decide how much of it is "the cd part" — recognizing plain,
-// standalone "cd" is what Midnight Commander's own command line does
-// too, and covers what "cd" is actually used for from a line like this.
-func parseCdCommand(command string) (target string, ok bool) {
-	fields := strings.Fields(command)
-	if len(fields) == 0 || fields[0] != "cd" || len(fields) > 2 {
-		return "", false
-	}
-	if len(fields) == 1 {
-		return "", true
-	}
-	return fields[1], true
-}
-
-// changeDirectory is what the bash line's own "cd" (see parseCdCommand)
-// runs instead of spawning a subshell for it: target is whatever
-// followed "cd" — "" for a bare "cd" (home, the same as a real shell),
-// "-" for the panel's previous directory (see Panel.previousPath), or
-// otherwise resolved exactly the way typing it into the path header's
-// own edit field would be (Panel.resolvePath: "~" expansion, relative
-// paths resolved against the panel's current directory).
-func (r *Root) changeDirectory(target string) error {
-	switch target {
-	case "":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		return r.panel.navigate(home)
-	case "-":
-		prev, ok := r.panel.previousPath()
-		if !ok {
-			return fmt.Errorf("cd: no previous directory")
-		}
-		return r.panel.navigate(prev)
-	default:
-		return r.panel.navigate(r.panel.resolvePath(target))
 	}
 }
 
@@ -793,53 +587,4 @@ func (r *Root) StartClock() (stop func()) {
 		}
 	}()
 	return func() { close(done) }
-}
-
-// captureBashLineKey adds history navigation (see bashHistoryUp/Down) to
-// the bash line — the one thing tview's plain InputField doesn't already
-// give it for free, unlike a real shell's own readline.
-func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
-	switch event.Key() {
-	case tcell.KeyUp:
-		r.bashHistoryUp()
-		return nil
-	case tcell.KeyDown:
-		r.bashHistoryDown()
-		return nil
-	}
-	return event
-}
-
-// bashHistoryUp recalls the previous (older) history entry, the same as
-// pressing Up in a real shell: the first press remembers whatever was
-// on the line so far (bashHistoryDraft), so pressing Down enough times
-// afterwards gets back to it rather than an empty line. Stops at the
-// oldest entry rather than wrapping.
-func (r *Root) bashHistoryUp() {
-	if len(r.bashHistory) == 0 {
-		return
-	}
-	if r.bashHistoryIdx == len(r.bashHistory) {
-		r.bashHistoryDraft = r.bashLine.GetText()
-	}
-	if r.bashHistoryIdx > 0 {
-		r.bashHistoryIdx--
-	}
-	r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
-}
-
-// bashHistoryDown is bashHistoryUp's counterpart: recalls the next
-// (newer) entry, or restores whatever was being typed before Up was
-// first pressed (bashHistoryDraft) once it moves past the newest one —
-// a no-op if history navigation isn't in progress at all.
-func (r *Root) bashHistoryDown() {
-	if r.bashHistoryIdx >= len(r.bashHistory) {
-		return
-	}
-	r.bashHistoryIdx++
-	if r.bashHistoryIdx == len(r.bashHistory) {
-		r.bashLine.SetText(r.bashHistoryDraft)
-	} else {
-		r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
-	}
 }

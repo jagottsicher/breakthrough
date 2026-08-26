@@ -89,10 +89,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.errorView.SetTextColor(theme.Text)
 	r.errorView.SetBackgroundColor(theme.ErrorBackground)
 
-	r.bashLine.SetFieldBackgroundColor(theme.AccentBackground)
 	r.bashLine.SetBackgroundColor(theme.AccentBackground)
-	r.bashLine.SetLabelColor(theme.Text)
-	r.bashLine.SetFieldTextColor(theme.Text)
+	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
+	r.bashHistoryView.SetBackgroundColor(theme.AccentBackground)
+	r.bashHistoryView.SetTextColor(theme.Text)
 	r.statusBar.SetBackgroundColor(theme.AccentBackground)
 	r.statusBar.SetTextColor(theme.Text)
 
