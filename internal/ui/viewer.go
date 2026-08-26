@@ -15,10 +15,10 @@ import (
 
 const viewerPage = "viewer"
 
-// viewerMinWidth/Height are viewerSize's own floor — a small terminal
-// still gets a usable Look window, just not the generous 90%/80% share
-// of the screen a bigger one does (see viewerSize) — the same numbers
-// helpSize uses, for the same reason (see its own doc comment).
+// viewerMinWidth/Height are viewerSize's own floor — a tiny terminal
+// still gets these numbers rather than something narrower still, the
+// same floor helpSize uses, for the same reason (see its own doc
+// comment).
 const viewerMinWidth, viewerMinHeight = 60, 20
 
 // newViewerView builds the Look overlay's built-in pager: a single,
@@ -28,13 +28,14 @@ const viewerMinWidth, viewerMinHeight = 60, 20
 // (TextView.SetDoneFunc fires for all four), as does a click outside or
 // Ctrl+C.
 //
-// SetDynamicColors is on (needed for the truncation footer's own muted
-// color — see showBuiltinLook), which means the file's own raw content
-// must be escaped before it's ever set as this view's text: an ordinary
-// source file or log line containing a literal "[" (Go's "[]byte", a log
-// line's "[ERROR]", ...) would otherwise be misparsed as one of tview's
-// own style tags instead of shown as-is (see showBuiltinLook's own call
-// to tview.Escape, and help.go's doc comment on the same mechanism).
+// SetDynamicColors is on — that's what carries both the syntax colors
+// (see syntax.go/renderSyntax) and the truncation footer's own muted
+// color — which means the file's own raw content must be escaped before
+// it's ever set as this view's text: an ordinary source file or log line
+// containing a literal "[" (Go's "[]byte", a log line's "[ERROR]", ...)
+// would otherwise be misparsed as one of tview's own style tags instead
+// of shown as-is (renderSyntax escapes each token as it goes — see its
+// own doc comment, and help.go's on the same mechanism).
 func (r *Root) newViewerView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
@@ -44,15 +45,17 @@ func (r *Root) newViewerView() *tview.TextView {
 	return v
 }
 
-// viewerSize sizes Look generously against the whole terminal, the same
-// as Help (see helpSize's own doc comment for the rationale: a read-only
-// view whose content is often long enough that more visible room
-// genuinely means less scrolling, not tied to the panel's own narrower
-// context the way a form like Properties is).
+// viewerSize is Look's own full screen, not the 90%/80% share Help
+// gets: full width so SetWrap's own line-wrapping never breaks a real
+// line any narrower than the terminal itself already forces, full
+// height so the fewest possible lines are ever scrolled out of view at
+// once. viewerMinWidth/Height only matter on a terminal already smaller
+// than them — GetRect never returns less than the real terminal size,
+// so this is a floor for the pathological case, not a ceiling on an
+// ordinary one.
 func (r *Root) viewerSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
-	width = screenWidth * 9 / 10
-	height = screenHeight * 8 / 10
+	width, height = screenWidth, screenHeight
 	if width < viewerMinWidth {
 		width = viewerMinWidth
 	}
@@ -111,7 +114,13 @@ func (r *Root) showBuiltinLook(path string) {
 		return
 	}
 
-	text := tview.Escape(result.Content) // see newViewerView's own doc comment on why
+	// Syntax coloring happens here rather than in internal/viewer: that
+	// package deliberately stays tview-free (see its own doc comment),
+	// classifying content into TokenKinds without knowing anything
+	// about how they're painted. renderSyntax does the escaping every
+	// token needs — see its own doc comment on why this can't just
+	// escape result.Content wholesale any more.
+	text := renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
 	if result.Truncated {
 		text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.PlaceholderText))
 	}
