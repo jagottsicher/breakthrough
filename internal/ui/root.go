@@ -93,6 +93,18 @@ type Root struct {
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
+	// viewerPDFPath/Page/PageCount track Look's own PDF page navigation
+	// (see viewer.go's showPDFPage/renderPDFPageContent/turnPDFPage) —
+	// viewerPDFPath is "" whenever Look isn't currently showing a PDF at
+	// all (reset at the top of every showBuiltinLook call, regardless
+	// of what Kind it turns out to be — see its own doc comment), which
+	// is also what captureViewerKey checks before ever treating
+	// PageUp/PageDown as a page turn instead of TextView's own default
+	// scroll.
+	viewerPDFPath      string
+	viewerPDFPage      int
+	viewerPDFPageCount int
+
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
 	// and, later, the planned Copy-to/Move-to target navigation.

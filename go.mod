@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/gdamore/tcell/v2 v2.13.10
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/rivo/tview v0.42.0
 	golang.org/x/image v0.45.0
 )

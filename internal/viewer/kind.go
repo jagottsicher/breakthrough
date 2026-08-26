@@ -28,6 +28,15 @@ const (
 	// Content/Truncated stay at their zero values, the same as
 	// KindUnsupported (see Result's own doc comment).
 	KindImage
+	// KindPDF is content Sniff recognized by the PDF file signature
+	// ("%PDF-", checked before the NUL-byte text/binary split below —
+	// a real PDF's own mixed binary/text structure would otherwise
+	// often land on KindUnsupported before ever getting this far). Load
+	// itself only ever reports the Kind for a PDF — see its own doc
+	// comment on why the actual page content is a separate, explicit
+	// call (LoadPDFPage — see pdf.go) rather than something Load does
+	// automatically the way it does for text and images.
+	KindPDF
 )
 
 // sniffLen is how much of a file's content Sniff actually inspects — the
@@ -69,6 +78,9 @@ const sniffLen = 8000
 //     here. Every other registered format's own header is self-
 //     contained well within sniffLen.
 func Sniff(sample []byte) Kind {
+	if bytes.HasPrefix(sample, []byte("%PDF-")) {
+		return KindPDF
+	}
 	if bytes.IndexByte(sample, 0) == -1 {
 		return KindText
 	}
