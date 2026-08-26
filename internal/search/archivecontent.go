@@ -290,7 +290,7 @@ func materializePlainTar(ctx context.Context, archivePath string) (plainPath str
 	if err != nil {
 		return "", nil, err
 	}
-	cleanup = func() { os.Remove(tmp.Name()) }
+	cleanup = func() { _ = os.Remove(tmp.Name()) } // best-effort — a leftover temp file isn't worth surfacing as an error
 
 	cmd := exec.CommandContext(ctx, tool, "-dc", archivePath)
 	cmd.Stdout = tmp
