@@ -76,7 +76,7 @@ type Theme struct {
 	// per fsops.Entry.Unreadable (see its own doc comment on how that's
 	// determined). Deliberately not EntryError's own red: that color
 	// already means "broken symlink", a different, more specific
-	// problem; this is a dimmer, distinct red so the two don't read as
+	// problem; this is a lighter, distinct red so the two don't read as
 	// the same thing at a glance.
 	EntryUnreadable string `json:"entry_unreadable"`
 	// EntryArchive colors a file whose name matches a recognized
@@ -89,6 +89,15 @@ type Theme struct {
 	// like an archive (e.g. "backup.tar.gz/"): DirectoryBackground
 	// already marks it as a folder, and it isn't actually an archive.
 	EntryArchive string `json:"entry_archive"`
+	// EntryHidden colors a dotfile/dotdir's name — anything starting
+	// with "." except ".." itself, which DirectoryBackground already
+	// marks and isn't "hidden" in spirit — a dimmer shade so it recedes
+	// a little against the ordinary listing. Checked last, after every
+	// other Entry* case (see entryColor in internal/ui): a hidden entry
+	// that's also broken/unreadable/special/an archive/a symlink/
+	// executable keeps that color instead, since those all say something
+	// more specific and more worth noticing than "this is a dotfile".
+	EntryHidden string `json:"entry_hidden"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -111,6 +120,7 @@ type ResolvedTheme struct {
 	EntrySpecial    tcell.Color
 	EntryUnreadable tcell.Color
 	EntryArchive    tcell.Color
+	EntryHidden     tcell.Color
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -135,8 +145,9 @@ func DefaultTheme() Theme {
 		EntryError:      "red",
 		EntrySymlink:    "aqua",
 		EntrySpecial:    "orange",
-		EntryUnreadable: "indianred",
+		EntryUnreadable: "lightcoral",
 		EntryArchive:    "fuchsia",
+		EntryHidden:     "dimgray",
 	}
 }
 
@@ -174,6 +185,7 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntrySpecial:    resolve(t.EntrySpecial, def.EntrySpecial),
 		EntryUnreadable: resolve(t.EntryUnreadable, def.EntryUnreadable),
 		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
+		EntryHidden:     resolve(t.EntryHidden, def.EntryHidden),
 	}
 }
 

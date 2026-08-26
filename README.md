@@ -29,11 +29,12 @@ terminal.
   yellow (just the name, not the trailing `/` or a symlink's `-> target`
   arrow), so folders stand out from plain files at a glance. Beyond
   that, a name's own text color also tells them apart: green for
-  executable, red for a broken symlink, a dimmed red for anything the
+  executable, red for a broken symlink, a light red for anything the
   current user can't actually read (checked with a real permission
   check, not just Mode's bits — a `/proc` entry included), cyan for a
-  working symlink to a file, orange for a socket/FIFO/device, and
-  magenta for a recognized archive extension.
+  working symlink to a file, orange for a socket/FIFO/device, magenta
+  for a recognized archive extension, and a dim gray for a dotfile/
+  dotdir (unless one of the other cases above already applies).
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
