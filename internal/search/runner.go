@@ -14,17 +14,24 @@ import (
 
 // Result is one match: a plain filename hit (Line == 0, ArchiveMember
 // == ""), a content hit (Line > 0 — a specific line within Path, Text
-// its own matching content), or an archive-member filename hit
-// (ArchiveMember != "", set only when Request.IncludeArchives is on) —
-// Path is then the real archive file that was found and opened, and
+// its own matching content), an archive-member filename hit
+// (ArchiveMember != "", Line == 0, set only when Request.IncludeArchives
+// is on), or a content hit *inside* an archive member (Line > 0 AND
+// ArchiveMember != "" both set, from Request.IncludeCompressed finding
+// a match inside a tar/tar.gz/tar.bz2/tar.xz archive — see
+// internal/search/tarcontent.go; a plain .zip's own content match never
+// sets ArchiveMember, since ContentZip/zipgrep greps a member directly
+// without this package ever listing members itself). Path is then the
+// real archive file that was found and opened either way, and
 // ArchiveMember is the internal member name that actually matched,
 // exactly as the listing tool reported it (see
-// internal/search/archive.go's own listArchiveMembers). Path always
-// stays a real, directly-openable filesystem path either way — never a
+// internal/search/archive.go's own listArchiveMembers) — Path always
+// stays a real, directly-openable filesystem path regardless — never a
 // synthetic combination of the two — so every existing use of Path
 // elsewhere (sorting, "which directory is this in", Properties, ...)
 // keeps working unchanged; only internal/ui's own display formatting
-// needs to know about ArchiveMember at all.
+// and result-activation logic need to know about ArchiveMember at all
+// (see its own appendSearchResult/activateRow).
 type Result struct {
 	Path          string
 	Line          int
@@ -350,9 +357,13 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	case ContentGrep:
 		// IncludeCompressed runs concurrently with the plain grep call
 		// right below it, not before or after — see
-		// startCompressedContentSearch's own doc comment on why.
+		// startCompressedContentSearch's own doc comment on why. Its tar-
+		// family counterpart (tar/tar.gz/tar.bz2/tar.xz — see
+		// tarcontent.go) runs the same way, for the same reason.
 		wait := startCompressedContentSearch(ctx, req, results)
 		defer wait()
+		waitTar := startTarContentSearch(ctx, req, results)
+		defer waitTar()
 
 		// Unlike the NamePattern-narrowed call just above, this walks
 		// req.Scope directly — grep itself is the only thing that will

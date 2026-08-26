@@ -11,10 +11,10 @@ import (
 // grep itself has a dedicated wrapper for (zgrep/bzgrep/xzgrep/
 // zipgrep, all verified present and flag-compatible with GrepArgs' own
 // shape — see BzgrepArgs/XzgrepArgs/ZgrepArgs/ZipgrepArgs' own doc
-// comments), not archive *containers* like tar.gz/tar.bz2/tar.xz —
-// none of those four tools can meaningfully search inside one (see
-// Request.IncludeCompressed's own doc comment for why that's a
-// deliberate scope decision, not an oversight).
+// comments), not archive *containers* like tar.gz/tar.bz2/tar.xz — none
+// of those four tools can meaningfully search inside one directly (see
+// tarcontent.go for how those are covered instead: decompressed once,
+// then each member grepped on its own).
 var compressedTools = []struct {
 	glob string
 	tool string

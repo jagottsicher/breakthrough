@@ -535,10 +535,13 @@ func (r *Root) rerenderSearchDialog() {
 	right.newline()
 	// search.Request.IncludeCompressed — see its own doc comment. Own
 	// checkbox in Content's own column, not Filename's: unlike Include
-	// Archives (member *names*), this searches decompressed *content*,
-	// via the matching grep wrapper (zgrep/bzgrep/xzgrep/zipgrep) —
-	// exactly the formats grep itself has a dedicated wrapper for, per
-	// the user's own explicit design decision.
+	// Archives (member *names*), this searches decompressed *content* —
+	// a single compressed file via the matching grep wrapper (zgrep/
+	// bzgrep/xzgrep/zipgrep), or a tar/tar.gz/tar.bz2/tar.xz archive's
+	// own member files, decompressed once and grepped individually (see
+	// internal/search's own tarcontent.go) — covering the same set of
+	// formats Include Archives itself covers, just for content instead
+	// of member names.
 	right.choice(r.searchIncludeCompressed, "Include compressed files", func() { r.searchIncludeCompressed = !r.searchIncludeCompressed })
 	r.searchRight.SetText(right.b.String())
 }

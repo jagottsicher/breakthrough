@@ -286,13 +286,16 @@ type rowRef struct {
 	// other row: a real directory entry, or a filename-search result.
 	searchLine int
 
-	// archiveHit is true for a filename-search result found *inside* an
-	// archive (search.Result.ArchiveMember — see appendSearchResult) —
-	// path is still the real, containing archive file (activateRow's
-	// usual "Go to file/folder" already does the right thing with it
-	// unchanged, see its own doc comment), only entryColor reads this,
-	// to set such a row's own name apart from a real file/directory
-	// match, per the user's own explicit request.
+	// archiveHit is true for a filename- or content-search result found
+	// *inside* an archive (search.Result.ArchiveMember — see
+	// appendSearchResult) — path is still the real, containing archive
+	// file. For a filename match, activateRow's usual "Go to file/
+	// folder" already does the right thing with it unchanged (see its
+	// own doc comment); a content match inside an archive member gets
+	// the same "Go to file/folder" treatment too, specifically because
+	// this is set (see activateRow's own searchLine check) — entryColor
+	// also reads this, to set such a row's own name apart from a real
+	// file/directory match, per the user's own explicit request.
 	archiveHit bool
 }
 
@@ -592,11 +595,15 @@ type searchResultEntry struct {
 // own doc comment). display is res.Path itself for a plain filename
 // match (Line == 0, ArchiveMember == ""), "path:line: text" for a
 // content match (see search.Result's own Line/Text fields, populated
-// only by a content/grep search), or "path -> member" for an
-// archive-member match (search.Result.ArchiveMember, populated only
-// when Request.IncludeArchives is on) — the same "-> target" shape a
-// symlink's own name already gets (see addRow), reused here rather
-// than inventing a second arrow convention.
+// only by a content/grep search), "path -> member" for an
+// archive-member filename match (search.Result.ArchiveMember,
+// populated when Request.IncludeArchives is on), or "path -> member:
+// line: text" for a content match found *inside* an archive member
+// (both Line and ArchiveMember set — see internal/search's own
+// tarcontent.go, populated when Request.IncludeCompressed finds a
+// match inside a tar/tar.gz/tar.bz2/tar.xz archive) — the same "->
+// target" shape a symlink's own name already gets (see addRow), reused
+// here rather than inventing a second arrow convention.
 //
 // fsops.DescribeEntry(res.Path) always describes the real, containing
 // archive file itself for an archive-member match, never something
@@ -616,6 +623,8 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	entry.Name = res.Path
 	display := res.Path
 	switch {
+	case res.Line > 0 && res.ArchiveMember != "":
+		display = fmt.Sprintf("%s -> %s:%d: %s", res.Path, res.ArchiveMember, res.Line, res.Text)
 	case res.Line > 0:
 		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
 	case res.ArchiveMember != "":
@@ -1396,12 +1405,20 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // leaving search mode: unlike a plain jump, this reads as "peek at
 // this match," and a content search often has several, each worth
 // checking in turn without losing the list between them. Every other
-// result — a filename match, or a content match with onOpenSearchResult
-// left nil — is never "this panel's own directory" the way a real
-// row's target always is, so there's nothing to navigate *into*;
-// instead this leaves search mode entirely and jumps to the result's
-// real location (see navigateAndSelect), the same "Go to file/folder"
-// meaning left-click on a result has always had otherwise.
+// result — a filename match, a content match with onOpenSearchResult
+// left nil, or a content match *inside* an archive member
+// (ref.archiveHit — see tarcontent.go's own Result.ArchiveMember,
+// which can now be set alongside a real Line/Text too, not just for a
+// filename-only archive-member hit) — is never "this panel's own
+// directory" the way a real row's target always is, so there's nothing
+// to navigate *into*, or (for the archive case specifically) nothing
+// real at ref.path/ref.searchLine to open at all — ref.path is the
+// containing archive file itself, not the matched member's own
+// extracted content, and opening an archive in a text editor at an
+// arbitrary line makes no sense; instead this leaves search mode
+// entirely and jumps to the result's real location (see
+// navigateAndSelect), the same "Go to file/folder" meaning left-click
+// on a result has always had otherwise.
 //
 // Returns whether IT already settled the table's own selection itself
 // (a real user report: it always did, but the caller — addRow's own
@@ -1427,7 +1444,7 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		return false
 	}
 	if p.searchMode {
-		if ref.searchLine > 0 && p.onOpenSearchResult != nil {
+		if ref.searchLine > 0 && !ref.archiveHit && p.onOpenSearchResult != nil {
 			p.onOpenSearchResult(ref.path, ref.searchLine)
 			return false
 		}
