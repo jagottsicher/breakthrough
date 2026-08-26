@@ -326,6 +326,17 @@ var interactivePrograms = map[string]bool{
 	"gdb": true, "lldb": true,
 	"sudo": true, "su": true, "passwd": true,
 	"visudo": true, "crontab": true,
+	// TUI file managers — breakthrough's own closest relatives, per
+	// CLAUDE.md's own "inspired by Midnight Commander" framing. Missing
+	// "mc" itself here was an embarrassing gap, per the user's own
+	// direct report: it silently ran captured instead of full-screen.
+	"mc": true, "ranger": true, "nnn": true, "lf": true, "vifm": true,
+	// Other common full-screen terminal tools this app's own POSIX/
+	// sysadmin-leaning audience (see CLAUDE.md) is likely to reach for
+	// from here.
+	"tig": true, "ncdu": true, "w3m": true, "lynx": true, "links": true,
+	"alsamixer": true, "nmtui": true, "weechat": true, "irssi": true,
+	"mutt": true, "neomutt": true,
 }
 
 // needsRealTerminal reports whether command contains any word matching
