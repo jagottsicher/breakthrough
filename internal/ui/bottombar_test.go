@@ -704,18 +704,24 @@ func TestBashLineRunsThroughRunBashCommand(t *testing.T) {
 
 	// "echo hello" isn't in interactivePrograms, so this exercises the
 	// captured path (see runShellCommandCaptured), not Suspend — a real
-	// (if trivial) subprocess actually starts here, its own completion
-	// handled by a background goroutine this test never waits for (see
-	// finishCapturedCommand's own doc comment on why that part is tested
-	// separately, directly, instead).
+	// (if trivial) subprocess actually starts here, its stdout wired
+	// directly to bashHistoryView (cmd.Stdout = r.bashHistoryView) and
+	// copied into it by exec's own internal goroutine. Deliberately not
+	// asserting on bashHistoryView's own content here the way the "$
+	// echo hello" echo line alone might suggest is safe: that write
+	// happens on this goroutine before Start(), but exec's copy
+	// goroutine can still be mid-Write (a real, -race-caught race
+	// against TextView.GetText, which — unlike TextView.Write — isn't
+	// lock-protected) by the time this test would read it back, and
+	// this test never waits for that copy to finish (see
+	// finishCapturedCommand's own doc comment on why the exit-handling
+	// part is tested separately, directly, instead of racing it here
+	// too).
 	r.bashLine.SetText("echo hello", true)
 	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.bashLine.GetText(); got != "" {
 		t.Errorf("bash line text = %q after Enter, want cleared", got)
-	}
-	if got := r.bashHistoryView.GetText(true); !strings.Contains(got, "$ echo hello") {
-		t.Errorf("bashHistoryView = %q, want it to contain the echoed command", got)
 	}
 }
 
