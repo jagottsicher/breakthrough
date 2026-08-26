@@ -1081,6 +1081,104 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	}
 }
 
+// TestAddRowMarksNavigableRowsWithDirectoryBackground checks that every
+// row Enter can navigate into — a real directory, a symlink to one, and
+// ".." itself — gets every one of its cells filled with the theme's
+// DirectoryBackground, while a plain file's cells stay transparent (the
+// table's own background shows through instead of an explicit fill; see
+// tview.NewTableCell and markDirectory's own doc comment).
+func TestAddRowMarksNavigableRowsWithDirectoryBackground(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target-dir")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetDir, filepath.Join(dir, "link-to-dir")); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int) // name -> row; addRow sets a reference for every row, ".." included.
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+
+	// Every column that addRow builds, so a cell accidentally left out of
+	// markDirectory's coverage doesn't slip past unnoticed.
+	allCols := []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified}
+
+	// tview.NewTableCell gives every cell a non-default Style up front
+	// (Foreground+Background already set — see its own doc comment), so
+	// SetBackgroundColor folds into that Style rather than the legacy
+	// BackgroundColor field (see tview's own Table.Draw, which prefers
+	// Style.Decompose() over the raw field whenever Style isn't the zero
+	// value) — Decompose is what actually gets painted, so that's what
+	// this test checks too.
+	cellBackground := func(cell *tview.TableCell) tcell.Color {
+		_, bg, _ := cell.Style.Decompose()
+		return bg
+	}
+
+	assertMarked := func(t *testing.T, row int, label string) {
+		t.Helper()
+		for _, col := range allCols {
+			cell := p.table.GetCell(row, col)
+			if cell.Transparent {
+				t.Errorf("%s row, col %d: Transparent = true, want a DirectoryBackground fill", label, col)
+			}
+			if got := cellBackground(cell); got != theme.DirectoryBackground {
+				t.Errorf("%s row, col %d: background = %v, want theme.DirectoryBackground (%v)", label, col, got, theme.DirectoryBackground)
+			}
+		}
+	}
+	assertUnmarked := func(t *testing.T, row int, label string) {
+		t.Helper()
+		for _, col := range allCols {
+			cell := p.table.GetCell(row, col)
+			if !cell.Transparent {
+				t.Errorf("%s row, col %d: Transparent = false (BackgroundColor %v), want the table's own transparent background", label, col, cell.BackgroundColor)
+			}
+		}
+	}
+
+	dotdotRow, ok := byName[".."]
+	if !ok {
+		t.Fatal(`".." row not found`)
+	}
+	assertMarked(t, dotdotRow, "..")
+
+	subdirRow, ok := byName["subdir"]
+	if !ok {
+		t.Fatal("subdir row not found")
+	}
+	assertMarked(t, subdirRow, "subdir")
+
+	linkRow, ok := byName["link-to-dir"]
+	if !ok {
+		t.Fatal("link-to-dir row not found")
+	}
+	assertMarked(t, linkRow, "link-to-dir")
+
+	plainRow, ok := byName["plain.txt"]
+	if !ok {
+		t.Fatal("plain.txt row not found")
+	}
+	assertUnmarked(t, plainRow, "plain.txt")
+}
+
 // TestActivateRowNavigatesIntoDirectorySymlink pins a behavior change
 // that comes for free now that ListDir resolves symlinks to classify
 // them (see fsops.Entry.IsDir's doc comment): Enter/click on a directory

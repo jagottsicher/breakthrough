@@ -35,6 +35,13 @@ type Theme struct {
 	ErrorBackground string `json:"error_background"`
 	// SelectionBackground highlights the panel's currently selected row.
 	SelectionBackground string `json:"selection_background"`
+	// DirectoryBackground marks every row that Enter navigates into —
+	// directories, symlinks to directories, mount points, and ".." itself
+	// (see rowRef.isDir in internal/ui) — so it's visually obvious which
+	// rows are folders before the cursor ever reaches them. It applies
+	// underneath SelectionBackground: the cursor row's own highlight still
+	// wins once a directory row is selected.
+	DirectoryBackground string `json:"directory_background"`
 
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
@@ -60,6 +67,7 @@ type ResolvedTheme struct {
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
 	SelectionBackground tcell.Color
+	DirectoryBackground tcell.Color
 
 	Text               tcell.Color
 	EditableBackground tcell.Color
@@ -81,6 +89,7 @@ func DefaultTheme() Theme {
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
 		SelectionBackground: "darkcyan",
+		DirectoryBackground: "darkgoldenrod",
 
 		Text:               "white",
 		EditableBackground: "slategray",
@@ -113,6 +122,7 @@ func (t Theme) Resolve() ResolvedTheme {
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		SelectionBackground: resolve(t.SelectionBackground, def.SelectionBackground),
+		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),

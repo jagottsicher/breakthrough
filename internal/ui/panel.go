@@ -933,14 +933,17 @@ func (p *Panel) addRow(row int, ref rowRef) {
 			// on its own, especially if the click landed a column off.
 		})
 	}
+	p.markDirectory(checkbox, ref)
 	p.table.SetCell(row, colCheckbox, checkbox)
 
 	color := p.entryColor(ref)
 
 	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
+	p.markDirectory(typeCell, ref)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
+	p.markDirectory(modCell, ref)
 	p.table.SetCell(row, colModifier, modCell)
 
 	label := ref.name
@@ -951,6 +954,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		label += " -> " + ref.linkTarget
 	}
 	name := tview.NewTableCell(label).SetTextColor(color)
+	p.markDirectory(name, ref)
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
@@ -966,10 +970,34 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	p.table.SetCell(row, colSizeSep, p.columnSeparator())
-	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
-	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
-	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
+	sizeSep := p.columnSeparator()
+	p.markDirectory(sizeSep, ref)
+	p.table.SetCell(row, colSizeSep, sizeSep)
+	sizeCell := tview.NewTableCell(sizeText).SetTextColor(p.theme.Text)
+	p.markDirectory(sizeCell, ref)
+	p.table.SetCell(row, colSize, sizeCell)
+	modSep := p.columnSeparator()
+	p.markDirectory(modSep, ref)
+	p.table.SetCell(row, colModifiedSep, modSep)
+	mtimeCell := tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text)
+	p.markDirectory(mtimeCell, ref)
+	p.table.SetCell(row, colModified, mtimeCell)
+}
+
+// markDirectory gives cell a DirectoryBackground fill when ref represents
+// something Enter navigates into — a directory, a symlink to one, a mount
+// point, or ".." itself (rowRef.isDir already covers exactly that set, see
+// its own doc comment) — so folders read as folders at a glance, before
+// the cursor ever reaches them. Plain files keep the table's own
+// transparent cell background (see tview.NewTableCell), so nothing changes
+// for them. The cursor row's own SelectedStyle (see the Table setup in
+// New) is table-wide and always paints over this once a row is selected,
+// directory or not — the intended effect: dark-yellow marks "this is a
+// folder", the cursor highlight still marks "this is where you are".
+func (p *Panel) markDirectory(cell *tview.TableCell, ref rowRef) {
+	if ref.isDir {
+		cell.SetBackgroundColor(p.theme.DirectoryBackground)
+	}
 }
 
 // columnSeparator is a new cell for the bare "│" columns dividing
