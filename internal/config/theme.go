@@ -74,10 +74,13 @@ type Theme struct {
 	// EntryUnreadable colors an entry the invoking user can't actually
 	// read — a permission-denied file, or a directory they can't list —
 	// per fsops.Entry.Unreadable (see its own doc comment on how that's
-	// determined). Deliberately not EntryError's own red: that color
-	// already means "broken symlink", a different, more specific
-	// problem; this is a lighter, distinct red so the two don't read as
-	// the same thing at a glance.
+	// determined). Deliberately not EntryError's own bright red: that
+	// color already means "broken symlink", a different, more specific
+	// problem, and reads too close to DirectoryBackground's own gold to
+	// stay legible on an unreadable directory's name specifically. A
+	// darker red than EntryError, per the user's own explicit request
+	// and hex value — but not so dark it disappears against the plain
+	// (non-directory) background an unreadable file's own name sits on.
 	EntryUnreadable string `json:"entry_unreadable"`
 	// EntryArchive colors a file whose name matches a recognized
 	// archive/compression extension (see isArchiveName in internal/ui) —
@@ -145,7 +148,7 @@ func DefaultTheme() Theme {
 		EntryError:      "red",
 		EntrySymlink:    "aqua",
 		EntrySpecial:    "orange",
-		EntryUnreadable: "lightcoral",
+		EntryUnreadable: "#ad0000",
 		EntryArchive:    "fuchsia",
 		EntryHidden:     "dimgray",
 	}
