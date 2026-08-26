@@ -29,7 +29,11 @@ func ReadPreview(path string, limit int64) (data []byte, truncated bool, err err
 	if err != nil {
 		return nil, false, err
 	}
-	defer f.Close()
+	// Discarded explicitly: this file is only ever read from, never
+	// written to, so a Close failure has nothing to report that the read
+	// itself wouldn't already have surfaced — unlike config.SetKey's own
+	// deferred Close, which does propagate one because it writes.
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {

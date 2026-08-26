@@ -126,12 +126,6 @@ func (r *Root) showBuiltinLook(path string) {
 	r.showOverlay(viewerPage, r.viewerView)
 }
 
-// closeLook hides the Look overlay — Escape, a click outside, or Ctrl+C
-// (see newViewerView's own SetDoneFunc and Root.RequestCancel).
-func (r *Root) closeLook() {
-	r.hideOverlay()
-}
-
 // LookShortcut is Ctrl+L's global action — see cmd/breakthrough and
 // acceptsGlobalShortcut for why it checks its own precondition first,
 // the same as Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F.
