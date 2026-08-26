@@ -13,6 +13,10 @@ import "image"
 //     would be misleading: an image Load could actually decode is by
 //     definition NOT truncated in any way that matters, regardless of
 //     how ImagePreviewLimit compares to DefaultPreviewLimit.
+//   - KindPDF: nothing else here is populated at all — Load only ever
+//     classifies a PDF, it never reads its actual page content (see
+//     Load's own doc comment on why, and LoadPDFPage in pdf.go for the
+//     call that does).
 //   - KindUnsupported: nothing else is meaningful. Reason, if non-empty,
 //     is a short, human-readable explanation worth showing instead of
 //     Look's own generic "no viewer for this file type" message — set
@@ -46,6 +50,14 @@ type Result struct {
 // recognized but no registered decoder could actually parse — a
 // genuinely corrupt file, or one very rare gap: an unregistered
 // sub-format sharing another format's own magic bytes).
+//
+// KindPDF is the one deliberate exception to "Load reads the actual
+// content": a PDF is inherently multi-page, and Look's own page
+// navigation (PageUp/PageDown — see internal/ui's turnPDFPage) needs
+// to load exactly one page at a time, on demand, not the whole
+// document up front the way every other Kind here does. internal/ui
+// calls LoadPDFPage itself once it sees this Kind, rather than Load
+// trying to guess which page to read.
 func Load(path string, limit int64) (Result, error) {
 	sample, sampleTruncated, err := ReadPreview(path, sniffLen)
 	if err != nil {
@@ -84,6 +96,9 @@ func Load(path string, limit int64) (Result, error) {
 			return Result{Kind: KindUnsupported, Reason: "recognized as an image, but couldn't actually be decoded"}, nil
 		}
 		return Result{Kind: KindImage, Image: img, ImageFormat: format}, nil
+
+	case KindPDF:
+		return Result{Kind: KindPDF}, nil
 
 	default:
 		return Result{Kind: KindUnsupported}, nil

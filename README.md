@@ -69,6 +69,11 @@ terminal.
   the file itself) to open `bat`/`batcat`, `$PAGER`, or `less`/`more`
   in your real terminal for text. "Tail -f", right next to Look in the
   context menu, follows a growing log live via the real `tail -f`.
+  PDFs open page by page — as a real rendered page image where
+  [poppler-utils](https://poppler.freedesktop.org/)'s `pdftoppm` is
+  installed (feeding straight into the same image renderer above), or
+  as extracted plain text otherwise, entirely in Go, no external tool
+  required. `PageUp`/`PageDown` move between pages either way.
 
 ## Status
 

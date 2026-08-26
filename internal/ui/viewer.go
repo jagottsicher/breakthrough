@@ -37,13 +37,44 @@ const viewerMinWidth, viewerMinHeight = 60, 20
 // would otherwise be misparsed as one of tview's own style tags instead
 // of shown as-is (renderSyntax escapes each token as it goes — see its
 // own doc comment, and help.go's on the same mechanism).
+//
+// SetInputCapture adds one thing TextView doesn't already do on its
+// own: while viewing a PDF page (r.viewerPDFPath != "" — see
+// captureViewerKey), PageUp/PageDown turn the page instead of
+// scrolling. Harmless to leave wired unconditionally: every other
+// Kind (and TextView's own cursor/Home/End keys, even for a PDF) still
+// falls straight through to TextView's own default handling, unchanged.
 func (r *Root) newViewerView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
 	v.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
+	v.SetInputCapture(r.captureViewerKey)
 	return v
+}
+
+// captureViewerKey intercepts PageUp/PageDown to turn a PDF's own page
+// instead of letting TextView scroll — a rendered PDF page is already
+// scaled to fit entirely within the overlay (see ScaleForTerminal), so
+// there's nothing to scroll within one anyway; repurposing the keys
+// this way costs nothing a PDF page actually needed. Every other key,
+// and PageUp/PageDown themselves whenever r.viewerPDFPath is "" (not
+// currently viewing a PDF at all — see showBuiltinLook's own reset at
+// the top of every call), passes straight through unchanged.
+func (r *Root) captureViewerKey(event *tcell.EventKey) *tcell.EventKey {
+	if r.viewerPDFPath == "" {
+		return event
+	}
+	switch event.Key() {
+	case tcell.KeyPgDn:
+		r.turnPDFPage(1)
+		return nil
+	case tcell.KeyPgUp:
+		r.turnPDFPage(-1)
+		return nil
+	}
+	return event
 }
 
 // viewerSize is Look's own full screen, not the 90%/80% share Help
@@ -108,6 +139,13 @@ func (r *Root) lookCurrentEntry() {
 // still the overlay, sometimes still a plain showError, depending on
 // what's actually known about the file.
 func (r *Root) showBuiltinLook(path string) {
+	// Reset unconditionally, before Load even runs: whatever Kind this
+	// turns out to be, it isn't "still showing the previous Look's own
+	// PDF" — see captureViewerKey's own doc comment on why a stale,
+	// un-reset path here would misroute PageUp/PageDown on the very
+	// next, unrelated file opened afterward.
+	r.viewerPDFPath = ""
+
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil {
 		r.showError(fmt.Errorf("look %s: %w", path, err))
@@ -123,6 +161,11 @@ func (r *Root) showBuiltinLook(path string) {
 	innerWidth, innerHeight := width-2, height
 
 	switch result.Kind {
+	case viewer.KindPDF:
+		if !r.showPDFPage(path, 1, innerWidth, innerHeight) {
+			return // showPDFPage already reported it via showError
+		}
+
 	case viewer.KindText:
 		// Syntax coloring happens here rather than in internal/viewer:
 		// that package deliberately stays tview-free (see its own doc
@@ -219,6 +262,97 @@ func looksLikeImagePath(path string) bool {
 		}
 	}
 	return false
+}
+
+// showPDFPage looks up path's own total page count (see
+// viewer.PDFPageCount) and renders page — the shared setup behind
+// showBuiltinLook's own first open of a PDF: unlike every other Kind,
+// a PDF needs r.viewerPDFPage/PageCount set before renderPDFPageContent
+// even runs, since PageUp/PageDown (see turnPDFPage) need that state to
+// already exist afterward. Reports false (having already called
+// showError) if the page count itself can't even be determined — see
+// viewer.PDFPageCount's own doc comment on when that happens; nothing
+// else here has a page to render at all in that case.
+func (r *Root) showPDFPage(path string, page, innerWidth, innerHeight int) bool {
+	count, err := viewer.PDFPageCount(path)
+	if err != nil {
+		r.showError(fmt.Errorf("look %s: %w", path, err))
+		return false
+	}
+	r.viewerPDFPath = path
+	r.viewerPDFPage = page
+	r.viewerPDFPageCount = count
+	r.renderPDFPageContent(innerWidth, innerHeight)
+	return true
+}
+
+// renderPDFPageContent sets r.viewerView's own text for
+// r.viewerPDFPath's r.viewerPDFPage, within an innerWidth×innerHeight
+// box — the shared body behind both showPDFPage's own initial open and
+// turnPDFPage's page turns, so neither needs its own separate copy of
+// this rendering logic. The bottom row is always reserved for a
+// "Page N of M" footer (pdfFooterHeight), muted the same way the
+// text-truncation footer already is elsewhere in this file — page
+// count is genuinely useful context a lone rendered page or extracted
+// page of text has no other way to convey.
+//
+// viewer.LoadPDFPage's own three possible Kinds map onto the exact
+// same rendering this func's caller already has for a real, standalone
+// image or text file (see showBuiltinLook) — a rendered PDF page is
+// just a PNG from here on, and extracted PDF text is just text, with
+// one addition: KindText here always means the pdftoppm tier failed
+// (see LoadPDFPage's own doc comment — that's the ONLY way this
+// specific call ever returns KindText), so viewer.PDFTextFallbackNotice
+// is always shown alongside it, unconditionally.
+func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
+	const pdfFooterHeight = 1
+	contentHeight := innerHeight - pdfFooterHeight
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
+
+	result, err := viewer.LoadPDFPage(r.viewerPDFPath, r.viewerPDFPage)
+	var content string
+	switch {
+	case err != nil:
+		content = centeredMessage(fmt.Sprintf("look %s (page %d): %v", filepath.Base(r.viewerPDFPath), r.viewerPDFPage, err), innerWidth, contentHeight)
+	case result.Kind == viewer.KindImage:
+		scaled := viewer.ScaleForTerminal(result.Image, innerWidth, contentHeight)
+		content = renderImageHalfBlocks(scaled, innerWidth, contentHeight)
+	case result.Kind == viewer.KindText:
+		content = tview.Escape(result.Content) + fmt.Sprintf("\n\n[%s]— %s[-]", colorTag(r.theme.PlaceholderText), viewer.PDFTextFallbackNotice)
+	default: // viewer.KindUnsupported
+		message := result.Reason
+		if message == "" {
+			message = "couldn't render or extract text from this PDF page"
+		}
+		content = centeredMessage(message, innerWidth, contentHeight)
+	}
+
+	footer := fmt.Sprintf("[%s]Page %d of %d[-]", colorTag(r.theme.PlaceholderText), r.viewerPDFPage, r.viewerPDFPageCount)
+	r.viewerView.SetText(content + "\n" + footer)
+	r.viewerView.ScrollToBeginning()
+}
+
+// turnPDFPage is PageUp/PageDown's own action while viewing a PDF (see
+// captureViewerKey) — delta is +1/-1. A no-op at either end of the
+// document (page 1 with delta -1, the last page with delta +1) rather
+// than wrapping around: PageDown past the last page silently doing
+// nothing reads as "you're done", not as a bug, the same way it would
+// in a real document viewer.
+//
+// Deliberately doesn't touch r.viewerView's own SetRect or the overlay
+// stack at all — Look is already open and focused; only the content
+// changes, the same box it was already sized to.
+func (r *Root) turnPDFPage(delta int) {
+	next := r.viewerPDFPage + delta
+	if next < 1 || next > r.viewerPDFPageCount {
+		return
+	}
+	r.viewerPDFPage = next
+
+	width, height := r.viewerSize()
+	r.renderPDFPageContent(width-2, height)
 }
 
 // LookShortcut is Ctrl+L's global action — see cmd/breakthrough and
