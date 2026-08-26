@@ -79,9 +79,9 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Rename/toggle hidden
-	// files/Options/Search — see the bottom bar's own buttons) check
-	// their own preconditions before acting (see
+	// Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Look/Rename/toggle
+	// hidden files/Options/Search — see the bottom bar's own buttons)
+	// check their own preconditions before acting (see
 	// Root.acceptsGlobalShortcut) rather than always firing the way
 	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
 	// bash line's own typing. Ctrl+H is deliberately not one of them —
@@ -109,6 +109,9 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlE:
 			root.EditShortcut()
+			return nil
+		case tcell.KeyCtrlL:
+			root.LookShortcut()
 			return nil
 		case tcell.KeyCtrlR:
 			root.RenameShortcut()

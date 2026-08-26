@@ -138,6 +138,26 @@ func TestLoadParsesGlobalsBooleans(t *testing.T) {
 	}
 }
 
+func TestLoadParsesPagerKey(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "pager = external\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.Pager != "external" {
+		t.Errorf("Pager = %q, want %q", s.Pager, "external")
+	}
+}
+
+func TestDefaultSettingsPagerIsBuiltin(t *testing.T) {
+	if got := DefaultSettings().Pager; got != "builtin" {
+		t.Errorf("DefaultSettings().Pager = %q, want %q", got, "builtin")
+	}
+}
+
 func TestLoadWarnsOnInvalidBooleanValue(t *testing.T) {
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "user")

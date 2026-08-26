@@ -33,16 +33,17 @@ var helpText = strings.TrimLeft(`
 [::b]File panel[::-]
 
   Ctrl+E          Edit the selected file
+  Ctrl+L          Look at the selected file (read-only)
   Ctrl+R          Rename the selected file
   Ctrl+G          Toggle hidden files
   Ctrl+F          Find
   Ctrl+O          Options
   Enter           Open the selected directory
   Space           Select/deselect the selected file
-  Right-click     Context menu (Properties, Edit, Rename, Select
-                  all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, and three toggles: hidden
-                  files, size format, modified-time format)
+  Right-click     Context menu (Properties, Edit, Look, Tail -f,
+                  Rename, Select all/Deselect all/Select +/Select -,
+                  Copy, Cut, Paste, chown, chmod, and three toggles:
+                  hidden files, size format, modified-time format)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);

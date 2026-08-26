@@ -24,6 +24,7 @@ type statusBarAction int
 
 const (
 	statusActionEdit statusBarAction = iota
+	statusActionLook
 	statusActionRename
 	statusActionToggleHidden
 	statusActionOptions
@@ -131,6 +132,8 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	}
 	sep()
 	button("^E Edit", statusActionEdit)
+	write("  ")
+	button("^L Look", statusActionLook)
 	write("  ")
 	button("^R Rename", statusActionRename)
 	write("  ")
@@ -355,6 +358,8 @@ func (r *Root) runStatusBarAction(action statusBarAction) {
 	switch action {
 	case statusActionEdit:
 		r.editCurrentEntry()
+	case statusActionLook:
+		r.lookCurrentEntry()
 	case statusActionRename:
 		r.renameCurrentEntry()
 	case statusActionToggleHidden:
@@ -398,14 +403,14 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/
-// Ctrl+F (see EditShortcut/RenameShortcut/ToggleHiddenShortcut/
-// OptionsShortcut/SearchShortcut, wired up in cmd/breakthrough) should
-// act right now: no overlay is open, and the bash command line doesn't
-// have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/
+// Ctrl+O/Ctrl+F (see EditShortcut/LookShortcut/RenameShortcut/
+// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut, wired up in
+// cmd/breakthrough) should act right now: no overlay is open, and the
+// bash command line doesn't have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these five operate on "the currently
+// work from literally anywhere, these six operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
@@ -422,8 +427,10 @@ func (r *Root) acceptsGlobalShortcut() bool {
 
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
 // and SearchShortcut are Ctrl+E, Ctrl+R, Ctrl+G, Ctrl+O, and Ctrl+F's
-// global actions (see cmd/breakthrough and acceptsGlobalShortcut for
-// why they check first rather than acting unconditionally).
+// global actions (see cmd/breakthrough and acceptsGlobalShortcut for why
+// they check first rather than acting unconditionally). LookShortcut
+// (Ctrl+L) is the same shape, defined alongside the rest of Look in
+// viewer.go instead of here.
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()
