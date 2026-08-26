@@ -54,18 +54,21 @@ terminal.
   real system tools rather than a reimplemented search, so it inherits
   whatever's already indexed by `locate`'s own `updatedb`.
 - Look (`^L`, the bottom bar's own button, or the context menu): a
-  read-only, full-screen preview of the selected file's content, with
+  read-only, full-screen preview of the selected file's content.
+  Plain text, source code, config files, diffs/patches, and logs get
   built-in syntax coloring (~200 languages, no external dependency —
-  see below) for plain text, source code, config files, diffs/patches,
-  or logs (large files show their own first 8 MiB rather than being
-  fully loaded). Set `pager = external` in your config instead (see
-  [Color schemes](#color-schemes) below for the file itself) to open
-  `bat`/`batcat`, `$PAGER`, or `less`/`more` in your real terminal
-  instead. "Tail -f", right next to Look in the context menu, follows a
-  growing log live via the real `tail -f`. A file type Look doesn't
-  recognize as text (an image, a PDF, ...) reports that plainly rather
-  than dumping binary content on screen — support for more file types
-  is planned.
+  large files show their own first 8 MiB rather than being fully
+  loaded). PNG, JPEG, GIF, BMP, TIFF, and WebP images render right in
+  the terminal — decoded and scaled entirely in Go, no external tool
+  needed there either. A format Look doesn't have a decoder for at all
+  (HEIC, AVIF, RAW, ...) still opens the same overlay, with a
+  recommendation for an external tool that can (`chafa`, or `pixterm`
+  if you'd rather stick to Go-only tooling) — matched to whichever
+  package manager your system actually has. Set `pager = external` in
+  your config instead (see [Color schemes](#color-schemes) below for
+  the file itself) to open `bat`/`batcat`, `$PAGER`, or `less`/`more`
+  in your real terminal for text. "Tail -f", right next to Look in the
+  context menu, follows a growing log live via the real `tail -f`.
 
 ## Status
 

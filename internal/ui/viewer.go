@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -98,41 +99,124 @@ func (r *Root) lookCurrentEntry() {
 // viewer.Load (see internal/viewer — a bounded, in-process read, no
 // external tool involved) and shows the result in r.viewerView. A file
 // viewer.Load can't even open (permission denied, path vanished between
-// the row being drawn and Look being triggered) or that it reads but
-// doesn't recognize as text (see viewer.Sniff) is reported via showError
-// instead of ever reaching the overlay — the same "decline clearly
-// rather than render garbage" approach the rest of this app takes for a
-// filesystem operation that can't proceed.
+// the row being drawn and Look being triggered) is reported via
+// showError instead of ever reaching the overlay — the same "decline
+// clearly rather than render garbage" approach the rest of this app
+// takes for a filesystem operation that can't proceed. Content Load
+// read but couldn't turn into anything showable goes through
+// showUnsupportedLook instead (see its own doc comment) — sometimes
+// still the overlay, sometimes still a plain showError, depending on
+// what's actually known about the file.
 func (r *Root) showBuiltinLook(path string) {
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil {
 		r.showError(fmt.Errorf("look %s: %w", path, err))
 		return
 	}
-	if result.Kind != viewer.KindText {
-		r.showError(fmt.Errorf("%s: no built-in viewer yet for this file type — try configuring pager = external (see README), or check back in a later release", filepath.Base(path)))
-		return
-	}
 
-	// Syntax coloring happens here rather than in internal/viewer: that
-	// package deliberately stays tview-free (see its own doc comment),
-	// classifying content into TokenKinds without knowing anything
-	// about how they're painted. renderSyntax does the escaping every
-	// token needs — see its own doc comment on why this can't just
-	// escape result.Content wholesale any more.
-	text := renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
-	if result.Truncated {
-		text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.PlaceholderText))
+	// Inner width/height account for newViewerView's own 1-column left/
+	// right border padding (0 top/bottom) — computed once, up front,
+	// since both the image path (ScaleForTerminal) and the unsupported-
+	// image-message path (centeredMessage) need the real drawable area,
+	// not the overlay's own outer rect.
+	width, height := r.viewerSize()
+	innerWidth, innerHeight := width-2, height
+
+	switch result.Kind {
+	case viewer.KindText:
+		// Syntax coloring happens here rather than in internal/viewer:
+		// that package deliberately stays tview-free (see its own doc
+		// comment), classifying content into TokenKinds without
+		// knowing anything about how they're painted. renderSyntax
+		// does the escaping every token needs — see its own doc
+		// comment on why this can't just escape result.Content
+		// wholesale any more.
+		text := renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
+		if result.Truncated {
+			text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.PlaceholderText))
+		}
+		r.viewerView.SetText(text)
+
+	case viewer.KindImage:
+		// internal/viewer stays tview-free the same way it does for
+		// text (see above) — ScaleForTerminal only ever hands back
+		// pixels, renderImageHalfBlocks (syntax.go's own neighbor,
+		// image.go) is what knows how to turn those into tview markup.
+		scaled := viewer.ScaleForTerminal(result.Image, innerWidth, innerHeight)
+		r.viewerView.SetText(renderImageHalfBlocks(scaled))
+
+	default: // viewer.KindUnsupported
+		if !r.showUnsupportedLook(path, result, innerWidth, innerHeight) {
+			return // showUnsupportedLook already reported it via showError
+		}
 	}
-	r.viewerView.SetText(text)
 	r.viewerView.ScrollToBeginning()
 
-	width, height := r.viewerSize()
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.viewerView.SetRect(x, y, width, height)
 
 	r.showOverlay(viewerPage, r.viewerView)
+}
+
+// showUnsupportedLook decides how to report content Load read but
+// couldn't turn into anything showable. Content unmistakably shaped
+// like an image — either Load itself recognized it as one but
+// couldn't finish (result.Reason: a real decode failure, or one too
+// large for viewer.ImagePreviewLimit), or its own extension is on
+// probablyImageExtensions (a format this package has no decoder for at
+// all, but is still unambiguously an image, not some other kind of
+// binary — see its own doc comment) — sets r.viewerView to a centered
+// message naming an external tool that could show it instead (see
+// imageToolRecommendation), so Look still opens, per the user's own
+// explicit request, rather than just an error over whatever was on
+// screen before. Reports true so showBuiltinLook continues on to size
+// and open the overlay.
+//
+// Everything else (a file this package has no reason at all to think
+// is an image — a compiled binary, an unrecognized archive, ...) has
+// no actionable tool to recommend, so this falls back to the plain
+// "no built-in viewer" showError instead, unchanged from Phase 1, and
+// reports false so showBuiltinLook returns without opening the
+// overlay over it.
+func (r *Root) showUnsupportedLook(path string, result viewer.Result, innerWidth, innerHeight int) bool {
+	message := result.Reason
+	if message == "" && !looksLikeImagePath(path) {
+		r.showError(fmt.Errorf("%s: no built-in viewer yet for this file type — try configuring pager = external (see README), or check back in a later release", filepath.Base(path)))
+		return false
+	}
+	if message != "" {
+		message += ".\n\n" + imageToolRecommendation()
+	} else {
+		message = imageToolRecommendation()
+	}
+	r.viewerView.SetText(centeredMessage(message, innerWidth, innerHeight))
+	return true
+}
+
+// probablyImageExtensions names file extensions Look recognizes as
+// "this is almost certainly an image, even though nothing this
+// package's own decoders can actually read" (see viewer.go's own
+// registered formats) — used only to decide whether an unsupported
+// file gets showUnsupportedLook's more specific, actionable
+// recommendation instead of the plain "no built-in viewer" message.
+// SVG is deliberately absent: it's plain XML text, which Look's own
+// KindText path already shows perfectly honestly (the markup itself,
+// not a picture) — nothing to apologize for or recommend a workaround
+// to.
+var probablyImageExtensions = []string{".heic", ".heif", ".avif", ".ico", ".psd", ".cr2", ".nef", ".raw", ".dng"}
+
+// looksLikeImagePath reports whether path's own extension is on
+// probablyImageExtensions, case-insensitively — the same convention
+// internal/search's own classifyArchive uses for extension checks.
+func looksLikeImagePath(path string) bool {
+	lower := strings.ToLower(path)
+	for _, ext := range probablyImageExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // LookShortcut is Ctrl+L's global action — see cmd/breakthrough and
