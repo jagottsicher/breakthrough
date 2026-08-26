@@ -9,24 +9,54 @@ import (
 	"github.com/rivo/tview"
 )
 
-// renderImageHalfBlocks turns img (already scaled to fit the overlay
-// — see viewer.ScaleForTerminal) into tview markup using the standard
-// terminal half-block trick: "▀" (upper half block) painted with the
-// pair's own top pixel as foreground and bottom pixel as background,
-// so one character cell shows two vertical pixels at once. Two rows of
-// img are consumed per line of output; an image with an odd pixel
-// height repeats its own last row as both halves of the final cell
-// row, rendering as one solid-colored row rather than an empty or
-// garbage one.
+// renderImageHalfBlocks turns img (already scaled to fit within a
+// boxCols×boxRows character grid — see viewer.ScaleForTerminal, which
+// is what guarantees img's own bounds never exceed that box) into
+// tview markup using the standard terminal half-block trick: "▀"
+// (upper half block) painted with the pair's own top pixel as
+// foreground and bottom pixel as background, so one character cell
+// shows two vertical pixels at once. Two rows of img are consumed per
+// line of output; an image with an odd pixel height repeats its own
+// last row as both halves of the final cell row, rendering as one
+// solid-colored row rather than an empty or garbage one.
+//
+// The image is centered within the full box — both horizontally (each
+// line gets its own leading spaces) and vertically (blank lines above
+// and below) — the same "don't leave it pinned to the top-left corner
+// of a full-screen overlay" reasoning centeredMessage already applies
+// to the tool-recommendation message; an image whose aspect ratio
+// doesn't exactly match the box (the overwhelmingly common case) would
+// otherwise always render hugging one edge instead of looking placed.
 //
 // No escaping needed here the way renderSyntax needs it for file
 // content (see its own doc comment): every character this writes is
-// either a color tag this function built itself, or the fixed glyph
-// "▀" — never anything derived from the image's own bytes.
-func renderImageHalfBlocks(img *image.RGBA) string {
+// either a color tag this function built itself, plain spaces, or the
+// fixed glyph "▀" — never anything derived from the image's own bytes.
+func renderImageHalfBlocks(img *image.RGBA, boxCols, boxRows int) string {
 	bounds := img.Bounds()
+	imgCols := bounds.Dx()
+	imgRows := (bounds.Dy() + 1) / 2 // ceil: an odd pixel height still occupies one more cell row
+
+	leftPad := (boxCols - imgCols) / 2
+	if leftPad < 0 {
+		leftPad = 0
+	}
+	topPad := (boxRows - imgRows) / 2
+	if topPad < 0 {
+		topPad = 0
+	}
+	bottomPad := boxRows - imgRows - topPad
+	if bottomPad < 0 {
+		bottomPad = 0
+	}
+	leftMargin := strings.Repeat(" ", leftPad)
+
 	var b strings.Builder
+	for i := 0; i < topPad; i++ {
+		b.WriteByte('\n')
+	}
 	for y := bounds.Min.Y; y < bounds.Max.Y; y += 2 {
+		b.WriteString(leftMargin)
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			top := img.RGBAAt(x, y)
 			bottom := top
@@ -40,6 +70,9 @@ func renderImageHalfBlocks(img *image.RGBA) string {
 			b.WriteString("]▀")
 		}
 		b.WriteString("[-:-]\n")
+	}
+	for i := 0; i < bottomPad; i++ {
+		b.WriteByte('\n')
 	}
 	return b.String()
 }
