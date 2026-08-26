@@ -54,18 +54,18 @@ terminal.
   real system tools rather than a reimplemented search, so it inherits
   whatever's already indexed by `locate`'s own `updatedb`.
 - Look (`^L`, the bottom bar's own button, or the context menu): a
-  read-only preview of the selected file's content, in breakthrough's
-  own scrollable overlay — no external dependency required for plain
-  text, source code, config files, diffs/patches, or logs (large files
-  show their own first 8 MiB rather than being fully loaded). Set
-  `pager = external` in your config instead (see
+  read-only, full-screen preview of the selected file's content, with
+  built-in syntax coloring (~200 languages, no external dependency —
+  see below) for plain text, source code, config files, diffs/patches,
+  or logs (large files show their own first 8 MiB rather than being
+  fully loaded). Set `pager = external` in your config instead (see
   [Color schemes](#color-schemes) below for the file itself) to open
-  `bat`/`batcat` (for syntax highlighting), `$PAGER`, or `less`/`more`
-  in your real terminal. "Tail -f", right next to Look in the context
-  menu, follows a growing log live via the real `tail -f` instead. A
-  file type Look doesn't recognize as text (an image, a PDF, ...)
-  reports that plainly rather than dumping binary content on screen —
-  support for more file types is planned.
+  `bat`/`batcat`, `$PAGER`, or `less`/`more` in your real terminal
+  instead. "Tail -f", right next to Look in the context menu, follows a
+  growing log live via the real `tail -f`. A file type Look doesn't
+  recognize as text (an image, a PDF, ...) reports that plainly rather
+  than dumping binary content on screen — support for more file types
+  is planned.
 
 ## Status
 
