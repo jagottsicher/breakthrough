@@ -1,9 +1,14 @@
 package ui
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/rivo/tview"
@@ -98,6 +103,123 @@ func TestShowBuiltinLookOnBinaryFileShowsError(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q for unsupported (binary) content", r.activePage, errorPage)
+	}
+}
+
+// TestShowBuiltinLookRendersRealImage pins the Phase 2 image path end
+// to end: a real PNG opens Look (not an error) and its own content
+// renders as half-block cells (see renderImageHalfBlocks) — checked by
+// looking for the glyph itself, not by pixel-matching the exact colors
+// this test doesn't otherwise care about.
+func TestShowBuiltinLookRendersRealImage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, 6, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 6; x++ {
+			img.Set(x, y, color.NRGBA{R: uint8(x * 40), G: uint8(y * 60), B: 100, A: 255})
+		}
+	}
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.showBuiltinLook(path)
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q for a real image", r.activePage, viewerPage)
+	}
+	if got := r.viewerView.GetText(true); !strings.Contains(got, "▀") {
+		t.Errorf("viewerView text doesn't contain the half-block glyph: %q", got)
+	}
+}
+
+// TestShowUnsupportedLookRecommendsToolForKnownImageExtension pins that
+// a file this package has no decoder for at all, but whose own
+// extension unambiguously marks it as an image (see
+// probablyImageExtensions), still opens Look — with a tool
+// recommendation as its content — rather than falling back to the
+// plain "no built-in viewer" error overlay.
+func TestShowUnsupportedLookRecommendsToolForKnownImageExtension(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.heic")
+	// A real HEIC file's own actual magic bytes ("ftypheic" ISO base
+	// media box, per the format's real spec — not guessed) followed by
+	// a NUL byte so Sniff's own binary check fires the same way it
+	// would for the genuine, much larger container format this stands
+	// in for: none of this package's registered decoders recognize
+	// HEIC at all, so Sniff still lands on KindUnsupported regardless.
+	if err := os.WriteFile(path, []byte("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.showBuiltinLook(path)
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q (Look should still open with a recommendation)", r.activePage, viewerPage)
+	}
+	if got := r.viewerView.GetText(true); !strings.Contains(got, "chafa") {
+		t.Errorf("viewerView text doesn't mention chafa: %q", got)
+	}
+}
+
+// TestShowUnsupportedLookRecommendsToolWhenLoadReportsReason pins the
+// other route to the same recommendation: a file Sniff recognized as
+// an image by its own header (so viewer.Load actually tried to decode
+// it), but whose body is corrupt enough that the real decode failed —
+// Result.Reason carries why, and it's shown alongside the same
+// recommendation.
+func TestShowUnsupportedLookRecommendsToolWhenLoadReportsReason(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "corrupt.png")
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	// A real PNG header (enough for Sniff's own DecodeConfig check to
+	// succeed) followed by a body chopped short enough that the real
+	// pixel decode fails, but still far short of ImagePreviewLimit —
+	// this must NOT be the "too large" branch, just a genuinely corrupt
+	// one.
+	truncated := buf.Bytes()[:len(buf.Bytes())-10]
+	if err := os.WriteFile(path, truncated, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.showBuiltinLook(path)
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q (Look should still open with a recommendation)", r.activePage, viewerPage)
+	}
+	got := r.viewerView.GetText(true)
+	if !strings.Contains(got, "chafa") {
+		t.Errorf("viewerView text doesn't mention chafa: %q", got)
+	}
+	if !strings.Contains(got, "decoded") {
+		t.Errorf("viewerView text doesn't include Load's own Reason: %q", got)
 	}
 }
 
