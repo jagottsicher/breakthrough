@@ -58,10 +58,17 @@ func (r *Root) newViewerView() *tview.TextView {
 // instead of letting TextView scroll — a rendered PDF page is already
 // scaled to fit entirely within the overlay (see ScaleForTerminal), so
 // there's nothing to scroll within one anyway; repurposing the keys
-// this way costs nothing a PDF page actually needed. Every other key,
-// and PageUp/PageDown themselves whenever r.viewerPDFPath is "" (not
-// currently viewing a PDF at all — see showBuiltinLook's own reset at
-// the top of every call), passes straight through unchanged.
+// this way costs nothing a PDF page actually needed — and 'g'/'t' to
+// force graphic/text view for the current page (see setPDFViewMode):
+// per the user's own explicit report, a text-heavy PDF rendered as a
+// raster image downsamples into illegible half-block mush at any
+// realistic terminal size, so which tier renders needs to be a choice
+// the user can make, not just whatever viewer.PDFViewAuto happened to
+// pick. Every other key, and all four of these themselves whenever
+// r.viewerPDFPath is "" (not currently viewing a PDF at all — see
+// showBuiltinLook's own reset at the top of every call), passes
+// straight through unchanged — a plain text file's own content is
+// real content, not something 'g'/'t' should ever intercept.
 func (r *Root) captureViewerKey(event *tcell.EventKey) *tcell.EventKey {
 	if r.viewerPDFPath == "" {
 		return event
@@ -73,6 +80,15 @@ func (r *Root) captureViewerKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyPgUp:
 		r.turnPDFPage(-1)
 		return nil
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case 'g', 'G':
+			r.setPDFViewMode(viewer.PDFViewGraphic)
+			return nil
+		case 't', 'T':
+			r.setPDFViewMode(viewer.PDFViewText)
+			return nil
+		}
 	}
 	return event
 }
@@ -142,9 +158,13 @@ func (r *Root) showBuiltinLook(path string) {
 	// Reset unconditionally, before Load even runs: whatever Kind this
 	// turns out to be, it isn't "still showing the previous Look's own
 	// PDF" — see captureViewerKey's own doc comment on why a stale,
-	// un-reset path here would misroute PageUp/PageDown on the very
-	// next, unrelated file opened afterward.
+	// un-reset path here would misroute PageUp/PageDown/'g'/'t' on the
+	// very next, unrelated file opened afterward. viewerPDFMode resets
+	// alongside it: a 'g'/'t' choice made on one PDF never carries over
+	// to the next one opened — each PDF starts back at
+	// viewer.PDFViewAuto.
 	r.viewerPDFPath = ""
+	r.viewerPDFMode = viewer.PDFViewAuto
 
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil {
@@ -287,23 +307,28 @@ func (r *Root) showPDFPage(path string, page, innerWidth, innerHeight int) bool 
 }
 
 // renderPDFPageContent sets r.viewerView's own text for
-// r.viewerPDFPath's r.viewerPDFPage, within an innerWidth×innerHeight
-// box — the shared body behind both showPDFPage's own initial open and
-// turnPDFPage's page turns, so neither needs its own separate copy of
+// r.viewerPDFPath's r.viewerPDFPage under r.viewerPDFMode, within an
+// innerWidth×innerHeight box — the shared body behind showPDFPage's
+// own initial open, turnPDFPage's page turns, and setPDFViewMode's own
+// mode switches, so none of the three needs its own separate copy of
 // this rendering logic. The bottom row is always reserved for a
-// "Page N of M" footer (pdfFooterHeight), muted the same way the
-// text-truncation footer already is elsewhere in this file — page
-// count is genuinely useful context a lone rendered page or extracted
-// page of text has no other way to convey.
+// "Page N of M (g: graphic, t: text)" footer (pdfFooterHeight), muted
+// the same way the text-truncation footer already is elsewhere in this
+// file — page count and the mode keys are both genuinely useful
+// context a lone rendered page or extracted page of text has no other
+// way to convey, and are shown regardless of Kind/mode so they're
+// always there to discover.
 //
 // viewer.LoadPDFPage's own three possible Kinds map onto the exact
 // same rendering this func's caller already has for a real, standalone
 // image or text file (see showBuiltinLook) — a rendered PDF page is
-// just a PNG from here on, and extracted PDF text is just text, with
-// one addition: KindText here always means the pdftoppm tier failed
-// (see LoadPDFPage's own doc comment — that's the ONLY way this
-// specific call ever returns KindText), so viewer.PDFTextFallbackNotice
-// is always shown alongside it, unconditionally.
+// just a PNG from here on, and extracted PDF text is just text.
+// viewer.PDFTextFallbackNotice is shown alongside a KindText result
+// only under viewer.PDFViewAuto specifically: there, and only there,
+// KindText means the pdftoppm tier was tried and failed (see
+// LoadPDFPage's own doc comment) — an explicit PDFViewText choice
+// already knows it asked for text, so repeating "install poppler-utils"
+// at someone who deliberately chose text would just be noise.
 func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
 	const pdfFooterHeight = 1
 	contentHeight := innerHeight - pdfFooterHeight
@@ -311,7 +336,7 @@ func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
 		contentHeight = 1
 	}
 
-	result, err := viewer.LoadPDFPage(r.viewerPDFPath, r.viewerPDFPage)
+	result, err := viewer.LoadPDFPage(r.viewerPDFPath, r.viewerPDFPage, r.viewerPDFMode)
 	var content string
 	switch {
 	case err != nil:
@@ -320,7 +345,10 @@ func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
 		scaled := viewer.ScaleForTerminal(result.Image, innerWidth, contentHeight)
 		content = renderImageHalfBlocks(scaled, innerWidth, contentHeight)
 	case result.Kind == viewer.KindText:
-		content = tview.Escape(result.Content) + fmt.Sprintf("\n\n[%s]— %s[-]", colorTag(r.theme.PlaceholderText), viewer.PDFTextFallbackNotice)
+		content = tview.Escape(result.Content)
+		if r.viewerPDFMode == viewer.PDFViewAuto {
+			content += fmt.Sprintf("\n\n[%s]— %s[-]", colorTag(r.theme.PlaceholderText), viewer.PDFTextFallbackNotice)
+		}
 	default: // viewer.KindUnsupported
 		message := result.Reason
 		if message == "" {
@@ -329,7 +357,7 @@ func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
 		content = centeredMessage(message, innerWidth, contentHeight)
 	}
 
-	footer := fmt.Sprintf("[%s]Page %d of %d[-]", colorTag(r.theme.PlaceholderText), r.viewerPDFPage, r.viewerPDFPageCount)
+	footer := fmt.Sprintf("[%s]Page %d of %d   (g: graphic, t: text)[-]", colorTag(r.theme.PlaceholderText), r.viewerPDFPage, r.viewerPDFPageCount)
 	r.viewerView.SetText(content + "\n" + footer)
 	r.viewerView.ScrollToBeginning()
 }
@@ -350,6 +378,19 @@ func (r *Root) turnPDFPage(delta int) {
 		return
 	}
 	r.viewerPDFPage = next
+
+	width, height := r.viewerSize()
+	r.renderPDFPageContent(width-2, height)
+}
+
+// setPDFViewMode is 'g'/'t”s own action while viewing a PDF (see
+// captureViewerKey) — re-renders the current page under mode. Setting
+// the same mode it's already in is harmless: renderPDFPageContent
+// re-runs viewer.LoadPDFPage regardless, so pressing 'g' twice in a
+// row just re-renders the same page the same way, not a bug to guard
+// against.
+func (r *Root) setPDFViewMode(mode viewer.PDFViewMode) {
+	r.viewerPDFMode = mode
 
 	width, height := r.viewerSize()
 	r.renderPDFPageContent(width-2, height)
