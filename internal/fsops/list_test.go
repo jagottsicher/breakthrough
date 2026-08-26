@@ -309,3 +309,79 @@ func TestDescribeEntryNonExistent(t *testing.T) {
 		t.Errorf("DescribeEntry(nonexistent) = %+v, want %+v", got, want)
 	}
 }
+
+// TestDescribeEntryUnreadable pins canRead's own real access(2) check
+// (see its doc comment on why this isn't just a Mode bit comparison) for
+// every case describeEntry sets it for: a plain file, a directory (which
+// needs execute as well as read to be listable — checked separately from
+// the read-only case below, since a naive R_OK-only check would get this
+// one wrong), and a symlink to each. Skipped entirely under root, which
+// bypasses every permission check these cases rely on.
+func TestDescribeEntryUnreadable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission checks never fail, this test doesn't apply")
+	}
+
+	dir := t.TempDir()
+
+	readableFile := filepath.Join(dir, "readable.txt")
+	if err := os.WriteFile(readableFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unreadableFile := filepath.Join(dir, "unreadable.txt")
+	if err := os.WriteFile(unreadableFile, nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	readableDir := filepath.Join(dir, "readable-dir")
+	if err := os.Mkdir(readableDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A directory with its read bit set but not its execute ("search")
+	// bit: readdir(3) alone isn't enough to actually list a directory's
+	// entries, so this must still come back Unreadable — the specific
+	// case a plain "check R_OK" implementation would get wrong.
+	unreadableDirNoExec := filepath.Join(dir, "unreadable-dir-no-exec")
+	if err := os.Mkdir(unreadableDirNoExec, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unreadableDir := filepath.Join(dir, "unreadable-dir")
+	if err := os.Mkdir(unreadableDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkToReadableFile := filepath.Join(dir, "link-to-readable-file")
+	if err := os.Symlink(readableFile, symlinkToReadableFile); err != nil {
+		t.Fatal(err)
+	}
+	symlinkToUnreadableFile := filepath.Join(dir, "link-to-unreadable-file")
+	if err := os.Symlink(unreadableFile, symlinkToUnreadableFile); err != nil {
+		t.Fatal(err)
+	}
+	symlinkToUnreadableDir := filepath.Join(dir, "link-to-unreadable-dir")
+	if err := os.Symlink(unreadableDir, symlinkToUnreadableDir); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"readable file", readableFile, false},
+		{"unreadable file", unreadableFile, true},
+		{"readable dir", readableDir, false},
+		{"dir with read but no execute bit", unreadableDirNoExec, true},
+		{"dir with no permissions at all", unreadableDir, true},
+		{"symlink to a readable file", symlinkToReadableFile, false},
+		{"symlink to an unreadable file", symlinkToUnreadableFile, true},
+		{"symlink to an unreadable dir", symlinkToUnreadableDir, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DescribeEntry(tt.path)
+			if got.Unreadable != tt.want {
+				t.Errorf("DescribeEntry(%s).Unreadable = %v, want %v (%+v)", tt.name, got.Unreadable, tt.want, got)
+			}
+		})
+	}
+}
