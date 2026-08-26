@@ -1081,13 +1081,30 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	}
 }
 
-// TestAddRowMarksNavigableRowsWithDirectoryBackground checks that every
-// row Enter can navigate into — a real directory, a symlink to one, and
-// ".." itself — gets every one of its cells filled with the theme's
-// DirectoryBackground, while a plain file's cells stay transparent (the
-// table's own background shows through instead of an explicit fill; see
-// tview.NewTableCell and markDirectory's own doc comment).
-func TestAddRowMarksNavigableRowsWithDirectoryBackground(t *testing.T) {
+// TestNameHighlightTagsSetsOnlyBackground pins the exact tag string
+// nameHighlightTags produces for the default theme's own
+// DirectoryBackground (darkgoldenrod, W3C value #b8860b): a background-only
+// style tag around the name, with no foreground field set (so the entry's
+// own text color, applied separately via SetTextColor on the whole cell,
+// shows through unchanged — see nameHighlightTags's own doc comment) and a
+// full reset immediately after.
+func TestNameHighlightTagsSetsOnlyBackground(t *testing.T) {
+	got := nameHighlightTags("Downloads", config.DefaultTheme().Resolve().DirectoryBackground)
+	want := "[:#b8860b:]Downloads[-:-:-]"
+	if got != want {
+		t.Errorf("nameHighlightTags(%q, darkgoldenrod) = %q, want %q", "Downloads", got, want)
+	}
+}
+
+// TestAddRowHighlightsOnlyDirectoryNames checks that the DirectoryBackground
+// highlight lands on exactly the entry's own name — not the trailing "/"
+// a real directory gets, not a symlink's " -> target" arrow, and not the
+// rest of the row — for everything Enter can navigate into (a real
+// directory, a directory symlink, and ".." itself), while a plain file's
+// name cell carries no tag at all. It also checks that a literal "[" in an
+// entry's own name is escaped first, so it can't be misread as the start
+// of the tag this wraps around it.
+func TestAddRowHighlightsOnlyDirectoryNames(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -1099,7 +1116,10 @@ func TestAddRowMarksNavigableRowsWithDirectoryBackground(t *testing.T) {
 	if err := os.Mkdir(targetDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(targetDir, filepath.Join(dir, "link-to-dir")); err != nil {
+	if err := os.Symlink(targetDir, filepath.Join(dir, "pictures")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "weird[name]"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1116,67 +1136,51 @@ func TestAddRowMarksNavigableRowsWithDirectoryBackground(t *testing.T) {
 		}
 	}
 
-	// Every column that addRow builds, so a cell accidentally left out of
-	// markDirectory's coverage doesn't slip past unnoticed.
-	allCols := []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified}
-
-	// tview.NewTableCell gives every cell a non-default Style up front
-	// (Foreground+Background already set — see its own doc comment), so
-	// SetBackgroundColor folds into that Style rather than the legacy
-	// BackgroundColor field (see tview's own Table.Draw, which prefers
-	// Style.Decompose() over the raw field whenever Style isn't the zero
-	// value) — Decompose is what actually gets painted, so that's what
-	// this test checks too.
-	cellBackground := func(cell *tview.TableCell) tcell.Color {
-		_, bg, _ := cell.Style.Decompose()
-		return bg
-	}
-
-	assertMarked := func(t *testing.T, row int, label string) {
+	nameCellText := func(t *testing.T, name string) (row int, text string) {
 		t.Helper()
-		for _, col := range allCols {
-			cell := p.table.GetCell(row, col)
-			if cell.Transparent {
-				t.Errorf("%s row, col %d: Transparent = true, want a DirectoryBackground fill", label, col)
-			}
-			if got := cellBackground(cell); got != theme.DirectoryBackground {
-				t.Errorf("%s row, col %d: background = %v, want theme.DirectoryBackground (%v)", label, col, got, theme.DirectoryBackground)
-			}
+		row, ok := byName[name]
+		if !ok {
+			t.Fatalf("%q row not found", name)
 		}
+		return row, p.table.GetCell(row, colName).Text
 	}
-	assertUnmarked := func(t *testing.T, row int, label string) {
-		t.Helper()
-		for _, col := range allCols {
+
+	dotdotRow, dotdotText := nameCellText(t, "..")
+	if want := nameHighlightTags(tview.Escape(".."), theme.DirectoryBackground) + "/"; dotdotText != want {
+		t.Errorf(`".." name cell = %q, want %q`, dotdotText, want)
+	}
+
+	subdirRow, subdirText := nameCellText(t, "subdir")
+	if want := nameHighlightTags(tview.Escape("subdir"), theme.DirectoryBackground) + "/"; subdirText != want {
+		t.Errorf("subdir name cell = %q, want %q", subdirText, want)
+	}
+
+	_, pictureText := nameCellText(t, "pictures")
+	if want := nameHighlightTags(tview.Escape("pictures"), theme.DirectoryBackground) + " -> " + tview.Escape(targetDir); pictureText != want {
+		t.Errorf("pictures name cell = %q, want %q — only the name itself should be highlighted, not the arrow/target", pictureText, want)
+	}
+
+	plainRow, plainText := nameCellText(t, "plain.txt")
+	if want := tview.Escape("plain.txt"); plainText != want {
+		t.Errorf("plain.txt name cell = %q, want %q (no highlight tags at all)", plainText, want)
+	}
+
+	_, weirdText := nameCellText(t, "weird[name]")
+	if want := nameHighlightTags(tview.Escape("weird[name]"), theme.DirectoryBackground) + "/"; weirdText != want {
+		t.Errorf("weird[name] name cell = %q, want %q — the literal \"[\" must be escaped or it corrupts the tag markup", weirdText, want)
+	}
+
+	// Every other column stays completely untouched — no background fill
+	// at all — for both a directory row and a plain file row; only the
+	// name cell's own Text ever carries a highlight tag.
+	for _, col := range []int{colCheckbox, colType, colModifier, colSizeSep, colSize, colModifiedSep, colModified} {
+		for _, row := range []int{dotdotRow, subdirRow, plainRow} {
 			cell := p.table.GetCell(row, col)
 			if !cell.Transparent {
-				t.Errorf("%s row, col %d: Transparent = false (BackgroundColor %v), want the table's own transparent background", label, col, cell.BackgroundColor)
+				t.Errorf("row %d, col %d: Transparent = false, want the table's own background (only the name cell should ever be marked)", row, col)
 			}
 		}
 	}
-
-	dotdotRow, ok := byName[".."]
-	if !ok {
-		t.Fatal(`".." row not found`)
-	}
-	assertMarked(t, dotdotRow, "..")
-
-	subdirRow, ok := byName["subdir"]
-	if !ok {
-		t.Fatal("subdir row not found")
-	}
-	assertMarked(t, subdirRow, "subdir")
-
-	linkRow, ok := byName["link-to-dir"]
-	if !ok {
-		t.Fatal("link-to-dir row not found")
-	}
-	assertMarked(t, linkRow, "link-to-dir")
-
-	plainRow, ok := byName["plain.txt"]
-	if !ok {
-		t.Fatal("plain.txt row not found")
-	}
-	assertUnmarked(t, plainRow, "plain.txt")
 }
 
 // TestActivateRowNavigatesIntoDirectorySymlink pins a behavior change
