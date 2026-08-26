@@ -1508,6 +1508,40 @@ func TestAppendSearchResultShowsArrowForArchiveMatch(t *testing.T) {
 	}
 }
 
+// TestAppendSearchResultShowsArrowAndLineForArchiveContentMatch pins the
+// display text for a content match found *inside* an archive member
+// (Line and ArchiveMember both set — see internal/search's own
+// archivecontent.go): "path -> member:line: text", combining both the
+// arrow shape a filename-only archive match already gets and the
+// line/text suffix a plain content match already gets, rather than
+// either one alone dropping the other's information.
+func TestAppendSearchResultShowsArrowAndLineForArchiveContentMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	archivePath := filepath.Join(dir, "backup.tar.gz")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "etc/fstab", Line: 2, Text: "Leere Zeile folgt"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != archivePath {
+		t.Errorf("path = %q, want the real archive path %q", ref.path, archivePath)
+	}
+	wantName := archivePath + " -> etc/fstab:2: Leere Zeile folgt"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+	if !ref.archiveHit {
+		t.Error("archiveHit = false, want true")
+	}
+}
+
 // TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches
 // pins the reason searchResultEntry carries display separately from
 // Entry.Name at all: a content search without "First hit" checked can
@@ -1910,6 +1944,49 @@ func TestActivateRowOnArchiveMatchCallsOnExitSearchResults(t *testing.T) {
 	}
 	if p.path != dir {
 		t.Errorf("p.path = %q, want the jump to have landed on %q (the archive's own parent dir)", p.path, dir)
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row = (%d, %q, %v), want the real archive %q selected", row, path, ok, archivePath)
+	}
+}
+
+// TestActivateRowOnArchiveContentMatchFallsBackInsteadOfOpeningEditor
+// pins activateRow's own exception for a content match found *inside*
+// an archive member (Line > 0 AND ArchiveMember != "" both set — see
+// internal/search's own archivecontent.go): unlike a plain content match,
+// this must NOT call onOpenSearchResult (ref.path is the containing
+// archive itself, not the matched member's own extracted content —
+// opening the raw archive in a text editor at ref.searchLine would
+// make no sense) — it falls back to the same "Go to file/folder"
+// jump a filename-only archive match already gets instead (see
+// TestActivateRowOnArchiveMatchCallsOnExitSearchResults).
+func TestActivateRowOnArchiveContentMatchFallsBackInsteadOfOpeningEditor(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	openCalled := false
+	p.onOpenSearchResult = func(string, int) { openCalled = true }
+	exitCalled := false
+	p.onExitSearchResults = func() { exitCalled = true }
+	p.showSearchResults()
+	archivePath := filepath.Join(dir, "backup.tar.gz")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil { // must really exist: navigateAndSelect reloads dir for real and looks for it by name
+		t.Fatal(err)
+	}
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "etc/fstab", Line: 2, Text: "Leere Zeile folgt"})
+
+	p.activateRow(0)
+
+	if openCalled {
+		t.Error("onOpenSearchResult ran for an archive content match, want it skipped in favor of the ordinary jump")
+	}
+	if !exitCalled {
+		t.Error("onExitSearchResults did not run — want the archive content match to leave search mode, same as a filename match")
+	}
+	if p.searchMode {
+		t.Error("searchMode still true after activating an archive content match, want it to have left search mode")
 	}
 	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
 		t.Errorf("selected row = (%d, %q, %v), want the real archive %q selected", row, path, ok, archivePath)
