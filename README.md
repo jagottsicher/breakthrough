@@ -73,7 +73,10 @@ terminal.
   [poppler-utils](https://poppler.freedesktop.org/)'s `pdftoppm` is
   installed (feeding straight into the same image renderer above), or
   as extracted plain text otherwise, entirely in Go, no external tool
-  required. `PageUp`/`PageDown` move between pages either way.
+  required. `PageUp`/`PageDown` move between pages either way; `g`/`t`
+  switch a given page between rendered-image and extracted-text view
+  on demand — handy since a text-heavy page rendered as an image
+  downsamples into illegible mush at any realistic terminal size.
 
 ## Status
 

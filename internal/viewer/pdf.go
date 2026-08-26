@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -38,33 +39,81 @@ func PDFPageCount(path string) (int, error) {
 
 // PDFTextFallbackNotice is what internal/ui appends to a PDF page's
 // own extracted text (see its own renderPDFPageContent) whenever
-// LoadPDFPage had to fall back to it because pdftoppm wasn't
-// available — kept here, next to the code that actually decides which
-// tier ran (Result.Kind alone doesn't distinguish "this is a text
-// file" from "this is a PDF's fallback text"), so the message and the
-// condition that triggers it can never drift out of sync with each
-// other.
+// LoadPDFPage fell back to it under PDFViewAuto because pdftoppm
+// wasn't available — kept here, next to the code that actually decides
+// which tier ran (Result.Kind alone doesn't distinguish "this is a
+// text file" from "this is a PDF's fallback text"), so the message and
+// the condition that triggers it can never drift out of sync with
+// each other.
 const PDFTextFallbackNotice = "showing extracted text only — install poppler-utils (pdftoppm) for full-page rendering"
 
-// LoadPDFPage renders page (1-based) of the PDF at path: as a real
-// raster image via pdftoppm where it's installed (see
-// rasterizePDFPage — going through the exact same
-// image.Decode/ScaleForTerminal path a real PNG/JPEG already does), or
-// — where pdftoppm isn't available, or fails on this particular file —
-// as extracted plain text via ledongthuc/pdf's own Page.GetPlainText
-// instead (see extractPDFPageText). Result.Kind tells internal/ui
+// PDFViewMode selects which of LoadPDFPage's own two tiers to use for
+// a page — a real user report: a text-heavy PDF rendered as a raster
+// image is downsampled into illegible half-block mush at any
+// realistic terminal size, exactly the failure mode extracting real
+// text exists to avoid, so which tier runs needs to be a choice, not
+// always whatever LoadPDFPage would have picked on its own.
+type PDFViewMode int
+
+const (
+	// PDFViewAuto is LoadPDFPage's own original behavior, and still the
+	// default for a PDF's very first page: rasterize via pdftoppm where
+	// it's available, silently falling back to extracted text
+	// otherwise — see PDFTextFallbackNotice.
+	PDFViewAuto PDFViewMode = iota
+	// PDFViewGraphic forces the rasterized-image tier — see
+	// internal/ui's own 'g' key. Unlike PDFViewAuto, a failure to
+	// rasterize is reported as KindUnsupported with a Reason instead of
+	// silently falling back to text: the user asked for graphic view
+	// specifically, so silently handing back something else instead
+	// would look like the key press did nothing.
+	PDFViewGraphic
+	// PDFViewText forces the extracted-text tier outright, skipping
+	// rasterization entirely even where pdftoppm is available — see
+	// internal/ui's own 't' key.
+	PDFViewText
+)
+
+// LoadPDFPage renders page (1-based) of the PDF at path, per mode: as
+// a real raster image via pdftoppm (see rasterizePDFPage — going
+// through the exact same image.Decode/ScaleForTerminal path a real
+// PNG/JPEG already does) for PDFViewAuto/PDFViewGraphic, or as
+// extracted plain text via ledongthuc/pdf's own Page.GetPlainText (see
+// extractPDFPageText) for PDFViewText or whenever PDFViewAuto's own
+// rasterization attempt didn't succeed. Result.Kind tells internal/ui
 // which tier actually ran (KindImage or KindText); a page that fails
-// both comes back as KindUnsupported with a Reason.
-func LoadPDFPage(path string, page int) (Result, error) {
-	if img, format, err := rasterizePDFPage(path, page); err == nil {
-		return Result{Kind: KindImage, Image: img, ImageFormat: format}, nil
+// the tier mode asked for (and, for PDFViewAuto only, the text
+// fallback too) comes back as KindUnsupported with a Reason.
+//
+// A page whose extracted text comes back empty (or all whitespace) —
+// a scanned page with no real text layer, the single most common real
+// reason for this — is also reported as KindUnsupported with its own
+// Reason naming that specifically, rather than silently showing a
+// blank page: this can only actually happen for PDFViewText (an
+// explicit choice to see text specifically), or for PDFViewAuto once
+// its own rasterization attempt has already failed too — by that
+// point there's genuinely nothing left to show either way, so the
+// clear message is the honest answer, not a missing fallback.
+func LoadPDFPage(path string, page int, mode PDFViewMode) (Result, error) {
+	if mode != PDFViewText {
+		img, format, err := rasterizePDFPage(path, page)
+		if err == nil {
+			return Result{Kind: KindImage, Image: img, ImageFormat: format}, nil
+		}
+		if mode == PDFViewGraphic {
+			return Result{Kind: KindUnsupported, Reason: "couldn't render this page as an image (is poppler-utils/pdftoppm installed?)"}, nil
+		}
 	}
 
 	text, err := extractPDFPageText(path, page)
-	if err == nil {
+	switch {
+	case err != nil:
+		return Result{Kind: KindUnsupported, Reason: "couldn't render or extract text from this PDF page"}, nil
+	case strings.TrimSpace(text) == "":
+		return Result{Kind: KindUnsupported, Reason: "no extractable text on this page — it may be a scanned image rather than real text"}, nil
+	default:
 		return Result{Kind: KindText, Content: text}, nil
 	}
-	return Result{Kind: KindUnsupported, Reason: "couldn't render or extract text from this PDF page"}, nil
 }
 
 // rasterizePDFPage runs pdftoppm on path, rendering exactly page to a
