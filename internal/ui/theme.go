@@ -158,11 +158,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedForm.SetLabelColor(theme.Text)
 	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.sedForm.SetFieldTextColor(theme.Text)
-	r.sedForm.SetButtonBackgroundColor(theme.AccentBackground)
-	r.sedForm.SetButtonTextColor(theme.Text)
+	r.sedFlagsList.SetBackgroundColor(theme.AccentBackground)
+	r.sedFlagsList.SetMainTextColor(theme.Text)
+	r.sedActions.SetBackgroundColor(theme.AccentBackground)
+	r.sedActions.SetMainTextColor(theme.Text)
 
-	r.sedPreviewView.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewView.SetTextColor(theme.Text)
+	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewStatus.SetTextColor(theme.Text)
+	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewActions.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewActions.SetMainTextColor(theme.Text)
 
