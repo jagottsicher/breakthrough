@@ -40,6 +40,29 @@ func TestZgrepArgsSingleFileNoRecursion(t *testing.T) {
 	}
 }
 
+// TestBzgrepArgsOmitsDashEForSVR4Workaround pins BzgrepArgs' one real
+// difference from ZgrepArgs (see its own doc comment): pattern is a
+// bare positional argument, never preceded by -e — this bzgrep build's
+// own "-e forces egrep" workaround would otherwise conflict with -F/-E.
+func TestBzgrepArgsOmitsDashEForSVR4Workaround(t *testing.T) {
+	got := BzgrepArgs("error", ModeKeyword, "/var/log/syslog.1.bz2", false, false, false)
+	want := []string{"-n", "-I", "-H", "-i", "-F", "error", "/var/log/syslog.1.bz2"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("BzgrepArgs = %v, want %v", got, want)
+	}
+}
+
+// TestXzgrepArgsMatchesZgrepShape pins that XzgrepArgs is structurally
+// identical to ZgrepArgs (see its own doc comment on why — verified
+// against xzgrep's real script, not guessed).
+func TestXzgrepArgsMatchesZgrepShape(t *testing.T) {
+	got := XzgrepArgs("error", ModeKeyword, "/var/log/syslog.1.xz", false, false, false)
+	want := []string{"-n", "-I", "-H", "-i", "-F", "-e", "error", "/var/log/syslog.1.xz"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("XzgrepArgs = %v, want %v", got, want)
+	}
+}
+
 // TestZipgrepArgsRegexPassesPatternBare pins zipgrep's own real,
 // undocumented constraint (verified by reading and running its script
 // directly, not guessed — see ZipgrepArgs' own doc comment): the

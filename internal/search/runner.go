@@ -12,12 +12,31 @@ import (
 	"strings"
 )
 
-// Result is one match: a plain filename hit (Line == 0), or a content
-// hit — a specific line within Path, Text its own matching content.
+// Result is one match: a plain filename hit (Line == 0, ArchiveMember
+// == ""), a content hit (Line > 0 — a specific line within Path, Text
+// its own matching content), an archive-member filename hit
+// (ArchiveMember != "", Line == 0, set only when Request.IncludeArchives
+// is on), or a content hit *inside* an archive member (Line > 0 AND
+// ArchiveMember != "" both set, from Request.IncludeCompressed finding
+// a match inside a tar/tar.gz/tar.bz2/tar.xz archive — see
+// internal/search/archivecontent.go; a plain .zip's own content match never
+// sets ArchiveMember, since ContentZip/zipgrep greps a member directly
+// without this package ever listing members itself). Path is then the
+// real archive file that was found and opened either way, and
+// ArchiveMember is the internal member name that actually matched,
+// exactly as the listing tool reported it (see
+// internal/search/archive.go's own listArchiveMembers) — Path always
+// stays a real, directly-openable filesystem path regardless — never a
+// synthetic combination of the two — so every existing use of Path
+// elsewhere (sorting, "which directory is this in", Properties, ...)
+// keeps working unchanged; only internal/ui's own display formatting
+// and result-activation logic need to know about ArchiveMember at all
+// (see its own appendSearchResult/activateRow).
 type Result struct {
-	Path string
-	Line int
-	Text string
+	Path          string
+	Line          int
+	Text          string
+	ArchiveMember string
 }
 
 // Run starts req in a background goroutine and streams each match it
@@ -68,6 +87,15 @@ func Run(ctx context.Context, req Request) (<-chan Result, <-chan error) {
 }
 
 func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) error {
+	// Started before either branch below, and waited on (via the
+	// deferred wait func) only once this whole func is otherwise ready
+	// to return — see startArchiveSearch's own doc comment on why this
+	// runs concurrently with the primary find/locate call, not before
+	// or after it.
+	wait := startArchiveSearch(ctx, req, results)
+	defer wait()
+	startDirectoryProgress(ctx, req)
+
 	// A recursive EngineFind search reports files shallow-first — see
 	// runFilenameSearchShallowFirst's own doc comment — rather than
 	// whatever order find's own directory traversal happens to produce.
@@ -99,6 +127,113 @@ func runFilenameSearch(ctx context.Context, req Request, results chan<- Result) 
 		}
 		return sendResult(ctx, results, Result{Path: path})
 	})
+}
+
+// startArchiveSearch kicks off searchArchives in the background when
+// req.IncludeArchives is set — running concurrently with whichever of
+// runFilenameSearch's own two branches actually executes right after
+// it, rather than before or after either: searchArchives' own
+// tar-listing step (see its doc comment) is the potentially slow part
+// here, not the primary find/locate call, so per the user's own
+// explicit request neither one should have to wait for the other to
+// even start.
+//
+// Returns a func that blocks until searchArchives is actually done —
+// meant to be called via defer right where it's returned (see
+// runFilenameSearch), so runFilenameSearch never returns, and Run's own
+// results channel never closes, while a member-listing goroutine
+// underneath it might still be sending on it. A no-op wait func when
+// IncludeArchives is false, so the caller never needs its own separate
+// branch for that case.
+func startArchiveSearch(ctx context.Context, req Request, results chan<- Result) (wait func()) {
+	if !req.IncludeArchives {
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		searchArchives(ctx, req, results)
+	}()
+	return func() { <-done }
+}
+
+// startDirectoryProgress kicks off a second, lightweight "find -type d"
+// traversal of the same Scope/IgnoreDirs — purely to report live
+// progress via req.OnProgress, never producing a real Result — running
+// concurrently with, and independent of, whatever real search is also
+// in flight. A no-op when req.OnProgress is nil (the common case —
+// internal/ui's search dialog is currently the only caller that sets
+// it) or Engine isn't EngineFind — see Request.OnProgress's own doc
+// comment on why locate has nothing to report here at all. Also serves
+// as the progress indicator while IncludeArchives' own archive-candidate
+// find call (see archiveCandidates) is running: that walks the exact
+// same Scope/IgnoreDirs, so one shared "where are we" indicator covers
+// both rather than needing a second, redundant walk just for that.
+//
+// A second walk rather than folding this into the primary find command
+// itself: doing both in a single process is possible on GNU find (its
+// own "," operator evaluates two expressions per entry, discarding the
+// first's own result — exactly this use case, per its own manual) but
+// has no equivalent on BSD/macOS find at all (verified against the real
+// FreeBSD find(1) manual, not guessed: only (), !/-not, -and, and -or
+// are documented operators there, no comma — and -or's own
+// short-circuiting means a plain OR would skip whichever side comes
+// second for any entry where the first side already evaluated true, so
+// it can't substitute either). One portable implementation, accepting
+// a second, cheaper (no stat-heavy match test, no -prune skip logic
+// beyond IgnoreDirs itself) directory walk, beats a GNU-only fast path
+// plus an entirely separate BSD implementation to maintain and verify.
+//
+// Not waited on before runFilenameSearch returns (unlike
+// startArchiveSearch's own wait func): this never sends on results/errs,
+// only calls req.OnProgress directly, so there's no channel-closing-
+// order hazard to guard against here — a stray, late progress call
+// right as, or just after, the real search ends is harmless (internal/ui
+// discards it once its own ctx is already done, the same guard every
+// other post-search UI update already applies).
+func startDirectoryProgress(ctx context.Context, req Request) {
+	if req.OnProgress == nil || req.Engine != EngineFind {
+		return
+	}
+	cmd := exec.CommandContext(ctx, "find", directoryProgressArgs(req.Scope, req.IgnoreDirs, req.NonRecursive, req.FollowSymlinks)...)
+	go func() {
+		_ = streamNullSeparated(cmd, func(path string) bool {
+			req.OnProgress(path)
+			return ctx.Err() == nil
+		})
+	}()
+}
+
+// directoryProgressArgs builds a plain "list every directory under
+// scope" find command — no name/extension test of any kind, unlike
+// FindArgs/findArchiveArgs, since this walk's only job is reporting
+// where the walk currently is, not matching anything against Pattern.
+// Mirrors FindArgs' own ignoreDirs-prune-clause structure exactly (see
+// its own doc comment) so a pruned tree is never even descended into
+// here either, keeping this walk's own cost roughly proportional to the
+// real search's rather than needlessly larger.
+func directoryProgressArgs(scope string, ignoreDirs []string, nonRecursive, followSymlinks bool) []string {
+	var args []string
+	if followSymlinks {
+		args = append(args, "-L")
+	}
+	args = append(args, scope)
+	if nonRecursive {
+		args = append(args, "-maxdepth", "1")
+	}
+
+	if len(ignoreDirs) > 0 {
+		args = append(args, "(")
+		for i, name := range ignoreDirs {
+			if i > 0 {
+				args = append(args, "-o")
+			}
+			args = append(args, "-name", name)
+		}
+		args = append(args, ")", "-prune", "-o")
+	}
+
+	return append(args, "-type", "d", "-print0")
 }
 
 // runFilenameSearchShallowFirst runs a recursive EngineFind filename
@@ -207,6 +342,20 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	// request: Engine only ever means something once there's an actual
 	// name-matching step for it to drive.
 	if req.NamePattern != "" && req.Content == ContentGrep {
+		// IncludeCompressed additionally narrows every zip/tar-family
+		// archive found under Scope to just the members whose own name
+		// matches NamePattern too, searching only those for content (a
+		// real user report: Filename "fstab" + Content "leere" used to
+		// find nothing inside any archive at all, since IncludeCompressed
+		// was never even consulted once NamePattern was set — see
+		// startArchiveContentSearchNarrowed in archivecontent.go). Runs
+		// concurrently with the plain NamePattern-narrowed grep right
+		// below it, not before or after — same "don't block one on the
+		// other" reasoning startCompressedContentSearch's own doc comment
+		// gives for the un-narrowed case.
+		waitArchives := startArchiveContentSearchNarrowed(ctx, req, results)
+		defer waitArchives()
+
 		return listThenGrep(ctx, req, req.NamePattern, req.NameMode, req.CaseSensitive, "grep", func(f string) []string {
 			// nil, not req.IgnoreDirs: f is already one single, already-
 			// approved file by the time it gets here (see listThenGrep's
@@ -220,6 +369,16 @@ func runContentSearch(ctx context.Context, req Request, results chan<- Result) e
 	}
 	switch req.Content {
 	case ContentGrep:
+		// IncludeCompressed runs concurrently with the plain grep call
+		// right below it, not before or after — see
+		// startCompressedContentSearch's own doc comment on why. Its tar-
+		// family counterpart (tar/tar.gz/tar.bz2/tar.xz — see
+		// archivecontent.go) runs the same way, for the same reason.
+		wait := startCompressedContentSearch(ctx, req, results)
+		defer wait()
+		waitTar := startTarContentSearch(ctx, req, results)
+		defer waitTar()
+
 		// Unlike the NamePattern-narrowed call just above, this walks
 		// req.Scope directly — grep itself is the only thing that will
 		// ever see, and so the only thing that can skip, an ignored

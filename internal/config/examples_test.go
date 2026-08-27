@@ -36,12 +36,18 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 			"FocusedBackground":   resolved.FocusedBackground,
 			"ErrorBackground":     resolved.ErrorBackground,
 			"SelectionBackground": resolved.SelectionBackground,
+			"DirectoryBackground": resolved.DirectoryBackground,
 			"Text":                resolved.Text,
 			"EditableBackground":  resolved.EditableBackground,
 			"PlaceholderText":     resolved.PlaceholderText,
 			"EntryNormal":         resolved.EntryNormal,
 			"EntryExecutable":     resolved.EntryExecutable,
 			"EntryError":          resolved.EntryError,
+			"EntrySymlink":        resolved.EntrySymlink,
+			"EntrySpecial":        resolved.EntrySpecial,
+			"EntryUnreadable":     resolved.EntryUnreadable,
+			"EntryArchive":        resolved.EntryArchive,
+			"EntryHidden":         resolved.EntryHidden,
 		}
 		defaults := DefaultTheme().Resolve()
 		defaultFields := map[string]tcell.Color{
@@ -49,12 +55,18 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 			"FocusedBackground":   defaults.FocusedBackground,
 			"ErrorBackground":     defaults.ErrorBackground,
 			"SelectionBackground": defaults.SelectionBackground,
+			"DirectoryBackground": defaults.DirectoryBackground,
 			"Text":                defaults.Text,
 			"EditableBackground":  defaults.EditableBackground,
 			"PlaceholderText":     defaults.PlaceholderText,
 			"EntryNormal":         defaults.EntryNormal,
 			"EntryExecutable":     defaults.EntryExecutable,
 			"EntryError":          defaults.EntryError,
+			"EntrySymlink":        defaults.EntrySymlink,
+			"EntrySpecial":        defaults.EntrySpecial,
+			"EntryUnreadable":     defaults.EntryUnreadable,
+			"EntryArchive":        defaults.EntryArchive,
+			"EntryHidden":         defaults.EntryHidden,
 		}
 		for field, c := range fields {
 			// Every field in both example files sets its own value,

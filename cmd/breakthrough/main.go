@@ -79,9 +79,9 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Rename/toggle hidden
-	// files/Options/Search — see the bottom bar's own buttons) check
-	// their own preconditions before acting (see
+	// Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Look/Rename/toggle
+	// hidden files/Options/Search — see the bottom bar's own buttons)
+	// check their own preconditions before acting (see
 	// Root.acceptsGlobalShortcut) rather than always firing the way
 	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
 	// bash line's own typing. Ctrl+H is deliberately not one of them —
@@ -110,6 +110,9 @@ func run() error {
 		case tcell.KeyCtrlE:
 			root.EditShortcut()
 			return nil
+		case tcell.KeyCtrlL:
+			root.LookShortcut()
+			return nil
 		case tcell.KeyCtrlR:
 			root.RenameShortcut()
 			return nil
@@ -124,6 +127,61 @@ func run() error {
 			return nil
 		case tcell.KeyF1:
 			root.HelpShortcut()
+			return nil
+		case tcell.KeyCtrlT:
+			// Falls through to bashLine's own default handling (readline-
+			// style Ctrl+T is "transpose characters") while it has focus,
+			// rather than always consuming the key the way the six above
+			// do - see Root.AcceptsGlobalShortcut's own doc comment.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.TrashShortcut()
+			return nil
+		case tcell.KeyCtrlS:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+T just above - readline-style Ctrl+S is "forward
+			// incremental search" in many shells' own line editing, even
+			// though bashLine itself doesn't implement that.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.SedReplaceShortcut()
+			return nil
+		case tcell.KeyCtrlP:
+			// bashLine's own captureBashLineKey binds Ctrl+P to command-
+			// history recall - falling through here (not consuming the
+			// event) while it has focus is what keeps that working; see
+			// Root.AcceptsGlobalShortcut's own doc comment for why this one
+			// specifically can't just always return nil the way the six
+			// above do.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.PurgeShortcut()
+			return nil
+		case tcell.KeyDelete:
+			// Entf triggers the safe action (Trash), matching both the
+			// physical key's own label and the near-universal
+			// file-manager convention — see TrashShortcut's own doc
+			// comment for the full reasoning. Ctrl+Delete for Purge is
+			// best-effort: tcell's own EventKey.Modifiers doc notes "it
+			// will not always be possible" to detect a modifier together
+			// with a non-alphanumeric key across every terminal —
+			// Ctrl+P above is the reliable path to Purge regardless of
+			// what this resolves to on any given terminal.
+			//
+			// Falls through un-consumed while bashLine has focus, the same
+			// as Ctrl+T/Ctrl+P above - otherwise this would eat a plain
+			// forward-delete keystroke while typing a command.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.PurgeShortcut()
+			} else {
+				root.TrashShortcut()
+			}
 			return nil
 		}
 		return event

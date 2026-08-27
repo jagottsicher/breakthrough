@@ -33,16 +33,17 @@ var helpText = strings.TrimLeft(`
 [::b]File panel[::-]
 
   Ctrl+E          Edit the selected file
+  Ctrl+L          Look at the selected file (read-only)
   Ctrl+R          Rename the selected file
   Ctrl+G          Toggle hidden files
   Ctrl+F          Find
   Ctrl+O          Options
   Enter           Open the selected directory
   Space           Select/deselect the selected file
-  Right-click     Context menu (Properties, Edit, Rename, Select
-                  all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, and three toggles: hidden
-                  files, size format, modified-time format)
+  Right-click     Context menu (Properties, Edit, Look, Tail -f,
+                  Rename, Select all/Deselect all/Select +/Select -,
+                  Copy, Cut, Paste, chown, chmod, and three toggles:
+                  hidden files, size format, modified-time format)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -82,8 +83,27 @@ var helpText = strings.TrimLeft(`
 
 [::b]Bash line[::-]
 
-  Up / Down       Recall the previous/next command from history
-  Enter           Run the command
+  Click to expand         Grows upward toward mid-screen while focused
+                           (a legend of these same keys shows above it),
+                           collapses back to one row on Escape/click away
+  Enter                    Run the buffer — a real terminal, with your
+                           shell's own ~/.bashrc, aliases and functions
+                           sourced first, for every command, the same as
+                           Midnight Commander's own command line. Once
+                           it's done, press Escape to return (its own
+                           output stays on screen to read until then)
+  Ctrl+J / Alt+Enter        Insert a newline (compose a multi-line script)
+                           — Ctrl+J always works; Alt+Enter is intercepted
+                           by some terminal emulators for their own use
+  Up / Down or             Recall the previous/next command from history
+  Ctrl+P / Ctrl+N          — Up/Down only at the first/last line of a
+                           multi-line buffer, otherwise they move the
+                           cursor as usual; Ctrl+P/Ctrl+N always recall
+                           regardless of cursor position
+  Tab                      Complete the filename/directory at the cursor
+                           against the panel's own current directory —
+                           several equally-possible matches show a
+                           scrollable pick list instead of doing nothing
 `, "\n")
 
 // newHelpView builds the Help overlay: a single, scrollable, read-only
