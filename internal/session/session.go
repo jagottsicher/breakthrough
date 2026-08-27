@@ -47,6 +47,11 @@ func ID() string {
 	return id
 }
 
+// isRoot is a var, not a plain inline os.Geteuid() call, so tests can
+// override it to exercise TrashDir's root-only behaviour without
+// actually needing to run as root.
+var isRoot = func() bool { return os.Geteuid() == 0 }
+
 // username mirrors internal/ui's own currentUsername(): os/user.Current
 // first, falling back to $USER if that fails (e.g. no matching /etc/passwd
 // entry in some container setups).
@@ -94,7 +99,20 @@ func dataDir() (string, error) {
 // persistent=true returns $XDG_DATA_HOME/breakthrough/trash/<user>/ (no
 // session ID: a persistent trash is meant to accumulate and survive
 // across runs, not start over each time).
+//
+// Running as root (euid 0 — typically via sudo) always gets the
+// persistent path, regardless of the persistent argument: sudo's default
+// env_reset drops XDG_RUNTIME_DIR entirely unless a sudoers config
+// explicitly keeps it, and even where it is kept, it names the original
+// user's runtime directory, not root's — root interactively has no real
+// systemd login session of its own to tie a "session-scoped" trash to in
+// the first place. Landing unpredictably in whatever os.TempDir()
+// fallback that produces would be worse than just always using root's
+// own well-known, predictable home directory.
 func TrashDir(persistent bool) (string, error) {
+	if isRoot() {
+		persistent = true
+	}
 	u := username()
 	if persistent {
 		base, err := dataDir()

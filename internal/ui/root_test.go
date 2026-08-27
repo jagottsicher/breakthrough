@@ -28,7 +28,7 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod",
 		menuSectionLabel("Delete"),
-		"Move to Trash", "Remove", "Restore from Trash", "Empty Trash",
+		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Globals"),
 		"Hide hidden files",       // dotfiles are shown by default now
 		"Show size in bytes",      // human-readable is the default
