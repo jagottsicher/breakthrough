@@ -114,30 +114,55 @@ type Root struct {
 	purgeConfirm *tview.List
 	pendingPurge func()
 
-	// sedForm is the "Sed Replace" dialog (see sedreplace.go) — rebuilt
-	// fresh on every open (resetSedForm), unlike purgeConfirm's shared,
-	// repopulated single widget, since tview.Form has no equivalent of
-	// List's SetItemText to reset one in place. sedFindField/
-	// sedReplaceField/sedAdvancedField are kept directly (their typed
-	// text values are read back in runSedPreview); the checkboxes are
-	// looked up by label instead (see sedCheckbox) rather than each
-	// getting their own field. sedTargets is the file(s) this open is
-	// for (see selectedOrCurrentPaths).
+	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
+	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
+	// own doc comment on why the five flag toggles are a separate List
+	// rather than Form checkboxes: tview.Form re-applies one uniform
+	// field background to every item it owns on every Draw call, which
+	// would force a checkbox into the same "editable text field"
+	// highlight real fields get). sedLayout stacks the other three and
+	// is what sedReplacePage actually shows. All three (plus sedFlags)
+	// are rebuilt fresh on every open (see resetSedForm), unlike
+	// purgeConfirm's shared, repopulated single widget, since Form has
+	// no equivalent of List's SetItemText to reset one in place.
+	// sedFindField/sedReplaceField/sedAdvancedField are kept directly
+	// (their typed text values are read back in runSedPreview);
+	// sedFlags holds the five toggles' current state, keyed by their
+	// label constants. sedTargets is the file(s) this open is for (see
+	// selectedOrCurrentPaths).
 	sedForm          *tview.Form
 	sedFindField     *tview.InputField
 	sedReplaceField  *tview.InputField
 	sedAdvancedField *tview.InputField
+	sedFlags         map[string]bool
+	sedFlagsList     *tview.List
+	sedActions       *tview.List
+	sedLayout        *tview.Flex
 	sedTargets       []string
 
-	// sedPreviewView/sedPreviewActions/sedPreviewLayout show Preview's
-	// own dry-run result (runSedPreview) — a scrollable, read-only
-	// summary next to Apply/Back/Cancel, the same three-choice shape
-	// purgeConfirm already has. sedPendingChanges is what confirmApplySed
-	// actually writes if the user goes on to confirm.
-	sedPreviewView    *tview.TextView
-	sedPreviewActions *tview.List
-	sedPreviewLayout  *tview.Flex
-	sedPendingChanges []replace.FileChange
+	// sedPreviewStatus/sedPreviewTable/sedPreviewActions/sedPreviewLayout
+	// show Preview's own dry-run result (runSedPreview): a one-line
+	// status (progress while running, a summary once done), the actual
+	// Name/Line/Excerpt table (see sedPreviewRows), and Apply/Back/
+	// Cancel — the same three-choice shape purgeConfirm already has.
+	// sedPendingChanges is what confirmApplySed actually writes if the
+	// user goes on to confirm.
+	//
+	// sedPreviewCancel/sedPreviewAnimFrame/sedPreviewProcessed/
+	// sedPreviewTotal/sedPreviewCurrentPos back the live progress
+	// animation (see animateSedPreviewProgress/renderSedPreviewStatus) —
+	// the same shape searchCancel/searchAnimFrame and friends already
+	// have for a live search.
+	sedPreviewStatus     *tview.TextView
+	sedPreviewTable      *tview.Table
+	sedPreviewActions    *tview.List
+	sedPreviewLayout     *tview.Flex
+	sedPendingChanges    []replace.FileChange
+	sedPreviewCancel     context.CancelFunc
+	sedPreviewAnimFrame  int
+	sedPreviewProcessed  int
+	sedPreviewTotal      int
+	sedPreviewCurrentPos string
 
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
@@ -659,11 +684,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.purgeConfirm = r.newPurgeConfirm()
 
 	// The "Sed Replace" dialog and its own Preview screen (see
-	// sedreplace.go) — sedForm itself is rebuilt fresh on every open
-	// (see resetSedForm), but sedPreviewLayout (and the view/actions it
-	// wraps) is built once here, the same as everything else on this
-	// page.
+	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
+	// on every open (see resetSedForm), but sedLayout (which stacks all
+	// three) and sedPreviewLayout (and the view/actions it wraps) are
+	// built once here, the same as everything else on this page.
 	r.sedForm = r.newSedForm()
+	r.sedFlagsList = r.newSedFlagsList()
+	r.sedActions = r.newSedActions()
+	r.sedLayout = r.newSedLayout()
 	r.sedPreviewLayout = r.newSedPreviewLayout()
 
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
@@ -740,7 +768,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
-	r.AddPage(sedReplacePage, r.sedForm, false, false)
+	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
