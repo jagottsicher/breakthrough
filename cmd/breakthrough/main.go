@@ -128,6 +128,28 @@ func run() error {
 		case tcell.KeyF1:
 			root.HelpShortcut()
 			return nil
+		case tcell.KeyCtrlT:
+			root.TrashShortcut()
+			return nil
+		case tcell.KeyCtrlP:
+			root.PurgeShortcut()
+			return nil
+		case tcell.KeyDelete:
+			// Entf triggers the safe action (Trash), matching both the
+			// physical key's own label and the near-universal
+			// file-manager convention — see TrashShortcut's own doc
+			// comment for the full reasoning. Ctrl+Delete for Purge is
+			// best-effort: tcell's own EventKey.Modifiers doc notes "it
+			// will not always be possible" to detect a modifier together
+			// with a non-alphanumeric key across every terminal —
+			// Ctrl+P above is the reliable path to Purge regardless of
+			// what this resolves to on any given terminal.
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.PurgeShortcut()
+			} else {
+				root.TrashShortcut()
+			}
+			return nil
 		}
 		return event
 	})
