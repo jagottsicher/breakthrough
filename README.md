@@ -54,7 +54,9 @@ terminal.
   recall history too, not just Ctrl+P/Ctrl+N, except at a line a
   multi-line script is still being composed on; Tab completes the
   filename/directory at the cursor against the panel's own current
-  directory). Every command runs through a real terminal, started the
+  directory, or, when several matches agree on nothing further, opens a
+  scrollable pick list of them instead of doing nothing). Every command
+  runs through a real terminal, started the
   same way an interactive login shell would be — your `~/.bashrc`,
   aliases and shell functions sourced first, so something like `ll`
   works exactly as it does in a real terminal — the same way Midnight

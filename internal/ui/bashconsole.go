@@ -174,6 +174,16 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 // Panel.completePath), a single match completing fully, several
 // completing as far as they agree, and no match leaving the text alone.
 //
+// If several matches agree on nothing beyond what's already typed —
+// longestCommonPrefix comes back unchanged, real bash's own cue that a
+// second Tab press would list every candidate — this shows that same
+// list immediately instead, in an overlay (see openCompletionPicker),
+// rather than requiring a second, identical Tab press first: pressing
+// Tab repeatedly at that point did nothing at all before this, per the
+// user's own direct report ("wenn man ... mehrmals auf tab klickt
+// funktioniert die pfad completion eben nicht ganz wie erwartet, weil
+// man keine pfadangebot bekommt").
+//
 // This only completes filenames/directories relative to the panel's
 // current directory — not full bash completion (command names via
 // $PATH, subcommand-aware completion for tools like git, ...), which
@@ -183,10 +193,12 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 // Bash-Vervollständigung" after Tab stopped closing the console.
 //
 // Only the cursor's own current line is ever touched — Replace's start/
-// end are absolute offsets into the *entire* (possibly multi-line, see
-// captureBashLineKey's own Ctrl+J/Alt+Enter case) text (see its own doc
-// comment), so completing on a later line needs every earlier line's
-// own length (plus its newline) added first to land in the right place.
+// end (and the picker's own onPick, which makes the same replacement
+// later once a candidate is chosen) are absolute offsets into the
+// *entire* (possibly multi-line, see captureBashLineKey's own
+// Ctrl+J/Alt+Enter case) text (see Replace's own doc comment), so
+// completing on a later line needs every earlier line's own length
+// (plus its newline) added first to land in the right place.
 func (r *Root) completeBashLine() {
 	text := r.bashLine.GetText()
 	row, col, _, _ := r.bashLine.GetCursor()
@@ -210,18 +222,101 @@ func (r *Root) completeBashLine() {
 	if len(matches) == 0 {
 		return
 	}
-	completed := longestCommonPrefix(matches)
-	if completed == word {
-		return // already as far as it goes
-	}
 
 	offset := 0
 	for i := 0; i < row; i++ {
 		offset += len(lines[i]) + 1 // +1 for the newline every earlier line ends with
 	}
 	offset += wordStart
+	end := offset + (col - wordStart)
 
-	r.bashLine.Replace(offset, offset+(col-wordStart), completed)
+	completed := longestCommonPrefix(matches)
+	if completed != word {
+		r.bashLine.Replace(offset, end, completed)
+		return
+	}
+	if len(matches) == 1 {
+		return // the one match is already exactly what's typed
+	}
+	r.openCompletionPicker(matches, offset, end)
+}
+
+// openCompletionPicker shows every one of completeBashLine's ambiguous
+// matches in a scrollable list, reusing the same r.picker widget/page
+// the owner/group picker uses (see openOwnerGroupPicker) — only one of
+// the two is ever open at a time, so there's nothing to gain from a
+// second List/page just for this. Each row shows only match's own final
+// path component (see completionBasename), not the full match text:
+// every match here already shares the same directory prefix (the only
+// reason more than one of them exist for a single word at all — see
+// Panel.completions), which would otherwise repeat, unreadably, on every
+// row — the user's own choice, offered both ways.
+//
+// Picking an entry (click or Enter, List's own behavior) replaces
+// exactly the word being completed — start/end, completeBashLine's own
+// absolute offsets, computed once and threaded through unchanged (see
+// its own doc comment on why they're absolute) — with the picked
+// match's full text, the same replacement completeBashLine's own
+// single-match case makes directly. Escape, or a click outside (see
+// captureOutsideClick), leaves the word untouched either way.
+//
+// Both paths hand focus back to bashLine afterwards, via
+// pushOverlayReturningFocusTo below — not hideOverlay's own ordinary
+// fallback to the panel, which is right when a context-menu-launched
+// overlay closes but wrong here: bashLine, not the panel, is what this
+// opened from, and what completing a command should hand focus back to.
+// That covers a click outside the picker too (see captureOutsideClick),
+// which — unlike the two paths here — calls hideOverlay directly rather
+// than through a callback of this function's own, so the redirect has to
+// live in hideOverlay itself to cover every dismissal path alike.
+func (r *Root) openCompletionPicker(matches []string, start, end int) {
+	r.picker.Clear()
+	for _, m := range matches {
+		match := m // captured per-iteration, not the shared loop variable
+		r.picker.AddItem(completionBasename(match), "", 0, func() {
+			r.hideOverlay()
+			r.bashLine.Replace(start, end, match)
+		})
+	}
+	r.picker.SetDoneFunc(func() {
+		r.hideOverlay()
+	})
+
+	width, height := listSize(r.picker)
+	x, y := r.completionPickerPosition(width, height)
+	x, y, width, height = r.clampToPanel(x, y, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+	r.picker.SetOffset(0, 0)
+
+	r.pushOverlayReturningFocusTo(pickerPage, r.picker, r.bashLine)
+}
+
+// completionPickerPosition anchors the completion picker's bottom edge
+// against bashConsole's own current top edge — directly above the
+// expanded console, the same way a real terminal's own completion
+// listing appears right above the line it completes, keeping bashLine's
+// own buffer (and the word actually being completed) visible above the
+// list rather than covered by it. clampToPanel (see openCompletionPicker)
+// still has the final say, shrinking/repositioning this if the panel
+// above the console isn't tall enough to fit it as given.
+func (r *Root) completionPickerPosition(width, height int) (x, y int) {
+	consoleX, consoleY, _, _ := r.bashConsole.GetRect()
+	return consoleX, consoleY - height
+}
+
+// completionBasename returns match's own final path component for
+// display in the completion picker (see openCompletionPicker) — the
+// basename, but with a directory's own trailing "/" (see
+// Panel.completions) kept rather than stripped by a plain
+// filepath.Base, so a directory is still visually distinguishable from
+// a file in the list the same way it already is while being typed.
+func completionBasename(match string) string {
+	base := match
+	if idx := strings.LastIndex(strings.TrimSuffix(match, "/"), "/"); idx >= 0 {
+		base = match[idx+1:]
+	}
+	return base
 }
 
 // bashLineAtFirstLine and bashLineAtLastLine report whether bashLine's
