@@ -788,11 +788,28 @@ func (r *Root) closeAllOverlays() {
 // captureOutsideClick keeps the panel underneath an open overlay inert:
 // a click outside the overlay closes it (instead of leaving it stuck
 // open) and is consumed rather than also acting on the panel, so it takes
-// a second click to do anything else. Scrolling is swallowed outright
-// while an overlay is open — letting it through would scroll the list out
-// from under a menu that stays put, which both looks wrong and would
-// leave targetRow (see openRename) pointing at a different file than the
-// one the menu was opened for.
+// a second click to do anything else. Every *other* mouse action outside
+// the overlay — scrolling, but also plain movement, button-down/up, and
+// double/middle clicks — is swallowed outright without closing anything,
+// the same "consumed, no other effect" a plain outside click gets once
+// it's done its one job of closing the overlay.
+//
+// That "every other action" part used to be narrower — only scrolling
+// was actually swallowed; everything else fell through to whatever was
+// underneath unconsumed — which left a real gap: a right-click *drag*
+// (see Root.captureMouse's own doc comment) is MouseRightDown, then
+// MouseMove/MouseRightUp, not a single MouseRightClick, so none of those
+// were being caught here at all. With the quit-confirmation overlay
+// open, that meant a right-click on a panel row still reached
+// Panel.captureMouse underneath it and opened the context menu right on
+// top of the still-open quit dialog — exactly the user's own direct
+// report ("wenn der quit confirm dialog offen ist, kann man immer noch
+// rumklicken oder den overlay öffnen. dann muss wirklich alle gesperrt
+// sein"). Consuming unconditionally, rather than opting in one action at
+// a time, closes that gap for good — including for any other overlay
+// this already guards, not just the quit dialog — instead of requiring
+// every individual mouse-action variant tview has to be enumerated and
+// kept in sync here by hand.
 //
 // The Properties overlay is the one exception to "click outside closes
 // it": once propertiesDirty is true (see markPropertiesDirty), an
@@ -810,19 +827,13 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		return action, event // event landed on the open overlay itself
 	}
 
-	if r.activePage == propertiesPage && r.propertiesDirty {
-		return tview.MouseConsumed, nil
-	}
-
-	switch action {
-	case tview.MouseLeftClick, tview.MouseRightClick:
+	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
+		if r.activePage == propertiesPage && r.propertiesDirty {
+			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		}
 		r.hideOverlay()
-		return tview.MouseConsumed, nil
-	case tview.MouseScrollUp, tview.MouseScrollDown, tview.MouseScrollLeft, tview.MouseScrollRight:
-		return tview.MouseConsumed, nil
-	default:
-		return action, event
 	}
+	return tview.MouseConsumed, nil
 }
 
 // primitiveContains reports whether (x, y) falls within p's rectangle.
