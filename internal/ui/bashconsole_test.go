@@ -491,21 +491,92 @@ func TestOpenCompletionPickerCancelLeavesWordAndReturnsFocusToBashLine(t *testin
 	}
 }
 
-// TestCompletionPickerPositionedAboveConsole pins completionPickerPosition
-// directly: the picker's bottom edge should sit exactly on bashConsole's
-// own top edge (so the list appears to grow upward from the console, the
-// same direction the console itself grows on focus), sharing its left
-// edge.
-func TestCompletionPickerPositionedAboveConsole(t *testing.T) {
+// TestBashConsoleStaysExpandedWhileCompletionPickerOpen pins the fix for
+// the user's own direct report: opening the completion picker used to
+// collapse the console right back down underneath it (moving focus to
+// the picker blurs bashLine, which triggers collapseBashConsole, bashLine's
+// own BlurFunc) — nonsensical, since the picker exists to keep completing
+// bashLine's own buffer, which the user still needs to see. See
+// bashLineCompletingPick's own doc comment on the Root struct for the fix.
+func TestBashConsoleStaysExpandedWhileCompletionPickerOpen(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.bashConsole.SetRect(0, 12, 80, 12)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+	r.SetRect(0, 0, 80, 24)
+
+	r.app.SetFocus(r.bashLine) // triggers expandBashConsole via bashLine's own FocusFunc
+	r.Draw(screen)
+
+	wantExpanded := 24 / 2
+	if _, _, _, h := r.bashConsole.GetRect(); h != wantExpanded {
+		t.Fatalf("setup: expanded bashConsole height = %d, want %d", h, wantExpanded)
+	}
+
+	r.openCompletionPicker([]string{"foobar", "foobaz"}, 0, 0)
+	r.Draw(screen)
+
+	if _, _, _, h := r.bashConsole.GetRect(); h != wantExpanded {
+		t.Errorf("bashConsole height while the completion picker is open = %d, want still %d (unchanged, not collapsed)", h, wantExpanded)
+	}
+	if _, _, _, h := r.bashHint.GetRect(); h != 1 {
+		t.Errorf("bashHint height while the completion picker is open = %d, want still 1 (unchanged, not hidden)", h)
+	}
+}
+
+// TestBashLineCursorScreenPosition pins bashLineCursorScreenPosition
+// directly, for the overwhelming common case it's exact for (see its own
+// doc comment): a single, unwrapped line with the cursor at the end —
+// column equal to the line's own length, row equal to bashLine's own
+// (border-less, so inner == outer) rect top, since neither the cursor
+// nor the scroll offset ever leaves row 0 for one short line.
+func TestBashLineCursorScreenPosition(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.bashLine.SetRect(0, 12, 80, 12)
+
+	line := "ls -halF /etc/"
+	r.bashLine.SetText(line, true) // cursor at the end
+
+	gotX, gotY := r.bashLineCursorScreenPosition()
+	wantX, wantY := len(line), 12
+	if gotX != wantX || gotY != wantY {
+		t.Errorf("bashLineCursorScreenPosition() = (%d,%d), want (%d,%d)", gotX, gotY, wantX, wantY)
+	}
+}
+
+// TestCompletionPickerPositionedAtCursor pins the fix for the user's own
+// direct report that the picker appeared "oben links" (top-left,
+// effectively bashConsole's own left edge with a tall list pinned to the
+// panel's own top by clampToPanel) instead of tracking the word actually
+// being completed: its bottom edge now sits exactly on bashLine's own
+// current cursor position (see completionPickerPosition/
+// bashLineCursorScreenPosition), opening upward from there — the same
+// direction the console itself grows on focus.
+func TestCompletionPickerPositionedAtCursor(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.bashLine.SetRect(0, 12, 80, 12)
+
+	line := "ls -halF /etc/"
+	r.bashLine.SetText(line, true) // cursor at the end, right after the word being completed
 
 	gotX, gotY := r.completionPickerPosition(20, 5)
-	wantX, wantY := 0, 7 // bashConsole's own top (12) minus the requested height (5)
+	wantX, wantY := len(line), 12-5 // the cursor's own column/row, height subtracted to open upward
 	if gotX != wantX || gotY != wantY {
 		t.Errorf("completionPickerPosition(20, 5) = (%d,%d), want (%d,%d)", gotX, gotY, wantX, wantY)
 	}
