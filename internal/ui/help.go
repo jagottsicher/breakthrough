@@ -91,7 +91,9 @@ var helpText = strings.TrimLeft(`
                            command line. Once it's done, press Escape to
                            return (its own output stays on screen to read
                            until then)
-  Alt+Enter                Insert a newline (compose a multi-line script)
+  Ctrl+J / Alt+Enter        Insert a newline (compose a multi-line script)
+                           — Ctrl+J always works; Alt+Enter is intercepted
+                           by some terminal emulators for their own use
   Up / Down or             Recall the previous/next command from history
   Ctrl+P / Ctrl+N          — Up/Down only at the first/last line of a
                            multi-line buffer, otherwise they move the

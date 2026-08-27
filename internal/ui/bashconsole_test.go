@@ -10,19 +10,22 @@ import (
 	"golang.org/x/term"
 )
 
-// TestCaptureBashLineKeyEnterVsAltEnter pins captureBashLineKey's own
+// TestCaptureBashLineKeyEnterVsNewline pins captureBashLineKey's own
 // central split: plain Enter is consumed here (runs the buffer, see
 // runBashCommand) rather than reaching TextArea's own default "insert a
-// newline" handling, while Alt+Enter is returned unchanged specifically
-// so that default handling still fires — the one way to compose a
-// multi-line script before running it (see the function's own doc
-// comment). "echo hi" runs through runShellCommandFullScreen — every
-// command does now (see newBashConsole's own doc comment) — where
-// Suspend is a no-op in this screenless test environment (see
+// newline" handling, while Alt+Enter is returned unchanged, and Ctrl+J
+// a synthesized plain Enter event, specifically so that default
+// handling still fires either way — two ways to compose a multi-line
+// script before running it (see the function's own doc comment on why
+// there are two: Alt+Enter isn't reliable across terminals, per the
+// user's own direct report that it "funktioniert nicht"). "echo hi"
+// runs through runShellCommandFullScreen — every command does now (see
+// newBashConsole's own doc comment) — where Suspend is a no-op in this
+// screenless test environment (see
 // TestCaptureStatusBarMouseEditClickRunsEditAction's own doc comment in
 // bottombar_test.go), so this only pins the wiring and that the buffer
 // clears afterwards, not that a command actually ran.
-func TestCaptureBashLineKeyEnterVsAltEnter(t *testing.T) {
+func TestCaptureBashLineKeyEnterVsNewline(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -37,6 +40,17 @@ func TestCaptureBashLineKeyEnterVsAltEnter(t *testing.T) {
 	// left alone (runBashCommand was NOT called for this one).
 	if got := r.bashLine.GetText(); got != "echo hi" {
 		t.Errorf("bashLine text after Alt+Enter (capture layer only) = %q, want unchanged %q", got, "echo hi")
+	}
+
+	got := r.captureBashLineKey(tcell.NewEventKey(tcell.KeyCtrlJ, 0, tcell.ModNone))
+	if got == nil {
+		t.Fatal("Ctrl+J should not be consumed as nil — it's turned into a synthesized Enter event for TextArea's own default handling")
+	}
+	if got.Key() != tcell.KeyEnter {
+		t.Errorf("Ctrl+J's synthesized event key = %v, want %v (KeyEnter, so TextArea inserts a newline)", got.Key(), tcell.KeyEnter)
+	}
+	if got := r.bashLine.GetText(); got != "echo hi" {
+		t.Errorf("bashLine text after Ctrl+J (capture layer only) = %q, want unchanged %q", got, "echo hi")
 	}
 
 	if got := r.captureBashLineKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)); got != nil {
@@ -97,6 +111,29 @@ func TestExpandCollapseBashConsole(t *testing.T) {
 	}
 	if _, _, _, h := r.bashHint.GetRect(); h != 0 {
 		t.Errorf("bashHint height after collapse = %d, want 0 (hidden)", h)
+	}
+}
+
+// TestBashLineCtrlJInsertsNewlineEndToEnd pins Ctrl+J's own effect all
+// the way through — not just that captureBashLineKey hands back a
+// synthesized Enter event (see TestCaptureBashLineKeyEnterVsNewline),
+// but that routing it through bashLine's real, wrapped InputHandler
+// (see Box.WrapInputHandler, which applies SetInputCapture before its
+// own default handling — the same mechanism SetInputCapture's own
+// documentation describes) actually inserts a newline into the buffer,
+// the way TextArea's own default Enter handling does.
+func TestBashLineCtrlJInsertsNewlineEndToEnd(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.bashLine.SetText("echo hi", true) // cursor at the end
+	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyCtrlJ, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := r.bashLine.GetText(); got != "echo hi\n" {
+		t.Errorf("bashLine text after Ctrl+J = %q, want %q (a newline appended, not run)", got, "echo hi\n")
 	}
 }
 
