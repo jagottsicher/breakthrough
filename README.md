@@ -42,8 +42,40 @@ terminal.
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
   Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
-  glob-pattern Select +/-), Copy/Cut/Paste, chmod, and chown.
-- A bottom bar: a real shell command line (with its own history, shared
+  glob-pattern Select +/-), Copy/Cut/Paste, chmod, chown, Sed Replace,
+  and the trash actions below.
+- Move to Trash / Remove: `^T` or Entf moves the current selection to
+  your own trash — recursively for a directory, no confirmation, since
+  that's the reversible action by design. `^P`, Ctrl+Entf (best-effort —
+  terminal-dependent; `^P` is always the reliable one), or the context
+  menu's "Remove" permanently deletes instead (a file like `rm`, a
+  directory recursively like `rm -rf`, empty or not), always behind a
+  confirmation dialog with Cancel preselected — a single stray keypress
+  can never confirm it by itself. "Go to Trash" jumps straight into it
+  without needing to know its path; "Restore from Trash" and "Empty
+  Trash" (same confirmation) round it out. Session-scoped by default —
+  lives under `$XDG_RUNTIME_DIR`, gone once the session ends — or
+  persistent under `~/.local/share/breakthrough/trash` via
+  `trash_persistent = true` in your config; running as root (e.g. via
+  `sudo`) always gets the persistent, well-known path, since root has no
+  real session of its own for a session-scoped trash to mean anything
+  for.
+- Sed Replace (`^S`, or the context menu): runs a real `sed(1)`
+  substitution against the current selection — one file or several, not
+  a directory tree. A guided Find/Replace pair (Regex, Extended regex
+  `-E`, Case-insensitive, and Replace-all-per-line toggles) builds the
+  script for you, or drop straight into the advanced field and write the
+  sed script yourself for anything real sed can do — address ranges,
+  multiple commands, backreferences. Always previews first, as a
+  Name/Line/Excerpt table — one row per changed line, skipped files
+  listed with why — computed in the background with a live "Checking N
+  of M" status; only Apply, behind the same Cancel-preselected
+  confirmation, actually writes, optionally keeping a `.bak` of each
+  original first. Never uses sed's own `-i`: GNU and BSD/macOS sed take
+  incompatible arguments for it, so this always runs sed as a plain
+  filter and writes the result back itself.
+- Three rows below the panel, each with its own job. First, a real
+  shell command line (with its own history, shared
   with your regular shell's `$HISTFILE`, and `cd` handled directly
   rather than uselessly changing a subshell's own directory), which
   expands when clicked into — full width, no prompt, growing upward
@@ -62,15 +94,24 @@ terminal.
   works exactly as it does in a real terminal — the same way Midnight
   Commander's own command line handles every command — no attempt to
   guess which programs need one and which don't. Its own output stays on
-  screen until you press Escape to return, so it doesn't just flash by. Plus
-  quick actions — Edit (`^E`, opens
-  `$VISUAL`/`$EDITOR`, or
+  screen until you press Escape to return, so it doesn't just flash by.
+- A middle row of nano-style quick-action buttons, always visible right
+  below the command line: Edit (`^E`, opens `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
   own pick if set, on the selected file), Look (`^L`, see below), Rename
   (`^R`), toggle hidden files (`^G`), Search (`^F`, see below), Options
-  (`^O`) — alongside the current user, disk usage for the directory on
-  screen, and a clock. Hidden-files/size-format/mtime-format toggles are
+  (`^O`), Move to Trash (`^T`), Remove (`^P`), and Sed Replace (`^S`) —
+  each also reachable from the context menu, and each still working the
+  same way whichever panel or field currently has focus, except while
+  the command line itself is expanded and needs those same keys for its
+  own editing. Hidden-files/size-format/mtime-format toggles are
   remembered across restarts.
+- A bottom row that's purely informational, no buttons on it at all: the
+  current user, disk and inode usage for the directory on screen, the
+  running kernel (`uname -r`), uptime and load average where the
+  platform exposes them (Linux's own `/proc/uptime` and
+  `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong),
+  and a clock.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Settings overlay (`^X` or the
   bottom bar's own button) — no restart needed, and the pick is
@@ -110,8 +151,9 @@ terminal.
 ## Status
 
 Actively developed. The single-panel core above is functional and
-tested; a second panel, a session-scoped trash, and the rest of the
-settings layer beyond color schemes are planned next — see
+tested, trash and Sed Replace included; a second panel and the rest of
+the settings layer beyond color schemes and the trash toggle are
+planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
