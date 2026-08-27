@@ -598,3 +598,55 @@ func TestRightClickUnderExpandedConsoleDoesNotOpenMenu(t *testing.T) {
 		t.Error("right-clicking below the panel's own shrunk bounds (over the expanded console) opened its context menu")
 	}
 }
+
+// TestQuitConfirmBlocksRightDragSelection pins the fix for the user's
+// own direct report ("wenn der quit confirm dialog offen ist, kann man
+// immer noch rumklicken oder den overlay öffnen. dann muss wirklich alle
+// gesperrt sein"): a right-click drag on the panel used to still work —
+// moving focus, toggling checkboxes — even with the quit-confirmation
+// overlay open on top of it, since captureOutsideClick only ever
+// consumed MouseLeftClick/MouseRightClick and scrolling; MouseRightDown,
+// MouseMove, and MouseRightUp — what a genuine drag is actually made of
+// (see dragRight's own doc comment, no MouseRightClick involved at all)
+// — fell through unconsumed straight to Panel.captureMouse underneath.
+//
+// The drag must now have no effect whatsoever while the dialog is open:
+// nothing selected, focus unmoved, dragging never even set. The dialog
+// itself stays open too — a drag produces no Left/RightClick for
+// captureOutsideClick to close it on (see its own doc comment on why
+// only those two actions do).
+func TestQuitConfirmBlocksRightDragSelection(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	if got, _ := root.panel.table.GetSelection(); got != 0 {
+		t.Fatalf("setup: focused row = %d, want 0", got)
+	}
+
+	root.RequestQuit()
+	if root.activePage != quitConfirmPage {
+		t.Fatalf("setup: activePage = %q, want %q", root.activePage, quitConfirmPage)
+	}
+
+	dragRight(t, root, 1, 3)
+
+	for row := 1; row <= 3; row++ {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if root.panel.selected[ref.path] {
+			t.Errorf("row %d (%s) got selected by a drag while the quit-confirmation overlay was open", row, ref.name)
+		}
+	}
+	if root.dragging {
+		t.Error("dragging should never have been set — MouseRightDown should not have reached Panel.captureMouse at all")
+	}
+	if got, _ := root.panel.table.GetSelection(); got != 0 {
+		t.Errorf("focused row = %d after the drag, want still 0 (unmoved)", got)
+	}
+	if root.activePage != quitConfirmPage {
+		t.Errorf("activePage = %q after the drag, want still %q (a drag produces no click to close it on)", root.activePage, quitConfirmPage)
+	}
+}
