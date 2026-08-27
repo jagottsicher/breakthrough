@@ -101,7 +101,9 @@ var helpText = strings.TrimLeft(`
                            cursor as usual; Ctrl+P/Ctrl+N always recall
                            regardless of cursor position
   Tab                      Complete the filename/directory at the cursor
-                           against the panel's own current directory
+                           against the panel's own current directory —
+                           several equally-possible matches show a
+                           scrollable pick list instead of doing nothing
 `, "\n")
 
 // newHelpView builds the Help overlay: a single, scrollable, read-only

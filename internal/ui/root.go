@@ -36,10 +36,20 @@ const (
 // — it keeps several sub-widgets simultaneously visible (see
 // newPropertiesView), so simply refocusing r.properties itself isn't
 // precise enough to land keyboard focus back on the right one.
+//
+// emptyStackFocus is a second, separate override — see
+// pushOverlayReturningFocusTo — for the *other* moment hideOverlay hands
+// out focus: this frame's own close, when it was the last one open. That
+// case has always defaulted to the panel, correct for every overlay that
+// opens *from* the panel (the context menu and everything under it), but
+// not for one that opens from somewhere else — see openCompletionPicker,
+// currently the only user, which opens from bashLine and should hand
+// focus back there, not to the panel, once it's gone.
 type overlayFrame struct {
-	page    string
-	widget  tview.Primitive
-	restore func()
+	page            string
+	widget          tview.Primitive
+	restore         func()
+	emptyStackFocus tview.Primitive
 }
 
 // Root is breakthrough's top-level UI: the directory panel, plus a
@@ -710,10 +720,19 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	}
 }
 
+// pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
+// its own doc comment on overlayFrame) for this one frame — currently
+// only openCompletionPicker's own case.
+func (r *Root) pushOverlayReturningFocusTo(page string, widget, emptyStackFocus tview.Primitive) {
+	r.pushOverlay(page, widget, nil)
+	r.overlayStack[len(r.overlayStack)-1].emptyStackFocus = emptyStackFocus
+}
+
 // hideOverlay closes just the topmost overlay layer, if any, revealing
 // whatever was underneath it — restoring that layer's own focus (see
 // overlayFrame.restore) — or, if that was the only one open, returning
-// focus to the panel.
+// focus to the panel, unless that closing frame itself requested
+// somewhere else instead (see overlayFrame.emptyStackFocus).
 func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		return
@@ -725,7 +744,11 @@ func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
 		r.activeWidget = nil
-		r.app.SetFocus(r.panel)
+		if top.emptyStackFocus != nil {
+			r.app.SetFocus(top.emptyStackFocus)
+		} else {
+			r.app.SetFocus(r.panel)
+		}
 		return
 	}
 

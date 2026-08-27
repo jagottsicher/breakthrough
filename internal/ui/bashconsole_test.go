@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -369,5 +370,165 @@ func TestCompleteBashLineMultiLineTouchesOnlyTheCursorsLine(t *testing.T) {
 	want := "echo hi\ncat banana.txt"
 	if got := r.bashLine.GetText(); got != want {
 		t.Errorf("bashLine text after completeBashLine() = %q, want %q", got, want)
+	}
+}
+
+// TestCompleteBashLineAmbiguousOpensCompletionPicker pins the fix for the
+// user's own direct report: typing "/etc/" and pressing Tab repeatedly
+// did nothing at all, because completions() for "ap" against fixtureDir
+// (apple.txt, apricot.txt, banana.txt, app-data/ — see fixtureDir's own
+// doc comment in panel_test.go) already comes back with "ap" as its own
+// longest common prefix — apple.txt/app-data/ share "app", but
+// apricot.txt only shares "ap" with either (see TestCompleteBashLine's
+// own doc comment), so there's nothing left to extend to, yet 3 matches
+// still remain ambiguous. Instead of a no-op, that now opens the
+// completion picker (see openCompletionPicker) with all 3 candidates —
+// real bash's own "list every option" response to the same situation —
+// rather than requiring an identical second Tab press first.
+func TestCompleteBashLineAmbiguousOpensCompletionPicker(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.bashLine.SetText("ap", true)
+
+	r.completeBashLine()
+
+	if r.activePage != pickerPage {
+		t.Fatalf("activePage = %q, want %q (the completion picker should have opened)", r.activePage, pickerPage)
+	}
+	if got := r.bashLine.GetText(); got != "ap" {
+		t.Errorf("bashLine text should stay unchanged until a candidate is actually picked, got %q", got)
+	}
+
+	var got []string
+	for i := 0; i < r.picker.GetItemCount(); i++ {
+		main, _ := r.picker.GetItemText(i)
+		got = append(got, main)
+	}
+	sort.Strings(got)
+	want := []string{"app-data/", "apple.txt", "apricot.txt"}
+	sort.Strings(want)
+	if len(got) != len(want) {
+		t.Fatalf("picker items = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("picker items = %v, want %v", got, want)
+			break
+		}
+	}
+}
+
+// TestOpenCompletionPickerPickReplacesWordAndReturnsFocusToBashLine pins
+// the fix for the second half of the same report, once the picker itself
+// is open: picking a candidate (Enter, List's own default behavior)
+// replaces exactly the word at start/end with the picked match's full
+// text, closes the picker, and — unlike hideOverlay's own ordinary
+// fallback to the panel once the overlay stack empties (see
+// pushOverlayReturningFocusTo/overlayFrame.emptyStackFocus) — hands focus
+// back to bashLine, not the panel, since that's where this opened from.
+func TestOpenCompletionPickerPickReplacesWordAndReturnsFocusToBashLine(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.bashLine.SetText("foo", true)
+	r.app.SetFocus(r.bashLine)
+
+	r.openCompletionPicker([]string{"foobar", "foobaz"}, 0, 3)
+
+	if r.activePage != pickerPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, pickerPage)
+	}
+	if got := r.picker.GetItemCount(); got != 2 {
+		t.Fatalf("picker item count = %d, want 2", got)
+	}
+	if !r.picker.HasFocus() {
+		t.Error("picker should have keyboard focus while it's open, for arrow-key navigation")
+	}
+
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := r.bashLine.GetText(); got != "foobar" {
+		t.Errorf("bashLine text after picking the first candidate = %q, want %q", got, "foobar")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after picking, want closed", r.activePage)
+	}
+	if !r.bashLine.HasFocus() {
+		t.Error("bashLine should have focus back after picking — not the panel, which hideOverlay's own ordinary fallback would otherwise leave it on")
+	}
+}
+
+// TestOpenCompletionPickerCancelLeavesWordAndReturnsFocusToBashLine pins
+// Escape's behavior: same focus-return fix as the pick case above, but
+// leaving the word untouched, the same as completeBashLine's own no-op
+// paths do.
+func TestOpenCompletionPickerCancelLeavesWordAndReturnsFocusToBashLine(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.bashLine.SetText("foo", true)
+	r.app.SetFocus(r.bashLine)
+
+	r.openCompletionPicker([]string{"foobar", "foobaz"}, 0, 3)
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := r.bashLine.GetText(); got != "foo" {
+		t.Errorf("bashLine text after cancelling = %q, want unchanged %q", got, "foo")
+	}
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after cancelling, want closed", r.activePage)
+	}
+	if !r.bashLine.HasFocus() {
+		t.Error("bashLine should have focus back after cancelling — not the panel")
+	}
+}
+
+// TestCompletionPickerPositionedAboveConsole pins completionPickerPosition
+// directly: the picker's bottom edge should sit exactly on bashConsole's
+// own top edge (so the list appears to grow upward from the console, the
+// same direction the console itself grows on focus), sharing its left
+// edge.
+func TestCompletionPickerPositionedAboveConsole(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.bashConsole.SetRect(0, 12, 80, 12)
+
+	gotX, gotY := r.completionPickerPosition(20, 5)
+	wantX, wantY := 0, 7 // bashConsole's own top (12) minus the requested height (5)
+	if gotX != wantX || gotY != wantY {
+		t.Errorf("completionPickerPosition(20, 5) = (%d,%d), want (%d,%d)", gotX, gotY, wantX, wantY)
+	}
+}
+
+// TestCompletionBasename pins the display-vs-insert split (see
+// openCompletionPicker/completionBasename): a directory's own trailing
+// "/" (see Panel.completions) survives basename extraction — unlike a
+// plain filepath.Base, which would strip it — so a directory stays
+// visually distinguishable from a file in the picker; a bare filename
+// with no directory component at all (matches from completions() run
+// against the panel's own current directory, which prepends nothing) is
+// returned unchanged, having no separator to strip in the first place.
+func TestCompletionBasename(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"/etc/hosts", "hosts"},
+		{"/etc/cron.d/", "cron.d/"},
+		{"apple.txt", "apple.txt"},
+		{"app-data/", "app-data/"},
+	}
+	for _, tt := range tests {
+		if got := completionBasename(tt.in); got != tt.want {
+			t.Errorf("completionBasename(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
