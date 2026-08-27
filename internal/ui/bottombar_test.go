@@ -338,6 +338,8 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 		statusActionSearch:       "^F Find",
 		statusActionOptions:      "^O Options",
 		statusActionHelp:         "F1 Help",
+		statusActionTrash:        "^T Trash",
+		statusActionRemove:       "^P Remove",
 	}
 	found := map[statusBarAction]bool{}
 	for _, s := range spans {
@@ -458,6 +460,40 @@ func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestCaptureStatusBarMouseTrashClickMovesFileToTrash pins the "^T Trash"
+// button (see buildStatusBar/runStatusBarAction) to the same
+// moveSelectionToTrash a right-click menu's "Move to Trash" and Ctrl+T/
+// Entf already run — one action, three ways to reach it.
+func TestCaptureStatusBarMouseTrashClickMovesFileToTrash(t *testing.T) {
+	dir := fixtureDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.refreshStatusBar()
+	r.panel.focusRow(1) // off ".." onto a real entry
+
+	_, target, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("no current row to trash")
+	}
+
+	span, ok := statusBarSpanFor(r, statusActionTrash)
+	if !ok {
+		t.Fatal("no Trash span found")
+	}
+	clickStatusBar(t, r, span.startCol)
+
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after clicking the Trash button (err=%v)", target, err)
+	}
+	if r.activePage == errorPage {
+		t.Errorf("clicking Trash should not report an error here, got: %q", r.errorView.GetText(true))
 	}
 }
 
