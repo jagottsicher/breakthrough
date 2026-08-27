@@ -29,14 +29,16 @@ func newTestRootWithSedFile(t *testing.T, content string) (r *Root, dir, file st
 	return r, dir, file
 }
 
-func sedCheck(t *testing.T, r *Root, label string, checked bool) {
+// sedSetFlag sets one of sedFlagsList's toggles directly by label — the
+// map itself, not simulating a click, since these tests are about what
+// Preview/Apply do with a given flag state, not the click/toggle
+// mechanism (see TestToggleSedFlagUpdatesStateAndLabel for that).
+func sedSetFlag(t *testing.T, r *Root, label string, checked bool) {
 	t.Helper()
-	item := r.sedForm.GetFormItemByLabel(label)
-	cb, ok := item.(*tview.Checkbox)
-	if !ok {
-		t.Fatalf("form item %q is not a checkbox (or missing)", label)
+	if _, ok := r.sedFlags[label]; !ok {
+		t.Fatalf("no such sed flag %q", label)
 	}
-	cb.SetChecked(checked)
+	r.sedFlags[label] = checked
 }
 
 func TestOpenSedReplacePopulatesTargetAndOpensForm(t *testing.T) {
@@ -54,6 +56,35 @@ func TestOpenSedReplacePopulatesTargetAndOpensForm(t *testing.T) {
 		if r.sedForm.GetFormItemByLabel(label) == nil {
 			t.Errorf("form is missing an item labeled %q", label)
 		}
+	}
+}
+
+func TestToggleSedFlagUpdatesStateAndLabel(t *testing.T) {
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+	r.openSedReplace()
+
+	if r.sedFlags[sedLabelRegex] {
+		t.Fatal("setup: Regex should default to false")
+	}
+
+	r.toggleSedFlag(sedLabelRegex)
+	if !r.sedFlags[sedLabelRegex] {
+		t.Error("toggleSedFlag should have flipped Regex to true")
+	}
+	idx := -1
+	for i, label := range sedFlagOrder {
+		if label == sedLabelRegex {
+			idx = i
+		}
+	}
+	main, _ := r.sedFlagsList.GetItemText(idx)
+	if main != sedFlagItemText(sedLabelRegex, true) {
+		t.Errorf("list item text = %q, want %q", main, sedFlagItemText(sedLabelRegex, true))
+	}
+
+	r.toggleSedFlag(sedLabelRegex)
+	if r.sedFlags[sedLabelRegex] {
+		t.Error("toggleSedFlag should have flipped Regex back to false")
 	}
 }
 
@@ -174,7 +205,7 @@ func TestConfirmApplySedWithBackupKeepsOriginal(t *testing.T) {
 	r.openSedReplace()
 	r.sedFindField.SetText("hello")
 	r.sedReplaceField.SetText("goodbye")
-	sedCheck(t, r, sedLabelBackup, true)
+	sedSetFlag(t, r, sedLabelBackup, true)
 	r.runSedPreview()
 
 	r.confirmApplySed()

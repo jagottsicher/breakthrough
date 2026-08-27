@@ -10,9 +10,10 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/replace"
 )
 
-// Checkbox labels, shared between resetSedForm (where they're added) and
-// sedCheckbox (where their state is read back) — constants rather than
-// repeated literals so a typo in one place can't silently desync them.
+// Flag labels, shared between resetSedForm (where sedFlagsList's items
+// are built) and r.sedFlags (where their state is read back) — constants
+// rather than repeated literals so a typo in one place can't silently
+// desync them. sedFlagOrder is the fixed display order.
 const (
 	sedLabelRegex           = "Regex (Find is a pattern, not literal text)"
 	sedLabelExtendedRegex   = "Extended regex (-E)"
@@ -20,6 +21,8 @@ const (
 	sedLabelGlobal          = "Replace all matches per line"
 	sedLabelBackup          = "Keep a .bak backup before overwriting"
 )
+
+var sedFlagOrder = []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup}
 
 // openSedReplace is the context menu's "Sed Replace", and (through
 // SedReplaceShortcut) Ctrl+S's action: opens a dialog to run a real
@@ -35,11 +38,11 @@ func (r *Root) openSedReplace() {
 	r.sedTargets = targets
 	r.resetSedForm()
 
-	// height fits every field/checkbox/button this form actually has
-	// (10 items plus their labels/spacing plus the button row) — checked
-	// against a real render, not guessed; a shorter value silently
-	// clipped the bottom rows, Preview/Cancel included.
-	width, height := 78, 22
+	// height fits sedLayout's three stacked widgets (sedForm's four
+	// fields, sedFlagsList's five toggles, sedActions' two buttons, plus
+	// spacing) — checked against a real render, not guessed; a shorter
+	// value silently clipped the bottom rows.
+	width, height := 78, 17
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -49,14 +52,27 @@ func (r *Root) openSedReplace() {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	r.sedForm.SetRect(x, y, width, height)
-	r.showOverlay(sedReplacePage, r.sedForm)
+	r.sedLayout.SetRect(x, y, width, height)
+	r.showOverlay(sedReplacePage, r.sedLayout)
 }
 
-// newSedForm builds the (initially empty) "Sed Replace" dialog — called
-// once from NewRoot; resetSedForm populates it fresh on every open (see
-// openSedReplace), since tview.Form doesn't lend itself to being reset
-// in place the way a List's own AddItem/SetItemText does.
+// newSedForm builds the (initially empty) "Sed Replace" text-field form
+// — called once from NewRoot; resetSedForm populates it fresh on every
+// open (see openSedReplace), since tview.Form doesn't lend itself to
+// being reset in place the way a List's own AddItem/SetItemText does.
+//
+// Deliberately holds only Target/Find/Replace/the advanced script —
+// none of the flag toggles: tview.Form re-applies one uniform field
+// background to every item it owns on every single Draw call (verified
+// by reading form.go directly, not guessed), so a checkbox added via
+// Form.AddCheckbox can never keep a background different from a real
+// text field's — the checkbox always ends up with the same
+// "you can type here" highlight (FocusedBackground, see applyTheme)
+// real fields get, even though it isn't one. The five flags live in
+// sedFlagsList instead (see newSedFlagsList), the same plain List-item-
+// with-a-relabeling-glyph pattern this app's own context menu already
+// uses for "Hide/Show hidden files" — a List has no such per-item
+// styling fight, since it never forces one color onto every row.
 //
 // No border, matching every other floating widget in this app (see
 // NewRoot's own comment on menu/quitConfirm/purgeConfirm) — a plain
@@ -73,14 +89,14 @@ func (r *Root) newSedForm() *tview.Form {
 	return f
 }
 
-// resetSedForm rebuilds sedForm's fields fresh for the current
-// r.sedTargets. Clear(true) first — Form has no other way to remove
-// everything a previous open's Preview/Cancel buttons and field values
-// left behind.
+// resetSedForm rebuilds sedForm's fields and sedFlagsList's toggles
+// fresh for the current r.sedTargets. Clear(true) first — Form has no
+// other way to remove everything a previous open's field values left
+// behind.
 //
 // The advanced field overrides Find/Replace/Regex/Extended/Case-
 // insensitive/Global entirely once it has anything in it (see
-// runSedPreview) — deliberately not a separate "advanced mode" checkbox
+// runSedPreview) — deliberately not a separate "advanced mode" toggle
 // requiring the form to dynamically show/hide fields (tview.Form has no
 // clean way to do that without rebuilding it anyway, so there is nothing
 // simpler on the other side of that complexity). Extended regex (-E)
@@ -96,32 +112,86 @@ func (r *Root) resetSedForm() {
 	r.sedReplaceField = tview.NewInputField().SetLabel("Replace with")
 	r.sedForm.AddFormItem(r.sedReplaceField)
 
-	r.sedForm.AddCheckbox(sedLabelRegex, false, nil)
-	r.sedForm.AddCheckbox(sedLabelExtendedRegex, false, nil)
-	r.sedForm.AddCheckbox(sedLabelCaseInsensitive, false, nil)
-	r.sedForm.AddCheckbox(sedLabelGlobal, true, nil)
-
 	r.sedAdvancedField = tview.NewInputField().SetLabel("Advanced sed script (overrides Find/Replace above)")
 	r.sedForm.AddFormItem(r.sedAdvancedField)
 
-	r.sedForm.AddCheckbox(sedLabelBackup, false, nil)
-
-	r.sedForm.AddButton("Preview", r.runSedPreview)
-	r.sedForm.AddButton("Cancel", r.hideOverlay)
-
-	r.styleSedCheckboxes()
+	r.sedFlags = map[string]bool{
+		sedLabelRegex:           false,
+		sedLabelExtendedRegex:   false,
+		sedLabelCaseInsensitive: false,
+		sedLabelGlobal:          true,
+		sedLabelBackup:          false,
+	}
+	r.sedFlagsList.Clear()
+	for _, label := range sedFlagOrder {
+		label := label // capture for the closure below
+		r.sedFlagsList.AddItem(sedFlagItemText(label, r.sedFlags[label]), "", 0, func() { r.toggleSedFlag(label) })
+	}
 }
 
-// styleSedCheckboxes swaps every checkbox's default "X" glyph for the
-// outline/filled circle (○/●) this app already uses for the panel's own
-// checkbox column (see checkboxText in panel.go) — one visual language
-// for "this is a boolean toggle" instead of two different ones.
-func (r *Root) styleSedCheckboxes() {
-	for _, label := range []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup} {
-		if cb, ok := r.sedForm.GetFormItemByLabel(label).(*tview.Checkbox); ok {
-			cb.SetCheckedString(checkboxText(true)).SetUncheckedString(checkboxText(false))
+// sedFlagItemText renders one sedFlagsList row: the same outline/filled
+// circle (○/●) this app already uses for the panel's own checkbox
+// column (see checkboxText in panel.go), so a boolean toggle looks the
+// same everywhere in this app rather than switching styles depending on
+// which widget happens to implement it.
+func sedFlagItemText(label string, checked bool) string {
+	return fmt.Sprintf("%s  %s", checkboxText(checked), label)
+}
+
+// toggleSedFlag flips one flag's state and re-renders just that row —
+// the same "selectedFunc flips state, then relabels" shape
+// Root.toggleHidden already uses for the context menu's own toggle.
+func (r *Root) toggleSedFlag(label string) {
+	r.sedFlags[label] = !r.sedFlags[label]
+	for i, l := range sedFlagOrder {
+		if l == label {
+			r.sedFlagsList.SetItemText(i, sedFlagItemText(label, r.sedFlags[label]), "")
+			return
 		}
 	}
+}
+
+// newSedFlagsList builds sedFlagsList once, from NewRoot — see
+// newSedForm's own doc comment for why the five flag toggles live here
+// instead of as Form checkboxes. Repopulated fresh on every open (see
+// resetSedForm), the same as sedForm's own fields.
+func (r *Root) newSedFlagsList() *tview.List {
+	l := tview.NewList().ShowSecondaryText(false)
+	l.SetHighlightFullLine(true)
+	l.SetDoneFunc(r.hideOverlay) // Escape
+	return l
+}
+
+// newSedActions builds sedForm's own action row once, from NewRoot — a
+// List rather than Form.AddButton, purely for consistency with
+// sedFlagsList/sedPreviewActions right above and below it (a Form's own
+// buttons would have worked fine here since buttons aren't checkboxes
+// and don't hit the per-item-background problem newSedForm's own doc
+// comment describes — this is a style choice, not a workaround).
+func (r *Root) newSedActions() *tview.List {
+	l := tview.NewList().ShowSecondaryText(false)
+	l.SetHighlightFullLine(true)
+	l.AddItem("Preview", "", 0, r.runSedPreview)
+	l.AddItem("Cancel", "", 0, r.hideOverlay)
+	l.SetDoneFunc(r.hideOverlay) // Escape
+	return l
+}
+
+// newSedLayout stacks sedForm (Target/Find/Replace/advanced script),
+// sedFlagsList (the five toggles), and sedActions (Preview/Cancel) into
+// the single widget sedReplacePage actually shows — see newSedForm's own
+// doc comment for why the flags live in a separate List rather than as
+// Form checkboxes. Initial focus goes to sedForm: typing Find/Replace
+// immediately, without an extra click first, is the common case:
+// reaching the flags or the buttons instead is one click away, the same
+// as moving between any two of this app's other independent widgets
+// (e.g. panel and bashLine) already is.
+func (r *Root) newSedLayout() *tview.Flex {
+	layout := tview.NewFlex().SetDirection(tview.FlexRow)
+	layout.AddItem(r.sedForm, 8, 0, true)
+	layout.AddItem(r.sedFlagsList, 5, 0, false)
+	layout.AddItem(r.sedActions, 2, 0, false)
+	return layout
 }
 
 // sedTargetsLabel is the form's own "Target" line: the single file's
@@ -136,33 +206,20 @@ func sedTargetsLabel(targets []string) string {
 	return fmt.Sprintf("%d selected files", len(targets))
 }
 
-// sedCheckbox reads one of resetSedForm's own checkboxes back by label —
-// simpler than keeping a separate *tview.Checkbox field per checkbox
-// alongside the input fields that do need one (their typed values, not
-// just a bool, are read directly).
-func (r *Root) sedCheckbox(label string) bool {
-	if item := r.sedForm.GetFormItemByLabel(label); item != nil {
-		if cb, ok := item.(*tview.Checkbox); ok {
-			return cb.IsChecked()
-		}
-	}
-	return false
-}
-
-// runSedPreview is the form's own "Preview" button: builds the sed
-// script (guided fields, or the advanced field verbatim if it has
-// anything in it), runs it read-only against every target via
-// replace.Preview, and shows the result — nothing is written to disk
-// yet, see confirmApplySed for that.
+// runSedPreview is sedActions' own "Preview": builds the sed script
+// (guided fields, or the advanced field verbatim if it has anything in
+// it), runs it read-only against every target via replace.Preview, and
+// shows the result — nothing is written to disk yet, see confirmApplySed
+// for that.
 func (r *Root) runSedPreview() {
-	extendedRegex := r.sedCheckbox(sedLabelExtendedRegex)
+	extendedRegex := r.sedFlags[sedLabelExtendedRegex]
 
 	script := strings.TrimSpace(r.sedAdvancedField.GetText())
 	if script == "" {
 		built, err := replace.BuildScript(
 			r.sedFindField.GetText(), r.sedReplaceField.GetText(),
-			r.sedCheckbox(sedLabelRegex), extendedRegex,
-			r.sedCheckbox(sedLabelCaseInsensitive), r.sedCheckbox(sedLabelGlobal),
+			r.sedFlags[sedLabelRegex], extendedRegex,
+			r.sedFlags[sedLabelCaseInsensitive], r.sedFlags[sedLabelGlobal],
 		)
 		if err != nil {
 			r.showError(err)
@@ -257,25 +314,25 @@ func (r *Root) newSedPreviewLayout() *tview.Flex {
 	return layout
 }
 
-// backToSedForm is Preview's own "Back": returns to sedForm with
-// whatever the user already typed still in place (Clear/reset only
-// happens on a fresh openSedReplace, not here) so a Find/Replace typo
-// spotted in the preview can be fixed without starting over.
+// backToSedForm is Preview's own "Back": returns to sedLayout with
+// whatever the user already typed/toggled still in place (Clear/reset
+// only happens on a fresh openSedReplace, not here) so a Find/Replace
+// typo spotted in the preview can be fixed without starting over.
 func (r *Root) backToSedForm() {
-	r.showOverlay(sedReplacePage, r.sedForm)
+	r.showOverlay(sedReplacePage, r.sedLayout)
 }
 
 // confirmApplySed is Preview's own "Apply": asks first (Cancel
 // preselected — reuses openPurgeConfirm exactly as Remove/Empty Trash
 // already do, see trash.go) before writing anything back, since Sed
 // Replace overwrites originals in place — optionally keeping a .bak,
-// see the form's own checkbox — just as permanently as those.
+// see sedFlagsList's own toggle — just as permanently as those.
 func (r *Root) confirmApplySed() {
 	changes := r.sedPendingChanges
 	if len(changes) == 0 {
 		return
 	}
-	backup := r.sedCheckbox(sedLabelBackup)
+	backup := r.sedFlags[sedLabelBackup]
 
 	note := " Originals will be kept as .bak files."
 	if !backup {
