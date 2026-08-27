@@ -138,6 +138,16 @@ func run() error {
 			}
 			root.TrashShortcut()
 			return nil
+		case tcell.KeyCtrlS:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+T just above - readline-style Ctrl+S is "forward
+			// incremental search" in many shells' own line editing, even
+			// though bashLine itself doesn't implement that.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.SedReplaceShortcut()
+			return nil
 		case tcell.KeyCtrlP:
 			// bashLine's own captureBashLineKey binds Ctrl+P to command-
 			// history recall - falling through here (not consuming the

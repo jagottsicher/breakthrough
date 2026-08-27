@@ -384,6 +384,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		buttonActionHelp:         "F1 Help",
 		buttonActionTrash:        "^T Trash",
 		buttonActionRemove:       "^P Remove",
+		buttonActionSed:          "^S Sed",
 	}
 	found := map[buttonBarAction]bool{}
 	for _, s := range spans {

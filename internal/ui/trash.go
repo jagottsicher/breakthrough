@@ -17,23 +17,6 @@ func (r *Root) trashDir() (string, error) {
 	return session.TrashDir(r.settings.TrashPersistent)
 }
 
-// trashTargets is what "Move to Trash"/"Remove" act on: the current
-// checkbox selection if there is one, otherwise whichever entry the
-// table's cursor is currently on — the same fallback shape
-// clipboardTargets uses for Copy/Cut, but read directly from the panel's
-// cursor instead of r.target, so it also works for the keyboard-shortcut
-// path (Ctrl+T/Entf, Ctrl+P/Ctrl+Delete — see cmd/breakthrough), which
-// never goes through a right-click that would have set r.target at all.
-func (r *Root) trashTargets() []string {
-	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
-		return paths
-	}
-	if _, path, ok := r.panel.CurrentRowPath(); ok {
-		return []string{path}
-	}
-	return nil
-}
-
 // reloadPanel reloads the panel's current directory (the same pasteInto
 // already does after Copy/Cut/Paste) and, if precedingErr is non-nil,
 // surfaces it — precedingErr takes priority since a reload failure is
@@ -54,7 +37,7 @@ func (r *Root) reloadPanel(precedingErr error) {
 // whole, recursively, the same way a plain move always has — there is
 // nothing to warn about since nothing is actually being destroyed yet.
 func (r *Root) moveSelectionToTrash() {
-	targets := r.trashTargets()
+	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
@@ -97,7 +80,7 @@ func (r *Root) openTrash() {
 // one file, one directory (with its real item count), or several targets
 // at once.
 func (r *Root) openRemoveConfirm() {
-	targets := r.trashTargets()
+	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
@@ -154,7 +137,7 @@ func (r *Root) restoreSelectionFromTrash() {
 		r.showError(err)
 		return
 	}
-	targets := r.trashTargets()
+	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
