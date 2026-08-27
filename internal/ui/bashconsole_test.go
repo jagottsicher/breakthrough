@@ -256,3 +256,118 @@ func TestWaitForEscapeReturnsImmediatelyWithoutARealTerminal(t *testing.T) {
 		t.Fatal("waitForEscape did not return promptly without a real terminal")
 	}
 }
+
+// TestFullScreenShellArgsIncludesInteractiveFlag pins the fix for the
+// user's own direct report ("der user sollte auch seine aliase und seine
+// bashrc oder sowas vorher sourced bekommen. aliase wie ll funktionieren
+// sonst nicht"): "-i" must be present so userShell() starts up the same
+// way a real login session would (~/.bashrc sourced, aliases live) — see
+// fullScreenShellArgs's own doc comment for why plain "-c" alone isn't
+// enough.
+func TestFullScreenShellArgsIncludesInteractiveFlag(t *testing.T) {
+	got := fullScreenShellArgs("ll")
+	want := []string{"-i", "-c", "ll"}
+	if len(got) != len(want) {
+		t.Fatalf("fullScreenShellArgs(%q) = %v, want %v", "ll", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("fullScreenShellArgs(%q)[%d] = %q, want %q", "ll", i, got[i], want[i])
+		}
+	}
+}
+
+// TestBashLineTabDoesNotCloseConsoleEndToEnd pins the fix for the user's
+// own direct report ("der bash prompt editor wird geschlossen, wenn man
+// tab drückt"): routed through bashLine's real, wrapped InputHandler (see
+// TestBashLineCtrlJInsertsNewlineEndToEnd's own doc comment on why that
+// matters — SetInputCapture applies before TextArea's own default
+// handling), Tab must never reach TextArea's own default KeyTab case,
+// which — like SetDisabled once did, see runShellCommandFullScreen's own
+// history — calls SetFinishedFunc and collapses the console. Also
+// confirms the word at the cursor was completed along the way, i.e. that
+// this exercises completeBashLine itself and not just the interception.
+func TestBashLineTabDoesNotCloseConsoleEndToEnd(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.app.SetFocus(r.bashLine)
+	if !r.bashLine.HasFocus() {
+		t.Fatal("setup: bashLine should have focus")
+	}
+	r.bashLine.SetText("ban", true)
+
+	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if !r.bashLine.HasFocus() {
+		t.Error("Tab should not return focus to the panel (and so should not collapse the console) — it should complete instead")
+	}
+	if got := r.bashLine.GetText(); got != "banana.txt" {
+		t.Errorf("bashLine text after Tab = %q, want %q (completed, not left alone or run)", got, "banana.txt")
+	}
+}
+
+// TestCompleteBashLine pins completeBashLine's own matching behavior
+// directly against fixtureDir's known entries (apple.txt, apricot.txt,
+// banana.txt, app-data/ — see fixtureDir's own doc comment in
+// panel_test.go): a single match completes fully, several matches
+// complete only as far as they agree (the same completions/
+// longestCommonPrefix logic the path header's own Tab already uses, see
+// Panel.completePath), and no match leaves the typed text alone. "a"
+// completes to "ap" rather than further: apple.txt and app-data/ share
+// "app", but apricot.txt (also "a"-prefixed) only shares "ap" with
+// either, so "ap" is as far as all three can agree.
+func TestCompleteBashLine(t *testing.T) {
+	dir := fixtureDir(t)
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"single match completes fully", "cat ban", "cat banana.txt"},
+		{"several matches complete to their common prefix", "cat a", "cat ap"},
+		{"no match leaves the text alone", "zzz", "zzz"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			r.bashLine.SetText(tt.in, true) // cursor at the end, i.e. right after the word to complete
+
+			r.completeBashLine()
+
+			if got := r.bashLine.GetText(); got != tt.want {
+				t.Errorf("bashLine text after completeBashLine() on %q = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCompleteBashLineMultiLineTouchesOnlyTheCursorsLine pins Replace's
+// own absolute-offset addressing (see completeBashLine's own doc comment)
+// against a multi-line buffer (composed via Ctrl+J/Alt+Enter, see
+// captureBashLineKey): completing a word on a later line must account for
+// every earlier line's own length, or it lands in the wrong place — and
+// must never touch any line but the cursor's own.
+func TestCompleteBashLineMultiLineTouchesOnlyTheCursorsLine(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.bashLine.SetText("echo hi\ncat ban", true) // cursor at the very end, on the second line
+
+	r.completeBashLine()
+
+	want := "echo hi\ncat banana.txt"
+	if got := r.bashLine.GetText(); got != want {
+		t.Errorf("bashLine text after completeBashLine() = %q, want %q", got, want)
+	}
+}
