@@ -91,6 +91,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 
 	r.bashLine.SetBackgroundColor(theme.AccentBackground)
 	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
+	r.bashHint.SetBackgroundColor(theme.AccentBackground)
+	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
 	r.statusBar.SetBackgroundColor(theme.AccentBackground)
 	r.statusBar.SetTextColor(theme.Text)
 

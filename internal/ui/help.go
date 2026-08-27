@@ -83,13 +83,19 @@ var helpText = strings.TrimLeft(`
 
 [::b]Bash line[::-]
 
-  Click to expand         Grows upward toward mid-screen while focused,
+  Click to expand         Grows upward toward mid-screen while focused
+                           (a legend of these same keys shows above it),
                            collapses back to one row on Escape/click away
-  Enter                    Run the buffer (a real terminal, briefly, for
-                           every command, the same as Midnight Commander's
-                           own command line)
+  Enter                    Run the buffer — a real terminal, for every
+                           command, the same as Midnight Commander's own
+                           command line. Once it's done, press Escape to
+                           return (its own output stays on screen to read
+                           until then)
   Alt+Enter                Insert a newline (compose a multi-line script)
-  Ctrl+P / Ctrl+N          Recall the previous/next command from history
+  Up / Down or             Recall the previous/next command from history
+  Ctrl+P / Ctrl+N          — Up/Down only at the first/last line of a
+                           multi-line buffer, otherwise they move the
+                           cursor as usual; Ctrl+P/Ctrl+N always recall
 `, "\n")
 
 // newHelpView builds the Help overlay: a single, scrollable, read-only

@@ -248,28 +248,33 @@ type Root struct {
 	searchLastDir    string
 	searchStartDir   string
 
-	// mainLayout wraps panel, bashLine, and statusBar into the vertical
-	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
-	// still owns its own rect the same way it always has (clampToPanel
-	// and everything else reading panel.GetInnerRect() is unaffected),
-	// just resized to leave the bottom rows free.
+	// mainLayout wraps panel, bashConsole, and statusBar into the
+	// vertical stack registered as panelPage (see newBottomBar/NewRoot)
+	// — panel still owns its own rect the same way it always has
+	// (clampToPanel and everything else reading panel.GetInnerRect() is
+	// unaffected), just resized to leave the bottom rows free.
 	mainLayout *tview.Flex
 
-	// bashLine is the second-to-last row: a multi-line shell command/
-	// script editor (see bashconsole.go) that grows upward on focus (see
-	// expandBashConsole) so a longer script stays visible while it's
-	// being written, back to a single row on blur (see
-	// collapseBashConsole). Every command runs full-screen, via a real
-	// terminal (see runShellCommandFullScreen) — see newBashConsole's
-	// own doc comment on why this doesn't try to distinguish which
-	// commands "need" that. Pasting into bashLine works because
-	// cmd/breakthrough enables tview's bracketed-paste support
-	// (Application.EnablePaste), not anything Root itself does.
+	// bashConsole is the second-to-last row: bashLine, a multi-line
+	// shell command/script editor, plus bashHint, a single-row,
+	// non-editable legend spelling out its own keybindings (see
+	// bashconsole.go) — both wrapped in their own nested Flex so the
+	// pair can grow together (see expandBashConsole) without disturbing
+	// mainLayout's own three-row split. Collapsed to a single row (just
+	// bashLine, bashHint hidden) until bashLine gains focus. Every
+	// command runs full-screen, via a real terminal (see
+	// runShellCommandFullScreen) — see newBashConsole's own doc comment
+	// on why this doesn't try to distinguish which commands "need"
+	// that. Pasting into bashLine works because cmd/breakthrough
+	// enables tview's bracketed-paste support (Application.EnablePaste),
+	// not anything Root itself does.
 	//
 	// statusBar is the last row: user/disk-usage/quick-action buttons/
 	// clock (see buildStatusBar), with statusBarSpans locating each
 	// button the same way propertySpans do for Properties.
+	bashConsole    *tview.Flex
 	bashLine       *tview.TextArea
+	bashHint       *tview.TextView
 	statusBar      *tview.TextView
 	statusBarSpans []statusBarSpan
 
@@ -617,14 +622,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// mainLayout stacks the panel above the two new bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
-	// own "focus" parameter); bashLine/statusBar are each pinned to
+	// own "focus" parameter); bashConsole/statusBar are each pinned to
 	// exactly one row (1, 0) and never auto-focused — reaching bashLine
 	// is a deliberate click, not something Tab should stumble into.
-	// bashLine's own row grows past that single row once it's actually
-	// focused (see expandBashConsole/collapseBashConsole).
+	// bashConsole's own row grows past that single row once bashLine is
+	// actually focused (see expandBashConsole/collapseBashConsole).
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(panel, 0, 1, true)
-	r.mainLayout.AddItem(r.bashLine, 1, 0, false)
+	r.mainLayout.AddItem(r.bashConsole, 1, 0, false)
 	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
 
 	r.AddPage(panelPage, r.mainLayout, true, true)
