@@ -1,8 +1,13 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -206,120 +211,314 @@ func sedTargetsLabel(targets []string) string {
 	return fmt.Sprintf("%d selected files", len(targets))
 }
 
-// runSedPreview is sedActions' own "Preview": builds the sed script
-// (guided fields, or the advanced field verbatim if it has anything in
-// it), runs it read-only against every target via replace.Preview, and
-// shows the result — nothing is written to disk yet, see confirmApplySed
-// for that.
-func (r *Root) runSedPreview() {
-	extendedRegex := r.sedFlags[sedLabelExtendedRegex]
+// buildSedScript resolves what script/extendedRegex runSedPreview
+// should actually run: the advanced field verbatim if it has anything
+// in it (see resetSedForm's own doc comment on why Extended regex still
+// applies even then), otherwise built from the guided Find/Replace
+// fields and flags (see replace.BuildScript).
+//
+// Split out from runSedPreview so it's testable synchronously, without
+// needing to synchronize with runSedPreview's own background goroutine
+// (see sedPreviewFunc's own doc comment on why that part isn't tested
+// the same direct way).
+func (r *Root) buildSedScript() (script string, extendedRegex bool, err error) {
+	extendedRegex = r.sedFlags[sedLabelExtendedRegex]
 
-	script := strings.TrimSpace(r.sedAdvancedField.GetText())
-	if script == "" {
-		built, err := replace.BuildScript(
-			r.sedFindField.GetText(), r.sedReplaceField.GetText(),
-			r.sedFlags[sedLabelRegex], extendedRegex,
-			r.sedFlags[sedLabelCaseInsensitive], r.sedFlags[sedLabelGlobal],
-		)
-		if err != nil {
-			r.showError(err)
-			return
-		}
-		script = built
+	script = strings.TrimSpace(r.sedAdvancedField.GetText())
+	if script != "" {
+		return script, extendedRegex, nil
 	}
 
-	changes, skipped, err := replace.Preview(r.sedTargets, script, extendedRegex)
+	script, err = replace.BuildScript(
+		r.sedFindField.GetText(), r.sedReplaceField.GetText(),
+		r.sedFlags[sedLabelRegex], extendedRegex,
+		r.sedFlags[sedLabelCaseInsensitive], r.sedFlags[sedLabelGlobal],
+	)
+	return script, extendedRegex, err
+}
+
+// sedPreviewFunc is replace.Preview, a package-level var so tests can
+// override it — the same reasoning search.go's own searchRun var has:
+// runSedPreview's real path runs this in a goroutine and reports back
+// through Application.QueueUpdateDraw, which nothing drains in a test
+// that never calls Application.Run — see showSedPreviewResult, split
+// out separately so the result-handling behavior is still directly
+// testable without needing that real event loop.
+var sedPreviewFunc = replace.Preview
+
+// runSedPreview is sedActions' own "Preview": builds the sed script
+// (guided fields, or the advanced field verbatim if it has anything in
+// it) and runs it read-only, in the background, against every target —
+// nothing is written to disk yet, see confirmApplySed for that. Shows
+// the preview screen immediately with an animated "processing" status
+// (see animateSedPreviewProgress) rather than blocking the UI until a
+// (possibly large) file has been read and sedded, the same reasoning
+// runSearch's own progress animation exists for.
+func (r *Root) runSedPreview() {
+	script, extendedRegex, err := r.buildSedScript()
 	if err != nil {
 		r.showError(err)
 		return
 	}
-	r.sedPendingChanges = changes
 
-	r.sedPreviewView.SetText(formatSedPreview(changes, skipped))
-	r.sedPreviewView.ScrollToBeginning()
+	r.cancelSedPreview() // stop an earlier run still in flight, if any
+	ctx, cancel := context.WithCancel(context.Background())
+	r.sedPreviewCancel = cancel
+
+	targets := r.sedTargets
+	r.sedPreviewTotal = len(targets)
+	r.sedPreviewProcessed = 0
+	r.sedPreviewAnimFrame = 0
+	r.sedPreviewCurrentPos = ""
+	r.renderSedPreviewStatus()
+	r.sedPreviewTable.Clear()
 	r.showOverlay(sedPreviewPage, r.sedPreviewLayout)
+
+	go r.animateSedPreviewProgress(ctx)
+	// Snapshotting the var here, on the calling goroutine, rather than
+	// reading sedPreviewFunc directly inside the goroutine below: a test
+	// overriding it (see isolateSedPreviewFunc) restores the original via
+	// t.Cleanup as soon as the test function returns, which can easily
+	// race with this goroutine still running past that point — reading
+	// the var exactly once, before the goroutine starts, avoids the race
+	// entirely rather than needing to synchronize the two.
+	preview := sedPreviewFunc
+	go func() {
+		changes, skipped, err := preview(targets, script, extendedRegex, func(path string) {
+			r.app.QueueUpdateDraw(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				r.sedPreviewProcessed++
+				r.sedPreviewCurrentPos = path
+				r.renderSedPreviewStatus()
+			})
+		})
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.cancelSedPreview()
+			r.showSedPreviewResult(changes, skipped, err)
+		})
+	}()
 }
 
-// formatSedPreview renders Preview's own result as a scrollable summary:
-// each changed file with a simple positional comparison of its before/
-// after lines, then every skipped input with its reason.
-//
-// The line comparison is deliberately simple — index-for-index, not a
-// real diff algorithm: a sed script that inserts or deletes whole lines
-// shifts every following line out of alignment, which shows up here as
-// every one of them looking "changed" even where only their position
-// moved. Good enough to spot-check an ordinary substitution; not a
-// substitute for understanding what an advanced script that adds/
-// removes lines outright actually does.
-func formatSedPreview(changes []replace.FileChange, skipped map[string]string) string {
-	var b strings.Builder
-
-	if len(changes) == 0 {
-		b.WriteString("No files would change.\n\n")
+// cancelSedPreview stops whatever sedPreviewFunc call is currently in
+// flight, if any, and its paired animateSedPreviewProgress ticker (both
+// share the same ctx/sedPreviewCancel) — the same shape cancelSearch
+// already has, so a slow preview started by an earlier, already-closed
+// dialog never keeps updating a screen the user has moved on from.
+func (r *Root) cancelSedPreview() {
+	if r.sedPreviewCancel != nil {
+		r.sedPreviewCancel()
+		r.sedPreviewCancel = nil
 	}
+}
+
+// animateSedPreviewProgress advances sedPreviewAnimFrame every
+// hashAnimationInterval until ctx is done — the same ticker-driven "in
+// progress" animation animateSearchProgress/animateHashProgress already
+// use, reusing hashAnimationFrames directly rather than a second,
+// separately-defined set of frames.
+func (r *Root) animateSedPreviewProgress(ctx context.Context) {
+	ticker := time.NewTicker(hashAnimationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
+			r.app.QueueUpdateDraw(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				r.sedPreviewAnimFrame++
+				r.renderSedPreviewStatus()
+			})
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// renderSedPreviewStatus paints sedPreviewStatus's one line while a
+// preview is still running: the current animation frame, how many of
+// the targets have been looked at so far, and whichever one is current
+// — the "Zeilenzahl als Indikator" the user asked for, the same
+// "N of M, here's where" shape renderSearchStatus already reports for a
+// live search.
+func (r *Root) renderSedPreviewStatus() {
+	frame := hashAnimationFrames[r.sedPreviewAnimFrame%len(hashAnimationFrames)]
+	text := fmt.Sprintf("%s Checking %d of %d: %s", frame, r.sedPreviewProcessed, r.sedPreviewTotal, tview.Escape(r.sedPreviewCurrentPos))
+	r.sedPreviewStatus.SetText(text)
+}
+
+// showSedPreviewResult renders sedPreviewFunc's own outcome. A bad sed
+// script fails identically for every file (see replace.Preview's own
+// doc comment), so that error closes the dialog and reports it via
+// showError rather than showing an empty table; otherwise populates
+// sedPreviewTable (see renderSedPreviewTable) and remembers changes for
+// confirmApplySed.
+//
+// Split out from runSedPreview specifically so it's callable directly,
+// without needing a real Application event loop to drain
+// QueueUpdateDraw first — see sedPreviewFunc's own doc comment.
+func (r *Root) showSedPreviewResult(changes []replace.FileChange, skipped map[string]string, err error) {
+	if err != nil {
+		r.hideOverlay()
+		r.showError(err)
+		return
+	}
+	r.sedPendingChanges = changes
+	r.renderSedPreviewTable(changes, skipped)
+}
+
+// sedPreviewRow is one line sedPreviewTable actually shows — either one
+// changed line within a file (name/line/excerpt all real), a summary row
+// for a file that changed without any single line lining up positionally
+// (see sedPreviewRows' own doc comment), or a skipped input (line "-",
+// excerpt explaining why).
+type sedPreviewRow struct {
+	name, line, excerpt string
+	skipped             bool
+}
+
+// sedPreviewRows computes sedPreviewTable's own rows from Preview's
+// result — kept as a pure function, separate from actually populating
+// the tview.Table, so the row content itself is testable without a
+// screen (see TestSedPreviewRows).
+//
+// The per-line comparison is deliberately simple — index-for-index, not
+// a real diff algorithm: a sed script that inserts or deletes whole
+// lines shifts every following line out of alignment, which would show
+// up here as every one of them looking "changed" even where only their
+// position moved. A file whose line count changed, or where nothing
+// lines up at the same position at all (a multi-line substitution),
+// gets one summary row instead of a misleading line-by-line dump.
+//
+// Skipped entries are sorted by path — map iteration order isn't
+// stable, and the table should look the same across two runs of an
+// otherwise-identical preview.
+func sedPreviewRows(changes []replace.FileChange, skipped map[string]string) []sedPreviewRow {
+	var rows []sedPreviewRow
 	for _, c := range changes {
+		name := filepath.Base(c.Path)
 		beforeLines := strings.Split(string(c.Before), "\n")
 		afterLines := strings.Split(string(c.After), "\n")
 
-		fmt.Fprintf(&b, "[::b]%s[::-]\n", tview.Escape(c.Path))
-
-		n := len(beforeLines)
-		if len(afterLines) < n {
-			n = len(afterLines)
+		if len(beforeLines) != len(afterLines) {
+			rows = append(rows, sedPreviewRow{
+				name: name, line: "-",
+				excerpt: fmt.Sprintf("(line count changed: %d -> %d)", len(beforeLines), len(afterLines)),
+			})
+			continue
 		}
+
 		shown := 0
-		for i := 0; i < n; i++ {
-			if beforeLines[i] == afterLines[i] {
+		for i, before := range beforeLines {
+			if before == afterLines[i] {
 				continue
 			}
-			fmt.Fprintf(&b, "  %d: [red]- %s[-]\n      [green]+ %s[-]\n", i+1, tview.Escape(beforeLines[i]), tview.Escape(afterLines[i]))
+			rows = append(rows, sedPreviewRow{name: name, line: strconv.Itoa(i + 1), excerpt: afterLines[i]})
 			shown++
 		}
-		if len(beforeLines) != len(afterLines) {
-			fmt.Fprintf(&b, "  (line count changed: %d -> %d)\n", len(beforeLines), len(afterLines))
-		} else if shown == 0 {
-			b.WriteString("  (changed, but no single line differs at the same position)\n")
+		if shown == 0 {
+			rows = append(rows, sedPreviewRow{name: name, line: "-", excerpt: "(changed, but no single line differs at the same position)"})
 		}
-		b.WriteString("\n")
 	}
 
-	if len(skipped) > 0 {
-		b.WriteString("Skipped:\n")
-		for path, reason := range skipped {
-			fmt.Fprintf(&b, "  %s (%s)\n", tview.Escape(path), tview.Escape(reason))
-		}
+	paths := make([]string, 0, len(skipped))
+	for path := range skipped {
+		paths = append(paths, path)
 	}
-	return b.String()
+	sort.Strings(paths)
+	for _, path := range paths {
+		rows = append(rows, sedPreviewRow{name: filepath.Base(path), line: "-", excerpt: "skipped: " + skipped[path], skipped: true})
+	}
+	return rows
+}
+
+// renderSedPreviewTable fills sedPreviewTable (Name/Line/Excerpt,
+// header fixed via SetFixed so it never scrolls away) from
+// sedPreviewRows — the "looks like the Find results" layout the user
+// asked for, replacing the earlier free-form text summary.
+func (r *Root) renderSedPreviewTable(changes []replace.FileChange, skipped map[string]string) {
+	r.sedPreviewTable.Clear()
+
+	header := func(col int, text string) {
+		r.sedPreviewTable.SetCell(0, col, tview.NewTableCell(text).
+			SetTextColor(r.theme.Text).SetAttributes(tcell.AttrBold).SetSelectable(false))
+	}
+	header(0, "Name")
+	header(1, "Line")
+	header(2, "Excerpt")
+	r.sedPreviewTable.SetFixed(1, 0)
+
+	rows := sedPreviewRows(changes, skipped)
+	for i, row := range rows {
+		color := r.theme.Text
+		if row.skipped {
+			color = r.theme.PlaceholderText // dimmer, same role it already has elsewhere
+		}
+		r.sedPreviewTable.SetCell(i+1, 0, tview.NewTableCell(row.name).SetTextColor(color))
+		r.sedPreviewTable.SetCell(i+1, 1, tview.NewTableCell(row.line).SetTextColor(color))
+		r.sedPreviewTable.SetCell(i+1, 2, tview.NewTableCell(row.excerpt).SetTextColor(color))
+	}
+
+	if len(rows) == 0 {
+		r.sedPreviewTable.SetCell(1, 0, tview.NewTableCell("No files would change.").SetTextColor(r.theme.PlaceholderText).SetSelectable(false))
+	}
+	r.sedPreviewTable.ScrollToBeginning()
+
+	r.sedPreviewStatus.SetText(fmt.Sprintf("%d file(s) changed, %d skipped", len(changes), len(skipped)))
 }
 
 // newSedPreviewLayout builds Preview's own result screen once, from
-// NewRoot: a scrollable read-only summary (see formatSedPreview/
-// runSedPreview) with Apply/Back/Cancel below it — the same three-choice
-// shape purgeConfirm already has, just paired with a TextView instead of
-// being one on its own, since the summary itself can run to many lines.
+// NewRoot: a one-line status (progress while running, a summary once
+// done — see renderSedPreviewStatus/renderSedPreviewTable), the
+// Name/Line/Excerpt table itself, and Apply/Back/Cancel below it — the
+// same three-choice shape purgeConfirm already has.
 func (r *Root) newSedPreviewLayout() *tview.Flex {
-	r.sedPreviewView = tview.NewTextView()
-	r.sedPreviewView.SetDynamicColors(true)
+	r.sedPreviewStatus = tview.NewTextView()
+
+	r.sedPreviewTable = tview.NewTable()
+	r.sedPreviewTable.SetSelectable(true, false)
 
 	r.sedPreviewActions = tview.NewList().ShowSecondaryText(false)
 	r.sedPreviewActions.SetHighlightFullLine(true)
 	r.sedPreviewActions.AddItem("Apply", "", 0, r.confirmApplySed)
 	r.sedPreviewActions.AddItem("Back", "", 0, r.backToSedForm)
-	r.sedPreviewActions.AddItem("Cancel", "", 0, r.hideOverlay)
-	r.sedPreviewActions.SetDoneFunc(r.hideOverlay) // Escape
+	r.sedPreviewActions.AddItem("Cancel", "", 0, r.closeSedPreview)
+	r.sedPreviewActions.SetDoneFunc(r.backToSedForm) // Esc back to Sed, like the search results' own Esc
 
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.sedPreviewView, 0, 1, false)
+	layout.AddItem(r.sedPreviewStatus, 1, 0, false)
+	layout.AddItem(r.sedPreviewTable, 0, 1, false)
 	layout.AddItem(r.sedPreviewActions, 3, 0, true)
 	return layout
 }
 
-// backToSedForm is Preview's own "Back": returns to sedLayout with
-// whatever the user already typed/toggled still in place (Clear/reset
-// only happens on a fresh openSedReplace, not here) so a Find/Replace
-// typo spotted in the preview can be fixed without starting over.
+// backToSedForm is Preview's own "Back" (and Escape — see
+// newSedPreviewLayout): stops any preview computation still running
+// (see cancelSedPreview) and returns to sedLayout with whatever the user
+// already typed/toggled still in place (Clear/reset only happens on a
+// fresh openSedReplace, not here) so a Find/Replace typo spotted in the
+// preview can be fixed without starting over.
 func (r *Root) backToSedForm() {
+	r.cancelSedPreview()
 	r.showOverlay(sedReplacePage, r.sedLayout)
+}
+
+// closeSedPreview is Preview's own "Cancel": stops any preview
+// computation still running (see cancelSedPreview — without this, a
+// slow preview finishing after the user already navigated away would
+// still fire its completion callback and repopulate a table nobody is
+// looking at any more) and closes the dialog entirely, unlike Back.
+func (r *Root) closeSedPreview() {
+	r.cancelSedPreview()
+	r.hideOverlay()
 }
 
 // confirmApplySed is Preview's own "Apply": asks first (Cancel

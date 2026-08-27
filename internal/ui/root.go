@@ -140,15 +140,29 @@ type Root struct {
 	sedLayout        *tview.Flex
 	sedTargets       []string
 
-	// sedPreviewView/sedPreviewActions/sedPreviewLayout show Preview's
-	// own dry-run result (runSedPreview) — a scrollable, read-only
-	// summary next to Apply/Back/Cancel, the same three-choice shape
-	// purgeConfirm already has. sedPendingChanges is what confirmApplySed
-	// actually writes if the user goes on to confirm.
-	sedPreviewView    *tview.TextView
-	sedPreviewActions *tview.List
-	sedPreviewLayout  *tview.Flex
-	sedPendingChanges []replace.FileChange
+	// sedPreviewStatus/sedPreviewTable/sedPreviewActions/sedPreviewLayout
+	// show Preview's own dry-run result (runSedPreview): a one-line
+	// status (progress while running, a summary once done), the actual
+	// Name/Line/Excerpt table (see sedPreviewRows), and Apply/Back/
+	// Cancel — the same three-choice shape purgeConfirm already has.
+	// sedPendingChanges is what confirmApplySed actually writes if the
+	// user goes on to confirm.
+	//
+	// sedPreviewCancel/sedPreviewAnimFrame/sedPreviewProcessed/
+	// sedPreviewTotal/sedPreviewCurrentPos back the live progress
+	// animation (see animateSedPreviewProgress/renderSedPreviewStatus) —
+	// the same shape searchCancel/searchAnimFrame and friends already
+	// have for a live search.
+	sedPreviewStatus     *tview.TextView
+	sedPreviewTable      *tview.Table
+	sedPreviewActions    *tview.List
+	sedPreviewLayout     *tview.Flex
+	sedPendingChanges    []replace.FileChange
+	sedPreviewCancel     context.CancelFunc
+	sedPreviewAnimFrame  int
+	sedPreviewProcessed  int
+	sedPreviewTotal      int
+	sedPreviewCurrentPos string
 
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
