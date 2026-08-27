@@ -11,9 +11,9 @@ import (
 )
 
 // TestContextMenuStructure pins the menu's grouping: Properties/Edit/
-// Rename, then a "Selection" section, a "Commands" section, and a
-// "Globals" section, in that order — the shape Root.NewRoot builds it
-// in.
+// Look/Tail -f/Rename, then a "Selection" section, a "Commands" section,
+// a "Delete" section, and a "Globals" section, in that order — the shape
+// Root.NewRoot builds it in.
 func TestContextMenuStructure(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -22,11 +22,13 @@ func TestContextMenuStructure(t *testing.T) {
 	}
 
 	want := []string{
-		"Properties", "Edit", "Rename",
+		"Properties", "Edit", "Look", "Tail -f", "Rename",
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
-		"Copy", "Cut", "Paste", "chown", "chmod",
+		"Copy", "Cut", "Paste", "chown", "chmod", "Sed Replace",
+		menuSectionLabel("Delete"),
+		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Globals"),
 		"Hide hidden files",       // dotfiles are shown by default now
 		"Show size in bytes",      // human-readable is the default

@@ -35,6 +35,14 @@ type Theme struct {
 	ErrorBackground string `json:"error_background"`
 	// SelectionBackground highlights the panel's currently selected row.
 	SelectionBackground string `json:"selection_background"`
+	// DirectoryBackground highlights an entry's own name — not the
+	// trailing "/" beside it, nor a symlink's " -> target" arrow, nor the
+	// rest of the row — whenever Enter navigates into it: directories,
+	// symlinks to directories, mount points, and ".." itself (see
+	// rowRef.isDir in internal/ui). So "Downloads/" shows the highlight
+	// only on "Downloads", and a directory symlink like "pictures ->
+	// /home/jens/Pictures" shows it only on "pictures".
+	DirectoryBackground string `json:"directory_background"`
 
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
@@ -51,6 +59,48 @@ type Theme struct {
 	EntryNormal     string `json:"entry_normal"`
 	EntryExecutable string `json:"entry_executable"`
 	EntryError      string `json:"entry_error"`
+	// EntrySymlink colors a working symlink that resolves to a plain
+	// file — not a directory symlink, which DirectoryBackground already
+	// marks, and not a broken one, which stays EntryError.
+	EntrySymlink string `json:"entry_symlink"`
+	// EntrySpecial colors the four rarer filesystem entry types a
+	// listing can contain: sockets, FIFOs, and character/block devices
+	// (see fsops.EntryType) — one color for all four, the same way
+	// DirectoryBackground covers several related EntryTypes with one
+	// color, since none of them is a file whose content you'd normally
+	// open or edit the way EntryNormal/EntryExecutable/EntrySymlink
+	// entries are.
+	EntrySpecial string `json:"entry_special"`
+	// EntryUnreadable colors an entry the invoking user can't actually
+	// read — a permission-denied file, or a directory they can't list —
+	// per fsops.Entry.Unreadable (see its own doc comment on how that's
+	// determined). Deliberately not EntryError's own bright red: that
+	// color already means "broken symlink", a different, more specific
+	// problem, and reads too close to DirectoryBackground's own gold to
+	// stay legible on an unreadable directory's name specifically. A
+	// darker red than EntryError, per the user's own explicit request
+	// and hex value — but not so dark it disappears against the plain
+	// (non-directory) background an unreadable file's own name sits on.
+	EntryUnreadable string `json:"entry_unreadable"`
+	// EntryArchive colors a file whose name matches a recognized
+	// archive/compression extension (see isArchiveName in internal/ui) —
+	// a purely visual "you can probably search inside this" cue,
+	// deliberately not tied to which formats internal/search's own
+	// Include Archives option can actually search (see
+	// archiveHighlightExtensions' own doc comment on why that list is
+	// broader). Never applied to a directory, even one literally named
+	// like an archive (e.g. "backup.tar.gz/"): DirectoryBackground
+	// already marks it as a folder, and it isn't actually an archive.
+	EntryArchive string `json:"entry_archive"`
+	// EntryHidden colors a dotfile/dotdir's name — anything starting
+	// with "." except ".." itself, which DirectoryBackground already
+	// marks and isn't "hidden" in spirit — a dimmer shade so it recedes
+	// a little against the ordinary listing. Checked last, after every
+	// other Entry* case (see entryColor in internal/ui): a hidden entry
+	// that's also broken/unreadable/special/an archive/a symlink/
+	// executable keeps that color instead, since those all say something
+	// more specific and more worth noticing than "this is a dotfile".
+	EntryHidden string `json:"entry_hidden"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -60,6 +110,7 @@ type ResolvedTheme struct {
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
 	SelectionBackground tcell.Color
+	DirectoryBackground tcell.Color
 
 	Text               tcell.Color
 	EditableBackground tcell.Color
@@ -68,6 +119,11 @@ type ResolvedTheme struct {
 	EntryNormal     tcell.Color
 	EntryExecutable tcell.Color
 	EntryError      tcell.Color
+	EntrySymlink    tcell.Color
+	EntrySpecial    tcell.Color
+	EntryUnreadable tcell.Color
+	EntryArchive    tcell.Color
+	EntryHidden     tcell.Color
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -81,6 +137,7 @@ func DefaultTheme() Theme {
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
 		SelectionBackground: "darkcyan",
+		DirectoryBackground: "darkgoldenrod",
 
 		Text:               "white",
 		EditableBackground: "slategray",
@@ -89,6 +146,11 @@ func DefaultTheme() Theme {
 		EntryNormal:     "white",
 		EntryExecutable: "green",
 		EntryError:      "red",
+		EntrySymlink:    "aqua",
+		EntrySpecial:    "orange",
+		EntryUnreadable: "#ad0000",
+		EntryArchive:    "fuchsia",
+		EntryHidden:     "dimgray",
 	}
 }
 
@@ -113,6 +175,7 @@ func (t Theme) Resolve() ResolvedTheme {
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		SelectionBackground: resolve(t.SelectionBackground, def.SelectionBackground),
+		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),
@@ -121,6 +184,11 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntryNormal:     resolve(t.EntryNormal, def.EntryNormal),
 		EntryExecutable: resolve(t.EntryExecutable, def.EntryExecutable),
 		EntryError:      resolve(t.EntryError, def.EntryError),
+		EntrySymlink:    resolve(t.EntrySymlink, def.EntrySymlink),
+		EntrySpecial:    resolve(t.EntrySpecial, def.EntrySpecial),
+		EntryUnreadable: resolve(t.EntryUnreadable, def.EntryUnreadable),
+		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
+		EntryHidden:     resolve(t.EntryHidden, def.EntryHidden),
 	}
 }
 

@@ -14,58 +14,62 @@ import (
 	"github.com/rivo/tview"
 )
 
-// statusBarAction identifies one clickable region in the status bar (see
-// statusBarSpan/buildStatusBar) — the bottom bar's own equivalent of
+// buttonBarAction identifies one clickable region in the button bar (see
+// buttonBarSpan/buildButtonBar) — the bottom bar's own equivalent of
 // headerSpan/propertySpan, the same hand-rolled span-tracking pattern
 // used everywhere else in this codebase for a line with several
 // distinct click targets, rather than tview's own region/Highlight
 // mechanism.
-type statusBarAction int
+type buttonBarAction int
 
 const (
-	statusActionEdit statusBarAction = iota
-	statusActionRename
-	statusActionToggleHidden
-	statusActionOptions
-	statusActionSearch
-	statusActionHelp
+	buttonActionEdit buttonBarAction = iota
+	buttonActionLook
+	buttonActionRename
+	buttonActionToggleHidden
+	buttonActionOptions
+	buttonActionSearch
+	buttonActionHelp
+	buttonActionTrash
+	buttonActionRemove
+	buttonActionSed
 )
 
-// statusBarSpan is one clickable region within the status bar's text —
+// buttonBarSpan is one clickable region within the button bar's text —
 // the same half-open [start,end) column-range idea as headerSpan, for a
 // single-line display so no row is needed.
-type statusBarSpan struct {
+type buttonBarSpan struct {
 	startCol, endCol int
-	action           statusBarAction
+	action           buttonBarAction
 }
 
-// newBottomBar builds the two rows below the panel: bashLine, a plain
-// InputField for shell commands (see runShellCommand), and statusBar, a
-// hand-built single line showing who/df/quick-action buttons/the clock
-// (see refreshStatusBar). NewRoot adds both to mainLayout beneath the
-// panel.
+// newBottomBar builds the three rows below the panel: bashConsole (see
+// newBashConsole, in bashconsole.go — bashLine, a multi-line shell
+// command/script editor, plus bashHistoryView, its scrollable output
+// transcript), buttonBar, a hand-built single line of quick-action
+// buttons (see buildButtonBar), and statusBar, a purely informational
+// line (see refreshStatusBar/buildStatusBar). NewRoot adds all three to
+// mainLayout beneath the panel.
+//
+// buttonBar's text is built once, here, and never rebuilt afterwards —
+// unlike statusBar (user/disk-usage/clock all change over a session),
+// none of the button labels ever do. statusBar starts blank; NewRoot's
+// caller is expected to call refreshStatusBar once real data (the
+// panel's own directory) is available, the same as it always has.
 func (r *Root) newBottomBar() {
-	r.bashLine = tview.NewInputField()
-	r.bashLine.SetLabel("$ ")
-	r.bashLine.SetDoneFunc(func(key tcell.Key) {
-		if key != tcell.KeyEnter {
-			return
-		}
-		r.runShellCommand(r.bashLine.GetText())
-	})
-	r.bashLine.SetInputCapture(r.captureBashLineKey)
+	r.newBashConsole()
 
-	// Inherit whatever real command history already exists (see
-	// historyFilePath/loadBashHistory), the same way a real shell starts
-	// a new session with Up already recalling what earlier sessions ran
-	// — not just what's typed into this one.
-	r.bashHistoryFile = historyFilePath()
-	r.bashHistory = loadBashHistory(r.bashHistoryFile)
-	r.bashHistoryIdx = len(r.bashHistory)
+	r.buttonBar = tview.NewTextView()
+	r.buttonBar.SetDynamicColors(true)
+	r.buttonBar.SetMouseCapture(r.captureButtonBarMouse)
+	text, spans := r.buildButtonBar()
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
 
 	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
-	r.statusBar.SetMouseCapture(r.captureStatusBarMouse)
+	// Deliberately no SetMouseCapture: statusBar is purely informational
+	// now, nothing in it is clickable — see buttonBar above for that.
 
 	r.currentUser = currentUsername()
 }
@@ -82,43 +86,79 @@ func currentUsername() string {
 	return os.Getenv("USER")
 }
 
-// refreshStatusBar rebuilds and redraws the status bar's text — called
+// refreshStatusBar rebuilds and redraws the (purely informational, no
+// buttons — see buildButtonBar for those) status bar's text — called
 // whenever anything it shows might have changed: the panel navigating
-// (df depends on the current directory — see Panel.onLoad, wired in
-// NewRoot), and once a second from StartClock's ticker (the clock
-// itself).
+// (disk usage depends on the current directory — see Panel.onLoad,
+// wired in NewRoot), and once a second from StartClock's ticker (the
+// clock itself). buttonBar is never part of this — its labels are fixed
+// and built exactly once, in newBottomBar.
 func (r *Root) refreshStatusBar() {
-	text, spans := r.buildStatusBar()
-	r.statusBarSpans = spans
-	r.statusBar.SetText(text)
+	r.statusBar.SetText(r.buildStatusBar())
 }
 
-// buildStatusBar renders the status bar's text: the current user, disk
-// and inode usage for the panel's current directory (see
-// fetchDiskUsage), five quick-action buttons in nano's own "^X Label"
-// style (instantly recognizable as "Ctrl+X does this" without needing a
-// separate legend), and the clock.
-func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
+// buildButtonBar renders the button bar's text: the quick-action buttons
+// (Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in nano's own
+// "^X Label" style (instantly recognizable as "Ctrl+X does this" without
+// needing a separate legend). Built once, from newBottomBar, and never
+// rebuilt afterwards — unlike statusBar, none of these labels ever
+// change while running (the equivalent context menu items do relabel
+// themselves, e.g. hiddenToggleLabel, but the button bar's own text
+// intentionally doesn't follow suit, to keep this a fixed, muscle-memory
+// legend rather than something to re-read each time).
+func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	var b strings.Builder
 	col := 0
 
 	// col advances by s's display width (tview.TaggedStringWidth), not a
-	// plain rune count — dfSummary's mount point or the current username
-	// could in principle contain double-width (e.g. CJK) characters, and
-	// a rune count would misalign every statusBarSpan after it (see
-	// buildHeaderSpans/propertiesBuilder.text for the same fix elsewhere).
+	// plain rune count — a button label could in principle contain
+	// double-width (e.g. CJK) characters some day, and a rune count
+	// would misalign every buttonBarSpan after it (see buildHeaderSpans/
+	// propertiesBuilder.text for the same fix elsewhere).
 	write := func(s string) {
 		b.WriteString(s)
 		col += tview.TaggedStringWidth(s)
 	}
-	button := func(label string, action statusBarAction) {
+	button := func(label string, action buttonBarAction) {
 		start := col
 		write(label)
-		spans = append(spans, statusBarSpan{startCol: start, endCol: col, action: action})
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: action})
 	}
-	sep := func() {
-		write(" │ ")
-	}
+
+	button("^E Edit", buttonActionEdit)
+	write("  ")
+	button("^L Look", buttonActionLook)
+	write("  ")
+	button("^R Rename", buttonActionRename)
+	write("  ")
+	button("^G Hidden", buttonActionToggleHidden)
+	write("  ")
+	button("^F Find", buttonActionSearch)
+	write("  ")
+	button("^O Options", buttonActionOptions)
+	write("  ")
+	button("F1 Help", buttonActionHelp)
+	write("  ")
+	button("^T Trash", buttonActionTrash)
+	write("  ")
+	button("^P Remove", buttonActionRemove)
+	write("  ")
+	button("^S Sed", buttonActionSed)
+
+	return b.String(), spans
+}
+
+// buildStatusBar renders the status bar's text: the current user, disk
+// and inode usage for the panel's current directory (see
+// fetchDiskUsage), the running kernel release (see kernelVersionText),
+// uptime and load average where available (see uptimeText/
+// loadAverageText — Linux only, gracefully omitted elsewhere, the same
+// "just show one less segment" degradation fetchDiskUsage itself already
+// has), and the clock. No buttons here any more — see buildButtonBar.
+func (r *Root) buildStatusBar() string {
+	var b strings.Builder
+	write := func(s string) { b.WriteString(s) }
+	sep := func() { write(" │ ") }
 
 	write(r.currentUser)
 	sep()
@@ -126,25 +166,90 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 		write(diskUsageText(u))
 		sep()
 		write(inodeUsageText(u))
-	} else {
-		write("disk usage unavailable")
+		sep()
 	}
-	sep()
-	button("^E Edit", statusActionEdit)
-	write("  ")
-	button("^R Rename", statusActionRename)
-	write("  ")
-	button("^G Hidden", statusActionToggleHidden)
-	write("  ")
-	button("^F Find", statusActionSearch)
-	write("  ")
-	button("^O Options", statusActionOptions)
-	write("  ")
-	button("F1 Help", statusActionHelp)
-	sep()
+	if k := kernelVersionText(); k != "" {
+		write(k)
+		sep()
+	}
+	if up, ok := uptimeText(); ok {
+		write(up)
+		sep()
+	}
+	if load, ok := loadAverageText(); ok {
+		write(load)
+		sep()
+	}
 	write(clockText())
 
-	return b.String(), spans
+	return b.String()
+}
+
+// kernelVersionText returns `uname -r`'s own output, trimmed — the same
+// "shell out to a real system tool" approach fetchDiskUsage's own df
+// already uses, rather than a syscall wrapper needing per-platform
+// struct handling for what's ultimately just one string. Returns "" if
+// uname isn't available (e.g. some minimal containers) — the status bar
+// just shows one less segment then.
+func kernelVersionText() string {
+	out, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// uptimeText and loadAverageText read Linux's /proc/uptime and
+// /proc/loadavg directly rather than shelling out to and parsing
+// `uptime`'s own output, whose format differs enough between GNU/Linux
+// and BSD/macOS (singular/plural "load average(s)", comma- vs.
+// space-separated numbers, different time formats — verified by actually
+// comparing sample output from both, not guessed) to make reliable
+// cross-platform parsing more fragile than it's worth for a status line.
+// Both simply return ok=false where /proc/... doesn't exist at all (e.g.
+// macOS, most BSDs) — no build tag needed, os.ReadFile's own error
+// already tells the two cases apart.
+func uptimeText() (string, bool) {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return "", false
+	}
+	seconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "", false
+	}
+	return "up " + formatUptime(time.Duration(seconds*float64(time.Second))), true
+}
+
+// formatUptime renders d as "NdHH:MM" once it's reached a full day, or
+// just "HH:MM" before that — the same shape `uptime`'s own "N days,
+// HH:MM" takes, just compact enough for a status line already showing
+// several other segments.
+func formatUptime(d time.Duration) string {
+	totalMinutes := int(d.Minutes())
+	days := totalMinutes / (24 * 60)
+	hours := (totalMinutes / 60) % 24
+	minutes := totalMinutes % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %02d:%02d", days, hours, minutes)
+	}
+	return fmt.Sprintf("%02d:%02d", hours, minutes)
+}
+
+func loadAverageText() (string, bool) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return "", false
+	}
+	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
 }
 
 // diskUsage is one filesystem's block and inode usage for the status
@@ -324,47 +429,55 @@ func clockText() string {
 	return time.Now().Format("2006-01-02 15:04:05 MST")
 }
 
-// captureStatusBarMouse routes a click on one of the status bar's three
-// buttons (see buildStatusBar/statusBarSpan) to its action. A click
-// elsewhere on the row (the user/df/clock text, or empty space) just
-// does nothing — those aren't actionable, only informational.
-func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.statusBar.InRect(event.Position()) {
+// captureButtonBarMouse routes a click on one of the button bar's
+// buttons (see buildButtonBar/buttonBarSpan) to its action. A click
+// elsewhere on the row (the gaps between buttons, or empty space) just
+// does nothing.
+func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick || !r.buttonBar.InRect(event.Position()) {
 		return action, event
 	}
 
 	x, _ := event.Position()
-	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
 	col := x - rectX
 
-	for _, s := range r.statusBarSpans {
+	for _, s := range r.buttonBarSpans {
 		if col >= s.startCol && col < s.endCol {
-			r.runStatusBarAction(s.action)
+			r.runButtonBarAction(s.action)
 			break
 		}
 	}
 	return tview.MouseConsumed, nil
 }
 
-// runStatusBarAction is what a button click runs. Called directly,
+// runButtonBarAction is what a button click runs. Called directly,
 // unguarded, unlike its keyboard-shortcut equivalent (see
 // acceptsGlobalShortcut): a click is always a deliberate, explicit
 // action on whatever it landed on, with none of the "is something else
 // currently typing" ambiguity a global keystroke has to rule out first.
-func (r *Root) runStatusBarAction(action statusBarAction) {
+func (r *Root) runButtonBarAction(action buttonBarAction) {
 	switch action {
-	case statusActionEdit:
+	case buttonActionEdit:
 		r.editCurrentEntry()
-	case statusActionRename:
+	case buttonActionLook:
+		r.lookCurrentEntry()
+	case buttonActionRename:
 		r.renameCurrentEntry()
-	case statusActionToggleHidden:
+	case buttonActionToggleHidden:
 		r.toggleHidden()
-	case statusActionOptions:
+	case buttonActionOptions:
 		r.openOptions()
-	case statusActionSearch:
+	case buttonActionSearch:
 		r.openSearch()
-	case statusActionHelp:
+	case buttonActionHelp:
 		r.openHelp()
+	case buttonActionTrash:
+		r.moveSelectionToTrash()
+	case buttonActionRemove:
+		r.openRemoveConfirm()
+	case buttonActionSed:
+		r.openSedReplace()
 	}
 }
 
@@ -398,32 +511,53 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/
-// Ctrl+F (see EditShortcut/RenameShortcut/ToggleHiddenShortcut/
-// OptionsShortcut/SearchShortcut, wired up in cmd/breakthrough) should
-// act right now: no overlay is open, and the bash command line doesn't
-// have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/
+// Ctrl+O/Ctrl+F (see EditShortcut/LookShortcut/RenameShortcut/
+// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut, wired up in
+// cmd/breakthrough) should act right now: no overlay is open, and the
+// bash command line doesn't have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these five operate on "the currently
+// work from literally anywhere, these six operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
-// on top of whatever's already open. Critically, this also
-// keeps them out of the bash line's way: tview's plain InputField
-// doesn't implement any readline-style keybindings of its own, but real
-// bash/readline uses Ctrl+E for end-of-line, Ctrl+R for reverse-search,
-// and Ctrl+F to move forward a character — letting these global
-// shortcuts fire while typing a command there would silently defeat
-// muscle memory this line is explicitly meant to feel like bash.
+// on top of whatever's already open. Critically, this also keeps them
+// out of the bash line's way: tview's TextArea already implements
+// several readline-style keybindings of its own (Ctrl+A/Home,
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these six are captured
+// globally, at the Application level (see cmd/breakthrough), they'd
+// reach and consume the keystroke before bashLine's own InputCapture or
+// TextArea's own default handling ever saw it, silently defeating both
+// that and the muscle memory this line is explicitly meant to feel like
+// bash — hence checking this first and no-op'ing instead.
 func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 
+// AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
+// cmd/breakthrough: Ctrl+P and Ctrl+T/Entf (see TrashShortcut/
+// PurgeShortcut in trash.go) need to decide, before even calling either
+// Shortcut method, whether to consume the key at all — unlike the six
+// above, which always return nil regardless (an accepted, minor
+// imperfection for keys TextArea might bind natively), Ctrl+P
+// specifically collides with a real, explicit feature of this same
+// codebase: bashLine's own captureBashLineKey binds Ctrl+P to command-
+// history recall. Consuming it unconditionally at the Application level
+// would silently break that recall every time the bash line has focus,
+// not just fail to fire Purge — so cmd/breakthrough falls through to
+// bashLine's own handling (returns the event, not nil) whenever this
+// reports false, rather than swallowing it either way.
+func (r *Root) AcceptsGlobalShortcut() bool {
+	return r.acceptsGlobalShortcut()
+}
+
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
 // and SearchShortcut are Ctrl+E, Ctrl+R, Ctrl+G, Ctrl+O, and Ctrl+F's
-// global actions (see cmd/breakthrough and acceptsGlobalShortcut for
-// why they check first rather than acting unconditionally).
+// global actions (see cmd/breakthrough and acceptsGlobalShortcut for why
+// they check first rather than acting unconditionally). LookShortcut
+// (Ctrl+L) is the same shape, defined alongside the rest of Look in
+// viewer.go instead of here.
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()
@@ -451,199 +585,6 @@ func (r *Root) OptionsShortcut() {
 func (r *Root) SearchShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openSearch()
-	}
-}
-
-// userShell returns $SHELL, or "/bin/sh" if it isn't set — used by both
-// runShellCommand and runEditor (see editorCommand's own doc comment for
-// why the editor is run through the shell too) as the interpreter for
-// whatever the user typed or configured.
-func userShell() string {
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	return "/bin/sh"
-}
-
-// historyFilePath returns where bash-style command history lives:
-// $HISTFILE if set (an explicit override, honored regardless of what
-// $SHELL actually is), otherwise "~/.bash_history" — bash's own
-// hardcoded default. That default is used even if $SHELL isn't bash: a
-// "bash Eingabezeile" inheriting history "wie in einer normalen bash
-// Session" is specifically what was asked for, not whatever the current
-// shell's own (possibly different, e.g. zsh's ~/.zsh_history) history
-// file convention happens to be. Empty if the home directory can't be
-// resolved.
-func historyFilePath() string {
-	if f := os.Getenv("HISTFILE"); f != "" {
-		return f
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".bash_history")
-}
-
-// loadBashHistory reads path's existing command history, oldest first
-// — one command per line, skipping bash's own optional "#<unix
-// timestamp>" comment lines (written when HISTTIMEFORMAT is set) rather
-// than mistaking them for commands. A missing or unreadable file isn't
-// an error worth reporting: an empty history is exactly what a first
-// run — or one where $HISTFILE genuinely doesn't exist yet — should
-// start with.
-func loadBashHistory(path string) []string {
-	if path == "" {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	var history []string
-	for _, line := range strings.Split(string(data), "\n") {
-		if line == "" || isHistoryTimestampComment(line) {
-			continue
-		}
-		history = append(history, line)
-	}
-	return history
-}
-
-// isHistoryTimestampComment reports whether line is one of bash's own
-// "#<unix timestamp>" history-file comment lines (see loadBashHistory).
-func isHistoryTimestampComment(line string) bool {
-	rest, ok := strings.CutPrefix(line, "#")
-	if !ok {
-		return false
-	}
-	_, err := strconv.ParseInt(rest, 10, 64)
-	return err == nil
-}
-
-// appendBashHistory appends command to path as bash itself would — one
-// line — so a later real bash session (or another breakthrough one)
-// inherits it too, the same way runShellCommand's caller inherited
-// whatever was already there (see loadBashHistory). Best-effort: called
-// via "_ = appendBashHistory(...)" in runShellCommand — a failure here
-// (a missing home directory, a permissions problem) shouldn't stop the
-// command that was just run from having run, or get reported as if it
-// were that command's own failure.
-func appendBashHistory(path, command string) (err error) {
-	if path == "" {
-		return nil
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		// Only overrides err if the write itself succeeded — a failure
-		// there is the more relevant one to report.
-		if cerr := f.Close(); err == nil {
-			err = cerr
-		}
-	}()
-	_, err = fmt.Fprintln(f, command)
-	return err
-}
-
-// runShellCommand is the bash line's Enter action: suspends the TUI (see
-// tview.Application.Suspend) and runs command through userShell, with
-// the real terminal handed over for the duration and the panel's
-// current directory as its working directory — full interactivity,
-// including interactive programs like vim or less, exactly like
-// Midnight Commander's own command line. The panel reloads once the
-// command exits, in case it changed anything in the directory currently
-// on screen.
-//
-// "cd", "cd <path>", and "cd -" are special-cased instead (see
-// parseCdCommand/Root.changeDirectory) — the same as Midnight
-// Commander's own command line does it, and for the same reason: a "cd"
-// run inside the subshell above only ever changes that child process's
-// own working directory, which has no way to affect the panel once the
-// child exits. No subshell, and no Suspend, is involved for these —
-// updating which directory the panel shows is instant, the same as
-// clicking a breadcrumb already is.
-//
-// command is recorded in bashHistory before it runs, unconditionally
-// (not only once it succeeds) — the same as a real shell, which
-// remembers what you typed regardless of the exit code.
-func (r *Root) runShellCommand(command string) {
-	if strings.TrimSpace(command) == "" {
-		return
-	}
-
-	r.bashHistory = append(r.bashHistory, command)
-	r.bashHistoryIdx = len(r.bashHistory)
-	r.bashHistoryDraft = ""
-	_ = appendBashHistory(r.bashHistoryFile, command) // best-effort — see its own doc comment
-
-	if target, ok := parseCdCommand(command); ok {
-		r.bashLine.SetText("")
-		r.showError(r.changeDirectory(target))
-		return
-	}
-
-	var runErr error
-	r.app.Suspend(func() {
-		cmd := exec.Command(userShell(), "-c", command)
-		cmd.Dir = r.panel.path
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		runErr = cmd.Run()
-	})
-
-	r.bashLine.SetText("")
-	if runErr != nil {
-		r.showError(fmt.Errorf("%s: %w", command, runErr))
-		return
-	}
-	r.showError(r.panel.load(r.panel.path))
-}
-
-// parseCdCommand reports whether command is exactly a "cd" invocation —
-// "cd", "cd <path>", or "cd -" — and if so, whatever followed it ("" for
-// a bare "cd"). Deliberately narrow: a compound command like
-// "cd /foo && ls" or "cd /foo; ls" is left alone and runs in the
-// subshell as usual, rather than this trying to parse general shell
-// syntax to decide how much of it is "the cd part" — recognizing plain,
-// standalone "cd" is what Midnight Commander's own command line does
-// too, and covers what "cd" is actually used for from a line like this.
-func parseCdCommand(command string) (target string, ok bool) {
-	fields := strings.Fields(command)
-	if len(fields) == 0 || fields[0] != "cd" || len(fields) > 2 {
-		return "", false
-	}
-	if len(fields) == 1 {
-		return "", true
-	}
-	return fields[1], true
-}
-
-// changeDirectory is what the bash line's own "cd" (see parseCdCommand)
-// runs instead of spawning a subshell for it: target is whatever
-// followed "cd" — "" for a bare "cd" (home, the same as a real shell),
-// "-" for the panel's previous directory (see Panel.previousPath), or
-// otherwise resolved exactly the way typing it into the path header's
-// own edit field would be (Panel.resolvePath: "~" expansion, relative
-// paths resolved against the panel's current directory).
-func (r *Root) changeDirectory(target string) error {
-	switch target {
-	case "":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		return r.panel.navigate(home)
-	case "-":
-		prev, ok := r.panel.previousPath()
-		if !ok {
-			return fmt.Errorf("cd: no previous directory")
-		}
-		return r.panel.navigate(prev)
-	default:
-		return r.panel.navigate(r.panel.resolvePath(target))
 	}
 }
 
@@ -786,53 +727,4 @@ func (r *Root) StartClock() (stop func()) {
 		}
 	}()
 	return func() { close(done) }
-}
-
-// captureBashLineKey adds history navigation (see bashHistoryUp/Down) to
-// the bash line — the one thing tview's plain InputField doesn't already
-// give it for free, unlike a real shell's own readline.
-func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
-	switch event.Key() {
-	case tcell.KeyUp:
-		r.bashHistoryUp()
-		return nil
-	case tcell.KeyDown:
-		r.bashHistoryDown()
-		return nil
-	}
-	return event
-}
-
-// bashHistoryUp recalls the previous (older) history entry, the same as
-// pressing Up in a real shell: the first press remembers whatever was
-// on the line so far (bashHistoryDraft), so pressing Down enough times
-// afterwards gets back to it rather than an empty line. Stops at the
-// oldest entry rather than wrapping.
-func (r *Root) bashHistoryUp() {
-	if len(r.bashHistory) == 0 {
-		return
-	}
-	if r.bashHistoryIdx == len(r.bashHistory) {
-		r.bashHistoryDraft = r.bashLine.GetText()
-	}
-	if r.bashHistoryIdx > 0 {
-		r.bashHistoryIdx--
-	}
-	r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
-}
-
-// bashHistoryDown is bashHistoryUp's counterpart: recalls the next
-// (newer) entry, or restores whatever was being typed before Up was
-// first pressed (bashHistoryDraft) once it moves past the newest one —
-// a no-op if history navigation isn't in progress at all.
-func (r *Root) bashHistoryDown() {
-	if r.bashHistoryIdx >= len(r.bashHistory) {
-		return
-	}
-	r.bashHistoryIdx++
-	if r.bashHistoryIdx == len(r.bashHistory) {
-		r.bashLine.SetText(r.bashHistoryDraft)
-	} else {
-		r.bashLine.SetText(r.bashHistory[r.bashHistoryIdx])
-	}
 }

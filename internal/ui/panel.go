@@ -220,6 +220,16 @@ type Panel struct {
 	// directory the way a filename match still does (see activateRow's
 	// own searchMode branch). Left nil the same as onSearchEscape.
 	onOpenSearchResult func(path string, line int)
+
+	// onExitSearchResults reports activateRow leaving search mode by
+	// jumping to a filename (or archive-member) match's own real
+	// location — every case besides onOpenSearchResult's own "stay in
+	// search mode" one above. Root wires this to cancelSearch: a real
+	// user report — clicking a result to jump to it, then watching the
+	// still-running search silently overwrite the panel with search
+	// results again moments later, because nothing had actually told it
+	// to stop. Left nil the same as onSearchEscape/onOpenSearchResult.
+	onExitSearchResults func()
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -251,18 +261,22 @@ type rowRef struct {
 	isDir     bool
 	checkable bool // false for "..", which can't be a file operation target
 
-	// entryType/linkTarget/nlink/mountPoint/mode mirror the corresponding
-	// fsops.Entry fields — see typeGlyph and modifierGlyph, the only
-	// things that read them, to render the type and modifier columns. The
-	// ".." row gets a plain TypeDir with nothing else set (see load):
-	// distinguishing whether going up crosses a filesystem boundary would
-	// need an extra stat purely for that row, not worth it for what's
-	// otherwise always just "..".
+	// entryType/linkTarget/nlink/mountPoint/mode/unreadable mirror the
+	// corresponding fsops.Entry fields — see typeGlyph, modifierGlyph,
+	// and entryColor, the only things that read them, to render the type
+	// and modifier columns and pick the name's own color. The ".." row
+	// gets a plain TypeDir with nothing else set (see load): distinguishing
+	// whether going up crosses a filesystem boundary, or isn't listable,
+	// would need an extra stat purely for that row, not worth it for
+	// what's otherwise always just "..". unreadable's own zero value
+	// (false) is the deliberately safe default here for exactly that
+	// reason — see fsops.Entry.Unreadable's own doc comment.
 	entryType  fsops.EntryType
 	linkTarget string
 	nlink      uint64
 	mountPoint bool
 	mode       os.FileMode
+	unreadable bool
 
 	// size/modTime mirror fsops.Entry's own fields, for the Size/Modified
 	// columns (see addRow/formatSizeCell/formatModTimeCell).
@@ -275,6 +289,18 @@ type rowRef struct {
 	// file there instead of just jumping to it. Always 0 for every
 	// other row: a real directory entry, or a filename-search result.
 	searchLine int
+
+	// archiveHit is true for a filename- or content-search result found
+	// *inside* an archive (search.Result.ArchiveMember — see
+	// appendSearchResult) — path is still the real, containing archive
+	// file. For a filename match, activateRow's usual "Go to file/
+	// folder" already does the right thing with it unchanged (see its
+	// own doc comment); a content match inside an archive member gets
+	// the same "Go to file/folder" treatment too, specifically because
+	// this is set (see activateRow's own searchLine check) — entryColor
+	// also reads this, to set such a row's own name apart from a real
+	// file/directory match, per the user's own explicit request.
+	archiveHit bool
 }
 
 // NewPanel creates a Panel rooted at path, themed per theme (see
@@ -495,6 +521,7 @@ func (p *Panel) load(dir string) error {
 			nlink:      e.Nlink,
 			mountPoint: e.MountPoint,
 			mode:       e.Mode,
+			unreadable: e.Unreadable,
 			size:       e.Size,
 			modTime:    e.ModTime,
 		})
@@ -561,18 +588,34 @@ func (p *Panel) showSearchResults() {
 // scatters them apart from one another.
 type searchResultEntry struct {
 	fsops.Entry
-	display string
-	line    int // > 0 for a content match — see rowRef.searchLine's own doc comment
+	display    string
+	line       int  // > 0 for a content match — see rowRef.searchLine's own doc comment
+	archiveHit bool // true for an archive-member match — see rowRef.archiveHit's own doc comment
 }
 
 // appendSearchResult adds one streamed result — classified via
 // fsops.DescribeEntry, the exact same per-entry classification a real
 // directory listing gives each of its own children (symlink
 // resolution, broken-symlink detection, mount-point check — see its
-// own doc comment). display is res.Path itself for a filename match
-// (Line == 0), or "path:line: text" for a content match — see
-// search.Result's own Line/Text fields, populated only by a content
-// (grep) search.
+// own doc comment). display is res.Path itself for a plain filename
+// match (Line == 0, ArchiveMember == ""), "path:line: text" for a
+// content match (see search.Result's own Line/Text fields, populated
+// only by a content/grep search), "path -> member" for an
+// archive-member filename match (search.Result.ArchiveMember,
+// populated when Request.IncludeArchives is on), or "path -> member:
+// line: text" for a content match found *inside* an archive member
+// (both Line and ArchiveMember set — see internal/search's own
+// archivecontent.go, populated when Request.IncludeCompressed finds a
+// match inside a tar/tar.gz/tar.bz2/tar.xz archive) — the same "->
+// target" shape a symlink's own name already gets (see addRow), reused
+// here rather than inventing a second arrow convention.
+//
+// fsops.DescribeEntry(res.Path) always describes the real, containing
+// archive file itself for an archive-member match, never something
+// synthetic for the virtual member path inside it — there's nothing on
+// disk to stat there — which is also exactly right for entry.IsDir/
+// entry.Size/etc. below: this is deliberately the archive's own real
+// classification, not a guess at the matched member's.
 //
 // Re-renders immediately, one result at a time: search results arrive
 // slowly enough (one find/grep process, one match at a time) that
@@ -584,10 +627,17 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	entry := fsops.DescribeEntry(res.Path)
 	entry.Name = res.Path
 	display := res.Path
-	if res.Line > 0 {
+	switch {
+	case res.Line > 0 && res.ArchiveMember != "":
+		display = fmt.Sprintf("%s -> %s:%d: %s", res.Path, res.ArchiveMember, res.Line, res.Text)
+	case res.Line > 0:
 		display = fmt.Sprintf("%s:%d: %s", res.Path, res.Line, res.Text)
+	case res.ArchiveMember != "":
+		display = res.Path + " -> " + res.ArchiveMember
 	}
-	p.searchEntries = append(p.searchEntries, searchResultEntry{Entry: entry, display: display, line: res.Line})
+	p.searchEntries = append(p.searchEntries, searchResultEntry{
+		Entry: entry, display: display, line: res.Line, archiveHit: res.ArchiveMember != "",
+	})
 	p.renderSearchEntries()
 }
 
@@ -663,9 +713,11 @@ func (p *Panel) renderSearchEntries() {
 			nlink:      e.Nlink,
 			mountPoint: e.MountPoint,
 			mode:       e.Mode,
+			unreadable: e.Unreadable,
 			size:       e.Size,
 			modTime:    e.ModTime,
 			searchLine: e.line,
+			archiveHit: e.archiveHit,
 		})
 		if p.selected[e.Name] {
 			p.setChecked(row, true)
@@ -891,25 +943,45 @@ func (p *Panel) addRow(row int, ref rowRef) {
 
 	color := p.entryColor(ref)
 
-	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(color)
+	// The type-indicator glyph itself stays the plain Text color — only
+	// the name (below) picks up entryColor's own distinction, per the
+	// user's own explicit request. MC's own skin colors both; this app
+	// deliberately doesn't, so the narrow type column reads as pure
+	// punctuation rather than a second, redundant color cue.
+	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
-	label := ref.name
+	// tview.TableCell.Text is parsed for style tags (see tview.Print), so
+	// any literal "[" in an entry's own name — an unusual but entirely
+	// legal filename character — must be escaped before it's used here,
+	// or it would be misread as (the start of) a tag and corrupt this and
+	// every tag after it. This applies to every row, not just directories.
+	label := tview.Escape(ref.name)
+	if ref.isDir {
+		// Wrap just the name itself in a style tag that sets its
+		// background to DirectoryBackground, leaving the foreground
+		// untouched (see nameHighlightTags's own doc comment) — not the
+		// trailing "/" or the symlink arrow appended below, and not the
+		// column's own blank padding out to the row's right edge, the
+		// way SetBackgroundColor on the whole cell would (that column
+		// has SetExpansion(1), see below, so it consumes whatever's left
+		// of the row's width).
+		label = nameHighlightTags(label, p.theme.DirectoryBackground)
+	}
 	if ref.entryType == fsops.TypeDir {
 		label += "/"
 	}
 	if ref.linkTarget != "" {
-		label += " -> " + ref.linkTarget
+		label += " -> " + tview.Escape(ref.linkTarget)
 	}
 	name := tview.NewTableCell(label).SetTextColor(color)
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
-		p.activateRow(row)
-		return false // still let the row become selected/highlighted
+		return p.activateRow(row)
 	})
 	p.table.SetCell(row, colName, name)
 
@@ -925,6 +997,21 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
 	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
 	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
+}
+
+// nameHighlightTags wraps escapedName (see addRow's own escaping, right
+// before this is called) in a tview style tag that sets only its
+// background to bg — "[:#rrggbb:]" leaves the foreground field empty,
+// which tview's tag parser reads as "no change" rather than "reset" (see
+// parseTag in tview/strings.go), so the entry's own EntryNormal/
+// EntryExecutable/EntryError text color (set via SetTextColor on the
+// whole cell, see addRow) still shows through unchanged. "[-:-:-]" then
+// resets background (and everything else) back to the cell's base style
+// for whatever text follows — the trailing "/" or " -> target" arrow, and
+// the column's own blank padding, all stay in the table's ordinary
+// background rather than picking up bg too.
+func nameHighlightTags(escapedName string, bg tcell.Color) string {
+	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(bg.Hex())&0xffffff, escapedName)
 }
 
 // columnSeparator is a new cell for the bare "│" columns dividing
@@ -1133,24 +1220,95 @@ func typeGlyph(ref rowRef) byte {
 	return ' '
 }
 
-// entryColor sets a row's type character and name apart by color for the
-// two cases worth flagging beyond the glyph alone — a broken symlink
-// (something that will fail if acted on) and an executable file, per
-// p.theme's own EntryError/EntryExecutable (the default scheme's red/
-// green match Midnight Commander's own default skin, which colors an
-// executable's whole name, not just its '*'). Applied to both the type
-// cell and the name cell (see addRow) for the same reason MC colors the
-// whole entry rather than a lone prefix character: it reads at a glance
-// across the row, not just in the narrow type column.
+// entryColor sets a row's name apart by color for every case worth
+// flagging beyond the type glyph alone, per p.theme's own Entry* fields
+// (the default scheme's red/green for EntryError/EntryExecutable match
+// Midnight Commander's own default skin). Unlike MC, this is applied
+// only to the name cell, not the narrow type-indicator column (see
+// addRow) — the glyph itself stays plain Text, so the type column reads
+// as punctuation rather than a second, redundant color cue. Checked in
+// this order, most specific/urgent first:
+//
+//  1. A broken symlink — nothing to open at all.
+//  2. archiveHit — a search-mode display concern (see its own doc
+//     comment on rowRef), unrelated to the entry's own file type, so it
+//     stays ahead of every type-based case below.
+//  3. The four special types (socket/FIFO/char/block device) — not
+//     really "readable content" in the EntryNormal/EntryExecutable
+//     sense at all, regardless of what ref.unreadable says.
+//  4. ref.unreadable — the invoking user can't actually read this
+//     entry's content, which matters more than whether it also happens
+//     to look like an archive or be executable.
+//  5. A recognized archive extension (never for a directory, even one
+//     literally named like an archive — see isArchiveName).
+//  6. A working symlink to a file (TypeSymlinkBroken, the one other
+//     symlink case, was already handled in step 1).
+//  7. An executable TypeFile.
+//  8. A dotfile/dotdir name (anything starting with "." except ".."
+//     itself — see EntryHidden's own doc comment) — checked dead last:
+//     every case above says something more specific and more worth
+//     noticing than "this is hidden", so none of them are ever dimmed
+//     by this instead.
+//  9. Everything else: EntryNormal.
 func (p *Panel) entryColor(ref rowRef) tcell.Color {
 	switch {
 	case ref.entryType == fsops.TypeSymlinkBroken:
 		return p.theme.EntryError
+	case ref.archiveHit:
+		// The same lighter, "auxiliary information" gray the search
+		// dialog's own hint texts use (see internal/ui/search.go's
+		// hintText) rather than a dedicated new theme color — an
+		// archive-member row isn't a real file/directory match the way
+		// every other row here is, so it reads a shade less prominent,
+		// per the user's own explicit request.
+		return p.theme.PlaceholderText
+	case ref.entryType == fsops.TypeSocket, ref.entryType == fsops.TypeFIFO,
+		ref.entryType == fsops.TypeCharDevice, ref.entryType == fsops.TypeBlockDevice:
+		return p.theme.EntrySpecial
+	case ref.unreadable:
+		return p.theme.EntryUnreadable
+	case !ref.isDir && isArchiveName(ref.name):
+		return p.theme.EntryArchive
+	case ref.entryType == fsops.TypeSymlinkFile:
+		return p.theme.EntrySymlink
 	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
 		return p.theme.EntryExecutable
+	case ref.name != ".." && strings.HasPrefix(ref.name, "."):
+		return p.theme.EntryHidden
 	default:
 		return p.theme.EntryNormal
 	}
+}
+
+// archiveHighlightExtensions is the set of filename suffixes
+// isArchiveName recognizes — deliberately broader than
+// internal/search's own archiveExtensions (see that var's own doc
+// comment on its "Stufe A" scope): this is a purely visual "this looks
+// like an archive" cue, not a claim that Search's own Include Archives
+// option can look inside it, so it also covers formats Search doesn't
+// support yet (7z, rar, zstd, a lone gzip/bzip2/xz/lzma) alongside the
+// zip/tar family Search already handles.
+var archiveHighlightExtensions = []string{
+	".zip", ".tar", ".tgz", ".tbz", ".tbz2", ".txz",
+	".tar.gz", ".tar.bz2", ".tar.xz",
+	".gz", ".bz2", ".xz", ".lzma", ".lz",
+	".7z", ".rar", ".zst",
+}
+
+// isArchiveName reports whether name's own extension (checked
+// case-insensitively, matching every other extension check in this
+// codebase — see internal/search's own classifyArchive) matches one of
+// archiveHighlightExtensions. Only ever consulted for a non-directory
+// entry (see entryColor) — a directory literally named e.g.
+// "backup.tar.gz" isn't actually an archive, just confusingly named one.
+func isArchiveName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, ext := range archiveHighlightExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // modifierGlyph renders ref's modifier column — information MC's own
@@ -1349,30 +1507,61 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // leaving search mode: unlike a plain jump, this reads as "peek at
 // this match," and a content search often has several, each worth
 // checking in turn without losing the list between them. Every other
-// result — a filename match, or a content match with onOpenSearchResult
-// left nil — is never "this panel's own directory" the way a real
-// row's target always is, so there's nothing to navigate *into*;
-// instead this leaves search mode entirely and jumps to the result's
-// real location (see navigateAndSelect), the same "Go to file/folder"
-// meaning left-click on a result has always had otherwise.
-func (p *Panel) activateRow(row int) {
+// result — a filename match, a content match with onOpenSearchResult
+// left nil, or a content match *inside* an archive member
+// (ref.archiveHit — see archivecontent.go's own Result.ArchiveMember,
+// which can now be set alongside a real Line/Text too, not just for a
+// filename-only archive-member hit) — is never "this panel's own
+// directory" the way a real row's target always is, so there's nothing
+// to navigate *into*, or (for the archive case specifically) nothing
+// real at ref.path/ref.searchLine to open at all — ref.path is the
+// containing archive file itself, not the matched member's own
+// extracted content, and opening an archive in a text editor at an
+// arbitrary line makes no sense; instead this leaves search mode
+// entirely and jumps to the result's real location (see
+// navigateAndSelect), the same "Go to file/folder" meaning left-click
+// on a result has always had otherwise.
+//
+// Returns whether IT already settled the table's own selection itself
+// (a real user report: it always did, but the caller — addRow's own
+// name.SetClickedFunc — used to unconditionally tell tview.Table to
+// *also* select whatever cell the click's own screen position landed
+// on. Table.MouseHandler computes that position before ever calling
+// this func at all, so once navigate/navigateAndSelect has gone on to
+// clear and rebuild the whole table underneath it — a genuinely
+// different directory, with completely different rows now sitting at
+// that same numeric index — tview's own follow-up selection silently
+// overwrote a correct, deliberate one (e.g. landing exactly on a
+// search result's own real archive file) with whatever row happened to
+// occupy the *old* table's row/column index instead, typically the
+// wrong entry entirely (verified against tview's own Table.MouseHandler
+// source, not guessed). Only the two branches that never touch the
+// table itself (a content match, and any click activateRow otherwise
+// no-ops on) return false, letting tview's own default selection still
+// provide the "row highlights" feedback a real file click's own no-op
+// would otherwise leave invisible.
+func (p *Panel) activateRow(row int) (handledSelection bool) {
 	ref, ok := p.rowRef(row)
 	if !ok {
-		return
+		return false
 	}
 	if p.searchMode {
-		if ref.searchLine > 0 && p.onOpenSearchResult != nil {
+		if ref.searchLine > 0 && !ref.archiveHit && p.onOpenSearchResult != nil {
 			p.onOpenSearchResult(ref.path, ref.searchLine)
-			return
+			return false
 		}
 		p.searchMode = false
+		if p.onExitSearchResults != nil {
+			p.onExitSearchResults()
+		}
 		p.reportError(p.navigateAndSelect(ref.path))
-		return
+		return true
 	}
 	if !ref.isDir {
-		return
+		return false
 	}
 	p.reportError(p.navigate(ref.path))
+	return true
 }
 
 // nameCellRect returns the on-screen position and width row's name cell
@@ -1425,7 +1614,23 @@ func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
 // Unlike RowAt, this doesn't exclude "..": a caller working with a
 // contiguous range of rows (see selectRange) needs the real index either
 // way, and toggling ".." is already a no-op (not checkable).
+//
+// Checks p.table.InRect first — not just tview's own Table.CellAt,
+// which validates a computed row against the table's own *data* size
+// (how many entries there are), not against how many of them actually
+// fit on screen right now. With bashLine able to occupy a large part of
+// the screen while expanded (see expandBashConsole), a position well
+// below the table's own current, shrunk bounds could otherwise still
+// arithmetically land on a real row further down the (longer) listing
+// — exactly the bug the user reported: a right-click over the expanded
+// console still opened the panel's own context menu for whatever row
+// the position numerically mapped to. SetMouseCapture's own contract
+// (see tview's own Box.WrapMouseHandler) doesn't filter by position on
+// its own; every caller into this needs to.
 func (p *Panel) rowIndexAt(x, y int) (row int, ok bool) {
+	if !p.table.InRect(x, y) {
+		return 0, false
+	}
 	row, _ = p.table.CellAt(x, y)
 	if _, ok := p.rowRef(row); !ok {
 		return 0, false

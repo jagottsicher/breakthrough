@@ -90,18 +90,65 @@ const (
 // ContentNone (MC's own "Whole words"/"First hit" checkboxes — see
 // GrepArgs/ZgrepArgs/ZipgrepArgs): match whole words only, and stop
 // after the first match per file, respectively.
+//
+// IncludeArchives additionally searches inside every zip/tar(.gz/.bz2/
+// .xz) archive found under Scope for a member whose own name matches
+// Pattern — a plain filename search only (Content == ContentNone);
+// meaningless otherwise, the same as NamePattern/NameMode only ever
+// narrowing a content search rather than running standalone (see this
+// struct's own doc comment above). One level deep only: an archive
+// inside another archive isn't itself opened — a deliberate "Stufe A"
+// scope decision, not a limitation of the approach (see
+// internal/search's own archive.go). A match here is reported with
+// Result.ArchiveMember set.
+//
+// OnProgress, if set, is called from a background goroutine — possibly
+// several different ones at once, and never the goroutine Run/Range
+// itself was called from — with the path currently being visited: a
+// directory the EngineFind traversal has just entered, or an archive
+// file about to be opened and listed (see internal/search's own
+// archive.go). Callers must be safe for concurrent calls (internal/ui's
+// own handler is, via Application.QueueUpdateDraw) and must return
+// quickly — this is called synchronously from whichever goroutine is
+// doing the actual work, so a slow OnProgress stalls that work.
+// Meaningless for EngineLocate: locate answers entirely from a
+// prebuilt index (see LocateDatabaseCaveat), with no live traversal of
+// its own to report progress on at all.
+//
+// IncludeCompressed additionally searches the decompressed content of
+// every .gz/.bz2/.xz/.zip file found under Scope, via the matching
+// grep wrapper (zgrep/bzgrep/xzgrep/zipgrep — see internal/search's own
+// compressed.go), and every tar/tar.gz/tar.bz2/tar.xz archive's own
+// member files (see archivecontent.go — none of zgrep/bzgrep/xzgrep can
+// meaningfully search a tar *container* directly, so this decompresses
+// each one once and greps its members individually instead); meaningless
+// when Content isn't ContentGrep.
+//
+// With NamePattern also set (Filename filled in alongside Content —
+// see runContentSearch's own early branch), this instead narrows every
+// zip/tar-family archive's own members to just the ones whose name
+// also matches NamePattern before searching their content (see
+// startArchiveContentSearchNarrowed) — matching Include Archives' own
+// member-name matching (see IncludeArchives), just feeding into a
+// content search instead of a filename-only one. A lone .gz/.bz2/.xz
+// has no members of its own to narrow this way in either case, so it's
+// left out of both paths, same as IncludeArchives' own
+// archiveExtensions already excludes it.
 type Request struct {
-	Pattern        string
-	NamePattern    string
-	NameMode       Mode
-	Scope          string
-	Mode           Mode
-	Engine         Engine
-	Content        ContentMode
-	IgnoreDirs     []string
-	CaseSensitive  bool
-	NonRecursive   bool
-	FollowSymlinks bool
-	WholeWords     bool
-	FirstHit       bool
+	Pattern           string
+	NamePattern       string
+	NameMode          Mode
+	Scope             string
+	Mode              Mode
+	Engine            Engine
+	Content           ContentMode
+	IgnoreDirs        []string
+	CaseSensitive     bool
+	NonRecursive      bool
+	FollowSymlinks    bool
+	WholeWords        bool
+	FirstHit          bool
+	IncludeArchives   bool
+	IncludeCompressed bool
+	OnProgress        func(path string)
 }

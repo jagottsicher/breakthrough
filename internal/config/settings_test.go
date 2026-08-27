@@ -138,6 +138,46 @@ func TestLoadParsesGlobalsBooleans(t *testing.T) {
 	}
 }
 
+func TestLoadParsesPagerKey(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "pager = external\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.Pager != "external" {
+		t.Errorf("Pager = %q, want %q", s.Pager, "external")
+	}
+}
+
+func TestDefaultSettingsPagerIsBuiltin(t *testing.T) {
+	if got := DefaultSettings().Pager; got != "builtin" {
+		t.Errorf("DefaultSettings().Pager = %q, want %q", got, "builtin")
+	}
+}
+
+func TestLoadParsesTrashPersistentKey(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "trash_persistent = true\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if !s.TrashPersistent {
+		t.Error("TrashPersistent = false, want true")
+	}
+}
+
+func TestDefaultSettingsTrashIsSessionScoped(t *testing.T) {
+	if got := DefaultSettings().TrashPersistent; got {
+		t.Errorf("DefaultSettings().TrashPersistent = %v, want false (session-scoped by default)", got)
+	}
+}
+
 func TestLoadWarnsOnInvalidBooleanValue(t *testing.T) {
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "user")

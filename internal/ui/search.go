@@ -489,6 +489,13 @@ func (r *Root) rerenderSearchDialog() {
 	left.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
 	left.newline()
 	left.choice(r.searchSkipHidden, "Skip hidden", func() { r.searchSkipHidden = !r.searchSkipHidden })
+	left.newline()
+	// search.Request.IncludeArchives — see its own doc comment. Its own
+	// checkbox lives here, in Filename's own column, not Content's:
+	// this matches inside a zip/tar's own member *names*, never their
+	// content, so it's an extension of a filename search specifically,
+	// per the user's own explicit design decision.
+	left.choice(r.searchIncludeArchives, "Include zip, tar (gz, bz2, xz)", func() { r.searchIncludeArchives = !r.searchIncludeArchives })
 	r.searchLeft.SetText(left.b.String())
 
 	// Content column. No more "Search in" selector (this app's own
@@ -525,6 +532,17 @@ func (r *Root) rerenderSearchDialog() {
 	right.choice(r.searchCaseSensitive, "Case sensitive", func() { r.searchCaseSensitive = !r.searchCaseSensitive })
 	right.newline()
 	right.choice(r.searchFirstHit, "First hit", func() { r.searchFirstHit = !r.searchFirstHit })
+	right.newline()
+	// search.Request.IncludeCompressed — see its own doc comment. Own
+	// checkbox in Content's own column, not Filename's: unlike Include
+	// Archives (member *names*), this searches decompressed *content* —
+	// a single compressed file via the matching grep wrapper (zgrep/
+	// bzgrep/xzgrep/zipgrep), or a tar/tar.gz/tar.bz2/tar.xz archive's
+	// own member files, decompressed once and grepped individually (see
+	// internal/search's own archivecontent.go) — covering the same set of
+	// formats Include Archives itself covers, just for content instead
+	// of member names.
+	right.choice(r.searchIncludeCompressed, "Include compressed files", func() { r.searchIncludeCompressed = !r.searchIncludeCompressed })
 	r.searchRight.SetText(right.b.String())
 }
 
@@ -1058,15 +1076,17 @@ func (r *Root) runSearch() {
 	}
 
 	req := search.Request{
-		Scope:          scope,
-		Engine:         engine,
-		Content:        contentMode,
-		IgnoreDirs:     ignoreDirs,
-		CaseSensitive:  r.searchCaseSensitive,
-		NonRecursive:   !r.searchRecursive,
-		FollowSymlinks: r.searchFollowSymlinks,
-		WholeWords:     r.searchWholeWords,
-		FirstHit:       r.searchFirstHit,
+		Scope:             scope,
+		Engine:            engine,
+		Content:           contentMode,
+		IgnoreDirs:        ignoreDirs,
+		CaseSensitive:     r.searchCaseSensitive,
+		NonRecursive:      !r.searchRecursive,
+		FollowSymlinks:    r.searchFollowSymlinks,
+		WholeWords:        r.searchWholeWords,
+		FirstHit:          r.searchFirstHit,
+		IncludeArchives:   contentMode == search.ContentNone && r.searchIncludeArchives,
+		IncludeCompressed: contentMode != search.ContentNone && r.searchIncludeCompressed,
 	}
 	// Content == ContentNone: Pattern is the filename match itself, run
 	// through Engine directly. Otherwise: Pattern is what grep actually
@@ -1090,10 +1110,30 @@ func (r *Root) runSearch() {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.searchCancel = cancel
 
+	// Set here, not inside the req literal above: it closes over ctx,
+	// which doesn't exist yet at that point. Runs on whichever
+	// background goroutine is actually doing the work (the directory-
+	// progress walk, or one of several concurrent archive-listing
+	// workers — see search.Request.OnProgress's own doc comment), so
+	// the ctx.Err() check guards against a stale update landing after
+	// this same search has already been cancelled or superseded by a
+	// newer one — the same guard every other post-search UI update in
+	// this file already applies (see e.g. streamSearchResults).
+	req.OnProgress = func(path string) {
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.searchCurrentPos = path
+			r.renderSearchStatus()
+		})
+	}
+
 	r.hideOverlay() // close the form, revealing the panel underneath
 	r.panel.showSearchResults()
 	r.panel.setSearchStatusColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
+	r.searchCurrentPos = ""
 	r.searchLastDir = ""
 	r.searchStartDir = scope
 	r.renderSearchStatus()
@@ -1141,31 +1181,64 @@ func (r *Root) animateSearchProgress(ctx context.Context) {
 }
 
 // renderSearchStatus paints the panel's own header status line (see
-// Panel.setSearchStatus): the current animation frame plus whatever
-// directory streamSearchResults last saw a match in (searchLastDir),
-// falling back to Start at's own value (searchStartDir) until the
-// first result arrives.
+// Panel.setSearchStatus): the current animation frame, the Esc hint,
+// then wherever the search actually is right now — searchCurrentPos,
+// live from search.Request.OnProgress (see runSearch), whenever there
+// is one; falling back to whatever directory streamSearchResults last
+// saw a match in (searchLastDir) once progress has nothing to show
+// (locate, or the search has already finished), and finally to Start
+// at's own value (searchStartDir) until either one has anything at
+// all.
+//
+// Goes through setSearchStatusLive, not the plain setSearchStatus every
+// other caller uses (see its own doc comment): this line's own last
+// part (dir) changes length on every single live update — a real user
+// report that a trailing hint visibly jumped left and right along with
+// it, distracting enough to be worse than not having a fixed position
+// for it at all.
 func (r *Root) renderSearchStatus() {
 	frame := hashAnimationFrames[r.searchAnimFrame%len(hashAnimationFrames)]
-	dir := r.searchLastDir
+	dir := r.searchCurrentPos
+	if dir == "" {
+		dir = r.searchLastDir
+	}
 	if dir == "" {
 		dir = r.searchStartDir
 	}
-	r.setSearchStatus(frame + " " + dir)
+	r.setSearchStatusLive(frame, dir)
 }
 
 // searchEscHint reminds the user, regardless of a search's own outcome
 // (still running, done, no matches, or the non-existent-Start-at error
 // — see showSearchError) that Escape goes back to the form — per the
-// user's own explicit request. setSearchStatus is the one place the
-// panel's own header status text actually gets set while search
-// results are showing (see its two call sites: here and
-// streamSearchResults' own final status — showSearchError goes through
-// this too), so the hint can never be left off some future third one.
+// user's own explicit request. setSearchStatus/setSearchStatusLive are
+// the only two places the panel's own header status text actually gets
+// set while search results are showing (see their own doc comments),
+// so the hint can never be left off some future third one, whichever
+// of the two it ends up using.
 const searchEscHint = "(Esc: back to search)"
 
+// setSearchStatus sets the panel's own header status to text, with
+// searchEscHint appended at the end — streamSearchResults' own final
+// "Done — N found" and showSearchError's own error message, both a
+// single, one-time value with nothing long and live-changing after it,
+// so a trailing hint never visibly moves once it's shown (see
+// renderSearchStatus's own doc comment on why its own live line needs
+// setSearchStatusLive instead).
 func (r *Root) setSearchStatus(text string) {
 	r.panel.setSearchStatus(strings.TrimSpace(text + " " + searchEscHint))
+}
+
+// setSearchStatusLive is renderSearchStatus's own variant: prefix (the
+// animation frame) and detail (dir) are composed with searchEscHint
+// sandwiched between them — "prefix hint detail" — rather than
+// appended at the very end the way setSearchStatus does, per the
+// user's own explicit request: detail changes length on every live
+// update, so keeping the hint right after the (fixed-width) animation
+// frame instead keeps its own on-screen position stable regardless of
+// how long detail currently is.
+func (r *Root) setSearchStatusLive(prefix, detail string) {
+	r.panel.setSearchStatus(strings.TrimSpace(prefix + " " + searchEscHint + " " + detail))
 }
 
 // noSearchResultsText is folded into the final status line (see

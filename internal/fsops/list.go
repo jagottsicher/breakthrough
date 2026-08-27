@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -75,6 +76,45 @@ type Entry struct {
 	// sortable Size/Modified columns.
 	Size    int64
 	ModTime time.Time
+
+	// Unreadable is true if the invoking user's real uid/gid can't
+	// actually read this entry's content — a file's bytes, or (for a
+	// directory) its own list of entries — checked via canRead (real
+	// access(2), not a Mode bit comparison: see its own doc comment for
+	// why that matters, e.g. a /proc file whose Mode looks readable but
+	// isn't). Left false (its zero value, the deliberately safe default)
+	// for TypeSymlinkBroken and the four special types — socket, FIFO,
+	// char/block device — "readable content" doesn't cleanly apply to
+	// any of those, and the UI already colors them distinctly regardless
+	// of this field (see ui.entryColor).
+	Unreadable bool
+}
+
+// canRead reports whether the invoking user can actually read path's own
+// content: a plain file's bytes, or — since listing a directory needs
+// the "search" permission bit too, not just read — a directory's own
+// entries when isDir is true. It calls the POSIX access(2) syscall
+// directly rather than comparing Entry.Mode's permission bits against
+// the process's own uid/gid by hand: that would still miss supplementary
+// group membership and whatever a filesystem's own ACLs add on top of
+// the classic nine permission bits, both of which the kernel already
+// accounts for — and it would get files like /proc/<pid>/mem wrong
+// outright, since procfs enforces its own access rules on open() that a
+// plain Mode reading can't see at all. access(2) checks the REAL uid/gid
+// (not the effective one), which is exactly what matters here: nothing
+// in breakthrough runs setuid. Symlinks are resolved automatically, the
+// same as os.Stat's own naming convention elsewhere in this file, so
+// this already reports on a symlink's target, not the symlink's own
+// (usually ignored) permission bits.
+func canRead(path string, isDir bool) bool {
+	// access(2)'s own mode flags: R_OK=4, X_OK=1 (POSIX <unistd.h>;
+	// package syscall doesn't export these as named constants).
+	const rOK, xOK = 0x4, 0x1
+	mode := uint32(rOK)
+	if isDir {
+		mode |= xOK
+	}
+	return syscall.Access(path, mode) == nil
 }
 
 // ListDir returns the entries of the directory at path, sorted with
@@ -169,9 +209,11 @@ func describeEntry(entryPath, name string, parentDev uint64, haveParentDev bool)
 			base.Type = TypeSymlinkDir
 			base.IsDir = true
 			base.MountPoint = mountPointVia(entryPath, parentDev, haveParentDev)
+			base.Unreadable = !canRead(entryPath, true)
 			return base
 		}
 		base.Type = TypeSymlinkFile
+		base.Unreadable = !canRead(entryPath, false)
 		return base
 	}
 
@@ -180,6 +222,7 @@ func describeEntry(entryPath, name string, parentDev uint64, haveParentDev bool)
 		base.Type = TypeDir
 		base.IsDir = true
 		base.MountPoint = mountPointVia(entryPath, parentDev, haveParentDev)
+		base.Unreadable = !canRead(entryPath, true)
 	case mode&os.ModeSocket != 0:
 		base.Type = TypeSocket
 	case mode&os.ModeNamedPipe != 0:
@@ -190,6 +233,7 @@ func describeEntry(entryPath, name string, parentDev uint64, haveParentDev bool)
 		base.Type = TypeBlockDevice
 	default:
 		base.Type = TypeFile
+		base.Unreadable = !canRead(entryPath, false)
 	}
 	return base
 }

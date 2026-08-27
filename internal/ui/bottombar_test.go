@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -308,6 +309,49 @@ func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
 	}
 }
 
+func TestKernelVersionTextMatchesUnameR(t *testing.T) {
+	requireCommand(t, "uname")
+	want, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		t.Fatalf("uname -r: %v", err)
+	}
+	if got := kernelVersionText(); got != strings.TrimSpace(string(want)) {
+		t.Errorf("kernelVersionText() = %q, want %q", got, strings.TrimSpace(string(want)))
+	}
+}
+
+// TestUptimeAndLoadAverageTextOnLinux only runs where /proc/uptime
+// actually exists (Linux) — see uptimeText/loadAverageText's own doc
+// comment on why this is Linux-only rather than parsing `uptime`'s
+// cross-platform-inconsistent output.
+func TestUptimeAndLoadAverageTextOnLinux(t *testing.T) {
+	if _, err := os.Stat("/proc/uptime"); err != nil {
+		t.Skip("no /proc/uptime on this platform")
+	}
+	if up, ok := uptimeText(); !ok || !strings.HasPrefix(up, "up ") {
+		t.Errorf("uptimeText() = %q, %v, want a \"up ...\" string, true", up, ok)
+	}
+	if load, ok := loadAverageText(); !ok || !strings.HasPrefix(load, "load ") {
+		t.Errorf("loadAverageText() = %q, %v, want a \"load ...\" string, true", load, ok)
+	}
+}
+
+func TestFormatUptime(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{90 * time.Minute, "01:30"},
+		{25 * time.Hour, "1d 01:00"},
+		{50*24*time.Hour + 4*time.Hour + 25*time.Minute, "50d 04:25"},
+	}
+	for _, c := range cases {
+		if got := formatUptime(c.d); got != c.want {
+			t.Errorf("formatUptime(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
 // requireCommand skips t unless name is on $PATH.
 func requireCommand(t *testing.T, name string) {
 	t.Helper()
@@ -316,29 +360,33 @@ func requireCommand(t *testing.T, name string) {
 	}
 }
 
-// TestBuildStatusBarSpansLocateButtons pins that each of the four button
-// spans in buildStatusBar's output actually covers that button's own
-// rendered label, and nothing else — the click-routing tests below rely
-// on this being right.
-func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
+// TestBuildButtonBarSpansLocateButtons pins that each button span in
+// buildButtonBar's output actually covers that button's own rendered
+// label, and nothing else — the click-routing tests below rely on this
+// being right.
+func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	text, spans := r.buildStatusBar()
+	text, spans := r.buildButtonBar()
 	runes := []rune(text)
 
-	wantActions := map[statusBarAction]string{
-		statusActionEdit:         "^E Edit",
-		statusActionRename:       "^R Rename",
-		statusActionToggleHidden: "^G Hidden",
-		statusActionSearch:       "^F Find",
-		statusActionOptions:      "^O Options",
-		statusActionHelp:         "F1 Help",
+	wantActions := map[buttonBarAction]string{
+		buttonActionEdit:         "^E Edit",
+		buttonActionLook:         "^L Look",
+		buttonActionRename:       "^R Rename",
+		buttonActionToggleHidden: "^G Hidden",
+		buttonActionSearch:       "^F Find",
+		buttonActionOptions:      "^O Options",
+		buttonActionHelp:         "F1 Help",
+		buttonActionTrash:        "^T Trash",
+		buttonActionRemove:       "^P Remove",
+		buttonActionSed:          "^S Sed",
 	}
-	found := map[statusBarAction]bool{}
+	found := map[buttonBarAction]bool{}
 	for _, s := range spans {
 		want, ok := wantActions[s.action]
 		if !ok {
@@ -358,92 +406,70 @@ func TestBuildStatusBarSpansLocateButtons(t *testing.T) {
 			t.Errorf("no span found for action %v", action)
 		}
 	}
-
-	if !strings.Contains(text, r.currentUser) {
-		t.Errorf("status bar text should contain the current user %q, got:\n%s", r.currentUser, text)
-	}
 }
 
-// TestBuildStatusBarSpansAccountForWideCharacters pins the fix for the
-// user's own report: a current username containing double-width (e.g.
-// CJK) characters must still leave every button span's start column at
-// that button's real display width offset, not short by however many
-// extra columns those characters occupy beyond their rune count (2
-// runes, 4 terminal columns for "文档"). dfSummary shells out to the
-// real, platform-specific df, so its output length isn't fixed across
-// machines — the expected column is derived from the returned text
-// itself via tview.TaggedStringWidth (the same measure buildStatusBar
-// now uses), not a hardcoded offset.
-func TestBuildStatusBarSpansAccountForWideCharacters(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.currentUser = "文档"
-
-	text, spans := r.buildStatusBar()
-
-	idx := strings.Index(text, "^E Edit")
-	if idx < 0 {
-		t.Fatalf("status bar text %q doesn't contain the Edit button label", text)
-	}
-	wantStart := tview.TaggedStringWidth(text[:idx])
-
-	var editSpan statusBarSpan
-	found := false
-	for _, s := range spans {
-		if s.action == statusActionEdit {
-			editSpan, found = s, true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("no span for statusActionEdit")
-	}
-	if editSpan.startCol != wantStart {
-		t.Errorf("edit span startCol = %d, want %d (real display width of %q, not its rune count)", editSpan.startCol, wantStart, text[:idx])
-	}
-}
-
-// clickStatusBar simulates a real left-click on the status bar at the
-// given column, the same way capturePropertiesMouse's own tests draw a
-// real screen first so InRect/GetInnerRect have real layout to resolve
-// coordinates against.
-func clickStatusBar(t *testing.T, r *Root, col int) {
-	t.Helper()
-
-	// Sized to the text's own actual width, not a fixed guess: dfSummary
-	// shells out to the real, platform-specific df, and GNU vs. BSD df
-	// (let alone different filesystems/mount paths) don't produce the
-	// same length line — a fixed 80-column screen was narrow enough on
-	// a real macOS CI runner to push the later buttons past its edge,
-	// making InRect reject clicks on them that a wider screen accepts
-	// fine.
-	width := tview.TaggedStringWidth(r.statusBar.GetText(true)) + 10
-	screen := tcell.NewSimulationScreen("")
-	if err := screen.Init(); err != nil {
-		t.Fatalf("screen.Init: %v", err)
-	}
-	defer screen.Fini()
-	screen.SetSize(width, 24)
-	r.statusBar.SetRect(0, 0, width, 1)
-	r.statusBar.Draw(screen)
-
-	rectX, _, _, _ := r.statusBar.GetInnerRect()
-	r.captureStatusBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(rectX+col, 0, tcell.Button1, 0))
-}
-
-func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
+// TestBuildStatusBarContainsUserNoButtons pins the split itself: the
+// status bar shows the current user (and, best-effort, other system
+// info — see buildStatusBar) but none of the button-bar labels any
+// more, now that they live on their own row (see buildButtonBar). Before
+// this split, a wide (e.g. CJK) username here could misalign every
+// button span after it on the same line — that whole bug class is gone
+// now that buttons never share a line with variable-width content at
+// all (buildButtonBar's spans always start counting from column 0).
+func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.refreshStatusBar()
+	text := r.statusBar.GetText(true)
+
+	if !strings.Contains(text, r.currentUser) {
+		t.Errorf("status bar text should contain the current user %q, got:\n%s", r.currentUser, text)
+	}
+	for _, label := range []string{"^E Edit", "^T Trash", "^P Remove"} {
+		if strings.Contains(text, label) {
+			t.Errorf("status bar text should no longer contain button label %q, got:\n%s", label, text)
+		}
+	}
+}
+
+// clickButtonBar simulates a real left-click on the button bar at the
+// given column, the same way capturePropertiesMouse's own tests draw a
+// real screen first so InRect/GetInnerRect have real layout to resolve
+// coordinates against.
+func clickButtonBar(t *testing.T, r *Root, col int) {
+	t.Helper()
+
+	// Sized to the text's own actual width, not a fixed guess — the
+	// button labels are fixed, but leaving headroom here costs nothing
+	// and matches the same defensive sizing the old combined bar needed
+	// (see git history) back when a variable-width df/username prefix
+	// shared this line.
+	width := tview.TaggedStringWidth(r.buttonBar.GetText(true)) + 10
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, 24)
+	r.buttonBar.SetRect(0, 0, width, 1)
+	r.buttonBar.Draw(screen)
+
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
+	r.captureButtonBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(rectX+col, 0, tcell.Button1, 0))
+}
+
+func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
 	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry, so this exercises editCurrentEntry for real
 
-	span, ok := statusBarSpanFor(r, statusActionEdit)
+	span, ok := buttonBarSpanFor(r, buttonActionEdit)
 	if !ok {
 		t.Fatal("no Edit span found")
 	}
@@ -453,10 +479,43 @@ func TestCaptureStatusBarMouseEditClickRunsEditAction(t *testing.T) {
 	// the actual editor invocation), so this only pins that the click
 	// reaches editCurrentEntry/runEditor and the panel reloads cleanly
 	// afterwards, not that an editor actually ran.
-	clickStatusBar(t, r, span.startCol)
+	clickButtonBar(t, r, span.startCol)
 
 	if r.activePage == errorPage {
 		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "^T Trash"
+// button (see buildButtonBar/runButtonBarAction) to the same
+// moveSelectionToTrash a right-click menu's "Move to Trash" and Ctrl+T/
+// Entf already run — one action, three ways to reach it.
+func TestCaptureButtonBarMouseTrashClickMovesFileToTrash(t *testing.T) {
+	dir := fixtureDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // off ".." onto a real entry
+
+	_, target, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("no current row to trash")
+	}
+
+	span, ok := buttonBarSpanFor(r, buttonActionTrash)
+	if !ok {
+		t.Fatal("no Trash span found")
+	}
+	clickButtonBar(t, r, span.startCol)
+
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatalf("%s still exists after clicking the Trash button (err=%v)", target, err)
+	}
+	if r.activePage == errorPage {
+		t.Errorf("clicking Trash should not report an error here, got: %q", r.errorView.GetText(true))
 	}
 }
 
@@ -489,40 +548,21 @@ func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
 	}
 }
 
-// TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks is
-// TestCaptureStatusBarMouseEditClickRunsEditAction's counterpart with a
-// double-width (CJK) username ahead of the buttons on the same row —
-// exercising the fix end to end (real Draw, real column math) rather
-// than just the span numbers a plain unit test would check.
-func TestCaptureStatusBarMouseWithWideUsernameStillRoutesClicks(t *testing.T) {
+// Note: this file used to also have a "...WithWideUsernameStillRoutesClicks"
+// test here, pinning that a double-width (CJK) username ahead of the
+// buttons on the same row didn't shift every button span after it. That
+// whole bug class no longer exists now that the username (buildStatusBar)
+// and the buttons (buildButtonBar) live on separate rows — buttonBar's
+// spans always start counting from column 0, with nothing variable-width
+// ever sharing that line. See TestBuildStatusBarContainsUserNoButtons for
+// the split itself.
+
+func TestCaptureButtonBarMouseRenameClickOpensRename(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.currentUser = "文档使用者" // 5 runes, 10 terminal columns
-	r.refreshStatusBar()
-	r.panel.focusRow(1) // off ".." onto a real entry, so editCurrentEntry has something to act on
-
-	span, ok := statusBarSpanFor(r, statusActionEdit)
-	if !ok {
-		t.Fatal("no Edit span found")
-	}
-
-	clickStatusBar(t, r, span.startCol)
-
-	if r.activePage == errorPage {
-		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
-	}
-}
-
-func TestCaptureStatusBarMouseRenameClickOpensRename(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.refreshStatusBar()
 	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
 
 	row, path, ok := r.panel.CurrentRowPath()
@@ -530,11 +570,11 @@ func TestCaptureStatusBarMouseRenameClickOpensRename(t *testing.T) {
 		t.Fatal("setup: no current row")
 	}
 
-	span, ok := statusBarSpanFor(r, statusActionRename)
+	span, ok := buttonBarSpanFor(r, buttonActionRename)
 	if !ok {
 		t.Fatal("no Rename span found")
 	}
-	clickStatusBar(t, r, span.startCol)
+	clickButtonBar(t, r, span.startCol)
 
 	if r.activePage != renamePage {
 		t.Errorf("activePage = %q, want %q", r.activePage, renamePage)
@@ -544,34 +584,33 @@ func TestCaptureStatusBarMouseRenameClickOpensRename(t *testing.T) {
 	}
 }
 
-func TestCaptureStatusBarMouseHiddenClickTogglesShowHidden(t *testing.T) {
+func TestCaptureButtonBarMouseHiddenClickTogglesShowHidden(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.refreshStatusBar()
 	before := r.panel.showHidden
 
-	span, ok := statusBarSpanFor(r, statusActionToggleHidden)
+	span, ok := buttonBarSpanFor(r, buttonActionToggleHidden)
 	if !ok {
 		t.Fatal("no Hidden span found")
 	}
-	clickStatusBar(t, r, span.startCol)
+	clickButtonBar(t, r, span.startCol)
 
 	if r.panel.showHidden == before {
 		t.Error("clicking Hidden should have toggled showHidden")
 	}
 }
 
-// statusBarSpanFor returns the first span for action in r.statusBarSpans.
-func statusBarSpanFor(r *Root, action statusBarAction) (statusBarSpan, bool) {
-	for _, s := range r.statusBarSpans {
+// buttonBarSpanFor returns the first span for action in r.buttonBarSpans.
+func buttonBarSpanFor(r *Root, action buttonBarAction) (buttonBarSpan, bool) {
+	for _, s := range r.buttonBarSpans {
 		if s.action == action {
 			return s, true
 		}
 	}
-	return statusBarSpan{}, false
+	return buttonBarSpan{}, false
 }
 
 // TestAcceptsGlobalShortcutGuards pins acceptsGlobalShortcut's two
@@ -664,7 +703,6 @@ func TestPanelOnLoadRefreshesStatusBar(t *testing.T) {
 	}
 
 	r.statusBar.SetText("")
-	r.statusBarSpans = nil
 
 	if err := r.panel.load(dir); err != nil {
 		t.Fatalf("load: %v", err)
@@ -672,9 +710,6 @@ func TestPanelOnLoadRefreshesStatusBar(t *testing.T) {
 
 	if r.statusBar.GetText(true) == "" {
 		t.Error("navigating should have refreshed the status bar via Panel.onLoad")
-	}
-	if len(r.statusBarSpans) == 0 {
-		t.Error("navigating should have rebuilt statusBarSpans via Panel.onLoad")
 	}
 }
 
@@ -693,7 +728,7 @@ func isolateHistoryFile(t *testing.T) {
 	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
 }
 
-func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
+func TestBashLineRunsThroughRunBashCommand(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -701,7 +736,11 @@ func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.bashLine.SetText("echo hello")
+	// app.Suspend is a no-op here (no real screen behind r.app — see
+	// TestCaptureStatusBarMouseEditClickRunsEditAction's own doc
+	// comment), so this only pins that Enter reaches runBashCommand and
+	// the line clears afterwards, not that a command actually ran.
+	r.bashLine.SetText("echo hello", true)
 	r.bashLine.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.bashLine.GetText(); got != "" {
@@ -709,10 +748,10 @@ func TestBashLineRunsThroughRunShellCommand(t *testing.T) {
 	}
 }
 
-// TestRunShellCommandEmptyIsNoop pins that submitting a blank (or
-// whitespace-only) command does nothing — no Suspend, no panel reload,
-// no error.
-func TestRunShellCommandEmptyIsNoop(t *testing.T) {
+// TestRunBashCommandEmptyIsNoop pins that submitting a blank (or
+// whitespace-only) command does nothing — no Suspend, no captured run,
+// no panel reload, no error.
+func TestRunBashCommandEmptyIsNoop(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -720,7 +759,7 @@ func TestRunShellCommandEmptyIsNoop(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("   ")
+	r.runBashCommand("   ")
 
 	if r.activePage == errorPage {
 		t.Error("an empty command should not report an error")
@@ -777,7 +816,7 @@ func TestRunShellCommandCdNavigatesPanelDirectly(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("cd app-data")
+	r.runBashCommand("cd app-data")
 
 	if r.panel.path != target {
 		t.Errorf("panel.path = %q, want %q", r.panel.path, target)
@@ -881,8 +920,8 @@ func TestRunShellCommandRecordsHistory(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("echo one")
-	r.runShellCommand("echo two")
+	r.runBashCommand("echo one")
+	r.runBashCommand("echo two")
 
 	want := []string{"echo one", "echo two"}
 	if len(r.bashHistory) != len(want) {
@@ -899,9 +938,12 @@ func TestRunShellCommandRecordsHistory(t *testing.T) {
 }
 
 // TestBashHistoryUpDownNavigation pins the full readline-style
-// interaction: Up recalls older entries one at a time and stops at the
-// oldest; Down recalls newer entries and restores whatever was being
-// typed (the draft) once it moves past the newest one.
+// interaction — now Ctrl+P/Ctrl+N, not Up/Down, which TextArea's own
+// default handling needs for moving the cursor between lines instead
+// (see captureBashLineKey's own doc comment): Ctrl+P recalls older
+// entries one at a time and stops at the oldest; Ctrl+N recalls newer
+// entries and restores whatever was being typed (the draft) once it
+// moves past the newest one.
 func TestBashHistoryUpDownNavigation(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
@@ -910,42 +952,42 @@ func TestBashHistoryUpDownNavigation(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.runShellCommand("first")
-	r.runShellCommand("second")
-	r.bashLine.SetText("in progress")
+	r.runBashCommand("first")
+	r.runBashCommand("second")
+	r.bashLine.SetText("in progress", true)
 
-	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-	down := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+	up := tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone)
+	down := tcell.NewEventKey(tcell.KeyCtrlN, 0, tcell.ModNone)
 
 	r.captureBashLineKey(up) // -> "second" (newest), remembering "in progress" as the draft
 	if got := r.bashLine.GetText(); got != "second" {
-		t.Errorf("after one Up, text = %q, want %q", got, "second")
+		t.Errorf("after one Ctrl+P, text = %q, want %q", got, "second")
 	}
 
 	r.captureBashLineKey(up) // -> "first" (oldest)
 	if got := r.bashLine.GetText(); got != "first" {
-		t.Errorf("after two Ups, text = %q, want %q", got, "first")
+		t.Errorf("after two Ctrl+Ps, text = %q, want %q", got, "first")
 	}
 
 	r.captureBashLineKey(up) // already at the oldest entry — stays put, does not wrap
 	if got := r.bashLine.GetText(); got != "first" {
-		t.Errorf("Up past the oldest entry = %q, want it to stay at %q", got, "first")
+		t.Errorf("Ctrl+P past the oldest entry = %q, want it to stay at %q", got, "first")
 	}
 
 	r.captureBashLineKey(down) // -> "second"
 	if got := r.bashLine.GetText(); got != "second" {
-		t.Errorf("after one Down, text = %q, want %q", got, "second")
+		t.Errorf("after one Ctrl+N, text = %q, want %q", got, "second")
 	}
 
 	r.captureBashLineKey(down) // -> back past the newest entry: restores the draft
 	if got := r.bashLine.GetText(); got != "in progress" {
-		t.Errorf("Down past the newest entry = %q, want the draft %q restored", got, "in progress")
+		t.Errorf("Ctrl+N past the newest entry = %q, want the draft %q restored", got, "in progress")
 	}
 }
 
-// TestBashHistoryDownWithNoHistoryIsNoop pins that Down is harmless when
-// nothing has been recalled yet (no history at all, or history exists
-// but Up was never pressed).
+// TestBashHistoryDownWithNoHistoryIsNoop pins that Ctrl+N is harmless
+// when nothing has been recalled yet (no history at all, or history
+// exists but Ctrl+P was never pressed).
 func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
@@ -954,11 +996,11 @@ func TestBashHistoryDownWithNoHistoryIsNoop(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.bashLine.SetText("untouched")
-	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+	r.bashLine.SetText("untouched", true)
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyCtrlN, 0, tcell.ModNone))
 
 	if got := r.bashLine.GetText(); got != "untouched" {
-		t.Errorf("text = %q after a stray Down, want unchanged %q", got, "untouched")
+		t.Errorf("text = %q after a stray Ctrl+N, want unchanged %q", got, "untouched")
 	}
 }
 
@@ -1036,9 +1078,10 @@ func TestAppendBashHistoryThenLoadRoundTrips(t *testing.T) {
 }
 
 // TestNewRootLoadsExistingHistory pins the end-to-end wiring: a
-// pre-existing history file is what Up recalls from the moment Root is
-// constructed, before any command has been run in this session at all
-// — inheriting an old session's history, not just recording a new one.
+// pre-existing history file is what Ctrl+P recalls from the moment Root
+// is constructed, before any command has been run in this session at
+// all — inheriting an old session's history, not just recording a new
+// one.
 func TestNewRootLoadsExistingHistory(t *testing.T) {
 	t.Setenv("HISTFILE", filepath.Join(t.TempDir(), "history"))
 	if err := appendBashHistory(os.Getenv("HISTFILE"), "old session command"); err != nil {
@@ -1051,8 +1094,8 @@ func TestNewRootLoadsExistingHistory(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone))
+	r.captureBashLineKey(tcell.NewEventKey(tcell.KeyCtrlP, 0, tcell.ModNone))
 	if got := r.bashLine.GetText(); got != "old session command" {
-		t.Errorf("Up right after startup = %q, want the pre-existing history entry %q", got, "old session command")
+		t.Errorf("Ctrl+P right after startup = %q, want the pre-existing history entry %q", got, "old session command")
 	}
 }

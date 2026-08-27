@@ -83,16 +83,21 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.quitConfirm.SetBackgroundColor(theme.AccentBackground)
 	r.quitConfirm.SetMainTextColor(theme.Text)
 
+	r.purgeConfirm.SetBackgroundColor(theme.AccentBackground)
+	r.purgeConfirm.SetMainTextColor(theme.Text)
+
 	r.picker.SetBackgroundColor(theme.AccentBackground)
 	r.picker.SetMainTextColor(theme.Text)
 
 	r.errorView.SetTextColor(theme.Text)
 	r.errorView.SetBackgroundColor(theme.ErrorBackground)
 
-	r.bashLine.SetFieldBackgroundColor(theme.AccentBackground)
 	r.bashLine.SetBackgroundColor(theme.AccentBackground)
-	r.bashLine.SetLabelColor(theme.Text)
-	r.bashLine.SetFieldTextColor(theme.Text)
+	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
+	r.bashHint.SetBackgroundColor(theme.AccentBackground)
+	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
+	r.buttonBar.SetBackgroundColor(theme.AccentBackground)
+	r.buttonBar.SetTextColor(theme.Text)
 	r.statusBar.SetBackgroundColor(theme.AccentBackground)
 	r.statusBar.SetTextColor(theme.Text)
 
@@ -143,6 +148,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpView.SetBackgroundColor(theme.AccentBackground)
 		r.helpView.SetTextColor(theme.Text)
 	}
+
+	if r.viewerView != nil {
+		r.viewerView.SetBackgroundColor(theme.AccentBackground)
+		r.viewerView.SetTextColor(theme.Text)
+	}
+
+	r.sedForm.SetBackgroundColor(theme.AccentBackground)
+	r.sedForm.SetLabelColor(theme.Text)
+	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.sedForm.SetFieldTextColor(theme.Text)
+	r.sedFlagsList.SetBackgroundColor(theme.AccentBackground)
+	r.sedFlagsList.SetMainTextColor(theme.Text)
+	r.sedActions.SetBackgroundColor(theme.AccentBackground)
+	r.sedActions.SetMainTextColor(theme.Text)
+
+	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewStatus.SetTextColor(theme.Text)
+	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewActions.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewActions.SetMainTextColor(theme.Text)
 
 	r.panel.applyTheme(theme)
 }
