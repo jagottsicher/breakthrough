@@ -32,6 +32,7 @@ const (
 	buttonActionHelp
 	buttonActionTrash
 	buttonActionRemove
+	buttonActionSed
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -141,6 +142,8 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	button("^T Trash", buttonActionTrash)
 	write("  ")
 	button("^P Remove", buttonActionRemove)
+	write("  ")
+	button("^S Sed", buttonActionSed)
 
 	return b.String(), spans
 }
@@ -473,6 +476,8 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.moveSelectionToTrash()
 	case buttonActionRemove:
 		r.openRemoveConfirm()
+	case buttonActionSed:
+		r.openSedReplace()
 	}
 }
 
