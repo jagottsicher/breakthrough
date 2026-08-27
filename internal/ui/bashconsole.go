@@ -94,8 +94,17 @@ func (r *Root) expandBashConsole() {
 
 // collapseBashConsole is expandBashConsole's counterpart, wired as
 // bashLine's own BlurFunc: back to a single row, bashHint hidden. Runs
-// every time focus leaves bashLine — Escape, or a click elsewhere.
+// every time focus leaves bashLine — Escape, or a click elsewhere — with
+// one deliberate exception: focus moving to the completion picker (see
+// openCompletionPicker/bashLineCompletingPick) isn't "leaving the
+// console" the way those are, so it's skipped for that one, per the
+// user's own direct report that the console collapsing out from under
+// an open completion list made no sense — the list is completing
+// bashLine's own buffer, which the user still needs to see.
 func (r *Root) collapseBashConsole() {
+	if r.bashLineCompletingPick {
+		return
+	}
 	r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
 	r.bashConsole.ResizeItem(r.bashHint, 0, 0)
 	r.bashConsole.ResizeItem(r.bashLine, 1, 0)
@@ -289,20 +298,50 @@ func (r *Root) openCompletionPicker(matches []string, start, end int) {
 	r.picker.SetCurrentItem(0)
 	r.picker.SetOffset(0, 0)
 
+	// Moving focus to the picker (inside pushOverlayReturningFocusTo)
+	// blurs bashLine, which would ordinarily collapse the console right
+	// back down (see collapseBashConsole, bashLine's own BlurFunc) — this
+	// flag is collapseBashConsole's own signal to skip that, just for
+	// this one, deliberate transition (see bashLineCompletingPick's own
+	// doc comment on the Root struct).
+	r.bashLineCompletingPick = true
 	r.pushOverlayReturningFocusTo(pickerPage, r.picker, r.bashLine)
+	r.bashLineCompletingPick = false
 }
 
 // completionPickerPosition anchors the completion picker's bottom edge
-// against bashConsole's own current top edge — directly above the
-// expanded console, the same way a real terminal's own completion
-// listing appears right above the line it completes, keeping bashLine's
-// own buffer (and the word actually being completed) visible above the
-// list rather than covered by it. clampToPanel (see openCompletionPicker)
-// still has the final say, shrinking/repositioning this if the panel
-// above the console isn't tall enough to fit it as given.
+// against the word actually being completed — bashLine's own current
+// cursor position on screen (see bashLineCursorScreenPosition) — per the
+// user's own direct report that a fixed spot on the console's own left
+// edge was wrong: it should track wherever in the line completion is
+// actually happening. Opening upward from there, the same way the
+// console itself grows upward on focus, keeps bashLine's own buffer
+// visible above the list rather than covered by it. clampToPanel (see
+// openCompletionPicker) still has the final say, shrinking/repositioning
+// this if the panel above the console isn't tall enough to fit it as
+// given.
 func (r *Root) completionPickerPosition(width, height int) (x, y int) {
-	consoleX, consoleY, _, _ := r.bashConsole.GetRect()
-	return consoleX, consoleY - height
+	cursorX, cursorY := r.bashLineCursorScreenPosition()
+	return cursorX, cursorY - height
+}
+
+// bashLineCursorScreenPosition returns where bashLine's own cursor is
+// currently drawn on screen: its GetInnerRect's own origin, offset by
+// the cursor's row/column (see GetCursor) less whatever's currently
+// scrolled off the top/left (see GetOffset). Exact for the overwhelming
+// common case this matters for (see completionPickerPosition) —
+// completing a path within a single, unwrapped command line, where both
+// the row and the scroll offset's own row are 0 either way. Not
+// accounted for: TextArea's own default line-wrapping spreading one long
+// logical line across more than one visual row, which would need
+// reverse-engineering its internal wrap bookkeeping to follow exactly —
+// clampToPanel (see completionPickerPosition) still keeps the result
+// on-screen even then, just not necessarily lined up with the cursor.
+func (r *Root) bashLineCursorScreenPosition() (x, y int) {
+	_, _, cursorRow, cursorCol := r.bashLine.GetCursor() // "to": the actual cursor, not a selection's start (see GetCursor's own doc comment) — same as completeBashLine reads for the same reason
+	offsetRow, offsetCol := r.bashLine.GetOffset()
+	innerX, innerY, _, _ := r.bashLine.GetInnerRect()
+	return innerX + (cursorCol - offsetCol), innerY + (cursorRow - offsetRow)
 }
 
 // completionBasename returns match's own final path component for

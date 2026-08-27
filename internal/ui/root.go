@@ -288,6 +288,16 @@ type Root struct {
 	statusBar      *tview.TextView
 	statusBarSpans []statusBarSpan
 
+	// bashLineCompletingPick is true only for the moment openCompletionPicker
+	// moves focus away from bashLine to the completion picker it opens —
+	// a deliberate, momentary transition, not the user leaving the
+	// console, so collapseBashConsole (bashLine's own BlurFunc, which
+	// that focus change would otherwise trigger) checks this and skips
+	// collapsing while it's set. Never true otherwise: blurring away for
+	// any real reason (Escape, clicking the panel, running a command)
+	// still collapses normally.
+	bashLineCompletingPick bool
+
 	// bashHistory is every command available for the bash line's
 	// Ctrl+P/Ctrl+N navigation (see bashHistoryUp/Down — not Up/Down
 	// themselves, which move the cursor within bashLine's own
