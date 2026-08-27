@@ -86,11 +86,12 @@ var helpText = strings.TrimLeft(`
   Click to expand         Grows upward toward mid-screen while focused
                            (a legend of these same keys shows above it),
                            collapses back to one row on Escape/click away
-  Enter                    Run the buffer — a real terminal, for every
-                           command, the same as Midnight Commander's own
-                           command line. Once it's done, press Escape to
-                           return (its own output stays on screen to read
-                           until then)
+  Enter                    Run the buffer — a real terminal, with your
+                           shell's own ~/.bashrc, aliases and functions
+                           sourced first, for every command, the same as
+                           Midnight Commander's own command line. Once
+                           it's done, press Escape to return (its own
+                           output stays on screen to read until then)
   Ctrl+J / Alt+Enter        Insert a newline (compose a multi-line script)
                            — Ctrl+J always works; Alt+Enter is intercepted
                            by some terminal emulators for their own use
@@ -98,6 +99,9 @@ var helpText = strings.TrimLeft(`
   Ctrl+P / Ctrl+N          — Up/Down only at the first/last line of a
                            multi-line buffer, otherwise they move the
                            cursor as usual; Ctrl+P/Ctrl+N always recall
+                           regardless of cursor position
+  Tab                      Complete the filename/directory at the cursor
+                           against the panel's own current directory
 `, "\n")
 
 // newHelpView builds the Help overlay: a single, scrollable, read-only
