@@ -35,7 +35,11 @@ func (r *Root) openSedReplace() {
 	r.sedTargets = targets
 	r.resetSedForm()
 
-	width, height := 78, 14
+	// height fits every field/checkbox/button this form actually has
+	// (10 items plus their labels/spacing plus the button row) — checked
+	// against a real render, not guessed; a shorter value silently
+	// clipped the bottom rows, Preview/Cancel included.
+	width, height := 78, 22
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -54,16 +58,11 @@ func (r *Root) openSedReplace() {
 // openSedReplace), since tview.Form doesn't lend itself to being reset
 // in place the way a List's own AddItem/SetItemText does.
 //
-// A real border and title here, unlike menu/quitConfirm/purgeConfirm's
-// deliberately borderless floating widgets (see NewRoot's own comment
-// on those): a multi-field form benefits from a visible frame and a
-// label saying what it is, the same shape tview's own Form is designed
-// around — nothing else in this app is dense enough to need that
-// treatment.
+// No border, matching every other floating widget in this app (see
+// NewRoot's own comment on menu/quitConfirm/purgeConfirm) — a plain
+// background color set apart from the panel already does the same job.
 func (r *Root) newSedForm() *tview.Form {
 	f := tview.NewForm()
-	f.SetBorder(true)
-	f.SetTitle(" Sed Replace ")
 	f.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			r.hideOverlay()
@@ -109,6 +108,20 @@ func (r *Root) resetSedForm() {
 
 	r.sedForm.AddButton("Preview", r.runSedPreview)
 	r.sedForm.AddButton("Cancel", r.hideOverlay)
+
+	r.styleSedCheckboxes()
+}
+
+// styleSedCheckboxes swaps every checkbox's default "X" glyph for the
+// outline/filled circle (○/●) this app already uses for the panel's own
+// checkbox column (see checkboxText in panel.go) — one visual language
+// for "this is a boolean toggle" instead of two different ones.
+func (r *Root) styleSedCheckboxes() {
+	for _, label := range []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup} {
+		if cb, ok := r.sedForm.GetFormItemByLabel(label).(*tview.Checkbox); ok {
+			cb.SetCheckedString(checkboxText(true)).SetUncheckedString(checkboxText(false))
+		}
+	}
 }
 
 // sedTargetsLabel is the form's own "Target" line: the single file's
@@ -230,8 +243,6 @@ func formatSedPreview(changes []replace.FileChange, skipped map[string]string) s
 func (r *Root) newSedPreviewLayout() *tview.Flex {
 	r.sedPreviewView = tview.NewTextView()
 	r.sedPreviewView.SetDynamicColors(true)
-	r.sedPreviewView.SetBorder(true)
-	r.sedPreviewView.SetTitle(" Sed Replace - Preview ")
 
 	r.sedPreviewActions = tview.NewList().ShowSecondaryText(false)
 	r.sedPreviewActions.SetHighlightFullLine(true)
