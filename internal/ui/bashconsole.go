@@ -10,14 +10,24 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"golang.org/x/term"
 )
+
+// bashHintText is bashHint's own fixed content — a single-row, always-
+// the-same legend spelling out bashLine's keybindings, since none of
+// them are otherwise discoverable from the collapsed line alone (per
+// the user's own report: "man weiß nicht worum es geht").
+const bashHintText = "Enter Run (full screen)   Alt+Enter Newline   ↑/↓ or ^P/^N History   Esc Close"
 
 // newBashConsole builds bashLine, a multi-line shell command/script
 // editor (no "$ " label, full width, per the user's own explicit
 // request) that grows upward on focus (see expandBashConsole/
 // collapseBashConsole) so a longer, multi-line script (composed via
 // Alt+Enter — see captureBashLineKey) stays visible while it's being
-// written. Called from newBottomBar.
+// written, plus bashHint, a plain, read-only legend line shown above it
+// while expanded (see bashHintText) — both wrapped together in
+// bashConsole, a small nested Flex expandBashConsole/collapseBashConsole
+// resize as one unit. Called from newBottomBar.
 //
 // Every command runs the same way: full-screen, via a real terminal
 // (see runShellCommandFullScreen) — the same as Midnight Commander's
@@ -32,6 +42,9 @@ import (
 // cosmetic one. Always going full-screen sidesteps the classification
 // problem entirely, the same way MC's own design does.
 func (r *Root) newBashConsole() {
+	r.bashHint = tview.NewTextView()
+	r.bashHint.SetText(bashHintText)
+
 	r.bashLine = tview.NewTextArea()
 	r.bashLine.SetInputCapture(r.captureBashLineKey)
 	r.bashLine.SetFinishedFunc(func(tcell.Key) {
@@ -51,12 +64,17 @@ func (r *Root) newBashConsole() {
 	r.bashHistoryFile = historyFilePath()
 	r.bashHistory = loadBashHistory(r.bashHistoryFile)
 	r.bashHistoryIdx = len(r.bashHistory)
+
+	r.bashConsole = tview.NewFlex().SetDirection(tview.FlexRow)
+	r.bashConsole.AddItem(r.bashHint, 0, 0, false) // hidden (0,0) until expanded
+	r.bashConsole.AddItem(r.bashLine, 1, 0, true)
 }
 
-// expandBashConsole grows bashLine upward — full width, already true,
-// since it's stacked directly in mainLayout's own FlexRow rather than
-// nested in a FlexColumn — up to just under half the terminal's
-// current height, so a multi-line script being composed (see
+// expandBashConsole grows bashConsole upward — full width, already
+// true, since it's stacked directly in mainLayout's own FlexRow rather
+// than nested in a FlexColumn — up to just under half the terminal's
+// current height: one row for bashHint's own legend, the rest for
+// bashLine, so a multi-line script being composed (see
 // captureBashLineKey's own Alt+Enter case) stays visible as it grows,
 // rather than scrolling out of a single row. Wired as bashLine's own
 // FocusFunc, so this runs the moment it's clicked into or otherwise
@@ -64,17 +82,21 @@ func (r *Root) newBashConsole() {
 func (r *Root) expandBashConsole() {
 	_, _, _, screenHeight := r.GetRect() // Root fills the whole screen
 	target := screenHeight / 2
-	if target < 1 {
-		target = 1
+	if target < 2 {
+		target = 2 // bashHint's own row, plus at least one for bashLine
 	}
-	r.mainLayout.ResizeItem(r.bashLine, target, 0)
+	r.mainLayout.ResizeItem(r.bashConsole, target, 0)
+	r.bashConsole.ResizeItem(r.bashHint, 1, 0)
+	r.bashConsole.ResizeItem(r.bashLine, 0, 1) // fills whatever's left of target
 }
 
 // collapseBashConsole is expandBashConsole's counterpart, wired as
-// bashLine's own BlurFunc: back to a single row. Runs every time focus
-// leaves bashLine — Escape, or a click elsewhere.
+// bashLine's own BlurFunc: back to a single row, bashHint hidden. Runs
+// every time focus leaves bashLine — Escape, or a click elsewhere.
 func (r *Root) collapseBashConsole() {
-	r.mainLayout.ResizeItem(r.bashLine, 1, 0)
+	r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
+	r.bashConsole.ResizeItem(r.bashHint, 0, 0)
+	r.bashConsole.ResizeItem(r.bashLine, 1, 0)
 }
 
 // captureBashLineKey handles everything bashLine's own default TextArea
@@ -87,16 +109,30 @@ func (r *Root) collapseBashConsole() {
 //   - Alt+Enter: falls through to TextArea's own default handling
 //     (returned unchanged) — inserts a literal newline, for composing a
 //     multi-line script across several lines before running it.
-//   - Ctrl+P / Ctrl+N: recall the previous/next history entry (see
-//     bashHistoryUp/Down) — not Up/Down, which TextArea already uses to
-//     move the cursor between lines, needed now that the buffer can
-//     genuinely span more than one.
+//   - Up / Down at the first/last line of the buffer: recall the
+//     previous/next history entry (see bashHistoryUp/Down), the same as
+//     a real shell's own readline does once there's nowhere left to
+//     move the cursor. For the common case — a single-line buffer, the
+//     only line is always both the first and the last — this makes
+//     plain Up/Down work exactly like a real shell's history recall.
+//     Anywhere else in a multi-line buffer, falls through unchanged to
+//     TextArea's own default handling instead, moving the cursor
+//     between lines as usual.
+//   - Ctrl+P / Ctrl+N: recall the previous/next history entry
+//     unconditionally, regardless of cursor position — the explicit,
+//     always-available form of the above.
 func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0:
 		return event
 	case event.Key() == tcell.KeyEnter:
 		r.runBashCommand(r.bashLine.GetText())
+		return nil
+	case event.Key() == tcell.KeyUp && r.bashLineAtFirstLine():
+		r.bashHistoryUp()
+		return nil
+	case event.Key() == tcell.KeyDown && r.bashLineAtLastLine():
+		r.bashHistoryDown()
 		return nil
 	case event.Key() == tcell.KeyCtrlP:
 		r.bashHistoryUp()
@@ -106,6 +142,22 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return event
+}
+
+// bashLineAtFirstLine and bashLineAtLastLine report whether bashLine's
+// own cursor currently sits on the first/last line of its (possibly
+// multi-line — see captureBashLineKey's own Alt+Enter case) buffer —
+// the boundary at which Up/Down should recall history instead of
+// TextArea's own default of moving the cursor to a line that doesn't
+// exist. For a single-line buffer, the only line is always both.
+func (r *Root) bashLineAtFirstLine() bool {
+	row, _, _, _ := r.bashLine.GetCursor()
+	return row == 0
+}
+
+func (r *Root) bashLineAtLastLine() bool {
+	row, _, _, _ := r.bashLine.GetCursor()
+	return row == strings.Count(r.bashLine.GetText(), "\n")
 }
 
 // bashHistoryUp recalls the previous (older) history entry, the same as
@@ -273,24 +325,78 @@ func (r *Root) runBashCommand(command string) {
 // the real terminal handed over for the duration and the panel's
 // current directory as its working directory — full interactivity,
 // including interactive programs like vim, less, or mc, exactly like
-// Midnight Commander's own command line. The panel reloads once the
-// command exits, in case it changed anything in the directory currently
-// on screen.
+// Midnight Commander's own command line.
+//
+// Echoes "$ command" before running it and waits for Escape once it's
+// done (see waitForEscape) — both per the user's own report that a
+// short command's own output otherwise flashes by and is gone the
+// moment breakthrough's own screen redraws over it the instant Suspend
+// returns, with no indication of what even ran. bashLine ends up
+// collapsed either way (SetFocus moves focus off it, triggering
+// collapseBashConsole via its own BlurFunc — see newBashConsole) once
+// back, per the user's own explicit "soll man zurückkehren auf
+// breakthrough mit geschlossenem bash Feld".
+//
+// The panel reloads once the command exits, in case it changed anything
+// in the directory currently on screen.
 func (r *Root) runShellCommandFullScreen(command string) {
 	var runErr error
 	r.app.Suspend(func() {
+		fmt.Printf("$ %s\n", command)
 		cmd := exec.Command(userShell(), "-c", command)
 		cmd.Dir = r.panel.path
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
+
+		fmt.Print("\n[Press Esc to return to breakthrough]")
+		waitForEscape()
 	})
 
 	r.bashLine.SetText("", true)
+	r.app.SetFocus(r.panel.table)
 	if runErr != nil {
 		r.showError(fmt.Errorf("%s: %w", command, runErr))
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))
+}
+
+// waitForEscape blocks until Escape is pressed on the real terminal —
+// called from inside app.Suspend (see runShellCommandFullScreen), after
+// a command has finished and its own output is what's currently on
+// screen, so there's a real chance to read it before breakthrough's own
+// UI redraws over it. Puts stdin into raw mode for the duration (see
+// golang.org/x/term) so a single keypress is enough — the terminal is
+// back in its normal, line-buffered mode at this point, the same "hand
+// a real terminal to the child process" state Suspend itself creates
+// for the command that just ran.
+//
+// Best-effort: if stdin isn't a real terminal at all (e.g. under `go
+// test`, or redirected) or raw mode can't be entered, returns
+// immediately rather than risk hanging on a keypress that may never
+// cleanly arrive — the same reasoning appendBashHistory's own doc
+// comment gives for its own best-effort failures.
+func waitForEscape() {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return
+	}
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return
+	}
+	defer func() { _ = term.Restore(fd, oldState) }()
+
+	buf := make([]byte, 1)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil || n == 0 {
+			return
+		}
+		if buf[0] == 0x1b { // Esc
+			return
+		}
+	}
 }
 
 // parseCdCommand reports whether command is exactly a "cd" invocation —
