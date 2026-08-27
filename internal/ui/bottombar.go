@@ -14,46 +14,61 @@ import (
 	"github.com/rivo/tview"
 )
 
-// statusBarAction identifies one clickable region in the status bar (see
-// statusBarSpan/buildStatusBar) — the bottom bar's own equivalent of
+// buttonBarAction identifies one clickable region in the button bar (see
+// buttonBarSpan/buildButtonBar) — the bottom bar's own equivalent of
 // headerSpan/propertySpan, the same hand-rolled span-tracking pattern
 // used everywhere else in this codebase for a line with several
 // distinct click targets, rather than tview's own region/Highlight
 // mechanism.
-type statusBarAction int
+type buttonBarAction int
 
 const (
-	statusActionEdit statusBarAction = iota
-	statusActionLook
-	statusActionRename
-	statusActionToggleHidden
-	statusActionOptions
-	statusActionSearch
-	statusActionHelp
-	statusActionTrash
-	statusActionRemove
+	buttonActionEdit buttonBarAction = iota
+	buttonActionLook
+	buttonActionRename
+	buttonActionToggleHidden
+	buttonActionOptions
+	buttonActionSearch
+	buttonActionHelp
+	buttonActionTrash
+	buttonActionRemove
 )
 
-// statusBarSpan is one clickable region within the status bar's text —
+// buttonBarSpan is one clickable region within the button bar's text —
 // the same half-open [start,end) column-range idea as headerSpan, for a
 // single-line display so no row is needed.
-type statusBarSpan struct {
+type buttonBarSpan struct {
 	startCol, endCol int
-	action           statusBarAction
+	action           buttonBarAction
 }
 
-// newBottomBar builds the two rows below the panel: bashConsole (see
+// newBottomBar builds the three rows below the panel: bashConsole (see
 // newBashConsole, in bashconsole.go — bashLine, a multi-line shell
 // command/script editor, plus bashHistoryView, its scrollable output
-// transcript), and statusBar, a hand-built single line showing who/df/
-// quick-action buttons/the clock (see refreshStatusBar). NewRoot adds
-// both to mainLayout beneath the panel.
+// transcript), buttonBar, a hand-built single line of quick-action
+// buttons (see buildButtonBar), and statusBar, a purely informational
+// line (see refreshStatusBar/buildStatusBar). NewRoot adds all three to
+// mainLayout beneath the panel.
+//
+// buttonBar's text is built once, here, and never rebuilt afterwards —
+// unlike statusBar (user/disk-usage/clock all change over a session),
+// none of the button labels ever do. statusBar starts blank; NewRoot's
+// caller is expected to call refreshStatusBar once real data (the
+// panel's own directory) is available, the same as it always has.
 func (r *Root) newBottomBar() {
 	r.newBashConsole()
 
+	r.buttonBar = tview.NewTextView()
+	r.buttonBar.SetDynamicColors(true)
+	r.buttonBar.SetMouseCapture(r.captureButtonBarMouse)
+	text, spans := r.buildButtonBar()
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
+
 	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
-	r.statusBar.SetMouseCapture(r.captureStatusBarMouse)
+	// Deliberately no SetMouseCapture: statusBar is purely informational
+	// now, nothing in it is clickable — see buttonBar above for that.
 
 	r.currentUser = currentUsername()
 }
@@ -70,44 +85,77 @@ func currentUsername() string {
 	return os.Getenv("USER")
 }
 
-// refreshStatusBar rebuilds and redraws the status bar's text — called
+// refreshStatusBar rebuilds and redraws the (purely informational, no
+// buttons — see buildButtonBar for those) status bar's text — called
 // whenever anything it shows might have changed: the panel navigating
-// (df depends on the current directory — see Panel.onLoad, wired in
-// NewRoot), and once a second from StartClock's ticker (the clock
-// itself).
+// (disk usage depends on the current directory — see Panel.onLoad,
+// wired in NewRoot), and once a second from StartClock's ticker (the
+// clock itself). buttonBar is never part of this — its labels are fixed
+// and built exactly once, in newBottomBar.
 func (r *Root) refreshStatusBar() {
-	text, spans := r.buildStatusBar()
-	r.statusBarSpans = spans
-	r.statusBar.SetText(text)
+	r.statusBar.SetText(r.buildStatusBar())
 }
 
-// buildStatusBar renders the status bar's text: the current user, disk
-// and inode usage for the panel's current directory (see
-// fetchDiskUsage), the quick-action buttons (Edit/Look/Rename/Hidden/
-// Find/Options/Help/Trash/Remove) in nano's own "^X Label" style
-// (instantly recognizable as "Ctrl+X does this" without needing a
-// separate legend), and the clock.
-func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
+// buildButtonBar renders the button bar's text: the quick-action buttons
+// (Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in nano's own
+// "^X Label" style (instantly recognizable as "Ctrl+X does this" without
+// needing a separate legend). Built once, from newBottomBar, and never
+// rebuilt afterwards — unlike statusBar, none of these labels ever
+// change while running (the equivalent context menu items do relabel
+// themselves, e.g. hiddenToggleLabel, but the button bar's own text
+// intentionally doesn't follow suit, to keep this a fixed, muscle-memory
+// legend rather than something to re-read each time).
+func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	var b strings.Builder
 	col := 0
 
 	// col advances by s's display width (tview.TaggedStringWidth), not a
-	// plain rune count — dfSummary's mount point or the current username
-	// could in principle contain double-width (e.g. CJK) characters, and
-	// a rune count would misalign every statusBarSpan after it (see
-	// buildHeaderSpans/propertiesBuilder.text for the same fix elsewhere).
+	// plain rune count — a button label could in principle contain
+	// double-width (e.g. CJK) characters some day, and a rune count
+	// would misalign every buttonBarSpan after it (see buildHeaderSpans/
+	// propertiesBuilder.text for the same fix elsewhere).
 	write := func(s string) {
 		b.WriteString(s)
 		col += tview.TaggedStringWidth(s)
 	}
-	button := func(label string, action statusBarAction) {
+	button := func(label string, action buttonBarAction) {
 		start := col
 		write(label)
-		spans = append(spans, statusBarSpan{startCol: start, endCol: col, action: action})
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: action})
 	}
-	sep := func() {
-		write(" │ ")
-	}
+
+	button("^E Edit", buttonActionEdit)
+	write("  ")
+	button("^L Look", buttonActionLook)
+	write("  ")
+	button("^R Rename", buttonActionRename)
+	write("  ")
+	button("^G Hidden", buttonActionToggleHidden)
+	write("  ")
+	button("^F Find", buttonActionSearch)
+	write("  ")
+	button("^O Options", buttonActionOptions)
+	write("  ")
+	button("F1 Help", buttonActionHelp)
+	write("  ")
+	button("^T Trash", buttonActionTrash)
+	write("  ")
+	button("^P Remove", buttonActionRemove)
+
+	return b.String(), spans
+}
+
+// buildStatusBar renders the status bar's text: the current user, disk
+// and inode usage for the panel's current directory (see
+// fetchDiskUsage), the running kernel release (see kernelVersionText),
+// uptime and load average where available (see uptimeText/
+// loadAverageText — Linux only, gracefully omitted elsewhere, the same
+// "just show one less segment" degradation fetchDiskUsage itself already
+// has), and the clock. No buttons here any more — see buildButtonBar.
+func (r *Root) buildStatusBar() string {
+	var b strings.Builder
+	write := func(s string) { b.WriteString(s) }
+	sep := func() { write(" │ ") }
 
 	write(r.currentUser)
 	sep()
@@ -115,31 +163,90 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 		write(diskUsageText(u))
 		sep()
 		write(inodeUsageText(u))
-	} else {
-		write("disk usage unavailable")
+		sep()
 	}
-	sep()
-	button("^E Edit", statusActionEdit)
-	write("  ")
-	button("^L Look", statusActionLook)
-	write("  ")
-	button("^R Rename", statusActionRename)
-	write("  ")
-	button("^G Hidden", statusActionToggleHidden)
-	write("  ")
-	button("^F Find", statusActionSearch)
-	write("  ")
-	button("^O Options", statusActionOptions)
-	write("  ")
-	button("F1 Help", statusActionHelp)
-	write("  ")
-	button("^T Trash", statusActionTrash)
-	write("  ")
-	button("^P Remove", statusActionRemove)
-	sep()
+	if k := kernelVersionText(); k != "" {
+		write(k)
+		sep()
+	}
+	if up, ok := uptimeText(); ok {
+		write(up)
+		sep()
+	}
+	if load, ok := loadAverageText(); ok {
+		write(load)
+		sep()
+	}
 	write(clockText())
 
-	return b.String(), spans
+	return b.String()
+}
+
+// kernelVersionText returns `uname -r`'s own output, trimmed — the same
+// "shell out to a real system tool" approach fetchDiskUsage's own df
+// already uses, rather than a syscall wrapper needing per-platform
+// struct handling for what's ultimately just one string. Returns "" if
+// uname isn't available (e.g. some minimal containers) — the status bar
+// just shows one less segment then.
+func kernelVersionText() string {
+	out, err := exec.Command("uname", "-r").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// uptimeText and loadAverageText read Linux's /proc/uptime and
+// /proc/loadavg directly rather than shelling out to and parsing
+// `uptime`'s own output, whose format differs enough between GNU/Linux
+// and BSD/macOS (singular/plural "load average(s)", comma- vs.
+// space-separated numbers, different time formats — verified by actually
+// comparing sample output from both, not guessed) to make reliable
+// cross-platform parsing more fragile than it's worth for a status line.
+// Both simply return ok=false where /proc/... doesn't exist at all (e.g.
+// macOS, most BSDs) — no build tag needed, os.ReadFile's own error
+// already tells the two cases apart.
+func uptimeText() (string, bool) {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return "", false
+	}
+	seconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "", false
+	}
+	return "up " + formatUptime(time.Duration(seconds*float64(time.Second))), true
+}
+
+// formatUptime renders d as "NdHH:MM" once it's reached a full day, or
+// just "HH:MM" before that — the same shape `uptime`'s own "N days,
+// HH:MM" takes, just compact enough for a status line already showing
+// several other segments.
+func formatUptime(d time.Duration) string {
+	totalMinutes := int(d.Minutes())
+	days := totalMinutes / (24 * 60)
+	hours := (totalMinutes / 60) % 24
+	minutes := totalMinutes % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %02d:%02d", days, hours, minutes)
+	}
+	return fmt.Sprintf("%02d:%02d", hours, minutes)
+}
+
+func loadAverageText() (string, bool) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return "", false
+	}
+	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
 }
 
 // diskUsage is one filesystem's block and inode usage for the status
@@ -319,52 +426,52 @@ func clockText() string {
 	return time.Now().Format("2006-01-02 15:04:05 MST")
 }
 
-// captureStatusBarMouse routes a click on one of the status bar's three
-// buttons (see buildStatusBar/statusBarSpan) to its action. A click
-// elsewhere on the row (the user/df/clock text, or empty space) just
-// does nothing — those aren't actionable, only informational.
-func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.statusBar.InRect(event.Position()) {
+// captureButtonBarMouse routes a click on one of the button bar's
+// buttons (see buildButtonBar/buttonBarSpan) to its action. A click
+// elsewhere on the row (the gaps between buttons, or empty space) just
+// does nothing.
+func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick || !r.buttonBar.InRect(event.Position()) {
 		return action, event
 	}
 
 	x, _ := event.Position()
-	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
 	col := x - rectX
 
-	for _, s := range r.statusBarSpans {
+	for _, s := range r.buttonBarSpans {
 		if col >= s.startCol && col < s.endCol {
-			r.runStatusBarAction(s.action)
+			r.runButtonBarAction(s.action)
 			break
 		}
 	}
 	return tview.MouseConsumed, nil
 }
 
-// runStatusBarAction is what a button click runs. Called directly,
+// runButtonBarAction is what a button click runs. Called directly,
 // unguarded, unlike its keyboard-shortcut equivalent (see
 // acceptsGlobalShortcut): a click is always a deliberate, explicit
 // action on whatever it landed on, with none of the "is something else
 // currently typing" ambiguity a global keystroke has to rule out first.
-func (r *Root) runStatusBarAction(action statusBarAction) {
+func (r *Root) runButtonBarAction(action buttonBarAction) {
 	switch action {
-	case statusActionEdit:
+	case buttonActionEdit:
 		r.editCurrentEntry()
-	case statusActionLook:
+	case buttonActionLook:
 		r.lookCurrentEntry()
-	case statusActionRename:
+	case buttonActionRename:
 		r.renameCurrentEntry()
-	case statusActionToggleHidden:
+	case buttonActionToggleHidden:
 		r.toggleHidden()
-	case statusActionOptions:
+	case buttonActionOptions:
 		r.openOptions()
-	case statusActionSearch:
+	case buttonActionSearch:
 		r.openSearch()
-	case statusActionHelp:
+	case buttonActionHelp:
 		r.openHelp()
-	case statusActionTrash:
+	case buttonActionTrash:
 		r.moveSelectionToTrash()
-	case statusActionRemove:
+	case buttonActionRemove:
 		r.openRemoveConfirm()
 	}
 }
@@ -421,6 +528,23 @@ func (r *Root) renameCurrentEntry() {
 // bash — hence checking this first and no-op'ing instead.
 func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
+}
+
+// AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
+// cmd/breakthrough: Ctrl+P and Ctrl+T/Entf (see TrashShortcut/
+// PurgeShortcut in trash.go) need to decide, before even calling either
+// Shortcut method, whether to consume the key at all — unlike the six
+// above, which always return nil regardless (an accepted, minor
+// imperfection for keys TextArea might bind natively), Ctrl+P
+// specifically collides with a real, explicit feature of this same
+// codebase: bashLine's own captureBashLineKey binds Ctrl+P to command-
+// history recall. Consuming it unconditionally at the Application level
+// would silently break that recall every time the bash line has focus,
+// not just fail to fire Purge — so cmd/breakthrough falls through to
+// bashLine's own handling (returns the event, not nil) whenever this
+// reports false, rather than swallowing it either way.
+func (r *Root) AcceptsGlobalShortcut() bool {
+	return r.acceptsGlobalShortcut()
 }
 
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
