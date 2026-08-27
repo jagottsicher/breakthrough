@@ -46,6 +46,29 @@ func TestTrashDirSessionFallsBackToTempDir(t *testing.T) {
 	}
 }
 
+func TestTrashDirRootAlwaysUsesPersistentPath(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/tmp/xdgdata-test")
+	t.Setenv("XDG_RUNTIME_DIR", "/tmp/xdgruntime-test")
+
+	old := isRoot
+	isRoot = func() bool { return true }
+	defer func() { isRoot = old }()
+
+	// persistent=false is what the config's default (trash_persistent)
+	// would pass - root must still get the persistent path regardless.
+	dir, err := TrashDir(false)
+	if err != nil {
+		t.Fatalf("TrashDir(false) as root: %v", err)
+	}
+	want := filepath.Join("/tmp/xdgdata-test", "breakthrough", "trash", username())
+	if dir != want {
+		t.Fatalf("root trash dir = %q, want %q (persistent, ignoring persistent=false)", dir, want)
+	}
+	if strings.Contains(dir, ID()) {
+		t.Fatalf("root trash dir = %q should not contain a session ID", dir)
+	}
+}
+
 func TestTrashDirPersistentUsesDataHomeNoSessionID(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/tmp/xdgdata-test")
 

@@ -553,6 +553,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
+	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
 	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
 	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)

@@ -74,6 +74,23 @@ func (r *Root) moveSelectionToTrash() {
 	r.reloadPanel(firstErr)
 }
 
+// openTrash is the context menu's "Go to Trash": navigates the panel
+// straight to the current trash's files/ subdirectory (see
+// fsops.FilesDir) — the one place browsing/Restore actually works (see
+// restoreSelectionFromTrash) — without the user needing to know or type
+// its path, which for the session-scoped default includes a random
+// per-run session ID buried under $XDG_RUNTIME_DIR.
+func (r *Root) openTrash() {
+	dir, err := r.trashDir()
+	if err != nil {
+		r.showError(err)
+		return
+	}
+	if err := r.panel.load(fsops.FilesDir(dir)); err != nil {
+		r.showError(err)
+	}
+}
+
 // openRemoveConfirm is the context menu's "Remove", and (through
 // PurgeShortcut) Ctrl+P/Ctrl+Entf's action: always asks first (Cancel
 // preselected — see newPurgeConfirm), wording the message concretely for

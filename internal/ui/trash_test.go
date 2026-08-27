@@ -181,6 +181,31 @@ func TestMoveToTrashThenRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestOpenTrashNavigatesToFilesDir(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+
+	r.openTrash()
+
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	if got, want := filepath.Clean(r.panel.path), filepath.Clean(fsops.FilesDir(trashDir)); got != want {
+		t.Fatalf("panel.path after openTrash = %q, want %q", got, want)
+	}
+	if r.activePage == errorPage {
+		t.Errorf("openTrash reported an error: %q", r.errorView.GetText(true))
+	}
+
+	// Restore should now work without the user ever having typed a path.
+	r.panel.focusRow(1)
+	r.restoreSelectionFromTrash()
+	if r.activePage == errorPage {
+		t.Errorf("restore right after openTrash failed: %q", r.errorView.GetText(true))
+	}
+}
+
 func TestOpenEmptyTrashConfirmRemovesEverything(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 	r.moveSelectionToTrash()

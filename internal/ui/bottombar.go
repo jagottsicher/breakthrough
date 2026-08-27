@@ -30,6 +30,8 @@ const (
 	statusActionOptions
 	statusActionSearch
 	statusActionHelp
+	statusActionTrash
+	statusActionRemove
 )
 
 // statusBarSpan is one clickable region within the status bar's text —
@@ -81,8 +83,9 @@ func (r *Root) refreshStatusBar() {
 
 // buildStatusBar renders the status bar's text: the current user, disk
 // and inode usage for the panel's current directory (see
-// fetchDiskUsage), five quick-action buttons in nano's own "^X Label"
-// style (instantly recognizable as "Ctrl+X does this" without needing a
+// fetchDiskUsage), the quick-action buttons (Edit/Look/Rename/Hidden/
+// Find/Options/Help/Trash/Remove) in nano's own "^X Label" style
+// (instantly recognizable as "Ctrl+X does this" without needing a
 // separate legend), and the clock.
 func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	var b strings.Builder
@@ -129,6 +132,10 @@ func (r *Root) buildStatusBar() (text string, spans []statusBarSpan) {
 	button("^O Options", statusActionOptions)
 	write("  ")
 	button("F1 Help", statusActionHelp)
+	write("  ")
+	button("^T Trash", statusActionTrash)
+	write("  ")
+	button("^P Remove", statusActionRemove)
 	sep()
 	write(clockText())
 
@@ -355,6 +362,10 @@ func (r *Root) runStatusBarAction(action statusBarAction) {
 		r.openSearch()
 	case statusActionHelp:
 		r.openHelp()
+	case statusActionTrash:
+		r.moveSelectionToTrash()
+	case statusActionRemove:
+		r.openRemoveConfirm()
 	}
 }
 
