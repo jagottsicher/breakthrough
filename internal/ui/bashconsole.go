@@ -578,7 +578,11 @@ func (r *Root) runShellCommandFullScreen(command string) {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
 
-		fmt.Print("\n[Press Esc to return to breakthrough]")
+		// Trailing "\n" too, not just the leading one — moves the
+		// terminal's own cursor to a fresh line below this message
+		// instead of leaving it sitting right after "]", per the user's
+		// own explicit request.
+		fmt.Print("\n[Press Esc to return to breakthrough]\n")
 		waitForEscape()
 	})
 
