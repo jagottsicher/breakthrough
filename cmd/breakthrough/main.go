@@ -129,9 +129,25 @@ func run() error {
 			root.HelpShortcut()
 			return nil
 		case tcell.KeyCtrlT:
+			// Falls through to bashLine's own default handling (readline-
+			// style Ctrl+T is "transpose characters") while it has focus,
+			// rather than always consuming the key the way the six above
+			// do - see Root.AcceptsGlobalShortcut's own doc comment.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
 			root.TrashShortcut()
 			return nil
 		case tcell.KeyCtrlP:
+			// bashLine's own captureBashLineKey binds Ctrl+P to command-
+			// history recall - falling through here (not consuming the
+			// event) while it has focus is what keeps that working; see
+			// Root.AcceptsGlobalShortcut's own doc comment for why this one
+			// specifically can't just always return nil the way the six
+			// above do.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
 			root.PurgeShortcut()
 			return nil
 		case tcell.KeyDelete:
@@ -144,6 +160,13 @@ func run() error {
 			// with a non-alphanumeric key across every terminal —
 			// Ctrl+P above is the reliable path to Purge regardless of
 			// what this resolves to on any given terminal.
+			//
+			// Falls through un-consumed while bashLine has focus, the same
+			// as Ctrl+T/Ctrl+P above - otherwise this would eat a plain
+			// forward-delete keystroke while typing a command.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
 			if event.Modifiers()&tcell.ModCtrl != 0 {
 				root.PurgeShortcut()
 			} else {
