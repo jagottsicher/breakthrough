@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -525,5 +528,73 @@ func TestRightDragMovesFocusToEndRow(t *testing.T) {
 
 	if got, _ := root.panel.table.GetSelection(); got != 3 {
 		t.Errorf("focused row = %d after dragging 1 -> 3, want 3", got)
+	}
+}
+
+// manyEntriesDir returns a directory with n plain files — enough that a
+// row index computed from a screen position well past a shrunk panel's
+// own bottom edge (see TestRightClickUnderExpandedConsoleDoesNotOpenMenu)
+// would still land on a *real* entry if it were validated only against
+// the table's own data size, not its current on-screen bounds — the
+// exact condition the bug that test pins needs to actually reproduce.
+func manyEntriesDir(t *testing.T, n int) string {
+	t.Helper()
+	dir := t.TempDir()
+	for i := 0; i < n; i++ {
+		name := fmt.Sprintf("file-%03d.txt", i)
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// TestRightClickUnderExpandedConsoleDoesNotOpenMenu pins the fix for the
+// user's own report: a right-click over the expanded bash console must
+// not open the panel's own context menu. tview's own Box.WrapMouseHandler
+// invokes an installed SetMouseCapture (see Root.captureMouse, installed
+// on the panel) for *every* mouse event reaching that primitive's own
+// MouseHandler, regardless of position — nothing filters by position
+// automatically. Before the fix, Panel.rowIndexAt validated a row only
+// against the table's own *data* size (via tview's own Table.CellAt,
+// which has no notion of its own current rendered height at all — see
+// rowIndexAt's own doc comment): with more entries than fit on screen,
+// a click well below the panel's own current bottom edge still
+// numerically mapped to a real (if invisible) row, and the menu opened
+// for it. manyEntriesDir's 40 entries make sure there really are enough
+// for that stale-looking mapping to exist, the same condition that let
+// the bug reproduce in the first place.
+func TestRightClickUnderExpandedConsoleDoesNotOpenMenu(t *testing.T) {
+	dir := manyEntriesDir(t, 40)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	root.app.SetFocus(root.bashLine) // expands bashConsole (see expandBashConsole), shrinking the panel
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+	root.Draw(screen) // re-cascades layout with the new, shrunk panel height
+
+	// The panel's own rect is the trustworthy source for "is this
+	// position actually within it" — unlike Table.CellAt (see this
+	// test's own doc comment above), Box.GetRect reflects exactly what
+	// the last Draw call actually allocated.
+	_, panelY, _, panelHeight := root.panel.GetRect()
+	if panelHeight >= 20 {
+		t.Fatalf("setup: panel height = %d after focusing bashLine, want it meaningfully shrunk (expandBashConsole isn't doing its job in this test)", panelHeight)
+	}
+	clickY := panelY + panelHeight + 3 // comfortably inside bashConsole, below the panel's own current bottom edge
+	const clickX = 5
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(clickX, clickY, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(clickX, clickY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightClick, tcell.NewEventMouse(clickX, clickY, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	if root.activePage == contextMenuPage {
+		t.Error("right-clicking below the panel's own shrunk bounds (over the expanded console) opened its context menu")
 	}
 }

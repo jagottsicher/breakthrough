@@ -1614,7 +1614,23 @@ func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
 // Unlike RowAt, this doesn't exclude "..": a caller working with a
 // contiguous range of rows (see selectRange) needs the real index either
 // way, and toggling ".." is already a no-op (not checkable).
+//
+// Checks p.table.InRect first — not just tview's own Table.CellAt,
+// which validates a computed row against the table's own *data* size
+// (how many entries there are), not against how many of them actually
+// fit on screen right now. With bashLine able to occupy a large part of
+// the screen while expanded (see expandBashConsole), a position well
+// below the table's own current, shrunk bounds could otherwise still
+// arithmetically land on a real row further down the (longer) listing
+// — exactly the bug the user reported: a right-click over the expanded
+// console still opened the panel's own context menu for whatever row
+// the position numerically mapped to. SetMouseCapture's own contract
+// (see tview's own Box.WrapMouseHandler) doesn't filter by position on
+// its own; every caller into this needs to.
 func (p *Panel) rowIndexAt(x, y int) (row int, ok bool) {
+	if !p.table.InRect(x, y) {
+		return 0, false
+	}
 	row, _ = p.table.CellAt(x, y)
 	if _, ok := p.rowRef(row); !ok {
 		return 0, false
