@@ -86,13 +86,19 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     time handling color_scheme already gets (an unrecognized scheme
 //     slug just falls back to Default via FindColorScheme, rather than
 //     Load itself rejecting it).
+//   - trash_persistent: whether "Move to Trash" (see internal/fsops'
+//     MoveToTrash and internal/session's TrashDir) uses the persistent,
+//     user-area trash (true) or the session-scoped one under
+//     $XDG_RUNTIME_DIR that disappears once breakthrough's session ends
+//     (false, the default).
 type Settings struct {
-	ColorScheme string
-	Language    string
-	ShowHidden  bool
-	SizeBytes   bool
-	MtimeUnix   bool
-	Pager       string
+	ColorScheme     string
+	Language        string
+	ShowHidden      bool
+	SizeBytes       bool
+	MtimeUnix       bool
+	Pager           string
+	TrashPersistent bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -102,12 +108,13 @@ type Settings struct {
 // identically to before this existed.
 func DefaultSettings() Settings {
 	return Settings{
-		ColorScheme: "default",
-		Language:    "en",
-		ShowHidden:  true,
-		SizeBytes:   false,
-		MtimeUnix:   false,
-		Pager:       "builtin",
+		ColorScheme:     "default",
+		Language:        "en",
+		ShowHidden:      true,
+		SizeBytes:       false,
+		MtimeUnix:       false,
+		Pager:           "builtin",
+		TrashPersistent: false,
 	}
 }
 
@@ -138,6 +145,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.MtimeUnix)
 	case "pager":
 		s.Pager = value
+	case "trash_persistent":
+		return parseBool(&s.TrashPersistent)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
