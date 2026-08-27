@@ -19,7 +19,7 @@ import (
 // the collapsed line alone (per the user's own report: "man weiß nicht
 // worum es geht" / "in der headline sollte noch etwas stehen wie 'Bash
 // prompt editor'").
-const bashHintText = "Bash Prompt Editor — Enter Run (full screen) · Ctrl+J/Alt+Enter Newline · ↑/↓ ^P/^N History · Esc Close"
+const bashHintText = "Bash Prompt Editor — Enter Run (full screen) · Ctrl+J/Alt+Enter Newline · ↑/↓ ^P/^N History · Tab Complete · Esc Close"
 
 // newBashConsole builds bashLine, a multi-line shell command/script
 // editor (no "$ " label, full width, per the user's own explicit
@@ -134,6 +134,11 @@ func (r *Root) collapseBashConsole() {
 //   - Ctrl+P / Ctrl+N: recall the previous/next history entry
 //     unconditionally, regardless of cursor position — the explicit,
 //     always-available form of the above.
+//   - Tab: complete the word at the cursor (see completeBashLine) —
+//     claimed here specifically so it never reaches TextArea's own
+//     default Tab handling, which (via SetFinishedFunc, wired for
+//     Escape — see newBashConsole) treats Tab exactly like Escape and
+//     collapses the console, per the user's own direct report.
 func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0:
@@ -155,8 +160,68 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	case event.Key() == tcell.KeyCtrlN:
 		r.bashHistoryDown()
 		return nil
+	case event.Key() == tcell.KeyTab:
+		r.completeBashLine()
+		return nil
 	}
 	return event
+}
+
+// completeBashLine is Tab's own action (see captureBashLineKey): extends
+// the word at the cursor to its longest unambiguous completion against
+// the panel's own current directory — the same completions/
+// longestCommonPrefix logic the path header's own Tab already uses (see
+// Panel.completePath), a single match completing fully, several
+// completing as far as they agree, and no match leaving the text alone.
+//
+// This only completes filenames/directories relative to the panel's
+// current directory — not full bash completion (command names via
+// $PATH, subcommand-aware completion for tools like git, ...), which
+// would need a real bash process's own completion machinery. Good
+// enough for the overwhelming common case of completing a path
+// argument, per the user's own request for "normale
+// Bash-Vervollständigung" after Tab stopped closing the console.
+//
+// Only the cursor's own current line is ever touched — Replace's start/
+// end are absolute offsets into the *entire* (possibly multi-line, see
+// captureBashLineKey's own Ctrl+J/Alt+Enter case) text (see its own doc
+// comment), so completing on a later line needs every earlier line's
+// own length (plus its newline) added first to land in the right place.
+func (r *Root) completeBashLine() {
+	text := r.bashLine.GetText()
+	row, col, _, _ := r.bashLine.GetCursor()
+
+	lines := strings.Split(text, "\n")
+	if row < 0 || row >= len(lines) {
+		return
+	}
+	line := lines[row]
+	if col < 0 {
+		col = 0
+	}
+	if col > len(line) {
+		col = len(line)
+	}
+
+	wordStart := strings.LastIndexAny(line[:col], " \t") + 1 // 0 if no whitespace found (LastIndexAny returns -1)
+	word := line[wordStart:col]
+
+	matches := r.panel.completions(word)
+	if len(matches) == 0 {
+		return
+	}
+	completed := longestCommonPrefix(matches)
+	if completed == word {
+		return // already as far as it goes
+	}
+
+	offset := 0
+	for i := 0; i < row; i++ {
+		offset += len(lines[i]) + 1 // +1 for the newline every earlier line ends with
+	}
+	offset += wordStart
+
+	r.bashLine.Replace(offset, offset+(col-wordStart), completed)
 }
 
 // bashLineAtFirstLine and bashLineAtLastLine report whether bashLine's
@@ -342,6 +407,22 @@ func (r *Root) runBashCommand(command string) {
 // including interactive programs like vim, less, or mc, exactly like
 // Midnight Commander's own command line.
 //
+// Run with "-i" (interactive) rather than plain "-c": without it, bash
+// (and every other common userShell()) starts a non-interactive shell,
+// which skips ~/.bashrc entirely and — even if it were sourced anyway —
+// leaves alias expansion off by default outside interactive mode, so
+// something like the user's own "ll" alias would silently come back as
+// "command not found". "-i" makes the shell start up the same way it
+// would from a real login session (~/.bashrc sourced, aliases and shell
+// functions live) before running the one command, per the user's own
+// direct report: "der user sollte auch seine aliase und seine bashrc
+// oder sowas vorher sourced bekommen. aliase wie ll funktionieren sonst
+// nicht". The one visible cost is a harmless "no job control in this
+// shell" notice some shells print to stderr when stdin isn't a fully
+// job-control-capable controlling terminal — cosmetic, not a failure,
+// and the same notice a real terminal's own login shell prints in the
+// same circumstances.
+//
 // Echoes "$ command" before running it and waits for Escape once it's
 // done (see waitForEscape) — both per the user's own report that a
 // short command's own output otherwise flashes by and is gone the
@@ -358,7 +439,7 @@ func (r *Root) runShellCommandFullScreen(command string) {
 	var runErr error
 	r.app.Suspend(func() {
 		fmt.Printf("$ %s\n", command)
-		cmd := exec.Command(userShell(), "-c", command)
+		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
 		cmd.Dir = r.panel.path
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
@@ -374,6 +455,18 @@ func (r *Root) runShellCommandFullScreen(command string) {
 		return
 	}
 	r.showError(r.panel.load(r.panel.path))
+}
+
+// fullScreenShellArgs returns the argv (after userShell() itself) used to
+// run command full-screen — split out from runShellCommandFullScreen
+// only so this exact argument list, in particular "-i" (see
+// runShellCommandFullScreen's own doc comment on why it's there — bash's
+// own ~/.bashrc and alias expansion), can be pinned by a test without
+// having to exercise Suspend, which is a no-op without a real screen
+// (see TestWaitForEscapeReturnsImmediatelyWithoutARealTerminal's own doc
+// comment).
+func fullScreenShellArgs(command string) []string {
+	return []string{"-i", "-c", command}
 }
 
 // waitForEscape blocks until Escape is pressed on the real terminal —

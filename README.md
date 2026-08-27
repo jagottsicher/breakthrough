@@ -52,11 +52,15 @@ terminal.
   inserts a newline instead — Ctrl+J always works, Alt+Enter is
   intercepted by some terminal emulators for their own use; Up/Down
   recall history too, not just Ctrl+P/Ctrl+N, except at a line a
-  multi-line script is still being composed on). Every command runs
-  through a real terminal, the same way Midnight Commander's own
-  command line handles every command — no attempt to guess which
-  programs need one and which don't. Its own output stays on screen
-  until you press Escape to return, so it doesn't just flash by. Plus
+  multi-line script is still being composed on; Tab completes the
+  filename/directory at the cursor against the panel's own current
+  directory). Every command runs through a real terminal, started the
+  same way an interactive login shell would be — your `~/.bashrc`,
+  aliases and shell functions sourced first, so something like `ll`
+  works exactly as it does in a real terminal — the same way Midnight
+  Commander's own command line handles every command — no attempt to
+  guess which programs need one and which don't. Its own output stays on
+  screen until you press Escape to return, so it doesn't just flash by. Plus
   quick actions — Edit (`^E`, opens
   `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
