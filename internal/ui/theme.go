@@ -83,6 +83,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.quitConfirm.SetBackgroundColor(theme.AccentBackground)
 	r.quitConfirm.SetMainTextColor(theme.Text)
 
+	r.purgeConfirm.SetBackgroundColor(theme.AccentBackground)
+	r.purgeConfirm.SetMainTextColor(theme.Text)
+
 	r.picker.SetBackgroundColor(theme.AccentBackground)
 	r.picker.SetMainTextColor(theme.Text)
 
@@ -150,6 +153,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.viewerView.SetBackgroundColor(theme.AccentBackground)
 		r.viewerView.SetTextColor(theme.Text)
 	}
+
+	r.sedForm.SetBackgroundColor(theme.AccentBackground)
+	r.sedForm.SetLabelColor(theme.Text)
+	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.sedForm.SetFieldTextColor(theme.Text)
+	r.sedForm.SetButtonBackgroundColor(theme.AccentBackground)
+	r.sedForm.SetButtonTextColor(theme.Text)
+
+	r.sedPreviewView.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewView.SetTextColor(theme.Text)
+	r.sedPreviewActions.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewActions.SetMainTextColor(theme.Text)
 
 	r.panel.applyTheme(theme)
 }
