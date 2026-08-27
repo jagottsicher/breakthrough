@@ -15,6 +15,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -26,6 +27,8 @@ const (
 	pickerPage       = "owner-group-picker"
 	quitConfirmPage  = "quit-confirm"
 	purgeConfirmPage = "purge-confirm"
+	sedReplacePage   = "sed-replace"
+	sedPreviewPage   = "sed-preview"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -110,6 +113,31 @@ type Root struct {
 	// opened the dialog.
 	purgeConfirm *tview.List
 	pendingPurge func()
+
+	// sedForm is the "Sed Replace" dialog (see sedreplace.go) — rebuilt
+	// fresh on every open (resetSedForm), unlike purgeConfirm's shared,
+	// repopulated single widget, since tview.Form has no equivalent of
+	// List's SetItemText to reset one in place. sedFindField/
+	// sedReplaceField/sedAdvancedField are kept directly (their typed
+	// text values are read back in runSedPreview); the checkboxes are
+	// looked up by label instead (see sedCheckbox) rather than each
+	// getting their own field. sedTargets is the file(s) this open is
+	// for (see selectedOrCurrentPaths).
+	sedForm          *tview.Form
+	sedFindField     *tview.InputField
+	sedReplaceField  *tview.InputField
+	sedAdvancedField *tview.InputField
+	sedTargets       []string
+
+	// sedPreviewView/sedPreviewActions/sedPreviewLayout show Preview's
+	// own dry-run result (runSedPreview) — a scrollable, read-only
+	// summary next to Apply/Back/Cancel, the same three-choice shape
+	// purgeConfirm already has. sedPendingChanges is what confirmApplySed
+	// actually writes if the user goes on to confirm.
+	sedPreviewView    *tview.TextView
+	sedPreviewActions *tview.List
+	sedPreviewLayout  *tview.Flex
+	sedPendingChanges []replace.FileChange
 
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
@@ -565,6 +593,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
+	r.menu.AddItem("Sed Replace", "", 0, r.openSedReplace)
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
@@ -628,6 +657,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
 	r.purgeConfirm = r.newPurgeConfirm()
+
+	// The "Sed Replace" dialog and its own Preview screen (see
+	// sedreplace.go) — sedForm itself is rebuilt fresh on every open
+	// (see resetSedForm), but sedPreviewLayout (and the view/actions it
+	// wraps) is built once here, the same as everything else on this
+	// page.
+	r.sedForm = r.newSedForm()
+	r.sedPreviewLayout = r.newSedPreviewLayout()
 
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
@@ -703,6 +740,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
+	r.AddPage(sedReplacePage, r.sedForm, false, false)
+	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
@@ -1354,6 +1393,24 @@ func (r *Root) clipboardTargets() []string {
 	}
 	if r.target != "" {
 		return []string{r.target}
+	}
+	return nil
+}
+
+// selectedOrCurrentPaths is what Move to Trash/Remove (see trash.go) and
+// Sed Replace (see sedreplace.go) all act on: the current checkbox
+// selection if there is one, otherwise whichever entry the table's
+// cursor is currently on — the same fallback shape clipboardTargets
+// uses for Copy/Cut, but read directly from the panel's cursor instead
+// of r.target, so it also works for the keyboard-shortcut path (Ctrl+T/
+// Entf, Ctrl+P/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
+// goes through a right-click that would have set r.target at all.
+func (r *Root) selectedOrCurrentPaths() []string {
+	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
+		return paths
+	}
+	if _, path, ok := r.panel.CurrentRowPath(); ok {
+		return []string{path}
 	}
 	return nil
 }
