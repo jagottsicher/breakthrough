@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 )
@@ -576,5 +577,113 @@ func TestFilenameCommandPropagatesLocateRegexUnavailable(t *testing.T) {
 	}
 	if _, _, ok := filenameCommand(EngineLocate, "", `.*\.go$`, ModeRegex, nil, false, false, false); ok {
 		t.Error("ok = true, want false — this platform's locate has no regex support")
+	}
+}
+
+func TestDirectoryProgressArgsPlain(t *testing.T) {
+	got := directoryProgressArgs("/home/jens", nil, false, false)
+	want := []string{"/home/jens", "-type", "d", "-print0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("directoryProgressArgs = %v, want %v", got, want)
+	}
+}
+
+func TestDirectoryProgressArgsIgnoreDirsAddsPruneClause(t *testing.T) {
+	got := directoryProgressArgs("/home/jens", []string{".git", "node_modules"}, false, false)
+	want := []string{
+		"/home/jens",
+		"(", "-name", ".git", "-o", "-name", "node_modules", ")", "-prune", "-o",
+		"-type", "d", "-print0",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("directoryProgressArgs = %v, want %v", got, want)
+	}
+}
+
+func TestDirectoryProgressArgsNonRecursiveAndFollowSymlinks(t *testing.T) {
+	got := directoryProgressArgs("/home/jens", nil, true, true)
+	want := []string{"-L", "/home/jens", "-maxdepth", "1", "-type", "d", "-print0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("directoryProgressArgs = %v, want %v", got, want)
+	}
+}
+
+// TestRunReportsLiveDirectoryProgressForFind pins the actual feature:
+// while an EngineFind search is in flight, OnProgress is called with
+// real directories under Scope as startDirectoryProgress's own second
+// "find -type d" walk visits them — not just the directory of a
+// result, and not just Scope itself.
+func TestRunReportsLiveDirectoryProgressForFind(t *testing.T) {
+	requireTool(t, "find")
+	dir := fixtureTree(t) // has a "sub" subdirectory — see its own doc comment
+
+	var mu sync.Mutex
+	var seen []string
+	onProgress := func(path string) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, path)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{
+		Pattern: "apple.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind, OnProgress: onProgress,
+	})
+	collectResults(t, results, errs)
+
+	// The directory-progress walk is a second, independent process (see
+	// startDirectoryProgress's own doc comment) — give it a moment to
+	// finish even after the primary search itself already has, rather
+	// than racing it.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		found := false
+		for _, p := range seen {
+			if p == dir || p == filepath.Join(dir, "sub") {
+				found = true
+			}
+		}
+		mu.Unlock()
+		if found || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatal("OnProgress was never called for an EngineFind search")
+	}
+	var sawScope, sawSub bool
+	for _, p := range seen {
+		if p == dir {
+			sawScope = true
+		}
+		if p == filepath.Join(dir, "sub") {
+			sawSub = true
+		}
+	}
+	if !sawScope || !sawSub {
+		t.Errorf("seen = %v, want it to include both %q and %q", seen, dir, filepath.Join(dir, "sub"))
+	}
+}
+
+// TestRunOnProgressNilIsSafe pins that leaving OnProgress unset (the
+// zero value, what every other test in this package already does)
+// never panics or blocks anything — startDirectoryProgress must no-op
+// cleanly rather than assume a non-nil callback.
+func TestRunOnProgressNilIsSafe(t *testing.T) {
+	requireTool(t, "find")
+	dir := fixtureTree(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results, errs := Run(ctx, Request{Pattern: "apple.txt", Scope: dir, Mode: ModeGlob, Engine: EngineFind})
+	got := collectResults(t, results, errs)
+	if len(got) != 1 {
+		t.Errorf("got %d results, want 1", len(got))
 	}
 }

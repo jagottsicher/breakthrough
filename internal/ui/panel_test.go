@@ -1002,6 +1002,98 @@ func TestEntryColor(t *testing.T) {
 	if got := p.entryColor(rowRef{entryType: fsops.TypeDir}); got != p.theme.EntryNormal {
 		t.Errorf("directory color = %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
 	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, mode: 0o755, archiveHit: true}); got != p.theme.PlaceholderText {
+		t.Errorf("archive-member hit color = %v, want %v (PlaceholderText) even for an executable archive file", got, p.theme.PlaceholderText)
+	}
+
+	for _, typ := range []fsops.EntryType{fsops.TypeSocket, fsops.TypeFIFO, fsops.TypeCharDevice, fsops.TypeBlockDevice} {
+		if got := p.entryColor(rowRef{entryType: typ}); got != p.theme.EntrySpecial {
+			t.Errorf("entry type %v color = %v, want %v (EntrySpecial)", typ, got, p.theme.EntrySpecial)
+		}
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkFile}); got != p.theme.EntrySymlink {
+		t.Errorf("working symlink-to-file color = %v, want %v (EntrySymlink)", got, p.theme.EntrySymlink)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "backup.tar.gz"}); got != p.theme.EntryArchive {
+		t.Errorf("archive-named file color = %v, want %v (EntryArchive)", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "BACKUP.TAR.GZ"}); got != p.theme.EntryArchive {
+		t.Errorf("archive-named file color should be case-insensitive, got %v, want %v (EntryArchive)", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: "backup.tar.gz"}); got != p.theme.EntryNormal {
+		t.Errorf("a directory merely named like an archive should NOT get EntryArchive, got %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "installer.tar.gz", mode: 0o755}); got != p.theme.EntryArchive {
+		t.Errorf("an executable archive-named file should still show EntryArchive (checked ahead of EntryExecutable), got %v, want %v", got, p.theme.EntryArchive)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("unreadable file color = %v, want %v (EntryUnreadable)", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("unreadable directory color = %v, want %v (EntryUnreadable)", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "backup.tar.gz", unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable archive-named file should show EntryUnreadable, not EntryArchive — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkFile, unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable symlink-to-file should show EntryUnreadable, not EntrySymlink — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken, unreadable: true}); got != p.theme.EntryError {
+		t.Errorf("a broken symlink should still show EntryError even if also flagged unreadable, got %v, want %v", got, p.theme.EntryError)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSocket, unreadable: true}); got != p.theme.EntrySpecial {
+		t.Errorf("a special file's own color should win regardless of unreadable, got %v, want %v (EntrySpecial)", got, p.theme.EntrySpecial)
+	}
+
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".bashrc"}); got != p.theme.EntryHidden {
+		t.Errorf("dotfile color = %v, want %v (EntryHidden)", got, p.theme.EntryHidden)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: ".config"}); got != p.theme.EntryHidden {
+		t.Errorf("dotdir color = %v, want %v (EntryHidden)", got, p.theme.EntryHidden)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: ".."}); got != p.theme.EntryNormal {
+		t.Errorf(`".." should NOT count as hidden (it already gets DirectoryBackground), got %v, want %v (EntryNormal)`, got, p.theme.EntryNormal)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".secrets", unreadable: true}); got != p.theme.EntryUnreadable {
+		t.Errorf("an unreadable dotfile should show EntryUnreadable, not EntryHidden — got %v, want %v", got, p.theme.EntryUnreadable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".run.sh", mode: 0o755}); got != p.theme.EntryExecutable {
+		t.Errorf("an executable dotfile should show EntryExecutable, not EntryHidden — got %v, want %v", got, p.theme.EntryExecutable)
+	}
+	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken, name: ".old-link"}); got != p.theme.EntryError {
+		t.Errorf("a broken symlink that's also a dotfile should still show EntryError, got %v, want %v", got, p.theme.EntryError)
+	}
+}
+
+func TestIsArchiveName(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"archive.zip", true},
+		{"ARCHIVE.ZIP", true},
+		{"backup.tar", true},
+		{"backup.tar.gz", true},
+		{"backup.tar.bz2", true},
+		{"backup.tar.xz", true},
+		{"backup.tgz", true},
+		{"backup.tbz2", true},
+		{"backup.txz", true},
+		{"data.7z", true},
+		{"data.rar", true},
+		{"data.zst", true},
+		{"lonely.gz", true},
+		{"lonely.bz2", true},
+		{"lonely.xz", true},
+		{"plain.txt", false},
+		{"noextension", false},
+		{"zipper.go", false}, // contains "zip" but doesn't end in ".zip"
+	}
+	for _, tt := range tests {
+		if got := isArchiveName(tt.name); got != tt.want {
+			t.Errorf("isArchiveName(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
 }
 
 func TestModifierGlyph(t *testing.T) {
@@ -1075,6 +1167,163 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	}
 	if got := p.table.GetCell(hardlinkRow, colType).Text; got != " " {
 		t.Errorf("hardlinked.txt type cell = %q, want blank (a plain, non-executable file)", got)
+	}
+}
+
+// TestAddRowTypeCellStaysPlainText pins that entryColor's distinctions —
+// green for executable, red for broken, etc. — land on the name cell
+// only, per the user's own explicit request: the narrow type-indicator
+// column always stays theme.Text, regardless of what the row's own type
+// or state is.
+func TestAddRowTypeCellStaysPlainText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "broken-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int)
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+
+	cellForeground := func(cell *tview.TableCell) tcell.Color {
+		fg, _, _ := cell.Style.Decompose()
+		return fg
+	}
+
+	execRow, ok := byName["run.sh"]
+	if !ok {
+		t.Fatal("run.sh row not found")
+	}
+	if got := cellForeground(p.table.GetCell(execRow, colType)); got != theme.Text {
+		t.Errorf("executable file's type cell foreground = %v, want theme.Text (%v), not EntryExecutable", got, theme.Text)
+	}
+	if got := cellForeground(p.table.GetCell(execRow, colName)); got != theme.EntryExecutable {
+		t.Errorf("executable file's name cell foreground = %v, want theme.EntryExecutable (%v)", got, theme.EntryExecutable)
+	}
+
+	brokenRow, ok := byName["broken-link"]
+	if !ok {
+		t.Fatal("broken-link row not found")
+	}
+	if got := cellForeground(p.table.GetCell(brokenRow, colType)); got != theme.Text {
+		t.Errorf("broken symlink's type cell foreground = %v, want theme.Text (%v), not EntryError", got, theme.Text)
+	}
+	if got := cellForeground(p.table.GetCell(brokenRow, colName)); got != theme.EntryError {
+		t.Errorf("broken symlink's name cell foreground = %v, want theme.EntryError (%v)", got, theme.EntryError)
+	}
+}
+
+// TestNameHighlightTagsSetsOnlyBackground pins the exact tag string
+// nameHighlightTags produces for the default theme's own
+// DirectoryBackground (darkgoldenrod, W3C value #b8860b): a background-only
+// style tag around the name, with no foreground field set (so the entry's
+// own text color, applied separately via SetTextColor on the whole cell,
+// shows through unchanged — see nameHighlightTags's own doc comment) and a
+// full reset immediately after.
+func TestNameHighlightTagsSetsOnlyBackground(t *testing.T) {
+	got := nameHighlightTags("Downloads", config.DefaultTheme().Resolve().DirectoryBackground)
+	want := "[:#b8860b:]Downloads[-:-:-]"
+	if got != want {
+		t.Errorf("nameHighlightTags(%q, darkgoldenrod) = %q, want %q", "Downloads", got, want)
+	}
+}
+
+// TestAddRowHighlightsOnlyDirectoryNames checks that the DirectoryBackground
+// highlight lands on exactly the entry's own name — not the trailing "/"
+// a real directory gets, not a symlink's " -> target" arrow, and not the
+// rest of the row — for everything Enter can navigate into (a real
+// directory, a directory symlink, and ".." itself), while a plain file's
+// name cell carries no tag at all. It also checks that a literal "[" in an
+// entry's own name is escaped first, so it can't be misread as the start
+// of the tag this wraps around it.
+func TestAddRowHighlightsOnlyDirectoryNames(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "plain.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := filepath.Join(dir, "target-dir")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetDir, filepath.Join(dir, "pictures")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "weird[name]"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int) // name -> row; addRow sets a reference for every row, ".." included.
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+
+	nameCellText := func(t *testing.T, name string) (row int, text string) {
+		t.Helper()
+		row, ok := byName[name]
+		if !ok {
+			t.Fatalf("%q row not found", name)
+		}
+		return row, p.table.GetCell(row, colName).Text
+	}
+
+	dotdotRow, dotdotText := nameCellText(t, "..")
+	if want := nameHighlightTags(tview.Escape(".."), theme.DirectoryBackground) + "/"; dotdotText != want {
+		t.Errorf(`".." name cell = %q, want %q`, dotdotText, want)
+	}
+
+	subdirRow, subdirText := nameCellText(t, "subdir")
+	if want := nameHighlightTags(tview.Escape("subdir"), theme.DirectoryBackground) + "/"; subdirText != want {
+		t.Errorf("subdir name cell = %q, want %q", subdirText, want)
+	}
+
+	_, pictureText := nameCellText(t, "pictures")
+	if want := nameHighlightTags(tview.Escape("pictures"), theme.DirectoryBackground) + " -> " + tview.Escape(targetDir); pictureText != want {
+		t.Errorf("pictures name cell = %q, want %q — only the name itself should be highlighted, not the arrow/target", pictureText, want)
+	}
+
+	plainRow, plainText := nameCellText(t, "plain.txt")
+	if want := tview.Escape("plain.txt"); plainText != want {
+		t.Errorf("plain.txt name cell = %q, want %q (no highlight tags at all)", plainText, want)
+	}
+
+	_, weirdText := nameCellText(t, "weird[name]")
+	if want := nameHighlightTags(tview.Escape("weird[name]"), theme.DirectoryBackground) + "/"; weirdText != want {
+		t.Errorf("weird[name] name cell = %q, want %q — the literal \"[\" must be escaped or it corrupts the tag markup", weirdText, want)
+	}
+
+	// Every other column stays completely untouched — no background fill
+	// at all — for both a directory row and a plain file row; only the
+	// name cell's own Text ever carries a highlight tag.
+	for _, col := range []int{colCheckbox, colType, colModifier, colSizeSep, colSize, colModifiedSep, colModified} {
+		for _, row := range []int{dotdotRow, subdirRow, plainRow} {
+			cell := p.table.GetCell(row, col)
+			if !cell.Transparent {
+				t.Errorf("row %d, col %d: Transparent = false, want the table's own background (only the name cell should ever be marked)", row, col)
+			}
+		}
 	}
 }
 
@@ -1472,6 +1721,73 @@ func TestAppendSearchResultShowsLineAndTextForContentMatch(t *testing.T) {
 	}
 }
 
+// TestAppendSearchResultShowsArrowForArchiveMatch pins an archive-member
+// match's own display text — "path -> member" (the same "-> target"
+// shape a symlink's own name already gets, see addRow) — while
+// rowRef.path stays the real, containing archive file throughout (so
+// activateRow's usual "Go to file/folder" still lands on something
+// real), and rowRef.archiveHit is set for entryColor (see TestEntryColor).
+func TestAppendSearchResultShowsArrowForArchiveMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	archivePath := filepath.Join(dir, "docs.zip")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != archivePath {
+		t.Errorf("path = %q, want the real archive path %q", ref.path, archivePath)
+	}
+	wantName := archivePath + " -> notes/abcdefg.txt"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+	if !ref.archiveHit {
+		t.Error("archiveHit = false, want true")
+	}
+}
+
+// TestAppendSearchResultShowsArrowAndLineForArchiveContentMatch pins the
+// display text for a content match found *inside* an archive member
+// (Line and ArchiveMember both set — see internal/search's own
+// archivecontent.go): "path -> member:line: text", combining both the
+// arrow shape a filename-only archive match already gets and the
+// line/text suffix a plain content match already gets, rather than
+// either one alone dropping the other's information.
+func TestAppendSearchResultShowsArrowAndLineForArchiveContentMatch(t *testing.T) {
+	dir := fixtureDir(t)
+	archivePath := filepath.Join(dir, "backup.tar.gz")
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "etc/fstab", Line: 2, Text: "Leere Zeile folgt"})
+
+	ref, ok := p.rowRef(0)
+	if !ok {
+		t.Fatal("no rowRef for the one appended result")
+	}
+	if ref.path != archivePath {
+		t.Errorf("path = %q, want the real archive path %q", ref.path, archivePath)
+	}
+	wantName := archivePath + " -> etc/fstab:2: Leere Zeile folgt"
+	if ref.name != wantName {
+		t.Errorf("name = %q, want %q", ref.name, wantName)
+	}
+	if !ref.archiveHit {
+		t.Error("archiveHit = false, want true")
+	}
+}
+
 // TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches
 // pins the reason searchResultEntry carries display separately from
 // Entry.Name at all: a content search without "First hit" checked can
@@ -1815,5 +2131,197 @@ func TestActivateRowOnFilenameMatchIgnoresOpenCallback(t *testing.T) {
 	}
 	if p.searchMode {
 		t.Error("searchMode still true after activating a filename match, want the jump to have left it")
+	}
+}
+
+// TestActivateRowOnFilenameMatchCallsOnExitSearchResults pins the real
+// user report onExitSearchResults exists to fix: without it, a search
+// still running in the background (a slow archive listing especially —
+// see internal/search's own archive.go) kept streaming further results
+// into appendSearchResult/renderSearchEntries after the user had
+// already clicked a match and moved on, silently overwriting the real
+// directory the click just landed on with search results again. Root
+// wires this to cancelSearch (see NewRoot) — checked here only as "was
+// it called", not against the real search.Run machinery.
+func TestActivateRowOnFilenameMatchCallsOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target}) // Line == 0: a filename match
+
+	p.activateRow(0)
+
+	if !called {
+		t.Error("onExitSearchResults did not run for a filename match leaving search mode")
+	}
+}
+
+// TestActivateRowOnArchiveMatchCallsOnExitSearchResults is the same
+// pin, specifically for an archive-member match (ArchiveMember != "",
+// see appendSearchResult) — the case the user actually ran into: Path
+// is the real containing archive, still a plain filename-shaped match
+// (Line == 0), so it takes the exact same activateRow branch as any
+// other filename match.
+func TestActivateRowOnArchiveMatchCallsOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.showSearchResults()
+	archivePath := filepath.Join(dir, "docs.zip")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil { // must really exist: navigateAndSelect reloads dir for real and looks for it by name
+		t.Fatal(err)
+	}
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	p.activateRow(0)
+
+	if !called {
+		t.Error("onExitSearchResults did not run for an archive-member match leaving search mode")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q, want the jump to have landed on %q (the archive's own parent dir)", p.path, dir)
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row = (%d, %q, %v), want the real archive %q selected", row, path, ok, archivePath)
+	}
+}
+
+// TestActivateRowOnArchiveContentMatchFallsBackInsteadOfOpeningEditor
+// pins activateRow's own exception for a content match found *inside*
+// an archive member (Line > 0 AND ArchiveMember != "" both set — see
+// internal/search's own archivecontent.go): unlike a plain content match,
+// this must NOT call onOpenSearchResult (ref.path is the containing
+// archive itself, not the matched member's own extracted content —
+// opening the raw archive in a text editor at ref.searchLine would
+// make no sense) — it falls back to the same "Go to file/folder"
+// jump a filename-only archive match already gets instead (see
+// TestActivateRowOnArchiveMatchCallsOnExitSearchResults).
+func TestActivateRowOnArchiveContentMatchFallsBackInsteadOfOpeningEditor(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	openCalled := false
+	p.onOpenSearchResult = func(string, int) { openCalled = true }
+	exitCalled := false
+	p.onExitSearchResults = func() { exitCalled = true }
+	p.showSearchResults()
+	archivePath := filepath.Join(dir, "backup.tar.gz")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil { // must really exist: navigateAndSelect reloads dir for real and looks for it by name
+		t.Fatal(err)
+	}
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "etc/fstab", Line: 2, Text: "Leere Zeile folgt"})
+
+	p.activateRow(0)
+
+	if openCalled {
+		t.Error("onOpenSearchResult ran for an archive content match, want it skipped in favor of the ordinary jump")
+	}
+	if !exitCalled {
+		t.Error("onExitSearchResults did not run — want the archive content match to leave search mode, same as a filename match")
+	}
+	if p.searchMode {
+		t.Error("searchMode still true after activating an archive content match, want it to have left search mode")
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row = (%d, %q, %v), want the real archive %q selected", row, path, ok, archivePath)
+	}
+}
+
+// TestArchiveResultRealClickSelectsArchiveNotStaleIndex is a real
+// click, dispatched through p.table's own MouseHandler the way an
+// actual click arrives — the same rigor TestColumnHeaderClickSortsBySize
+// already applies, for the exact same reason: this is coordinate-
+// dependent click routing, not something a direct activateRow(row)
+// call alone can catch.
+//
+// The bug this pins (a real user report): Table.MouseHandler computes
+// (row, column) from the click's own screen position *before* calling
+// the clicked cell's own ClickedFunc, then — unless that func returns
+// true — calls t.Select(row, column) with those same, now-stale
+// coordinates *after* it returns (verified against tview's own
+// table.go source, not guessed). Activating a search result rebuilds
+// the whole table into a different, real directory first (see
+// navigateAndSelect) — by the time MouseHandler's own follow-up
+// t.Select ran, it was silently overwriting a correct, deliberate
+// selection (the archive itself) with whatever row happened to occupy
+// that same numeric index in the *new* table instead (here: row 0,
+// the ".." entry — search-mode's own listing has no such row at all,
+// so index 0 there is the archive itself). activateRow's own
+// handledSelection return value (see its doc comment) is what
+// SetClickedFunc now reports back, suppressing that follow-up call.
+func TestArchiveResultRealClickSelectsArchiveNotStaleIndex(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "docs.zip")
+	if err := os.WriteFile(archivePath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: archivePath, ArchiveMember: "notes/abcdefg.txt"})
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(120, 24)
+	p.table.SetRect(0, 0, 120, 20)
+	p.table.Draw(screen) // populates GetLastPosition for nameCellRect below
+
+	x, y, _, ok := p.nameCellRect(0) // row 0: the one archive result, before the click
+	if !ok {
+		t.Fatal("nameCellRect(0) not ok")
+	}
+
+	handler := p.table.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if p.path != dir {
+		t.Errorf("p.path = %q, want %q", p.path, dir)
+	}
+	if row, path, ok := p.CurrentRowPath(); !ok || path != archivePath {
+		t.Errorf("selected row after a real click = (%d, %q, %v), want the archive %q selected, not the stale row-0 index", row, path, ok, archivePath)
+	}
+}
+
+// TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults pins the
+// deliberate exception: a content match stays in search mode (see
+// TestActivateRowOnContentMatchOpensEditorWithoutLeavingSearchMode), so
+// nothing was actually exited — onExitSearchResults must not fire for
+// it, or a still-legitimately-running search would be cancelled out
+// from under a user still paging through its own matches.
+func TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	called := false
+	p.onExitSearchResults = func() { called = true }
+	p.onOpenSearchResult = func(string, int) {}
+	p.showSearchResults()
+	target := filepath.Join(dir, "apple.txt")
+	p.appendSearchResult(search.Result{Path: target, Line: 9, Text: "needle"})
+
+	p.activateRow(0)
+
+	if called {
+		t.Error("onExitSearchResults ran for a content match, want it left alone (search mode still showing)")
 	}
 }

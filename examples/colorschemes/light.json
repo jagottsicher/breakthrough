@@ -4,10 +4,16 @@
   "focused_background": "#1e6fd9",
   "error_background": "#c0392b",
   "selection_background": "#1e6fd9",
+  "directory_background": "#a67c00",
   "text": "#1a1a1a",
   "editable_background": "#b0b0b0",
   "placeholder_text": "#707070",
   "entry_normal": "#1a1a1a",
   "entry_executable": "#1a7a1a",
-  "entry_error": "#c0392b"
+  "entry_error": "#c0392b",
+  "entry_symlink": "#0e7c86",
+  "entry_special": "#b35900",
+  "entry_unreadable": "#902a20",
+  "entry_archive": "#8e3b8e",
+  "entry_hidden": "#595959"
 }

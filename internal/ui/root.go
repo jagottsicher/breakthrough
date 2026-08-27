@@ -15,15 +15,20 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/replace"
+	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 const (
-	panelPage       = "panel"
-	contextMenuPage = "context-menu"
-	renamePage      = "rename"
-	promptPage      = "prompt"
-	pickerPage      = "owner-group-picker"
-	quitConfirmPage = "quit-confirm"
+	panelPage        = "panel"
+	contextMenuPage  = "context-menu"
+	renamePage       = "rename"
+	promptPage       = "prompt"
+	pickerPage       = "owner-group-picker"
+	quitConfirmPage  = "quit-confirm"
+	purgeConfirmPage = "purge-confirm"
+	sedReplacePage   = "sed-replace"
+	sedPreviewPage   = "sed-preview"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -35,10 +40,20 @@ const (
 // — it keeps several sub-widgets simultaneously visible (see
 // newPropertiesView), so simply refocusing r.properties itself isn't
 // precise enough to land keyboard focus back on the right one.
+//
+// emptyStackFocus is a second, separate override — see
+// pushOverlayReturningFocusTo — for the *other* moment hideOverlay hands
+// out focus: this frame's own close, when it was the last one open. That
+// case has always defaulted to the panel, correct for every overlay that
+// opens *from* the panel (the context menu and everything under it), but
+// not for one that opens from somewhere else — see openCompletionPicker,
+// currently the only user, which opens from bashLine and should hand
+// focus back there, not to the panel, once it's gone.
 type overlayFrame struct {
-	page    string
-	widget  tview.Primitive
-	restore func()
+	page            string
+	widget          tview.Primitive
+	restore         func()
+	emptyStackFocus tview.Primitive
 }
 
 // Root is breakthrough's top-level UI: the directory panel, plus a
@@ -89,8 +104,85 @@ type Root struct {
 	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
+
+	// purgeConfirm backs both "Remove" and "Empty Trash" (see
+	// newPurgeConfirm/openPurgeConfirm in trash.go) — one shared,
+	// repopulated widget, the same pattern r.picker/r.prompt already use.
+	// pendingPurge is the action confirmPurge runs once the user actually
+	// confirms, set by whichever of openRemoveConfirm/openEmptyTrashConfirm
+	// opened the dialog.
+	purgeConfirm *tview.List
+	pendingPurge func()
+
+	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
+	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
+	// own doc comment on why the five flag toggles are a separate List
+	// rather than Form checkboxes: tview.Form re-applies one uniform
+	// field background to every item it owns on every Draw call, which
+	// would force a checkbox into the same "editable text field"
+	// highlight real fields get). sedLayout stacks the other three and
+	// is what sedReplacePage actually shows. All three (plus sedFlags)
+	// are rebuilt fresh on every open (see resetSedForm), unlike
+	// purgeConfirm's shared, repopulated single widget, since Form has
+	// no equivalent of List's SetItemText to reset one in place.
+	// sedFindField/sedReplaceField/sedAdvancedField are kept directly
+	// (their typed text values are read back in runSedPreview);
+	// sedFlags holds the five toggles' current state, keyed by their
+	// label constants. sedTargets is the file(s) this open is for (see
+	// selectedOrCurrentPaths).
+	sedForm          *tview.Form
+	sedFindField     *tview.InputField
+	sedReplaceField  *tview.InputField
+	sedAdvancedField *tview.InputField
+	sedFlags         map[string]bool
+	sedFlagsList     *tview.List
+	sedActions       *tview.List
+	sedLayout        *tview.Flex
+	sedTargets       []string
+
+	// sedPreviewStatus/sedPreviewTable/sedPreviewActions/sedPreviewLayout
+	// show Preview's own dry-run result (runSedPreview): a one-line
+	// status (progress while running, a summary once done), the actual
+	// Name/Line/Excerpt table (see sedPreviewRows), and Apply/Back/
+	// Cancel — the same three-choice shape purgeConfirm already has.
+	// sedPendingChanges is what confirmApplySed actually writes if the
+	// user goes on to confirm.
+	//
+	// sedPreviewCancel/sedPreviewAnimFrame/sedPreviewProcessed/
+	// sedPreviewTotal/sedPreviewCurrentPos back the live progress
+	// animation (see animateSedPreviewProgress/renderSedPreviewStatus) —
+	// the same shape searchCancel/searchAnimFrame and friends already
+	// have for a live search.
+	sedPreviewStatus     *tview.TextView
+	sedPreviewTable      *tview.Table
+	sedPreviewActions    *tview.List
+	sedPreviewLayout     *tview.Flex
+	sedPendingChanges    []replace.FileChange
+	sedPreviewCancel     context.CancelFunc
+	sedPreviewAnimFrame  int
+	sedPreviewProcessed  int
+	sedPreviewTotal      int
+	sedPreviewCurrentPos string
+
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
+	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+
+	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
+	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
+	// turnPDFPage/setPDFViewMode) — viewerPDFPath is "" whenever Look
+	// isn't currently showing a PDF at all (reset at the top of every
+	// showBuiltinLook call, regardless of what Kind it turns out to be
+	// — see its own doc comment), which is also what captureViewerKey
+	// checks before ever treating PageUp/PageDown/'g'/'t' as PDF
+	// actions instead of TextView's own default handling. viewerPDFMode
+	// resets to viewer.PDFViewAuto alongside viewerPDFPath — 'g'/'t'
+	// only ever override it for the PDF currently open, never persist
+	// to the next one.
+	viewerPDFPath      string
+	viewerPDFPage      int
+	viewerPDFPageCount int
+	viewerPDFMode      viewer.PDFViewMode
 
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
@@ -162,84 +254,142 @@ type Root struct {
 	// it single); searchSkipHidden/searchWholeWords/searchFirstHit are
 	// each their own — see runSearch for how every one of these feeds
 	// into the search.Request that's actually built.
-	searchPages          *tview.Pages
-	searchFieldsPages    *tview.Pages
-	searchTop            *tview.TextView
-	searchLeft           *tview.TextView
-	searchRight          *tview.TextView
-	searchEditField      *tview.InputField
-	searchEditCommit     func(string)
-	searchButtons        *tview.Flex
-	searchCancelBtn      *tview.Button
-	searchSearchBtn      *tview.Button
-	searchSpans          []searchSpan
-	searchFocusedIdx     int
-	searchEngineOptions  []searchEngineOption
-	searchEngineIdx      int
-	searchScopeValue     string
-	searchFilenameValue  string
-	searchIgnoreValue    string
-	searchContentValue   string
-	searchIgnoreEnabled  bool
-	searchCaseSensitive  bool
-	searchSkipHidden     bool
-	searchRecursive      bool
-	searchFollowSymlinks bool
-	searchShellPatterns  bool
-	searchContentRegex   bool
-	searchWholeWords     bool
-	searchFirstHit       bool
+	//
+	// searchIncludeArchives is Filename's own "Include zip, tar (gz,
+	// bz2, xz)" checkbox — search.Request.IncludeArchives, a plain
+	// filename search only (meaningless once Content is filled in, the
+	// same as searchRecursive/searchFollowSymlinks are meaningless for
+	// EngineLocate — see its own doc comment).
+	//
+	// searchIncludeCompressed is Content's own mirror of that —
+	// "Include compressed files" — search.Request.IncludeCompressed, a
+	// plain content search only (Content filled in, meaningless
+	// otherwise — the exact opposite scoping of searchIncludeArchives).
+	searchPages             *tview.Pages
+	searchFieldsPages       *tview.Pages
+	searchTop               *tview.TextView
+	searchLeft              *tview.TextView
+	searchRight             *tview.TextView
+	searchEditField         *tview.InputField
+	searchEditCommit        func(string)
+	searchButtons           *tview.Flex
+	searchCancelBtn         *tview.Button
+	searchSearchBtn         *tview.Button
+	searchSpans             []searchSpan
+	searchFocusedIdx        int
+	searchEngineOptions     []searchEngineOption
+	searchEngineIdx         int
+	searchScopeValue        string
+	searchFilenameValue     string
+	searchIgnoreValue       string
+	searchContentValue      string
+	searchIgnoreEnabled     bool
+	searchCaseSensitive     bool
+	searchSkipHidden        bool
+	searchRecursive         bool
+	searchFollowSymlinks    bool
+	searchShellPatterns     bool
+	searchContentRegex      bool
+	searchWholeWords        bool
+	searchFirstHit          bool
+	searchIncludeArchives   bool
+	searchIncludeCompressed bool
 	// searchCancel stops whatever search.Run call is currently in
 	// flight, if any, and its paired animateSearchProgress ticker (both
 	// share this same ctx) — called before starting a new one, and when
 	// the dialog closes, so a slow "find /" left running never keeps
 	// working after the user has moved on (see runSearch/closeSearch).
 	searchCancel context.CancelFunc
-	// searchAnimFrame/searchLastDir/searchStartDir back the results
-	// window's own status line (see renderSearchStatus):
-	// searchAnimFrame is the current "still working" animation frame
-	// (see animateSearchProgress); searchLastDir is the directory of
-	// the most recently streamed match, breakthrough's own
-	// approximation of "currently scanning" — see streamSearchResults'
-	// own doc comment on why a real one isn't available when the
-	// actual traversal happens inside an external find/locate/grep
-	// process, not breakthrough's own code; searchStartDir (Start at,
-	// as of when the search began) is shown until the first match
-	// arrives.
-	searchAnimFrame int
-	searchLastDir   string
-	searchStartDir  string
+	// searchAnimFrame/searchCurrentPos/searchLastDir/searchStartDir
+	// back the results window's own status line (see
+	// renderSearchStatus): searchAnimFrame is the current "still
+	// working" animation frame (see animateSearchProgress).
+	// searchCurrentPos is the real, live "where are we right now" —
+	// set from search.Request.OnProgress (see runSearch), which for
+	// EngineFind actually is breakthrough's own code watching the
+	// traversal happen (a second, lightweight find -type d — see
+	// internal/search's own startDirectoryProgress), not a guess.
+	// searchLastDir, the directory of the most recently streamed
+	// match, is the fallback once searchCurrentPos has nothing to show
+	// — EngineLocate (OnProgress is never called for it — see its own
+	// doc comment: locate has no live traversal to report on at all)
+	// or once the search has already finished and progress has
+	// stopped arriving. searchStartDir (Start at, as of when the
+	// search began) is the last resort, shown until either one has
+	// anything at all.
+	searchAnimFrame  int
+	searchCurrentPos string
+	searchLastDir    string
+	searchStartDir   string
 
-	// mainLayout wraps panel, bashLine, and statusBar into the vertical
-	// stack registered as panelPage (see newBottomBar/NewRoot) — panel
-	// still owns its own rect the same way it always has (clampToPanel
-	// and everything else reading panel.GetInnerRect() is unaffected),
-	// just resized to leave the bottom two rows free.
+	// mainLayout wraps panel, bashConsole, buttonBar, and statusBar into
+	// the vertical stack registered as panelPage (see newBottomBar/
+	// NewRoot) — panel still owns its own rect the same way it always
+	// has (clampToPanel and everything else reading
+	// panel.GetInnerRect() is unaffected), just resized to leave the
+	// bottom rows free.
 	mainLayout *tview.Flex
 
-	// bashLine is the second-to-last row: a plain shell command line
-	// (see runShellCommand) — pasting into it works because
-	// cmd/breakthrough enables tview's bracketed-paste support
-	// (Application.EnablePaste), not anything Root itself does.
+	// bashConsole is the topmost of the three bottom rows: bashLine, a
+	// multi-line shell command/script editor, plus bashHint, a
+	// single-row, non-editable legend spelling out its own keybindings
+	// (see bashconsole.go) — both wrapped in their own nested Flex so
+	// the pair can grow together (see expandBashConsole) without
+	// disturbing mainLayout's own four-row split (panel plus these
+	// three). Collapsed to a single row (just bashLine, bashHint
+	// hidden) until bashLine gains focus. Every command runs
+	// full-screen, via a real terminal (see runShellCommandFullScreen)
+	// — see newBashConsole's own doc comment on why this doesn't try to
+	// distinguish which commands "need" that. Pasting into bashLine
+	// works because cmd/breakthrough enables tview's bracketed-paste
+	// support (Application.EnablePaste), not anything Root itself does.
 	//
-	// statusBar is the last row: user/disk-usage/quick-action buttons/
-	// clock (see buildStatusBar), with statusBarSpans locating each
-	// button the same way propertySpans do for Properties.
-	bashLine       *tview.InputField
+	// buttonBar, the middle row, is the quick-action buttons (Edit/
+	// Look/Rename/Hidden/Find/Options/Help/Trash/Remove — see
+	// buildButtonBar), with buttonBarSpans locating each one the same
+	// way propertySpans do for Properties. Built once at construction
+	// and never rebuilt afterwards — unlike statusBar below, none of
+	// these labels ever change while running (the equivalent context
+	// menu items do relabel themselves, e.g. hiddenToggleLabel, but the
+	// button bar's own text doesn't follow suit — see buildButtonBar's
+	// own doc comment).
+	//
+	// statusBar, the last row, is purely informational, deliberately
+	// with nothing clickable in it any more (see buildStatusBar): the
+	// current user, disk/inode usage, the running kernel, uptime/load
+	// average where available, and the clock — refreshed on navigation
+	// and once a second by the clock's own ticker (see
+	// refreshStatusBar), unlike buttonBar above.
+	bashConsole    *tview.Flex
+	bashLine       *tview.TextArea
+	bashHint       *tview.TextView
+	buttonBar      *tview.TextView
+	buttonBarSpans []buttonBarSpan
 	statusBar      *tview.TextView
-	statusBarSpans []statusBarSpan
 
-	// bashHistory is every command available for the bash line's Up/Down
-	// navigation (see bashHistoryUp/Down) — seeded at construction from
+	// bashLineCompletingPick is true only for the moment openCompletionPicker
+	// moves focus away from bashLine to the completion picker it opens —
+	// a deliberate, momentary transition, not the user leaving the
+	// console, so collapseBashConsole (bashLine's own BlurFunc, which
+	// that focus change would otherwise trigger) checks this and skips
+	// collapsing while it's set. Never true otherwise: blurring away for
+	// any real reason (Escape, clicking the panel, running a command)
+	// still collapses normally.
+	bashLineCompletingPick bool
+
+	// bashHistory is every command available for the bash line's
+	// Ctrl+P/Ctrl+N navigation (see bashHistoryUp/Down — not Up/Down
+	// themselves, which move the cursor within bashLine's own
+	// multi-line text instead) — seeded at construction from
 	// bashHistoryFile's existing content (see historyFilePath/
 	// loadBashHistory: real, cross-session history, the same as a real
 	// shell's own), then appended to (both here and back to
-	// bashHistoryFile — see appendBashHistory) as runShellCommand runs
+	// bashHistoryFile — see appendBashHistory) as runBashCommand runs
 	// each one. bashHistoryIdx is which entry is currently showing:
 	// len(bashHistory) means "not currently browsing history" — a fresh
 	// or in-progress line, not one recalled from it — in which case
 	// bashHistoryDraft is what that in-progress line was, restored if
-	// Down is pressed back past the newest entry.
+	// Ctrl+N is pressed back past the newest entry.
 	bashHistory      []string
 	bashHistoryIdx   int
 	bashHistoryDraft string
@@ -454,6 +604,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
 	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
 	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.AddItem("Look", "", 0, r.lookCurrentEntry)
+	r.menu.AddItem("Tail -f", "", 0, r.tailCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
@@ -466,6 +618,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
+	r.menu.AddItem("Sed Replace", "", 0, r.openSedReplace)
+	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
+	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
+	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
+	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
+	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
+	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
@@ -499,8 +658,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// typed into the header) through Root's error overlay.
 	panel.onError = r.showError
 
-	// The bottom bar (see newBottomBar): bashLine/statusBar must exist
-	// before onLoad can be wired below, and before mainLayout is built.
+	// The bottom bars (see newBottomBar): bashLine/buttonBar/statusBar
+	// must exist before onLoad can be wired below, and before
+	// mainLayout is built.
 	r.newBottomBar()
 
 	// Panel's disk-usage display depends on whichever directory it's
@@ -517,6 +677,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
 	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
 	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
+
+	// The Remove/Empty-Trash confirmation (see trash.go) — same "one
+	// shared List" shape as quitConfirm above, deliberately different
+	// default focus (see newPurgeConfirm's own comment).
+	r.purgeConfirm = r.newPurgeConfirm()
+
+	// The "Sed Replace" dialog and its own Preview screen (see
+	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
+	// on every open (see resetSedForm), but sedLayout (which stacks all
+	// three) and sedPreviewLayout (and the view/actions it wraps) are
+	// built once here, the same as everything else on this page.
+	r.sedForm = r.newSedForm()
+	r.sedFlagsList = r.newSedFlagsList()
+	r.sedActions = r.newSedActions()
+	r.sedLayout = r.newSedLayout()
+	r.sedPreviewLayout = r.newSedPreviewLayout()
 
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
@@ -541,6 +717,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reset or repopulate on open).
 	r.helpView = r.newHelpView()
 
+	// The Look overlay's built-in pager (see viewer.go/openLook) — same
+	// single-static-TextView shape as Help, just with its own text set
+	// fresh on every open instead of once here.
+	r.viewerView = r.newViewerView()
+
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -554,15 +735,28 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// Panel.onOpenSearchResult's own doc comment).
 	panel.onOpenSearchResult = r.runEditor
 
-	// mainLayout stacks the panel above the two new bottom rows — panel
+	// Jumping to a filename/archive-member match's own real location
+	// stops the search itself, not just the panel's own display of it
+	// (see Panel.onExitSearchResults' own doc comment) — cancelSearch is
+	// exactly what Escape/closing the dialog already does for the same
+	// reason (see closeSearch), just reached from a result click now.
+	panel.onExitSearchResults = r.cancelSearch
+
+	// mainLayout stacks the panel above the three bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
-	// own "focus" parameter); bashLine/statusBar are each pinned to
-	// exactly one row (1, 0) and never auto-focused — reaching bashLine
-	// is a deliberate click, not something Tab should stumble into.
+	// own "focus" parameter); bashConsole/buttonBar/statusBar are each
+	// pinned to exactly one row (1, 0) and never auto-focused — reaching
+	// bashLine is a deliberate click, not something Tab should stumble
+	// into. bashConsole's own row grows past that single row once
+	// bashLine is actually focused (see expandBashConsole/
+	// collapseBashConsole) — ResizeItem there targets it by widget
+	// identity, not position, so it's unaffected by buttonBar sitting
+	// between it and statusBar.
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(panel, 0, 1, true)
-	r.mainLayout.AddItem(r.bashLine, 1, 0, false)
+	r.mainLayout.AddItem(r.bashConsole, 1, 0, false)
+	r.mainLayout.AddItem(r.buttonBar, 1, 0, false)
 	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
 
 	r.AddPage(panelPage, r.mainLayout, true, true)
@@ -573,10 +767,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
+	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
+	r.AddPage(sedReplacePage, r.sedLayout, false, false)
+	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(viewerPage, r.viewerView, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -642,10 +840,19 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	}
 }
 
+// pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
+// its own doc comment on overlayFrame) for this one frame — currently
+// only openCompletionPicker's own case.
+func (r *Root) pushOverlayReturningFocusTo(page string, widget, emptyStackFocus tview.Primitive) {
+	r.pushOverlay(page, widget, nil)
+	r.overlayStack[len(r.overlayStack)-1].emptyStackFocus = emptyStackFocus
+}
+
 // hideOverlay closes just the topmost overlay layer, if any, revealing
 // whatever was underneath it — restoring that layer's own focus (see
 // overlayFrame.restore) — or, if that was the only one open, returning
-// focus to the panel.
+// focus to the panel, unless that closing frame itself requested
+// somewhere else instead (see overlayFrame.emptyStackFocus).
 func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		return
@@ -657,7 +864,11 @@ func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
 		r.activeWidget = nil
-		r.app.SetFocus(r.panel)
+		if top.emptyStackFocus != nil {
+			r.app.SetFocus(top.emptyStackFocus)
+		} else {
+			r.app.SetFocus(r.panel)
+		}
 		return
 	}
 
@@ -687,11 +898,28 @@ func (r *Root) closeAllOverlays() {
 // captureOutsideClick keeps the panel underneath an open overlay inert:
 // a click outside the overlay closes it (instead of leaving it stuck
 // open) and is consumed rather than also acting on the panel, so it takes
-// a second click to do anything else. Scrolling is swallowed outright
-// while an overlay is open — letting it through would scroll the list out
-// from under a menu that stays put, which both looks wrong and would
-// leave targetRow (see openRename) pointing at a different file than the
-// one the menu was opened for.
+// a second click to do anything else. Every *other* mouse action outside
+// the overlay — scrolling, but also plain movement, button-down/up, and
+// double/middle clicks — is swallowed outright without closing anything,
+// the same "consumed, no other effect" a plain outside click gets once
+// it's done its one job of closing the overlay.
+//
+// That "every other action" part used to be narrower — only scrolling
+// was actually swallowed; everything else fell through to whatever was
+// underneath unconsumed — which left a real gap: a right-click *drag*
+// (see Root.captureMouse's own doc comment) is MouseRightDown, then
+// MouseMove/MouseRightUp, not a single MouseRightClick, so none of those
+// were being caught here at all. With the quit-confirmation overlay
+// open, that meant a right-click on a panel row still reached
+// Panel.captureMouse underneath it and opened the context menu right on
+// top of the still-open quit dialog — exactly the user's own direct
+// report ("wenn der quit confirm dialog offen ist, kann man immer noch
+// rumklicken oder den overlay öffnen. dann muss wirklich alle gesperrt
+// sein"). Consuming unconditionally, rather than opting in one action at
+// a time, closes that gap for good — including for any other overlay
+// this already guards, not just the quit dialog — instead of requiring
+// every individual mouse-action variant tview has to be enumerated and
+// kept in sync here by hand.
 //
 // The Properties overlay is the one exception to "click outside closes
 // it": once propertiesDirty is true (see markPropertiesDirty), an
@@ -709,19 +937,13 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		return action, event // event landed on the open overlay itself
 	}
 
-	if r.activePage == propertiesPage && r.propertiesDirty {
-		return tview.MouseConsumed, nil
-	}
-
-	switch action {
-	case tview.MouseLeftClick, tview.MouseRightClick:
+	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
+		if r.activePage == propertiesPage && r.propertiesDirty {
+			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		}
 		r.hideOverlay()
-		return tview.MouseConsumed, nil
-	case tview.MouseScrollUp, tview.MouseScrollDown, tview.MouseScrollLeft, tview.MouseScrollRight:
-		return tview.MouseConsumed, nil
-	default:
-		return action, event
 	}
+	return tview.MouseConsumed, nil
 }
 
 // primitiveContains reports whether (x, y) falls within p's rectangle.
@@ -1199,6 +1421,24 @@ func (r *Root) clipboardTargets() []string {
 	}
 	if r.target != "" {
 		return []string{r.target}
+	}
+	return nil
+}
+
+// selectedOrCurrentPaths is what Move to Trash/Remove (see trash.go) and
+// Sed Replace (see sedreplace.go) all act on: the current checkbox
+// selection if there is one, otherwise whichever entry the table's
+// cursor is currently on — the same fallback shape clipboardTargets
+// uses for Copy/Cut, but read directly from the panel's cursor instead
+// of r.target, so it also works for the keyboard-shortcut path (Ctrl+T/
+// Entf, Ctrl+P/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
+// goes through a right-click that would have set r.target at all.
+func (r *Root) selectedOrCurrentPaths() []string {
+	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
+		return paths
+	}
+	if _, path, ok := r.panel.CurrentRowPath(); ok {
+		return []string{path}
 	}
 	return nil
 }
