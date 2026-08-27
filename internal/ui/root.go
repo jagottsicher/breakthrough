@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	panelPage       = "panel"
-	contextMenuPage = "context-menu"
-	renamePage      = "rename"
-	promptPage      = "prompt"
-	pickerPage      = "owner-group-picker"
-	quitConfirmPage = "quit-confirm"
+	panelPage        = "panel"
+	contextMenuPage  = "context-menu"
+	renamePage       = "rename"
+	promptPage       = "prompt"
+	pickerPage       = "owner-group-picker"
+	quitConfirmPage  = "quit-confirm"
+	purgeConfirmPage = "purge-confirm"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -100,6 +101,16 @@ type Root struct {
 	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
 	errorView   *tview.TextView
 	quitConfirm *tview.List
+
+	// purgeConfirm backs both "Remove" and "Empty Trash" (see
+	// newPurgeConfirm/openPurgeConfirm in trash.go) — one shared,
+	// repopulated widget, the same pattern r.picker/r.prompt already use.
+	// pendingPurge is the action confirmPurge runs once the user actually
+	// confirms, set by whichever of openRemoveConfirm/openEmptyTrashConfirm
+	// opened the dialog.
+	purgeConfirm *tview.List
+	pendingPurge func()
+
 	optionsList *tview.List     // Options overlay — see openOptions
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -539,6 +550,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
+	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
+	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
+	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
+	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
+	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
@@ -590,6 +606,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
 	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
 	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
+
+	// The Remove/Empty-Trash confirmation (see trash.go) — same "one
+	// shared List" shape as quitConfirm above, deliberately different
+	// default focus (see newPurgeConfirm's own comment).
+	r.purgeConfirm = r.newPurgeConfirm()
 
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
@@ -660,6 +681,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
+	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
