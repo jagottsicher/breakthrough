@@ -14,16 +14,18 @@ import (
 )
 
 // bashHintText is bashHint's own fixed content — a single-row, always-
-// the-same legend spelling out bashLine's keybindings, since none of
-// them are otherwise discoverable from the collapsed line alone (per
-// the user's own report: "man weiß nicht worum es geht").
-const bashHintText = "Enter Run (full screen)   Alt+Enter Newline   ↑/↓ or ^P/^N History   Esc Close"
+// the-same title-plus-legend spelling out what bashLine even is and its
+// own keybindings, since none of that is otherwise discoverable from
+// the collapsed line alone (per the user's own report: "man weiß nicht
+// worum es geht" / "in der headline sollte noch etwas stehen wie 'Bash
+// prompt editor'").
+const bashHintText = "Bash Prompt Editor — Enter Run (full screen) · Ctrl+J/Alt+Enter Newline · ↑/↓ ^P/^N History · Esc Close"
 
 // newBashConsole builds bashLine, a multi-line shell command/script
 // editor (no "$ " label, full width, per the user's own explicit
 // request) that grows upward on focus (see expandBashConsole/
 // collapseBashConsole) so a longer, multi-line script (composed via
-// Alt+Enter — see captureBashLineKey) stays visible while it's being
+// Ctrl+J/Alt+Enter — see captureBashLineKey) stays visible while it's being
 // written, plus bashHint, a plain, read-only legend line shown above it
 // while expanded (see bashHintText) — both wrapped together in
 // bashConsole, a small nested Flex expandBashConsole/collapseBashConsole
@@ -75,7 +77,7 @@ func (r *Root) newBashConsole() {
 // than nested in a FlexColumn — up to just under half the terminal's
 // current height: one row for bashHint's own legend, the rest for
 // bashLine, so a multi-line script being composed (see
-// captureBashLineKey's own Alt+Enter case) stays visible as it grows,
+// captureBashLineKey's own Ctrl+J/Alt+Enter case) stays visible as it grows,
 // rather than scrolling out of a single row. Wired as bashLine's own
 // FocusFunc, so this runs the moment it's clicked into or otherwise
 // gains focus.
@@ -103,12 +105,23 @@ func (r *Root) collapseBashConsole() {
 // behavior doesn't already cover correctly for a command line:
 //
 //   - Enter (no modifier): run the buffer now (see runBashCommand) —
-//     not TextArea's own default of inserting a newline, which Alt+Enter
-//     is left to do instead (see below), so this line keeps feeling like
-//     a real shell for the common case of a single command.
-//   - Alt+Enter: falls through to TextArea's own default handling
-//     (returned unchanged) — inserts a literal newline, for composing a
-//     multi-line script across several lines before running it.
+//     not TextArea's own default of inserting a newline, which Ctrl+J
+//     and Alt+Enter are left to do instead (see below), so this line
+//     keeps feeling like a real shell for the common case of a single
+//     command.
+//   - Ctrl+J / Alt+Enter: insert a literal newline instead of running,
+//     for composing a multi-line script across several lines before
+//     running it. Two bindings for the same thing because Alt+Enter
+//     isn't reliable across terminals — many terminal emulators
+//     intercept it themselves (commonly for their own "toggle
+//     fullscreen" action) before it ever reaches breakthrough at all,
+//     per the user's own direct report that it "funktioniert nicht".
+//     Ctrl+J (LF, 0x0A) is a plain, unambiguous ASCII control byte
+//     every terminal sends through untouched, no escape-sequence
+//     negotiation involved — synthesized here as a plain Enter event
+//     for TextArea's own default handler, which inserts a newline for
+//     any KeyEnter regardless of modifiers (the same thing Alt+Enter
+//     itself falls through to, unchanged, when it does work).
 //   - Up / Down at the first/last line of the buffer: recall the
 //     previous/next history entry (see bashHistoryUp/Down), the same as
 //     a real shell's own readline does once there's nowhere left to
@@ -125,6 +138,8 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModAlt != 0:
 		return event
+	case event.Key() == tcell.KeyCtrlJ:
+		return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 	case event.Key() == tcell.KeyEnter:
 		r.runBashCommand(r.bashLine.GetText())
 		return nil
@@ -146,7 +161,7 @@ func (r *Root) captureBashLineKey(event *tcell.EventKey) *tcell.EventKey {
 
 // bashLineAtFirstLine and bashLineAtLastLine report whether bashLine's
 // own cursor currently sits on the first/last line of its (possibly
-// multi-line — see captureBashLineKey's own Alt+Enter case) buffer —
+// multi-line — see captureBashLineKey's own Ctrl+J/Alt+Enter case) buffer —
 // the boundary at which Up/Down should recall history instead of
 // TextArea's own default of moving the cursor to a line that doesn't
 // exist. For a single-line buffer, the only line is always both.
