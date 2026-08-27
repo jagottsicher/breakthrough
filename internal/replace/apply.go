@@ -42,10 +42,20 @@ func looksBinary(data []byte) bool {
 // A bad sed script (e.g. a syntax error) fails identically for every
 // file, so the first such failure stops Preview immediately (returned as
 // err) rather than repeating the same message once per file.
-func Preview(paths []string, script string, extendedRegex bool) (changes []FileChange, skipped map[string]string, err error) {
+//
+// onProgress, if non-nil, is called once per path, after it's been
+// looked at (whether it ended up in changes, skipped, or was left out
+// as unchanged) — the same "here's what I just looked at" contract
+// internal/search's own Request.OnProgress has, letting a caller (see
+// internal/ui's Sed Replace dialog) show a live "N of M files" status
+// without Preview needing to know anything about how that's displayed.
+func Preview(paths []string, script string, extendedRegex bool, onProgress func(path string)) (changes []FileChange, skipped map[string]string, err error) {
 	skipped = map[string]string{}
 
 	for _, path := range paths {
+		if onProgress != nil {
+			onProgress(path)
+		}
 		fi, statErr := os.Lstat(path)
 		if statErr != nil {
 			skipped[path] = statErr.Error()

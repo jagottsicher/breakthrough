@@ -25,7 +25,7 @@ func TestPreviewFindsChangedFilesOnly(t *testing.T) {
 		t.Fatalf("BuildScript: %v", err)
 	}
 
-	changes, skipped, err := Preview([]string{changed, unchanged}, script, false)
+	changes, skipped, err := Preview([]string{changed, unchanged}, script, false, nil)
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestPreviewSkipsDirectoriesAndBinaryFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changes, skipped, err := Preview([]string{subdir, binaryFile, missing}, script, false)
+	changes, skipped, err := Preview([]string{subdir, binaryFile, missing}, script, false, nil)
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
@@ -80,12 +80,43 @@ func TestPreviewSkipsDirectoriesAndBinaryFiles(t *testing.T) {
 	}
 }
 
+func TestPreviewReportsProgressForEveryPath(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.txt")
+	b := filepath.Join(dir, "b.txt")
+	mustWriteFile(t, a, "hello\n")
+	mustWriteFile(t, b, "hello\n")
+	missing := filepath.Join(dir, "gone.txt")
+
+	script, err := BuildScript("hello", "goodbye", false, false, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []string
+	_, _, err = Preview([]string{a, missing, b}, script, false, func(path string) {
+		seen = append(seen, path)
+	})
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	want := []string{a, missing, b}
+	if len(seen) != len(want) {
+		t.Fatalf("onProgress saw %v, want %v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Errorf("onProgress[%d] = %q, want %q", i, seen[i], want[i])
+		}
+	}
+}
+
 func TestPreviewStopsOnBadScript(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	mustWriteFile(t, f, "hello\n")
 
-	_, _, err := Preview([]string{f}, "s/unterminated", false)
+	_, _, err := Preview([]string{f}, "s/unterminated", false, nil)
 	if err == nil {
 		t.Fatal("Preview with a malformed sed script should return an error")
 	}
