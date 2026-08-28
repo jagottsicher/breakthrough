@@ -3,22 +3,45 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
+
+// backdateTrashItem rewrites id's own deleted_at record directly, the
+// same "info/<id>.trashinfo" layout fsops.MoveToTrash itself writes
+// (see its own doc comment) — internal/fsops has no exported way to
+// simulate an old item, and duplicating these two literals here is
+// cheaper than exporting a test-only helper from production code just
+// for this.
+func backdateTrashItem(t *testing.T, trashDir, id string, age time.Duration) {
+	t.Helper()
+	path := filepath.Join(trashDir, "info", id+".trashinfo")
+	deletedAt := time.Now().Add(-age).UTC().Format(time.RFC3339Nano)
+	if err := config.SetKey(path, "deleted_at", deletedAt); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // newTestRootWithFile creates a directory containing exactly one file
 // ("a.txt") and a Root rooted there, with the table cursor already
 // focused on that file (row 0 is always ".." — see focusRow's own
-// callers elsewhere in this package). $XDG_RUNTIME_DIR is pointed at a
-// fresh temp dir so the session-scoped trash (the default —
-// r.settings.TrashPersistent starts false) never touches the real one.
+// callers elsewhere in this package). Both $XDG_RUNTIME_DIR and
+// $XDG_DATA_HOME are pointed at their own fresh temp dirs — session-
+// scoped and persistent trash resolve to one or the other (see
+// session.TrashDir), and isolating only whichever TrashPersistent
+// currently defaults to would silently break the moment that default
+// changes again; isolating both means this test's own trash is always
+// private regardless.
 func newTestRootWithFile(t *testing.T) (r *Root, dir, file string) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	dir = t.TempDir()
 	file = filepath.Join(dir, "a.txt")
@@ -301,5 +324,63 @@ func TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 
 	if got, want := filepath.Clean(r.panel.path), filepath.Clean(dir); got != want {
 		t.Errorf("TrashbinShortcut navigated while an overlay was open: panel.path = %q, want unchanged %q", got, want)
+	}
+}
+
+// TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice pins the actual
+// integration, not just fsops.PruneTrash's own already-tested logic: an
+// item older than r.settings.TrashMaxAgeDays is gone from the trash
+// afterward, and the returned notice names how many.
+func TestPruneTrashAtStartupRemovesOldItemAndReturnsNotice(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+
+	dir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	items, err := fsops.ListTrash(dir)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("setup ListTrash = %+v, %v, want 1 item", items, err)
+	}
+	backdateTrashItem(t, dir, items[0].ID, time.Duration(r.settings.TrashMaxAgeDays+10)*24*time.Hour)
+
+	notice := r.pruneTrashAtStartup()
+
+	if notice == "" {
+		t.Fatal("pruneTrashAtStartup returned no notice despite an item old enough to prune")
+	}
+	remaining, err := fsops.ListTrash(dir)
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("ListTrash after pruneTrashAtStartup = %+v, %v, want empty", remaining, err)
+	}
+	if _, err := os.Lstat(file); !os.IsNotExist(err) {
+		t.Fatalf("original file reappeared at %s after the aged trash item was pruned", file)
+	}
+}
+
+// TestPruneTrashAtStartupNoOpWithEmptyTrash is a regression guard for
+// NewRoot's own end-of-construction wiring (see its startupNotices):
+// an ordinary fresh start, with nothing ever trashed, must not pop an
+// error overlay of its own accord.
+func TestPruneTrashAtStartupNoOpWithEmptyTrash(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+
+	if r.activePage == errorPage {
+		t.Fatalf("NewRoot already shows an error overlay with an empty trash: %q", r.errorView.GetText(true))
+	}
+	if notice := r.pruneTrashAtStartup(); notice != "" {
+		t.Errorf("pruneTrashAtStartup() = %q, want \"\" with nothing in the trash", notice)
+	}
+}
+
+// TestTrashPruneMessageMentionsBothAgeAndQuota pins trashPruneMessage's
+// own formatting directly — a pure function, no filesystem needed.
+func TestTrashPruneMessageMentionsBothAgeAndQuota(t *testing.T) {
+	got := trashPruneMessage(fsops.PruneTrashResult{RemovedByAge: 2, RemovedByQuota: 3})
+	for _, want := range []string{"5", "2", "age", "3", "quota"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("trashPruneMessage(...) = %q, missing %q", got, want)
+		}
 	}
 }
