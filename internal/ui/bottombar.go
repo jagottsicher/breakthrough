@@ -131,7 +131,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	write("  ")
 	button("^R Rename", buttonActionRename)
 	write("  ")
-	button("^G Hidden", buttonActionToggleHidden)
+	button("^G Hide/Unhide", buttonActionToggleHidden)
 	write("  ")
 	button("^F Find", buttonActionSearch)
 	write("  ")
@@ -267,8 +267,8 @@ type diskUsage struct {
 // on dir and parses each one's own data line into a diskUsage.
 //
 // Deliberately not `df -h`: -h's own human-readable formatting is
-// locale-dependent (this app's own README/CLAUDE.md target audience
-// includes non-English locales — a German one, for instance, renders
+// locale-dependent (this app's own target audience includes non-
+// English locales — a German one, for instance, renders
 // "1.7G" as "1,7G", a comma this app would then have no reliable way
 // to tell apart from a field separator when parsing it back out). Also
 // deliberately not `df -P`, which on GNU df guarantees a single,
@@ -660,8 +660,8 @@ func selectedEditor() string {
 // A line is passed as a leading "+N" argument, vi/vim/nvim/nano/
 // emacs' own shared convention for "open already positioned at line
 // N" — the overwhelming majority of terminal $EDITOR values in this
-// app's own POSIX-focused audience (see CLAUDE.md's own target
-// platforms) already understand it; there's no attempt at a per-editor
+// app's own POSIX-focused audience already understand it; there's no
+// attempt at a per-editor
 // lookup table for anything fancier (e.g. VS Code's own "-g file:N")
 // — an editor that doesn't recognize "+N" is no worse off than not
 // jumping to a line at all, just a leading argument it happens to
