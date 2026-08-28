@@ -79,8 +79,8 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (Edit/Look/Rename/toggle
-	// hidden files/Options/Search — see the bottom bar's own buttons)
+	// Ctrl+E/Ctrl+L/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R (Edit/Look/toggle hidden
+	// files/Options/Search/Remove — see the bottom bar's own buttons)
 	// check their own preconditions before acting (see
 	// Root.acceptsGlobalShortcut) rather than always firing the way
 	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
@@ -90,15 +90,25 @@ func run() error {
 	// "toggle hidden files" instead. Ctrl+O, previously left unclaimed,
 	// is Options (Ctrl+X used to be, before the dialog itself was
 	// renamed from Settings to Options and the shortcut moved to match).
+	// Rename moved off Ctrl+R to F2 (see below) once Remove needed a
+	// letter matching its own name and Ctrl+R was the only one left.
 	//
-	// F1 (Help) sits alongside Ctrl+Q/Ctrl+C, not the five above: it
+	// F1 (Help) sits alongside Ctrl+Q/Ctrl+C, not the six above: it
 	// works from literally anywhere, including in the middle of typing
 	// a bash command or editing a field in another dialog, the same
 	// "always fires" reasoning as those two — see Root.HelpShortcut's
 	// own doc comment. F1, not a Ctrl combination, both sidesteps ever
 	// needing a free letter (every obvious one is already claimed) and
 	// matches the one keybinding this app's own stated inspiration,
-	// Midnight Commander, uses for exactly the same purpose.
+	// Midnight Commander, uses for exactly the same purpose. F2 (Rename)
+	// sits with the six Ctrl-letter actions instead, not with F1: it
+	// still checks its own precondition the same way they do, unlike F1
+	// — an F-key rather than Ctrl+R purely because Ctrl+R was needed
+	// elsewhere, not because Rename should now work from anywhere.
+	// F2/Rename is the near-universal convention across GUI file
+	// managers (Windows Explorer, Nautilus, Dolphin) and several
+	// terminal ones, so it was the natural key to free Ctrl+R with,
+	// rather than picking an arbitrary unclaimed letter instead.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -114,7 +124,7 @@ func run() error {
 			root.LookShortcut()
 			return nil
 		case tcell.KeyCtrlR:
-			root.RenameShortcut()
+			root.PurgeShortcut()
 			return nil
 		case tcell.KeyCtrlG:
 			root.ToggleHiddenShortcut()
@@ -127,6 +137,9 @@ func run() error {
 			return nil
 		case tcell.KeyF1:
 			root.HelpShortcut()
+			return nil
+		case tcell.KeyF2:
+			root.RenameShortcut()
 			return nil
 		case tcell.KeyCtrlT:
 			// Falls through to bashLine's own default handling (readline-
@@ -158,17 +171,17 @@ func run() error {
 			if !root.AcceptsGlobalShortcut() {
 				return event
 			}
-			root.PurgeShortcut()
+			root.PropertiesShortcut()
 			return nil
 		case tcell.KeyDelete:
 			// Entf triggers the safe action (Trash), matching both the
 			// physical key's own label and the near-universal
 			// file-manager convention — see TrashShortcut's own doc
-			// comment for the full reasoning. Ctrl+Delete for Purge is
+			// comment for the full reasoning. Ctrl+Delete for Remove is
 			// best-effort: tcell's own EventKey.Modifiers doc notes "it
 			// will not always be possible" to detect a modifier together
 			// with a non-alphanumeric key across every terminal —
-			// Ctrl+P above is the reliable path to Purge regardless of
+			// Ctrl+R above is the reliable path to Remove regardless of
 			// what this resolves to on any given terminal.
 			//
 			// Falls through un-consumed while bashLine has focus, the same

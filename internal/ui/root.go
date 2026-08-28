@@ -344,8 +344,8 @@ type Root struct {
 	// works because cmd/breakthrough enables tview's bracketed-paste
 	// support (Application.EnablePaste), not anything Root itself does.
 	//
-	// buttonBar, the middle row, is the quick-action buttons (Edit/
-	// Look/Rename/Hidden/Find/Options/Help/Trash/Remove — see
+	// buttonBar, the middle row, is the quick-action buttons (Properties/
+	// Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove — see
 	// buildButtonBar), with buttonBarSpans locating each one the same
 	// way propertySpans do for Properties. Built once at construction
 	// and never rebuilt afterwards — unlike statusBar below, none of
@@ -1431,7 +1431,7 @@ func (r *Root) clipboardTargets() []string {
 // cursor is currently on — the same fallback shape clipboardTargets
 // uses for Copy/Cut, but read directly from the panel's cursor instead
 // of r.target, so it also works for the keyboard-shortcut path (Ctrl+T/
-// Entf, Ctrl+P/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
+// Entf, Ctrl+R/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
 // goes through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
 	if paths := r.panel.SelectedPaths(); len(paths) > 0 {

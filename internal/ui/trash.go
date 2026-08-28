@@ -75,7 +75,7 @@ func (r *Root) openTrash() {
 }
 
 // openRemoveConfirm is the context menu's "Remove", and (through
-// PurgeShortcut) Ctrl+P/Ctrl+Entf's action: always asks first (Cancel
+// PurgeShortcut) Ctrl+R/Ctrl+Entf's action: always asks first (Cancel
 // preselected — see newPurgeConfirm), wording the message concretely for
 // one file, one directory (with its real item count), or several targets
 // at once.
@@ -185,15 +185,18 @@ func (r *Root) openEmptyTrashConfirm() {
 	})
 }
 
-// TrashShortcut and PurgeShortcut are Ctrl+T/Entf and Ctrl+P/Ctrl+Entf's
+// TrashShortcut and PurgeShortcut are Ctrl+T/Entf and Ctrl+R/Ctrl+Entf's
 // global actions (see cmd/breakthrough and acceptsGlobalShortcut). Entf
 // deliberately triggers the safe action (Trash), not Purge, matching
 // both the physical key's own label and the near-universal file-manager
 // convention (Windows/macOS/GNOME/Total Commander: the bare Delete key is
 // always the reversible one, a modifier is required for the permanent
 // variant). Ctrl+Delete for Purge is best-effort — see cmd/breakthrough's
-// own comment on tcell's modifier-detection caveat; Ctrl+P is the
-// reliable path regardless.
+// own comment on tcell's modifier-detection caveat; Ctrl+R is the
+// reliable path regardless. Unlike Ctrl+T, Ctrl+R needs no fallthrough
+// guard at the cmd/breakthrough dispatch level: nothing in bashLine
+// binds it, so it joins Edit/Look/Rename/etc.'s "always consumed, no-op
+// internally if the precondition fails" group instead.
 func (r *Root) TrashShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.moveSelectionToTrash()
