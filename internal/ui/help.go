@@ -86,6 +86,11 @@ var helpText = strings.TrimLeft(`
   moves on to the next field this way; click elsewhere, or Shift+Tab,
   to actually leave it.
 
+  The results page's own header also carries a real, ordinary path
+  breadcrumb next to the status line — click a button or segment (or
+  edit the path directly) to keep browsing normally, the same as
+  clicking a result already does, without needing to pick one first.
+
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 
   Tab / Shift+Tab   Move between fields or buttons

@@ -152,7 +152,12 @@ terminal.
   `zgrep`/`zipgrep` for gzip/zip contents), scoped to any directory,
   with real-time streamed results you can jump straight to. Runs the
   real system tools rather than a reimplemented search, so it inherits
-  whatever's already indexed by `locate`'s own `updatedb`.
+  whatever's already indexed by `locate`'s own `updatedb`. The results
+  view isn't a dead end either: its own header carries a real,
+  fully clickable/editable path breadcrumb — starting at the search's
+  own scope — right alongside the status line, so you can keep
+  browsing normally without first jumping to a specific hit or backing
+  all the way out with Escape.
 - Look (`^L`, the bottom bar's own button, or the context menu): a
   read-only, full-screen preview of the selected file's content.
   Plain text, source code, config files, diffs/patches, and logs get
