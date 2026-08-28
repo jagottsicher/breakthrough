@@ -432,6 +432,36 @@ func (r *Root) openProperties() {
 	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
 }
 
+// propertiesCurrentEntry is the Properties button/Ctrl+P's actual
+// action — the keyboard/status-bar equivalent of the context menu's
+// "Properties" (see openProperties above), targeting whichever entry
+// the table's cursor is currently on instead of a right-clicked one.
+// r.menu never having been shown yet (no right-click this session) just
+// means openProperties' own GetRect() reads as its zero value —
+// resizeProperties' clampToPanel call still turns that into a valid,
+// on-screen position, the same as it would any other out-of-range x/y.
+func (r *Root) propertiesCurrentEntry() {
+	row, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return
+	}
+	r.target = path
+	r.targetRow = row
+	r.openProperties()
+}
+
+// PropertiesShortcut is Ctrl+P's global action — see cmd/breakthrough
+// and acceptsGlobalShortcut for why it checks its own precondition
+// first, the same as Ctrl+E/F2/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R. Unlike
+// those six, Ctrl+P also needs cmd/breakthrough's own dispatch-level
+// AcceptsGlobalShortcut check before it's even called, since bashLine's
+// own captureBashLineKey binds Ctrl+P to command-history recall.
+func (r *Root) PropertiesShortcut() {
+	if r.acceptsGlobalShortcut() {
+		r.propertiesCurrentEntry()
+	}
+}
+
 // loadPropertiesTarget does openProperties' own state-population half
 // (stat r.target, stage every editable field, render the text), kept
 // separate from its own positioning/overlay logic below.

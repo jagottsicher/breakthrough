@@ -34,16 +34,23 @@ var helpText = strings.TrimLeft(`
 
   Ctrl+E          Edit the selected file
   Ctrl+L          Look at the selected file (read-only)
-  Ctrl+R          Rename the selected file
+  F2              Rename the selected file
   Ctrl+G          Toggle hidden files
   Ctrl+F          Find
   Ctrl+O          Options
+  Ctrl+P          Properties
+  Ctrl+S          Sed Replace on the selected file(s)
+  Ctrl+T / Delete Move the selection to Trash (reversible)
+  Ctrl+R          Remove — permanently delete the selection (asks
+                  first); Ctrl+Delete does the same, best-effort
   Enter           Open the selected directory
   Space           Select/deselect the selected file
   Right-click     Context menu (Properties, Edit, Look, Tail -f,
                   Rename, Select all/Deselect all/Select +/Select -,
-                  Copy, Cut, Paste, chown, chmod, and three toggles:
-                  hidden files, size format, modified-time format)
+                  Copy, Cut, Paste, chown, chmod, Sed Replace, Move to
+                  Trash, Remove, Go to Trash, Restore from Trash,
+                  Empty Trash, and three toggles: hidden files, size
+                  format, modified-time format)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -159,10 +166,10 @@ func (r *Root) helpSize() (width, height int) {
 }
 
 // HelpShortcut is F1's own action — see cmd/breakthrough. Unlike
-// Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F (see acceptsGlobalShortcut), F1
-// works from literally anywhere, the same as Ctrl+Q/Ctrl+C: getting
-// help in the middle of something else is exactly the point, not a
-// case to guard against. Re-pressing F1 while Help is already the
+// Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+P/Ctrl+R (see acceptsGlobalShortcut)
+// or F2, F1 works from literally anywhere, the same as Ctrl+Q/Ctrl+C:
+// getting help in the middle of something else is exactly the point,
+// not a case to guard against. Re-pressing F1 while Help is already the
 // front overlay is a no-op rather than pushing a second copy of it on
 // top of itself.
 func (r *Root) HelpShortcut() {
