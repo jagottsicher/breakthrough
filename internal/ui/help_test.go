@@ -85,7 +85,7 @@ func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 	want := []string{
 		"F1", "Ctrl+Q", "Ctrl+C",
 		"Ctrl+E", "Ctrl+L", "F2", "Ctrl+G", "Ctrl+F", "Ctrl+O",
-		"Ctrl+P", "Ctrl+S", "Ctrl+T", "Ctrl+R", "Delete",
+		"Ctrl+P", "Ctrl+S", "Ctrl+B", "Ctrl+T", "Ctrl+R", "Delete",
 		"Enter", "Space", "Right-click",
 		"Tab", "Escape",
 	}

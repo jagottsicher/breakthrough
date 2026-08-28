@@ -240,3 +240,66 @@ func TestTrashShortcutsNoOpWhileAnOverlayIsOpen(t *testing.T) {
 		t.Fatalf("TrashShortcut acted while an overlay was open (a.txt gone: %v)", err)
 	}
 }
+
+// TestMoveSelectionToTrashInsideTrashRedirectsToRemove pins
+// moveSelectionToTrash's own redirect (see its doc comment): a second
+// "Move to Trash" on something already in the trash has nowhere left to
+// go, so it opens the same Remove confirmation Ctrl+R/the context
+// menu's own "Remove" would, Cancel preselected the same as any other
+// Remove — not a silent no-op, and not an unconfirmed delete either.
+func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+	r.openTrash()
+	r.panel.focusRow(1) // off ".." onto the now-trashed a.txt
+
+	r.moveSelectionToTrash()
+
+	if r.activePage != purgeConfirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, purgeConfirmPage)
+	}
+	if got := r.purgeConfirm.GetCurrentItem(); got != 1 {
+		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
+	}
+
+	// Cancel must still actually cancel — nothing removed by this redirect alone.
+	r.resolvePurgeConfirmByCurrentFocus(t)
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	items, err := fsops.ListTrash(trashDir)
+	if err != nil || len(items) != 1 || items[0].OriginalPath != file {
+		t.Fatalf("ListTrash after Cancel = %+v, %v, want the one item still there", items, err)
+	}
+}
+
+// TestTrashbinShortcutOpensTrash pins Ctrl+B's own action
+// (Root.TrashbinShortcut): the same navigation openTrash itself does.
+func TestTrashbinShortcutOpensTrash(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+
+	r.TrashbinShortcut()
+
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	if got, want := filepath.Clean(r.panel.path), filepath.Clean(fsops.FilesDir(trashDir)); got != want {
+		t.Fatalf("panel.path after TrashbinShortcut = %q, want %q", got, want)
+	}
+}
+
+// TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen mirrors
+// TestTrashShortcutsNoOpWhileAnOverlayIsOpen above for Ctrl+B.
+func TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+
+	r.openOptions() // any overlay; makes acceptsGlobalShortcut false
+	r.TrashbinShortcut()
+
+	if got, want := filepath.Clean(r.panel.path), filepath.Clean(dir); got != want {
+		t.Errorf("TrashbinShortcut navigated while an overlay was open: panel.path = %q, want unchanged %q", got, want)
+	}
+}

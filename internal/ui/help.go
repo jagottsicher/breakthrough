@@ -35,12 +35,16 @@ var helpText = strings.TrimLeft(`
   Ctrl+E          Edit the selected file
   Ctrl+L          Look at the selected file (read-only)
   F2              Rename the selected file
-  Ctrl+G          Toggle hidden files
+  Ctrl+G          Toggle hidden files — the button bar's own label
+                  flips between Hide/Unhide to match
   Ctrl+F          Find
   Ctrl+O          Options
   Ctrl+P          Properties
   Ctrl+S          Sed Replace on the selected file(s)
-  Ctrl+T / Delete Move the selection to Trash (reversible)
+  Ctrl+B          Go to Trash — browse it directly
+  Ctrl+T / Delete Move the selection to Trash (reversible); already
+                  inside the trash itself, does a Remove instead —
+                  nowhere left to move an already-trashed item to
   Ctrl+R          Remove — permanently delete the selection (asks
                   first); Ctrl+Delete does the same, best-effort
   Enter           Open the selected directory

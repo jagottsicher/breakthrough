@@ -30,13 +30,44 @@ func (r *Root) reloadPanel(precedingErr error) {
 	}
 }
 
+// inTrash reports whether the panel is currently browsing the current
+// trash's own files/ subdirectory (see openTrash) — the one place
+// Restore actually makes sense. Used by buildButtonBar to swap Trashbin
+// for Restore and hide Trash entirely, and by moveSelectionToTrash to
+// redirect an already-trashed selection to Remove instead of trying to
+// trash it a second time. False, not an error to report, if the trash
+// directory can't be resolved at all — the same "nothing special going
+// on" reading buildButtonBar's own no-error-surfacing callers need.
+func (r *Root) inTrash() bool {
+	dir, err := r.trashDir()
+	if err != nil {
+		return false
+	}
+	return r.panel.path == fsops.FilesDir(dir)
+}
+
 // moveSelectionToTrash is the context menu's "Move to Trash", and
 // (through TrashShortcut) Ctrl+T/Entf's action. No confirmation — per
 // this project's own feature notes, moving to the trash is the reversible
 // action by design, unlike Remove/Empty Trash below. A directory goes in
 // whole, recursively, the same way a plain move always has — there is
 // nothing to warn about since nothing is actually being destroyed yet.
+//
+// Redirects to openRemoveConfirm instead when r.inTrash(): an item
+// that's already in the trash has nowhere sensible left to be "moved to
+// trash" a second time, so this is the one case where Ctrl+T/Entf (and
+// this same context menu entry, still wired here) means Remove instead
+// — its own confirmation dialog is exactly the "are you sure" a second,
+// otherwise-silent send-to-trash would need of its own anyway. The
+// button bar hides its own "Trash" button entirely in this state
+// instead of relabeling it (see buildButtonBar) — this redirect is what
+// still fires if Ctrl+T/Entf gets pressed out of habit regardless.
 func (r *Root) moveSelectionToTrash() {
+	if r.inTrash() {
+		r.openRemoveConfirm()
+		return
+	}
+
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
@@ -57,9 +88,10 @@ func (r *Root) moveSelectionToTrash() {
 	r.reloadPanel(firstErr)
 }
 
-// openTrash is the context menu's "Go to Trash": navigates the panel
-// straight to the current trash's files/ subdirectory (see
-// fsops.FilesDir) — the one place browsing/Restore actually works (see
+// openTrash is the context menu's "Go to Trash", and (through
+// TrashbinShortcut) Ctrl+B's action: navigates the panel straight to
+// the current trash's files/ subdirectory (see fsops.FilesDir) — the
+// one place browsing/Restore actually works (see
 // restoreSelectionFromTrash) — without the user needing to know or type
 // its path, which for the session-scoped default includes a random
 // per-run session ID buried under $XDG_RUNTIME_DIR.
@@ -206,6 +238,20 @@ func (r *Root) TrashShortcut() {
 func (r *Root) PurgeShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openRemoveConfirm()
+	}
+}
+
+// TrashbinShortcut is Ctrl+B's global action (see cmd/breakthrough and
+// acceptsGlobalShortcut) — "B" for "Bin", the one Ctrl-letter mnemonic
+// for Go to Trash that was actually still free. Needs the same
+// dispatch-level AcceptsGlobalShortcut check Ctrl+P/T/S do rather than
+// joining TrashShortcut/PurgeShortcut's "always consumed" group above:
+// tview's TextArea already binds Ctrl+B to its own PgUp-style movement
+// (see acceptsGlobalShortcut's own doc comment), so bashLine needs to
+// keep seeing it while it has focus.
+func (r *Root) TrashbinShortcut() {
+	if r.acceptsGlobalShortcut() {
+		r.openTrash()
 	}
 }
 

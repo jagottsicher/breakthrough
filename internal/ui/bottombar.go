@@ -32,6 +32,8 @@ const (
 	buttonActionSearch
 	buttonActionHelp
 	buttonActionTrash
+	buttonActionTrashbin
+	buttonActionRestore
 	buttonActionRemove
 	buttonActionSed
 )
@@ -52,11 +54,14 @@ type buttonBarSpan struct {
 // line (see refreshStatusBar/buildStatusBar). NewRoot adds all three to
 // mainLayout beneath the panel.
 //
-// buttonBar's text is built once, here, and never rebuilt afterwards —
-// unlike statusBar (user/disk-usage/clock all change over a session),
-// none of the button labels ever do. statusBar starts blank; NewRoot's
-// caller is expected to call refreshStatusBar once real data (the
-// panel's own directory) is available, the same as it always has.
+// buttonBar's initial text is built here (see buildButtonBar), but —
+// unlike when this was first written — it's no longer fixed for the
+// run of the program: refreshButtonBar rebuilds it on the same
+// Panel.onLoad wiring statusBar already uses below, since which
+// buttons even appear now depends on the panel's current directory
+// (see buildButtonBar's own doc comment). statusBar starts blank;
+// NewRoot's caller is expected to call refreshStatusBar once real data
+// (the panel's own directory) is available, the same as it always has.
 func (r *Root) newBottomBar() {
 	r.newBashConsole()
 
@@ -92,23 +97,78 @@ func currentUsername() string {
 // whenever anything it shows might have changed: the panel navigating
 // (disk usage depends on the current directory — see Panel.onLoad,
 // wired in NewRoot), and once a second from StartClock's ticker (the
-// clock itself). buttonBar is never part of this — its labels are fixed
-// and built exactly once, in newBottomBar.
+// clock itself).
 func (r *Root) refreshStatusBar() {
 	r.statusBar.SetText(r.buildStatusBar())
 }
 
-// buildButtonBar renders the button bar's text: the quick-action buttons
-// (Properties/Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in
-// nano's own "^X Label" style (instantly recognizable as "Ctrl+X does
-// this" without needing a separate legend). Built once, from
-// newBottomBar, and never rebuilt afterwards — unlike statusBar, none of
-// these labels ever change while running (the equivalent context menu
-// items do relabel themselves, e.g. hiddenToggleLabel, but the button
-// bar's own text intentionally doesn't follow suit, to keep this a
-// fixed, muscle-memory legend rather than something to re-read each
-// time).
+// refreshButtonBar rebuilds and redraws the button bar's text — called
+// from the same Panel.onLoad wiring refreshStatusBar uses (see NewRoot),
+// since buildButtonBar's own output now depends on the panel's current
+// directory (in/out of the trash — see inTrash) as well as its
+// showHidden flag, both of which a navigation, toggleHidden's own
+// reload, or a trash operation's reloadPanel can change.
+func (r *Root) refreshButtonBar() {
+	text, spans := r.buildButtonBar()
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
+}
+
+// buildButtonBar renders the button bar's text: the quick-action
+// buttons in nano's own "^X Label" style (instantly recognizable as
+// "Ctrl+X does this" without needing a separate legend) — Help, Rename,
+// Edit, Look, Properties, Find, Sed, toggle hidden files, Options,
+// Trash, Trashbin/Restore, Remove, in that fixed order.
+//
+// Two of these aren't fixed labels any more (see refreshButtonBar for
+// when this gets called again): the hidden-files toggle reads "Hide" or
+// "Unhide" depending on r.panel.showHidden — the same "label names the
+// action clicking it performs next" convention hiddenToggleLabel
+// already uses for the context menu's own equivalent, just with this
+// button's own shorter Hide/Unhide vocabulary instead of that item's
+// fuller "Show/Hide hidden files" text. And the Trashbin slot itself
+// swaps to Restore while r.inTrash() — browsing the trash and asking to
+// "go to trash" again does nothing useful, but Restore does; see
+// moveSelectionToTrash for Trash's own equivalent swap, which
+// disappears from this bar entirely in the same state rather than
+// swapping to anything, since there's nothing sensible to move an
+// already-trashed item to.
 func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
+	type buttonSpec struct {
+		label  string
+		action buttonBarAction
+	}
+
+	hideUnhideLabel := "^G Unhide"
+	if r.panel.showHidden {
+		hideUnhideLabel = "^G Hide"
+	}
+
+	trashbinLabel, trashbinAction := "^B Trashbin", buttonActionTrashbin
+	inTrash := r.inTrash()
+	if inTrash {
+		trashbinLabel, trashbinAction = "^B Restore", buttonActionRestore
+	}
+
+	buttons := []buttonSpec{
+		{"F1 Help", buttonActionHelp},
+		{"F2 Rename", buttonActionRename},
+		{"^E Edit", buttonActionEdit},
+		{"^L Look", buttonActionLook},
+		{"^P Properties", buttonActionProperties},
+		{"^F Find", buttonActionSearch},
+		{"^S Sed", buttonActionSed},
+		{hideUnhideLabel, buttonActionToggleHidden},
+		{"^O Options", buttonActionOptions},
+	}
+	if !inTrash {
+		buttons = append(buttons, buttonSpec{"^T Trash", buttonActionTrash})
+	}
+	buttons = append(buttons,
+		buttonSpec{trashbinLabel, trashbinAction},
+		buttonSpec{"^R Remove", buttonActionRemove},
+	)
+
 	var b strings.Builder
 	col := 0
 
@@ -121,33 +181,14 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		b.WriteString(s)
 		col += tview.TaggedStringWidth(s)
 	}
-	button := func(label string, action buttonBarAction) {
+	for i, bt := range buttons {
+		if i > 0 {
+			write("  ")
+		}
 		start := col
-		write(label)
-		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: action})
+		write(bt.label)
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: bt.action})
 	}
-
-	button("^P Properties", buttonActionProperties)
-	write("  ")
-	button("^E Edit", buttonActionEdit)
-	write("  ")
-	button("^L Look", buttonActionLook)
-	write("  ")
-	button("F2 Rename", buttonActionRename)
-	write("  ")
-	button("^G Hide/Unhide", buttonActionToggleHidden)
-	write("  ")
-	button("^F Find", buttonActionSearch)
-	write("  ")
-	button("^O Options", buttonActionOptions)
-	write("  ")
-	button("F1 Help", buttonActionHelp)
-	write("  ")
-	button("^T Trash", buttonActionTrash)
-	write("  ")
-	button("^R Remove", buttonActionRemove)
-	write("  ")
-	button("^S Sed", buttonActionSed)
 
 	return b.String(), spans
 }
@@ -480,6 +521,10 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openHelp()
 	case buttonActionTrash:
 		r.moveSelectionToTrash()
+	case buttonActionTrashbin:
+		r.openTrash()
+	case buttonActionRestore:
+		r.restoreSelectionFromTrash()
 	case buttonActionRemove:
 		r.openRemoveConfirm()
 	case buttonActionSed:
@@ -543,9 +588,10 @@ func (r *Root) acceptsGlobalShortcut() bool {
 
 // AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
 // cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Ctrl+T/Entf (see
-// TrashShortcut in trash.go), and Ctrl+S (see SedReplaceShortcut) need
-// to decide, before even calling their own Shortcut method, whether to
-// consume the key at all — unlike the seven above, which always return
+// TrashShortcut in trash.go), Ctrl+B (see TrashbinShortcut), and Ctrl+S
+// (see SedReplaceShortcut) need to decide, before even calling their
+// own Shortcut method, whether to consume the key at all — unlike the
+// seven above, which always return
 // nil regardless (an accepted, minor imperfection for keys TextArea
 // might bind natively), each of these collides with a real, explicit
 // feature of this same codebase: bashLine's own captureBashLineKey
