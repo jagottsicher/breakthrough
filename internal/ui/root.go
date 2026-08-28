@@ -344,15 +344,16 @@ type Root struct {
 	// works because cmd/breakthrough enables tview's bracketed-paste
 	// support (Application.EnablePaste), not anything Root itself does.
 	//
-	// buttonBar, the middle row, is the quick-action buttons (Properties/
-	// Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove — see
-	// buildButtonBar), with buttonBarSpans locating each one the same
-	// way propertySpans do for Properties. Built once at construction
-	// and never rebuilt afterwards — unlike statusBar below, none of
-	// these labels ever change while running (the equivalent context
-	// menu items do relabel themselves, e.g. hiddenToggleLabel, but the
-	// button bar's own text doesn't follow suit — see buildButtonBar's
-	// own doc comment).
+	// buttonBar, the middle row, is the quick-action buttons (Help,
+	// Rename, Edit, Look, Properties, Find, Sed, toggle hidden files,
+	// Options, Trash, Trashbin/Restore, Remove — see buildButtonBar),
+	// with buttonBarSpans locating each one the same way propertySpans
+	// do for Properties. Unlike when this was first written, it's no
+	// longer fixed for the run of the program: refreshButtonBar rebuilds
+	// it on the same onLoad wiring statusBar uses below, since which
+	// buttons even appear (Trashbin vs. Restore, Trash's own
+	// disappearance) and one label's own text (Hide vs. Unhide) both
+	// depend on live state now — see buildButtonBar's own doc comment.
 	//
 	// statusBar, the last row, is purely informational, deliberately
 	// with nothing clickable in it any more (see buildStatusBar): the
@@ -668,8 +669,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// (onLoad isn't called for the very first load, which already
 	// happened inside NewPanel above, before there was anything to wire
 	// it to — refreshStatusBar is called once explicitly, right after
-	// AddPage below, to cover that one case).
-	panel.onLoad = func(string) { r.refreshStatusBar() }
+	// AddPage below, to cover that one case). refreshButtonBar rides
+	// along on the same wiring: buildButtonBar's own Trashbin/Restore
+	// swap and Trash's disappearance both depend on the panel's current
+	// directory too (see inTrash), so every navigation that can move in
+	// or out of the trash — including toggleHidden's own reload, which
+	// this also keeps in sync for the Hide/Unhide label — needs to
+	// re-render it exactly when it re-renders statusBar.
+	panel.onLoad = func(string) {
+		r.refreshStatusBar()
+		r.refreshButtonBar()
+	}
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
 	r.quitConfirm.SetHighlightFullLine(true)

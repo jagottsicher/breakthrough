@@ -144,7 +144,7 @@ func run() error {
 		case tcell.KeyCtrlT:
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
-			// rather than always consuming the key the way the six above
+			// rather than always consuming the key the way the seven above
 			// do - see Root.AcceptsGlobalShortcut's own doc comment.
 			if !root.AcceptsGlobalShortcut() {
 				return event
@@ -166,12 +166,22 @@ func run() error {
 			// history recall - falling through here (not consuming the
 			// event) while it has focus is what keeps that working; see
 			// Root.AcceptsGlobalShortcut's own doc comment for why this one
-			// specifically can't just always return nil the way the six
+			// specifically can't just always return nil the way the seven
 			// above do.
 			if !root.AcceptsGlobalShortcut() {
 				return event
 			}
 			root.PropertiesShortcut()
+			return nil
+		case tcell.KeyCtrlB:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+T/Ctrl+P above - readline-style Ctrl+B is
+			// "backward-char", and tview's TextArea binds it to its own
+			// PgUp-style movement.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.TrashbinShortcut()
 			return nil
 		case tcell.KeyDelete:
 			// Entf triggers the safe action (Trash), matching both the
