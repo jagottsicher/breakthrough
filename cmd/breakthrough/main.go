@@ -110,16 +110,23 @@ func run() error {
 	// terminal ones, so it was the natural key to free Ctrl+R with,
 	// rather than picking an arbitrary unclaimed letter instead.
 	//
-	// F3 (the info sidebar, see internal/ui/infosidebar.go) is a
-	// deliberately provisional pick, not a settled decision the way the
-	// eight above are: the feature itself is still just an empty shell,
-	// and which key it should end up on is an open question. F3 was
-	// simply free, and, like F1/F2, sidesteps needing a letter
-	// combination (there wasn't an obviously free, mnemonic one — see
-	// the Ctrl+H note above for why that search isn't always successful).
-	// It always fires, the same reasoning as F1: showing or hiding the
-	// sidebar never moves keyboard focus anywhere, so unlike the six
-	// Ctrl-letter actions there's no in-progress edit it could interrupt.
+	// Ctrl+D (the Details sidebar, see internal/ui/detailssidebar.go) is
+	// grouped with Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B below rather than with the
+	// six that always fire: tview's own TextArea binds Ctrl+D to "delete
+	// forward" (verified directly against tview's own source, the same
+	// way every claim in this comment block is - see also the Ctrl+H
+	// note above for why guessing instead has already gone wrong once),
+	// the same key the physical Delete key already sends, so it falls
+	// through to bashLine's own handling instead of always consuming the
+	// event, exactly like those four. Chosen over the alphabet's other
+	// options (A/D/K/U/W/Y all have some real, native TextArea binding of
+	// their own; H/I/M collide with Backspace/Tab/Enter at the terminal
+	// protocol level; V/X/Z are earmarked for planned Paste/Cut/Undo
+	// features instead) for its "Details" mnemonic and because losing
+	// delete-forward specifically, while bashLine has focus, is the
+	// least disruptive of the available real trade-offs - it's also the
+	// one native binding this app already has its own guarded equivalent
+	// for, on the physical Delete key itself, right below.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -152,9 +159,6 @@ func run() error {
 		case tcell.KeyF2:
 			root.RenameShortcut()
 			return nil
-		case tcell.KeyF3:
-			root.ToggleInfoSidebarShortcut()
-			return nil
 		case tcell.KeyCtrlT:
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
@@ -186,6 +190,17 @@ func run() error {
 				return event
 			}
 			root.PropertiesShortcut()
+			return nil
+		case tcell.KeyCtrlD:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+T/Ctrl+P/Ctrl+S/Ctrl+B above - tview's own TextArea
+			// binds Ctrl+D to "delete forward" (see the doc comment above
+			// this switch), a real, working feature that would otherwise
+			// be silently swallowed while typing a command.
+			if !root.AcceptsGlobalShortcut() {
+				return event
+			}
+			root.ToggleDetailsSidebarShortcut()
 			return nil
 		case tcell.KeyCtrlB:
 			// Falls through while bashLine has focus for the same reason

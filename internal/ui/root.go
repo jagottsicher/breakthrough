@@ -168,13 +168,13 @@ type Root struct {
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
-	// infoSidebar is the right-hand info layer toggled by F3 — see
-	// infosidebar.go. infoSidebarVisible tracks whether it's currently
-	// shown; unlike every overlay above it, it's deliberately not modal
-	// (see newInfoSidebarView's own doc comment), so it can't reuse
-	// activePage/overlayStack the way those do.
-	infoSidebar        *tview.TextView
-	infoSidebarVisible bool
+	// detailsSidebar is the right-hand Details layer toggled by Ctrl+D
+	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
+	// currently shown; unlike every overlay above it, it's deliberately
+	// not modal (see newDetailsSidebarView's own doc comment), so it
+	// can't reuse activePage/overlayStack the way those do.
+	detailsSidebar        *tview.TextView
+	detailsSidebarVisible bool
 
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
@@ -740,10 +740,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
-	// The info sidebar (see infosidebar.go) — also a single static
+	// The Details sidebar (see detailssidebar.go) — also a single static
 	// TextView for now, same shape as Help/the Look pager above, just
-	// positioned and shown/hidden its own way (see showInfoSidebar).
-	r.infoSidebar = r.newInfoSidebarView()
+	// positioned and shown/hidden its own way (see showDetailsSidebar).
+	r.detailsSidebar = r.newDetailsSidebarView()
 
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
@@ -803,7 +803,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
-	r.AddPage(infoSidebarPage, r.infoSidebar, false, false)
+	r.AddPage(detailsSidebarPage, r.detailsSidebar, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
