@@ -1,6 +1,6 @@
 # GoReleaser v2 configuration — see .github/workflows/release.yml for
-# what runs this (a "v*.*.*" tag pushed to main) and CLAUDE.md section 5
-# for the reasoning behind the target platform list and package formats.
+# what runs this (a "v*.*.*" tag pushed to main). The target platform
+# list and package formats below follow this project's own release design.
 #
 # Schema verified against the current GoReleaser docs (goreleaser.com)
 # at the time this was written, not guessed from training data — the
@@ -20,8 +20,8 @@ builds:
   - id: breakthrough
     main: ./cmd/breakthrough
     binary: breakthrough
-    # No CGO anywhere in this project (see CLAUDE.md's own architecture
-    # guardrail) — CGO_ENABLED=0 is what makes cross-compiling straight
+    # No CGO anywhere in this project — a deliberate architecture
+    # guardrail — CGO_ENABLED=0 is what makes cross-compiling straight
     # from a single Linux runner to every target below possible at all,
     # without needing a C cross-compiler toolchain per platform.
     env:
@@ -34,7 +34,7 @@ builds:
       - amd64
       - arm64
     ignore:
-      # freebsd/arm64 is deliberately not a target (see CLAUDE.md's own
+      # freebsd/arm64 is deliberately not a target (this project's own
       # platform list) — only freebsd/amd64 is.
       - goos: freebsd
         goarch: arm64
@@ -59,9 +59,9 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
-# .deb/.rpm packages (see CLAUDE.md section 5 — Homebrew and AUR are
-# explicitly a later step, needing a separate tap repo, not part of
-# this first pipeline). Linux only, matching the formats themselves.
+# .deb/.rpm packages — Homebrew and AUR are explicitly a later step,
+# needing a separate tap repo, not part of this first pipeline. Linux
+# only, matching the formats themselves.
 nfpms:
   - id: breakthrough
     package_name: breakthrough
@@ -87,9 +87,9 @@ changelog:
       - "^Merge remote-tracking branch"
   groups:
     # Matches this project's own Conventional Commits type list
-    # (CLAUDE.md section 3: feat/fix/refactor/docs/chore/test) — not a
-    # generic feat/fix/docs/chore list copied from GoReleaser's own
-    # example, which uses a different set.
+    # (feat/fix/refactor/docs/chore/test) — not a generic feat/fix/docs/
+    # chore list copied from GoReleaser's own example, which uses a
+    # different set.
     - title: Features
       regexp: '^feat(\([[:word:]-]+\))?!?:.+$'
       order: 0

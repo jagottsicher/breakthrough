@@ -15,9 +15,9 @@ import (
 // within a single filesystem. If that fails with EXDEV ("cross-device
 // link" — src and dst are on different filesystems, e.g. two different
 // mounts), it falls back to Copy followed by removing src, since
-// os.Rename can never bridge that gap directly (see CLAUDE.md's
-// architecture notes on this). Any other os.Rename failure is returned
-// as-is — there's no reason to believe copy+delete would fare any better.
+// os.Rename can never bridge that gap directly. Any other os.Rename
+// failure is returned as-is — there's no reason to believe copy+delete
+// would fare any better.
 //
 // The fallback's Copy call always runs with force=true: the overwrite
 // decision was already made above (or by os.Rename, which itself
