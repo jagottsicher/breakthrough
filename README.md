@@ -60,13 +60,20 @@ terminal.
   can never confirm it by itself. "Go to Trash" (`^B`, or "Trashbin" in
   the button bar) jumps straight into it without needing to know its
   path; "Restore from Trash" and "Empty Trash" (same confirmation) round
-  it out. Session-scoped by default —
-  lives under `$XDG_RUNTIME_DIR`, gone once the session ends — or
-  persistent under `~/.local/share/breakthrough/trash` via
-  `trash_persistent = true` in your config; running as root (e.g. via
-  `sudo`) always gets the persistent, well-known path, since root has no
-  real session of its own for a session-scoped trash to mean anything
-  for.
+  it out. Persistent by default — lives under
+  `~/.local/share/breakthrough/trash`, so it's still there tomorrow, even
+  across a login session boundary — or session-scoped via
+  `trash_persistent = false` in your config, under `$XDG_RUNTIME_DIR`
+  instead, gone once the session ends; running as root (e.g. via `sudo`)
+  always gets the persistent path regardless, since root has no real
+  session of its own for a session-scoped trash to mean anything for.
+  Kept from growing forever by two settings checked once at startup, not
+  on every single trash operation: `trash_max_age_days` (30 by default —
+  anything older is removed unconditionally) and `trash_quota_percent`
+  (10 by default — a backstop, oldest item first, only if age alone
+  didn't already bring the trash back under that share of the
+  filesystem it lives on); either one is `0` to disable it. Anything
+  actually removed this way is reported once, on the next start.
 - Sed Replace (`^S`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
