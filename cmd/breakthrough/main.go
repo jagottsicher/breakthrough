@@ -109,6 +109,17 @@ func run() error {
 	// managers (Windows Explorer, Nautilus, Dolphin) and several
 	// terminal ones, so it was the natural key to free Ctrl+R with,
 	// rather than picking an arbitrary unclaimed letter instead.
+	//
+	// F3 (the info sidebar, see internal/ui/infosidebar.go) is a
+	// deliberately provisional pick, not a settled decision the way the
+	// eight above are: the feature itself is still just an empty shell,
+	// and which key it should end up on is an open question. F3 was
+	// simply free, and, like F1/F2, sidesteps needing a letter
+	// combination (there wasn't an obviously free, mnemonic one — see
+	// the Ctrl+H note above for why that search isn't always successful).
+	// It always fires, the same reasoning as F1: showing or hiding the
+	// sidebar never moves keyboard focus anywhere, so unlike the six
+	// Ctrl-letter actions there's no in-progress edit it could interrupt.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -140,6 +151,9 @@ func run() error {
 			return nil
 		case tcell.KeyF2:
 			root.RenameShortcut()
+			return nil
+		case tcell.KeyF3:
+			root.ToggleInfoSidebarShortcut()
 			return nil
 		case tcell.KeyCtrlT:
 			// Falls through to bashLine's own default handling (readline-

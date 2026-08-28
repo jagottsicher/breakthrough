@@ -27,6 +27,8 @@ var helpText = strings.TrimLeft(`
 [::b]Global — work anywhere, even inside another dialog[::-]
 
   F1              This help
+  F3              Toggle the info sidebar (empty for now — a work in
+                  progress, key subject to change)
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
