@@ -2,9 +2,9 @@
 // trash path derived from it. A session ID is generated once per process
 // (not just the PID, which the OS recycles) and used to build a
 // session-scoped trash location such as
-// $XDG_RUNTIME_DIR/breakthrough/trash/<user>/<session-id>/, the default
-// for a trash that does not survive past the session — see TrashDir for
-// the persistent alternative.
+// $XDG_RUNTIME_DIR/breakthrough/trash/<user>/<session-id>/ — used for a
+// trash explicitly configured not to survive past the session, an
+// opt-in alternative to the persistent default; see TrashDir.
 package session
 
 import (
@@ -88,17 +88,22 @@ func dataDir() (string, error) {
 
 // TrashDir returns the trash directory to use right now.
 //
-// persistent=false (the default — see internal/config's trash_persistent
-// setting) returns the session-scoped path,
+// persistent=false returns the session-scoped path,
 // $XDG_RUNTIME_DIR/breakthrough/trash/<user>/<session-id>/. On a systemd
-// system XDG_RUNTIME_DIR is tmpfs-backed and cleared on logout, so this
-// disappears on its own once the session ends — nothing has to remember
-// to clean it up. Falls back to a subdirectory of os.TempDir() (still
-// scoped by user and session ID) where XDG_RUNTIME_DIR isn't set.
+// system XDG_RUNTIME_DIR is tmpfs-backed and cleared once the login
+// session ends (not on a calendar schedule — logout or reboot, possibly
+// well before either), so this disappears on its own then — nothing has
+// to remember to clean it up, but a file trashed today isn't guaranteed
+// to still be there tomorrow either. Falls back to a subdirectory of
+// os.TempDir() (still scoped by user and session ID) where
+// XDG_RUNTIME_DIR isn't set.
 //
-// persistent=true returns $XDG_DATA_HOME/breakthrough/trash/<user>/ (no
-// session ID: a persistent trash is meant to accumulate and survive
-// across runs, not start over each time).
+// persistent=true (internal/config's trash_persistent default) returns
+// $XDG_DATA_HOME/breakthrough/trash/<user>/ (no session ID: this is
+// meant to survive across runs, not start over each time) — kept from
+// accumulating forever by age/quota pruning instead (see
+// fsops.PruneTrash, run once at startup by internal/ui's
+// pruneTrashAtStartup), not by disappearing with the session itself.
 //
 // Running as root (euid 0 — typically via sudo) always gets the
 // persistent path, regardless of the persistent argument: sudo's default

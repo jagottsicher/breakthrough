@@ -907,6 +907,13 @@ func (r *Root) showSearchError(msg string) {
 	r.cancelSearch()
 	r.hideOverlay() // close the form, revealing the panel underneath
 	r.panel.showSearchResults()
+	// The only real call site (a non-existent Start-at, see runSearch)
+	// means whatever scope was actually typed is exactly the broken
+	// path msg is already complaining about — falling back to the
+	// panel's own last real directory here instead gives the "continue
+	// here" breadcrumb (see Panel.setSearchStatus) something genuinely
+	// navigable, rather than one more click away from the same error.
+	r.panel.searchBrowsePath = r.panel.path
 	r.panel.setSearchStatusColor(r.theme.EntryError)
 	r.setSearchStatus(msg)
 }
@@ -1131,6 +1138,11 @@ func (r *Root) runSearch() {
 
 	r.hideOverlay() // close the form, revealing the panel underneath
 	r.panel.showSearchResults()
+	// scope is already validated at this point for every case that
+	// actually checks it (see the os.Stat above) — the "continue here"
+	// breadcrumb (see Panel.setSearchStatus) starts at the search's own
+	// real scope, not wherever the panel happened to be before it.
+	r.panel.searchBrowsePath = scope
 	r.panel.setSearchStatusColor(r.theme.Text) // undo showSearchError's own red, if a previous run left it set
 	r.searchAnimFrame = 0
 	r.searchCurrentPos = ""

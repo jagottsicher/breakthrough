@@ -12,6 +12,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // buttonBarAction identifies one clickable region in the button bar (see
@@ -23,7 +25,8 @@ import (
 type buttonBarAction int
 
 const (
-	buttonActionEdit buttonBarAction = iota
+	buttonActionProperties buttonBarAction = iota
+	buttonActionEdit
 	buttonActionLook
 	buttonActionRename
 	buttonActionToggleHidden
@@ -31,6 +34,8 @@ const (
 	buttonActionSearch
 	buttonActionHelp
 	buttonActionTrash
+	buttonActionTrashbin
+	buttonActionRestore
 	buttonActionRemove
 	buttonActionSed
 )
@@ -51,11 +56,14 @@ type buttonBarSpan struct {
 // line (see refreshStatusBar/buildStatusBar). NewRoot adds all three to
 // mainLayout beneath the panel.
 //
-// buttonBar's text is built once, here, and never rebuilt afterwards —
-// unlike statusBar (user/disk-usage/clock all change over a session),
-// none of the button labels ever do. statusBar starts blank; NewRoot's
-// caller is expected to call refreshStatusBar once real data (the
-// panel's own directory) is available, the same as it always has.
+// buttonBar's initial text is built here (see buildButtonBar), but —
+// unlike when this was first written — it's no longer fixed for the
+// run of the program: refreshButtonBar rebuilds it on the same
+// Panel.onLoad wiring statusBar already uses below, since which
+// buttons even appear now depends on the panel's current directory
+// (see buildButtonBar's own doc comment). statusBar starts blank;
+// NewRoot's caller is expected to call refreshStatusBar once real data
+// (the panel's own directory) is available, the same as it always has.
 func (r *Root) newBottomBar() {
 	r.newBashConsole()
 
@@ -91,22 +99,78 @@ func currentUsername() string {
 // whenever anything it shows might have changed: the panel navigating
 // (disk usage depends on the current directory — see Panel.onLoad,
 // wired in NewRoot), and once a second from StartClock's ticker (the
-// clock itself). buttonBar is never part of this — its labels are fixed
-// and built exactly once, in newBottomBar.
+// clock itself).
 func (r *Root) refreshStatusBar() {
 	r.statusBar.SetText(r.buildStatusBar())
 }
 
-// buildButtonBar renders the button bar's text: the quick-action buttons
-// (Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in nano's own
-// "^X Label" style (instantly recognizable as "Ctrl+X does this" without
-// needing a separate legend). Built once, from newBottomBar, and never
-// rebuilt afterwards — unlike statusBar, none of these labels ever
-// change while running (the equivalent context menu items do relabel
-// themselves, e.g. hiddenToggleLabel, but the button bar's own text
-// intentionally doesn't follow suit, to keep this a fixed, muscle-memory
-// legend rather than something to re-read each time).
+// refreshButtonBar rebuilds and redraws the button bar's text — called
+// from the same Panel.onLoad wiring refreshStatusBar uses (see NewRoot),
+// since buildButtonBar's own output now depends on the panel's current
+// directory (in/out of the trash — see inTrash) as well as its
+// showHidden flag, both of which a navigation, toggleHidden's own
+// reload, or a trash operation's reloadPanel can change.
+func (r *Root) refreshButtonBar() {
+	text, spans := r.buildButtonBar()
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
+}
+
+// buildButtonBar renders the button bar's text: the quick-action
+// buttons in nano's own "^X Label" style (instantly recognizable as
+// "Ctrl+X does this" without needing a separate legend) — Help, Rename,
+// Edit, Look, Properties, Find, Sed, toggle hidden files, Options,
+// Trash, Trashbin/Restore, Remove, in that fixed order.
+//
+// Two of these aren't fixed labels any more (see refreshButtonBar for
+// when this gets called again): the hidden-files toggle reads "Hide" or
+// "Unhide" depending on r.panel.showHidden — the same "label names the
+// action clicking it performs next" convention hiddenToggleLabel
+// already uses for the context menu's own equivalent, just with this
+// button's own shorter Hide/Unhide vocabulary instead of that item's
+// fuller "Show/Hide hidden files" text. And the Trashbin slot itself
+// swaps to Restore while r.inTrash() — browsing the trash and asking to
+// "go to trash" again does nothing useful, but Restore does; see
+// moveSelectionToTrash for Trash's own equivalent swap, which
+// disappears from this bar entirely in the same state rather than
+// swapping to anything, since there's nothing sensible to move an
+// already-trashed item to.
 func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
+	type buttonSpec struct {
+		label  string
+		action buttonBarAction
+	}
+
+	hideUnhideLabel := "^G Unhide"
+	if r.panel.showHidden {
+		hideUnhideLabel = "^G Hide"
+	}
+
+	trashbinLabel, trashbinAction := "^B Trashbin", buttonActionTrashbin
+	inTrash := r.inTrash()
+	if inTrash {
+		trashbinLabel, trashbinAction = "^B Restore", buttonActionRestore
+	}
+
+	buttons := []buttonSpec{
+		{"F1 Help", buttonActionHelp},
+		{"F2 Rename", buttonActionRename},
+		{"^E Edit", buttonActionEdit},
+		{"^L Look", buttonActionLook},
+		{"^P Properties", buttonActionProperties},
+		{"^F Find", buttonActionSearch},
+		{"^S Sed", buttonActionSed},
+		{hideUnhideLabel, buttonActionToggleHidden},
+		{"^O Options", buttonActionOptions},
+	}
+	if !inTrash {
+		buttons = append(buttons, buttonSpec{"^T Trash", buttonActionTrash})
+	}
+	buttons = append(buttons,
+		buttonSpec{trashbinLabel, trashbinAction},
+		buttonSpec{"^R Remove", buttonActionRemove},
+	)
+
 	var b strings.Builder
 	col := 0
 
@@ -119,42 +183,26 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		b.WriteString(s)
 		col += tview.TaggedStringWidth(s)
 	}
-	button := func(label string, action buttonBarAction) {
+	for i, bt := range buttons {
+		if i > 0 {
+			write("  ")
+		}
 		start := col
-		write(label)
-		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: action})
+		write(bt.label)
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: bt.action})
 	}
-
-	button("^E Edit", buttonActionEdit)
-	write("  ")
-	button("^L Look", buttonActionLook)
-	write("  ")
-	button("^R Rename", buttonActionRename)
-	write("  ")
-	button("^G Hide/Unhide", buttonActionToggleHidden)
-	write("  ")
-	button("^F Find", buttonActionSearch)
-	write("  ")
-	button("^O Options", buttonActionOptions)
-	write("  ")
-	button("F1 Help", buttonActionHelp)
-	write("  ")
-	button("^T Trash", buttonActionTrash)
-	write("  ")
-	button("^P Remove", buttonActionRemove)
-	write("  ")
-	button("^S Sed", buttonActionSed)
 
 	return b.String(), spans
 }
 
 // buildStatusBar renders the status bar's text: the current user, disk
 // and inode usage for the panel's current directory (see
-// fetchDiskUsage), the running kernel release (see kernelVersionText),
-// uptime and load average where available (see uptimeText/
-// loadAverageText — Linux only, gracefully omitted elsewhere, the same
-// "just show one less segment" degradation fetchDiskUsage itself already
-// has), and the clock. No buttons here any more — see buildButtonBar.
+// fsops.FetchDiskUsage), the running kernel release (see
+// kernelVersionText), uptime and load average where available (see
+// uptimeText/loadAverageText — Linux only, gracefully omitted
+// elsewhere, the same "just show one less segment" degradation
+// fsops.FetchDiskUsage itself already has), and the clock. No buttons
+// here any more — see buildButtonBar.
 func (r *Root) buildStatusBar() string {
 	var b strings.Builder
 	write := func(s string) { b.WriteString(s) }
@@ -162,7 +210,7 @@ func (r *Root) buildStatusBar() string {
 
 	write(r.currentUser)
 	sep()
-	if u, ok := fetchDiskUsage(r.panel.path); ok {
+	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
 		write(diskUsageText(u))
 		sep()
 		write(inodeUsageText(u))
@@ -186,8 +234,8 @@ func (r *Root) buildStatusBar() string {
 }
 
 // kernelVersionText returns `uname -r`'s own output, trimmed — the same
-// "shell out to a real system tool" approach fetchDiskUsage's own df
-// already uses, rather than a syscall wrapper needing per-platform
+// "shell out to a real system tool" approach fsops.FetchDiskUsage's own
+// df already uses, rather than a syscall wrapper needing per-platform
 // struct handling for what's ultimately just one string. Returns "" if
 // uname isn't available (e.g. some minimal containers) — the status bar
 // just shows one less segment then.
@@ -252,112 +300,6 @@ func loadAverageText() (string, bool) {
 	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
 }
 
-// diskUsage is one filesystem's block and inode usage for the status
-// bar's own display (see fetchDiskUsage/diskUsageText/inodeUsageText)
-// — the labeled, color-coded replacement for what used to be dfSummary,
-// an entirely unlabeled raw df line the user themselves reported as
-// unreadable ("man weiß gar nicht was die heißen sollen").
-type diskUsage struct {
-	usedBytes, availBytes    int64
-	usedInodes, availInodes  int64
-	usePercent, inodePercent int
-}
-
-// fetchDiskUsage runs `df -k` (block usage) and `df -i` (inode usage)
-// on dir and parses each one's own data line into a diskUsage.
-//
-// Deliberately not `df -h`: -h's own human-readable formatting is
-// locale-dependent (this app's own target audience includes non-
-// English locales — a German one, for instance, renders
-// "1.7G" as "1,7G", a comma this app would then have no reliable way
-// to tell apart from a field separator when parsing it back out). Also
-// deliberately not `df -P`, which on GNU df guarantees a single,
-// portably-parseable data line — but means something else entirely on
-// BSD df (512-byte blocks, not "portable output format" — verified
-// against the FreeBSD/macOS df(1) man pages, not guessed: using it
-// cross-platform for parseability, the way a straight port of GNU df's
-// own convention would, is actually wrong here). Requesting raw block/
-// inode counts via -k/-i and formatting them with this app's own
-// humanSize/humanCount instead sidesteps both problems, and gets
-// exact usedBytes/availBytes/usedInodes/availInodes for free rather
-// than needing to reverse a rounded, unit-suffixed string.
-func fetchDiskUsage(dir string) (diskUsage, bool) {
-	blockLine, ok := dfLastLine("df", "-k", dir)
-	if !ok {
-		return diskUsage{}, false
-	}
-	inodeLine, ok := dfLastLine("df", "-i", dir)
-	if !ok {
-		return diskUsage{}, false
-	}
-
-	usedBlocks, availBlocks, usePercent, ok := parseDfDataLine(blockLine)
-	if !ok {
-		return diskUsage{}, false
-	}
-	usedInodes, availInodes, inodePercent, ok := parseDfDataLine(inodeLine)
-	if !ok {
-		return diskUsage{}, false
-	}
-
-	return diskUsage{
-		usedBytes:    usedBlocks * 1024,
-		availBytes:   availBlocks * 1024,
-		usedInodes:   usedInodes,
-		availInodes:  availInodes,
-		usePercent:   usePercent,
-		inodePercent: inodePercent,
-	}, true
-}
-
-// dfLastLine runs name(args...) (df, with whatever flags the caller
-// chose) and returns its own data line — the last line of output,
-// skipping the header row df always prints first. A single given path
-// always produces exactly one data line, on every platform this
-// project targets.
-func dfLastLine(name string, args ...string) (string, bool) {
-	out, err := exec.Command(name, args...).Output()
-	if err != nil {
-		return "", false
-	}
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) < 2 {
-		return "", false
-	}
-	return lines[len(lines)-1], true
-}
-
-// parseDfDataLine extracts Used, Available, and Capacity (Use%/IUse%)
-// from one df data line, indexed from the END of its whitespace-
-// separated fields — Mounted-on last, Capacity/Use% just before it,
-// Available before that, Used before that — rather than from the
-// start. That's what makes this robust to a wrapped Filesystem name (a
-// real, if rare, BSD df quirk for a very long device name, splitting
-// it onto its own line and shifting how many fields precede the data
-// that actually matters here) without needing to detect the wrap
-// itself. Not robust to a mount point that itself contains a space
-// (e.g. "/Volumes/My Drive") — an accepted, rare limitation, the same
-// class dfSummary's own predecessor already accepted before this.
-func parseDfDataLine(line string) (used, avail int64, percent int, ok bool) {
-	fields := strings.Fields(line)
-	if len(fields) < 4 {
-		return 0, 0, 0, false
-	}
-	percent, err := strconv.Atoi(strings.TrimSuffix(fields[len(fields)-2], "%"))
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	avail, err = strconv.ParseInt(fields[len(fields)-3], 10, 64)
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	used, err = strconv.ParseInt(fields[len(fields)-4], 10, 64)
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	return used, avail, percent, true
-}
-
 // diskUsageWarnColor is the color a usage percentage should stand out
 // in — tcell.ColorRed at 90% or more, tcell.ColorOrange at 80% or
 // more, tcell.ColorDefault (no warning, leave the surrounding text's
@@ -396,12 +338,12 @@ func formatUsagePercent(percent int) string {
 // die heißen sollen"), and explicit used *and* free numbers for
 // inodes specifically, per the user's own request, rather than just a
 // percentage.
-func diskUsageText(u diskUsage) string {
-	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.usedBytes), humanSize(u.availBytes), formatUsagePercent(u.usePercent))
+func diskUsageText(u fsops.DiskUsage) string {
+	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent))
 }
 
-func inodeUsageText(u diskUsage) string {
-	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.usedInodes), humanCount(u.availInodes), formatUsagePercent(u.inodePercent))
+func inodeUsageText(u fsops.DiskUsage) string {
+	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent))
 }
 
 // humanCount renders n the same way humanSize renders a byte count
@@ -458,6 +400,8 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 // currently typing" ambiguity a global keystroke has to rule out first.
 func (r *Root) runButtonBarAction(action buttonBarAction) {
 	switch action {
+	case buttonActionProperties:
+		r.propertiesCurrentEntry()
 	case buttonActionEdit:
 		r.editCurrentEntry()
 	case buttonActionLook:
@@ -474,6 +418,10 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openHelp()
 	case buttonActionTrash:
 		r.moveSelectionToTrash()
+	case buttonActionTrashbin:
+		r.openTrash()
+	case buttonActionRestore:
+		r.restoreSelectionFromTrash()
 	case buttonActionRemove:
 		r.openRemoveConfirm()
 	case buttonActionSed:
@@ -497,7 +445,7 @@ func (r *Root) editCurrentEntry() {
 	r.runEditor(path, 0)
 }
 
-// renameCurrentEntry is the Rename button/Ctrl+R's actual action — the
+// renameCurrentEntry is the Rename button/F2's actual action — the
 // keyboard/status-bar equivalent of the context menu's "Rename" (see
 // Root.openRename), targeting whichever entry the table's cursor is
 // currently on instead of a right-clicked one.
@@ -511,21 +459,21 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/
-// Ctrl+O/Ctrl+F (see EditShortcut/LookShortcut/RenameShortcut/
-// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut, wired up in
-// cmd/breakthrough) should act right now: no overlay is open, and the
-// bash command line doesn't have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/F2/Ctrl+G/
+// Ctrl+O/Ctrl+F/Ctrl+R (see EditShortcut/LookShortcut/RenameShortcut/
+// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut/PurgeShortcut,
+// wired up in cmd/breakthrough) should act right now: no overlay is
+// open, and the bash command line doesn't have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these six operate on "the currently
+// work from literally anywhere, these seven operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
 // on top of whatever's already open. Critically, this also keeps them
 // out of the bash line's way: tview's TextArea already implements
 // several readline-style keybindings of its own (Ctrl+A/Home,
-// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these six are captured
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these seven are captured
 // globally, at the Application level (see cmd/breakthrough), they'd
 // reach and consume the keystroke before bashLine's own InputCapture or
 // TextArea's own default handling ever saw it, silently defeating both
@@ -536,28 +484,31 @@ func (r *Root) acceptsGlobalShortcut() bool {
 }
 
 // AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
-// cmd/breakthrough: Ctrl+P and Ctrl+T/Entf (see TrashShortcut/
-// PurgeShortcut in trash.go) need to decide, before even calling either
-// Shortcut method, whether to consume the key at all — unlike the six
-// above, which always return nil regardless (an accepted, minor
-// imperfection for keys TextArea might bind natively), Ctrl+P
-// specifically collides with a real, explicit feature of this same
-// codebase: bashLine's own captureBashLineKey binds Ctrl+P to command-
-// history recall. Consuming it unconditionally at the Application level
-// would silently break that recall every time the bash line has focus,
-// not just fail to fire Purge — so cmd/breakthrough falls through to
-// bashLine's own handling (returns the event, not nil) whenever this
+// cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Ctrl+T/Entf (see
+// TrashShortcut in trash.go), Ctrl+B (see TrashbinShortcut), and Ctrl+S
+// (see SedReplaceShortcut) need to decide, before even calling their
+// own Shortcut method, whether to consume the key at all — unlike the
+// seven above, which always return
+// nil regardless (an accepted, minor imperfection for keys TextArea
+// might bind natively), each of these collides with a real, explicit
+// feature of this same codebase: bashLine's own captureBashLineKey
+// binds Ctrl+P to command-history recall, for instance. Consuming one
+// of them unconditionally at the Application level would silently break
+// that native behavior every time the bash line has focus, not just
+// fail to fire the intended action — so cmd/breakthrough falls through
+// to bashLine's own handling (returns the event, not nil) whenever this
 // reports false, rather than swallowing it either way.
 func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
 }
 
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
-// and SearchShortcut are Ctrl+E, Ctrl+R, Ctrl+G, Ctrl+O, and Ctrl+F's
+// and SearchShortcut are Ctrl+E, F2, Ctrl+G, Ctrl+O, and Ctrl+F's
 // global actions (see cmd/breakthrough and acceptsGlobalShortcut for why
 // they check first rather than acting unconditionally). LookShortcut
-// (Ctrl+L) is the same shape, defined alongside the rest of Look in
-// viewer.go instead of here.
+// (Ctrl+L) and PurgeShortcut (Ctrl+R, Remove) are the same shape,
+// defined alongside the rest of Look/Trash in viewer.go/trash.go instead
+// of here.
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()
