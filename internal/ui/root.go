@@ -752,6 +752,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reason (see closeSearch), just reached from a result click now.
 	panel.onExitSearchResults = r.cancelSearch
 
+	// Browsing the trash itself shows each item's own original path and
+	// deletion time instead of its real on-disk name/mtime (see
+	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
+	panel.onDescribeRows = r.describeTrashRows
+
 	// mainLayout stacks the panel above the three bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -1299,11 +1304,16 @@ func (r *Root) toggleMtimeUnix() {
 }
 
 // mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
+// Worded as "time", not "mtime": this same column, and this same
+// toggle, now applies to a trashed item's own deletion time while
+// browsing the trash (see Panel.onDescribeRows/buildColumnHeader), not
+// only a real directory's modification time — "mtime" specifically
+// would be wrong there.
 func mtimeFormatToggleLabel(mtimeUnix bool) string {
 	if mtimeUnix {
-		return "Show mtime formatted"
+		return "Show time formatted"
 	}
-	return "Show mtime as timestamp"
+	return "Show time as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the

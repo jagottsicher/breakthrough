@@ -365,3 +365,40 @@ func trashPruneMessage(result fsops.PruneTrashResult) string {
 	}
 	return fmt.Sprintf("Trash cleanup removed %d item(s) on startup: %s", result.Removed(), strings.Join(parts, ", "))
 }
+
+// describeTrashRows is Root's own Panel.onDescribeRows (see its own doc
+// comment) — wired once in NewRoot. Reports isTrashDir true exactly
+// when dir is the current trash's own files/ subdirectory (the same
+// check inTrash makes against r.panel.path, just against whatever
+// directory load() is about to render instead — load() itself hasn't
+// updated r.panel.path yet by the time this runs), regardless of
+// whether ListTrash finds anything in it: a brand-new, empty trash is
+// still "the trash" as far as the Modified column's own label is
+// concerned.
+//
+// A ListTrash failure (or the trash directory failing to resolve at
+// all) degrades to isTrashDir false, nil descriptions rather than an
+// error: load() itself has no error-reporting path for what its own
+// row-description hook thinks, and falling back to the raw on-disk
+// name/mtime is no worse than what browsing the trash always showed
+// before this existed.
+func (r *Root) describeTrashRows(dir string) (map[string]rowDescription, bool) {
+	trashDir, err := r.trashDir()
+	if err != nil {
+		return nil, false
+	}
+	if filepath.Clean(dir) != filepath.Clean(fsops.FilesDir(trashDir)) {
+		return nil, false
+	}
+
+	items, err := fsops.ListTrash(trashDir)
+	if err != nil {
+		return nil, true // still the trash — just couldn't read its own contents
+	}
+
+	descriptions := make(map[string]rowDescription, len(items))
+	for _, item := range items {
+		descriptions[item.Path(trashDir)] = rowDescription{name: item.OriginalPath, modTime: item.DeletedAt}
+	}
+	return descriptions, true
+}
