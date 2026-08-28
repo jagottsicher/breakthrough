@@ -97,14 +97,17 @@ func (r *Root) moveSelectionToTrash() {
 // restoreSelectionFromTrash) — without the user needing to know or type
 // its path, which for the session-scoped (opt-in, trash_persistent =
 // false) mode includes a random per-run session ID buried under
-// $XDG_RUNTIME_DIR.
+// $XDG_RUNTIME_DIR. Goes through Panel.navigate, not a plain load, so
+// this excursion is a real history entry too — per the user's own
+// explicit request that visiting the trash not be invisible to
+// Back/Forward the way it used to be, unlike a real directory.
 func (r *Root) openTrash() {
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
 		return
 	}
-	if err := r.panel.load(fsops.FilesDir(dir)); err != nil {
+	if err := r.panel.navigate(fsops.FilesDir(dir)); err != nil {
 		r.showError(err)
 	}
 }
