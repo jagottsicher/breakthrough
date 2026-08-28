@@ -7,8 +7,8 @@ github-token.txt
 # Local tool state: personal permission overrides (the ".local" suffix
 # marks this as machine-specific, never meant for version control) and
 # worktree checkouts created for background/parallel sessions — never
-# committed, same "local-only tooling artifact" principle as
-# CLAUDE.md/github-token.txt above.
+# committed, same local-only-tooling-artifact principle as the two
+# files ignored above.
 .claude/settings.local.json
 .claude/worktrees/
 
