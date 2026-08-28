@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -30,13 +32,44 @@ func (r *Root) reloadPanel(precedingErr error) {
 	}
 }
 
+// inTrash reports whether the panel is currently browsing the current
+// trash's own files/ subdirectory (see openTrash) — the one place
+// Restore actually makes sense. Used by buildButtonBar to swap Trashbin
+// for Restore and hide Trash entirely, and by moveSelectionToTrash to
+// redirect an already-trashed selection to Remove instead of trying to
+// trash it a second time. False, not an error to report, if the trash
+// directory can't be resolved at all — the same "nothing special going
+// on" reading buildButtonBar's own no-error-surfacing callers need.
+func (r *Root) inTrash() bool {
+	dir, err := r.trashDir()
+	if err != nil {
+		return false
+	}
+	return r.panel.path == fsops.FilesDir(dir)
+}
+
 // moveSelectionToTrash is the context menu's "Move to Trash", and
 // (through TrashShortcut) Ctrl+T/Entf's action. No confirmation — per
 // this project's own feature notes, moving to the trash is the reversible
 // action by design, unlike Remove/Empty Trash below. A directory goes in
 // whole, recursively, the same way a plain move always has — there is
 // nothing to warn about since nothing is actually being destroyed yet.
+//
+// Redirects to openRemoveConfirm instead when r.inTrash(): an item
+// that's already in the trash has nowhere sensible left to be "moved to
+// trash" a second time, so this is the one case where Ctrl+T/Entf (and
+// this same context menu entry, still wired here) means Remove instead
+// — its own confirmation dialog is exactly the "are you sure" a second,
+// otherwise-silent send-to-trash would need of its own anyway. The
+// button bar hides its own "Trash" button entirely in this state
+// instead of relabeling it (see buildButtonBar) — this redirect is what
+// still fires if Ctrl+T/Entf gets pressed out of habit regardless.
 func (r *Root) moveSelectionToTrash() {
+	if r.inTrash() {
+		r.openRemoveConfirm()
+		return
+	}
+
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
@@ -57,25 +90,30 @@ func (r *Root) moveSelectionToTrash() {
 	r.reloadPanel(firstErr)
 }
 
-// openTrash is the context menu's "Go to Trash": navigates the panel
-// straight to the current trash's files/ subdirectory (see
-// fsops.FilesDir) — the one place browsing/Restore actually works (see
+// openTrash is the context menu's "Go to Trash", and (through
+// TrashbinShortcut) Ctrl+B's action: navigates the panel straight to
+// the current trash's files/ subdirectory (see fsops.FilesDir) — the
+// one place browsing/Restore actually works (see
 // restoreSelectionFromTrash) — without the user needing to know or type
-// its path, which for the session-scoped default includes a random
-// per-run session ID buried under $XDG_RUNTIME_DIR.
+// its path, which for the session-scoped (opt-in, trash_persistent =
+// false) mode includes a random per-run session ID buried under
+// $XDG_RUNTIME_DIR. Goes through Panel.navigate, not a plain load, so
+// this excursion is a real history entry too — per the user's own
+// explicit request that visiting the trash not be invisible to
+// Back/Forward the way it used to be, unlike a real directory.
 func (r *Root) openTrash() {
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
 		return
 	}
-	if err := r.panel.load(fsops.FilesDir(dir)); err != nil {
+	if err := r.panel.navigate(fsops.FilesDir(dir)); err != nil {
 		r.showError(err)
 	}
 }
 
 // openRemoveConfirm is the context menu's "Remove", and (through
-// PurgeShortcut) Ctrl+P/Ctrl+Entf's action: always asks first (Cancel
+// PurgeShortcut) Ctrl+R/Ctrl+Entf's action: always asks first (Cancel
 // preselected — see newPurgeConfirm), wording the message concretely for
 // one file, one directory (with its real item count), or several targets
 // at once.
@@ -185,15 +223,18 @@ func (r *Root) openEmptyTrashConfirm() {
 	})
 }
 
-// TrashShortcut and PurgeShortcut are Ctrl+T/Entf and Ctrl+P/Ctrl+Entf's
+// TrashShortcut and PurgeShortcut are Ctrl+T/Entf and Ctrl+R/Ctrl+Entf's
 // global actions (see cmd/breakthrough and acceptsGlobalShortcut). Entf
 // deliberately triggers the safe action (Trash), not Purge, matching
 // both the physical key's own label and the near-universal file-manager
 // convention (Windows/macOS/GNOME/Total Commander: the bare Delete key is
 // always the reversible one, a modifier is required for the permanent
 // variant). Ctrl+Delete for Purge is best-effort — see cmd/breakthrough's
-// own comment on tcell's modifier-detection caveat; Ctrl+P is the
-// reliable path regardless.
+// own comment on tcell's modifier-detection caveat; Ctrl+R is the
+// reliable path regardless. Unlike Ctrl+T, Ctrl+R needs no fallthrough
+// guard at the cmd/breakthrough dispatch level: nothing in bashLine
+// binds it, so it joins Edit/Look/Rename/etc.'s "always consumed, no-op
+// internally if the precondition fails" group instead.
 func (r *Root) TrashShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.moveSelectionToTrash()
@@ -203,6 +244,20 @@ func (r *Root) TrashShortcut() {
 func (r *Root) PurgeShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openRemoveConfirm()
+	}
+}
+
+// TrashbinShortcut is Ctrl+B's global action (see cmd/breakthrough and
+// acceptsGlobalShortcut) — "B" for "Bin", the one Ctrl-letter mnemonic
+// for Go to Trash that was actually still free. Needs the same
+// dispatch-level AcceptsGlobalShortcut check Ctrl+P/T/S do rather than
+// joining TrashShortcut/PurgeShortcut's "always consumed" group above:
+// tview's TextArea already binds Ctrl+B to its own PgUp-style movement
+// (see acceptsGlobalShortcut's own doc comment), so bashLine needs to
+// keep seeing it while it has focus.
+func (r *Root) TrashbinShortcut() {
+	if r.acceptsGlobalShortcut() {
+		r.openTrash()
 	}
 }
 
@@ -257,4 +312,93 @@ func (r *Root) confirmPurge() {
 func (r *Root) cancelPurge() {
 	r.pendingPurge = nil
 	r.hideOverlay()
+}
+
+// pruneTrashAtStartup applies the user's own age/quota trash policy
+// (see config.Settings' trash_max_age_days/trash_quota_percent, and
+// fsops.PruneTrash's own doc comment for why once per run rather than
+// on every trash operation) — called once from NewRoot. Returns a
+// one-time notice for NewRoot to combine with its own other startup
+// notices (see its caller — config warnings use the same showError
+// overlay, and calling that twice in a row would just silently
+// overwrite whichever came first) — "" if nothing was removed.
+//
+// Best-effort like the rest of this file's own background bookkeeping
+// (see appendBashHistory): a failure to even resolve or read the trash
+// directory is silently ignored here rather than greeting a fresh run
+// with an error dialog over something that hasn't actually happened
+// yet. A partial removal failure (see PruneTrash's own return) is
+// swallowed the same way — whatever it did manage to remove is still
+// worth reporting, and there's no actionable fix a dialog could offer
+// for e.g. one stuck file at startup anyway.
+func (r *Root) pruneTrashAtStartup() string {
+	dir, err := r.trashDir()
+	if err != nil {
+		return ""
+	}
+
+	opts := fsops.PruneTrashOptions{
+		MaxAge:       time.Duration(r.settings.TrashMaxAgeDays) * 24 * time.Hour,
+		QuotaPercent: r.settings.TrashQuotaPercent,
+	}
+	result, _ := fsops.PruneTrash(dir, opts)
+	if result.Removed() == 0 {
+		return ""
+	}
+	return trashPruneMessage(result)
+}
+
+// trashPruneMessage words pruneTrashAtStartup's own one-time notice —
+// only ever called once Removed() > 0 has already confirmed there's
+// something to report. Irreversibly removing files, even ones the user
+// already sent to the trash, earns the same attention-grabbing
+// treatment a real error would (see showError, the only "surface a
+// message" channel this app has) — "klar kommuniziert", not just
+// quietly logged.
+func trashPruneMessage(result fsops.PruneTrashResult) string {
+	var parts []string
+	if result.RemovedByAge > 0 {
+		parts = append(parts, fmt.Sprintf("%d older than the configured age limit", result.RemovedByAge))
+	}
+	if result.RemovedByQuota > 0 {
+		parts = append(parts, fmt.Sprintf("%d over the configured quota", result.RemovedByQuota))
+	}
+	return fmt.Sprintf("Trash cleanup removed %d item(s) on startup: %s", result.Removed(), strings.Join(parts, ", "))
+}
+
+// describeTrashRows is Root's own Panel.onDescribeRows (see its own doc
+// comment) — wired once in NewRoot. Reports isTrashDir true exactly
+// when dir is the current trash's own files/ subdirectory (the same
+// check inTrash makes against r.panel.path, just against whatever
+// directory load() is about to render instead — load() itself hasn't
+// updated r.panel.path yet by the time this runs), regardless of
+// whether ListTrash finds anything in it: a brand-new, empty trash is
+// still "the trash" as far as the Modified column's own label is
+// concerned.
+//
+// A ListTrash failure (or the trash directory failing to resolve at
+// all) degrades to isTrashDir false, nil descriptions rather than an
+// error: load() itself has no error-reporting path for what its own
+// row-description hook thinks, and falling back to the raw on-disk
+// name/mtime is no worse than what browsing the trash always showed
+// before this existed.
+func (r *Root) describeTrashRows(dir string) (map[string]rowDescription, bool) {
+	trashDir, err := r.trashDir()
+	if err != nil {
+		return nil, false
+	}
+	if filepath.Clean(dir) != filepath.Clean(fsops.FilesDir(trashDir)) {
+		return nil, false
+	}
+
+	items, err := fsops.ListTrash(trashDir)
+	if err != nil {
+		return nil, true // still the trash — just couldn't read its own contents
+	}
+
+	descriptions := make(map[string]rowDescription, len(items))
+	for _, item := range items {
+		descriptions[item.Path(trashDir)] = rowDescription{name: item.OriginalPath, modTime: item.DeletedAt}
+	}
+	return descriptions, true
 }

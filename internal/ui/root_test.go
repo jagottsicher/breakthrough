@@ -30,9 +30,9 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Globals"),
-		"Hide hidden files",       // dotfiles are shown by default now
-		"Show size in bytes",      // human-readable is the default
-		"Show mtime as timestamp", // formatted is the default
+		"Hide hidden files",      // dotfiles are shown by default now
+		"Show size in bytes",     // human-readable is the default
+		"Show time as timestamp", // formatted is the default
 	}
 	if got := r.menu.GetItemCount(); got != len(want) {
 		t.Fatalf("menu has %d items, want %d", got, len(want))
@@ -164,8 +164,8 @@ func TestToggleMtimeUnixViaMenu(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show mtime as timestamp" {
-		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show mtime as timestamp")
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show time as timestamp" {
+		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show time as timestamp")
 	}
 
 	r.toggleMtimeUnix()
@@ -173,8 +173,8 @@ func TestToggleMtimeUnixViaMenu(t *testing.T) {
 	if !r.panel.mtimeUnix {
 		t.Error("mtimeUnix should be true after toggling once")
 	}
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show mtime formatted" {
-		t.Errorf("mtime-format label = %q, want %q", main, "Show mtime formatted")
+	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show time formatted" {
+		t.Errorf("mtime-format label = %q, want %q", main, "Show time formatted")
 	}
 
 	r.toggleMtimeUnix()

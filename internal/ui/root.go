@@ -344,15 +344,16 @@ type Root struct {
 	// works because cmd/breakthrough enables tview's bracketed-paste
 	// support (Application.EnablePaste), not anything Root itself does.
 	//
-	// buttonBar, the middle row, is the quick-action buttons (Edit/
-	// Look/Rename/Hidden/Find/Options/Help/Trash/Remove — see
-	// buildButtonBar), with buttonBarSpans locating each one the same
-	// way propertySpans do for Properties. Built once at construction
-	// and never rebuilt afterwards — unlike statusBar below, none of
-	// these labels ever change while running (the equivalent context
-	// menu items do relabel themselves, e.g. hiddenToggleLabel, but the
-	// button bar's own text doesn't follow suit — see buildButtonBar's
-	// own doc comment).
+	// buttonBar, the middle row, is the quick-action buttons (Help,
+	// Rename, Edit, Look, Properties, Find, Sed, toggle hidden files,
+	// Options, Trash, Trashbin/Restore, Remove — see buildButtonBar),
+	// with buttonBarSpans locating each one the same way propertySpans
+	// do for Properties. Unlike when this was first written, it's no
+	// longer fixed for the run of the program: refreshButtonBar rebuilds
+	// it on the same onLoad wiring statusBar uses below, since which
+	// buttons even appear (Trashbin vs. Restore, Trash's own
+	// disappearance) and one label's own text (Hide vs. Unhide) both
+	// depend on live state now — see buildButtonBar's own doc comment.
 	//
 	// statusBar, the last row, is purely informational, deliberately
 	// with nothing clickable in it any more (see buildStatusBar): the
@@ -668,8 +669,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// (onLoad isn't called for the very first load, which already
 	// happened inside NewPanel above, before there was anything to wire
 	// it to — refreshStatusBar is called once explicitly, right after
-	// AddPage below, to cover that one case).
-	panel.onLoad = func(string) { r.refreshStatusBar() }
+	// AddPage below, to cover that one case). refreshButtonBar rides
+	// along on the same wiring: buildButtonBar's own Trashbin/Restore
+	// swap and Trash's disappearance both depend on the panel's current
+	// directory too (see inTrash), so every navigation that can move in
+	// or out of the trash — including toggleHidden's own reload, which
+	// this also keeps in sync for the Hide/Unhide label — needs to
+	// re-render it exactly when it re-renders statusBar.
+	panel.onLoad = func(string) {
+		r.refreshStatusBar()
+		r.refreshButtonBar()
+	}
 
 	r.quitConfirm = tview.NewList().ShowSecondaryText(false)
 	r.quitConfirm.SetHighlightFullLine(true)
@@ -742,6 +752,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reason (see closeSearch), just reached from a result click now.
 	panel.onExitSearchResults = r.cancelSearch
 
+	// Browsing the trash itself shows each item's own original path and
+	// deletion time instead of its real on-disk name/mtime (see
+	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
+	panel.onDescribeRows = r.describeTrashRows
+
 	// mainLayout stacks the panel above the three bottom rows — panel
 	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
 	// remaining space) and real focus by default (see NewFlex/AddItem's
@@ -782,8 +797,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
 
+	// Both of these can have something to say, and both go through the
+	// same showError overlay — collected into one notice rather than
+	// risking the second call silently overwriting the first before
+	// anything's even been drawn (see pruneTrashAtStartup's own doc
+	// comment).
+	var startupNotices []string
 	if len(configWarnings) > 0 {
-		r.showError(fmt.Errorf("config: %s", strings.Join(configWarnings, "; ")))
+		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
+	}
+	if notice := r.pruneTrashAtStartup(); notice != "" {
+		startupNotices = append(startupNotices, notice)
+	}
+	if len(startupNotices) > 0 {
+		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
 	}
 
 	return r, nil
@@ -1277,11 +1304,16 @@ func (r *Root) toggleMtimeUnix() {
 }
 
 // mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
+// Worded as "time", not "mtime": this same column, and this same
+// toggle, now applies to a trashed item's own deletion time while
+// browsing the trash (see Panel.onDescribeRows/buildColumnHeader), not
+// only a real directory's modification time — "mtime" specifically
+// would be wrong there.
 func mtimeFormatToggleLabel(mtimeUnix bool) string {
 	if mtimeUnix {
-		return "Show mtime formatted"
+		return "Show time formatted"
 	}
-	return "Show mtime as timestamp"
+	return "Show time as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
@@ -1431,7 +1463,7 @@ func (r *Root) clipboardTargets() []string {
 // cursor is currently on — the same fallback shape clipboardTargets
 // uses for Copy/Cut, but read directly from the panel's cursor instead
 // of r.target, so it also works for the keyboard-shortcut path (Ctrl+T/
-// Entf, Ctrl+P/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
+// Entf, Ctrl+R/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
 // goes through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
 	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
