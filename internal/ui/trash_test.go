@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -382,5 +383,134 @@ func TestTrashPruneMessageMentionsBothAgeAndQuota(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("trashPruneMessage(...) = %q, missing %q", got, want)
 		}
+	}
+}
+
+// TestGoToTrashShowsOriginalPathAndDeletionTimeLabel pins
+// Root.describeTrashRows' own point (see its doc comment and Panel's
+// own onDescribeRows): browsing the trash shows each item's real
+// original path as its row name — not the raw, hash-prefixed on-disk
+// name nobody could tell apart at a glance — and labels the Modified
+// column "Deletion time" instead of its usual "Modify time (mtime)",
+// per the user's own explicit report.
+func TestGoToTrashShowsOriginalPathAndDeletionTimeLabel(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+	r.openTrash()
+
+	if !r.panel.inTrashView {
+		t.Fatal("panel.inTrashView = false after Go to Trash, want true")
+	}
+	if got := strings.TrimSpace(r.panel.columnHeader.GetCell(0, colModified).Text); got != "Deletion time" {
+		t.Errorf("Modified column header = %q, want %q", got, "Deletion time")
+	}
+
+	r.panel.focusRow(1) // off ".." onto the one trashed item
+	row, _, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("no current row after Go to Trash")
+	}
+	ref, ok := r.panel.rowRef(row)
+	if !ok {
+		t.Fatal("no rowRef for the current row")
+	}
+	if ref.name != file {
+		t.Errorf("row name = %q, want the original path %q, not the raw on-disk name", ref.name, file)
+	}
+}
+
+// TestGoToTrashSortByModifiedUsesDeletionTime pins that sorting the
+// trash's own Modified/"Deletion time" column, and the time actually
+// rendered in it, both reflect deleted_at — not the trashed file's own
+// real, unrelated last-edit time, which load() would otherwise use.
+func TestGoToTrashSortByModifiedUsesDeletionTime(t *testing.T) {
+	srcDir := t.TempDir()
+	trashRoot := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", trashRoot)
+	t.Setenv("XDG_DATA_HOME", trashRoot)
+
+	older := filepath.Join(srcDir, "older.txt")
+	newer := filepath.Join(srcDir, "newer.txt")
+	if err := os.WriteFile(older, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newer, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1)
+	r.moveSelectionToTrash() // older.txt
+	r.panel.focusRow(1)
+	r.moveSelectionToTrash() // newer.txt (now the only entry left in srcDir)
+
+	dir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	items, err := fsops.ListTrash(dir)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("setup ListTrash = %+v, %v, want 2 items", items, err)
+	}
+	var olderID, newerID string
+	for _, item := range items {
+		switch item.OriginalPath {
+		case older:
+			olderID = item.ID
+		case newer:
+			newerID = item.ID
+		}
+	}
+	if olderID == "" || newerID == "" {
+		t.Fatalf("setup: could not find both items by original path in %+v", items)
+	}
+	// Both items were actually trashed moments apart just now — force a
+	// real, unambiguous gap so sort order can't come down to timing luck.
+	backdateTrashItem(t, dir, olderID, 48*time.Hour)
+	backdateTrashItem(t, dir, newerID, 24*time.Hour)
+
+	r.openTrash()
+	r.panel.setSortKey(sortByModified) // ascending: oldest deletion first
+
+	ref1, ok1 := r.panel.rowRef(1)
+	ref2, ok2 := r.panel.rowRef(2)
+	if !ok1 || !ok2 {
+		t.Fatalf("expected two real rows after row 0 (\"..\"), got ok=%v/%v", ok1, ok2)
+	}
+	if ref1.name != older || ref2.name != newer {
+		t.Errorf("sortByModified order = [%q, %q], want [%q, %q] (oldest deletion first)", ref1.name, ref2.name, older, newer)
+	}
+
+	cellText := strings.TrimSpace(r.panel.table.GetCell(1, colModified).Text)
+	wantYear := strconv.Itoa(time.Now().Add(-48 * time.Hour).Year())
+	if !strings.Contains(cellText, wantYear) {
+		t.Errorf("rendered Modified cell = %q, want it to reflect the backdated deletion time (year %s), not the file's own real mtime (today)", cellText, wantYear)
+	}
+}
+
+// TestOrdinaryDirectoryUnaffectedByTrashRowDescriptions is a regression
+// guard for describeTrashRows: browsing a perfectly ordinary directory
+// (never the trash) must still show real names, the file's own real
+// mtime, and the usual "Modify time (mtime)" column label.
+func TestOrdinaryDirectoryUnaffectedByTrashRowDescriptions(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+
+	if r.panel.inTrashView {
+		t.Error("inTrashView = true for an ordinary directory, want false")
+	}
+	if got := strings.TrimSpace(r.panel.columnHeader.GetCell(0, colModified).Text); got != "Modify time (mtime)" {
+		t.Errorf("Modified column header = %q, want the usual %q", got, "Modify time (mtime)")
+	}
+
+	r.panel.focusRow(1)
+	ref, ok := r.panel.rowRef(1)
+	if !ok {
+		t.Fatal("no rowRef for row 1")
+	}
+	if want := filepath.Base(file); ref.name != want {
+		t.Errorf("row name = %q, want the real basename %q, not an original-path override", ref.name, want)
 	}
 }
