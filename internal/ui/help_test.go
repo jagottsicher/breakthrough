@@ -83,7 +83,7 @@ func TestHelpShortcutIsNoopWhenAlreadyOpen(t *testing.T) {
 // incomplete reference would be worse than none at all.
 func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 	want := []string{
-		"F1", "Ctrl+Q", "Ctrl+C",
+		"F1", "F3", "Ctrl+Q", "Ctrl+C",
 		"Ctrl+E", "Ctrl+L", "F2", "Ctrl+G", "Ctrl+F", "Ctrl+O",
 		"Ctrl+P", "Ctrl+S", "Ctrl+B", "Ctrl+T", "Ctrl+R", "Delete",
 		"Enter", "Space", "Right-click",

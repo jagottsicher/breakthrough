@@ -154,6 +154,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.viewerView.SetTextColor(theme.Text)
 	}
 
+	if r.infoSidebar != nil {
+		r.infoSidebar.SetBackgroundColor(theme.AccentBackground)
+		r.infoSidebar.SetTextColor(theme.Text)
+	}
+
 	r.sedForm.SetBackgroundColor(theme.AccentBackground)
 	r.sedForm.SetLabelColor(theme.Text)
 	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)

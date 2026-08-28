@@ -168,6 +168,14 @@ type Root struct {
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
+	// infoSidebar is the right-hand info layer toggled by F3 — see
+	// infosidebar.go. infoSidebarVisible tracks whether it's currently
+	// shown; unlike every overlay above it, it's deliberately not modal
+	// (see newInfoSidebarView's own doc comment), so it can't reuse
+	// activePage/overlayStack the way those do.
+	infoSidebar        *tview.TextView
+	infoSidebarVisible bool
+
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
 	// turnPDFPage/setPDFViewMode) — viewerPDFPath is "" whenever Look
@@ -732,6 +740,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
+	// The info sidebar (see infosidebar.go) — also a single static
+	// TextView for now, same shape as Help/the Look pager above, just
+	// positioned and shown/hidden its own way (see showInfoSidebar).
+	r.infoSidebar = r.newInfoSidebarView()
+
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -790,6 +803,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
+	r.AddPage(infoSidebarPage, r.infoSidebar, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
