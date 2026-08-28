@@ -23,7 +23,8 @@ import (
 type buttonBarAction int
 
 const (
-	buttonActionEdit buttonBarAction = iota
+	buttonActionProperties buttonBarAction = iota
+	buttonActionEdit
 	buttonActionLook
 	buttonActionRename
 	buttonActionToggleHidden
@@ -98,14 +99,15 @@ func (r *Root) refreshStatusBar() {
 }
 
 // buildButtonBar renders the button bar's text: the quick-action buttons
-// (Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in nano's own
-// "^X Label" style (instantly recognizable as "Ctrl+X does this" without
-// needing a separate legend). Built once, from newBottomBar, and never
-// rebuilt afterwards — unlike statusBar, none of these labels ever
-// change while running (the equivalent context menu items do relabel
-// themselves, e.g. hiddenToggleLabel, but the button bar's own text
-// intentionally doesn't follow suit, to keep this a fixed, muscle-memory
-// legend rather than something to re-read each time).
+// (Properties/Edit/Look/Rename/Hidden/Find/Options/Help/Trash/Remove) in
+// nano's own "^X Label" style (instantly recognizable as "Ctrl+X does
+// this" without needing a separate legend). Built once, from
+// newBottomBar, and never rebuilt afterwards — unlike statusBar, none of
+// these labels ever change while running (the equivalent context menu
+// items do relabel themselves, e.g. hiddenToggleLabel, but the button
+// bar's own text intentionally doesn't follow suit, to keep this a
+// fixed, muscle-memory legend rather than something to re-read each
+// time).
 func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	var b strings.Builder
 	col := 0
@@ -125,11 +127,13 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: action})
 	}
 
+	button("^P Properties", buttonActionProperties)
+	write("  ")
 	button("^E Edit", buttonActionEdit)
 	write("  ")
 	button("^L Look", buttonActionLook)
 	write("  ")
-	button("^R Rename", buttonActionRename)
+	button("F2 Rename", buttonActionRename)
 	write("  ")
 	button("^G Hide/Unhide", buttonActionToggleHidden)
 	write("  ")
@@ -141,7 +145,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	write("  ")
 	button("^T Trash", buttonActionTrash)
 	write("  ")
-	button("^P Remove", buttonActionRemove)
+	button("^R Remove", buttonActionRemove)
 	write("  ")
 	button("^S Sed", buttonActionSed)
 
@@ -458,6 +462,8 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 // currently typing" ambiguity a global keystroke has to rule out first.
 func (r *Root) runButtonBarAction(action buttonBarAction) {
 	switch action {
+	case buttonActionProperties:
+		r.propertiesCurrentEntry()
 	case buttonActionEdit:
 		r.editCurrentEntry()
 	case buttonActionLook:
@@ -497,7 +503,7 @@ func (r *Root) editCurrentEntry() {
 	r.runEditor(path, 0)
 }
 
-// renameCurrentEntry is the Rename button/Ctrl+R's actual action — the
+// renameCurrentEntry is the Rename button/F2's actual action — the
 // keyboard/status-bar equivalent of the context menu's "Rename" (see
 // Root.openRename), targeting whichever entry the table's cursor is
 // currently on instead of a right-clicked one.
@@ -511,21 +517,21 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/Ctrl+R/Ctrl+G/
-// Ctrl+O/Ctrl+F (see EditShortcut/LookShortcut/RenameShortcut/
-// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut, wired up in
-// cmd/breakthrough) should act right now: no overlay is open, and the
-// bash command line doesn't have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/F2/Ctrl+G/
+// Ctrl+O/Ctrl+F/Ctrl+R (see EditShortcut/LookShortcut/RenameShortcut/
+// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut/PurgeShortcut,
+// wired up in cmd/breakthrough) should act right now: no overlay is
+// open, and the bash command line doesn't have keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these six operate on "the currently
+// work from literally anywhere, these seven operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
 // on top of whatever's already open. Critically, this also keeps them
 // out of the bash line's way: tview's TextArea already implements
 // several readline-style keybindings of its own (Ctrl+A/Home,
-// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these six are captured
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these seven are captured
 // globally, at the Application level (see cmd/breakthrough), they'd
 // reach and consume the keystroke before bashLine's own InputCapture or
 // TextArea's own default handling ever saw it, silently defeating both
@@ -536,28 +542,30 @@ func (r *Root) acceptsGlobalShortcut() bool {
 }
 
 // AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
-// cmd/breakthrough: Ctrl+P and Ctrl+T/Entf (see TrashShortcut/
-// PurgeShortcut in trash.go) need to decide, before even calling either
-// Shortcut method, whether to consume the key at all — unlike the six
-// above, which always return nil regardless (an accepted, minor
-// imperfection for keys TextArea might bind natively), Ctrl+P
-// specifically collides with a real, explicit feature of this same
-// codebase: bashLine's own captureBashLineKey binds Ctrl+P to command-
-// history recall. Consuming it unconditionally at the Application level
-// would silently break that recall every time the bash line has focus,
-// not just fail to fire Purge — so cmd/breakthrough falls through to
-// bashLine's own handling (returns the event, not nil) whenever this
+// cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Ctrl+T/Entf (see
+// TrashShortcut in trash.go), and Ctrl+S (see SedReplaceShortcut) need
+// to decide, before even calling their own Shortcut method, whether to
+// consume the key at all — unlike the seven above, which always return
+// nil regardless (an accepted, minor imperfection for keys TextArea
+// might bind natively), each of these collides with a real, explicit
+// feature of this same codebase: bashLine's own captureBashLineKey
+// binds Ctrl+P to command-history recall, for instance. Consuming one
+// of them unconditionally at the Application level would silently break
+// that native behavior every time the bash line has focus, not just
+// fail to fire the intended action — so cmd/breakthrough falls through
+// to bashLine's own handling (returns the event, not nil) whenever this
 // reports false, rather than swallowing it either way.
 func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
 }
 
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
-// and SearchShortcut are Ctrl+E, Ctrl+R, Ctrl+G, Ctrl+O, and Ctrl+F's
+// and SearchShortcut are Ctrl+E, F2, Ctrl+G, Ctrl+O, and Ctrl+F's
 // global actions (see cmd/breakthrough and acceptsGlobalShortcut for why
 // they check first rather than acting unconditionally). LookShortcut
-// (Ctrl+L) is the same shape, defined alongside the rest of Look in
-// viewer.go instead of here.
+// (Ctrl+L) and PurgeShortcut (Ctrl+R, Remove) are the same shape,
+// defined alongside the rest of Look/Trash in viewer.go/trash.go instead
+// of here.
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()

@@ -398,7 +398,7 @@ func (r *Root) setPDFViewMode(mode viewer.PDFViewMode) {
 
 // LookShortcut is Ctrl+L's global action — see cmd/breakthrough and
 // acceptsGlobalShortcut for why it checks its own precondition first,
-// the same as Ctrl+E/Ctrl+R/Ctrl+G/Ctrl+O/Ctrl+F.
+// the same as Ctrl+E/F2/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R.
 func (r *Root) LookShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openLook()

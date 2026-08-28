@@ -375,15 +375,16 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	runes := []rune(text)
 
 	wantActions := map[buttonBarAction]string{
+		buttonActionProperties:   "^P Properties",
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
-		buttonActionRename:       "^R Rename",
+		buttonActionRename:       "F2 Rename",
 		buttonActionToggleHidden: "^G Hide/Unhide",
 		buttonActionSearch:       "^F Find",
 		buttonActionOptions:      "^O Options",
 		buttonActionHelp:         "F1 Help",
 		buttonActionTrash:        "^T Trash",
-		buttonActionRemove:       "^P Remove",
+		buttonActionRemove:       "^R Remove",
 		buttonActionSed:          "^S Sed",
 	}
 	found := map[buttonBarAction]bool{}
@@ -428,7 +429,7 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	if !strings.Contains(text, r.currentUser) {
 		t.Errorf("status bar text should contain the current user %q, got:\n%s", r.currentUser, text)
 	}
-	for _, label := range []string{"^E Edit", "^T Trash", "^P Remove"} {
+	for _, label := range []string{"^E Edit", "^T Trash", "^R Remove", "^P Properties"} {
 		if strings.Contains(text, label) {
 			t.Errorf("status bar text should no longer contain button label %q, got:\n%s", label, text)
 		}
@@ -665,7 +666,7 @@ func TestToggleHiddenShortcutRespectsGuard(t *testing.T) {
 	}
 }
 
-// TestRenameShortcutTargetsCurrentRow pins Ctrl+R's actual action
+// TestRenameShortcutTargetsCurrentRow pins F2's actual action
 // (Root.RenameShortcut): it targets whichever row the table's cursor is
 // on, the same as clicking the status bar's Rename button.
 func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
@@ -688,6 +689,51 @@ func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
 	}
 	if r.target != path || r.targetRow != row {
 		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)
+	}
+}
+
+// TestPropertiesShortcutTargetsCurrentRow pins Ctrl+P's actual action
+// (Root.PropertiesShortcut): it targets whichever row the table's
+// cursor is on, the same as clicking the button bar's Properties button
+// or opening Properties from the context menu after a right-click.
+func TestPropertiesShortcutTargetsCurrentRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
+
+	row, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("setup: no current row")
+	}
+
+	r.PropertiesShortcut()
+
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, propertiesPage)
+	}
+	if r.target != path || r.targetRow != row {
+		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)
+	}
+}
+
+// TestPropertiesShortcutRespectsGuard pins that Ctrl+P's actual action
+// (Root.PropertiesShortcut) stays closed — not just individually
+// harmless — while the guard says no, the same as ToggleHiddenShortcut
+// (see TestToggleHiddenShortcutRespectsGuard).
+func TestPropertiesShortcutRespectsGuard(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.app.SetFocus(r.bashLine)
+	r.PropertiesShortcut()
+	if r.activePage == propertiesPage {
+		t.Error("PropertiesShortcut should no-op while the bash line has focus")
 	}
 }
 

@@ -46,8 +46,8 @@ terminal.
   and the trash actions below.
 - Move to Trash / Remove: `^T` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `^P`, Ctrl+Entf (best-effort —
-  terminal-dependent; `^P` is always the reliable one), or the context
+  that's the reversible action by design. `^R`, Ctrl+Entf (best-effort —
+  terminal-dependent; `^R` is always the reliable one), or the context
   menu's "Remove" permanently deletes instead (a file like `rm`, a
   directory recursively like `rm -rf`, empty or not), always behind a
   confirmation dialog with Cancel preselected — a single stray keypress
@@ -96,13 +96,15 @@ terminal.
   guess which programs need one and which don't. Its own output stays on
   screen until you press Escape to return, so it doesn't just flash by.
 - A middle row of nano-style quick-action buttons, always visible right
-  below the command line: Edit (`^E`, opens `$VISUAL`/`$EDITOR`, or
+  below the command line: Properties (`^P`), Edit (`^E`, opens
+  `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
   own pick if set, on the selected file), Look (`^L`, see below), Rename
-  (`^R`), toggle hidden files (`^G`), Search (`^F`, see below), Options
-  (`^O`), Move to Trash (`^T`), Remove (`^P`), and Sed Replace (`^S`) —
-  each also reachable from the context menu, and each still working the
-  same way whichever panel or field currently has focus, except while
+  (`F2` — the same key most GUI file managers use for it), toggle hidden
+  files (`^G`), Search (`^F`, see below), Options (`^O`), Move to Trash
+  (`^T`), Remove (`^R`), and Sed Replace (`^S`) — each also reachable
+  from the context menu, and each still working the same way whichever
+  panel or field currently has focus, except while
   the command line itself is expanded and needs those same keys for its
   own editing. Hidden-files/size-format/mtime-format toggles are
   remembered across restarts.
