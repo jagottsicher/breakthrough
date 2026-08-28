@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -93,8 +95,9 @@ func (r *Root) moveSelectionToTrash() {
 // the current trash's files/ subdirectory (see fsops.FilesDir) — the
 // one place browsing/Restore actually works (see
 // restoreSelectionFromTrash) — without the user needing to know or type
-// its path, which for the session-scoped default includes a random
-// per-run session ID buried under $XDG_RUNTIME_DIR.
+// its path, which for the session-scoped (opt-in, trash_persistent =
+// false) mode includes a random per-run session ID buried under
+// $XDG_RUNTIME_DIR.
 func (r *Root) openTrash() {
 	dir, err := r.trashDir()
 	if err != nil {
@@ -306,4 +309,56 @@ func (r *Root) confirmPurge() {
 func (r *Root) cancelPurge() {
 	r.pendingPurge = nil
 	r.hideOverlay()
+}
+
+// pruneTrashAtStartup applies the user's own age/quota trash policy
+// (see config.Settings' trash_max_age_days/trash_quota_percent, and
+// fsops.PruneTrash's own doc comment for why once per run rather than
+// on every trash operation) — called once from NewRoot. Returns a
+// one-time notice for NewRoot to combine with its own other startup
+// notices (see its caller — config warnings use the same showError
+// overlay, and calling that twice in a row would just silently
+// overwrite whichever came first) — "" if nothing was removed.
+//
+// Best-effort like the rest of this file's own background bookkeeping
+// (see appendBashHistory): a failure to even resolve or read the trash
+// directory is silently ignored here rather than greeting a fresh run
+// with an error dialog over something that hasn't actually happened
+// yet. A partial removal failure (see PruneTrash's own return) is
+// swallowed the same way — whatever it did manage to remove is still
+// worth reporting, and there's no actionable fix a dialog could offer
+// for e.g. one stuck file at startup anyway.
+func (r *Root) pruneTrashAtStartup() string {
+	dir, err := r.trashDir()
+	if err != nil {
+		return ""
+	}
+
+	opts := fsops.PruneTrashOptions{
+		MaxAge:       time.Duration(r.settings.TrashMaxAgeDays) * 24 * time.Hour,
+		QuotaPercent: r.settings.TrashQuotaPercent,
+	}
+	result, _ := fsops.PruneTrash(dir, opts)
+	if result.Removed() == 0 {
+		return ""
+	}
+	return trashPruneMessage(result)
+}
+
+// trashPruneMessage words pruneTrashAtStartup's own one-time notice —
+// only ever called once Removed() > 0 has already confirmed there's
+// something to report. Irreversibly removing files, even ones the user
+// already sent to the trash, earns the same attention-grabbing
+// treatment a real error would (see showError, the only "surface a
+// message" channel this app has) — "klar kommuniziert", not just
+// quietly logged.
+func trashPruneMessage(result fsops.PruneTrashResult) string {
+	var parts []string
+	if result.RemovedByAge > 0 {
+		parts = append(parts, fmt.Sprintf("%d older than the configured age limit", result.RemovedByAge))
+	}
+	if result.RemovedByQuota > 0 {
+		parts = append(parts, fmt.Sprintf("%d over the configured quota", result.RemovedByQuota))
+	}
+	return fmt.Sprintf("Trash cleanup removed %d item(s) on startup: %s", result.Removed(), strings.Join(parts, ", "))
 }

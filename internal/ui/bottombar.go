@@ -12,6 +12,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // buttonBarAction identifies one clickable region in the button bar (see
@@ -195,11 +197,12 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 
 // buildStatusBar renders the status bar's text: the current user, disk
 // and inode usage for the panel's current directory (see
-// fetchDiskUsage), the running kernel release (see kernelVersionText),
-// uptime and load average where available (see uptimeText/
-// loadAverageText — Linux only, gracefully omitted elsewhere, the same
-// "just show one less segment" degradation fetchDiskUsage itself already
-// has), and the clock. No buttons here any more — see buildButtonBar.
+// fsops.FetchDiskUsage), the running kernel release (see
+// kernelVersionText), uptime and load average where available (see
+// uptimeText/loadAverageText — Linux only, gracefully omitted
+// elsewhere, the same "just show one less segment" degradation
+// fsops.FetchDiskUsage itself already has), and the clock. No buttons
+// here any more — see buildButtonBar.
 func (r *Root) buildStatusBar() string {
 	var b strings.Builder
 	write := func(s string) { b.WriteString(s) }
@@ -207,7 +210,7 @@ func (r *Root) buildStatusBar() string {
 
 	write(r.currentUser)
 	sep()
-	if u, ok := fetchDiskUsage(r.panel.path); ok {
+	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
 		write(diskUsageText(u))
 		sep()
 		write(inodeUsageText(u))
@@ -231,8 +234,8 @@ func (r *Root) buildStatusBar() string {
 }
 
 // kernelVersionText returns `uname -r`'s own output, trimmed — the same
-// "shell out to a real system tool" approach fetchDiskUsage's own df
-// already uses, rather than a syscall wrapper needing per-platform
+// "shell out to a real system tool" approach fsops.FetchDiskUsage's own
+// df already uses, rather than a syscall wrapper needing per-platform
 // struct handling for what's ultimately just one string. Returns "" if
 // uname isn't available (e.g. some minimal containers) — the status bar
 // just shows one less segment then.
@@ -297,112 +300,6 @@ func loadAverageText() (string, bool) {
 	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
 }
 
-// diskUsage is one filesystem's block and inode usage for the status
-// bar's own display (see fetchDiskUsage/diskUsageText/inodeUsageText)
-// — the labeled, color-coded replacement for what used to be dfSummary,
-// an entirely unlabeled raw df line the user themselves reported as
-// unreadable ("man weiß gar nicht was die heißen sollen").
-type diskUsage struct {
-	usedBytes, availBytes    int64
-	usedInodes, availInodes  int64
-	usePercent, inodePercent int
-}
-
-// fetchDiskUsage runs `df -k` (block usage) and `df -i` (inode usage)
-// on dir and parses each one's own data line into a diskUsage.
-//
-// Deliberately not `df -h`: -h's own human-readable formatting is
-// locale-dependent (this app's own target audience includes non-
-// English locales — a German one, for instance, renders
-// "1.7G" as "1,7G", a comma this app would then have no reliable way
-// to tell apart from a field separator when parsing it back out). Also
-// deliberately not `df -P`, which on GNU df guarantees a single,
-// portably-parseable data line — but means something else entirely on
-// BSD df (512-byte blocks, not "portable output format" — verified
-// against the FreeBSD/macOS df(1) man pages, not guessed: using it
-// cross-platform for parseability, the way a straight port of GNU df's
-// own convention would, is actually wrong here). Requesting raw block/
-// inode counts via -k/-i and formatting them with this app's own
-// humanSize/humanCount instead sidesteps both problems, and gets
-// exact usedBytes/availBytes/usedInodes/availInodes for free rather
-// than needing to reverse a rounded, unit-suffixed string.
-func fetchDiskUsage(dir string) (diskUsage, bool) {
-	blockLine, ok := dfLastLine("df", "-k", dir)
-	if !ok {
-		return diskUsage{}, false
-	}
-	inodeLine, ok := dfLastLine("df", "-i", dir)
-	if !ok {
-		return diskUsage{}, false
-	}
-
-	usedBlocks, availBlocks, usePercent, ok := parseDfDataLine(blockLine)
-	if !ok {
-		return diskUsage{}, false
-	}
-	usedInodes, availInodes, inodePercent, ok := parseDfDataLine(inodeLine)
-	if !ok {
-		return diskUsage{}, false
-	}
-
-	return diskUsage{
-		usedBytes:    usedBlocks * 1024,
-		availBytes:   availBlocks * 1024,
-		usedInodes:   usedInodes,
-		availInodes:  availInodes,
-		usePercent:   usePercent,
-		inodePercent: inodePercent,
-	}, true
-}
-
-// dfLastLine runs name(args...) (df, with whatever flags the caller
-// chose) and returns its own data line — the last line of output,
-// skipping the header row df always prints first. A single given path
-// always produces exactly one data line, on every platform this
-// project targets.
-func dfLastLine(name string, args ...string) (string, bool) {
-	out, err := exec.Command(name, args...).Output()
-	if err != nil {
-		return "", false
-	}
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) < 2 {
-		return "", false
-	}
-	return lines[len(lines)-1], true
-}
-
-// parseDfDataLine extracts Used, Available, and Capacity (Use%/IUse%)
-// from one df data line, indexed from the END of its whitespace-
-// separated fields — Mounted-on last, Capacity/Use% just before it,
-// Available before that, Used before that — rather than from the
-// start. That's what makes this robust to a wrapped Filesystem name (a
-// real, if rare, BSD df quirk for a very long device name, splitting
-// it onto its own line and shifting how many fields precede the data
-// that actually matters here) without needing to detect the wrap
-// itself. Not robust to a mount point that itself contains a space
-// (e.g. "/Volumes/My Drive") — an accepted, rare limitation, the same
-// class dfSummary's own predecessor already accepted before this.
-func parseDfDataLine(line string) (used, avail int64, percent int, ok bool) {
-	fields := strings.Fields(line)
-	if len(fields) < 4 {
-		return 0, 0, 0, false
-	}
-	percent, err := strconv.Atoi(strings.TrimSuffix(fields[len(fields)-2], "%"))
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	avail, err = strconv.ParseInt(fields[len(fields)-3], 10, 64)
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	used, err = strconv.ParseInt(fields[len(fields)-4], 10, 64)
-	if err != nil {
-		return 0, 0, 0, false
-	}
-	return used, avail, percent, true
-}
-
 // diskUsageWarnColor is the color a usage percentage should stand out
 // in — tcell.ColorRed at 90% or more, tcell.ColorOrange at 80% or
 // more, tcell.ColorDefault (no warning, leave the surrounding text's
@@ -441,12 +338,12 @@ func formatUsagePercent(percent int) string {
 // die heißen sollen"), and explicit used *and* free numbers for
 // inodes specifically, per the user's own request, rather than just a
 // percentage.
-func diskUsageText(u diskUsage) string {
-	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.usedBytes), humanSize(u.availBytes), formatUsagePercent(u.usePercent))
+func diskUsageText(u fsops.DiskUsage) string {
+	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent))
 }
 
-func inodeUsageText(u diskUsage) string {
-	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.usedInodes), humanCount(u.availInodes), formatUsagePercent(u.inodePercent))
+func inodeUsageText(u fsops.DiskUsage) string {
+	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent))
 }
 
 // humanCount renders n the same way humanSize renders a byte count

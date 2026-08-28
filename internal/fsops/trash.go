@@ -272,6 +272,176 @@ func purgeTrashItem(item TrashItem, trashDir string) error {
 	return os.Remove(trashInfoPath(trashDir, item.ID))
 }
 
+// PruneTrashOptions is PruneTrash's own age/quota policy — see internal/
+// config's trash_max_age_days/trash_quota_percent, which is where these
+// values actually come from (internal/ui's pruneTrashAtStartup reads
+// them off Settings before calling PruneTrash).
+type PruneTrashOptions struct {
+	// MaxAge is how long a trashed item is kept before it's removed
+	// unconditionally, regardless of free space. Zero disables age-based
+	// pruning entirely.
+	MaxAge time.Duration
+	// QuotaPercent keeps the trash's own on-disk size at or under this
+	// percentage of the filesystem it lives on, oldest item first. Zero
+	// disables quota-based pruning entirely.
+	QuotaPercent int
+}
+
+// PruneTrashResult reports what PruneTrash actually removed, split by
+// which of the two passes caught it — internal/ui's pruneTrashAtStartup
+// uses this to word its own one-time startup notice.
+type PruneTrashResult struct {
+	RemovedByAge   int
+	RemovedByQuota int
+}
+
+// Removed is the total across both passes.
+func (r PruneTrashResult) Removed() int { return r.RemovedByAge + r.RemovedByQuota }
+
+// PruneTrash applies opts' age and quota policy to trashDir. Meant to
+// run once per program start (see internal/ui's pruneTrashAtStartup),
+// not on every MoveToTrash — checking (and potentially deleting) on
+// every single trash operation would mean a file already in the trash
+// could vanish out from under a session that's still open, mid-use;
+// once at startup, before the user has had a chance to add anything new
+// yet, is the one point this can't surprise anyone still working with
+// what's already there.
+//
+// Two independent passes, in this order:
+//
+//  1. Age: every item whose DeletedAt is older than opts.MaxAge is
+//     removed unconditionally — a hard cutoff, not best-effort, so
+//     "30 days" actually means 30 days regardless of how much space is
+//     free.
+//  2. Quota: a no-op if the age pass alone already brought the trash
+//     under quota. Otherwise, oldest first (ListTrash's own order),
+//     items are removed until the trash's own on-disk size is back at
+//     or under opts.QuotaPercent of the hosting filesystem's total
+//     capacity (see FetchDiskUsage — UsedBytes+AvailBytes as the "how
+//     big is this drive" proxy, close enough for a backstop like this
+//     without needing a raw statfs call of its own).
+//
+// Never fails outright over a filesystem-inspection problem (e.g. df
+// not on $PATH): the quota pass is silently skipped rather than
+// blocking startup over a smaller feature not working, the same
+// tolerance FetchDiskUsage's own other callers already have. A single
+// item's own removal failure is collected (the first one) but doesn't
+// stop the rest, the same as EmptyTrash.
+func PruneTrash(trashDir string, opts PruneTrashOptions) (PruneTrashResult, error) {
+	var result PruneTrashResult
+
+	items, err := ListTrash(trashDir)
+	if err != nil {
+		return result, err
+	}
+
+	var firstErr error
+
+	if opts.MaxAge > 0 {
+		cutoff := time.Now().Add(-opts.MaxAge)
+		var kept []TrashItem
+		for _, item := range items {
+			if !item.DeletedAt.Before(cutoff) {
+				kept = append(kept, item)
+				continue
+			}
+			if err := purgeTrashItem(item, trashDir); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				kept = append(kept, item) // still on disk — the quota pass below should still see it
+				continue
+			}
+			result.RemovedByAge++
+		}
+		items = kept
+	}
+
+	if opts.QuotaPercent > 0 && len(items) > 0 {
+		removed, err := pruneOverQuota(trashDir, items, opts.QuotaPercent)
+		result.RemovedByQuota = removed
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return result, firstErr
+}
+
+// fetchDiskUsageForQuota is FetchDiskUsage, a package-level var so a
+// test can substitute a controlled DiskUsage instead of depending on
+// this machine's own real, unpredictable disk size to exercise
+// pruneOverQuota's own over/under-quota branches deterministically —
+// the same test-seam shape internal/ui's loadInitialSettings/
+// sedPreviewFunc already use for the same "real thing isn't
+// controllable enough for a unit test" reason.
+var fetchDiskUsageForQuota = FetchDiskUsage
+
+// pruneOverQuota removes items — expected already oldest-first, i.e.
+// straight from ListTrash — until trashDir's own files/ subdirectory is
+// back at or under quotaPercent of the filesystem it lives on. Does
+// nothing, successfully, if fetchDiskUsageForQuota can't determine that
+// filesystem's size at all (see PruneTrash's own doc comment on why
+// this degrades rather than errors).
+func pruneOverQuota(trashDir string, items []TrashItem, quotaPercent int) (removed int, err error) {
+	usage, ok := fetchDiskUsageForQuota(trashDir)
+	if !ok {
+		return 0, nil
+	}
+	totalBytes := usage.UsedBytes + usage.AvailBytes
+	if totalBytes <= 0 {
+		return 0, nil
+	}
+	quotaBytes := totalBytes * int64(quotaPercent) / 100
+
+	trashBytes, err := dirSize(trashFilesDir(trashDir))
+	if err != nil {
+		return 0, err
+	}
+
+	var firstErr error
+	for _, item := range items {
+		if trashBytes <= quotaBytes {
+			break
+		}
+		size, sizeErr := dirSize(item.Path(trashDir))
+		if err := purgeTrashItem(item, trashDir); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		removed++
+		if sizeErr == nil {
+			trashBytes -= size
+		}
+	}
+	return removed, firstErr
+}
+
+// dirSize returns the total apparent size (sum of file sizes, not disk
+// blocks actually allocated) of everything under path — just path's own
+// size if it's a plain file or symlink, the same "no special-casing
+// needed" shape CountEntries below already has for a non-directory.
+func dirSize(path string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		total += info.Size()
+		return nil
+	})
+	return total, err
+}
+
 // CountEntries returns how many filesystem entries exist inside path, not
 // counting path itself — used to word a Remove confirmation with a real
 // count ("... and 42 items inside it?") instead of a vague "and its
