@@ -378,7 +378,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
 		buttonActionRename:       "^R Rename",
-		buttonActionToggleHidden: "^G Hidden",
+		buttonActionToggleHidden: "^G Hide/Unhide",
 		buttonActionSearch:       "^F Find",
 		buttonActionOptions:      "^O Options",
 		buttonActionHelp:         "F1 Help",
