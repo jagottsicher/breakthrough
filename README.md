@@ -4,14 +4,20 @@
 [![CI (macOS)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml)
 
 # breakthrough
-## A window/menu-based TUI file manager for your POSIX-compliant terminal, written in Go.
+## A mouse-and-menu-driven TUI file manager for your POSIX-compliant terminal, built around a real embedded bash shell — written in Go.
 
-breakthrough puts a quasi-windows-like layer — a panel, floating overlays,
-context menus, a bottom bar — over your terminal session, without leaving
-the shell. It's built with [tcell](https://github.com/gdamore/tcell) and
+breakthrough puts classic GUI file-manager idioms — a browsable panel,
+context menus, floating dialogs, clickable breadcrumbs — over a real bash
+session, without ever leaving the shell. It's built with
+[tcell](https://github.com/gdamore/tcell) and
 [tview](https://github.com/rivo/tview); it is not integrated into Bash
-itself. The shell connection stays a thin wrapper (a command line and a
-handful of quick actions), never code integration into Bash.
+itself — no fork, no patch, no hook into Bash's own internals. Its console
+is a first-class citizen all the same: its own history, path completion
+against the current directory, multi-line scripting, and every command
+running through your actual `$SHELL`, started the same way an
+interactive login shell would be — so it sources that shell's own
+startup files and expands its aliases, whichever shell that actually is
+— not a reimplementation of one.
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
@@ -20,7 +26,11 @@ terminal.
 ## Features
 
 - Panel-based directory browsing: arrow-key and mouse navigation, a
-  clickable path breadcrumb bar with Start/Home/Back/Forward, sortable
+  clickable path breadcrumb bar with Start/Home/Back/Forward — its
+  history covers a trip into search results or the trash exactly the
+  same as a real directory, and Back/Forward into any of them restores
+  the cursor row it was left on, a search's own results included, shown
+  again exactly as they were rather than a live re-run — sortable
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.
@@ -46,20 +56,36 @@ terminal.
   and the trash actions below.
 - Move to Trash / Remove: `^T` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `^P`, Ctrl+Entf (best-effort —
-  terminal-dependent; `^P` is always the reliable one), or the context
+  that's the reversible action by design. `^R`, Ctrl+Entf (best-effort —
+  terminal-dependent; `^R` is always the reliable one), or the context
   menu's "Remove" permanently deletes instead (a file like `rm`, a
   directory recursively like `rm -rf`, empty or not), always behind a
   confirmation dialog with Cancel preselected — a single stray keypress
-  can never confirm it by itself. "Go to Trash" jumps straight into it
-  without needing to know its path; "Restore from Trash" and "Empty
-  Trash" (same confirmation) round it out. Session-scoped by default —
-  lives under `$XDG_RUNTIME_DIR`, gone once the session ends — or
-  persistent under `~/.local/share/breakthrough/trash` via
-  `trash_persistent = true` in your config; running as root (e.g. via
-  `sudo`) always gets the persistent, well-known path, since root has no
-  real session of its own for a session-scoped trash to mean anything
-  for.
+  can never confirm it by itself. "Go to Trash" (`^B`, or "Trashbin" in
+  the button bar) jumps straight into it without needing to know its
+  path; "Restore from Trash" and "Empty Trash" (same confirmation) round
+  it out. Persistent by default — lives under
+  `~/.local/share/breakthrough/trash`, so it's still there tomorrow, even
+  across a login session boundary — or session-scoped via
+  `trash_persistent = false` in your config, under `$XDG_RUNTIME_DIR`
+  instead, gone once the session ends; running as root (e.g. via `sudo`)
+  always gets the persistent path regardless, since root has no real
+  session of its own for a session-scoped trash to mean anything for.
+  Kept from growing forever by two settings checked once at startup, not
+  on every single trash operation: `trash_max_age_days` (30 by default —
+  anything older is removed unconditionally) and `trash_quota_percent`
+  (10 by default — a backstop, oldest item first, only if age alone
+  didn't already bring the trash back under that share of the
+  filesystem it lives on); either one is `0` to disable it. Anything
+  actually removed this way is reported once, on the next start.
+  Browsing the trash itself ("Go to Trash"/Trashbin) shows each item's
+  own original path in place of its real on-disk name (a collision-
+  avoidance hash you'd otherwise have to squint past — two files
+  trashed from the very same location, more than once, still stay
+  distinguishable this way) and labels the Modified column "Deletion
+  time" instead — both, like the Modified column always has, respecting
+  the Options overlay's timestamp-vs-formatted toggle and the column's
+  own sort.
 - Sed Replace (`^S`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
@@ -75,11 +101,13 @@ terminal.
   incompatible arguments for it, so this always runs sed as a plain
   filter and writes the result back itself.
 - Three rows below the panel, each with its own job. First, a real
-  shell command line (with its own history, shared
-  with your regular shell's `$HISTFILE`, and `cd` handled directly
-  rather than uselessly changing a subshell's own directory), which
-  expands when clicked into — full width, no prompt, growing upward
-  toward mid-screen with a "Bash Prompt Editor" legend above it — for
+  shell command line (with its own history — shared with `$HISTFILE` if
+  you've set it, `~/.bash_history` otherwise regardless of your actual
+  shell, a deliberate choice so this line's own history always behaves
+  like a bash one's — and `cd` handled directly rather than uselessly
+  changing a subshell's own directory), which expands when clicked
+  into — full width, no prompt, growing upward toward mid-screen with a
+  "Bash Prompt Editor" legend above it — for
   multi-line bash scripting (Enter runs the buffer, Ctrl+J or Alt+Enter
   inserts a newline instead — Ctrl+J always works, Alt+Enter is
   intercepted by some terminal emulators for their own use; Up/Down
@@ -88,24 +116,34 @@ terminal.
   filename/directory at the cursor against the panel's own current
   directory, or, when several matches agree on nothing further, opens a
   scrollable pick list of them instead of doing nothing). Every command
-  runs through a real terminal, started the
-  same way an interactive login shell would be — your `~/.bashrc`,
-  aliases and shell functions sourced first, so something like `ll`
-  works exactly as it does in a real terminal — the same way Midnight
+  runs through your actual `$SHELL`, started the same way an
+  interactive login shell would be — that shell's own startup files,
+  aliases and functions sourced first, so something like `ll` works
+  exactly as it does in a real terminal — the same way Midnight
   Commander's own command line handles every command — no attempt to
   guess which programs need one and which don't. Its own output stays on
   screen until you press Escape to return, so it doesn't just flash by.
 - A middle row of nano-style quick-action buttons, always visible right
-  below the command line: Edit (`^E`, opens `$VISUAL`/`$EDITOR`, or
+  below the command line, in a fixed order: Help (`F1`), Rename (`F2` —
+  the same key most GUI file managers use for it), Edit (`^E`, opens
+  `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
-  own pick if set, on the selected file), Look (`^L`, see below), Rename
-  (`^R`), toggle hidden files (`^G`), Search (`^F`, see below), Options
-  (`^O`), Move to Trash (`^T`), Remove (`^P`), and Sed Replace (`^S`) —
-  each also reachable from the context menu, and each still working the
-  same way whichever panel or field currently has focus, except while
-  the command line itself is expanded and needs those same keys for its
-  own editing. Hidden-files/size-format/mtime-format toggles are
-  remembered across restarts.
+  own pick if set, on the selected file), Look (`^L`, see below),
+  Properties (`^P`), Search (`^F`, see below), Sed Replace (`^S`),
+  toggle hidden files (`^G` — labeled Hide or Unhide, whichever it would
+  do next, not whichever state you're currently in), Options (`^O`),
+  Move to Trash (`^T`), Trashbin (`^B`, jumps straight into your own
+  trash without needing to know its path), and Remove (`^R`). Two of
+  these change with where you are: Trash disappears and Trashbin turns
+  into Restore while you're actually browsing the trash itself — moving
+  something already in the trash to the trash again doesn't mean
+  anything, so `^T`/Entf there does a Remove instead, with the exact
+  same confirmation any other Remove has. Each button is also reachable
+  from the context menu, and each still works the same way whichever
+  panel or field currently has focus, except while the command line
+  itself is expanded and needs those same keys for its own editing.
+  Hidden-files/size-format/mtime-format toggles are remembered across
+  restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
   current user, disk and inode usage for the directory on screen, the
   running kernel (`uname -r`), uptime and load average where the
@@ -122,7 +160,12 @@ terminal.
   `zgrep`/`zipgrep` for gzip/zip contents), scoped to any directory,
   with real-time streamed results you can jump straight to. Runs the
   real system tools rather than a reimplemented search, so it inherits
-  whatever's already indexed by `locate`'s own `updatedb`.
+  whatever's already indexed by `locate`'s own `updatedb`. The results
+  view isn't a dead end either: its own header carries a real,
+  fully clickable/editable path breadcrumb — starting at the search's
+  own scope — right alongside the status line, so you can keep
+  browsing normally without first jumping to a specific hit or backing
+  all the way out with Escape.
 - Look (`^L`, the bottom bar's own button, or the context menu): a
   read-only, full-screen preview of the selected file's content.
   Plain text, source code, config files, diffs/patches, and logs get

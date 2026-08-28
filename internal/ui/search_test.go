@@ -772,6 +772,58 @@ func TestRunSearchBuildsRequestFromDialogState(t *testing.T) {
 	}
 }
 
+// TestRunSearchSetsSearchBrowsePathToScope pins that the panel's own
+// "continue here" breadcrumb (see Panel.setSearchStatus/searchBrowsePath)
+// starts at the search's own real, already-validated scope — not
+// wherever the panel happened to be sitting before the search — per the
+// user's own explicit request that search results carry real navigation
+// with them, not just an Escape/jump-to-result dead end.
+func TestRunSearchSetsSearchBrowsePathToScope(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = "/tmp"
+
+	r.runSearch()
+
+	if r.panel.searchBrowsePath != "/tmp" {
+		t.Errorf("panel.searchBrowsePath = %q, want the search's own scope %q", r.panel.searchBrowsePath, "/tmp")
+	}
+}
+
+// TestRunSearchRejectedStartAtFallsBackBrowsePathToPanelPath pins the
+// deliberate exception (see Root.showSearchError's own doc comment): a
+// rejected, non-existent Start-at is exactly the broken path the error
+// message already names, so the "continue here" breadcrumb falls back
+// to the panel's own last real directory instead of one more click away
+// from the same error.
+func TestRunSearchRejectedStartAtFallsBackBrowsePathToPanelPath(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured)) // never actually called — see TestRunSearchRejectsNonexistentStartAt
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+
+	r.runSearch()
+
+	if r.panel.searchBrowsePath != dir {
+		t.Errorf("panel.searchBrowsePath = %q, want the panel's own real directory %q, not the broken scope", r.panel.searchBrowsePath, dir)
+	}
+}
+
 // TestRunSearchIncludeArchivesReachesRequest pins that the "Include
 // zip, tar (gz, bz2, xz)" checkbox actually reaches
 // search.Request.IncludeArchives for a plain filename search.

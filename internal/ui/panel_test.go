@@ -1573,9 +1573,10 @@ func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
 
 // TestShowSearchResultsClearsTableAndEntersSearchMode pins
 // showSearchResults' own basic contract: an empty table, searchMode
-// true, and — critically — p.path itself left completely untouched
-// (see its own doc comment on why every other Panel method depends on
-// that).
+// true, p.path itself left completely untouched (see its own doc
+// comment on why every other Panel method depends on that), and — since
+// a search excursion is now a real history entry (see historyEntry) —
+// a new entry pushed on top of the real directory it was showing.
 func TestShowSearchResultsClearsTableAndEntersSearchMode(t *testing.T) {
 	dir := fixtureDir(t)
 	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
@@ -1595,8 +1596,11 @@ func TestShowSearchResultsClearsTableAndEntersSearchMode(t *testing.T) {
 	if p.path != realPath {
 		t.Errorf("p.path = %q after showSearchResults, want unchanged %q", p.path, realPath)
 	}
-	if p.searchRestorePath != realPath {
-		t.Errorf("searchRestorePath = %q, want %q", p.searchRestorePath, realPath)
+	if len(p.history) != 2 || p.history[0].path != realPath || !p.history[1].isSearch() {
+		t.Fatalf("history = %+v, want [{path: %q}, {isSearch: true}]", p.history, realPath)
+	}
+	if p.historyIdx != 1 {
+		t.Errorf("historyIdx = %d, want 1 (pointing at the new search entry)", p.historyIdx)
 	}
 }
 
@@ -1836,25 +1840,142 @@ func TestAppendSearchResultAllowsSamePathTwiceForMultipleContentMatches(t *testi
 	}
 }
 
-// TestSetSearchStatusPaintsHeaderWithNoClickableSpans pins that the
-// header, while showing search status text, has nothing left in
-// headerSpans — see captureHeaderMouse's own searchMode guard, which
-// depends on this to avoid falling through to openEdit.
-func TestSetSearchStatusPaintsHeaderWithNoClickableSpans(t *testing.T) {
+// TestSetSearchStatusAppendsClickableBreadcrumb pins setSearchStatus's
+// own two-part contract (see its own doc comment, and the user's
+// explicit report that search mode used to trap them between only
+// Escape and jumping to a specific result): the status text itself,
+// followed by a real, ordinary breadcrumb for searchBrowsePath — with
+// spans a click can actually land on, unlike before.
+func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults() // defaults searchBrowsePath to p.path (dir) — see its own doc comment
+
+	p.setSearchStatus("⠋ searching…")
+
+	want := "⠋ searching…, or continue here: " + buildHeaderSpansText(dir)
+	if got := p.header.GetText(true); got != want {
+		t.Errorf("header text = %q, want %q", got, want)
+	}
+	if len(p.headerSpans) == 0 {
+		t.Fatal("headerSpans empty after setSearchStatus, want the breadcrumb's own clickable spans")
+	}
+	// Every span's column range must fall within the breadcrumb portion,
+	// never overlapping the status-text prefix before searchHeaderOffset.
+	for _, s := range p.headerSpans {
+		if s.start < p.searchHeaderOffset {
+			t.Errorf("span %+v starts before searchHeaderOffset (%d) — overlaps the status text", s, p.searchHeaderOffset)
+		}
+	}
+}
+
+// buildHeaderSpansText is buildHeaderSpans' own text half, for a test
+// that only needs to compare against it, not the spans too.
+func buildHeaderSpansText(abs string) string {
+	text, _ := buildHeaderSpans(abs)
+	return text
+}
+
+// TestSpanAtDuringSearchModeFindsBreadcrumbNotStatusText pins spanAt's
+// own behavior against the two-part header setSearchStatus now paints:
+// a column within the "continue here" breadcrumb resolves to that
+// segment's real headerSpan, while a column still within the status
+// text before it finds nothing at all — the status text was never a
+// click target, breadcrumb or not.
+func TestSpanAtDuringSearchModeFindsBreadcrumbNotStatusText(t *testing.T) {
 	dir := fixtureDir(t)
 	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
 	p.showSearchResults()
+	p.setSearchStatus("Done — 0 found")
 
-	p.setSearchStatus("⠋ searching…")
-
-	if got := p.header.GetText(true); got != "⠋ searching…" {
-		t.Errorf("header text = %q, want %q", got, "⠋ searching…")
+	if _, ok := p.spanAt(0); ok {
+		t.Error("spanAt(0) found a span within the status-text prefix, want none")
 	}
-	if len(p.headerSpans) != 0 {
-		t.Errorf("headerSpans = %v after setSearchStatus, want empty", p.headerSpans)
+	if p.searchHeaderOffset == 0 {
+		t.Fatal("setup: searchHeaderOffset is 0, this test can't distinguish the two regions")
+	}
+
+	// "^" (actionStart) is always the breadcrumb's own first character.
+	span, ok := p.spanAt(p.searchHeaderOffset + 1)
+	if !ok || span.action != actionStart {
+		t.Errorf("spanAt(searchHeaderOffset+1) = %+v, %v, want the actionStart button", span, ok)
+	}
+}
+
+// TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode pins
+// the actual point of the "continue here" breadcrumb: activating any of
+// its spans is real navigation — the same runHeaderAction a real
+// directory's header already used — which leaves search mode the
+// moment it runs, per the user's own explicit report that search
+// results used to trap them between only Escape and a specific result.
+func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	sub := filepath.Join(dir, "app-data")
+	if err := p.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+
+	p.showSearchResults()
+	p.setSearchStatus("Done — 0 found")
+
+	p.runHeaderAction(headerSpan{action: actionNavigate, target: dir})
+
+	if p.searchMode {
+		t.Error("searchMode still true after activating a breadcrumb navigation span")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q after the breadcrumb jump, want %q", p.path, dir)
+	}
+}
+
+// TestOpenEditDuringSearchModeUsesSearchBrowsePath pins openEdit's own
+// searchMode branch (see effectiveBrowsePath): the field is pre-filled
+// with searchBrowsePath, not p.path, which stays frozen at wherever the
+// panel was before the search throughout that mode.
+func TestOpenEditDuringSearchModeUsesSearchBrowsePath(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	scope := filepath.Join(dir, "app-data")
+	p.searchBrowsePath = scope // what Root.runSearch would set to the dialog's own Start-at value
+
+	p.openEdit()
+
+	if got := p.headerEdit.GetText(); got != scope {
+		t.Errorf("edit field = %q, want searchBrowsePath %q, not p.path %q", got, scope, p.path)
+	}
+}
+
+// TestResolvePathDuringSearchModeUsesSearchBrowsePath pins
+// resolvePath's own searchMode branch: a relative path resolves against
+// searchBrowsePath, not p.path — otherwise typing a relative path into
+// the "continue here" field while search results are showing would
+// silently resolve against the wrong directory.
+func TestResolvePathDuringSearchModeUsesSearchBrowsePath(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	scope := filepath.Join(dir, "app-data")
+	p.searchBrowsePath = scope
+
+	if got, want := p.resolvePath("sub"), filepath.Join(scope, "sub"); got != want {
+		t.Errorf("resolvePath(%q) = %q, want %q (resolved against searchBrowsePath)", "sub", got, want)
 	}
 }
 
@@ -1995,6 +2116,141 @@ func TestActivateRowInSearchModeJumpsToResultInstead(t *testing.T) {
 	ref, ok := p.rowRef(row)
 	if !ok || ref.path != target {
 		t.Errorf("selected row after activating the result = %+v, want it focused on %q", ref, target)
+	}
+}
+
+// TestBackFromSearchJumpRestoresFrozenResultsNotALiveRerun pins the
+// full round trip a search "excursion" now supports (see historyEntry/
+// showSearchResults' own doc comment): jumping to a result leaves a
+// frozen snapshot of the results list behind as a real history entry,
+// and Back into it redisplays exactly that snapshot — not an empty
+// table, not a re-run search — with Back once more from there landing
+// on the real directory the search was launched from.
+func TestBackFromSearchJumpRestoresFrozenResultsNotALiveRerun(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "banana.txt")})
+	p.setSearchStatus("Done — 2 found")
+	p.focusRow(1) // the second result, before jumping
+
+	target := filepath.Join(dir, "apple.txt")
+	if err := p.navigateAndSelect(target); err != nil {
+		t.Fatalf("navigateAndSelect: %v", err)
+	}
+	if p.path != dir || p.searchMode {
+		t.Fatalf("setup: p.path = %q, searchMode = %v, want %q, false", p.path, p.searchMode, dir)
+	}
+
+	p.back()
+
+	if !p.searchMode {
+		t.Fatal("back() from the jump destination should restore search mode, not a real directory")
+	}
+	if got := p.table.GetRowCount(); got != 2 {
+		t.Fatalf("table has %d rows after Back into the frozen search, want the 2 it had when left", got)
+	}
+	if got := p.header.GetText(true); !strings.HasPrefix(got, "Done — 2 found") {
+		t.Errorf("header = %q, want it still starting with the frozen status text %q", got, "Done — 2 found")
+	}
+	if row, _ := p.table.GetSelection(); row != 1 {
+		t.Errorf("selected row after Back into the frozen search = %d, want the restored 1", row)
+	}
+
+	p.back()
+
+	if p.searchMode {
+		t.Error("a second Back should leave search mode entirely, landing on the real directory")
+	}
+	if p.path != dir {
+		t.Errorf("p.path after the second Back = %q, want %q", p.path, dir)
+	}
+}
+
+// TestForwardReplaysSearchThenJumpDestination pins Forward's own
+// symmetric half of the round trip above: stepping forward from the
+// real directory lands back on the frozen search snapshot, and forward
+// again reaches the jump destination, in that order.
+func TestForwardReplaysSearchThenJumpDestination(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.showSearchResults()
+	p.appendSearchResult(search.Result{Path: filepath.Join(dir, "apple.txt")})
+	if err := p.navigateAndSelect(filepath.Join(dir, "apple.txt")); err != nil {
+		t.Fatalf("navigateAndSelect: %v", err)
+	}
+	p.back() // -> frozen search
+	p.back() // -> real directory, start of history
+
+	p.forward()
+	if !p.searchMode {
+		t.Fatal("first Forward should land back on the frozen search entry")
+	}
+
+	p.forward()
+	if p.searchMode || p.path != dir {
+		t.Errorf("second Forward: searchMode = %v, path = %q, want false, %q (the jump destination)", p.searchMode, p.path, dir)
+	}
+}
+
+// TestBackForwardRestoresCursorRowForPlainDirectories pins the other
+// half of the user's own request — not just a search excursion, but any
+// ordinary Back/Forward between two real directories restoring the
+// cursor row each was left on, not always resetting to the top.
+func TestBackForwardRestoresCursorRowForPlainDirectories(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.focusRow(2) // some row in the starting directory, before ever leaving it
+
+	sub := filepath.Join(dir, "app-data")
+	if err := p.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+
+	p.back()
+	if row, _ := p.table.GetSelection(); row != 2 {
+		t.Errorf("selected row after Back = %d, want the restored 2", row)
+	}
+
+	p.forward()
+	if row, _ := p.table.GetSelection(); row != 0 {
+		t.Errorf("selected row after Forward into %s (never visited before) = %d, want 0", sub, row)
+	}
+}
+
+// TestOpenTrashIsHistoryAwareBackReturnsToOriginalDirectory pins the
+// other explicit part of the user's own request: visiting the trash
+// (see Root.openTrash) is a real history entry now, not invisible to
+// Back/Forward the way it used to be.
+func TestOpenTrashIsHistoryAwareBackReturnsToOriginalDirectory(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+
+	r.openTrash()
+
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	if got, want := filepath.Clean(r.panel.path), filepath.Clean(fsops.FilesDir(trashDir)); got != want {
+		t.Fatalf("panel.path after openTrash = %q, want %q", got, want)
+	}
+
+	r.panel.back()
+
+	if got, want := filepath.Clean(r.panel.path), filepath.Clean(dir); got != want {
+		t.Errorf("panel.path after Back from the trash = %q, want the original %q", got, want)
 	}
 }
 
