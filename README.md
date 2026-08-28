@@ -12,10 +12,12 @@ session, without ever leaving the shell. It's built with
 [tcell](https://github.com/gdamore/tcell) and
 [tview](https://github.com/rivo/tview); it is not integrated into Bash
 itself — no fork, no patch, no hook into Bash's own internals. Its console
-is a first-class citizen all the same: its own history, tab completion
-that sources your aliases and `~/.bashrc`, multi-line scripting, and every
-command running through a real interactive terminal, not a
-reimplementation of one.
+is a first-class citizen all the same: its own history, path completion
+against the current directory, multi-line scripting, and every command
+running through your actual `$SHELL`, started the same way an
+interactive login shell would be — so it sources that shell's own
+startup files and expands its aliases, whichever shell that actually is
+— not a reimplementation of one.
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
@@ -79,11 +81,13 @@ terminal.
   incompatible arguments for it, so this always runs sed as a plain
   filter and writes the result back itself.
 - Three rows below the panel, each with its own job. First, a real
-  shell command line (with its own history, shared
-  with your regular shell's `$HISTFILE`, and `cd` handled directly
-  rather than uselessly changing a subshell's own directory), which
-  expands when clicked into — full width, no prompt, growing upward
-  toward mid-screen with a "Bash Prompt Editor" legend above it — for
+  shell command line (with its own history — shared with `$HISTFILE` if
+  you've set it, `~/.bash_history` otherwise regardless of your actual
+  shell, a deliberate choice so this line's own history always behaves
+  like a bash one's — and `cd` handled directly rather than uselessly
+  changing a subshell's own directory), which expands when clicked
+  into — full width, no prompt, growing upward toward mid-screen with a
+  "Bash Prompt Editor" legend above it — for
   multi-line bash scripting (Enter runs the buffer, Ctrl+J or Alt+Enter
   inserts a newline instead — Ctrl+J always works, Alt+Enter is
   intercepted by some terminal emulators for their own use; Up/Down
@@ -92,10 +96,10 @@ terminal.
   filename/directory at the cursor against the panel's own current
   directory, or, when several matches agree on nothing further, opens a
   scrollable pick list of them instead of doing nothing). Every command
-  runs through a real terminal, started the
-  same way an interactive login shell would be — your `~/.bashrc`,
-  aliases and shell functions sourced first, so something like `ll`
-  works exactly as it does in a real terminal — the same way Midnight
+  runs through your actual `$SHELL`, started the same way an
+  interactive login shell would be — that shell's own startup files,
+  aliases and functions sourced first, so something like `ll` works
+  exactly as it does in a real terminal — the same way Midnight
   Commander's own command line handles every command — no attempt to
   guess which programs need one and which don't. Its own output stays on
   screen until you press Escape to return, so it doesn't just flash by.
