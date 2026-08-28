@@ -67,7 +67,8 @@ var helpText = strings.TrimLeft(`
   Tab / Shift+Tab   Move between fields
   Enter / Space     Activate or commit the focused one
   Escape            Cancel and close
-  h                 Compute file hashes (MD5/SHA-1/SHA-256)
+  h                 Compute file hashes (SHA-256/SHA-1/MD5/SHA-512/
+                    BLAKE2b-512)
 
   With a permission bit focused: r / w / x sets that bit directly,
   Space toggles it, Delete or - clears it.
