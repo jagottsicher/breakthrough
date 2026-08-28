@@ -59,6 +59,30 @@ const (
 // give exact hit-testing and per-row data for free — no more hand-rolled
 // coordinate math (see RowAt, and contrast with Phase 1's since-removed
 // EntryAt, which had to reimplement List's own unexported indexAtPoint).
+// historyEntry is one entry in Panel's own browser-style navigation
+// history (see history/historyIdx below) — either a real directory, or
+// a frozen snapshot of a search-results listing exactly as it stood the
+// moment the panel navigated away from it (see snapshotCurrentEntry),
+// so Back/Forward into it looks like nothing ever happened rather than
+// silently re-running a search that might behave differently by then,
+// or take a while. cursorRow applies to both alike: the row focusRow
+// should land on when returning here, captured the same way whether
+// this entry is a real directory or a search listing.
+type historyEntry struct {
+	path      string // "" marks a search-results snapshot — see isSearch
+	cursorRow int
+
+	// Populated only when isSearch() is true — see
+	// snapshotCurrentEntry/restoreHistoryEntry.
+	searchEntries []searchResultEntry
+	searchStatus  string
+	searchColor   tcell.Color
+}
+
+// isSearch reports whether e is a frozen search-results snapshot rather
+// than a real directory.
+func (e historyEntry) isSearch() bool { return e.path == "" }
+
 type Panel struct {
 	*tview.Flex
 
@@ -110,9 +134,12 @@ type Panel struct {
 	headerSpans []headerSpan
 
 	// history is a browser-style navigation history: history[historyIdx]
-	// is the current path. navigate() appends to it (truncating any
-	// forward entries first); back()/forward() only move historyIdx.
-	history    []string
+	// is the current entry — a real directory or a frozen search-results
+	// snapshot alike (see historyEntry). navigate() and showSearchResults
+	// both append to it (truncating any forward entries first);
+	// back()/forward() only move historyIdx, restoring whichever entry
+	// they land on (see restoreHistoryEntry).
+	history    []historyEntry
 	historyIdx int
 
 	// sortKey/sortDescending, sizeBytes/mtimeUnix, and showHidden are all
@@ -194,14 +221,13 @@ type Panel struct {
 	// searchMode is true — see appendSearchResult/renderSearchEntries.
 	searchEntries []searchResultEntry
 
-	// searchRestorePath/searchRestoreRow are the real directory (and
-	// cursor row within it) the panel was showing right before
-	// showSearchResults first switched it over — restored by
-	// exitSearchResults, so leaving search results behind looks exactly
-	// like nothing ever happened, not a fresh load() of wherever the
-	// panel happened to land.
-	searchRestorePath string
-	searchRestoreRow  int
+	// searchStatusText/searchStatusColor mirror whatever setSearchStatus/
+	// setSearchStatusColor most recently painted onto the header — kept
+	// here too (not just on the widget) so snapshotCurrentEntry has
+	// something to freeze into a historyEntry when the panel navigates
+	// away from search results still in progress or just finished.
+	searchStatusText  string
+	searchStatusColor tcell.Color
 
 	// onSearchEscape reports Escape while searchMode is true and the
 	// table itself has focus (see captureTableKey) — Root wires this to
@@ -549,22 +575,26 @@ func (p *Panel) load(dir string) error {
 // an initially empty search-results listing — see appendSearchResult
 // (called once per streamed result), setSearchStatus (the header's own
 // progress/outcome text), and exitSearchResults/activateRow for the
-// rest of this mode's lifecycle. Safe to call again while search
-// results are already showing (a second search replacing the first):
-// searchRestorePath/Row, captured once on the way in, are left alone
-// on a repeat call so they still point at the real directory from
-// before the *first* search, not the results a second search is about
-// to replace.
+// rest of this mode's lifecycle. Also pushes a new historyEntry for
+// this results listing (see snapshotCurrentEntry/pushHistoryEntry),
+// same as navigate does for a real directory, so Back/Forward can
+// return to it later — per the user's own explicit request that a
+// search "excursion" not be invisible to the navigation history the
+// way it used to be. Safe to call again while search results are
+// already showing (a second search replacing the first): the history
+// push is skipped then, so refining and re-running a search doesn't
+// stack a new entry per attempt — only the *first* transition into
+// search mode is a new "place" to come back to.
 //
 // p.path itself is deliberately never touched here or anywhere else in
-// this mode: every other Panel method (navigate, history, back/
-// forward) stays completely unaware search mode ever happened, and
-// exitSearchResults' own restore ends up being nothing more than a
-// plain, ordinary reload of whatever p.path still is.
+// this mode — navigate/back/forward now know about search mode (see
+// historyEntry.isSearch/restoreHistoryEntry) but load() itself still
+// doesn't need to, so exitSearchResults' own restore stays nothing more
+// than a plain, ordinary reload of whatever p.path still is.
 func (p *Panel) showSearchResults() {
 	if !p.searchMode {
-		p.searchRestorePath = p.path
-		p.searchRestoreRow, _, _ = p.CurrentRowPath() // ok=false (e.g. cursor on "..") just leaves this at its zero value, 0 — a safe fallback
+		p.snapshotCurrentEntry()
+		p.pushHistoryEntry(historyEntry{})
 	}
 	p.searchMode = true
 	p.searchEntries = nil
@@ -646,8 +676,11 @@ func (p *Panel) appendSearchResult(res search.Result) {
 // place of the real breadcrumb path bar search mode otherwise shows
 // there (see buildHeaderSpans/load). No spans: unlike the breadcrumb,
 // none of this text is a click target (see captureHeaderMouse's own
-// searchMode guard).
+// searchMode guard). Also mirrored into searchStatusText, for
+// snapshotCurrentEntry to freeze if the panel navigates away before
+// this search is ever revisited.
 func (p *Panel) setSearchStatus(text string) {
+	p.searchStatusText = text
 	p.header.SetText(text)
 	p.headerSpans = nil
 }
@@ -658,8 +691,10 @@ func (p *Panel) setSearchStatus(text string) {
 // refused before it ever ran (see Root.showSearchError) — the same red
 // a broken symlink already gets in a real listing (see entryColor).
 // Root.runSearch resets it back to theme.Text before a real search
-// begins, in case a previous one left it red.
+// begins, in case a previous one left it red. Also mirrored into
+// searchStatusColor — see setSearchStatus's own doc comment.
 func (p *Panel) setSearchStatusColor(c tcell.Color) {
+	p.searchStatusColor = c
 	p.header.SetTextColor(c)
 }
 
@@ -766,29 +801,24 @@ func sortSearchGroup(entries []searchResultEntry, key sortKey, descending bool) 
 	sort.SliceStable(entries, less)
 }
 
-// exitSearchResults restores the real directory the panel was showing
-// before showSearchResults first switched it over (see
-// searchRestorePath/Row) — a no-op if search results aren't showing at
-// all. Reloads rather than assuming the table's own current state is
-// still meaningful, but that reload is nothing more than an ordinary,
-// already-idiomatic "refresh in place" (the same p.load(p.path) call
-// setSortKey/the filter box/toggleHidden all already use): p.path
-// itself was never touched by search mode (see showSearchResults' own
-// doc comment), so this always resolves to reloading the one directory
-// that was already current, just with search results no longer
-// covering it — restoreRow is applied afterward since load() only
-// resets the cursor to row 0 for a *genuinely new* directory (abs !=
-// p.path — see its own doc comment), which this deliberately never is.
+// exitSearchResults leaves search mode behind, restoring whatever the
+// panel was showing right before showSearchResults switched it over —
+// a no-op if search results aren't showing at all (closeSearch calls
+// this unconditionally, whether or not a search was ever actually run).
+//
+// Simply steps back exactly one history entry (see back): the
+// search-results entry showSearchResults pushed is always the current
+// position by the time this runs, since nothing else can push another
+// entry while searchMode is still true (every other navigation method
+// checks it first — see Panel's own searchMode doc comment) — so this
+// used to need its own separate searchRestorePath/Row bookkeeping, but
+// now that a search listing is itself a real historyEntry (see
+// showSearchResults), leaving it is just an ordinary Back.
 func (p *Panel) exitSearchResults() error {
 	if !p.searchMode {
 		return nil
 	}
-	p.searchMode = false
-	restoreRow := p.searchRestoreRow
-	if err := p.load(p.searchRestorePath); err != nil {
-		return err
-	}
-	p.focusRow(restoreRow)
+	p.back()
 	return nil
 }
 
@@ -1675,30 +1705,129 @@ func (p *Panel) applyDragDelta(start, from, to int) {
 	}
 }
 
-// navigate is load plus history bookkeeping: on success it records the
-// new path as the current history entry, discarding any "forward" entries
-// beyond where we were — the same behavior a browser's address bar has.
-// Every user-initiated jump (opening a directory, a breadcrumb click, the
-// Home button, submitting the edit field) goes through this; back() and
-// forward() call load() directly instead, since they must not themselves
-// create new history entries.
-func (p *Panel) navigate(dir string) error {
-	if err := p.load(dir); err != nil {
-		return err
+// currentRow returns the table's own current cursor row (see
+// tview.Table.GetSelection) — an opaque number here, never re-resolved
+// against a row's own identity, used purely to freeze and later restore
+// where the cursor was (see snapshotCurrentEntry/restoreHistoryEntry).
+func (p *Panel) currentRow() int {
+	row, _ := p.table.GetSelection()
+	return row
+}
+
+// snapshotCurrentEntry freezes whatever the panel is showing right now
+// into history[historyIdx] — the cursor row always, plus (see
+// historyEntry.isSearch) a full copy of the current search results and
+// status if that's what this entry actually is, so navigating back to
+// it later (see restoreHistoryEntry) restores it exactly rather than a
+// plain reload silently losing the cursor, or a search's own results
+// entirely. A no-op before any history entry exists yet.
+//
+// Checked against history[historyIdx].isSearch(), not the live
+// searchMode flag: activateRow's own searchMode branch already flips
+// searchMode to false *before* calling navigate (which is what
+// eventually calls this), so relying on the live flag here would miss
+// capturing the very results being left — the history entry's own
+// recorded type is what actually matters.
+func (p *Panel) snapshotCurrentEntry() {
+	if len(p.history) == 0 {
+		return
+	}
+	e := &p.history[p.historyIdx]
+	e.cursorRow = p.currentRow()
+	if e.isSearch() {
+		e.searchEntries = append([]searchResultEntry(nil), p.searchEntries...)
+		e.searchStatus = p.searchStatusText
+		e.searchColor = p.searchStatusColor
+	}
+}
+
+// pushHistoryEntry appends entry as the new current position, truncating
+// any "forward" entries beyond where we were — the same behavior a
+// browser's address bar has. Bootstraps history from scratch if this is
+// the very first entry ever (navigate's own original contract: nothing
+// is lost, since there was no other "place" before the first one).
+// Skips the push entirely if entry duplicates whatever's already
+// current — the same real directory again (navigate's own long-standing
+// rule), or search mode already showing (showSearchResults' own "safe
+// to call again" rule, extended to also mean no duplicate history entry
+// per repeat/refined search).
+func (p *Panel) pushHistoryEntry(entry historyEntry) {
+	if len(p.history) == 0 {
+		p.history = []historyEntry{entry}
+		p.historyIdx = 0
+		return
 	}
 
-	if len(p.history) == 0 {
-		p.history = []string{p.path}
-		p.historyIdx = 0
+	current := p.history[p.historyIdx]
+	if current.isSearch() == entry.isSearch() && current.path == entry.path {
+		return
+	}
+
+	p.history = append(p.history[:p.historyIdx+1], entry)
+	p.historyIdx = len(p.history) - 1
+}
+
+// restoreHistoryEntry redisplays entry exactly as historyEntry
+// describes it: a real directory (load, then land on its own
+// cursorRow), or a frozen search-results snapshot (see
+// historyEntry.isSearch) redisplayed as-is — never re-run, since a
+// search might behave differently or take a while by the time anyone
+// comes back to it. Used by back/forward, which — unlike navigate —
+// must not push a new history entry for where they land.
+func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
+	if entry.isSearch() {
+		p.searchMode = true
+		p.searchEntries = append([]searchResultEntry(nil), entry.searchEntries...)
+		p.selected = make(map[string]bool)
+		p.table.Clear()
+		p.buildColumnHeader()
+		p.renderSearchEntries()
+		p.setSearchStatus(entry.searchStatus)
+		p.setSearchStatusColor(entry.searchColor)
+		p.focusRowClamped(entry.cursorRow)
 		return nil
 	}
 
-	if p.history[p.historyIdx] == p.path {
-		return nil // already there; don't push a duplicate entry
+	if err := p.load(entry.path); err != nil {
+		return err
 	}
+	p.focusRowClamped(entry.cursorRow)
+	return nil
+}
 
-	p.history = append(p.history[:p.historyIdx+1], p.path)
-	p.historyIdx = len(p.history) - 1
+// focusRowClamped is focusRow, clamped to the table's own current row
+// range first — a stored cursorRow can point past the end (or, for an
+// empty table, below 0) if whatever it pointed at was deleted, or a
+// re-run search now finds fewer results, between when it was frozen and
+// when it's restored.
+func (p *Panel) focusRowClamped(row int) {
+	if max := p.table.GetRowCount() - 1; row > max {
+		row = max
+	}
+	if row < 0 {
+		row = 0
+	}
+	p.focusRow(row)
+}
+
+// navigate is load plus history bookkeeping: on success it records the
+// new directory as a new historyEntry (see pushHistoryEntry),
+// snapshotting wherever the panel is leaving first (see
+// snapshotCurrentEntry) so returning to it later restores its own
+// cursor row — or, for a search-results entry, its own frozen results —
+// rather than a plain fresh load(). Discards any "forward" entries
+// beyond where we were, the same behavior a browser's address bar has.
+// Every user-initiated jump (opening a directory, a breadcrumb click,
+// the Home button, submitting the edit field, activateRow's own
+// searchMode branch via navigateAndSelect) goes through this; back()
+// and forward() call restoreHistoryEntry directly instead, since they
+// must not themselves push new history entries.
+func (p *Panel) navigate(dir string) error {
+	p.snapshotCurrentEntry()
+	if err := p.load(dir); err != nil {
+		return err
+	}
+	p.pushHistoryEntry(historyEntry{path: p.path})
 	return nil
 }
 
@@ -1733,18 +1862,23 @@ func (p *Panel) reportError(err error) {
 	}
 }
 
-// back steps one entry back in history, if possible.
+// back steps one entry back in history, if possible — a real directory
+// or a frozen search-results snapshot alike (see restoreHistoryEntry).
 //
-// The index only moves once the load has actually succeeded: if the
+// The index only moves once the restore has actually succeeded: if a
 // directory has since been deleted, moving it anyway would leave
 // historyIdx pointing at a path the panel isn't showing, and the next
 // navigate() would then truncate the forward entries from the wrong
-// position — silently dropping a page the user never left.
+// position — silently dropping a page the user never left. Snapshots
+// wherever the panel is leaving first (see snapshotCurrentEntry), the
+// same as navigate — so, unlike before, a subsequent forward() back to
+// here still finds it exactly as it was left, not a fresh reload.
 func (p *Panel) back() {
 	if p.historyIdx <= 0 {
 		return
 	}
-	if err := p.load(p.history[p.historyIdx-1]); err != nil {
+	p.snapshotCurrentEntry()
+	if err := p.restoreHistoryEntry(p.history[p.historyIdx-1]); err != nil {
 		p.reportError(err) // stay put rather than lie about where we are
 		return
 	}
@@ -1752,12 +1886,14 @@ func (p *Panel) back() {
 }
 
 // forward steps one entry forward in history, if possible. As in back(),
-// the index only moves once the load has succeeded.
+// the index only moves once the restore has succeeded, and wherever the
+// panel is leaving is snapshotted first.
 func (p *Panel) forward() {
 	if p.historyIdx >= len(p.history)-1 {
 		return
 	}
-	if err := p.load(p.history[p.historyIdx+1]); err != nil {
+	p.snapshotCurrentEntry()
+	if err := p.restoreHistoryEntry(p.history[p.historyIdx+1]); err != nil {
 		p.reportError(err)
 		return
 	}
@@ -1767,16 +1903,22 @@ func (p *Panel) forward() {
 // previousPath returns the directory navigate() most recently moved
 // away from — one step back in the browser-style history (see
 // back/forward) — for the bash line's own "cd -" (see
-// Root.changeDirectory). Not a true shell OLDPWD toggle (repeated
-// "cd -" walks further back through history rather than swapping
-// between exactly two directories the way a real shell's does), but
-// close enough for what this is actually used for: a quick way back to
-// wherever the panel just was.
+// Root.changeDirectory). false if that entry is a frozen search-results
+// snapshot (see historyEntry.isSearch) rather than a real directory:
+// there's nothing for "cd -" to sensibly land on there. Not a true
+// shell OLDPWD toggle (repeated "cd -" walks further back through
+// history rather than swapping between exactly two directories the way
+// a real shell's does), but close enough for what this is actually used
+// for: a quick way back to wherever the panel just was.
 func (p *Panel) previousPath() (string, bool) {
 	if p.historyIdx <= 0 {
 		return "", false
 	}
-	return p.history[p.historyIdx-1], true
+	prev := p.history[p.historyIdx-1]
+	if prev.isSearch() {
+		return "", false
+	}
+	return prev.path, true
 }
 
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
@@ -1889,7 +2031,10 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// loaded — NewPanel's initial navigate() call sets it and nothing
 		// afterwards ever removes it, so it's a stable record of where
 		// breakthrough started, independent of the OS home directory.
-		p.reportError(p.navigate(p.history[0]))
+		// Always a real directory, never a search snapshot (see
+		// historyEntry.isSearch): nothing can search before ever having
+		// navigated anywhere at all.
+		p.reportError(p.navigate(p.history[0].path))
 	case actionHome:
 		home, err := os.UserHomeDir()
 		if err != nil {
