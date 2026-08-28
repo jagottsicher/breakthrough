@@ -1,8 +1,8 @@
 name: release
 
 # Only a "v*.*.*" tag pushed to main triggers this — main is exclusively
-# for tagged releases (see CLAUDE.md section 3), never a direct commit,
-# so a tag landing there always means "this is the commit to release".
+# for tagged releases by design, never a direct commit, so a tag
+# landing there always means "this is the commit to release".
 on:
   push:
     tags:
