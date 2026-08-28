@@ -78,6 +78,14 @@ terminal.
   didn't already bring the trash back under that share of the
   filesystem it lives on); either one is `0` to disable it. Anything
   actually removed this way is reported once, on the next start.
+  Browsing the trash itself ("Go to Trash"/Trashbin) shows each item's
+  own original path in place of its real on-disk name (a collision-
+  avoidance hash you'd otherwise have to squint past — two files
+  trashed from the very same location, more than once, still stay
+  distinguishable this way) and labels the Modified column "Deletion
+  time" instead — both, like the Modified column always has, respecting
+  the Options overlay's timestamp-vs-formatted toggle and the column's
+  own sort.
 - Sed Replace (`^S`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex

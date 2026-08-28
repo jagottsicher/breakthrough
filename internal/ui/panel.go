@@ -272,6 +272,36 @@ type Panel struct {
 	// results again moments later, because nothing had actually told it
 	// to stop. Left nil the same as onSearchEscape/onOpenSearchResult.
 	onExitSearchResults func()
+
+	// onDescribeRows lets Root override display names and Modified-
+	// column times for the directory load() is about to render, plus
+	// what the Modified column itself should be called while doing so
+	// (see inTrashView below) — wired to Root.describeTrashRows for
+	// browsing the trash's own files/ directory, whose real on-disk
+	// names (a collision-avoidance hash) and mtimes (the file's own
+	// last-edit time, before it was ever trashed) are internal
+	// implementation details, not what a user browsing the trash
+	// actually wants to see — the item's own original path and deletion
+	// time are, per the user's own explicit report that two items
+	// trashed from the very same location, more than once, otherwise
+	// stay indistinguishable. Called once per load(), not once per row
+	// (see load's own doc comment on why). Left nil for a Panel that
+	// doesn't need this (returns a nil map, isTrashDir false, same as
+	// what's returned when this itself is nil).
+	onDescribeRows func(dir string) (descriptions map[string]rowDescription, isTrashDir bool)
+
+	// inTrashView mirrors onDescribeRows' own isTrashDir return from the
+	// most recent load() — buildColumnHeader reads this to label the
+	// Modified column "Deletion time" instead of its usual "Modify time
+	// (mtime)" while it's true.
+	inTrashView bool
+}
+
+// rowDescription overrides one row's own display name and Modified-
+// column time — see Panel.onDescribeRows.
+type rowDescription struct {
+	name    string
+	modTime time.Time
 }
 
 // headerAction identifies what a headerSpan does when clicked.
@@ -531,6 +561,32 @@ func (p *Panel) load(dir string) error {
 	if !p.showHidden {
 		entries = filterHidden(entries)
 	}
+
+	// onDescribeRows overrides (see its own doc comment) apply to
+	// ModTime right here, on entries themselves — before filtering/
+	// sorting run — specifically so sorting by Modified (the "Deletion
+	// time" column while p.describeRows/isTrashDir is true) reflects
+	// what's actually displayed, not the real file's own last-edit time
+	// underneath it. Name is deliberately NOT overridden here (see
+	// addRow below instead): filterByText/applySortPreference operate
+	// on fsops.Entry.Name, which is also what builds each row's own real
+	// path just below — overwriting it here would silently break that
+	// path construction. Sorting by Name for a trash listing therefore
+	// still sorts by the real, hidden on-disk name — a narrow, accepted
+	// limitation rather than a second parallel sort implementation (see
+	// sortSearchEntries's own doc comment for why that path already
+	// costs a dozen-odd duplicated lines elsewhere in this file).
+	var describeRows map[string]rowDescription
+	p.inTrashView = false
+	if p.onDescribeRows != nil {
+		describeRows, p.inTrashView = p.onDescribeRows(abs)
+	}
+	for i, e := range entries {
+		if d, ok := describeRows[filepath.Join(abs, e.Name)]; ok {
+			entries[i].ModTime = d.modTime
+		}
+	}
+
 	newDirectory := abs != p.path
 	if newDirectory {
 		p.filterText = ""
@@ -553,9 +609,14 @@ func (p *Panel) load(dir string) error {
 		row++
 	}
 	for _, e := range entries {
+		entryPath := filepath.Join(abs, e.Name)
+		name := e.Name
+		if d, ok := describeRows[entryPath]; ok {
+			name = d.name
+		}
 		p.addRow(row, rowRef{
-			path:       filepath.Join(abs, e.Name),
-			name:       e.Name,
+			path:       entryPath,
+			name:       name,
 			isDir:      e.IsDir,
 			checkable:  true,
 			entryType:  e.Type,
@@ -1200,7 +1261,11 @@ func (p *Panel) buildColumnHeader() {
 	p.columnHeader.SetCell(0, colSizeSep, p.columnSeparator())
 	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
 	p.columnHeader.SetCell(0, colModifiedSep, p.columnSeparator())
-	p.setColumnHeaderCell(colModified, modColumnWidth, "Modify time (mtime)", sortByModified)
+	modLabel := "Modify time (mtime)"
+	if p.inTrashView {
+		modLabel = "Deletion time" // see onDescribeRows' own doc comment
+	}
+	p.setColumnHeaderCell(colModified, modColumnWidth, modLabel, sortByModified)
 }
 
 // setColumnHeaderCell builds one of columnHeader's fixed-width, right-
