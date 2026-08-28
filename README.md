@@ -57,9 +57,10 @@ terminal.
   menu's "Remove" permanently deletes instead (a file like `rm`, a
   directory recursively like `rm -rf`, empty or not), always behind a
   confirmation dialog with Cancel preselected — a single stray keypress
-  can never confirm it by itself. "Go to Trash" jumps straight into it
-  without needing to know its path; "Restore from Trash" and "Empty
-  Trash" (same confirmation) round it out. Session-scoped by default —
+  can never confirm it by itself. "Go to Trash" (`^B`, or "Trashbin" in
+  the button bar) jumps straight into it without needing to know its
+  path; "Restore from Trash" and "Empty Trash" (same confirmation) round
+  it out. Session-scoped by default —
   lives under `$XDG_RUNTIME_DIR`, gone once the session ends — or
   persistent under `~/.local/share/breakthrough/trash` via
   `trash_persistent = true` in your config; running as root (e.g. via
@@ -104,18 +105,26 @@ terminal.
   guess which programs need one and which don't. Its own output stays on
   screen until you press Escape to return, so it doesn't just flash by.
 - A middle row of nano-style quick-action buttons, always visible right
-  below the command line: Properties (`^P`), Edit (`^E`, opens
+  below the command line, in a fixed order: Help (`F1`), Rename (`F2` —
+  the same key most GUI file managers use for it), Edit (`^E`, opens
   `$VISUAL`/`$EDITOR`, or
   [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
-  own pick if set, on the selected file), Look (`^L`, see below), Rename
-  (`F2` — the same key most GUI file managers use for it), toggle hidden
-  files (`^G`), Search (`^F`, see below), Options (`^O`), Move to Trash
-  (`^T`), Remove (`^R`), and Sed Replace (`^S`) — each also reachable
-  from the context menu, and each still working the same way whichever
-  panel or field currently has focus, except while
-  the command line itself is expanded and needs those same keys for its
-  own editing. Hidden-files/size-format/mtime-format toggles are
-  remembered across restarts.
+  own pick if set, on the selected file), Look (`^L`, see below),
+  Properties (`^P`), Search (`^F`, see below), Sed Replace (`^S`),
+  toggle hidden files (`^G` — labeled Hide or Unhide, whichever it would
+  do next, not whichever state you're currently in), Options (`^O`),
+  Move to Trash (`^T`), Trashbin (`^B`, jumps straight into your own
+  trash without needing to know its path), and Remove (`^R`). Two of
+  these change with where you are: Trash disappears and Trashbin turns
+  into Restore while you're actually browsing the trash itself — moving
+  something already in the trash to the trash again doesn't mean
+  anything, so `^T`/Entf there does a Remove instead, with the exact
+  same confirmation any other Remove has. Each button is also reachable
+  from the context menu, and each still works the same way whichever
+  panel or field currently has focus, except while the command line
+  itself is expanded and needs those same keys for its own editing.
+  Hidden-files/size-format/mtime-format toggles are remembered across
+  restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
   current user, disk and inode usage for the directory on screen, the
   running kernel (`uname -r`), uptime and load average where the
