@@ -323,6 +323,8 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
 		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
 		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+		SHA512: "309ecc489c12d6eb4cc40f50c902f2b4d0ed77ee511a7c7a9bcd3ca86d4cd86f989dd35bc5ff499670da34255b45b0cfd830e81f605dcf7dc5542e93ae9cd76f",
+		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
 	}
 	r.rerenderProperties()
 
@@ -330,8 +332,20 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") {
 		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
-	if !strings.Contains(after, "SHA-256") {
-		t.Errorf("Properties text after computing hashes should label the SHA-256 line, got:\n%s", after)
+	for _, label := range []string{"SHA-256", "SHA-1", "MD5", "SHA-512", "BLAKE2b-512"} {
+		if !strings.Contains(after, label) {
+			t.Errorf("Properties text after computing hashes should label the %s line, got:\n%s", label, after)
+		}
+	}
+	// The user's own requested order: SHA-256, SHA-1, MD5, SHA-512, Blake2.
+	order := []string{"SHA-256", "SHA-1", "MD5", "SHA-512", "BLAKE2b-512"}
+	last := -1
+	for _, label := range order {
+		idx := strings.Index(after, label)
+		if idx < last {
+			t.Errorf("hash lines are out of order: %v, want %s before whatever precedes it", order, label)
+		}
+		last = idx
 	}
 }
 
