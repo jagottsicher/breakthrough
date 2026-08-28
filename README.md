@@ -26,7 +26,11 @@ terminal.
 ## Features
 
 - Panel-based directory browsing: arrow-key and mouse navigation, a
-  clickable path breadcrumb bar with Start/Home/Back/Forward, sortable
+  clickable path breadcrumb bar with Start/Home/Back/Forward — its
+  history covers a trip into search results or the trash exactly the
+  same as a real directory, and Back/Forward into any of them restores
+  the cursor row it was left on, a search's own results included, shown
+  again exactly as they were rather than a live re-run — sortable
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.
