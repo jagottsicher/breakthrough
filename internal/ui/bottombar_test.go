@@ -14,6 +14,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // TestMain isolates every test in this package from whatever the real
@@ -40,8 +41,21 @@ import (
 //     disk. Tests that exercise applyColorScheme's own persistence (the
 //     one thing that writes anywhere here) isolate themselves further via
 //     isolateUserConfigFile.
+//   - $XDG_RUNTIME_DIR/$XDG_DATA_HOME: Root now also prunes the trash by
+//     age/quota at construction (see pruneTrashAtStartup, wired in
+//     NewRoot) — TrashPersistent defaults to true, so without this every
+//     one of this package's hundreds of NewRoot calls, not just the
+//     trash-specific ones, would create and prune
+//     ~/.local/share/breakthrough/trash on whatever real machine runs
+//     `go test`. Pointed at a shared (not per-test) fixed path: safe
+//     because nothing here ever asserts on this directory's own content
+//     — tests that actually do (see newTestRootWithFile) isolate further
+//     with their own t.TempDir() for both variables, taking precedence
+//     for their own duration the same way isolateHistoryFile does above.
 func TestMain(m *testing.M) {
 	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
+	os.Setenv("XDG_RUNTIME_DIR", filepath.Join(os.TempDir(), "breakthrough-test-xdg-runtime"))     //nolint:errcheck
+	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
 
 	loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
 		return config.DefaultSettings(), config.LoadColorSchemes("", ""), nil
@@ -177,80 +191,12 @@ func TestClockTextFormat(t *testing.T) {
 	}
 }
 
-// TestFetchDiskUsageRealFilesystem runs the real df binary against a
-// real, if throwaway, directory — sanity-checking shape (non-negative
-// values, a 0-100 percent) rather than exact numbers, which depend on
-// whatever this machine's own disk state happens to be.
-func TestFetchDiskUsageRealFilesystem(t *testing.T) {
-	requireCommand(t, "df")
-	u, ok := fetchDiskUsage(t.TempDir())
-	if !ok {
-		t.Fatal("fetchDiskUsage should succeed against a real, existing directory")
-	}
-	if u.usedBytes < 0 || u.availBytes < 0 || u.usedInodes < 0 || u.availInodes < 0 {
-		t.Errorf("negative usage: %+v", u)
-	}
-	if u.usePercent < 0 || u.usePercent > 100 || u.inodePercent < 0 || u.inodePercent > 100 {
-		t.Errorf("percent out of [0,100]: %+v", u)
-	}
-}
-
-// TestParseDfDataLine pins the field layout against real df output
-// captured on this machine (GNU df, df -k and df -i) plus a simulated
-// BSD-style wrapped line (Filesystem name on its own line, so the data
-// line itself starts one field short) — parseDfDataLine indexes from
-// the end specifically so that second case still works.
-func TestParseDfDataLine(t *testing.T) {
-	tests := []struct {
-		name        string
-		line        string
-		wantUsed    int64
-		wantAvail   int64
-		wantPercent int
-	}{
-		{
-			name:        "GNU df -k",
-			line:        "/dev/md0       480149504 454345216  1782272  97% /",
-			wantUsed:    454345216,
-			wantAvail:   1782272,
-			wantPercent: 97,
-		},
-		{
-			name:        "GNU df -i",
-			line:        "/dev/md0        30515200 1316665 29198535    5% /",
-			wantUsed:    1316665,
-			wantAvail:   29198535,
-			wantPercent: 5,
-		},
-		{
-			name:        "wrapped Filesystem name (BSD-style, own line above)",
-			line:        "        480149504 454345216  1782272  97% /",
-			wantUsed:    454345216,
-			wantAvail:   1782272,
-			wantPercent: 97,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			used, avail, percent, ok := parseDfDataLine(tt.line)
-			if !ok {
-				t.Fatalf("parseDfDataLine(%q) ok = false, want true", tt.line)
-			}
-			if used != tt.wantUsed || avail != tt.wantAvail || percent != tt.wantPercent {
-				t.Errorf("parseDfDataLine(%q) = (%d, %d, %d), want (%d, %d, %d)",
-					tt.line, used, avail, percent, tt.wantUsed, tt.wantAvail, tt.wantPercent)
-			}
-		})
-	}
-}
-
-func TestParseDfDataLineMalformed(t *testing.T) {
-	for _, line := range []string{"", "too few fields", "not numbers at all here really"} {
-		if _, _, _, ok := parseDfDataLine(line); ok {
-			t.Errorf("parseDfDataLine(%q) ok = true, want false", line)
-		}
-	}
-}
+// FetchDiskUsage/parseDfDataLine themselves now live in internal/fsops
+// (see diskusage.go/diskusage_test.go there) — moved once PruneTrash
+// needed the same "how big is this filesystem" logic the status bar
+// already had, rather than duplicating it. What's left here is purely
+// the UI-side formatting (diskUsageText/inodeUsageText/
+// diskUsageWarnColor below) built on top of fsops.DiskUsage.
 
 func TestDiskUsageWarnColor(t *testing.T) {
 	tests := []struct {
@@ -300,7 +246,7 @@ func TestHumanCount(t *testing.T) {
 }
 
 func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
-	u := diskUsage{usedBytes: 1024, availBytes: 2048, usedInodes: 10, availInodes: 20, usePercent: 50, inodePercent: 50}
+	u := fsops.DiskUsage{UsedBytes: 1024, AvailBytes: 2048, UsedInodes: 10, AvailInodes: 20, UsePercent: 50, InodePercent: 50}
 	if got := diskUsageText(u); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
 		t.Errorf("diskUsageText(%+v) = %q, want it labeled with \"Disk\"/\"used\"/\"free\"", u, got)
 	}
@@ -567,6 +513,7 @@ func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
 func TestCaptureButtonBarMouseTrashClickMovesFileToTrash(t *testing.T) {
 	dir := fixtureDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {

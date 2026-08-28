@@ -172,9 +172,64 @@ func TestLoadParsesTrashPersistentKey(t *testing.T) {
 	}
 }
 
-func TestDefaultSettingsTrashIsSessionScoped(t *testing.T) {
-	if got := DefaultSettings().TrashPersistent; got {
-		t.Errorf("DefaultSettings().TrashPersistent = %v, want false (session-scoped by default)", got)
+func TestDefaultSettingsTrashIsPersistent(t *testing.T) {
+	if got := DefaultSettings().TrashPersistent; !got {
+		t.Errorf("DefaultSettings().TrashPersistent = %v, want true (persistent by default, pruned by age/quota — see TrashMaxAgeDays/TrashQuotaPercent)", got)
+	}
+}
+
+func TestLoadParsesTrashPersistentFalseOptsIntoSessionScoped(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "trash_persistent = false\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.TrashPersistent {
+		t.Error("TrashPersistent = true, want false — explicit opt-out of the persistent default should still work")
+	}
+}
+
+func TestDefaultSettingsTrashMaxAgeDaysAndQuotaPercent(t *testing.T) {
+	s := DefaultSettings()
+	if s.TrashMaxAgeDays != 30 {
+		t.Errorf("DefaultSettings().TrashMaxAgeDays = %d, want 30", s.TrashMaxAgeDays)
+	}
+	if s.TrashQuotaPercent != 10 {
+		t.Errorf("DefaultSettings().TrashQuotaPercent = %d, want 10", s.TrashQuotaPercent)
+	}
+}
+
+func TestLoadParsesTrashMaxAgeDaysAndQuotaPercentKeys(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "trash_max_age_days = 7\ntrash_quota_percent = 25\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.TrashMaxAgeDays != 7 {
+		t.Errorf("TrashMaxAgeDays = %d, want 7", s.TrashMaxAgeDays)
+	}
+	if s.TrashQuotaPercent != 25 {
+		t.Errorf("TrashQuotaPercent = %d, want 25", s.TrashQuotaPercent)
+	}
+}
+
+func TestLoadRejectsNonIntegerTrashMaxAgeDays(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "trash_max_age_days = not-a-number\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) == 0 {
+		t.Error("warnings = none, want one for the malformed value")
+	}
+	if s.TrashMaxAgeDays != 30 {
+		t.Errorf("TrashMaxAgeDays after a rejected value = %d, want the default (30) left untouched", s.TrashMaxAgeDays)
 	}
 }
 

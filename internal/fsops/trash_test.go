@@ -4,12 +4,27 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+// backdateTrashItem rewrites id's own deleted_at record in trashDir's
+// info/ sidecar directly — the same low-level path writeTrashInfo
+// itself uses — so a test can simulate an item trashed long ago without
+// needing to fake the clock MoveToTrash itself always reads from.
+func backdateTrashItem(t *testing.T, trashDir, id string, age time.Duration) {
+	t.Helper()
+	deletedAt := time.Now().Add(-age).UTC().Format(time.RFC3339Nano)
+	if err := config.SetKey(trashInfoPath(trashDir, id), "deleted_at", deletedAt); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -272,5 +287,145 @@ func TestCountEntries(t *testing.T) {
 	}
 	if count != 3 { // "top.txt", "sub", "sub/nested.txt"
 		t.Fatalf("CountEntries(project) = %d, want 3", count)
+	}
+}
+
+func TestPruneTrashRemovesItemsOlderThanMaxAge(t *testing.T) {
+	srcDir := t.TempDir()
+	trashDir := filepath.Join(t.TempDir(), "trash")
+	oldFile := filepath.Join(srcDir, "old.txt")
+	newFile := filepath.Join(srcDir, "new.txt")
+	mustWriteFile(t, oldFile, "old")
+	mustWriteFile(t, newFile, "new")
+
+	if err := MoveToTrash(oldFile, trashDir); err != nil {
+		t.Fatalf("MoveToTrash(old): %v", err)
+	}
+	if err := MoveToTrash(newFile, trashDir); err != nil {
+		t.Fatalf("MoveToTrash(new): %v", err)
+	}
+	items, err := ListTrash(trashDir)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("setup ListTrash = %+v, %v, want 2 items", items, err)
+	}
+	backdateTrashItem(t, trashDir, items[0].ID, 40*24*time.Hour)
+
+	result, err := PruneTrash(trashDir, PruneTrashOptions{MaxAge: 30 * 24 * time.Hour})
+	if err != nil {
+		t.Fatalf("PruneTrash: %v", err)
+	}
+	if result.RemovedByAge != 1 || result.RemovedByQuota != 0 {
+		t.Fatalf("PruneTrash result = %+v, want {RemovedByAge:1, RemovedByQuota:0}", result)
+	}
+
+	remaining, err := ListTrash(trashDir)
+	if err != nil || len(remaining) != 1 || remaining[0].OriginalPath != newFile {
+		t.Fatalf("ListTrash after PruneTrash = %+v, %v, want only %s left", remaining, err, newFile)
+	}
+}
+
+func TestPruneTrashZeroMaxAgeDisablesAgePruning(t *testing.T) {
+	srcDir := t.TempDir()
+	trashDir := filepath.Join(t.TempDir(), "trash")
+	f := filepath.Join(srcDir, "ancient.txt")
+	mustWriteFile(t, f, "x")
+	if err := MoveToTrash(f, trashDir); err != nil {
+		t.Fatal(err)
+	}
+	items, err := ListTrash(trashDir)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("setup ListTrash = %+v, %v", items, err)
+	}
+	backdateTrashItem(t, trashDir, items[0].ID, 1000*24*time.Hour)
+
+	result, err := PruneTrash(trashDir, PruneTrashOptions{MaxAge: 0})
+	if err != nil {
+		t.Fatalf("PruneTrash: %v", err)
+	}
+	if result.Removed() != 0 {
+		t.Fatalf("PruneTrash with MaxAge=0 removed %d item(s), want 0 (age pruning disabled)", result.Removed())
+	}
+}
+
+func TestPruneTrashQuotaRemovesOldestFirstUntilUnderQuota(t *testing.T) {
+	srcDir := t.TempDir()
+	trashDir := filepath.Join(t.TempDir(), "trash")
+
+	// Three 10-byte files, trashed in order — ListTrash's own
+	// oldest-first ordering makes which two get removed deterministic.
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		f := filepath.Join(srcDir, name)
+		mustWriteFile(t, f, "0123456789")
+		if err := MoveToTrash(f, trashDir); err != nil {
+			t.Fatalf("MoveToTrash(%s): %v", name, err)
+		}
+	}
+
+	// A simulated 100-byte filesystem: a 10% quota is 10 bytes, one
+	// file's worth — 30 bytes of trash needs exactly two removed (a.txt,
+	// then b.txt) to get back under it.
+	original := fetchDiskUsageForQuota
+	fetchDiskUsageForQuota = func(string) (DiskUsage, bool) {
+		return DiskUsage{UsedBytes: 90, AvailBytes: 10}, true
+	}
+	t.Cleanup(func() { fetchDiskUsageForQuota = original })
+
+	result, err := PruneTrash(trashDir, PruneTrashOptions{QuotaPercent: 10})
+	if err != nil {
+		t.Fatalf("PruneTrash: %v", err)
+	}
+	if result.RemovedByQuota != 2 || result.RemovedByAge != 0 {
+		t.Fatalf("PruneTrash result = %+v, want {RemovedByAge:0, RemovedByQuota:2}", result)
+	}
+
+	remaining, err := ListTrash(trashDir)
+	if err != nil || len(remaining) != 1 || remaining[0].OriginalPath != filepath.Join(srcDir, "c.txt") {
+		t.Fatalf("ListTrash after quota prune = %+v, %v, want only c.txt (newest) left", remaining, err)
+	}
+}
+
+func TestPruneTrashZeroQuotaPercentDisablesQuotaPruning(t *testing.T) {
+	srcDir := t.TempDir()
+	trashDir := filepath.Join(t.TempDir(), "trash")
+	f := filepath.Join(srcDir, "big.txt")
+	mustWriteFile(t, f, "0123456789")
+	if err := MoveToTrash(f, trashDir); err != nil {
+		t.Fatal(err)
+	}
+
+	original := fetchDiskUsageForQuota
+	fetchDiskUsageForQuota = func(string) (DiskUsage, bool) {
+		return DiskUsage{UsedBytes: 99, AvailBytes: 1}, true // 1% total — the trash alone is already "over" any nonzero quota
+	}
+	t.Cleanup(func() { fetchDiskUsageForQuota = original })
+
+	result, err := PruneTrash(trashDir, PruneTrashOptions{QuotaPercent: 0})
+	if err != nil {
+		t.Fatalf("PruneTrash: %v", err)
+	}
+	if result.Removed() != 0 {
+		t.Fatalf("PruneTrash with QuotaPercent=0 removed %d item(s), want 0 (quota pruning disabled)", result.Removed())
+	}
+}
+
+func TestPruneTrashQuotaSkippedWhenDiskUsageUnavailable(t *testing.T) {
+	srcDir := t.TempDir()
+	trashDir := filepath.Join(t.TempDir(), "trash")
+	f := filepath.Join(srcDir, "a.txt")
+	mustWriteFile(t, f, "x")
+	if err := MoveToTrash(f, trashDir); err != nil {
+		t.Fatal(err)
+	}
+
+	original := fetchDiskUsageForQuota
+	fetchDiskUsageForQuota = func(string) (DiskUsage, bool) { return DiskUsage{}, false } // e.g. df not on $PATH
+	t.Cleanup(func() { fetchDiskUsageForQuota = original })
+
+	result, err := PruneTrash(trashDir, PruneTrashOptions{QuotaPercent: 10})
+	if err != nil {
+		t.Fatalf("PruneTrash: %v, want nil — an unavailable quota check degrades rather than fails", err)
+	}
+	if result.Removed() != 0 {
+		t.Fatalf("PruneTrash removed %d item(s) despite no way to check quota, want 0", result.Removed())
 	}
 }

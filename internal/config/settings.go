@@ -88,17 +88,33 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     Load itself rejecting it).
 //   - trash_persistent: whether "Move to Trash" (see internal/fsops'
 //     MoveToTrash and internal/session's TrashDir) uses the persistent,
-//     user-area trash (true) or the session-scoped one under
-//     $XDG_RUNTIME_DIR that disappears once breakthrough's session ends
-//     (false, the default).
+//     user-area trash (true, the default) or the session-scoped one
+//     under $XDG_RUNTIME_DIR that disappears once breakthrough's
+//     session ends (false) — persistent by default specifically so a
+//     file trashed today is still there tomorrow even across a login
+//     session boundary, kept from growing forever by trash_max_age_days/
+//     trash_quota_percent below rather than by disappearing with the
+//     session itself.
+//   - trash_max_age_days: how many days a trashed item is kept before
+//     PruneTrash (see internal/fsops, run once at startup — internal/
+//     ui's pruneTrashAtStartup) removes it unconditionally, regardless
+//     of free space. 30 by default. 0 disables age-based pruning
+//     entirely.
+//   - trash_quota_percent: the trash's own on-disk size is kept at or
+//     under this percentage of the filesystem it lives on — a backstop
+//     PruneTrash applies, oldest item first, only if trash_max_age_days
+//     alone didn't already bring it back under quota. 10 by default. 0
+//     disables quota-based pruning entirely.
 type Settings struct {
-	ColorScheme     string
-	Language        string
-	ShowHidden      bool
-	SizeBytes       bool
-	MtimeUnix       bool
-	Pager           string
-	TrashPersistent bool
+	ColorScheme       string
+	Language          string
+	ShowHidden        bool
+	SizeBytes         bool
+	MtimeUnix         bool
+	Pager             string
+	TrashPersistent   bool
+	TrashMaxAgeDays   int
+	TrashQuotaPercent int
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -108,21 +124,23 @@ type Settings struct {
 // identically to before this existed.
 func DefaultSettings() Settings {
 	return Settings{
-		ColorScheme:     "default",
-		Language:        "en",
-		ShowHidden:      true,
-		SizeBytes:       false,
-		MtimeUnix:       false,
-		Pager:           "builtin",
-		TrashPersistent: false,
+		ColorScheme:       "default",
+		Language:          "en",
+		ShowHidden:        true,
+		SizeBytes:         false,
+		MtimeUnix:         false,
+		Pager:             "builtin",
+		TrashPersistent:   true,
+		TrashMaxAgeDays:   30,
+		TrashQuotaPercent: 10,
 	}
 }
 
 // apply sets the one field key names to value, returning an error
 // (without applying anything) if key isn't recognized at all, or if a
-// boolean key's value isn't one strconv.ParseBool understands — Load
-// turns either into a warning rather than silently ignoring a typo'd
-// key or a malformed value.
+// boolean/integer key's value isn't one strconv.ParseBool/Atoi
+// understands — Load turns either into a warning rather than silently
+// ignoring a typo'd key or a malformed value.
 func (s *Settings) apply(key, value string) error {
 	parseBool := func(dst *bool) error {
 		b, err := strconv.ParseBool(value)
@@ -130,6 +148,14 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid boolean for %q: %q", key, value)
 		}
 		*dst = b
+		return nil
+	}
+	parseInt := func(dst *int) error {
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid integer for %q: %q", key, value)
+		}
+		*dst = n
 		return nil
 	}
 	switch key {
@@ -147,6 +173,10 @@ func (s *Settings) apply(key, value string) error {
 		s.Pager = value
 	case "trash_persistent":
 		return parseBool(&s.TrashPersistent)
+	case "trash_max_age_days":
+		return parseInt(&s.TrashMaxAgeDays)
+	case "trash_quota_percent":
+		return parseInt(&s.TrashQuotaPercent)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

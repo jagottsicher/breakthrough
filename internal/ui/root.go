@@ -792,8 +792,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
 
+	// Both of these can have something to say, and both go through the
+	// same showError overlay — collected into one notice rather than
+	// risking the second call silently overwriting the first before
+	// anything's even been drawn (see pruneTrashAtStartup's own doc
+	// comment).
+	var startupNotices []string
 	if len(configWarnings) > 0 {
-		r.showError(fmt.Errorf("config: %s", strings.Join(configWarnings, "; ")))
+		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
+	}
+	if notice := r.pruneTrashAtStartup(); notice != "" {
+		startupNotices = append(startupNotices, notice)
+	}
+	if len(startupNotices) > 0 {
+		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
 	}
 
 	return r, nil
