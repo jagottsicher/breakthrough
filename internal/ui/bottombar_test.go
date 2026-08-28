@@ -375,17 +375,18 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	runes := []rune(text)
 
 	wantActions := map[buttonBarAction]string{
-		buttonActionProperties:   "^P Properties",
+		buttonActionHelp:         "F1 Help",
+		buttonActionRename:       "F2 Rename",
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
-		buttonActionRename:       "F2 Rename",
-		buttonActionToggleHidden: "^G Hide/Unhide",
+		buttonActionProperties:   "^P Properties",
 		buttonActionSearch:       "^F Find",
-		buttonActionOptions:      "^O Options",
-		buttonActionHelp:         "F1 Help",
-		buttonActionTrash:        "^T Trash",
-		buttonActionRemove:       "^R Remove",
 		buttonActionSed:          "^S Sed",
+		buttonActionToggleHidden: "^G Hide", // ShowHidden defaults to true — see config.DefaultSettings
+		buttonActionOptions:      "^O Options",
+		buttonActionTrash:        "^T Trash",
+		buttonActionTrashbin:     "^B Trashbin", // not inside the trash — see TestButtonBarSwapsTrashbinForRestoreInsideTrash for that state
+		buttonActionRemove:       "^R Remove",
 	}
 	found := map[buttonBarAction]bool{}
 	for _, s := range spans {
@@ -406,6 +407,78 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		if !found[action] {
 			t.Errorf("no span found for action %v", action)
 		}
+	}
+}
+
+// buttonLabelFor returns the label currently rendered for action, read
+// from the live r.buttonBarSpans/r.buttonBar (see buttonBarSpanFor
+// below) rather than calling buildButtonBar fresh — so this also pins
+// that refreshButtonBar actually pushed a rebuilt bar into both fields
+// after whatever state change the caller just made, not only that
+// buildButtonBar would compute the right thing in isolation. false if
+// action isn't showing at all right now.
+func buttonLabelFor(r *Root, action buttonBarAction) (label string, present bool) {
+	span, ok := buttonBarSpanFor(r, action)
+	if !ok {
+		return "", false
+	}
+	runes := []rune(r.buttonBar.GetText(true))
+	return string(runes[span.startCol:span.endCol]), true
+}
+
+// TestButtonBarHideUnhideLabelTracksShowHidden pins the one button whose
+// own label is no longer fixed (see buildButtonBar's own doc comment):
+// it names whichever action clicking it performs next, the same
+// direction hiddenToggleLabel already uses for the context menu's own
+// equivalent — "Hide" while dotfiles are shown, "Unhide" while they're
+// not.
+func TestButtonBarHideUnhideLabelTracksShowHidden(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	// ShowHidden defaults to true — see config.DefaultSettings.
+	if got, ok := buttonLabelFor(r, buttonActionToggleHidden); !ok || got != "^G Hide" {
+		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, "^G Hide")
+	}
+
+	r.toggleHidden()
+
+	if got, ok := buttonLabelFor(r, buttonActionToggleHidden); !ok || got != "^G Unhide" {
+		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, "^G Unhide")
+	}
+}
+
+// TestButtonBarSwapsTrashbinForRestoreInsideTrash pins the conditional-
+// visibility half of buildButtonBar (see its own doc comment and
+// Root.inTrash): once the panel is browsing the trash itself, Trashbin
+// disappears in favor of Restore in the same slot, and Trash disappears
+// entirely — there's nothing left to move an already-trashed item to
+// (see moveSelectionToTrash's own redirect for the shortcut/context-menu
+// side of that same rule).
+func TestButtonBarSwapsTrashbinForRestoreInsideTrash(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+
+	if _, ok := buttonLabelFor(r, buttonActionTrashbin); !ok {
+		t.Fatal("setup: Trashbin should be showing before ever entering the trash")
+	}
+	if _, ok := buttonLabelFor(r, buttonActionTrash); !ok {
+		t.Fatal("setup: Trash should be showing before ever entering the trash")
+	}
+
+	r.moveSelectionToTrash()
+	r.openTrash()
+
+	if _, ok := buttonLabelFor(r, buttonActionTrashbin); ok {
+		t.Error("Trashbin should disappear once inside the trash")
+	}
+	if _, ok := buttonLabelFor(r, buttonActionTrash); ok {
+		t.Error("Trash should disappear once inside the trash")
+	}
+	if label, ok := buttonLabelFor(r, buttonActionRestore); !ok || label != "^B Restore" {
+		t.Errorf("Restore = %q, present=%v, want %q showing in Trashbin's own slot", label, ok, "^B Restore")
 	}
 }
 
