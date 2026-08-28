@@ -131,7 +131,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	write("  ")
 	button("^R Rename", buttonActionRename)
 	write("  ")
-	button("^G Hidden", buttonActionToggleHidden)
+	button("^G Hide/Unhide", buttonActionToggleHidden)
 	write("  ")
 	button("^F Find", buttonActionSearch)
 	write("  ")
