@@ -326,6 +326,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
 		buttonActionProperties:   "^P Properties",
+		buttonActionDetails:      "^D Details",
 		buttonActionSearch:       "^F Find",
 		buttonActionSed:          "^S Sed",
 		buttonActionToggleHidden: "^G Hide", // ShowHidden defaults to true — see config.DefaultSettings

@@ -27,8 +27,6 @@ var helpText = strings.TrimLeft(`
 [::b]Global — work anywhere, even inside another dialog[::-]
 
   F1              This help
-  F3              Toggle the info sidebar (empty for now — a work in
-                  progress, key subject to change)
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
@@ -42,6 +40,8 @@ var helpText = strings.TrimLeft(`
   Ctrl+F          Find
   Ctrl+O          Options
   Ctrl+P          Properties
+  Ctrl+D          Toggle the Details sidebar (empty for now — a work
+                  in progress, key subject to change)
   Ctrl+S          Sed Replace on the selected file(s)
   Ctrl+B          Go to Trash — browse it directly
   Ctrl+T / Delete Move the selection to Trash (reversible); already
