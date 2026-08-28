@@ -20,11 +20,11 @@ const dirPickerWidth, dirPickerHeight = 60, 20
 // showing the path currently being browsed, a scrollable list of its
 // subdirectories (see loadDirPicker), and a Select/Cancel button row —
 // its own navigation state, entirely separate from the main panel (see
-// dirPickerPath), the same "eigener Navigationszustand" CLAUDE.md's own
-// Copy-to/Move-to design note calls for. Built once and reused by every
-// caller (openDirPicker resets its content each time), the same
-// "one shared, repopulated widget" shape r.picker (owner/group) and
-// r.optionsList already use.
+// dirPickerPath) — by design: Copy-to/Move-to needs its own destination
+// browsing state, not shared with the main panel's. Built once and
+// reused by every caller (openDirPicker resets its content each time),
+// the same "one shared, repopulated widget" shape r.picker (owner/
+// group) and r.optionsList already use.
 func (r *Root) newDirPicker() *tview.Flex {
 	r.dirPickerHeader = tview.NewTextView().SetDynamicColors(true)
 	r.dirPickerHeader.SetBorderPadding(0, 0, 1, 1)

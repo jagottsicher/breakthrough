@@ -10,8 +10,8 @@ import (
 // default (see Load) — generous enough for the overwhelming majority of
 // source files, config files, and diffs to show in full, while still
 // keeping a multi-gigabyte log file (a real, common case for this app's
-// own POSIX-focused audience — see CLAUDE.md) from being pulled entirely
-// into memory just to preview it. A file larger than this shows its own
+// own POSIX-focused audience) from being pulled entirely into memory
+// just to preview it. A file larger than this shows its own
 // first DefaultPreviewLimit bytes plus a truncation notice (see Load) —
 // internal/ui's separate "Tail -f" action (see runTailFollow) is the way
 // to watch a growing log live instead.
