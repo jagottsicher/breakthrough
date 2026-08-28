@@ -229,6 +229,22 @@ type Panel struct {
 	searchStatusText  string
 	searchStatusColor tcell.Color
 
+	// searchBrowsePath is the real breadcrumb setSearchStatus paints
+	// after the status text itself (see its own doc comment) — a normal,
+	// fully clickable/editable path, independent of p.path (which search
+	// mode leaves frozen throughout — see showSearchResults' own doc
+	// comment), so the user isn't limited to Escape or jumping to a
+	// specific result to leave search results behind, per their own
+	// explicit report. Defaults to p.path when showSearchResults itself
+	// first enters search mode; Root.runSearch/showSearchError then set
+	// it to the search's own actual scope, which they alone know.
+	// searchHeaderOffset is the column setSearchStatus's own breadcrumb
+	// starts at within the header text, so captureHeaderMouse can tell a
+	// click on the status-text prefix (never a path to edit) apart from
+	// one on — or past — the breadcrumb itself.
+	searchBrowsePath   string
+	searchHeaderOffset int
+
 	// onSearchEscape reports Escape while searchMode is true and the
 	// table itself has focus (see captureTableKey) — Root wires this to
 	// reopening the search form, the same "Esc: back to search"
@@ -591,10 +607,17 @@ func (p *Panel) load(dir string) error {
 // historyEntry.isSearch/restoreHistoryEntry) but load() itself still
 // doesn't need to, so exitSearchResults' own restore stays nothing more
 // than a plain, ordinary reload of whatever p.path still is.
+//
+// Defaults searchBrowsePath to p.path — a reasonable fallback, and
+// exactly right for every test that calls this directly without caring
+// about the "continue here" breadcrumb at all. Root.runSearch/
+// showSearchError set it to the search's own actual "Start at" scope
+// right after calling this, since only they know it.
 func (p *Panel) showSearchResults() {
 	if !p.searchMode {
 		p.snapshotCurrentEntry()
 		p.pushHistoryEntry(historyEntry{})
+		p.searchBrowsePath = p.path
 	}
 	p.searchMode = true
 	p.searchEntries = nil
@@ -671,18 +694,42 @@ func (p *Panel) appendSearchResult(res search.Result) {
 	p.renderSearchEntries()
 }
 
-// setSearchStatus paints the header's own status line — the animated
-// "still searching" indicator, then a final "Done — N found" — in
-// place of the real breadcrumb path bar search mode otherwise shows
-// there (see buildHeaderSpans/load). No spans: unlike the breadcrumb,
-// none of this text is a click target (see captureHeaderMouse's own
-// searchMode guard). Also mirrored into searchStatusText, for
+// setSearchStatus paints the header's own two-part display while search
+// results are showing: text itself (the animated "still searching"
+// indicator, then a final "Done — N found") followed by a real,
+// ordinary breadcrumb for searchBrowsePath — the same clickable
+// buttons/path segments a real directory's header shows (see
+// buildHeaderSpans), editable by clicking past it the same way too (see
+// openEdit) — so search mode no longer traps the user between only
+// Escape and jumping to a specific result, per their own explicit
+// report that it did. Any click there is real navigation (see
+// captureHeaderMouse/runHeaderAction) and leaves search mode the moment
+// it actually goes anywhere, the same as activating a result already
+// does.
+//
+// searchHeaderOffset records where the breadcrumb starts within the
+// combined text, so captureHeaderMouse can tell a click on the status
+// prefix (never a path to edit) apart from one on, or past, the
+// breadcrumb itself. Also mirrors text into searchStatusText, for
 // snapshotCurrentEntry to freeze if the panel navigates away before
 // this search is ever revisited.
 func (p *Panel) setSearchStatus(text string) {
 	p.searchStatusText = text
-	p.header.SetText(text)
-	p.headerSpans = nil
+
+	const separator = ", or continue here: "
+	prefix := text + separator
+	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
+
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath)
+	p.header.SetText(prefix + breadcrumbText)
+
+	spans := make([]headerSpan, len(breadcrumbSpans))
+	for i, s := range breadcrumbSpans {
+		s.start += p.searchHeaderOffset
+		s.end += p.searchHeaderOffset
+		spans[i] = s
+	}
+	p.headerSpans = spans
 }
 
 // setSearchStatusColor overrides the header's text color while showing
@@ -1989,14 +2036,6 @@ func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventM
 	if !p.header.InRect(event.Position()) {
 		return action, event
 	}
-	if p.searchMode {
-		// The header shows search status text while searchMode (see
-		// setSearchStatus) — headerSpans is empty throughout, so
-		// without this a click here would fall through to openEdit
-		// below, opening a raw path editor over status text that was
-		// never a real path to begin with.
-		return tview.MouseConsumed, nil
-	}
 
 	if action == tview.MouseLeftClick {
 		x, _ := event.Position()
@@ -2005,9 +2044,13 @@ func (p *Panel) captureHeaderMouse(action tview.MouseAction, event *tcell.EventM
 
 		if span, ok := p.spanAt(col); ok {
 			p.runHeaderAction(span)
-		} else {
+		} else if !p.searchMode || col >= p.searchHeaderOffset {
 			p.openEdit()
 		}
+		// The remaining case — searchMode and col < searchHeaderOffset —
+		// is a click on setSearchStatus's own status-text prefix, before
+		// its "continue here" breadcrumb even starts: never a real path,
+		// so there's nothing here to open an editor over.
 	}
 
 	return tview.MouseConsumed, nil
@@ -2052,12 +2095,28 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 }
 
 // openEdit switches the header to its editable text field, pre-filled
-// with the current path, and moves keyboard focus there.
+// with the current path — searchBrowsePath while search results are
+// showing (see effectiveBrowsePath), since p.path itself stays frozen
+// at wherever the panel was before the search throughout that mode —
+// and moves keyboard focus there.
 func (p *Panel) openEdit() {
 	p.editing = true
-	p.headerEdit.SetText(p.path)
+	p.headerEdit.SetText(p.effectiveBrowsePath())
 	p.headerPages.SwitchToPage(headerEditPage)
 	p.app.SetFocus(p.headerEdit)
+}
+
+// effectiveBrowsePath is whichever path the header's own editable field
+// and relative-path resolution (see resolvePath) should act on right
+// now: searchBrowsePath while search results are showing, p.path
+// otherwise. Two different things while searchMode is true — see
+// showSearchResults' own doc comment on why p.path itself never moves
+// during that mode — one and the same the rest of the time.
+func (p *Panel) effectiveBrowsePath() string {
+	if p.searchMode {
+		return p.searchBrowsePath
+	}
+	return p.path
 }
 
 // closeEdit switches back to the display header and returns focus to the
@@ -2219,9 +2278,11 @@ func (p *Panel) dirCompletions(currentText string) []string {
 // resolvePath turns text typed into the header into an absolute path: a
 // leading "~" expands to the user's home directory (the header has a "~"
 // button doing the same thing, so users reasonably expect it), and a
-// relative path resolves against the directory the panel is currently
-// showing — not the process's working directory, which stops matching
-// what the user sees the moment they navigate anywhere.
+// relative path resolves against effectiveBrowsePath — the directory
+// the panel is currently showing, or searchBrowsePath while search
+// results are showing instead — not the process's working directory,
+// which stops matching what the user sees the moment they navigate
+// anywhere.
 func (p *Panel) resolvePath(input string) string {
 	switch {
 	case input == "~":
@@ -2237,7 +2298,7 @@ func (p *Panel) resolvePath(input string) string {
 	if filepath.IsAbs(input) {
 		return input
 	}
-	return filepath.Join(p.path, input)
+	return filepath.Join(p.effectiveBrowsePath(), input)
 }
 
 // longestCommonPrefix returns the longest prefix shared by all values,
