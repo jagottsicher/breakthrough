@@ -1470,16 +1470,21 @@ func classifyKind(info fsops.Info) string {
 }
 
 // hashLines renders the Properties overlay's hash section: a hint to
-// compute them (see Root.computeHashes) until hashes is non-nil, then the
-// three digests themselves.
+// compute them (see Root.computeHashes) until hashes is non-nil, then
+// the five digests themselves, in the user's own requested order —
+// SHA-256, SHA-1, MD5 (the three the standard library already covered),
+// then SHA-512 and Blake2 (BLAKE2b-512, see fsops.Hashes' own doc
+// comment on where that one actually comes from).
 func hashLines(hashes *fsops.Hashes) string {
 	if hashes == nil {
-		return "Press h or click here to compute MD5 / SHA-1 / SHA-256"
+		return "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512"
 	}
 	return strings.Join([]string{
-		infoField("MD5", hashes.MD5),
-		infoField("SHA-1", hashes.SHA1),
 		infoField("SHA-256", hashes.SHA256),
+		infoField("SHA-1", hashes.SHA1),
+		infoField("MD5", hashes.MD5),
+		infoField("SHA-512", hashes.SHA512),
+		infoField("BLAKE2b-512", hashes.Blake2),
 	}, "\n")
 }
 
