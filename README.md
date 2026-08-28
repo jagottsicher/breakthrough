@@ -4,14 +4,18 @@
 [![CI (macOS)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml)
 
 # breakthrough
-## A window/menu-based TUI file manager for your POSIX-compliant terminal, written in Go.
+## A mouse-and-menu-driven TUI file manager for your POSIX-compliant terminal, built around a real embedded bash shell — written in Go.
 
-breakthrough puts a quasi-windows-like layer — a panel, floating overlays,
-context menus, a bottom bar — over your terminal session, without leaving
-the shell. It's built with [tcell](https://github.com/gdamore/tcell) and
+breakthrough puts classic GUI file-manager idioms — a browsable panel,
+context menus, floating dialogs, clickable breadcrumbs — over a real bash
+session, without ever leaving the shell. It's built with
+[tcell](https://github.com/gdamore/tcell) and
 [tview](https://github.com/rivo/tview); it is not integrated into Bash
-itself. The shell connection stays a thin wrapper (a command line and a
-handful of quick actions), never code integration into Bash.
+itself — no fork, no patch, no hook into Bash's own internals. Its console
+is a first-class citizen all the same: its own history, tab completion
+that sources your aliases and `~/.bashrc`, multi-line scripting, and every
+command running through a real interactive terminal, not a
+reimplementation of one.
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
