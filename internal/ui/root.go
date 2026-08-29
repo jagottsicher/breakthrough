@@ -181,12 +181,20 @@ type Root struct {
 	// but reloaded on every selection change (see refreshDetailsSidebar),
 	// not just once when opened. detailsTarget is "" whenever nothing
 	// meaningfully selected (the ".." row, or an empty listing) — see
-	// loadDetailsTarget. detailsImage is non-nil only once detailsTarget
-	// names a file viewer.Load actually decoded as an image.
-	detailsTarget  string
-	detailsStat    fsops.Info
-	detailsStatErr error
-	detailsImage   *viewer.Result
+	// loadDetailsTarget. detailsImage is non-nil once detailsTarget names
+	// either a file viewer.Load actually decoded as an image, or a PDF
+	// whose first page could be rasterized (see viewer.LoadPDFPage) —
+	// detailsPDFPageCount (>0 only for the latter) is what tells the two
+	// apart wherever that matters (see renderDetailsSidebar). It's set
+	// independently of detailsImage: PDFPageCount can succeed even when
+	// rendering the page image itself fails (no pdftoppm installed).
+	detailsTarget          string
+	detailsStat            fsops.Info
+	detailsStatErr         error
+	detailsImage           *viewer.Result
+	detailsPDFPageCount    int
+	detailsPreviewRowStart int
+	detailsPreviewRowEnd   int
 
 	// detailsMetadataState is "" until fetchDetailsMetadata has run for
 	// the current detailsTarget (see its own doc comment on why that's

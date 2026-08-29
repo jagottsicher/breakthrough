@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -198,14 +199,23 @@ func (r *Root) refreshDetailsSidebar() {
 
 // loadDetailsTarget stats path (""=nothing meaningfully selected, e.g.
 // the ".." row or an otherwise-empty listing) and, for a non-directory
-// it successfully stats, tries loading it as an image too (see
-// viewer.Load) — the shared data-loading half of
+// it successfully stats, tries loading a preview too — an image
+// directly (see viewer.Load), or for a PDF, its own page count (see
+// viewer.PDFPageCount) plus a rasterized first page where that's
+// possible (see viewer.LoadPDFPage) — the shared data-loading half of
 // refreshDetailsSidebar/showDetailsSidebar (see their own doc comments
 // on why one skips a redundant reload and the other never does).
 // Cancels and discards any hash computation and metadata state from
 // whatever the previous target was — both are meaningless for a
 // different file, the same reasoning loadPropertiesTarget already
 // applies for Properties.
+//
+// PDFViewGraphic, not the default PDFViewAuto Look itself starts a PDF
+// with, deliberately: a failure to rasterize should leave detailsImage
+// nil so renderDetailsSidebar falls back to its own "Pages: N" line and
+// a short install hint, not silently show extracted page text crammed
+// into this sidebar's own much narrower width than Look ever has to
+// account for.
 func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.detailsHashes = nil
@@ -215,11 +225,22 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.detailsStat = fsops.Info{}
 	r.detailsStatErr = nil
 	r.detailsImage = nil
+	r.detailsPDFPageCount = 0
 	if path != "" {
 		r.detailsStat, r.detailsStatErr = fsops.Stat(path)
 		if r.detailsStatErr == nil && !isDirish(r.detailsStat) {
-			if result, err := viewer.Load(path, viewer.DefaultPreviewLimit); err == nil && result.Kind == viewer.KindImage {
-				r.detailsImage = &result
+			if result, err := viewer.Load(path, viewer.DefaultPreviewLimit); err == nil {
+				switch result.Kind {
+				case viewer.KindImage:
+					r.detailsImage = &result
+				case viewer.KindPDF:
+					if count, err := viewer.PDFPageCount(path); err == nil {
+						r.detailsPDFPageCount = count
+					}
+					if page, err := viewer.LoadPDFPage(path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
+						r.detailsImage = &page
+					}
+				}
 			}
 		}
 	}
@@ -233,8 +254,12 @@ func (r *Root) loadDetailsTarget(path string) {
 // way an unconstrained preview would. ScaleForTerminal always preserves
 // the image's own aspect ratio within that box (never stretching or
 // cropping — see its own doc comment), so a wide/landscape image simply
-// ends up shorter than this, letterboxed by renderImageHalfBlocks'
-// own centering, not stretched to fill it.
+// ends up shorter than this — renderDetailsSidebar itself only ever
+// passes the scaled image's own real row count to renderImageHalfBlocks,
+// not this function's own maximum, specifically so that "shorter" isn't
+// then padded back out to the full reserved height with blank lines
+// (real, observed bug: a strangely large gap between a mini preview and
+// whatever came right after it, for exactly this reason).
 func (r *Root) detailsImageBoxSize() (width, height int) {
 	_, _, innerWidth, innerHeight := r.detailsSidebar.GetInnerRect()
 	height = innerHeight / 3
@@ -244,16 +269,49 @@ func (r *Root) detailsImageBoxSize() (width, height int) {
 	return innerWidth, height
 }
 
+// detailsFullscreenHint is the preview section's own click-zone hint
+// (image or rasterized PDF page alike) — reuses Ctrl+L, this app's own
+// existing "Look" shortcut, rather than inventing a second one: Look
+// already opens fullscreen for exactly these two Kinds (see
+// showBuiltinLook), and it already works from here unmodified (it
+// reads the panel's own current selection itself, the same as this
+// sidebar's own target — see openLook), so nothing new was needed
+// beyond a click zone routing to it and a line saying so.
+//
+// Deliberately short (18 characters) rather than spelling out "or click
+// here" the way the hash/metadata hints do: a real, observed bug once
+// found the longer wording wrapped at this sidebar's own minimum width
+// (see detailsSidebarMinWidth), silently mis-numbering every row after
+// it — the exact same class of bug already fixed once for hashes and
+// once for Modified. This one's own click-zone is also the whole
+// preview image itself (see renderDetailsSidebar/
+// captureDetailsSidebarMouse), a much bigger and more discoverable
+// target than the text alone, so losing the explicit "click here"
+// wording costs less here than it would in the other two hints.
+const detailsFullscreenHint = "Ctrl+L: fullscreen"
+
 // detailsMetadataHint is the metadata section's own placeholder, shown
 // until fetchDetailsMetadata actually runs for the current target — the
 // same "hint until triggered" shape hashLines already uses for hashes,
 // just naming Ctrl+N instead of Ctrl+K.
-const detailsMetadataHint = "Press Ctrl+N or click here to load metadata (EXIF, etc.)"
+//
+// Deliberately short, for the same reason detailsFullscreenHint is (see
+// its own doc comment): unlike the hash hint, which sits last with
+// nothing after it to mis-number, this one is always followed by the
+// stat block (and often the hash section too) — a real, observed bug
+// once found the original, longer wording of this exact string wrapped
+// at the sidebar's own minimum width, silently pushing both of those
+// down by a row this function's own click-zone bookkeeping never knew
+// to account for.
+const detailsMetadataHint = "Ctrl+N: load metadata"
 
 // detailsMetadataStubMessage is what fetchDetailsMetadata currently
 // shows once triggered — see its own doc comment on why that's a stub
-// rather than real EXIF/format-specific metadata today.
-const detailsMetadataStubMessage = "(metadata loading isn't implemented yet)"
+// rather than real EXIF/format-specific metadata today. Short for the
+// same reason detailsMetadataHint is: this replaces that hint in the
+// exact same row-tracked position, so it's just as capable of
+// mis-numbering everything after it if it wrapped.
+const detailsMetadataStubMessage = "(not implemented yet)"
 
 // fetchDetailsMetadata is Ctrl+N/the metadata hint's click zone's own
 // action — currently a stub: real EXIF/format-specific metadata
@@ -358,22 +416,25 @@ func formatPermissions(mode os.FileMode) string {
 
 // renderDetailsSidebar rebuilds the sidebar's text from whatever
 // loadDetailsTarget last populated (detailsStat/detailsImage/
-// detailsHashes/detailsMetadataState), in the order the user explicitly
-// asked for: an image preview (only for an image target, see
-// detailsImageBoxSize) and its dimensions, then a metadata hint/result
-// (only for an image target — see detailsMetadataHint), then the stat
-// block (see detailsStatLines), and finally the hash section (see
-// hashLines) — omitted entirely for a directory, or a symlink resolving
-// to one, the same as Properties' own isDirish check.
+// detailsPDFPageCount/detailsHashes/detailsMetadataState), in the order
+// the user explicitly asked for: a preview (an image, or a rasterized
+// PDF page — see detailsImageBoxSize) with its own Format/Dimensions or
+// Type/Pages line and a fullscreen hint (see detailsFullscreenHint),
+// then — images only — a metadata hint/result (see detailsMetadataHint),
+// then the stat block (see detailsStatLines), and finally the hash
+// section (see hashLines) — omitted entirely for a directory, or a
+// symlink resolving to one, the same as Properties' own isDirish check.
 //
-// detailsMetaRowStart/End and detailsHashRowStart are (re)computed here,
-// alongside the text they describe, so captureDetailsSidebarMouse's own
-// click routing always matches whatever is actually on screen right
-// now — the same "compute once, right where the content itself is
+// detailsPreviewRowStart/End, detailsMetaRowStart/End, and
+// detailsHashRowStart are (re)computed here, alongside the text they
+// describe, so captureDetailsSidebarMouse's own click routing always
+// matches whatever is actually on screen right now — the same
+// "compute once, right where the content itself is
 // built" approach hashSectionRow already takes in renderProperties,
 // rather than trying to reverse-engineer row numbers separately
 // afterward.
 func (r *Root) renderDetailsSidebar() {
+	r.detailsPreviewRowStart, r.detailsPreviewRowEnd = -1, -1
 	r.detailsMetaRowStart, r.detailsMetaRowEnd = -1, -1
 	r.detailsHashRowStart = -1
 
@@ -406,22 +467,78 @@ func (r *Root) renderDetailsSidebar() {
 		return
 	}
 
-	if r.detailsImage != nil {
-		boxW, boxH := r.detailsImageBoxSize()
-		scaled := viewer.ScaleForTerminal(r.detailsImage.Image, boxW, boxH)
-		writeSection(renderImageHalfBlocks(scaled, boxW, boxH))
+	isPDF := r.detailsPDFPageCount > 0
 
-		bounds := r.detailsImage.Image.Bounds()
-		writeSection(strings.Join([]string{
-			infoField("Format", strings.ToUpper(r.detailsImage.ImageFormat)),
-			infoField("Dimensions", fmt.Sprintf("%d × %d px", bounds.Dx(), bounds.Dy())),
-		}, "\n"))
+	switch {
+	case r.detailsImage != nil:
+		boxW, maxBoxH := r.detailsImageBoxSize()
+		scaled := viewer.ScaleForTerminal(r.detailsImage.Image, boxW, maxBoxH)
 
-		meta := r.detailsMetadataState
-		if meta == "" {
-			meta = detailsMetadataHint
+		// The scaled image's own real row count, not maxBoxH — passing
+		// the full reserved maximum here would have renderImageHalfBlocks
+		// pad a shorter image back out with blank lines to fill it (its
+		// own vertical-centering logic, meant for a box it's actually
+		// supposed to fill) — see detailsImageBoxSize's own doc comment
+		// on the real, observed gap this caused.
+		actualRows := (scaled.Bounds().Dy() + 1) / 2
+		if actualRows < 1 {
+			actualRows = 1
 		}
-		r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
+		// TrimSuffix: renderImageHalfBlocks terminates every row with its
+		// own "\n", including the last one — never a problem for its only
+		// other caller (Look's own showBuiltinLook), which never
+		// concatenates anything else after an image in the same text, so
+		// nothing was ever there to expose it. writeSection assumes a
+		// section has no trailing newline of its own (true of every other
+		// section here, all built via strings.Join without one) — without
+		// this trim, that extra "\n" combines with writeSection's own
+		// "\n\n" separator into two blank lines instead of one, a real,
+		// observed gap, and silently overcounts this section's own row
+		// range by one to boot.
+		preview := strings.TrimSuffix(renderImageHalfBlocks(scaled, boxW, actualRows), "\n")
+		previewStart, _ := writeSection(preview)
+
+		var infoLines []string
+		if isPDF {
+			infoLines = []string{
+				infoField("Type", "PDF"),
+				infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
+			}
+		} else {
+			bounds := r.detailsImage.Image.Bounds()
+			infoLines = []string{
+				infoField("Format", strings.ToUpper(r.detailsImage.ImageFormat)),
+				infoField("Dimensions", fmt.Sprintf("%d × %d px", bounds.Dx(), bounds.Dy())),
+			}
+		}
+		infoLines = append(infoLines, detailsFullscreenHint)
+		_, previewEnd := writeSection(strings.Join(infoLines, "\n"))
+		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
+
+		if !isPDF {
+			// EXIF-style metadata is an image-specific concept (see
+			// fetchDetailsMetadata's own doc comment) — a PDF has its own,
+			// different kind of metadata (Title/Author/Creator, ...), not
+			// built here yet, so no hint for it is shown on one.
+			meta := r.detailsMetadataState
+			if meta == "" {
+				meta = detailsMetadataHint
+			}
+			r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
+		}
+
+	case isPDF:
+		// PDFPageCount succeeded but rasterizing page 1 didn't (most
+		// likely: pdftoppm/poppler-utils isn't installed — see
+		// loadDetailsTarget) — still worth naming the page count, with a
+		// short note on how to get an actual preview, rather than
+		// silently showing nothing at all where the image branch above
+		// would have been.
+		writeSection(strings.Join([]string{
+			infoField("Type", "PDF"),
+			infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
+			"(install poppler-utils for a page preview)",
+		}, "\n"))
 	}
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))
@@ -555,9 +672,10 @@ func (r *Root) ComputeHashesShortcut() {
 // is still there in the panel underneath, which shares that same screen
 // space while the sidebar floats over it. A left-click additionally
 // routes to whichever click zone it landed in (see renderDetailsSidebar
-// for how detailsMetaRowStart/End/detailsHashRowStart get set) — the
-// same row-range approach Properties' own hashesMouseCapture already
-// uses, just against this sidebar's own geometry instead.
+// for how detailsPreviewRowStart/End, detailsMetaRowStart/End, and
+// detailsHashRowStart get set) — the same row-range approach Properties'
+// own hashesMouseCapture already uses, just against this sidebar's own
+// geometry instead.
 func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	x, y := event.Position()
 	if !primitiveContains(r.detailsSidebar, x, y) {
@@ -568,6 +686,8 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 		_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
 		row := y - rectY
 		switch {
+		case r.detailsPreviewRowStart >= 0 && row >= r.detailsPreviewRowStart && row <= r.detailsPreviewRowEnd:
+			r.lookCurrentEntry()
 		case r.detailsMetaRowStart >= 0 && row >= r.detailsMetaRowStart && row <= r.detailsMetaRowEnd:
 			r.fetchDetailsMetadata()
 		case r.detailsHashRowStart >= 0 && row >= r.detailsHashRowStart:
