@@ -168,6 +168,59 @@ type Root struct {
 	helpView    *tview.TextView // Help overlay — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
+	// detailsSidebar is the right-hand Details layer toggled by Ctrl+D
+	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
+	// currently shown; unlike every overlay above it, it's deliberately
+	// not modal (see newDetailsSidebarView's own doc comment), so it
+	// can't reuse activePage/overlayStack the way those do.
+	detailsSidebar        *tview.TextView
+	detailsSidebarVisible bool
+
+	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
+	// currently showing — mirrors propertiesTarget/propertiesStat above,
+	// but reloaded on every selection change (see refreshDetailsSidebar),
+	// not just once when opened. detailsTarget is "" whenever nothing
+	// meaningfully selected (the ".." row, or an empty listing) — see
+	// loadDetailsTarget. detailsImage is non-nil once detailsTarget names
+	// either a file viewer.Load actually decoded as an image, or a PDF
+	// whose first page could be rasterized (see viewer.LoadPDFPage) —
+	// detailsPDFPageCount (>0 only for the latter) is what tells the two
+	// apart wherever that matters (see renderDetailsSidebar). It's set
+	// independently of detailsImage: PDFPageCount can succeed even when
+	// rendering the page image itself fails (no pdftoppm installed).
+	detailsTarget          string
+	detailsStat            fsops.Info
+	detailsStatErr         error
+	detailsImage           *viewer.Result
+	detailsPDFPageCount    int
+	detailsPreviewRowStart int
+	detailsPreviewRowEnd   int
+
+	// detailsMetadataState is "" until fetchDetailsMetadata has run for
+	// the current detailsTarget (see its own doc comment on why that's
+	// still a stub) — reset back to "" by loadDetailsTarget every time
+	// the target changes, the same way detailsHashes is.
+	// detailsMetaRowStart/End are the metadata section's own click-zone
+	// bounds within the rendered text (-1 when there's no image, so
+	// nothing to show it for — see renderDetailsSidebar).
+	detailsMetadataState string
+	detailsMetaRowStart  int
+	detailsMetaRowEnd    int
+
+	// detailsHashes/InProgress/AnimFrame/Cancel/BytesRead/RowStart mirror
+	// propertiesHashes/hashInProgress/hashAnimFrame/hashCancel/
+	// hashBytesRead/hashSectionRow above exactly (see computeDetailsHashes'
+	// own doc comment on why this is a second, independent copy rather
+	// than shared state) — detailsHashRowStart is -1 whenever the current
+	// target is a directory (or resolves to one), which never gets a hash
+	// section at all, same as Properties' own isDirish check.
+	detailsHashes         *fsops.Hashes
+	detailsHashInProgress bool
+	detailsHashAnimFrame  int
+	detailsHashCancel     context.CancelFunc
+	detailsHashBytesRead  atomic.Int64
+	detailsHashRowStart   int
+
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
 	// turnPDFPage/setPDFViewMode) — viewerPDFPath is "" whenever Look
@@ -732,6 +785,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
+	// The Details sidebar (see detailssidebar.go) — also a single static
+	// TextView for now, same shape as Help/the Look pager above, just
+	// positioned and shown/hidden its own way (see showDetailsSidebar).
+	r.detailsSidebar = r.newDetailsSidebarView()
+
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -739,6 +797,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// mode-specific to begin with), so there's no separate context menu
 	// to build here any more.
 	panel.onSearchEscape = r.backToSearchForm
+
+	// Live-updates the Details sidebar as the cursor moves — tview's own
+	// native hook for "the table's current row changed, for any reason"
+	// (arrow keys, a click, a directory reload repositioning the cursor,
+	// ...), not something this codebase already had a use for before
+	// this sidebar needed one. refreshDetailsSidebar itself is a cheap
+	// no-op whenever the sidebar isn't actually visible, so this costs
+	// nothing extra during plain browsing the rest of the time.
+	panel.table.SetSelectionChangedFunc(func(int, int) { r.refreshDetailsSidebar() })
 
 	// A content-search match opens in the configured editor, at its
 	// own matched line, instead of just jumping to it (see
@@ -790,6 +857,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
+	r.AddPage(detailsSidebarPage, r.detailsSidebar, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)

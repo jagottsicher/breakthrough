@@ -38,6 +38,7 @@ const (
 	buttonActionRestore
 	buttonActionRemove
 	buttonActionSed
+	buttonActionDetails
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -158,6 +159,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		{"^E Edit", buttonActionEdit},
 		{"^L Look", buttonActionLook},
 		{"^P Properties", buttonActionProperties},
+		{"^D Details", buttonActionDetails},
 		{"^F Find", buttonActionSearch},
 		{"^S Sed", buttonActionSed},
 		{hideUnhideLabel, buttonActionToggleHidden},
@@ -426,6 +428,8 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openRemoveConfirm()
 	case buttonActionSed:
 		r.openSedReplace()
+	case buttonActionDetails:
+		r.toggleDetailsSidebar()
 	}
 }
 
@@ -500,6 +504,23 @@ func (r *Root) acceptsGlobalShortcut() bool {
 // reports false, rather than swallowing it either way.
 func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
+}
+
+// BashLineHasFocus is acceptsGlobalShortcut's own bashLine.HasFocus()
+// half, exported on its own for cmd/breakthrough: Ctrl+K
+// (ComputeHashesShortcut) and Ctrl+N (FetchMetadataShortcut) both bind
+// keys tview's own TextArea gives a real, native meaning (delete-to-
+// end-of-line, history-recall-adjacent movement — see the doc comment
+// above), so like every AcceptsGlobalShortcut-gated shortcut, they must
+// fall through instead of consuming the key while bashLine has focus.
+// Unlike those, though, they deliberately do NOT also require
+// activePage == "" — both need to keep firing while Properties
+// specifically is open (that's exactly the case ComputeHashesShortcut
+// itself has to tell apart — see its own doc comment), which
+// AcceptsGlobalShortcut's coarser, combined check would otherwise block
+// outright.
+func (r *Root) BashLineHasFocus() bool {
+	return r.bashLine.HasFocus()
 }
 
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
