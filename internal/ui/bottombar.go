@@ -506,6 +506,23 @@ func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
 }
 
+// BashLineHasFocus is acceptsGlobalShortcut's own bashLine.HasFocus()
+// half, exported on its own for cmd/breakthrough: Ctrl+K
+// (ComputeHashesShortcut) and Ctrl+N (FetchMetadataShortcut) both bind
+// keys tview's own TextArea gives a real, native meaning (delete-to-
+// end-of-line, history-recall-adjacent movement — see the doc comment
+// above), so like every AcceptsGlobalShortcut-gated shortcut, they must
+// fall through instead of consuming the key while bashLine has focus.
+// Unlike those, though, they deliberately do NOT also require
+// activePage == "" — both need to keep firing while Properties
+// specifically is open (that's exactly the case ComputeHashesShortcut
+// itself has to tell apart — see its own doc comment), which
+// AcceptsGlobalShortcut's coarser, combined check would otherwise block
+// outright.
+func (r *Root) BashLineHasFocus() bool {
+	return r.bashLine.HasFocus()
+}
+
 // EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
 // and SearchShortcut are Ctrl+E, F2, Ctrl+G, Ctrl+O, and Ctrl+F's
 // global actions (see cmd/breakthrough and acceptsGlobalShortcut for why

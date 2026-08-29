@@ -127,6 +127,23 @@ func run() error {
 	// least disruptive of the available real trade-offs - it's also the
 	// one native binding this app already has its own guarded equivalent
 	// for, on the physical Delete key itself, right below.
+	//
+	// Ctrl+K (compute hashes) and Ctrl+N (fetch metadata), both for the
+	// Details sidebar, are two more of the same shape - Ctrl+H (the
+	// obvious mnemonic for "hash", matching Properties' own bare 'h')
+	// and Ctrl+M (the obvious one for "metadata") were both considered
+	// and rejected: Ctrl+H is the Backspace collision already noted
+	// above, and Ctrl+M is the same kind of collision with Enter (both
+	// send byte 0x0D) - no mnemonic survives that. Ctrl+K/Ctrl+N were
+	// picked from what's left as the two with the least real cost:
+	// TextArea's own Ctrl+K deletes to end of line, a real but
+	// infrequently-reached-for edit; Ctrl+N is only breakthrough's own
+	// bash-history-forward alias for Down (see the bash line's own help
+	// text) - Down itself is untouched. Unlike every case above,
+	// including Ctrl+D, these two check BashLineHasFocus alone, not the
+	// full AcceptsGlobalShortcut - both need to keep working while
+	// Properties is open, not just while plainly browsing (see
+	// Root.ComputeHashesShortcut's own doc comment for why).
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -201,6 +218,26 @@ func run() error {
 				return event
 			}
 			root.ToggleDetailsSidebarShortcut()
+			return nil
+		case tcell.KeyCtrlK:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+D just above - tview's own TextArea binds Ctrl+K to
+			// "delete to end of line" (see the doc comment above this
+			// switch).
+			if root.BashLineHasFocus() {
+				return event
+			}
+			root.ComputeHashesShortcut()
+			return nil
+		case tcell.KeyCtrlN:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+K just above - it's breakthrough's own bash-history-
+			// forward alias (see the doc comment above this switch), not a
+			// native TextArea binding, but still a real, working one.
+			if root.BashLineHasFocus() {
+				return event
+			}
+			root.FetchMetadataShortcut()
 			return nil
 		case tcell.KeyCtrlB:
 			// Falls through while bashLine has focus for the same reason
