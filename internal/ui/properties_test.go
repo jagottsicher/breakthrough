@@ -369,7 +369,7 @@ func TestHashLinesNeverProducesAWideLine(t *testing.T) {
 		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
 	}
 	const safeWidth = 78 // comfortably under even a narrow (80-column) real terminal
-	for _, line := range strings.Split(hashLines(hashes), "\n") {
+	for _, line := range strings.Split(hashLines(hashes, "Press h or click here to compute", propertiesHashFieldWidth), "\n") {
 		if w := len([]rune(line)); w > safeWidth {
 			t.Errorf("hashLines produced a %d-column line, want at most %d — a line this wide can silently wrap at render time and push later content off the bottom of the overlay: %q", w, safeWidth, line)
 		}
@@ -398,6 +398,32 @@ func TestWideInfoFieldSplitsIntoTwoAlignedLines(t *testing.T) {
 	}
 	if want := indent + value[mid:]; lines[1] != want {
 		t.Errorf("line 2 = %q, want %q (indented to align under line 1's own value column, then the value's second half)", lines[1], want)
+	}
+}
+
+// TestWrapInfoFieldNeverExceedsMaxWidth is a regression guard for a
+// real, observed bug: Details' hash section initially reused
+// wideInfoField's fixed 64-character halves (tuned for Properties' own
+// much wider budget — see propertiesHashFieldWidth's doc comment)
+// unconditionally, and each half was itself too wide for Details' own
+// much narrower sidebar, wrapping again at render time. wrapInfoField
+// must keep every line within maxWidth regardless of how narrow that
+// is, splitting into as many lines as it actually takes.
+func TestWrapInfoFieldNeverExceedsMaxWidth(t *testing.T) {
+	value := "309ecc489c12d6eb4cc40f50c902f2b4d0ed77ee511a7c7a9bcd3ca86d4cd86f989dd35bc5ff499670da34255b45b0cfd830e81f605dcf7dc5542e93ae9cd76f" // a real 128-char SHA-512 digest
+	for _, maxWidth := range []int{77, 30, 24, 15} {
+		got := wrapInfoField("SHA-512", value, maxWidth)
+		for _, line := range strings.Split(got, "\n") {
+			if w := len([]rune(line)); w > maxWidth {
+				t.Errorf("wrapInfoField(maxWidth=%d) produced a %d-column line, want at most %d: %q", maxWidth, w, maxWidth, line)
+			}
+		}
+		// Every byte of value must still be present somewhere, in order —
+		// splitting into more/shorter chunks must never drop or reorder
+		// any of it.
+		if got := strings.Join(strings.Fields(got), ""); !strings.HasSuffix(got, value) {
+			t.Errorf("wrapInfoField(maxWidth=%d) lost or reordered part of value: %q", maxWidth, got)
+		}
 	}
 }
 

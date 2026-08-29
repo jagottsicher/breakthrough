@@ -176,6 +176,43 @@ type Root struct {
 	detailsSidebar        *tview.TextView
 	detailsSidebarVisible bool
 
+	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
+	// currently showing — mirrors propertiesTarget/propertiesStat above,
+	// but reloaded on every selection change (see refreshDetailsSidebar),
+	// not just once when opened. detailsTarget is "" whenever nothing
+	// meaningfully selected (the ".." row, or an empty listing) — see
+	// loadDetailsTarget. detailsImage is non-nil only once detailsTarget
+	// names a file viewer.Load actually decoded as an image.
+	detailsTarget  string
+	detailsStat    fsops.Info
+	detailsStatErr error
+	detailsImage   *viewer.Result
+
+	// detailsMetadataState is "" until fetchDetailsMetadata has run for
+	// the current detailsTarget (see its own doc comment on why that's
+	// still a stub) — reset back to "" by loadDetailsTarget every time
+	// the target changes, the same way detailsHashes is.
+	// detailsMetaRowStart/End are the metadata section's own click-zone
+	// bounds within the rendered text (-1 when there's no image, so
+	// nothing to show it for — see renderDetailsSidebar).
+	detailsMetadataState string
+	detailsMetaRowStart  int
+	detailsMetaRowEnd    int
+
+	// detailsHashes/InProgress/AnimFrame/Cancel/BytesRead/RowStart mirror
+	// propertiesHashes/hashInProgress/hashAnimFrame/hashCancel/
+	// hashBytesRead/hashSectionRow above exactly (see computeDetailsHashes'
+	// own doc comment on why this is a second, independent copy rather
+	// than shared state) — detailsHashRowStart is -1 whenever the current
+	// target is a directory (or resolves to one), which never gets a hash
+	// section at all, same as Properties' own isDirish check.
+	detailsHashes         *fsops.Hashes
+	detailsHashInProgress bool
+	detailsHashAnimFrame  int
+	detailsHashCancel     context.CancelFunc
+	detailsHashBytesRead  atomic.Int64
+	detailsHashRowStart   int
+
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
 	// turnPDFPage/setPDFViewMode) — viewerPDFPath is "" whenever Look
@@ -752,6 +789,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// mode-specific to begin with), so there's no separate context menu
 	// to build here any more.
 	panel.onSearchEscape = r.backToSearchForm
+
+	// Live-updates the Details sidebar as the cursor moves — tview's own
+	// native hook for "the table's current row changed, for any reason"
+	// (arrow keys, a click, a directory reload repositioning the cursor,
+	// ...), not something this codebase already had a use for before
+	// this sidebar needed one. refreshDetailsSidebar itself is a cheap
+	// no-op whenever the sidebar isn't actually visible, so this costs
+	// nothing extra during plain browsing the rest of the time.
+	panel.table.SetSelectionChangedFunc(func(int, int) { r.refreshDetailsSidebar() })
 
 	// A content-search match opens in the configured editor, at its
 	// own matched line, instead of just jumping to it (see
