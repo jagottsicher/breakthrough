@@ -161,6 +161,34 @@ func TestInfoFieldDateTimeNeverWrapsAtMinWidth(t *testing.T) {
 	}
 }
 
+// TestDetailsFullscreenHintNeverWrapsAtMinWidth is a regression guard
+// for a real, observed bug: the original, longer wording of this hint
+// ("Press Ctrl+L or click here for fullscreen") wrapped at the
+// sidebar's own minimum width, silently mis-numbering every row after
+// it — the same class of bug already fixed once for hashes and once for
+// Modified.
+func TestDetailsFullscreenHintNeverWrapsAtMinWidth(t *testing.T) {
+	usableWidth := detailsSidebarMinWidth - 2
+	if w := len([]rune(detailsFullscreenHint)); w > usableWidth {
+		t.Errorf("detailsFullscreenHint is %d columns wide, want at most %d (the sidebar's own minimum usable width): %q", w, usableWidth, detailsFullscreenHint)
+	}
+}
+
+// TestDetailsMetadataHintAndStubNeverWrapAtMinWidth is a regression
+// guard for a real, observed bug: the original, longer wording of both
+// of these strings wrapped at the sidebar's own minimum width — unlike
+// detailsFullscreenHint (which sits with nothing after it to
+// mis-number), both of these are always followed by the stat block,
+// so wrapping here silently threw off every click zone below it.
+func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
+	usableWidth := detailsSidebarMinWidth - 2
+	for _, s := range []string{detailsMetadataHint, detailsMetadataStubMessage} {
+		if w := len([]rune(s)); w > usableWidth {
+			t.Errorf("%q is %d columns wide, want at most %d (the sidebar's own minimum usable width)", s, w, usableWidth)
+		}
+	}
+}
+
 // TestCaptureButtonBarMouseDetailsClickTogglesSidebar pins the "^D
 // Details" button (see buildButtonBar/runButtonBarAction) to the same
 // toggleDetailsSidebar Ctrl+D already runs — one action, two ways to
@@ -545,5 +573,161 @@ func TestHideDetailsSidebarCancelsInProgressHashComputation(t *testing.T) {
 
 	if r.detailsHashInProgress {
 		t.Error("hiding the sidebar should cancel an in-progress hash computation")
+	}
+}
+
+// TestDetailsSidebarShowsPDFPageCount pins the part of PDF support that
+// doesn't depend on pdftoppm being installed at all (see
+// TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable for the part
+// that does): PDFPageCount alone, via ledongthuc/pdf, always works.
+func TestDetailsSidebarShowsPDFPageCount(t *testing.T) {
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.loadDetailsTarget(path)
+	r.detailsSidebarVisible = true
+
+	if r.detailsPDFPageCount != 1 {
+		t.Fatalf("detailsPDFPageCount = %d, want 1 (the fixture is a single-page PDF)", r.detailsPDFPageCount)
+	}
+	text := r.detailsSidebar.GetText(true)
+	for _, want := range []string{"Type:", "PDF", "Pages:", "1"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("details sidebar text should contain %q, got:\n%s", want, text)
+		}
+	}
+}
+
+// TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable pins the actual
+// rasterized-page-1 preview path — skipped where pdftoppm isn't
+// installed, mirroring TestShowBuiltinLookRendersPDFPage's own same
+// concern for Look.
+func TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable(t *testing.T) {
+	requireCommand(t, "pdftoppm")
+
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.loadDetailsTarget(path)
+	r.detailsSidebarVisible = true
+
+	if r.detailsImage == nil {
+		t.Fatal("detailsImage should be set once pdftoppm actually rasterized page 1")
+	}
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "▀") {
+		t.Errorf("details sidebar text should contain a half-block preview, got:\n%s", text)
+	}
+	if !strings.Contains(text, detailsFullscreenHint) {
+		t.Errorf("details sidebar text should show the fullscreen hint, got:\n%s", text)
+	}
+	if r.detailsPreviewRowStart < 0 || r.detailsPreviewRowEnd < r.detailsPreviewRowStart {
+		t.Errorf("detailsPreviewRowStart/End = %d/%d, want a valid non-negative range", r.detailsPreviewRowStart, r.detailsPreviewRowEnd)
+	}
+	if r.detailsMetaRowStart >= 0 {
+		t.Error("a PDF should not get the image-only EXIF-style metadata hint")
+	}
+}
+
+// TestClickingPreviewOpensLook pins the user's own explicit request: a
+// click on the preview section (image or rasterized PDF page alike)
+// opens the same fullscreen view Ctrl+L/the Look button already does —
+// tested here against an image target, which needs no external tool
+// dependency; the PDF case reuses the exact same click-zone/dispatch
+// code (see captureDetailsSidebarMouse), not a separate path.
+func TestClickingPreviewOpensLook(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewNRGBA(image.Rect(0, 0, 6, 4))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1) // off ".." onto photo.png, the only real entry
+	r.showDetailsSidebar()
+
+	if r.detailsPreviewRowStart < 0 {
+		t.Fatal("setup: detailsPreviewRowStart should be set for an image target")
+	}
+	x, y, _, _ := r.detailsSidebar.GetInnerRect()
+
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, y+r.detailsPreviewRowStart, tcell.Button1, 0))
+	if action != tview.MouseConsumed {
+		t.Fatalf("action = %v, want MouseConsumed", action)
+	}
+	if r.activePage != viewerPage {
+		t.Errorf("activePage = %q, want %q — clicking the preview should open Look", r.activePage, viewerPage)
+	}
+}
+
+// TestDetailsImagePreviewHasNoExtraVerticalGap is a regression guard for
+// a real, observed bug: the preview box was always reserved at exactly
+// a third of the sidebar's own height, so a scaled image shorter than
+// that (letterboxed by renderImageHalfBlocks' own centering — see
+// detailsImageBoxSize's own doc comment) left a strangely large blank
+// gap before whatever came next. A wide, short image scaled into a much
+// taller sidebar — width-constrained, so its real scaled height ends up
+// well under the reserved maximum — is exactly the case that exposed
+// it.
+func TestDetailsImagePreviewHasNoExtraVerticalGap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "wide.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewNRGBA(image.Rect(0, 0, 400, 10))); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 90) // tall: a third (30 rows) is far more than a 400x10 image scaled into ~90 columns will ever need
+	r.loadDetailsTarget(path)
+	r.detailsSidebarVisible = true
+
+	text := r.detailsSidebar.GetText(true)
+	lines := strings.Split(text, "\n")
+	formatIdx := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "Format:") {
+			formatIdx = i
+			break
+		}
+	}
+	if formatIdx < 2 {
+		t.Fatalf("couldn't find a Format: line with at least two lines before it in:\n%s", text)
+	}
+	if lines[formatIdx-1] != "" {
+		t.Errorf("the line right before Format: should be the single blank paragraph separator, got %q", lines[formatIdx-1])
+	}
+	if strings.TrimSpace(lines[formatIdx-2]) == "" {
+		t.Errorf("the line two before Format: should already be real preview content (no second, extra blank line) — full text:\n%s", text)
 	}
 }
