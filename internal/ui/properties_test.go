@@ -323,6 +323,8 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3", // MD5("hello world")
 		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
 		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+		SHA512: "309ecc489c12d6eb4cc40f50c902f2b4d0ed77ee511a7c7a9bcd3ca86d4cd86f989dd35bc5ff499670da34255b45b0cfd830e81f605dcf7dc5542e93ae9cd76f",
+		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
 	}
 	r.rerenderProperties()
 
@@ -330,8 +332,98 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	if !strings.Contains(after, "5eb63bbbe01eeed093cb22bb8f5acdc3") {
 		t.Errorf("Properties text after computing hashes should show the MD5 digest, got:\n%s", after)
 	}
-	if !strings.Contains(after, "SHA-256") {
-		t.Errorf("Properties text after computing hashes should label the SHA-256 line, got:\n%s", after)
+	for _, label := range []string{"SHA-256", "SHA-1", "MD5", "SHA-512", "BLAKE2b-512"} {
+		if !strings.Contains(after, label) {
+			t.Errorf("Properties text after computing hashes should label the %s line, got:\n%s", label, after)
+		}
+	}
+	// The user's own requested order: SHA-256, SHA-1, MD5, SHA-512, Blake2.
+	order := []string{"SHA-256", "SHA-1", "MD5", "SHA-512", "BLAKE2b-512"}
+	last := -1
+	for _, label := range order {
+		idx := strings.Index(after, label)
+		if idx < last {
+			t.Errorf("hash lines are out of order: %v, want %s before whatever precedes it", order, label)
+		}
+		last = idx
+	}
+}
+
+// TestHashLinesNeverProducesAWideLine is a regression guard for a real,
+// observed bug: a hashLines line wide enough to need tview's own
+// word-wrap at render time (a 128-character SHA-512/BLAKE2b-512 digest
+// plus its label, 141 columns — wider than most real terminals) wraps
+// into an extra row textSize has no way to know to budget for (see its
+// own doc comment), silently pushing whatever came after it — BLAKE2b-
+// 512's own line, in the actual case this was caught in — below the
+// Properties overlay's own bottom edge, invisible even though it was
+// still really there. Every line hashLines produces must stay short
+// enough that this can never happen again, regardless of how (see
+// wideInfoField's own two-line split, the current answer).
+func TestHashLinesNeverProducesAWideLine(t *testing.T) {
+	hashes := &fsops.Hashes{
+		MD5:    "5eb63bbbe01eeed093cb22bb8f5acdc3",
+		SHA1:   "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed",
+		SHA256: "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+		SHA512: "309ecc489c12d6eb4cc40f50c902f2b4d0ed77ee511a7c7a9bcd3ca86d4cd86f989dd35bc5ff499670da34255b45b0cfd830e81f605dcf7dc5542e93ae9cd76f",
+		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
+	}
+	const safeWidth = 78 // comfortably under even a narrow (80-column) real terminal
+	for _, line := range strings.Split(hashLines(hashes, "Press h or click here to compute", propertiesHashFieldWidth), "\n") {
+		if w := len([]rune(line)); w > safeWidth {
+			t.Errorf("hashLines produced a %d-column line, want at most %d — a line this wide can silently wrap at render time and push later content off the bottom of the overlay: %q", w, safeWidth, line)
+		}
+	}
+}
+
+// TestWideInfoFieldSplitsIntoTwoAlignedLines pins wideInfoField's own
+// exact contract: the label on its own first line, the value split
+// into two equal halves, the second indented to align under the first
+// half's own starting column — not just "somehow shorter".
+func TestWideInfoFieldSplitsIntoTwoAlignedLines(t *testing.T) {
+	value := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" // 66 chars, deliberately not a real digest
+	got := wideInfoField("Label", value)
+
+	lines := strings.Split(got, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("wideInfoField produced %d line(s), want 2: %q", len(lines), got)
+	}
+
+	labelColumn := fmt.Sprintf("%-13s", "Label:") // the same "%-13s" infoField itself uses
+	indent := strings.Repeat(" ", len(labelColumn))
+	mid := len(value) / 2
+
+	if want := labelColumn + value[:mid]; lines[0] != want {
+		t.Errorf("line 1 = %q, want %q (the label column followed by the value's first half)", lines[0], want)
+	}
+	if want := indent + value[mid:]; lines[1] != want {
+		t.Errorf("line 2 = %q, want %q (indented to align under line 1's own value column, then the value's second half)", lines[1], want)
+	}
+}
+
+// TestWrapInfoFieldNeverExceedsMaxWidth is a regression guard for a
+// real, observed bug: Details' hash section initially reused
+// wideInfoField's fixed 64-character halves (tuned for Properties' own
+// much wider budget — see propertiesHashFieldWidth's doc comment)
+// unconditionally, and each half was itself too wide for Details' own
+// much narrower sidebar, wrapping again at render time. wrapInfoField
+// must keep every line within maxWidth regardless of how narrow that
+// is, splitting into as many lines as it actually takes.
+func TestWrapInfoFieldNeverExceedsMaxWidth(t *testing.T) {
+	value := "309ecc489c12d6eb4cc40f50c902f2b4d0ed77ee511a7c7a9bcd3ca86d4cd86f989dd35bc5ff499670da34255b45b0cfd830e81f605dcf7dc5542e93ae9cd76f" // a real 128-char SHA-512 digest
+	for _, maxWidth := range []int{77, 30, 24, 15} {
+		got := wrapInfoField("SHA-512", value, maxWidth)
+		for _, line := range strings.Split(got, "\n") {
+			if w := len([]rune(line)); w > maxWidth {
+				t.Errorf("wrapInfoField(maxWidth=%d) produced a %d-column line, want at most %d: %q", maxWidth, w, maxWidth, line)
+			}
+		}
+		// Every byte of value must still be present somewhere, in order —
+		// splitting into more/shorter chunks must never drop or reorder
+		// any of it.
+		if got := strings.Join(strings.Fields(got), ""); !strings.HasSuffix(got, value) {
+			t.Errorf("wrapInfoField(maxWidth=%d) lost or reordered part of value: %q", maxWidth, got)
+		}
 	}
 }
 

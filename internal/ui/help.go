@@ -40,6 +40,8 @@ var helpText = strings.TrimLeft(`
   Ctrl+F          Find
   Ctrl+O          Options
   Ctrl+P          Properties
+  Ctrl+D          Toggle the Details sidebar (empty for now — a work
+                  in progress, key subject to change)
   Ctrl+S          Sed Replace on the selected file(s)
   Ctrl+B          Go to Trash — browse it directly
   Ctrl+T / Delete Move the selection to Trash (reversible); already
@@ -67,7 +69,8 @@ var helpText = strings.TrimLeft(`
   Tab / Shift+Tab   Move between fields
   Enter / Space     Activate or commit the focused one
   Escape            Cancel and close
-  h                 Compute file hashes (MD5/SHA-1/SHA-256)
+  h                 Compute file hashes (SHA-256/SHA-1/MD5/SHA-512/
+                    BLAKE2b-512)
 
   With a permission bit focused: r / w / x sets that bit directly,
   Space toggles it, Delete or - clears it.
