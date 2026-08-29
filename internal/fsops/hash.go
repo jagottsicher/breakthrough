@@ -5,10 +5,13 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
+
+	"golang.org/x/crypto/blake2b"
 )
 
 // Hashes holds hex-encoded fingerprints of one file, as computed by Hash.
@@ -16,17 +19,25 @@ import (
 // they're still the digests most existing checksums (release pages,
 // deduplication tools, older SHASUMS files) were published with, so
 // leaving them out would make Hash less useful for the fingerprinting/
-// verification use case it's for, not more secure.
+// verification use case it's for, not more secure. Blake2 (BLAKE2b,
+// 512-bit output) is the one digest here that isn't in the standard
+// library at all — it comes from golang.org/x/crypto instead, the Go
+// team's own extended crypto module and already a sibling of
+// golang.org/x/image/golang.org/x/term this project already depends
+// on, not a third-party dependency in the usual sense.
 type Hashes struct {
 	MD5    string
 	SHA1   string
 	SHA256 string
+	SHA512 string
+	Blake2 string
 }
 
-// Hash computes MD5, SHA-1, and SHA-256 digests of the file at path in a
-// single streaming pass — io.MultiWriter fans the same read out to all
-// three hash.Hash instances, so the file is only read once regardless of
-// its size, rather than three times over.
+// Hash computes MD5, SHA-1, SHA-256, SHA-512, and Blake2 (BLAKE2b-512)
+// digests of the file at path in a single streaming pass —
+// io.MultiWriter fans the same read out to all five hash.Hash
+// instances, so the file is only read once regardless of its size,
+// rather than five times over.
 //
 // ctx is checked before every underlying Read (see progressReader) —
 // once it's cancelled, the very next Read returns ctx.Err() instead of
@@ -81,8 +92,17 @@ func Hash(ctx context.Context, path string, onProgress func(readBytes int64)) (H
 
 	reader := &progressReader{r: f, ctx: ctx, onProgress: onProgress}
 
-	md5h, sha1h, sha256h := md5.New(), sha1.New(), sha256.New()
-	if _, err := io.Copy(io.MultiWriter(md5h, sha1h, sha256h), reader); err != nil {
+	// blake2b.New512's own error is only ever non-nil for an invalid key
+	// length — never true for the nil we always pass here (the plain,
+	// unkeyed hash mode every other algorithm below also is).
+	blake2h, err := blake2b.New512(nil)
+	if err != nil {
+		return Hashes{}, err
+	}
+
+	md5h, sha1h, sha256h, sha512h := md5.New(), sha1.New(), sha256.New(), sha512.New()
+	w := io.MultiWriter(md5h, sha1h, sha256h, sha512h, blake2h)
+	if _, err := io.Copy(w, reader); err != nil {
 		return Hashes{}, err
 	}
 
@@ -90,6 +110,8 @@ func Hash(ctx context.Context, path string, onProgress func(readBytes int64)) (H
 		MD5:    hex.EncodeToString(md5h.Sum(nil)),
 		SHA1:   hex.EncodeToString(sha1h.Sum(nil)),
 		SHA256: hex.EncodeToString(sha256h.Sum(nil)),
+		SHA512: hex.EncodeToString(sha512h.Sum(nil)),
+		Blake2: hex.EncodeToString(blake2h.Sum(nil)),
 	}, nil
 }
 

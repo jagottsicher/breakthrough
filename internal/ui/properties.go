@@ -548,7 +548,7 @@ func (r *Root) renderProperties() {
 		case r.hashInProgress:
 			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
 		default:
-			text += "\n\n" + hashLines(r.propertiesHashes)
+			text += "\n\n" + hashLines(r.propertiesHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
 		}
 	}
 
@@ -1441,6 +1441,58 @@ func infoField(label, value string) string {
 	return fmt.Sprintf("%-13s%s", label+":", value)
 }
 
+// wideInfoField is infoField's own two-line variant for a value too
+// long to sit safely on one line at any realistic terminal width — a
+// 128-character SHA-512/BLAKE2b-512 hex digest, e.g., plus the 13-column
+// label prefix, needs 141 columns, wider than most real terminals.
+// Splitting it into two fixed 64-character halves (indented to align
+// under infoField's own value column, matching a SHA-256 digest's own
+// length either half) keeps every line short enough to never actually
+// need tview's own word-wrap — deliberately, not just hopefully: relying
+// on the terminal happening to be wide enough was a real, observed bug
+// here (see textSize's own doc comment on why it can't safely guess at
+// wrapping tview itself might still do at render time — this sidesteps
+// that question entirely rather than trying to answer it exactly).
+func wideInfoField(label, value string) string {
+	mid := len(value) / 2
+	return fmt.Sprintf("%-13s%s\n%13s%s", label+":", value[:mid], "", value[mid:])
+}
+
+// wrapInfoField is wideInfoField's own shape (label on the first line,
+// every following one indented to align under the first line's own
+// value column), generalized to as many lines as it takes to keep every
+// one of them at most maxWidth columns wide — wideInfoField's fixed
+// exactly-half split only ever produces lines short enough for
+// Properties' own much wider ~141-column budget (see its own doc
+// comment); reused as-is for a narrower context, a single 64-character
+// half can still itself be too wide to fit, and would silently wrap
+// again at render time — a real, observed bug the first time this
+// sidebar's own hash section tried exactly that. Value is split on raw
+// byte offsets, not runes: every real caller passes a hex digest
+// (ASCII-only), so a byte index is always also a valid rune boundary.
+func wrapInfoField(label, value string, maxWidth int) string {
+	labelCol := fmt.Sprintf("%-13s", label+":")
+	indent := strings.Repeat(" ", len(labelCol))
+	chunkWidth := maxWidth - len(labelCol)
+	if chunkWidth < 1 {
+		chunkWidth = 1 // a maxWidth this narrow can't avoid wrapping somewhere — better one char per line than an infinite loop
+	}
+
+	var lines []string
+	for i := 0; i < len(value); i += chunkWidth {
+		end := min(i+chunkWidth, len(value))
+		prefix := indent
+		if i == 0 {
+			prefix = labelCol
+		}
+		lines = append(lines, prefix+value[i:end])
+	}
+	if len(lines) == 0 {
+		lines = []string{labelCol}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // classifyKind renders the Type field with more detail than a plain
 // file/directory/symlink split: a symlink additionally says what it
 // resolves to (or that it's broken — info.LinkBroken), and the rarer
@@ -1469,17 +1521,58 @@ func classifyKind(info fsops.Info) string {
 	}
 }
 
-// hashLines renders the Properties overlay's hash section: a hint to
-// compute them (see Root.computeHashes) until hashes is non-nil, then the
-// three digests themselves.
-func hashLines(hashes *fsops.Hashes) string {
+// propertiesHashFieldWidth is the width hashLines' own Properties call
+// site passes: sized so wrapInfoField's per-line chunk comes out to 64
+// characters — exactly half of a 128-character SHA-512/BLAKE2b-512
+// digest, i.e. the same two-line split wideInfoField itself would
+// produce, for the width Properties' own overlay actually has (see
+// clampToScreen/clampToPanel) — chosen once, empirically, rather than
+// derived from Properties' real (variable, terminal-dependent) width,
+// since a couple of columns of slack here costs nothing.
+const propertiesHashFieldWidth = 77
+
+// hashLines renders a hash section: hint until hashes is non-nil, then
+// the five digests themselves, in the user's own requested order —
+// SHA-256, SHA-1, MD5 (the three the standard library already covered),
+// then SHA-512 and Blake2 (BLAKE2b-512, see fsops.Hashes' own doc
+// comment on where that one actually comes from) — the two of these
+// long enough to need wrapInfoField instead of infoField's own single
+// line (see its own doc comment).
+//
+// hint and width are caller-supplied, not hardcoded, because the two
+// callers need different values for both: Properties' own
+// renderProperties and Details' own renderDetailsSidebar trigger the
+// same computation via genuinely different keys (bare 'h' vs Ctrl+K —
+// see ComputeHashesShortcut's own doc comment on why Details can't
+// reuse Properties' bare-letter one), and have very different amounts
+// of width to lay the two long digests out in (see
+// propertiesHashFieldWidth vs Details' own actual sidebar width) — a
+// shared hardcoded value for either would be wrong for one of them, and
+// in width's case, once was: this sidebar's own hash section initially
+// reused wideInfoField's fixed 64-character halves unconditionally, and
+// each one wrapped again inside Details' own much narrower box.
+func hashLines(hashes *fsops.Hashes, hint string, width int) string {
 	if hashes == nil {
-		return "Press h or click here to compute MD5 / SHA-1 / SHA-256"
+		return hint
 	}
+	// wrapInfoField for all five, not just the two long ones — plain
+	// infoField for SHA-256/SHA-1/MD5 fits Properties' own ~141-column
+	// budget just fine, but a real, observed bug found it didn't fit
+	// Details' own much narrower sidebar: those three lines wrapped
+	// anyway, just via tview's own uncounted auto-wrap instead of a real
+	// newline this function's own caller could see and budget rows for
+	// (see renderDetailsSidebar's own writeSection) — silently
+	// mis-numbering everything below the hash section, the exact same
+	// bug class SHA-512/BLAKE2b-512 already had fixed once. wrapInfoField
+	// produces identical single-line output to infoField whenever a
+	// value already fits within width (see its own doc comment), so this
+	// changes nothing for Properties' own wider case.
 	return strings.Join([]string{
-		infoField("MD5", hashes.MD5),
-		infoField("SHA-1", hashes.SHA1),
-		infoField("SHA-256", hashes.SHA256),
+		wrapInfoField("SHA-256", hashes.SHA256, width),
+		wrapInfoField("SHA-1", hashes.SHA1, width),
+		wrapInfoField("MD5", hashes.MD5, width),
+		wrapInfoField("SHA-512", hashes.SHA512, width),
+		wrapInfoField("BLAKE2b-512", hashes.Blake2, width),
 	}, "\n")
 }
 
@@ -1555,11 +1648,25 @@ func sizeWithBytes(size int64) string {
 }
 
 // textSize returns the width (the longest line, plus 1-char left/right
-// padding — matching listSize) and height (line count) of a block of
-// text, for sizing a no-border overlay to fit it exactly. Style tags
-// (see propertiesBuilder) would throw this off if counted, but
-// GetText(true) — every caller's source for the text passed in here —
-// already strips them.
+// padding — matching listSize) and height (a plain newline count) of a
+// block of text, for sizing a no-border overlay to fit it exactly.
+// Style tags (see propertiesBuilder) would throw this off if counted,
+// but GetText(true) — every caller's source for the text passed in
+// here — already strips them.
+//
+// Deliberately does not try to account for tview's own word-wrap
+// (clampToPanel can still shrink the width this reports if the
+// terminal itself is narrow) — a real, observed bug once did exactly
+// that: a line too wide to fit wrapped at render time into a second
+// row this had no way to know to budget for, silently pushing whatever
+// came after it (BLAKE2b-512's own line, once SHA-512 grew this text
+// past every terminal's width) below the overlay's own bottom edge,
+// invisible even though it was still really there. The actual fix
+// isn't here — it's the caller's own responsibility to never hand this
+// a line long enough to need wrapping in the first place (see
+// wideInfoField), which is simpler and more predictable than this
+// function trying to reverse-engineer wherever tview would decide to
+// break a line at whatever width it ends up actually getting.
 func textSize(text string) (width, height int) {
 	lines := strings.Split(text, "\n")
 	height = len(lines)
