@@ -5,6 +5,8 @@
 # breakthrough
 ## A mouse-and-menu-driven TUI file manager for your POSIX-compliant terminal, built around a real embedded bash shell — written in Go.
 
+![Hero Picture](docs/images/20260830_000058_01B543A0-5FB0-4374-B58D-31F07F11333F.jpg)
+
 breakthrough puts classic GUI file-manager idioms — a browsable panel,
 context menus, floating dialogs, clickable breadcrumbs — over a real bash
 session, without ever leaving the shell. It's built with
