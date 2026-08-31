@@ -1594,14 +1594,14 @@ func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
 	}
 }
 
-// TestRecursiveApplyFieldShownForDirectory and
-// TestRecursiveApplyFieldHiddenForFile pin renderProperties'/
-// currentFieldOrder's own isDirish guard for the recursive Owner/Group
-// toggle (see recursiveApplyField/toggleRecursiveApply): the row — and
-// so its propertySpan — only exists for a directory target, per the
-// user's own explicit request that it sit "behind" Owner/Group only for
-// folders.
-func TestRecursiveApplyFieldShownForDirectory(t *testing.T) {
+// TestRecursiveApplyFieldsShownForDirectory and
+// TestRecursiveApplyFieldsHiddenForFile pin renderProperties'/
+// currentFieldOrder's own isDirish guards for the two recursive
+// Owner/Group toggles (see recursiveApplyField/toggleRecursiveApply):
+// both rows — and so their propertySpans — only exist for a directory
+// target, per the user's own explicit request that each sit right
+// behind its own Owner/Group line, only for folders.
+func TestRecursiveApplyFieldsShownForDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1610,12 +1610,15 @@ func TestRecursiveApplyFieldShownForDirectory(t *testing.T) {
 	r.target = filepath.Join(dir, "app-data")
 	r.openProperties()
 
-	if _, ok := findPropertySpan(r, fieldRecursiveApply); !ok {
-		t.Error("a directory target should show the recursive-apply toggle")
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyOwner); !ok {
+		t.Error("a directory target should show the Owner recursive-apply toggle")
+	}
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyGroup); !ok {
+		t.Error("a directory target should show the Group recursive-apply toggle")
 	}
 }
 
-func TestRecursiveApplyFieldHiddenForFile(t *testing.T) {
+func TestRecursiveApplyFieldsHiddenForFile(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1624,16 +1627,22 @@ func TestRecursiveApplyFieldHiddenForFile(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	if _, ok := findPropertySpan(r, fieldRecursiveApply); ok {
-		t.Error("a plain file target should not show the recursive-apply toggle")
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyOwner); ok {
+		t.Error("a plain file target should not show the Owner recursive-apply toggle")
+	}
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyGroup); ok {
+		t.Error("a plain file target should not show the Group recursive-apply toggle")
 	}
 }
 
-// TestToggleRecursiveApply pins that clicking the toggle (see
-// activatePropertyField's own fieldRecursiveApply case) flips
-// stagedRecursiveChown back and forth and marks the overlay dirty, the
-// same as every other field click already does.
-func TestToggleRecursiveApply(t *testing.T) {
+// TestToggleRecursiveApplyIndependence pins that clicking either toggle
+// (see activatePropertyField's own fieldRecursiveApplyOwner/
+// fieldRecursiveApplyGroup cases) flips only its own
+// stagedRecursiveOwner/stagedRecursiveGroup half, marks the overlay
+// dirty like every other field click already does, and leaves the
+// other toggle alone — the independence the user explicitly asked for,
+// instead of one combined switch for both.
+func TestToggleRecursiveApplyIndependence(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1642,83 +1651,105 @@ func TestToggleRecursiveApply(t *testing.T) {
 	r.target = filepath.Join(dir, "app-data")
 	r.openProperties()
 
-	if r.stagedRecursiveChown {
-		t.Fatal("setup: should start off")
+	if r.stagedRecursiveOwner || r.stagedRecursiveGroup {
+		t.Fatal("setup: both should start off")
 	}
 
-	span, ok := findPropertySpan(r, fieldRecursiveApply)
+	ownerSpan, ok := findPropertySpan(r, fieldRecursiveApplyOwner)
 	if !ok {
-		t.Fatal("no fieldRecursiveApply span found")
+		t.Fatal("no fieldRecursiveApplyOwner span found")
 	}
-
-	r.activatePropertyField(span)
-	if !r.stagedRecursiveChown {
-		t.Error("clicking the toggle should turn it on")
+	r.activatePropertyField(ownerSpan)
+	if !r.stagedRecursiveOwner {
+		t.Error("clicking the Owner toggle should turn it on")
+	}
+	if r.stagedRecursiveGroup {
+		t.Error("clicking the Owner toggle should not affect Group's own toggle")
 	}
 	if !r.propertiesDirty {
 		t.Error("clicking the toggle should mark the overlay dirty, same as every other field")
 	}
 
-	r.activatePropertyField(span)
-	if r.stagedRecursiveChown {
-		t.Error("clicking the toggle again should turn it back off")
+	groupSpan, ok := findPropertySpan(r, fieldRecursiveApplyGroup)
+	if !ok {
+		t.Fatal("no fieldRecursiveApplyGroup span found")
+	}
+	r.activatePropertyField(groupSpan)
+	if !r.stagedRecursiveGroup {
+		t.Error("clicking the Group toggle should turn it on")
+	}
+	if !r.stagedRecursiveOwner {
+		t.Error("clicking the Group toggle should not turn Owner's own toggle back off")
+	}
+
+	r.activatePropertyField(ownerSpan)
+	if r.stagedRecursiveOwner {
+		t.Error("clicking the Owner toggle again should turn it back off")
+	}
+	if !r.stagedRecursiveGroup {
+		t.Error("turning Owner back off should not affect Group's own toggle")
 	}
 }
 
-// TestSavePropertiesEditRecursiveChownReachesNestedEntries proves the
-// toggle actually changes which fsops function Save calls (see
-// savePropertiesEdit's own "chown := fsops.Chown; if
-// r.stagedRecursiveChown ..." dispatch), not merely a field nothing
-// downstream reads. A same-uid/gid chown (see
-// TestSavePropertiesEditAppliesOwnerGroupChange's own doc comment on why
-// that's the only privilege-free option) can't tell "reached this file"
-// apart from "never touched it" by inspecting the result — the uid/gid
-// look identical either way. A dangling symlink nested inside the
-// directory can: a non-recursive Chown on the directory itself never
-// looks inside, so it's never reached at all, but ChownRecursive's own
-// WalkDir does reach it, and Chown on it follows the (broken) link and
-// fails — see ChownRecursive's own doc comment. That failure surfacing
-// as Properties' error overlay only when the toggle is on is what this
-// test actually pins.
-func TestSavePropertiesEditRecursiveChownReachesNestedEntries(t *testing.T) {
-	dir := fixtureDir(t)
-	target := filepath.Join(dir, "app-data")
-	broken := filepath.Join(target, "broken-link")
-	if err := os.Symlink(filepath.Join(target, "does-not-exist"), broken); err != nil {
-		t.Fatal(err)
+// TestSavePropertiesEditRecursiveTogglesAreIndependent proves Save
+// actually dispatches Owner and Group through separate
+// Chown/ChownRecursive calls, each governed by its own toggle (see
+// savePropertiesEdit's own two independent dispatches), rather than one
+// combined call that couldn't express "recursive for one, not the
+// other" in the first place.
+//
+// A same-uid/gid chown (see TestSavePropertiesEditAppliesOwnerGroupChange's
+// own doc comment on why that's the only privilege-free option) can't
+// tell "reached this file" apart from "never touched it" by inspecting
+// the result — the uid/gid look identical either way. A dangling
+// symlink nested inside the directory can: a non-recursive Chown on the
+// directory itself never looks inside, so it's never reached at all,
+// but ChownRecursive's own WalkDir does reach it, and Chown on it
+// follows the (broken) link and fails — see ChownRecursive's own doc
+// comment. That failure surfacing as Properties' error overlay only
+// when the relevant toggle is on, and never as a side effect of the
+// *other* one, is what this test actually pins.
+func TestSavePropertiesEditRecursiveTogglesAreIndependent(t *testing.T) {
+	tests := []struct {
+		name             string
+		recursiveOwner   bool
+		recursiveGroup   bool
+		wantErrorOverlay bool
+	}{
+		{"owner recursive reaches the broken symlink", true, false, true},
+		{"owner non-recursive skips the broken symlink", false, false, false},
+		{"group recursive reaches the broken symlink", false, true, true},
+		{"group non-recursive skips the broken symlink", false, false, false},
 	}
 
-	newRoot := func() *Root {
-		r, err := NewRoot(tview.NewApplication(), dir)
-		if err != nil {
-			t.Fatalf("NewRoot: %v", err)
-		}
-		r.target = target
-		r.openProperties()
-		r.stagedOwner = strconv.Itoa(os.Getuid())
-		r.stagedGroup = strconv.Itoa(os.Getgid())
-		r.markPropertiesDirty()
-		return r
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := fixtureDir(t)
+			target := filepath.Join(dir, "app-data")
+			broken := filepath.Join(target, "broken-link")
+			if err := os.Symlink(filepath.Join(target, "does-not-exist"), broken); err != nil {
+				t.Fatal(err)
+			}
 
-	// Toggle off: Save never looks inside app-data, so the broken
-	// symlink is simply never reached — succeeds the same as
-	// TestSavePropertiesEditAppliesOwnerGroupChange's own case.
-	r := newRoot()
-	r.savePropertiesEdit()
-	if r.activePage == errorPage {
-		t.Fatalf("non-recursive Save should not have touched the broken symlink, got error overlay: %q", r.errorView.GetText(true))
-	}
+			r, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			r.target = target
+			r.openProperties()
+			r.stagedOwner = strconv.Itoa(os.Getuid())
+			r.stagedGroup = strconv.Itoa(os.Getgid())
+			r.stagedRecursiveOwner = tt.recursiveOwner
+			r.stagedRecursiveGroup = tt.recursiveGroup
+			r.markPropertiesDirty()
 
-	// Toggle on: ChownRecursive's own WalkDir now reaches broken-link;
-	// Chown on it follows the link and fails (there's nothing on the
-	// other end) — that failure should surface as Properties' own error
-	// overlay, same as any other failed Save.
-	r2 := newRoot()
-	r2.stagedRecursiveChown = true
-	r2.savePropertiesEdit()
-	if r2.activePage != errorPage {
-		t.Error("recursive Save should have surfaced the broken symlink's chown failure as an error overlay")
+			r.savePropertiesEdit()
+
+			gotErrorOverlay := r.activePage == errorPage
+			if gotErrorOverlay != tt.wantErrorOverlay {
+				t.Errorf("error overlay shown = %v, want %v", gotErrorOverlay, tt.wantErrorOverlay)
+			}
+		})
 	}
 }
 
@@ -1860,6 +1891,55 @@ func TestCaptureOutsideClickBlockedWhilePropertiesDirty(t *testing.T) {
 	}
 	if action != tview.MouseConsumed || event != nil {
 		t.Errorf("outside click while dirty should be consumed and swallowed, got action=%v event=%v", action, event)
+	}
+}
+
+// TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen
+// pins the user's own explicit request's other half (see
+// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen for Ctrl+D):
+// a click on the Details button must reach the button bar's own
+// handling untouched, even while Properties is dirty — the one case
+// that would otherwise swallow every other outside click outright (see
+// TestCaptureOutsideClickBlockedWhilePropertiesDirty just above).
+func TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // dirty — the stricter of the two outside-click cases
+
+	// Positioned low on the screen, well clear of wherever Properties
+	// itself ended up (a small overlay near the top-left) — the same
+	// non-overlap the real app's own layout always has between the
+	// button bar (always the second-to-last row) and Properties.
+	width := tview.TaggedStringWidth(r.buttonBar.GetText(true)) + 10
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, 40)
+	r.buttonBar.SetRect(0, 38, width, 1)
+	r.buttonBar.Draw(screen)
+
+	span, ok := buttonBarSpanFor(r, buttonActionDetails)
+	if !ok {
+		t.Fatal("no Details span found in the button bar")
+	}
+	rectX, rectY, _, _ := r.buttonBar.GetInnerRect()
+	x, y := rectX+span.startCol, rectY
+
+	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
+
+	if action != tview.MouseLeftClick || event == nil {
+		t.Errorf("a click on the Details button should pass through untouched, got action=%v event=%v", action, event)
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
 	}
 }
 
