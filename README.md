@@ -1,10 +1,11 @@
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CI (Linux)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-2db94d.svg)](https://opensource.org/licenses/Apache-2.0) [![CI (Linux)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux.yml)
 [![CI (Linux ARM64)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux-arm.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-linux-arm.yml)
 [![CI (macOS)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml/badge.svg)](https://github.com/jagottsicher/breakthrough/actions/workflows/test-macos.yml)
 
 # breakthrough
 ## A mouse-and-menu-driven TUI file manager for your POSIX-compliant terminal, built around a real embedded bash shell — written in Go.
+
+![Hero Picture](docs/images/20260830_000058_01B543A0-5FB0-4374-B58D-31F07F11333F.jpg)
 
 breakthrough puts classic GUI file-manager idioms — a browsable panel,
 context menus, floating dialogs, clickable breadcrumbs — over a real bash
@@ -18,6 +19,8 @@ running through your actual `$SHELL`, started the same way an
 interactive login shell would be — so it sources that shell's own
 startup files and expands its aliases, whichever shell that actually is
 — not a reimplementation of one.
+
+![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-08-30%2022-46-12.png)
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the

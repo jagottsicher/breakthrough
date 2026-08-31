@@ -40,8 +40,17 @@ var helpText = strings.TrimLeft(`
   Ctrl+F          Find
   Ctrl+O          Options
   Ctrl+P          Properties
-  Ctrl+D          Toggle the Details sidebar (empty for now — a work
-                  in progress, key subject to change)
+  Ctrl+D          Toggle the Details sidebar — a read-only, live-
+                  updating panel of file info (stat fields; for an
+                  image or PDF, a preview with its own click zone/
+                  Ctrl+L for fullscreen; hashes) for whichever entry
+                  is currently selected
+  Ctrl+K          Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512)
+                  for Properties if that's open, otherwise the Details
+                  sidebar; shown in both at once if both are open on
+                  the same file, however it was triggered
+  Ctrl+N          Load an image's metadata in the Details sidebar
+                  (EXIF etc. — not implemented yet)
   Ctrl+S          Sed Replace on the selected file(s)
   Ctrl+B          Go to Trash — browse it directly
   Ctrl+T / Delete Move the selection to Trash (reversible); already
@@ -64,16 +73,25 @@ var helpText = strings.TrimLeft(`
   narrow the list live (its own button switches between a plain glob
   and a regular expression).
 
+  While plainly browsing (not editing the path, not in the filter box)
+  and the Details sidebar is shown, Tab moves keyboard focus into it —
+  its own scrolling (arrow keys, PageUp/PageDown, Home/End, mouse
+  wheel) then works once its content is longer than it has room for —
+  and Tab again moves focus back to the panel. A click anywhere in the
+  sidebar that isn't one of its own click zones also focuses it, the
+  same way.
+
 [::b]Properties dialog[::-]
 
   Tab / Shift+Tab   Move between fields
   Enter / Space     Activate or commit the focused one
   Escape            Cancel and close
-  h                 Compute file hashes (SHA-256/SHA-1/MD5/SHA-512/
-                    BLAKE2b-512)
 
   With a permission bit focused: r / w / x sets that bit directly,
   Space toggles it, Delete or - clears it.
+
+  Ctrl+K (see the file panel's own entry above) computes hashes here
+  too — click the hash hint works as well.
 
 [::b]Search dialog (Ctrl+F)[::-]
 
