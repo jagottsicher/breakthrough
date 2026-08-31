@@ -196,16 +196,31 @@ func (r *Root) toggleDetailsSidebar() {
 
 // ToggleDetailsSidebarShortcut is Ctrl+D's own action — see
 // cmd/breakthrough, which falls through to bashLine's own handling
-// (returns the event, not nil) whenever acceptsGlobalShortcut reports
-// false, the same as Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B: tview's own TextArea
-// binds Ctrl+D to "delete forward" (the same as the physical Delete
-// key), and losing that while typing a command would be a real, working
-// feature silently broken, not just an unlikely readline convention no
-// one would ever actually hit.
+// (returns the event, not nil) whenever this reports it wouldn't have
+// fired anyway, the same as Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B: tview's own
+// TextArea binds Ctrl+D to "delete forward" (the same as the physical
+// Delete key), and losing that while typing a command would be a real,
+// working feature silently broken, not just an unlikely readline
+// convention no one would ever actually hit.
+//
+// Unlike those four, this doesn't gate on the full acceptsGlobalShortcut
+// (which requires no overlay open at all) — it also fires while
+// Properties specifically is open, per the user's own explicit request
+// to be able to open or close Details *alongside* Properties, the same
+// "also works while Properties is open" carve-out Ctrl+K/Ctrl+N's own
+// doc comment already documents for the same reason (see
+// ComputeHashesShortcut). Every other overlay (Search, Help, Options,
+// Sed, a picker, ...) still blocks it, same as before — only Properties
+// gets this exception. See captureOutsideClick's own matching carve-out
+// for the Details button's click, the other half of the same request.
 func (r *Root) ToggleDetailsSidebarShortcut() {
-	if r.acceptsGlobalShortcut() {
-		r.toggleDetailsSidebar()
+	if r.bashLine.HasFocus() {
+		return
 	}
+	if r.activePage != "" && r.activePage != propertiesPage {
+		return
+	}
+	r.toggleDetailsSidebar()
 }
 
 // ToggleDetailsFocusShortcut is Tab's own action while either the
