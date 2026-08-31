@@ -313,6 +313,7 @@ const (
 	actionHome                         // go to the user's home directory
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
+	actionUp                           // go up one level (the parent directory)
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -2034,13 +2035,26 @@ func (p *Panel) previousPath() (string, bool) {
 }
 
 // buildHeaderSpans renders the header's display text — Start/Home/Back/
-// Forward button glyphs followed by the path, one clickable span per path
-// component (the leading "/" plus each name in between), e.g. clicking
-// "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are measured via
-// tview.TaggedStringWidth, not a plain rune count — a directory name
-// containing double-width (e.g. CJK) characters occupies two terminal
-// columns per character, and a rune count would silently drift the spans
-// after it out of alignment with what's actually drawn on screen.
+// Forward/Up button glyphs followed by the path, one clickable span per
+// path component (the leading "/" plus each name in between), e.g.
+// clicking "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are
+// measured via tview.TaggedStringWidth, not a plain rune count — a
+// directory name containing double-width (e.g. CJK) characters occupies
+// two terminal columns per character, and a rune count would silently
+// drift the spans after it out of alignment with what's actually drawn
+// on screen.
+//
+// The five button glyphs are packed together with no space between
+// them, none before the first one either, and exactly one before the
+// path starts — per the user's own explicit request, "^ ~ < >" read as
+// more spread out than five single-purpose buttons need to be. Start's
+// own glyph is "∎" (U+220E), not "^": this
+// app's own button bar already writes Ctrl-shortcuts as "^E", "^L" and
+// so on, so a bare "^" here risked reading as one of those instead of a
+// button in its own right — "∎" carries no such collision. "^" itself
+// isn't reused for Up either, despite visually suggesting "upward": ↑
+// says that unambiguously and isn't asked to also serve as a
+// stand-in for whatever Start used to mean.
 //
 // A click that lands in the header but doesn't hit any of these spans
 // (e.g. on a "/" separator, or in empty space after the path) is handled
@@ -2051,19 +2065,18 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	col := 0
 
 	button := func(glyph string, action headerAction) {
-		b.WriteByte(' ')
-		col++
 		start := col
 		b.WriteString(glyph)
 		col += tview.TaggedStringWidth(glyph)
 		spans = append(spans, headerSpan{start: start, end: col, action: action})
 	}
-	button("^", actionStart)
+	button("∎", actionStart)
 	button("~", actionHome)
 	button("<", actionBack)
 	button(">", actionForward)
-	b.WriteString("  ")
-	col += 2
+	button("↑", actionUp)
+	b.WriteString(" ")
+	col++
 
 	rootStart := col
 	b.WriteString("/")
@@ -2154,6 +2167,14 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		p.back()
 	case actionForward:
 		p.forward()
+	case actionUp:
+		// filepath.Dir("/") == "/" — a no-op navigate back to the same
+		// directory at the filesystem root, the same "nothing to do,
+		// nothing goes wrong either" territory Start/Home already have
+		// at their own edges (already at the start directory, already
+		// home). Mirrors the ".." row's own identical parent-or-self
+		// check in load, just without needing a visible row for it.
+		p.reportError(p.navigate(filepath.Dir(p.path)))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
