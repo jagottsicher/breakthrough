@@ -801,7 +801,7 @@ func TestSavingUntouchedFieldsDoesNotWriteAnything(t *testing.T) {
 	r.openProperties()
 
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-	for i := 0; i < len(propertyFieldOrder); i++ {
+	for i := 0; i < len(r.currentFieldOrder()); i++ {
 		r.properties.InputHandler()(tab, func(tview.Primitive) {})
 	}
 
@@ -1171,7 +1171,7 @@ func TestFinishPropertyEditTabCommitsAndAdvances(t *testing.T) {
 	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
 
 	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
-	timeIdx, _ := propertyFieldIndex(fieldMtimeTime)
+	timeIdx, _ := r.propertyFieldIndex(fieldMtimeTime)
 	r.activatePropertyField(dateSpan)
 	r.propertiesEditField.SetText("2026-08-05")
 	r.finishPropertyEdit(tcell.KeyTab)
@@ -1198,7 +1198,7 @@ func TestFinishPropertyEditBacktabCommitsAndRetreats(t *testing.T) {
 	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
 
 	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
-	dateIdx, _ := propertyFieldIndex(fieldMtimeDate)
+	dateIdx, _ := r.propertyFieldIndex(fieldMtimeDate)
 	r.activatePropertyField(timeSpan)
 	r.propertiesEditField.SetText("09:05:03")
 	r.finishPropertyEdit(tcell.KeyBacktab)
@@ -1594,6 +1594,134 @@ func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
 	}
 }
 
+// TestRecursiveApplyFieldShownForDirectory and
+// TestRecursiveApplyFieldHiddenForFile pin renderProperties'/
+// currentFieldOrder's own isDirish guard for the recursive Owner/Group
+// toggle (see recursiveApplyField/toggleRecursiveApply): the row — and
+// so its propertySpan — only exists for a directory target, per the
+// user's own explicit request that it sit "behind" Owner/Group only for
+// folders.
+func TestRecursiveApplyFieldShownForDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "app-data")
+	r.openProperties()
+
+	if _, ok := findPropertySpan(r, fieldRecursiveApply); !ok {
+		t.Error("a directory target should show the recursive-apply toggle")
+	}
+}
+
+func TestRecursiveApplyFieldHiddenForFile(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if _, ok := findPropertySpan(r, fieldRecursiveApply); ok {
+		t.Error("a plain file target should not show the recursive-apply toggle")
+	}
+}
+
+// TestToggleRecursiveApply pins that clicking the toggle (see
+// activatePropertyField's own fieldRecursiveApply case) flips
+// stagedRecursiveChown back and forth and marks the overlay dirty, the
+// same as every other field click already does.
+func TestToggleRecursiveApply(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "app-data")
+	r.openProperties()
+
+	if r.stagedRecursiveChown {
+		t.Fatal("setup: should start off")
+	}
+
+	span, ok := findPropertySpan(r, fieldRecursiveApply)
+	if !ok {
+		t.Fatal("no fieldRecursiveApply span found")
+	}
+
+	r.activatePropertyField(span)
+	if !r.stagedRecursiveChown {
+		t.Error("clicking the toggle should turn it on")
+	}
+	if !r.propertiesDirty {
+		t.Error("clicking the toggle should mark the overlay dirty, same as every other field")
+	}
+
+	r.activatePropertyField(span)
+	if r.stagedRecursiveChown {
+		t.Error("clicking the toggle again should turn it back off")
+	}
+}
+
+// TestSavePropertiesEditRecursiveChownReachesNestedEntries proves the
+// toggle actually changes which fsops function Save calls (see
+// savePropertiesEdit's own "chown := fsops.Chown; if
+// r.stagedRecursiveChown ..." dispatch), not merely a field nothing
+// downstream reads. A same-uid/gid chown (see
+// TestSavePropertiesEditAppliesOwnerGroupChange's own doc comment on why
+// that's the only privilege-free option) can't tell "reached this file"
+// apart from "never touched it" by inspecting the result — the uid/gid
+// look identical either way. A dangling symlink nested inside the
+// directory can: a non-recursive Chown on the directory itself never
+// looks inside, so it's never reached at all, but ChownRecursive's own
+// WalkDir does reach it, and Chown on it follows the (broken) link and
+// fails — see ChownRecursive's own doc comment. That failure surfacing
+// as Properties' error overlay only when the toggle is on is what this
+// test actually pins.
+func TestSavePropertiesEditRecursiveChownReachesNestedEntries(t *testing.T) {
+	dir := fixtureDir(t)
+	target := filepath.Join(dir, "app-data")
+	broken := filepath.Join(target, "broken-link")
+	if err := os.Symlink(filepath.Join(target, "does-not-exist"), broken); err != nil {
+		t.Fatal(err)
+	}
+
+	newRoot := func() *Root {
+		r, err := NewRoot(tview.NewApplication(), dir)
+		if err != nil {
+			t.Fatalf("NewRoot: %v", err)
+		}
+		r.target = target
+		r.openProperties()
+		r.stagedOwner = strconv.Itoa(os.Getuid())
+		r.stagedGroup = strconv.Itoa(os.Getgid())
+		r.markPropertiesDirty()
+		return r
+	}
+
+	// Toggle off: Save never looks inside app-data, so the broken
+	// symlink is simply never reached — succeeds the same as
+	// TestSavePropertiesEditAppliesOwnerGroupChange's own case.
+	r := newRoot()
+	r.savePropertiesEdit()
+	if r.activePage == errorPage {
+		t.Fatalf("non-recursive Save should not have touched the broken symlink, got error overlay: %q", r.errorView.GetText(true))
+	}
+
+	// Toggle on: ChownRecursive's own WalkDir now reaches broken-link;
+	// Chown on it follows the link and fails (there's nothing on the
+	// other end) — that failure should surface as Properties' own error
+	// overlay, same as any other failed Save.
+	r2 := newRoot()
+	r2.stagedRecursiveChown = true
+	r2.savePropertiesEdit()
+	if r2.activePage != errorPage {
+		t.Error("recursive Save should have surfaced the broken symlink's chown failure as an error overlay")
+	}
+}
+
 // TestCancelPropertiesEditDiscardsChanges pins that Cancel never touches
 // the real file, even after a permission bit was toggled.
 func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
@@ -1884,7 +2012,7 @@ func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	n := len(propertyFieldOrder)
+	n := len(r.currentFieldOrder())
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 	noSetFocus := func(tview.Primitive) {}
 
@@ -1986,7 +2114,7 @@ func TestSpaceActivatesFocusedButton(t *testing.T) {
 	r.openProperties()
 	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640, something for Save to actually apply
 
-	r.setPropertiesFocus(len(propertyFieldOrder) + 1) // Save
+	r.setPropertiesFocus(len(r.currentFieldOrder()) + 1) // Save
 
 	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
 	if got := r.propertiesSaveBtn.GetInputCapture()(space); got != nil {
@@ -2033,7 +2161,7 @@ func TestTabAutoOpensTextFieldsButNotTogglesOrPicker(t *testing.T) {
 		t.Errorf("activePage = %q, want Properties still open", r.activePage)
 	}
 
-	octalIdx, _ := propertyFieldIndex(fieldPermOctal)
+	octalIdx, _ := r.propertyFieldIndex(fieldPermOctal)
 	r.setPropertiesFocus(octalIdx)
 	if !propertiesEditFieldOpen(r) {
 		t.Error("landing on the octal value should auto-open its inline editor")
@@ -2041,7 +2169,7 @@ func TestTabAutoOpensTextFieldsButNotTogglesOrPicker(t *testing.T) {
 
 	r.finishPropertyEdit(tcell.KeyEnter) // conclude editing, stay on the octal field
 
-	ownerIdx, _ := propertyFieldIndex(fieldOwner)
+	ownerIdx, _ := r.propertyFieldIndex(fieldOwner)
 	r.setPropertiesFocus(ownerIdx)
 	if propertiesEditFieldOpen(r) {
 		t.Error("landing on Owner should not auto-open the inline editor (it opens the picker instead, on an explicit key/click)")
@@ -2076,7 +2204,7 @@ func TestFinishPropertyEditEnterConcludesWithoutReopening(t *testing.T) {
 	if propertiesEditFieldOpen(r) {
 		t.Error("Enter should close the inline editor, not immediately reopen it")
 	}
-	nameIdx, _ := propertyFieldIndex(fieldName)
+	nameIdx, _ := r.propertyFieldIndex(fieldName)
 	if r.propertiesFocusIndex != nameIdx {
 		t.Errorf("propertiesFocusIndex = %d, want to stay on Name (%d)", r.propertiesFocusIndex, nameIdx)
 	}
@@ -2100,7 +2228,7 @@ func TestPermBitKeyboardShortcuts(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	idx, _ := propertyFieldIndex(fieldPermOwnerRead)
+	idx, _ := r.propertyFieldIndex(fieldPermOwnerRead)
 	r.setPropertiesFocus(idx)
 
 	// The matching letter ('r' for a read bit) sets it on.

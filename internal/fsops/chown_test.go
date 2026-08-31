@@ -104,3 +104,35 @@ func TestChownNoopToOwnUser(t *testing.T) {
 		t.Errorf("Chown to own uid/gid should succeed without special privileges: %v", err)
 	}
 }
+
+// TestChownRecursiveNoopToOwnUser is TestChownNoopToOwnUser's own
+// counterpart for ChownRecursive: same "own uid/gid, no root needed"
+// constraint, but over a small tree (top-level file, a subdirectory, and
+// a file inside it) to confirm the walk actually reaches every entry,
+// not just path itself.
+func TestChownRecursiveNoopToOwnUser(t *testing.T) {
+	dir := t.TempDir()
+	topFile := filepath.Join(dir, "f.txt")
+	subDir := filepath.Join(dir, "sub")
+	subFile := filepath.Join(subDir, "g.txt")
+
+	if err := os.WriteFile(topFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(subFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ChownRecursive(dir, os.Getuid(), os.Getgid()); err != nil {
+		t.Errorf("ChownRecursive to own uid/gid should succeed without special privileges: %v", err)
+	}
+
+	for _, p := range []string{dir, topFile, subDir, subFile} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("stat %s after ChownRecursive: %v", p, err)
+		}
+	}
+}
