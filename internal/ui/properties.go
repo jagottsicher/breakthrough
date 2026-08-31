@@ -71,12 +71,13 @@ var baseFieldOrder = []propertyField{
 // currentFieldOrder returns baseFieldOrder for Properties' current
 // target, with fieldRecursiveApplyOwner and fieldRecursiveApplyGroup
 // spliced in right after fieldOwner and fieldGroup respectively —
-// matching exactly where recursiveApplyField draws each one's own row —
-// once isDirish(r.propertiesStat) is true. Unchanged for anything else,
-// since a non-directory target never shows either row at all (see
-// renderProperties' own isDirish guards); every Tab-navigation function
-// below reads the order through this method rather than baseFieldOrder
-// directly, precisely so a field that isn't actually rendered can never
+// matching exactly where recursiveApplyToggle appends each one's own
+// glyph — once isDirish(r.propertiesStat) is true. Unchanged for
+// anything else, since a non-directory target never shows either toggle
+// at all (see renderProperties' own isDirish guards); every
+// Tab-navigation function below reads the order through this method
+// rather than baseFieldOrder directly, precisely so a field that isn't
+// actually rendered can never
 // become a reachable (but invisible) tab stop — the same "the field
 // order and what renderProperties actually draws are meant to always
 // agree" invariant activateFocusedPropertyStop's own doc comment already
@@ -284,30 +285,28 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: octalStart, endCol: octalEnd, field: fieldPermOctal})
 }
 
-// recursiveApplyField writes one directory-only "apply recursively"
-// toggle's own line (see renderProperties' own isDirish guards, the only
-// caller, which decide whether either gets written at all) — one
-// right after Owner, one right after Group, per the user's own explicit
-// request that the two be independently toggleable rather than a single
-// combined switch for both. field is whichever of
-// fieldRecursiveApplyOwner/fieldRecursiveApplyGroup this particular call
-// is drawing; it governs whether saving that one attribute (see
-// savePropertiesEdit) reaches only this directory's own entry, or every
-// file and subdirectory inside it too (see fsops.ChownRecursive).
-// Rendered with the same ○/● glyph this app's checkbox column and every
-// other plain on/off toggle already use (see checkboxText in panel.go):
-// the click itself toggles it (see Root.toggleRecursiveApply), there's
-// nothing here to type into. The label column is left blank (not
-// "Label:", like every other field) since there's no separate value to
-// align — the checkbox and its own description both live in what would
-// otherwise be the value column, at the same start column editableField's
-// own values line up at.
-func (pb *propertiesBuilder) recursiveApplyField(field propertyField, checked bool, focused propertyField) {
-	pb.text(fmt.Sprintf("%-13s", ""))
+// recursiveApplyToggle appends one directory-only "apply recursively"
+// toggle right onto the end of Owner's or Group's own current line (see
+// renderProperties' own isDirish guards, the only caller, which decide
+// whether either gets appended at all, right after that line's own
+// editableField call and before its newline) — inline, right behind the
+// name, rather than a separate row of its own, and just the bare ○/●
+// glyph rather than a highlighted "Apply recursively" line, per the
+// user's own explicit request that the clickable glyph alone is enough.
+// field is whichever of fieldRecursiveApplyOwner/fieldRecursiveApplyGroup
+// this particular call is drawing; it governs whether saving that one
+// attribute (see savePropertiesEdit) reaches only this directory's own
+// entry, or every file and subdirectory inside it too (see
+// fsops.ChownRecursive). Rendered with the same ○/● glyph this app's
+// checkbox column and every other plain on/off toggle already use (see
+// checkboxText in panel.go): the click itself toggles it (see
+// Root.toggleRecursiveApply), there's nothing here to type into.
+func (pb *propertiesBuilder) recursiveApplyToggle(field propertyField, checked bool, focused propertyField) {
+	pb.text("  ")
 	tag, reset := pb.focusTag(field, focused)
 	pb.tag(tag)
 	start := pb.col
-	pb.text(checkboxText(checked) + " Apply recursively")
+	pb.text(checkboxText(checked))
 	end := pb.col
 	pb.tag(reset)
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: end, field: field})
@@ -611,17 +610,15 @@ func (r *Root) renderProperties() {
 	}
 	pb.newline()
 	pb.editableField("Owner", r.stagedOwner, fieldOwner, focused)
-	pb.newline()
 	if isDirish(r.propertiesStat) {
-		pb.recursiveApplyField(fieldRecursiveApplyOwner, r.stagedRecursiveOwner, focused)
-		pb.newline()
+		pb.recursiveApplyToggle(fieldRecursiveApplyOwner, r.stagedRecursiveOwner, focused)
 	}
+	pb.newline()
 	pb.editableField("Group", r.stagedGroup, fieldGroup, focused)
-	pb.newline()
 	if isDirish(r.propertiesStat) {
-		pb.recursiveApplyField(fieldRecursiveApplyGroup, r.stagedRecursiveGroup, focused)
-		pb.newline()
+		pb.recursiveApplyToggle(fieldRecursiveApplyGroup, r.stagedRecursiveGroup, focused)
 	}
+	pb.newline()
 	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
 	pb.newline()
 	pb.mtimeField(r.stagedMtime, focused)
