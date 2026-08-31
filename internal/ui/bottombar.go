@@ -394,6 +394,27 @@ func clockText() string {
 	return time.Now().Format("2006-01-02 15:04:05 MST")
 }
 
+// buttonBarActionAt returns the buttonBarAction at screen position
+// (x, y), if any — the column lookup captureButtonBarMouse itself needs
+// to actually run one, factored out so captureOutsideClick can also ask
+// "what would a click here do" without running it (see its own
+// buttonActionDetails carve-out, letting a Details click through while
+// Properties is open instead of treating it as a click outside the
+// overlay).
+func (r *Root) buttonBarActionAt(x, y int) (buttonBarAction, bool) {
+	if !r.buttonBar.InRect(x, y) {
+		return 0, false
+	}
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
+	col := x - rectX
+	for _, s := range r.buttonBarSpans {
+		if col >= s.startCol && col < s.endCol {
+			return s.action, true
+		}
+	}
+	return 0, false
+}
+
 // captureButtonBarMouse routes a click on one of the button bar's
 // buttons (see buildButtonBar/buttonBarSpan) to its action. A click
 // elsewhere on the row (the gaps between buttons, or empty space) just
@@ -403,15 +424,9 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 		return action, event
 	}
 
-	x, _ := event.Position()
-	rectX, _, _, _ := r.buttonBar.GetInnerRect()
-	col := x - rectX
-
-	for _, s := range r.buttonBarSpans {
-		if col >= s.startCol && col < s.endCol {
-			r.runButtonBarAction(s.action)
-			break
-		}
+	x, y := event.Position()
+	if bAction, ok := r.buttonBarActionAt(x, y); ok {
+		r.runButtonBarAction(bAction)
 	}
 	return tview.MouseConsumed, nil
 }

@@ -240,6 +240,38 @@ func TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 	}
 }
 
+// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen pins the
+// user's own explicit request: unlike every other overlay (see
+// TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen just above),
+// Properties specifically must NOT block Ctrl+D — Details should open
+// and close alongside it, not require closing Properties first.
+func TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	r.ToggleDetailsSidebarShortcut()
+	if !r.detailsSidebarVisible {
+		t.Error("Ctrl+D should show the Details sidebar while Properties is open")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
+	}
+
+	r.ToggleDetailsSidebarShortcut()
+	if r.detailsSidebarVisible {
+		t.Error("a second Ctrl+D should hide the Details sidebar again")
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to still be open", r.activePage)
+	}
+}
+
 // TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight pins the
 // sizing contract from the user's own request: at least a third of the
 // screen's width, flush against its right edge, and — for now — its
