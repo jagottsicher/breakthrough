@@ -144,6 +144,23 @@ func run() error {
 	// full AcceptsGlobalShortcut - both need to keep working while
 	// Properties is open, not just while plainly browsing (see
 	// Root.ComputeHashesShortcut's own doc comment for why).
+	//
+	// Tab moves focus between the panel and the Details sidebar (see
+	// Root.ToggleDetailsFocusShortcut) - considered and rejected first:
+	// Ctrl+Tab, the more obvious "cycle between things" mnemonic. Verified
+	// directly against tcell's own key.go, not assumed: there's no
+	// KeyCtrlTab constant at all, because the classic terminal encoding
+	// tcell parses here has no room left to represent it - Tab itself
+	// already occupies the one byte (0x09) Ctrl+I would also use, so a
+	// real Ctrl+Tab keypress arrives as plain Tab, indistinguishable, on
+	// most terminals (the same class of problem as Ctrl+H/Ctrl+M above,
+	// just with no extended-protocol fallback tcell's decoder even
+	// attempts here) - and separately, most terminal emulators intercept
+	// Ctrl+Tab themselves for their own tab-switching before it would ever
+	// reach an application at all. Plain Tab is safe here specifically
+	// because it's genuinely unclaimed while the panel or the sidebar has
+	// focus: neither installs a SetDoneFunc, so it was already a pure
+	// no-op in exactly the two states this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -239,6 +256,20 @@ func run() error {
 			}
 			root.FetchMetadataShortcut()
 			return nil
+		case tcell.KeyTab:
+			// Only consumed when it actually means something (see
+			// Root.ToggleDetailsFocusShortcut's own doc comment) - moving
+			// focus between the panel and the Details sidebar once it's
+			// shown, so its own already-built-in scrolling works once its
+			// content outgrows the space it has. Everywhere else (a
+			// Properties field, the header path edit, the filter box, bash-
+			// line completion, ...), it reports false and this falls
+			// through completely untouched, exactly as Tab already worked
+			// everywhere before this existed.
+			if root.ToggleDetailsFocusShortcut() {
+				return nil
+			}
+			return event
 		case tcell.KeyCtrlB:
 			// Falls through while bashLine has focus for the same reason
 			// as Ctrl+T/Ctrl+P above - readline-style Ctrl+B is

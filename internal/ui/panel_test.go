@@ -20,20 +20,21 @@ import (
 func TestBuildHeaderSpans(t *testing.T) {
 	text, spans := buildHeaderSpans("/a/bb/c")
 
-	wantText := " ^ ~ < >  /a/bb/c"
+	wantText := "∎~<>↑ /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
 	want := []headerSpan{
-		{start: 1, end: 2, action: actionStart},
-		{start: 3, end: 4, action: actionHome},
-		{start: 5, end: 6, action: actionBack},
-		{start: 7, end: 8, action: actionForward},
-		{start: 10, end: 11, action: actionNavigate, target: "/"},
-		{start: 11, end: 12, action: actionNavigate, target: "/a"},
-		{start: 13, end: 15, action: actionNavigate, target: "/a/bb"},
-		{start: 16, end: 17, action: actionNavigate, target: "/a/bb/c"},
+		{start: 0, end: 1, action: actionStart},
+		{start: 1, end: 2, action: actionHome},
+		{start: 2, end: 3, action: actionBack},
+		{start: 3, end: 4, action: actionForward},
+		{start: 4, end: 5, action: actionUp},
+		{start: 6, end: 7, action: actionNavigate, target: "/"},
+		{start: 7, end: 8, action: actionNavigate, target: "/a"},
+		{start: 9, end: 11, action: actionNavigate, target: "/a/bb"},
+		{start: 12, end: 13, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -73,17 +74,17 @@ func TestBuildHeaderSpans(t *testing.T) {
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
-	wantText := " ^ ~ < >  /"
+	wantText := "∎~<>↑ /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	// 4 buttons + the root span.
-	if len(spans) != 5 {
-		t.Fatalf("got %d spans, want 5: %+v", len(spans), spans)
+	// 5 buttons + the root span.
+	if len(spans) != 6 {
+		t.Fatalf("got %d spans, want 6: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 10, end: 11, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 6, end: 7, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -97,19 +98,20 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	text, spans := buildHeaderSpans("/文档/c")
 
-	wantText := " ^ ~ < >  /文档/c"
+	wantText := "∎~<>↑ /文档/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
 	want := []headerSpan{
-		{start: 1, end: 2, action: actionStart},
-		{start: 3, end: 4, action: actionHome},
-		{start: 5, end: 6, action: actionBack},
-		{start: 7, end: 8, action: actionForward},
-		{start: 10, end: 11, action: actionNavigate, target: "/"},
-		{start: 11, end: 15, action: actionNavigate, target: "/文档"},
-		{start: 16, end: 17, action: actionNavigate, target: "/文档/c"},
+		{start: 0, end: 1, action: actionStart},
+		{start: 1, end: 2, action: actionHome},
+		{start: 2, end: 3, action: actionBack},
+		{start: 3, end: 4, action: actionForward},
+		{start: 4, end: 5, action: actionUp},
+		{start: 6, end: 7, action: actionNavigate, target: "/"},
+		{start: 7, end: 11, action: actionNavigate, target: "/文档"},
+		{start: 12, end: 13, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -1901,10 +1903,12 @@ func TestSpanAtDuringSearchModeFindsBreadcrumbNotStatusText(t *testing.T) {
 		t.Fatal("setup: searchHeaderOffset is 0, this test can't distinguish the two regions")
 	}
 
-	// "^" (actionStart) is always the breadcrumb's own first character.
-	span, ok := p.spanAt(p.searchHeaderOffset + 1)
+	// "∎" (actionStart) is always the breadcrumb's own first character —
+	// buildHeaderSpans no longer pads it with a leading space (see its
+	// own doc comment).
+	span, ok := p.spanAt(p.searchHeaderOffset)
 	if !ok || span.action != actionStart {
-		t.Errorf("spanAt(searchHeaderOffset+1) = %+v, %v, want the actionStart button", span, ok)
+		t.Errorf("spanAt(searchHeaderOffset) = %+v, %v, want the actionStart button", span, ok)
 	}
 }
 

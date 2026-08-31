@@ -13,6 +13,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // TestToggleDetailsSidebarShortcutShowsAndHides pins Ctrl+D's own basic
@@ -78,6 +80,143 @@ func TestShowDetailsSidebarPreservesKeyboardFocus(t *testing.T) {
 	r.hideDetailsSidebar()
 	if got := r.app.GetFocus(); got != r.panel.table {
 		t.Errorf("focus after hiding the sidebar = %v, want still unchanged", got)
+	}
+}
+
+// TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar pins Tab's
+// own two-way action: from the panel, it moves focus onto the sidebar
+// (so its own already-built-in scrolling works); pressed again, it
+// moves focus back.
+func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+	r.showDetailsSidebar()
+
+	if !r.ToggleDetailsFocusShortcut() {
+		t.Fatal("first Tab (panel -> sidebar) should report true")
+	}
+	if got := r.app.GetFocus(); got != r.detailsSidebar {
+		t.Errorf("focus after first Tab = %v, want the details sidebar", got)
+	}
+
+	if !r.ToggleDetailsFocusShortcut() {
+		t.Fatal("second Tab (sidebar -> panel) should report true")
+	}
+	if got := r.app.GetFocus(); got != r.panel.table {
+		t.Errorf("focus after second Tab = %v, want the panel's own table", got)
+	}
+}
+
+// TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies pins the
+// half of Tab's contract cmd/breakthrough actually depends on: it must
+// report false — so Tab falls through untouched — whenever neither the
+// panel nor the sidebar is what currently has focus (here: Properties,
+// which needs its own Tab for moving between fields), and also
+// whenever the sidebar isn't even shown at all.
+func TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	if r.ToggleDetailsFocusShortcut() {
+		t.Error("should report false when the sidebar isn't shown at all")
+	}
+
+	r.target = path
+	r.openProperties()
+	if r.ToggleDetailsFocusShortcut() {
+		t.Error("should report false while Properties (not the panel or the sidebar) has focus")
+	}
+	if got := r.app.GetFocus(); got == r.detailsSidebar || got == r.panel.table {
+		t.Errorf("focus should still be on Properties, got %v", got)
+	}
+}
+
+// TestHideDetailsSidebarRedirectsFocusWhenSidebarWasFocused is a
+// regression guard: preserveFocusAcross alone would restore focus onto
+// the very widget hideDetailsSidebar is about to hide, if that's what
+// had it — see hideDetailsSidebar's own doc comment.
+func TestHideDetailsSidebarRedirectsFocusWhenSidebarWasFocused(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+	r.showDetailsSidebar()
+	r.ToggleDetailsFocusShortcut() // panel -> sidebar
+	if got := r.app.GetFocus(); got != r.detailsSidebar {
+		t.Fatalf("setup: focus = %v, want the details sidebar", got)
+	}
+
+	r.hideDetailsSidebar()
+
+	if got := r.app.GetFocus(); got != r.panel.table {
+		t.Errorf("focus after hiding a focused sidebar = %v, want redirected to the panel's own table", got)
+	}
+}
+
+// TestLoadDetailsTargetResetsScrollPosition pins that a new target
+// always starts showing from its own top, not wherever the previous
+// one happened to be scrolled to.
+func TestLoadDetailsTargetResetsScrollPosition(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+
+	r.detailsSidebar.ScrollTo(3, 0)
+	if row, _ := r.detailsSidebar.GetScrollOffset(); row != 3 {
+		t.Fatalf("setup: scroll offset row = %d, want 3", row)
+	}
+
+	r.panel.focusRow(2)
+	if row, _ := r.detailsSidebar.GetScrollOffset(); row != 0 {
+		t.Errorf("scroll offset row after moving to a new target = %d, want 0 (reset)", row)
+	}
+}
+
+// TestDetailsSidebarBackgroundReflectsFocusState pins the visual cue
+// SetFocusFunc/SetBlurFunc give (see newDetailsSidebarView's own doc
+// comment) — the same FocusedBackground/AccentBackground contrast
+// propertiesEditField already uses elsewhere.
+func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+	r.showDetailsSidebar()
+
+	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
+		t.Errorf("background before focus = %v, want AccentBackground %v", got, want)
+	}
+
+	r.ToggleDetailsFocusShortcut()
+	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("background while focused = %v, want FocusedBackground %v", got, want)
+	}
+
+	r.ToggleDetailsFocusShortcut()
+	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
+		t.Errorf("background after losing focus again = %v, want AccentBackground %v", got, want)
 	}
 }
 
@@ -223,7 +362,7 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 // ever consumes MouseLeftDown, so without this capture, a right-click or
 // scroll landing on the sidebar would fall straight through to the
 // panel underneath, sharing that same screen space.
-func TestCaptureDetailsSidebarMouseSwallowsEveryActionInsideItsRect(t *testing.T) {
+func TestCaptureDetailsSidebarMouseSwallowsUnhandledActionsInsideItsRect(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -235,15 +374,45 @@ func TestCaptureDetailsSidebarMouseSwallowsEveryActionInsideItsRect(t *testing.T
 	x, y, width, _ := r.detailsSidebar.GetRect()
 	insideX, insideY := x+width/2, y
 
-	action, event := r.captureDetailsSidebarMouse(tview.MouseScrollUp, tcell.NewEventMouse(insideX, insideY, tcell.ButtonNone, 0))
+	// MouseRightClick isn't one of the actions captureDetailsSidebarMouse
+	// deliberately lets through (see its own doc comment: scroll,
+	// MouseLeftDown, and a non-click-zone MouseLeftClick) — still
+	// swallowed, so it can't leak through to the panel underneath.
+	action, event := r.captureDetailsSidebarMouse(tview.MouseRightClick, tcell.NewEventMouse(insideX, insideY, tcell.ButtonNone, 0))
 	if action != tview.MouseConsumed || event != nil {
 		t.Errorf("inside click: action=%v event=%v, want (MouseConsumed, nil)", action, event)
 	}
 
 	outsideX := x - 1
-	action, event = r.captureDetailsSidebarMouse(tview.MouseScrollUp, tcell.NewEventMouse(outsideX, insideY, tcell.ButtonNone, 0))
-	if action != tview.MouseScrollUp || event == nil {
+	action, event = r.captureDetailsSidebarMouse(tview.MouseRightClick, tcell.NewEventMouse(outsideX, insideY, tcell.ButtonNone, 0))
+	if action != tview.MouseRightClick || event == nil {
 		t.Errorf("outside click: action=%v event=%v, want passed through unchanged", action, event)
+	}
+}
+
+// TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough pins the fix
+// for the user's own explicit report: mouse-wheel scrolling (and a
+// plain click that focuses the sidebar via tview's own MouseLeftDown
+// handling — see ToggleDetailsFocusShortcut for the Tab-driven way in)
+// must reach the TextView's own default MouseHandler, not be swallowed
+// here the way every other action still is.
+func TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 90, 40)
+	r.showDetailsSidebar()
+
+	x, y, width, _ := r.detailsSidebar.GetRect()
+	insideX, insideY := x+width/2, y
+
+	for _, tc := range []tview.MouseAction{tview.MouseScrollUp, tview.MouseScrollDown, tview.MouseLeftDown} {
+		action, event := r.captureDetailsSidebarMouse(tc, tcell.NewEventMouse(insideX, insideY, tcell.ButtonNone, 0))
+		if action != tc || event == nil {
+			t.Errorf("%v: action=%v event=%v, want passed through unchanged", tc, action, event)
+		}
 	}
 }
 
@@ -537,6 +706,252 @@ func TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen(t *testing.T) 
 	}
 	if r.hashInProgress {
 		t.Error("hashInProgress (Properties') should stay false — Properties was never opened")
+	}
+}
+
+// TestPropagateHashResultUpdatesBothWhenShowingSameTarget pins the
+// user's own explicit request: a hash computed via either side shows up
+// in both, whenever they're showing the very same file at once — tested
+// against propagateHashResult directly (see its own doc comment on why
+// it's the sole place either side's own display actually gets updated,
+// not just a bolt-on for the other one), since the real async paths
+// that call it never actually complete in this test style (nothing
+// drains QueueUpdateDraw — see isolateHashFile's own doc comment).
+func TestPropagateHashResultUpdatesBothWhenShowingSameTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1) // the only real entry
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q — both must be showing the same file for this test", r.detailsTarget, path)
+	}
+
+	r.propagateHashResult(path, fsops.Hashes{MD5: "abc123"})
+
+	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
+		t.Errorf("propertiesHashes = %v, want MD5 abc123", r.propertiesHashes)
+	}
+	if r.detailsHashes == nil || r.detailsHashes.MD5 != "abc123" {
+		t.Errorf("detailsHashes = %v, want MD5 abc123", r.detailsHashes)
+	}
+}
+
+// TestPropagateHashResultIgnoresUnrelatedTarget pins the other half:
+// a result computed for some other path — not what either side is
+// currently showing — must not overwrite either one's own display.
+func TestPropagateHashResultIgnoresUnrelatedTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	r.propagateHashResult(filepath.Join(dir, "unrelated.txt"), fsops.Hashes{MD5: "xyz"})
+
+	if r.propertiesHashes != nil {
+		t.Errorf("propertiesHashes = %v, want nil — the result was for a different file", r.propertiesHashes)
+	}
+	if r.detailsHashes != nil {
+		t.Errorf("detailsHashes = %v, want nil — the result was for a different file", r.detailsHashes)
+	}
+}
+
+// TestOpenPropertiesAdoptsExistingDetailsHash pins the "adopt on open"
+// half of the user's own explicit request: opening Properties on a file
+// Details already has a computed hash for shows that result right away
+// — no fresh "press Ctrl+K" hint, no redundant recomputation.
+func TestOpenPropertiesAdoptsExistingDetailsHash(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.detailsHashes = &fsops.Hashes{MD5: "abc123"} // simulating an already-computed result
+
+	r.target = path
+	r.openProperties()
+
+	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
+		t.Errorf("propertiesHashes = %v, want adopted MD5 abc123 from Details", r.propertiesHashes)
+	}
+}
+
+// TestLoadDetailsTargetAdoptsExistingPropertiesHash is
+// TestOpenPropertiesAdoptsExistingDetailsHash's own mirror image: Details
+// loading a target Properties already has open and hashed adopts that
+// result immediately too.
+func TestLoadDetailsTargetAdoptsExistingPropertiesHash(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.target = path
+	r.openProperties()
+	r.propertiesHashes = &fsops.Hashes{MD5: "xyz789"} // simulating an already-computed result
+
+	r.showDetailsSidebar() // Details loads for the first time, same target
+
+	if r.detailsHashes == nil || r.detailsHashes.MD5 != "xyz789" {
+		t.Errorf("detailsHashes = %v, want adopted MD5 xyz789 from Properties", r.detailsHashes)
+	}
+}
+
+// TestSavePropertiesEditRefreshesDetailsShowingSameFile pins the user's
+// own explicit request: committing an edit in Properties (Return on a
+// field, then Save) immediately updates Details too, if it's showing
+// that same file — including following a rename to the file's own new
+// path, not just refreshing stale info still filed under the old one.
+// A real, observed gap otherwise: a same-directory reload (see
+// savePropertiesEdit's own doc comment) never repositions the table's
+// selection, so nothing would otherwise tell Details a rename even
+// happened.
+func TestSavePropertiesEditRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, path)
+	}
+
+	r.target = path
+	r.openProperties()
+	r.stagedName = "banana.txt"
+	r.savePropertiesEdit()
+
+	wantPath := filepath.Join(dir, "banana.txt")
+	if r.detailsTarget != wantPath {
+		t.Errorf("detailsTarget after rename via Save = %q, want %q", r.detailsTarget, wantPath)
+	}
+	if got := r.detailsSidebar.GetText(true); !strings.Contains(got, "banana.txt") {
+		t.Errorf("details sidebar text should show the new name, got:\n%s", got)
+	}
+}
+
+// TestSavePropertiesEditIgnoresDetailsShowingADifferentFile pins the
+// other half: Details tracking some other file entirely must not be
+// disturbed by an edit to whatever Properties happens to be open on.
+func TestSavePropertiesEditIgnoresDetailsShowingADifferentFile(t *testing.T) {
+	dir := t.TempDir()
+	applePath := filepath.Join(dir, "apple.txt")
+	bananaPath := filepath.Join(dir, "banana.txt")
+	for _, p := range []string{applePath, bananaPath} {
+		if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	if r.detailsTarget != applePath {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, applePath)
+	}
+
+	r.target = bananaPath
+	r.openProperties()
+	r.stagedMode = 0o600
+	r.savePropertiesEdit()
+
+	if r.detailsTarget != applePath {
+		t.Errorf("detailsTarget = %q, want unchanged %q — Properties was editing a different file", r.detailsTarget, applePath)
+	}
+}
+
+// TestClickingDetailsHashZoneDefersToOpenProperties pins the fix for
+// the inconsistency the user's own report surfaced: the click zone used
+// to call computeDetailsHashes directly, bypassing the "Properties wins
+// while it's open" rule Ctrl+K already followed (see
+// ComputeHashesShortcut) — a click was a second way around it that
+// pressing the key wasn't.
+func TestClickingDetailsHashZoneDefersToOpenProperties(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	t.Cleanup(r.cancelDetailsHashComputation)
+
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	if r.detailsHashRowStart < 0 {
+		t.Fatal("setup: detailsHashRowStart should be set for a non-directory target")
+	}
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+r.detailsHashRowStart, tcell.Button1, 0))
+	if action != tview.MouseConsumed {
+		t.Fatalf("action = %v, want MouseConsumed", action)
+	}
+	<-started
+
+	if !r.hashInProgress {
+		t.Error("clicking Details' hash zone while Properties is open should target Properties, not start its own computation")
+	}
+	if r.detailsHashInProgress {
+		t.Error("should not also start Details' own independent computation")
 	}
 }
 
