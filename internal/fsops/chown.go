@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -70,4 +71,28 @@ func ResolveGID(s string) (int, error) {
 // gid of -1 leaves that half unchanged.
 func Chown(path string, uid, gid int) error {
 	return os.Chown(path, uid, gid)
+}
+
+// ChownRecursive is Chown, applied to path itself and everything inside
+// it — the Properties overlay's own "apply to this folder's whole tree"
+// toggle for Owner/Group, per the user's own explicit request, rather
+// than just the directory entry itself. Stops at the first error rather
+// than continuing past it: whatever already succeeded stays changed,
+// the same "no automatic rollback" approach savePropertiesEdit's own
+// doc comment already documents for a save that fails partway through.
+// A symlink is never descended into as if it were a directory (WalkDir's
+// own traversal only ever recurses into a real subdirectory), but the
+// symlink entry itself still gets a plain Chown call like everything
+// else here — which, like a single, non-recursive Chown/os.Chown call
+// on a symlink, follows it and changes its target's ownership, not the
+// link's own. A dangling symlink nested anywhere in the tree therefore
+// makes the whole walk fail once it's reached, the same as chown(1)
+// itself would on a broken link's target.
+func ChownRecursive(path string, uid, gid int) error {
+	return filepath.WalkDir(path, func(p string, _ os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return Chown(p, uid, gid)
+	})
 }

@@ -173,22 +173,26 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		buttonSpec{"^R Remove", buttonActionRemove},
 	)
 
-	// " | " reads as a clearer separator between buttons than a plain
-	// double space — per the user's own explicit request, which also
-	// asked for a narrower bare "|" (no surrounding spaces) once the
-	// row's own available width can't fit the wider version. Not done:
-	// buildButtonBar only ever runs again on specific state changes
-	// (toggling hidden files, entering/leaving the trash view — see
-	// refreshButtonBar's own callers), never on a bare terminal resize
-	// by itself, so a width check here would frequently judge against
-	// whatever rect r.buttonBar happened to have the *last* time some
-	// unrelated state change last rebuilt it — not the terminal's
+	// " │ " (U+2502, the same box-drawing vertical bar buildStatusBar's
+	// own sep already uses one row below this) reads as a clearer
+	// separator between buttons than a plain double space, and keeps the
+	// two adjacent rows visually consistent with each other — a plain
+	// ASCII "|" here, tried first, read as an inconsistency once both
+	// were actually side by side. Per the user's own explicit request,
+	// which also asked for a narrower bare "│" (no surrounding spaces)
+	// once the row's own available width can't fit the wider version.
+	// Not done: buildButtonBar only ever runs again on specific state
+	// changes (toggling hidden files, entering/leaving the trash view —
+	// see refreshButtonBar's own callers), never on a bare terminal
+	// resize by itself, so a width check here would frequently judge
+	// against whatever rect r.buttonBar happened to have the *last* time
+	// some unrelated state change last rebuilt it — not the terminal's
 	// current real size — and silently keep the wrong separator until
-	// another such change happened to come along. Worth doing properly
-	// (hooking a real resize signal — e.g. Application.SetAfterDrawFunc,
-	// comparing against the last known width — to force a rebuild) as
-	// its own follow-up, not as a guess bolted onto this one.
-	const sep = " | "
+	// another such change happened to come along. Root.handleBeforeDraw
+	// already solves exactly this for Properties/Details (see its own
+	// doc comment); wiring buildButtonBar into it too, rather than
+	// guessing a width here, is the real follow-up.
+	const sep = " │ "
 
 	var b strings.Builder
 	col := 0
@@ -390,6 +394,27 @@ func clockText() string {
 	return time.Now().Format("2006-01-02 15:04:05 MST")
 }
 
+// buttonBarActionAt returns the buttonBarAction at screen position
+// (x, y), if any — the column lookup captureButtonBarMouse itself needs
+// to actually run one, factored out so captureOutsideClick can also ask
+// "what would a click here do" without running it (see its own
+// buttonActionDetails carve-out, letting a Details click through while
+// Properties is open instead of treating it as a click outside the
+// overlay).
+func (r *Root) buttonBarActionAt(x, y int) (buttonBarAction, bool) {
+	if !r.buttonBar.InRect(x, y) {
+		return 0, false
+	}
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
+	col := x - rectX
+	for _, s := range r.buttonBarSpans {
+		if col >= s.startCol && col < s.endCol {
+			return s.action, true
+		}
+	}
+	return 0, false
+}
+
 // captureButtonBarMouse routes a click on one of the button bar's
 // buttons (see buildButtonBar/buttonBarSpan) to its action. A click
 // elsewhere on the row (the gaps between buttons, or empty space) just
@@ -399,15 +424,9 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 		return action, event
 	}
 
-	x, _ := event.Position()
-	rectX, _, _, _ := r.buttonBar.GetInnerRect()
-	col := x - rectX
-
-	for _, s := range r.buttonBarSpans {
-		if col >= s.startCol && col < s.endCol {
-			r.runButtonBarAction(s.action)
-			break
-		}
+	x, y := event.Position()
+	if bAction, ok := r.buttonBarActionAt(x, y); ok {
+		r.runButtonBarAction(bAction)
 	}
 	return tview.MouseConsumed, nil
 }

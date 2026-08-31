@@ -585,12 +585,23 @@ type Root struct {
 	// into its text fallback — resolved to a uid/gid via
 	// fsops.ResolveUID/ResolveGID only at Save time, the same as
 	// propertiesStat.Owner/Group are themselves already just names.
-	propertiesDirty bool
-	stagedName      string
-	stagedMode      os.FileMode
-	stagedMtime     time.Time
-	stagedOwner     string
-	stagedGroup     string
+	//
+	// stagedRecursiveOwner/stagedRecursiveGroup are the directory-only
+	// "apply recursively" toggles (see recursiveApplyField/
+	// toggleRecursiveApply) that sit right after Owner and right after
+	// Group respectively — two independent toggles rather than one
+	// combined switch for both, per the user's own explicit request.
+	// Always reset to false in openProperties, never carried over from a
+	// previous Properties session, since each describes what this
+	// particular Save should do, not a standing preference.
+	propertiesDirty      bool
+	stagedName           string
+	stagedMode           os.FileMode
+	stagedMtime          time.Time
+	stagedOwner          string
+	stagedGroup          string
+	stagedRecursiveOwner bool
+	stagedRecursiveGroup bool
 
 	// activePage/activeWidget mirror overlayStack's top frame — see
 	// showOverlay/pushOverlay/hideOverlay. This drives both explicit focus
@@ -1031,6 +1042,21 @@ func (r *Root) closeAllOverlays() {
 // Save is the only way out from there, so an in-progress edit (a
 // permission bit already toggled, a name half-typed) can't be silently
 // discarded, or just as silently lost track of, by a stray click.
+//
+// The Details button specifically is a second, narrower exception,
+// checked before either of the above: a click on it reaches the button
+// bar's own handling (see buttonBarActionAt/runButtonBarAction)
+// completely untouched, toggling the Details sidebar alongside
+// Properties rather than being swallowed as an "outside click" or
+// (while dirty) ignored outright — per the user's own explicit request
+// to open or close Details *while Properties stays open*, the same
+// "also works while Properties is open" carve-out
+// ToggleDetailsSidebarShortcut's own doc comment already makes for
+// Ctrl+D. The two already coexist independently of this (see
+// ComputeHashesShortcut's own doc comment); this is only what let the
+// click reach that existing mechanism in the first place. Scoped to
+// Properties and to Details alone — every other overlay, and every
+// other button-bar click, still gets the ordinary handling below.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
@@ -1039,6 +1065,12 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
+	}
+
+	if r.activePage == propertiesPage && action == tview.MouseLeftClick {
+		if bAction, ok := r.buttonBarActionAt(x, y); ok && bAction == buttonActionDetails {
+			return action, event
+		}
 	}
 
 	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
