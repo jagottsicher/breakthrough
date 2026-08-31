@@ -801,7 +801,7 @@ func TestSavingUntouchedFieldsDoesNotWriteAnything(t *testing.T) {
 	r.openProperties()
 
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-	for i := 0; i < len(propertyFieldOrder); i++ {
+	for i := 0; i < len(r.currentFieldOrder()); i++ {
 		r.properties.InputHandler()(tab, func(tview.Primitive) {})
 	}
 
@@ -1171,7 +1171,7 @@ func TestFinishPropertyEditTabCommitsAndAdvances(t *testing.T) {
 	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
 
 	dateSpan, _ := findPropertySpan(r, fieldMtimeDate)
-	timeIdx, _ := propertyFieldIndex(fieldMtimeTime)
+	timeIdx, _ := r.propertyFieldIndex(fieldMtimeTime)
 	r.activatePropertyField(dateSpan)
 	r.propertiesEditField.SetText("2026-08-05")
 	r.finishPropertyEdit(tcell.KeyTab)
@@ -1198,7 +1198,7 @@ func TestFinishPropertyEditBacktabCommitsAndRetreats(t *testing.T) {
 	r.stagedMtime = time.Date(2020, time.January, 1, 14, 30, 45, 0, time.Local)
 
 	timeSpan, _ := findPropertySpan(r, fieldMtimeTime)
-	dateIdx, _ := propertyFieldIndex(fieldMtimeDate)
+	dateIdx, _ := r.propertyFieldIndex(fieldMtimeDate)
 	r.activatePropertyField(timeSpan)
 	r.propertiesEditField.SetText("09:05:03")
 	r.finishPropertyEdit(tcell.KeyBacktab)
@@ -1594,6 +1594,165 @@ func TestSavePropertiesEditAppliesOwnerGroupChange(t *testing.T) {
 	}
 }
 
+// TestRecursiveApplyFieldsShownForDirectory and
+// TestRecursiveApplyFieldsHiddenForFile pin renderProperties'/
+// currentFieldOrder's own isDirish guards for the two recursive
+// Owner/Group toggles (see recursiveApplyField/toggleRecursiveApply):
+// both rows — and so their propertySpans — only exist for a directory
+// target, per the user's own explicit request that each sit right
+// behind its own Owner/Group line, only for folders.
+func TestRecursiveApplyFieldsShownForDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "app-data")
+	r.openProperties()
+
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyOwner); !ok {
+		t.Error("a directory target should show the Owner recursive-apply toggle")
+	}
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyGroup); !ok {
+		t.Error("a directory target should show the Group recursive-apply toggle")
+	}
+}
+
+func TestRecursiveApplyFieldsHiddenForFile(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyOwner); ok {
+		t.Error("a plain file target should not show the Owner recursive-apply toggle")
+	}
+	if _, ok := findPropertySpan(r, fieldRecursiveApplyGroup); ok {
+		t.Error("a plain file target should not show the Group recursive-apply toggle")
+	}
+}
+
+// TestToggleRecursiveApplyIndependence pins that clicking either toggle
+// (see activatePropertyField's own fieldRecursiveApplyOwner/
+// fieldRecursiveApplyGroup cases) flips only its own
+// stagedRecursiveOwner/stagedRecursiveGroup half, marks the overlay
+// dirty like every other field click already does, and leaves the
+// other toggle alone — the independence the user explicitly asked for,
+// instead of one combined switch for both.
+func TestToggleRecursiveApplyIndependence(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "app-data")
+	r.openProperties()
+
+	if r.stagedRecursiveOwner || r.stagedRecursiveGroup {
+		t.Fatal("setup: both should start off")
+	}
+
+	ownerSpan, ok := findPropertySpan(r, fieldRecursiveApplyOwner)
+	if !ok {
+		t.Fatal("no fieldRecursiveApplyOwner span found")
+	}
+	r.activatePropertyField(ownerSpan)
+	if !r.stagedRecursiveOwner {
+		t.Error("clicking the Owner toggle should turn it on")
+	}
+	if r.stagedRecursiveGroup {
+		t.Error("clicking the Owner toggle should not affect Group's own toggle")
+	}
+	if !r.propertiesDirty {
+		t.Error("clicking the toggle should mark the overlay dirty, same as every other field")
+	}
+
+	groupSpan, ok := findPropertySpan(r, fieldRecursiveApplyGroup)
+	if !ok {
+		t.Fatal("no fieldRecursiveApplyGroup span found")
+	}
+	r.activatePropertyField(groupSpan)
+	if !r.stagedRecursiveGroup {
+		t.Error("clicking the Group toggle should turn it on")
+	}
+	if !r.stagedRecursiveOwner {
+		t.Error("clicking the Group toggle should not turn Owner's own toggle back off")
+	}
+
+	r.activatePropertyField(ownerSpan)
+	if r.stagedRecursiveOwner {
+		t.Error("clicking the Owner toggle again should turn it back off")
+	}
+	if !r.stagedRecursiveGroup {
+		t.Error("turning Owner back off should not affect Group's own toggle")
+	}
+}
+
+// TestSavePropertiesEditRecursiveTogglesAreIndependent proves Save
+// actually dispatches Owner and Group through separate
+// Chown/ChownRecursive calls, each governed by its own toggle (see
+// savePropertiesEdit's own two independent dispatches), rather than one
+// combined call that couldn't express "recursive for one, not the
+// other" in the first place.
+//
+// A same-uid/gid chown (see TestSavePropertiesEditAppliesOwnerGroupChange's
+// own doc comment on why that's the only privilege-free option) can't
+// tell "reached this file" apart from "never touched it" by inspecting
+// the result — the uid/gid look identical either way. A dangling
+// symlink nested inside the directory can: a non-recursive Chown on the
+// directory itself never looks inside, so it's never reached at all,
+// but ChownRecursive's own WalkDir does reach it, and Chown on it
+// follows the (broken) link and fails — see ChownRecursive's own doc
+// comment. That failure surfacing as Properties' error overlay only
+// when the relevant toggle is on, and never as a side effect of the
+// *other* one, is what this test actually pins.
+func TestSavePropertiesEditRecursiveTogglesAreIndependent(t *testing.T) {
+	tests := []struct {
+		name             string
+		recursiveOwner   bool
+		recursiveGroup   bool
+		wantErrorOverlay bool
+	}{
+		{"owner recursive reaches the broken symlink", true, false, true},
+		{"owner non-recursive skips the broken symlink", false, false, false},
+		{"group recursive reaches the broken symlink", false, true, true},
+		{"group non-recursive skips the broken symlink", false, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := fixtureDir(t)
+			target := filepath.Join(dir, "app-data")
+			broken := filepath.Join(target, "broken-link")
+			if err := os.Symlink(filepath.Join(target, "does-not-exist"), broken); err != nil {
+				t.Fatal(err)
+			}
+
+			r, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			r.target = target
+			r.openProperties()
+			r.stagedOwner = strconv.Itoa(os.Getuid())
+			r.stagedGroup = strconv.Itoa(os.Getgid())
+			r.stagedRecursiveOwner = tt.recursiveOwner
+			r.stagedRecursiveGroup = tt.recursiveGroup
+			r.markPropertiesDirty()
+
+			r.savePropertiesEdit()
+
+			gotErrorOverlay := r.activePage == errorPage
+			if gotErrorOverlay != tt.wantErrorOverlay {
+				t.Errorf("error overlay shown = %v, want %v", gotErrorOverlay, tt.wantErrorOverlay)
+			}
+		})
+	}
+}
+
 // TestCancelPropertiesEditDiscardsChanges pins that Cancel never touches
 // the real file, even after a permission bit was toggled.
 func TestCancelPropertiesEditDiscardsChanges(t *testing.T) {
@@ -1732,6 +1891,55 @@ func TestCaptureOutsideClickBlockedWhilePropertiesDirty(t *testing.T) {
 	}
 	if action != tview.MouseConsumed || event != nil {
 		t.Errorf("outside click while dirty should be consumed and swallowed, got action=%v event=%v", action, event)
+	}
+}
+
+// TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen
+// pins the user's own explicit request's other half (see
+// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen for Ctrl+D):
+// a click on the Details button must reach the button bar's own
+// handling untouched, even while Properties is dirty — the one case
+// that would otherwise swallow every other outside click outright (see
+// TestCaptureOutsideClickBlockedWhilePropertiesDirty just above).
+func TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // dirty — the stricter of the two outside-click cases
+
+	// Positioned low on the screen, well clear of wherever Properties
+	// itself ended up (a small overlay near the top-left) — the same
+	// non-overlap the real app's own layout always has between the
+	// button bar (always the second-to-last row) and Properties.
+	width := tview.TaggedStringWidth(r.buttonBar.GetText(true)) + 10
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, 40)
+	r.buttonBar.SetRect(0, 38, width, 1)
+	r.buttonBar.Draw(screen)
+
+	span, ok := buttonBarSpanFor(r, buttonActionDetails)
+	if !ok {
+		t.Fatal("no Details span found in the button bar")
+	}
+	rectX, rectY, _, _ := r.buttonBar.GetInnerRect()
+	x, y := rectX+span.startCol, rectY
+
+	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
+
+	if action != tview.MouseLeftClick || event == nil {
+		t.Errorf("a click on the Details button should pass through untouched, got action=%v event=%v", action, event)
+	}
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
 	}
 }
 
@@ -1884,7 +2092,7 @@ func TestPropertiesFocusCyclesFieldsThenButtonsThenWraps(t *testing.T) {
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
-	n := len(propertyFieldOrder)
+	n := len(r.currentFieldOrder())
 	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 	noSetFocus := func(tview.Primitive) {}
 
@@ -1986,7 +2194,7 @@ func TestSpaceActivatesFocusedButton(t *testing.T) {
 	r.openProperties()
 	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640, something for Save to actually apply
 
-	r.setPropertiesFocus(len(propertyFieldOrder) + 1) // Save
+	r.setPropertiesFocus(len(r.currentFieldOrder()) + 1) // Save
 
 	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
 	if got := r.propertiesSaveBtn.GetInputCapture()(space); got != nil {
@@ -2033,7 +2241,7 @@ func TestTabAutoOpensTextFieldsButNotTogglesOrPicker(t *testing.T) {
 		t.Errorf("activePage = %q, want Properties still open", r.activePage)
 	}
 
-	octalIdx, _ := propertyFieldIndex(fieldPermOctal)
+	octalIdx, _ := r.propertyFieldIndex(fieldPermOctal)
 	r.setPropertiesFocus(octalIdx)
 	if !propertiesEditFieldOpen(r) {
 		t.Error("landing on the octal value should auto-open its inline editor")
@@ -2041,7 +2249,7 @@ func TestTabAutoOpensTextFieldsButNotTogglesOrPicker(t *testing.T) {
 
 	r.finishPropertyEdit(tcell.KeyEnter) // conclude editing, stay on the octal field
 
-	ownerIdx, _ := propertyFieldIndex(fieldOwner)
+	ownerIdx, _ := r.propertyFieldIndex(fieldOwner)
 	r.setPropertiesFocus(ownerIdx)
 	if propertiesEditFieldOpen(r) {
 		t.Error("landing on Owner should not auto-open the inline editor (it opens the picker instead, on an explicit key/click)")
@@ -2076,7 +2284,7 @@ func TestFinishPropertyEditEnterConcludesWithoutReopening(t *testing.T) {
 	if propertiesEditFieldOpen(r) {
 		t.Error("Enter should close the inline editor, not immediately reopen it")
 	}
-	nameIdx, _ := propertyFieldIndex(fieldName)
+	nameIdx, _ := r.propertyFieldIndex(fieldName)
 	if r.propertiesFocusIndex != nameIdx {
 		t.Errorf("propertiesFocusIndex = %d, want to stay on Name (%d)", r.propertiesFocusIndex, nameIdx)
 	}
@@ -2100,7 +2308,7 @@ func TestPermBitKeyboardShortcuts(t *testing.T) {
 	r.target = path
 	r.openProperties()
 
-	idx, _ := propertyFieldIndex(fieldPermOwnerRead)
+	idx, _ := r.propertyFieldIndex(fieldPermOwnerRead)
 	r.setPropertiesFocus(idx)
 
 	// The matching letter ('r' for a read bit) sets it on.
