@@ -834,6 +834,81 @@ func TestLoadDetailsTargetAdoptsExistingPropertiesHash(t *testing.T) {
 	}
 }
 
+// TestSavePropertiesEditRefreshesDetailsShowingSameFile pins the user's
+// own explicit request: committing an edit in Properties (Return on a
+// field, then Save) immediately updates Details too, if it's showing
+// that same file — including following a rename to the file's own new
+// path, not just refreshing stale info still filed under the old one.
+// A real, observed gap otherwise: a same-directory reload (see
+// savePropertiesEdit's own doc comment) never repositions the table's
+// selection, so nothing would otherwise tell Details a rename even
+// happened.
+func TestSavePropertiesEditRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, path)
+	}
+
+	r.target = path
+	r.openProperties()
+	r.stagedName = "banana.txt"
+	r.savePropertiesEdit()
+
+	wantPath := filepath.Join(dir, "banana.txt")
+	if r.detailsTarget != wantPath {
+		t.Errorf("detailsTarget after rename via Save = %q, want %q", r.detailsTarget, wantPath)
+	}
+	if got := r.detailsSidebar.GetText(true); !strings.Contains(got, "banana.txt") {
+		t.Errorf("details sidebar text should show the new name, got:\n%s", got)
+	}
+}
+
+// TestSavePropertiesEditIgnoresDetailsShowingADifferentFile pins the
+// other half: Details tracking some other file entirely must not be
+// disturbed by an edit to whatever Properties happens to be open on.
+func TestSavePropertiesEditIgnoresDetailsShowingADifferentFile(t *testing.T) {
+	dir := t.TempDir()
+	applePath := filepath.Join(dir, "apple.txt")
+	bananaPath := filepath.Join(dir, "banana.txt")
+	for _, p := range []string{applePath, bananaPath} {
+		if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	if r.detailsTarget != applePath {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, applePath)
+	}
+
+	r.target = bananaPath
+	r.openProperties()
+	r.stagedMode = 0o600
+	r.savePropertiesEdit()
+
+	if r.detailsTarget != applePath {
+		t.Errorf("detailsTarget = %q, want unchanged %q — Properties was editing a different file", r.detailsTarget, applePath)
+	}
+}
+
 // TestClickingDetailsHashZoneDefersToOpenProperties pins the fix for
 // the inconsistency the user's own report surfaced: the click zone used
 // to call computeDetailsHashes directly, bypassing the "Properties wins
