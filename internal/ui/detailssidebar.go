@@ -33,24 +33,38 @@ const detailsSidebarMinWidth = 26
 // hideDetailsSidebar).
 //
 // Unlike every other overlay in this app (Properties, Search, Help, the
-// Look pager, ...), this one is not modal: it's meant to stay visible
-// and live-updating while the user keeps browsing and selecting in the
-// still-focused, still-fully-interactive panel underneath — the same
-// way Midnight Commander's own "Info" panel mode works, rather than
-// taking over the screen the way a dialog does. So it deliberately
-// doesn't go through showOverlay/pushOverlay (which both hand keyboard
-// focus to the widget they show) or get tracked in
-// activePage/overlayStack — showDetailsSidebar/hideDetailsSidebar/
-// toggleDetailsSidebar below are its own, separate, focus-preserving
-// show/hide path, and refreshDetailsSidebar (wired to the panel table's
-// own SetSelectionChangedFunc in NewRoot) is what keeps its content
-// live instead of a one-shot snapshot the way Properties' own is.
+// Look pager, ...), this one is not modal: showing it never moves
+// keyboard focus by itself, so the still-focused, still-fully-
+// interactive panel underneath keeps working — the same way Midnight
+// Commander's own "Info" panel mode works, rather than taking over the
+// screen the way a dialog does. So it deliberately doesn't go through
+// showOverlay/pushOverlay (which both hand keyboard focus to the widget
+// they show) or get tracked in activePage/overlayStack —
+// showDetailsSidebar/hideDetailsSidebar/toggleDetailsSidebar below are
+// its own, separate, focus-preserving show/hide path, and
+// refreshDetailsSidebar (wired to the panel table's own
+// SetSelectionChangedFunc in NewRoot) is what keeps its content live
+// instead of a one-shot snapshot the way Properties' own is.
+//
+// It CAN still take real focus, deliberately, once content grows longer
+// than it has room for: Tab toggles focus between it and the panel (see
+// ToggleDetailsFocusShortcut) so tview's own already-built-in TextView
+// scrolling (arrow keys, PageUp/PageDown, Home/End, vi-style
+// j/k/g/G/h/l, mouse wheel) works for free — cheaper and more capable
+// than teaching this sidebar its own scroll keys from scratch, and
+// scrolling while it has focus is exactly the same "browsing paused,
+// reading instead" tradeoff a real MC info panel accepts too.
+// SetFocusFunc/SetBlurFunc give a visual cue for whichever state it's
+// currently in, the same FocusedBackground/AccentBackground contrast
+// propertiesEditField already uses.
 func (r *Root) newDetailsSidebarView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
 	v.SetMouseCapture(r.captureDetailsSidebarMouse)
+	v.SetFocusFunc(func() { v.SetBackgroundColor(r.theme.FocusedBackground) })
+	v.SetBlurFunc(func() { v.SetBackgroundColor(r.theme.AccentBackground) })
 	return v
 }
 
@@ -137,9 +151,21 @@ func (r *Root) preserveFocusAcross(f func()) {
 // original design intent: an expensive calculation running purely for
 // this sidebar's own benefit has no reason to keep going once it's not
 // even shown any more.
+//
+// Explicitly redirects focus to the panel's own table if the sidebar
+// itself currently has it (see ToggleDetailsFocusShortcut) — a case
+// preserveFocusAcross alone can't handle correctly: "restore whatever
+// had focus right before" is exactly wrong here, since what had focus
+// right before *is* the widget this is about to hide. Left to it alone,
+// focus would end up parked on a now-invisible primitive, with nothing
+// left able to receive it back.
 func (r *Root) hideDetailsSidebar() {
 	r.cancelDetailsHashComputation()
+	hadFocus := r.detailsSidebar.HasFocus()
 	r.preserveFocusAcross(func() { r.HidePage(detailsSidebarPage) })
+	if hadFocus {
+		r.app.SetFocus(r.panel.table)
+	}
 	r.detailsSidebarVisible = false
 }
 
@@ -169,6 +195,36 @@ func (r *Root) toggleDetailsSidebar() {
 func (r *Root) ToggleDetailsSidebarShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.toggleDetailsSidebar()
+	}
+}
+
+// ToggleDetailsFocusShortcut is Tab's own action while either the
+// panel's own table or the details sidebar itself currently has real
+// keyboard focus — see cmd/breakthrough, which only consumes Tab when
+// this returns true. Everywhere else (Properties' own fields, the
+// header's path edit, the filter box, bash-line completion, ...), it
+// reports false and Tab falls through completely untouched, exactly as
+// it already does today — verified against tview's own Table/TextView
+// source: neither installs a SetDoneFunc in this codebase, so a bare
+// Tab while the table has focus was already a pure no-op before this
+// existed, nothing here takes over a working feature.
+//
+// The sidebar only actually needs real focus once its own content
+// outgrows the space it has — see newDetailsSidebarView's own doc
+// comment on why tview's already-built-in TextView scrolling is worth
+// that trade-off (browsing pauses while it's focused, since the panel
+// isn't what's receiving arrow keys any more) rather than teaching this
+// sidebar its own separate scroll keys.
+func (r *Root) ToggleDetailsFocusShortcut() bool {
+	switch {
+	case r.detailsSidebarVisible && r.panel.table.HasFocus():
+		r.app.SetFocus(r.detailsSidebar)
+		return true
+	case r.detailsSidebar.HasFocus():
+		r.app.SetFocus(r.panel.table)
+		return true
+	default:
+		return false
 	}
 }
 
@@ -245,6 +301,15 @@ func (r *Root) loadDetailsTarget(path string) {
 		}
 	}
 	r.renderDetailsSidebar()
+
+	// A new target always starts showing from its own top — not
+	// wherever the previous one happened to be scrolled to (see
+	// ToggleDetailsFocusShortcut for how it gets scrolled at all).
+	// Deliberately not in renderDetailsSidebar itself: that also reruns
+	// on every hash-progress animation frame for the *same* target,
+	// which must never yank the scroll position back to the top out
+	// from under someone actually reading further down.
+	r.detailsSidebar.ScrollToBeginning()
 }
 
 // detailsImageBoxSize is the box renderDetailsSidebar scales an image
@@ -663,36 +728,56 @@ func (r *Root) ComputeHashesShortcut() {
 	}
 }
 
-// captureDetailsSidebarMouse swallows every mouse action landing within
-// the sidebar's own current rect, regardless of action type — without
-// this, only a plain left-click would actually be consumed (tview.Box's
-// own default MouseHandler only ever handles MouseLeftDown, setting
-// focus to itself — see its doc comment in box.go); anything else
-// (right-click, scroll, plain movement) would fall through to whatever
-// is still there in the panel underneath, which shares that same screen
-// space while the sidebar floats over it. A left-click additionally
-// routes to whichever click zone it landed in (see renderDetailsSidebar
-// for how detailsPreviewRowStart/End, detailsMetaRowStart/End, and
-// detailsHashRowStart get set) — the same row-range approach Properties'
-// own hashesMouseCapture already uses, just against this sidebar's own
-// geometry instead.
+// captureDetailsSidebarMouse handles every mouse action landing within
+// the sidebar's own current rect — everything else falls through to
+// whatever is still there in the panel underneath, which shares that
+// same screen space while the sidebar floats over it, so a click or
+// scroll meant for it doesn't leak through by accident.
+//
+// MouseScrollUp/MouseScrollDown and MouseLeftDown are deliberately let
+// through to the TextView's own default MouseHandler instead of being
+// swallowed here: MouseLeftDown is what tview's own Box.MouseHandler
+// uses to actually call Application.SetFocus (see its doc comment in
+// box.go) — clicking anywhere in the sidebar, not just Tab (see
+// ToggleDetailsFocusShortcut), is a second, more discoverable way to
+// give it real focus — and MouseScrollUp/Down is genuinely native
+// TextView behavior, working immediately regardless of focus (unlike
+// keyboard scrolling, which does need it). A MouseLeftClick landing on
+// a specific click zone (see renderDetailsSidebar for how
+// detailsPreviewRowStart/End, detailsMetaRowStart/End, and
+// detailsHashRowStart get set — the same row-range approach Properties'
+// own hashesMouseCapture already uses) runs that action instead of
+// falling through; a click anywhere else in the sidebar also falls
+// through, to whatever tview's own default handling does with it
+// (nothing harmful — this TextView uses none of the
+// region/highlighting features that's actually for).
 func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	x, y := event.Position()
 	if !primitiveContains(r.detailsSidebar, x, y) {
 		return action, event
 	}
 
-	if action == tview.MouseLeftClick {
+	switch action {
+	case tview.MouseScrollUp, tview.MouseScrollDown, tview.MouseLeftDown:
+		return action, event
+
+	case tview.MouseLeftClick:
 		_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
 		row := y - rectY
 		switch {
 		case r.detailsPreviewRowStart >= 0 && row >= r.detailsPreviewRowStart && row <= r.detailsPreviewRowEnd:
 			r.lookCurrentEntry()
+			return tview.MouseConsumed, nil
 		case r.detailsMetaRowStart >= 0 && row >= r.detailsMetaRowStart && row <= r.detailsMetaRowEnd:
 			r.fetchDetailsMetadata()
+			return tview.MouseConsumed, nil
 		case r.detailsHashRowStart >= 0 && row >= r.detailsHashRowStart:
 			r.computeDetailsHashes()
+			return tview.MouseConsumed, nil
 		}
+		return action, event
+
+	default:
+		return tview.MouseConsumed, nil
 	}
-	return tview.MouseConsumed, nil
 }
