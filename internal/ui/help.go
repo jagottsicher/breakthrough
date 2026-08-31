@@ -40,8 +40,15 @@ var helpText = strings.TrimLeft(`
   Ctrl+F          Find
   Ctrl+O          Options
   Ctrl+P          Properties
-  Ctrl+D          Toggle the Details sidebar (empty for now — a work
-                  in progress, key subject to change)
+  Ctrl+D          Toggle the Details sidebar — a read-only, live-
+                  updating panel of file info (stat fields; for an
+                  image or PDF, a preview with its own click zone/
+                  Ctrl+L for fullscreen; hashes) for whichever entry
+                  is currently selected
+  Ctrl+K          Compute the Details sidebar's own hashes — targets
+                  Properties instead if that's the one currently open
+  Ctrl+N          Load an image's metadata in the Details sidebar
+                  (EXIF etc. — not implemented yet)
   Ctrl+S          Sed Replace on the selected file(s)
   Ctrl+B          Go to Trash — browse it directly
   Ctrl+T / Delete Move the selection to Trash (reversible); already
@@ -63,6 +70,14 @@ var helpText = strings.TrimLeft(`
   click a column heading to sort by it; type into the filter box to
   narrow the list live (its own button switches between a plain glob
   and a regular expression).
+
+  While plainly browsing (not editing the path, not in the filter box)
+  and the Details sidebar is shown, Tab moves keyboard focus into it —
+  its own scrolling (arrow keys, PageUp/PageDown, Home/End, mouse
+  wheel) then works once its content is longer than it has room for —
+  and Tab again moves focus back to the panel. A click anywhere in the
+  sidebar that isn't one of its own click zones also focuses it, the
+  same way.
 
 [::b]Properties dialog[::-]
 
