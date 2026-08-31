@@ -324,10 +324,15 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	pages.AddPage("buttons", r.propertiesButtons, false, true)
 
 	// Installed on pages itself, the shared ancestor of all three pages
-	// above — see hashesInputCapture/hashesMouseCapture's own doc
-	// comment for why that's what makes 'h' and a hash-section click
-	// keep working no matter which of the three currently has focus.
-	pages.SetInputCapture(r.hashesInputCapture)
+	// above — see hashesMouseCapture's own doc comment for why that's
+	// what makes a hash-section click keep working no matter which of
+	// the three currently has focus. The keyboard half of this used to
+	// be a bare 'h', installed here the same way for the same reason —
+	// removed once Ctrl+K existed and covered it better: a global
+	// Application-level shortcut (see cmd/breakthrough) already runs
+	// before any of this widget-level focus routing even comes into it,
+	// so it never needed a "shared ancestor" trick to keep working
+	// regardless of which sub-widget had focus, unlike 'h' once did.
 	pages.SetMouseCapture(r.hashesMouseCapture)
 
 	return pages
@@ -474,7 +479,13 @@ func (r *Root) loadPropertiesTarget() error {
 	r.cancelHashComputation() // a previous target's own hash computation, if still running, is now stale
 	r.propertiesTarget = r.target
 	r.propertiesStat = info
-	r.propertiesHashes = nil
+	// Adopts Details' own result immediately if it already has one for
+	// this exact file (see detailsHashesFor's own doc comment) — nil
+	// otherwise, same as always. Per the user's own explicit request:
+	// opening Properties on a file Details already hashed shouldn't
+	// show a fresh "press Ctrl+K" hint (or need recomputing) just
+	// because Properties itself is only now opening on it.
+	r.propertiesHashes = r.detailsHashesFor(r.propertiesTarget)
 	r.propertiesDirty = false
 	r.propertiesFocusIndex = -1 // nothing focused yet — see setPropertiesFocus
 	r.stagedName = info.Name
@@ -548,7 +559,7 @@ func (r *Root) renderProperties() {
 		case r.hashInProgress:
 			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
 		default:
-			text += "\n\n" + hashLines(r.propertiesHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
+			text += "\n\n" + hashLines(r.propertiesHashes, "Press Ctrl+K or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
 		}
 	}
 
@@ -666,6 +677,29 @@ func (r *Root) savePropertiesEdit() {
 				firstErr = err
 			}
 		}
+	}
+
+	// Per the user's own explicit request: Details, if it's showing the
+	// very same file Properties was just editing, reflects whatever
+	// actually landed on disk immediately — not stale info until the
+	// user happens to navigate away and back. Needed regardless of
+	// firstErr: even a save that failed partway through (see this
+	// function's own doc comment on why that isn't rolled back) may
+	// still have really renamed/rechmod'd/etc. the file before hitting
+	// whatever failed next, and target already reflects that. Checked
+	// against propertiesTarget, not the possibly-just-renamed target
+	// itself: that's the file Details would have been showing
+	// beforehand, under its original, pre-edit path.
+	//
+	// Deliberately not left to the panel's own reload just below to
+	// trigger this on its own: p.load only repositions the table's
+	// selection (see focusRow, which is what actually fires
+	// SetSelectionChangedFunc) when moving to a genuinely different
+	// directory — a same-directory reload, exactly this case, rebuilds
+	// every row's data in place without reselecting anything, so
+	// nothing would tell Details a rename even happened.
+	if r.detailsSidebarVisible && r.detailsTarget == r.propertiesTarget {
+		r.loadDetailsTarget(target)
 	}
 
 	r.hideOverlay()
@@ -1216,8 +1250,10 @@ func (r *Root) computeHashes() {
 				r.showError(err)
 				return
 			}
-			r.propertiesHashes = &hashes
-			r.rerenderProperties()
+			// Updates propertiesHashes/re-renders itself, then mirrors
+			// into Details too if that's showing the same target — see
+			// propagateHashResult's own doc comment (detailssidebar.go).
+			r.propagateHashResult(target, hashes)
 		})
 	}()
 }
@@ -1264,37 +1300,26 @@ func (r *Root) cancelHashComputation() {
 	r.hashInProgress = false
 }
 
-// hashesInputCapture and hashesMouseCapture make 'h' and a click on the
-// hash section compute hashes (see computeHashes) unconditionally,
-// regardless of which of Properties' several sub-widgets currently has
-// real keyboard/mouse focus — installed directly on r.properties (see
-// newPropertiesView), the shared ancestor of propertiesText/
-// propertiesEditField/propertiesButtons, so both run before whichever of
-// those three would otherwise claim the event on its own (a Box-based
-// primitive's own SetInputCapture/SetMouseCapture always runs before it
-// delegates to whatever currently has focus underneath it — see
-// Box.WrapInputHandler/WrapMouseHandler). Without this, landing keyboard
-// focus on an auto-editing field (see isAutoEditField — Name, the octal
-// permission value, either half of Modified) via Tab hands real focus to
-// propertiesEditField instead of propertiesText, and neither 'h'
-// (previously handled in capturePropertiesKey, installed on
-// propertiesText itself) nor a hash-section click (previously handled in
-// capturePropertiesMouse, likewise) would ever run — per the user's own
-// explicit report and request that either work "jederzeit", not just
-// before the first field is touched.
+// hashesMouseCapture makes a click on the hash section compute hashes
+// (see computeHashes) unconditionally, regardless of which of
+// Properties' several sub-widgets currently has real mouse focus —
+// installed directly on r.properties (see newPropertiesView), the
+// shared ancestor of propertiesText/propertiesEditField/
+// propertiesButtons, so it runs before whichever of those three would
+// otherwise claim the event on its own (a Box-based primitive's own
+// SetMouseCapture always runs before it delegates to whatever currently
+// has focus underneath it — see Box.WrapMouseHandler). Without this,
+// landing keyboard focus on an auto-editing field (see isAutoEditField —
+// Name, the octal permission value, either half of Modified) via Tab
+// hands real focus to propertiesEditField instead of propertiesText, and
+// a hash-section click (previously handled in capturePropertiesMouse)
+// would never run — per the user's own explicit report and request that
+// it work "jederzeit", not just before the first field is touched.
 //
-// The accepted trade-off for the keyboard half: 'h' can no longer be
-// typed as a literal character while editing Name, or Owner/Group's own
-// text fallback — a narrow cost (renaming to something containing "h")
-// against a much more commonly wanted action.
-func (r *Root) hashesInputCapture(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyRune && event.Rune() == 'h' {
-		r.computeHashes()
-		return nil
-	}
-	return event
-}
-
+// The keyboard equivalent of this used to be a bare 'h', handled the
+// same way, right below this function — see newPropertiesView's own
+// doc comment on why Ctrl+K replaced it outright instead of needing the
+// same "shared ancestor" treatment.
 func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
 		return action, event
@@ -1351,11 +1376,6 @@ func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMo
 // rather than needing Enter first, per the user's own request: Space
 // toggles it, same as Enter; Delete or '-' explicitly clears it; the
 // matching letter (r/w/x — see permFieldLetter) explicitly sets it.
-// 'h' (compute hashes) is handled a level up now (see
-// hashesInputCapture on r.properties itself), not here — it needs to
-// keep working even while propertiesText doesn't have focus at all
-// (e.g. an auto-opened inline editor), which is exactly the case this
-// handler, installed on propertiesText specifically, can never see.
 func (r *Root) capturePropertiesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -1540,17 +1560,18 @@ const propertiesHashFieldWidth = 77
 // line (see its own doc comment).
 //
 // hint and width are caller-supplied, not hardcoded, because the two
-// callers need different values for both: Properties' own
-// renderProperties and Details' own renderDetailsSidebar trigger the
-// same computation via genuinely different keys (bare 'h' vs Ctrl+K —
-// see ComputeHashesShortcut's own doc comment on why Details can't
-// reuse Properties' bare-letter one), and have very different amounts
-// of width to lay the two long digests out in (see
-// propertiesHashFieldWidth vs Details' own actual sidebar width) — a
-// shared hardcoded value for either would be wrong for one of them, and
-// in width's case, once was: this sidebar's own hash section initially
-// reused wideInfoField's fixed 64-character halves unconditionally, and
-// each one wrapped again inside Details' own much narrower box.
+// callers have very different amounts of width to lay the two long
+// digests out in (see propertiesHashFieldWidth vs Details' own actual
+// sidebar width) — a shared hardcoded width would be wrong for one of
+// them, and once was: this sidebar's own hash section initially reused
+// wideInfoField's fixed 64-character halves unconditionally, and each
+// one wrapped again inside Details' own much narrower box. hint is
+// theirs to supply too, even though both currently say the same thing
+// (Ctrl+K, since that now triggers this in Properties as well — see
+// hashesMouseCapture's own doc comment on the bare 'h' it replaced) —
+// keeping it a parameter rather than folding the wording in here still
+// means neither caller has to change if that ever stops being true for
+// one of them.
 func hashLines(hashes *fsops.Hashes, hint string, width int) string {
 	if hashes == nil {
 		return hint
