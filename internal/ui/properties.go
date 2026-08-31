@@ -285,30 +285,33 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: octalStart, endCol: octalEnd, field: fieldPermOctal})
 }
 
-// recursiveApplyToggle appends one directory-only "apply recursively"
-// toggle right onto the end of Owner's or Group's own current line (see
+// recursiveApplyToggle appends one directory-only "recursive" toggle
+// right onto the end of Owner's or Group's own current line (see
 // renderProperties' own isDirish guards, the only caller, which decide
 // whether either gets appended at all, right after that line's own
 // editableField call and before its newline) — inline, right behind the
-// name, rather than a separate row of its own, and just the bare ○/●
-// glyph rather than a highlighted "Apply recursively" line, per the
-// user's own explicit request that the clickable glyph alone is enough.
-// field is whichever of fieldRecursiveApplyOwner/fieldRecursiveApplyGroup
-// this particular call is drawing; it governs whether saving that one
-// attribute (see savePropertiesEdit) reaches only this directory's own
-// entry, or every file and subdirectory inside it too (see
-// fsops.ChownRecursive). Rendered with the same ○/● glyph this app's
-// checkbox column and every other plain on/off toggle already use (see
-// checkboxText in panel.go): the click itself toggles it (see
-// Root.toggleRecursiveApply), there's nothing here to type into.
-func (pb *propertiesBuilder) recursiveApplyToggle(field propertyField, checked bool, focused propertyField) {
+// name, rather than a separate row of its own, per the user's own
+// explicit request. field is whichever of
+// fieldRecursiveApplyOwner/fieldRecursiveApplyGroup this particular call
+// is drawing; it governs whether saving that one attribute (see
+// savePropertiesEdit) reaches only this directory's own entry, or every
+// file and subdirectory inside it too (see fsops.ChownRecursive).
+// Rendered with the same ○/● glyph this app's checkbox column and every
+// other plain on/off toggle already use (see checkboxText in panel.go),
+// followed by a short "recursive" label — per the user's own explicit
+// follow-up that a bare glyph alone didn't say what it does, even a
+// short word fixes that. Deliberately never wrapped in focusTag, unlike
+// every other field here, even while focused: per the user's own
+// explicit request, this is a plain clickbox, not a value being read or
+// typed into, so it doesn't need the "this one has focus" background
+// tint the rest of this overlay's fields get — the click itself is
+// still what toggles it (see Root.toggleRecursiveApply), there's just
+// nothing to visually highlight beforehand.
+func (pb *propertiesBuilder) recursiveApplyToggle(field propertyField, checked bool) {
 	pb.text("  ")
-	tag, reset := pb.focusTag(field, focused)
-	pb.tag(tag)
 	start := pb.col
-	pb.text(checkboxText(checked))
+	pb.text(checkboxText(checked) + " recursive")
 	end := pb.col
-	pb.tag(reset)
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: end, field: field})
 }
 
@@ -611,12 +614,12 @@ func (r *Root) renderProperties() {
 	pb.newline()
 	pb.editableField("Owner", r.stagedOwner, fieldOwner, focused)
 	if isDirish(r.propertiesStat) {
-		pb.recursiveApplyToggle(fieldRecursiveApplyOwner, r.stagedRecursiveOwner, focused)
+		pb.recursiveApplyToggle(fieldRecursiveApplyOwner, r.stagedRecursiveOwner)
 	}
 	pb.newline()
 	pb.editableField("Group", r.stagedGroup, fieldGroup, focused)
 	if isDirish(r.propertiesStat) {
-		pb.recursiveApplyToggle(fieldRecursiveApplyGroup, r.stagedRecursiveGroup, focused)
+		pb.recursiveApplyToggle(fieldRecursiveApplyGroup, r.stagedRecursiveGroup)
 	}
 	pb.newline()
 	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
