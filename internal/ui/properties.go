@@ -38,20 +38,25 @@ const (
 	fieldMtimeTime
 	fieldOwner
 	fieldGroup
+	fieldRecursiveApply
 )
 
-// propertyFieldOrder is every editable field, in the same top-to-bottom
-// order renderProperties draws them — the Tab/Backtab navigation order
-// (see movePropertiesFocus/setPropertiesFocus): Name, the 9 permission
-// bits, the octal permission value (fieldPermOctal — an equivalent,
-// direct way to set all 9 at once, per the user's own request, rather
-// than only one bit at a time by clicking), Owner, Group, then the
-// Modified date and time halves. Cancel and Save (see newPropertiesView)
-// follow immediately after, as stops len(propertyFieldOrder) and
-// len(propertyFieldOrder)+1 — not part of this slice themselves, since
-// they're real tview.Button widgets with their own focus, not text spans
-// within propertiesText.
-var propertyFieldOrder = []propertyField{
+// baseFieldOrder is every editable field that's always present,
+// regardless of what Properties' current target is, in the same
+// top-to-bottom order renderProperties draws them — the Tab/Backtab
+// navigation order (see movePropertiesFocus/setPropertiesFocus): Name,
+// the 9 permission bits, the octal permission value (fieldPermOctal —
+// an equivalent, direct way to set all 9 at once, per the user's own
+// request, rather than only one bit at a time by clicking), Owner,
+// Group, then the Modified date and time halves. Cancel and Save (see
+// newPropertiesView) follow immediately after, as stops
+// len(currentFieldOrder()) and len(currentFieldOrder())+1 — not part of
+// this slice themselves, since they're real tview.Button widgets with
+// their own focus, not text spans within propertiesText.
+//
+// fieldRecursiveApply is deliberately NOT listed here — see
+// currentFieldOrder, which is what every caller actually uses.
+var baseFieldOrder = []propertyField{
 	fieldName,
 	fieldPermOwnerRead, fieldPermOwnerWrite, fieldPermOwnerExec,
 	fieldPermGroupRead, fieldPermGroupWrite, fieldPermGroupExec,
@@ -61,12 +66,39 @@ var propertyFieldOrder = []propertyField{
 	fieldMtimeDate, fieldMtimeTime,
 }
 
-// propertyFieldIndex returns field's position in propertyFieldOrder —
-// used both to seed propertiesFocusIndex when a field is clicked (see
+// currentFieldOrder returns baseFieldOrder for Properties' current
+// target, with fieldRecursiveApply spliced in right after fieldGroup —
+// matching exactly where recursiveApplyField draws its own row — once
+// isDirish(r.propertiesStat) is true. Unchanged for anything else, since
+// a non-directory target never shows that row at all (see
+// renderProperties' own isDirish guard); every Tab-navigation function
+// below reads the order through this method rather than baseFieldOrder
+// directly, precisely so a field that isn't actually rendered can never
+// become a reachable (but invisible) tab stop — the same "the field
+// order and what renderProperties actually draws are meant to always
+// agree" invariant activateFocusedPropertyStop's own doc comment already
+// relies on.
+func (r *Root) currentFieldOrder() []propertyField {
+	if !isDirish(r.propertiesStat) {
+		return baseFieldOrder
+	}
+	order := make([]propertyField, 0, len(baseFieldOrder)+1)
+	for _, f := range baseFieldOrder {
+		order = append(order, f)
+		if f == fieldGroup {
+			order = append(order, fieldRecursiveApply)
+		}
+	}
+	return order
+}
+
+// propertyFieldIndex returns field's position in the Properties
+// overlay's current field order (see currentFieldOrder) — used both to
+// seed propertiesFocusIndex when a field is clicked (see
 // activatePropertyField) and, in reverse, by focusedPropertyField to
 // render the right one highlighted.
-func propertyFieldIndex(field propertyField) (int, bool) {
-	for i, f := range propertyFieldOrder {
+func (r *Root) propertyFieldIndex(field propertyField) (int, bool) {
+	for i, f := range r.currentFieldOrder() {
 		if f == field {
 			return i, true
 		}
@@ -239,6 +271,32 @@ func (pb *propertiesBuilder) permissionsField(mode os.FileMode, focused property
 	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: octalStart, endCol: octalEnd, field: fieldPermOctal})
 }
 
+// recursiveApplyField writes the directory-only "apply to all files and
+// folders inside" toggle's own line (see renderProperties' own isDirish
+// guard, which is the only caller and decides whether this gets written
+// at all) — positioned right after Owner/Group, per the user's own
+// explicit request, since it governs whether saving an Owner/Group
+// change (see savePropertiesEdit) reaches only this directory's own
+// entry, or every file and subdirectory inside it too (see
+// fsops.ChownRecursive). Rendered with the same ○/● glyph this app's
+// checkbox column and every other plain on/off toggle already use (see
+// checkboxText in panel.go): the click itself toggles it (see
+// Root.toggleRecursiveApply), there's nothing here to type into. The
+// label column is left blank (not "Label:", like every other field)
+// since there's no separate value to align — the checkbox and its own
+// description both live in what would otherwise be the value column, at
+// the same start column editableField's own values line up at.
+func (pb *propertiesBuilder) recursiveApplyField(checked bool, focused propertyField) {
+	pb.text(fmt.Sprintf("%-13s", ""))
+	tag, reset := pb.focusTag(fieldRecursiveApply, focused)
+	pb.tag(tag)
+	start := pb.col
+	pb.text(checkboxText(checked) + " Apply to all files and folders inside")
+	end := pb.col
+	pb.tag(reset)
+	pb.spans = append(pb.spans, propertySpan{row: pb.row, startCol: start, endCol: end, field: fieldRecursiveApply})
+}
+
 // mtimeField writes the "Modified:" line with the date and time halves
 // as two independently highlighted, independently clickable spans (see
 // fieldMtimeDate/fieldMtimeTime) — edited separately, per the user's own
@@ -349,7 +407,14 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	r.propertiesCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelPropertiesEdit))
 	r.propertiesSaveBtn.SetInputCapture(spaceAlsoActivates(r.savePropertiesEdit))
 
-	n := len(propertyFieldOrder)
+	// n is deliberately NOT captured once here: newPropertiesButtons runs
+	// exactly once, at widget construction, but currentFieldOrder's own
+	// length can differ between one Properties session and the next (a
+	// directory adds fieldRecursiveApply, a plain file doesn't — see its
+	// own doc comment) — so every closure below reads it fresh, at the
+	// time it actually runs, instead of a value that would otherwise be
+	// frozen at whatever the very first target happened to be.
+	//
 	// Tab/Backtab leave the button that currently has focus (see
 	// Button.InputHandler) rather than doing anything themselves — where
 	// that lands is entirely up to SetExitFunc. Escape reaches the same
@@ -357,6 +422,7 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	// meaning everywhere else it's already used in this overlay (and in
 	// every other overlay in this app).
 	r.propertiesCancelBtn.SetExitFunc(func(key tcell.Key) {
+		n := len(r.currentFieldOrder())
 		switch key {
 		case tcell.KeyTab:
 			r.setPropertiesFocus(n + 1) // Save
@@ -371,7 +437,7 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 		case tcell.KeyTab:
 			r.setPropertiesFocus(0) // wrap to the first field
 		case tcell.KeyBacktab:
-			r.setPropertiesFocus(n) // Cancel
+			r.setPropertiesFocus(len(r.currentFieldOrder())) // Cancel
 		case tcell.KeyEscape:
 			r.cancelPropertiesEdit()
 		}
@@ -382,11 +448,11 @@ func (r *Root) newPropertiesButtons() *tview.Flex {
 	// propertiesFocusIndex (and so the rendered highlight) in sync with
 	// that path too, not just the keyboard one.
 	r.propertiesCancelBtn.SetFocusFunc(func() {
-		r.propertiesFocusIndex = n
+		r.propertiesFocusIndex = len(r.currentFieldOrder())
 		r.rerenderProperties()
 	})
 	r.propertiesSaveBtn.SetFocusFunc(func() {
-		r.propertiesFocusIndex = n + 1
+		r.propertiesFocusIndex = len(r.currentFieldOrder()) + 1
 		r.rerenderProperties()
 	})
 
@@ -493,6 +559,7 @@ func (r *Root) loadPropertiesTarget() error {
 	r.stagedMtime = info.ModTime
 	r.stagedOwner = info.Owner
 	r.stagedGroup = info.Group
+	r.stagedRecursiveChown = false
 
 	r.renderProperties()
 	r.properties.HidePage("editfield")
@@ -529,6 +596,10 @@ func (r *Root) renderProperties() {
 	pb.newline()
 	pb.editableField("Group", r.stagedGroup, fieldGroup, focused)
 	pb.newline()
+	if isDirish(r.propertiesStat) {
+		pb.recursiveApplyField(r.stagedRecursiveChown, focused)
+		pb.newline()
+	}
 	pb.field("Size", sizeWithBytes(r.propertiesStat.Size))
 	pb.newline()
 	pb.mtimeField(r.stagedMtime, focused)
@@ -673,7 +744,15 @@ func (r *Root) savePropertiesEdit() {
 			}
 		}
 		if firstErr == nil {
-			if err := fsops.Chown(target, uid, gid); err != nil {
+			// stagedRecursiveChown (see toggleRecursiveApply) is only ever
+			// settable while the target is a directory in the first place
+			// (renderProperties/currentFieldOrder both gate the row behind
+			// isDirish), so no extra guard is needed here beyond reading it.
+			chown := fsops.Chown
+			if r.stagedRecursiveChown {
+				chown = fsops.ChownRecursive
+			}
+			if err := chown(target, uid, gid); err != nil {
 				firstErr = err
 			}
 		}
@@ -744,6 +823,20 @@ func (r *Root) setPermBit(field propertyField, on bool) {
 	r.rerenderProperties()
 }
 
+// toggleRecursiveApply flips whether saving an Owner/Group change
+// reaches this directory's own entry only, or every file and
+// subdirectory inside it too (see savePropertiesEdit/
+// fsops.ChownRecursive) — the click itself *is* the edit here, exactly
+// like togglePermBit's own permission bits, not something needing a
+// separate confirmation. Only ever reachable while the target is a
+// directory (see currentFieldOrder/renderProperties' own isDirish
+// guards), so no such guard is needed here too.
+func (r *Root) toggleRecursiveApply() {
+	r.stagedRecursiveChown = !r.stagedRecursiveChown
+	r.markPropertiesDirty()
+	r.rerenderProperties()
+}
+
 // activatePropertyField is what clicking any propertySpan does — and,
 // via activateFocusedPropertyStop, what pressing Enter on one via
 // keyboard navigation does too: a permission bit toggles immediately
@@ -758,7 +851,7 @@ func (r *Root) setPermBit(field propertyField, on bool) {
 // navigation last left off.
 func (r *Root) activatePropertyField(span propertySpan) {
 	r.markPropertiesDirty()
-	if idx, ok := propertyFieldIndex(span.field); ok {
+	if idx, ok := r.propertyFieldIndex(span.field); ok {
 		r.propertiesFocusIndex = idx
 	}
 	r.rerenderProperties()
@@ -769,6 +862,9 @@ func (r *Root) activatePropertyField(span propertySpan) {
 	}
 
 	switch span.field {
+	case fieldRecursiveApply:
+		r.toggleRecursiveApply()
+		return
 	case fieldOwner:
 		r.openOwnerGroupPicker(pickUser, r.propertiesStat.UID, r.propertyFieldPosition(span), func(name string, _ int) {
 			r.stagedOwner = name
@@ -848,10 +944,11 @@ func (r *Root) restoreProperties() {
 // Tab has ever been pressed (index -1, Properties' state right after
 // opening — see openProperties).
 func (r *Root) focusedPropertyField() propertyField {
-	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(propertyFieldOrder) {
+	order := r.currentFieldOrder()
+	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(order) {
 		return fieldNone
 	}
-	return propertyFieldOrder[r.propertiesFocusIndex]
+	return order[r.propertiesFocusIndex]
 }
 
 // propertySpanForField returns the current propertySpan for field, if
@@ -888,9 +985,9 @@ func isAutoEditField(field propertyField) bool {
 }
 
 // setPropertiesFocus moves keyboard-navigation focus to stop idx — a
-// field span (0..len(propertyFieldOrder)-1), the Cancel button
-// (len(propertyFieldOrder)), or the Save button
-// (len(propertyFieldOrder)+1) — re-rendering so the highlighted field
+// field span (0..len(currentFieldOrder())-1), the Cancel button
+// (len(currentFieldOrder())), or the Save button
+// (len(currentFieldOrder())+1) — re-rendering so the highlighted field
 // (if any) matches, and giving the concrete widget that stop actually
 // lives on real keyboard focus: propertiesText for a field (see
 // capturePropertiesKey's Tab/Backtab/Enter handling), or the button
@@ -907,7 +1004,8 @@ func (r *Root) setPropertiesFocus(idx int) {
 	r.propertiesFocusIndex = idx
 	r.rerenderProperties()
 
-	n := len(propertyFieldOrder)
+	order := r.currentFieldOrder()
+	n := len(order)
 	switch idx {
 	case n:
 		r.app.SetFocus(r.propertiesCancelBtn)
@@ -915,7 +1013,7 @@ func (r *Root) setPropertiesFocus(idx int) {
 		r.app.SetFocus(r.propertiesSaveBtn)
 	default:
 		r.app.SetFocus(r.propertiesText)
-		if idx >= 0 && idx < n && isAutoEditField(propertyFieldOrder[idx]) {
+		if idx >= 0 && idx < n && isAutoEditField(order[idx]) {
 			r.activateFocusedPropertyStop()
 		}
 	}
@@ -929,7 +1027,7 @@ func (r *Root) setPropertiesFocus(idx int) {
 // calls setPropertiesFocus directly the same way once Tab/Backtab leaves
 // them.
 func (r *Root) movePropertiesFocus(delta int) {
-	n := len(propertyFieldOrder)
+	n := len(r.currentFieldOrder())
 	idx := r.propertiesFocusIndex + delta
 	switch {
 	case idx < 0:
@@ -945,13 +1043,14 @@ func (r *Root) movePropertiesFocus(delta int) {
 // counterpart to clicking that same field (see activatePropertyField).
 // A no-op if nothing is focused yet (idx < 0: Tab hasn't been pressed
 // since Properties opened) or the field somehow isn't currently rendered
-// (shouldn't happen — propertyFieldOrder and what renderProperties
+// (shouldn't happen — currentFieldOrder and what renderProperties
 // actually draws are meant to always agree).
 func (r *Root) activateFocusedPropertyStop() {
-	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(propertyFieldOrder) {
+	order := r.currentFieldOrder()
+	if r.propertiesFocusIndex < 0 || r.propertiesFocusIndex >= len(order) {
 		return
 	}
-	field := propertyFieldOrder[r.propertiesFocusIndex]
+	field := order[r.propertiesFocusIndex]
 	if span, ok := r.propertySpanForField(field); ok {
 		r.activatePropertyField(span)
 	}
