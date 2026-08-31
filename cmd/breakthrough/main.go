@@ -110,15 +110,14 @@ func run() error {
 	// terminal ones, so it was the natural key to free Ctrl+R with,
 	// rather than picking an arbitrary unclaimed letter instead.
 	//
-	// Ctrl+D (the Details sidebar, see internal/ui/detailssidebar.go) is
-	// grouped with Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B below rather than with the
-	// six that always fire: tview's own TextArea binds Ctrl+D to "delete
-	// forward" (verified directly against tview's own source, the same
-	// way every claim in this comment block is - see also the Ctrl+H
-	// note above for why guessing instead has already gone wrong once),
-	// the same key the physical Delete key already sends, so it falls
-	// through to bashLine's own handling instead of always consuming the
-	// event, exactly like those four. Chosen over the alphabet's other
+	// Ctrl+D (the Details sidebar, see internal/ui/detailssidebar.go)
+	// falls through to bashLine's own handling instead of always
+	// consuming the event, the same as Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B below:
+	// tview's own TextArea binds Ctrl+D to "delete forward" (verified
+	// directly against tview's own source, the same way every claim in
+	// this comment block is - see also the Ctrl+H note above for why
+	// guessing instead has already gone wrong once), the same key the
+	// physical Delete key already sends. Chosen over the alphabet's other
 	// options (A/D/K/U/W/Y all have some real, native TextArea binding of
 	// their own; H/I/M collide with Backspace/Tab/Enter at the terminal
 	// protocol level; V/X/Z are earmarked for planned Paste/Cut/Undo
@@ -128,8 +127,14 @@ func run() error {
 	// one native binding this app already has its own guarded equivalent
 	// for, on the physical Delete key itself, right below.
 	//
+	// Unlike those four, though, Ctrl+D is checked here via
+	// BashLineHasFocus alone, not the full AcceptsGlobalShortcut - it
+	// needs to keep working while Properties specifically is open too,
+	// per the user's own explicit request to open or close Details
+	// *alongside* Properties (see ToggleDetailsSidebarShortcut's own doc
+	// comment), not just while plainly browsing. This is the same shape
 	// Ctrl+K (compute hashes) and Ctrl+N (fetch metadata), both for the
-	// Details sidebar, are two more of the same shape - Ctrl+H (the
+	// Details sidebar, already have for the same reason - Ctrl+H (the
 	// obvious mnemonic for "hash", matching Properties' own bare 'h')
 	// and Ctrl+M (the obvious one for "metadata") were both considered
 	// and rejected: Ctrl+H is the Backspace collision already noted
@@ -139,11 +144,11 @@ func run() error {
 	// TextArea's own Ctrl+K deletes to end of line, a real but
 	// infrequently-reached-for edit; Ctrl+N is only breakthrough's own
 	// bash-history-forward alias for Down (see the bash line's own help
-	// text) - Down itself is untouched. Unlike every case above,
-	// including Ctrl+D, these two check BashLineHasFocus alone, not the
-	// full AcceptsGlobalShortcut - both need to keep working while
-	// Properties is open, not just while plainly browsing (see
-	// Root.ComputeHashesShortcut's own doc comment for why).
+	// text) - Down itself is untouched. All three - Ctrl+D, Ctrl+K,
+	// Ctrl+N - need to keep working while Properties is open, not just
+	// while plainly browsing (see Root.ComputeHashesShortcut's own doc
+	// comment for why), which the full AcceptsGlobalShortcut Ctrl+T/
+	// Ctrl+P/Ctrl+S/Ctrl+B below still use would otherwise block.
 	//
 	// Tab moves focus between the panel and the Details sidebar (see
 	// Root.ToggleDetailsFocusShortcut) - considered and rejected first:
@@ -230,8 +235,13 @@ func run() error {
 			// as Ctrl+T/Ctrl+P/Ctrl+S/Ctrl+B above - tview's own TextArea
 			// binds Ctrl+D to "delete forward" (see the doc comment above
 			// this switch), a real, working feature that would otherwise
-			// be silently swallowed while typing a command.
-			if !root.AcceptsGlobalShortcut() {
+			// be silently swallowed while typing a command. Checked
+			// directly here, not via the full AcceptsGlobalShortcut those
+			// four still use below - like Ctrl+K/Ctrl+N just below, this
+			// also needs to keep working while Properties specifically is
+			// open (see ToggleDetailsSidebarShortcut's own doc comment),
+			// which the fuller check would otherwise block there too.
+			if root.BashLineHasFocus() {
 				return event
 			}
 			root.ToggleDetailsSidebarShortcut()
