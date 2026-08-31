@@ -84,6 +84,14 @@ type Root struct {
 
 	app *tview.Application
 
+	// lastScreenWidth/Height are the terminal's own size as of the most
+	// recent handleBeforeDraw call — how it tells a genuine resize apart
+	// from any other reason a draw happens to run (a keypress, a click,
+	// StartClock's own once-a-second tick, ...). Zero-valued until the
+	// very first draw, which handleBeforeDraw treats as a "resize" too —
+	// harmless, since nothing it repositions is open that early anyway.
+	lastScreenWidth, lastScreenHeight int
+
 	// theme is the active color scheme, resolved once at startup (see
 	// loadInitialSettings/applyTheme) from settings.ColorScheme against
 	// colorSchemes, and again live whenever the Options overlay (see
@@ -861,6 +869,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
+	app.SetBeforeDrawFunc(r.handleBeforeDraw)
 
 	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
@@ -1111,6 +1120,73 @@ func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
 	}
 
 	return x, y, width, height
+}
+
+// handleBeforeDraw is registered via Application.SetBeforeDrawFunc in
+// NewRoot, so it runs before every single Draw — deliberately not
+// SetAfterDrawFunc: Application.draw itself already updates Root's own
+// rect to the new screen size (SetRoot's own "fullscreen" argument)
+// before calling either handler, but only *before* actually runs before
+// the primitive tree is drawn (verified directly against tview's own
+// application.go, not guessed — the two are asymmetric despite the
+// similar names). Repositioning from an after-handler would still look
+// right eventually, but only from the *next* draw on, one full resize
+// behind, rather than in the very same frame the resize itself caused.
+//
+// A real, user-reported gap this fixes: neither Properties nor the
+// Details sidebar previously reacted to a live terminal resize at all —
+// both compute their own size/position once, at whatever moment they're
+// opened or last re-rendered for an unrelated reason (an edit, a hash
+// finishing, ...), and nothing before this ever revisited that purely
+// because the terminal itself changed size. The panel underneath is
+// unaffected either way: panelPage is the one page in Root added with
+// AddPage's own resize=true, so tview already re-fits it to the new
+// screen on every Draw, with no help needed here.
+//
+// Every other overlay (Search, Help, Options, Sed, the pickers, ...)
+// still has the same gap this fixes for Properties and Details
+// specifically — deliberately narrow in scope to the two the user
+// actually asked about, not a general "reposition whatever's currently
+// open" mechanism; extending it further is a real, and fairly
+// mechanical, follow-up once there's a reason to.
+//
+// One real remaining wrinkle for Properties specifically: it sizes
+// itself via clampToPanel, against the panel's own current inner rect —
+// but the panel (mainLayout, panelPage's own Item) only gets its rect
+// updated to match a resize via Pages' own resize=true handling inside
+// root.Draw, which runs *after* this returns (see above). So on the
+// very first draw following a resize, Properties still clamps against
+// the panel's previous-frame bounds, catching up one draw later —
+// normally imperceptible (an actual resize drag fires many of these in
+// quick succession, well before a user could react to any one of them),
+// and correct behavior arrives well before the *next* deliberate
+// interaction either way. Recomputing the panel's own rect by hand here
+// too, ahead of Pages' own turn, was tried and rejected: Flex layout
+// (mainLayout's own bashConsole/buttonBar/statusBar split, further
+// complicated by bashConsole's own variable expanded height) isn't
+// something worth re-deriving by hand just to shave off one frame,
+// on a component tview itself already recomputes correctly moments
+// later anyway.
+//
+// Always returns false: returning true here would tell Application.draw
+// to skip drawing the primitive tree entirely for this frame (see
+// SetBeforeDrawFunc's own doc comment) — never what a mere size check
+// should do.
+func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
+	width, height := screen.Size()
+	if width == r.lastScreenWidth && height == r.lastScreenHeight {
+		return false
+	}
+	r.lastScreenWidth, r.lastScreenHeight = width, height
+
+	if r.detailsSidebarVisible {
+		r.repositionDetailsSidebar()
+	}
+	if r.activePage == propertiesPage {
+		r.rerenderProperties()
+	}
+
+	return false
 }
 
 // RequestQuit shows a confirmation overlay instead of quitting right
