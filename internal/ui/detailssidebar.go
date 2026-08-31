@@ -84,15 +84,28 @@ func (r *Root) detailsSidebarSize() (width, height int) {
 	return width, screenHeight
 }
 
+// repositionDetailsSidebar (re)computes the sidebar's own rect from
+// detailsSidebarSize, flush against the right edge of the screen, and
+// applies it — the size/position half of showDetailsSidebar, split out
+// on its own so Root's own resize handling (see handleBeforeDraw) can
+// re-run just this, without also reloading content or resetting scroll
+// position the way showDetailsSidebar itself always does.
+func (r *Root) repositionDetailsSidebar() {
+	width, height := r.detailsSidebarSize()
+	_, _, screenWidth, _ := r.GetRect()
+	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
+	r.detailsSidebar.SetRect(x, y, width, height)
+}
+
 // showDetailsSidebar positions the sidebar flush against the right edge
-// of the screen (see detailsSidebarSize) and shows it, without touching
-// keyboard focus — see newDetailsSidebarView's own doc comment on why
-// that matters here specifically, and preserveFocusAcross's own doc
-// comment for the real bug that turned out to take to actually guarantee
-// it. SendToFront matters for the same reason it does in pushOverlay:
-// ShowPage alone doesn't reorder Pages' own internal draw order, so
-// without it the sidebar could end up drawn underneath — and fully
-// hidden by — some other page registered after it in NewRoot.
+// of the screen (see repositionDetailsSidebar) and shows it, without
+// touching keyboard focus — see newDetailsSidebarView's own doc comment
+// on why that matters here specifically, and preserveFocusAcross's own
+// doc comment for the real bug that turned out to take to actually
+// guarantee it. SendToFront matters for the same reason it does in
+// pushOverlay: ShowPage alone doesn't reorder Pages' own internal draw
+// order, so without it the sidebar could end up drawn underneath — and
+// fully hidden by — some other page registered after it in NewRoot.
 //
 // Always (re)loads its content for whatever the panel's cursor
 // currently points at, even if that's the same entry it showed the last
@@ -102,10 +115,7 @@ func (r *Root) detailsSidebarSize() (width, height int) {
 // what populates the sidebar the very first time it's ever shown, when
 // there's nothing yet to compare the new target against.
 func (r *Root) showDetailsSidebar() {
-	width, height := r.detailsSidebarSize()
-	_, _, screenWidth, _ := r.GetRect()
-	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
-	r.detailsSidebar.SetRect(x, y, width, height)
+	r.repositionDetailsSidebar()
 	r.preserveFocusAcross(func() {
 		r.ShowPage(detailsSidebarPage)
 		r.SendToFront(detailsSidebarPage)
