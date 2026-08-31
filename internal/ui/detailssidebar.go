@@ -274,9 +274,13 @@ func (r *Root) refreshDetailsSidebar() {
 // account for.
 func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
-	r.detailsHashes = nil
 	r.detailsMetadataState = ""
 	r.detailsTarget = path
+	// Adopts Properties' own result immediately if it's already open on
+	// this exact file and has one (see propertiesHashesFor's own doc
+	// comment) — nil otherwise, same as the plain assignment this
+	// replaced.
+	r.detailsHashes = r.propertiesHashesFor(path)
 
 	r.detailsStat = fsops.Info{}
 	r.detailsStatErr = nil
@@ -704,6 +708,36 @@ func (r *Root) propagateHashResult(target string, hashes fsops.Hashes) {
 	}
 }
 
+// detailsHashesFor returns Details' own already-computed result if it's
+// currently showing target, or nil — propagateHashResult's own
+// "adopt on open" counterpart, checked by loadPropertiesTarget: opening
+// Properties on a file Details already hashed shows that result right
+// away instead of a fresh "press Ctrl+K" hint, per the user's own
+// explicit request. Unlike propagateHashResult, this only ever needs
+// one direction here — loadPropertiesTarget is the one doing the
+// asking, so there's no symmetric "does Properties already have it"
+// question to also answer in the same call (see propertiesHashesFor for
+// that, checked the other way around by loadDetailsTarget).
+func (r *Root) detailsHashesFor(target string) *fsops.Hashes {
+	if r.detailsSidebarVisible && r.detailsTarget == target {
+		return r.detailsHashes
+	}
+	return nil
+}
+
+// propertiesHashesFor is detailsHashesFor's own mirror image, checked
+// by loadDetailsTarget: Details loading a target Properties already has
+// open and hashed (always the same file whenever both are showing
+// something at once — see propagateHashResult's own doc comment on why
+// that's guaranteed, not just usually true) adopts that result
+// immediately too, rather than needing its own separate computation.
+func (r *Root) propertiesHashesFor(target string) *fsops.Hashes {
+	if r.activePage == propertiesPage && r.propertiesTarget == target {
+		return r.propertiesHashes
+	}
+	return nil
+}
+
 // animateDetailsHashProgress mirrors Properties' own
 // animateHashProgress — see its doc comment.
 func (r *Root) animateDetailsHashProgress(ctx context.Context) {
@@ -741,16 +775,17 @@ func (r *Root) cancelDetailsHashComputation() {
 }
 
 // ComputeHashesShortcut is Ctrl+K's own action — see cmd/breakthrough.
-// Targets whichever of Properties/Details is actually the relevant one
-// right now, decided by real keyboard focus: Properties, being modal,
-// always holds it while open, so Ctrl+K then reuses its own existing
-// computeHashes (the exact same action its own bare 'h' key already
-// runs — see hashesInputCapture) instead of reaching past it to a
-// Details sidebar sitting, unfocused, behind it — per the user's own
-// explicit request for what should happen when both are open at once.
-// Otherwise, if Details is currently shown, targets its own hash
-// section (see computeDetailsHashes) instead. A no-op if neither
-// applies.
+// Also Properties' *only* way to trigger this now (see
+// hashesMouseCapture's own doc comment on why the bare 'h' it used to
+// have besides its own click zone is gone). Targets whichever of
+// Properties/Details is actually the relevant one right now, decided by
+// real keyboard focus: Properties, being modal, always holds it while
+// open, so Ctrl+K then reuses its own existing computeHashes instead of
+// reaching past it to a Details sidebar sitting, unfocused, behind it —
+// per the user's own explicit request for what should happen when both
+// are open at once. Otherwise, if Details is currently shown, targets
+// its own hash section (see computeDetailsHashes) instead. A no-op if
+// neither applies.
 func (r *Root) ComputeHashesShortcut() {
 	switch {
 	case r.activePage == propertiesPage:

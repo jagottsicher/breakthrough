@@ -778,6 +778,62 @@ func TestPropagateHashResultIgnoresUnrelatedTarget(t *testing.T) {
 	}
 }
 
+// TestOpenPropertiesAdoptsExistingDetailsHash pins the "adopt on open"
+// half of the user's own explicit request: opening Properties on a file
+// Details already has a computed hash for shows that result right away
+// — no fresh "press Ctrl+K" hint, no redundant recomputation.
+func TestOpenPropertiesAdoptsExistingDetailsHash(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.detailsHashes = &fsops.Hashes{MD5: "abc123"} // simulating an already-computed result
+
+	r.target = path
+	r.openProperties()
+
+	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
+		t.Errorf("propertiesHashes = %v, want adopted MD5 abc123 from Details", r.propertiesHashes)
+	}
+}
+
+// TestLoadDetailsTargetAdoptsExistingPropertiesHash is
+// TestOpenPropertiesAdoptsExistingDetailsHash's own mirror image: Details
+// loading a target Properties already has open and hashed adopts that
+// result immediately too.
+func TestLoadDetailsTargetAdoptsExistingPropertiesHash(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.target = path
+	r.openProperties()
+	r.propertiesHashes = &fsops.Hashes{MD5: "xyz789"} // simulating an already-computed result
+
+	r.showDetailsSidebar() // Details loads for the first time, same target
+
+	if r.detailsHashes == nil || r.detailsHashes.MD5 != "xyz789" {
+		t.Errorf("detailsHashes = %v, want adopted MD5 xyz789 from Properties", r.detailsHashes)
+	}
+}
+
 // TestClickingDetailsHashZoneDefersToOpenProperties pins the fix for
 // the inconsistency the user's own report surfaced: the click zone used
 // to call computeDetailsHashes directly, bypassing the "Properties wins

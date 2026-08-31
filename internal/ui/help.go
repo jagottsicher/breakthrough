@@ -45,8 +45,10 @@ var helpText = strings.TrimLeft(`
                   image or PDF, a preview with its own click zone/
                   Ctrl+L for fullscreen; hashes) for whichever entry
                   is currently selected
-  Ctrl+K          Compute the Details sidebar's own hashes — targets
-                  Properties instead if that's the one currently open
+  Ctrl+K          Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512)
+                  for Properties if that's open, otherwise the Details
+                  sidebar; shown in both at once if both are open on
+                  the same file, however it was triggered
   Ctrl+N          Load an image's metadata in the Details sidebar
                   (EXIF etc. — not implemented yet)
   Ctrl+S          Sed Replace on the selected file(s)
@@ -84,11 +86,12 @@ var helpText = strings.TrimLeft(`
   Tab / Shift+Tab   Move between fields
   Enter / Space     Activate or commit the focused one
   Escape            Cancel and close
-  h                 Compute file hashes (SHA-256/SHA-1/MD5/SHA-512/
-                    BLAKE2b-512)
 
   With a permission bit focused: r / w / x sets that bit directly,
   Space toggles it, Delete or - clears it.
+
+  Ctrl+K (see the file panel's own entry above) computes hashes here
+  too — click the hash hint works as well.
 
 [::b]Search dialog (Ctrl+F)[::-]
 
