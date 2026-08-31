@@ -585,12 +585,20 @@ type Root struct {
 	// into its text fallback — resolved to a uid/gid via
 	// fsops.ResolveUID/ResolveGID only at Save time, the same as
 	// propertiesStat.Owner/Group are themselves already just names.
-	propertiesDirty bool
-	stagedName      string
-	stagedMode      os.FileMode
-	stagedMtime     time.Time
-	stagedOwner     string
-	stagedGroup     string
+	//
+	// stagedRecursiveChown is the directory-only "apply to all files and
+	// folders inside" toggle (see recursiveApplyField/toggleRecursiveApply)
+	// that sits right after Owner/Group, per the user's own explicit
+	// request — always reset to false in openProperties, never carried
+	// over from a previous Properties session, since it describes what
+	// this particular Save should do, not a standing preference.
+	propertiesDirty      bool
+	stagedName           string
+	stagedMode           os.FileMode
+	stagedMtime          time.Time
+	stagedOwner          string
+	stagedGroup          string
+	stagedRecursiveChown bool
 
 	// activePage/activeWidget mirror overlayStack's top frame — see
 	// showOverlay/pushOverlay/hideOverlay. This drives both explicit focus
