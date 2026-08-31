@@ -307,7 +307,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	r.openProperties()
 
 	before := r.propertiesText.GetText(true)
-	if !strings.Contains(before, "Press h or click here") {
+	if !strings.Contains(before, "Press Ctrl+K or click here") {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
@@ -369,7 +369,7 @@ func TestHashLinesNeverProducesAWideLine(t *testing.T) {
 		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
 	}
 	const safeWidth = 78 // comfortably under even a narrow (80-column) real terminal
-	for _, line := range strings.Split(hashLines(hashes, "Press h or click here to compute", propertiesHashFieldWidth), "\n") {
+	for _, line := range strings.Split(hashLines(hashes, "Press Ctrl+K or click here to compute", propertiesHashFieldWidth), "\n") {
 		if w := len([]rune(line)); w > safeWidth {
 			t.Errorf("hashLines produced a %d-column line, want at most %d — a line this wide can silently wrap at render time and push later content off the bottom of the overlay: %q", w, safeWidth, line)
 		}
@@ -438,7 +438,7 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	r.openProperties()
 
 	text := r.propertiesText.GetText(true)
-	if strings.Contains(text, "Press h or click here") {
+	if strings.Contains(text, "Press Ctrl+K or click here") {
 		t.Errorf("a directory's Properties should not offer to compute a hash, got:\n%s", text)
 	}
 
@@ -644,12 +644,17 @@ func TestOpenPropertiesCancelsStaleHashComputation(t *testing.T) {
 	}
 }
 
-// TestPropertiesHPressTriggersHash pins the 'h' keyboard shortcut for
-// computing hashes, dispatched through r.properties itself (see
-// hashesInputCapture) the way a real keypress arrives, rather than
-// calling capturePropertiesKey directly — that's no longer where this
-// is handled (see its own doc comment on why).
-func TestPropertiesHPressTriggersHash(t *testing.T) {
+// TestPropertiesHPressNoLongerTriggersHash pins the removal of the bare
+// 'h' keyboard shortcut — per the user's own explicit request, once
+// Ctrl+K existed globally and covered the same action without the
+// "typing h into Name/Owner/Group no longer works" trade-off bare 'h'
+// used to carry (see hashesMouseCapture's own doc comment): pressing h
+// now does nothing hash-related, and can be typed as a literal
+// character again, including into an auto-opened inline editor (see
+// isAutoEditField), which used to be the harder of the two cases to get
+// right when 'h' still needed its own dedicated, shared-ancestor
+// keyboard capture.
+func TestPropertiesHPressNoLongerTriggersHash(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -657,65 +662,22 @@ func TestPropertiesHPressTriggersHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	started := isolateHashFile(t)
-	t.Cleanup(r.cancelHashComputation)
 	r.target = path
 	r.openProperties()
 
-	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
-	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
-
-	// Hashing now runs on a background goroutine (see computeHashes),
-	// with an "in progress" animation shown while it's running — the
-	// real result only ever lands via r.app.QueueUpdateDraw, which
-	// nothing here drains (see isolateHashFile's own doc comment), so
-	// this only pins that pressing h actually started a computation.
-	if !r.hashInProgress {
-		t.Error("pressing h should have started computing the hash")
-	}
-	if !strings.Contains(r.propertiesText.GetText(true), "Computing hashes") {
-		t.Errorf("propertiesText should show the in-progress animation, got:\n%s", r.propertiesText.GetText(true))
-	}
-}
-
-// TestPropertiesHPressTriggersHashWhileInlineEditorOpen pins the fix for
-// the user's own report: pressing h stopped working once you'd tabbed
-// onto an auto-editing field (see isAutoEditField — Name, the octal
-// permission value, either half of Modified), since real keyboard focus
-// moves to propertiesEditField then, not propertiesText, where 'h' used
-// to be handled — it would just get typed into whatever field was open
-// instead. hashesInputCapture (installed on r.properties, the shared
-// ancestor of both) fixes this by running before propertiesEditField's
-// own InputHandler ever gets a chance to.
-func TestPropertiesHPressTriggersHashWhileInlineEditorOpen(t *testing.T) {
-	dir := fixtureDir(t)
-	path := filepath.Join(dir, "banana.txt")
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	started := isolateHashFile(t)
-	t.Cleanup(r.cancelHashComputation)
-	r.target = path
-	r.openProperties()
-
-	r.setPropertiesFocus(0) // fieldName is propertyFieldOrder[0] — auto-opens the inline editor
+	r.setPropertiesFocus(0) // fieldName is propertyFieldOrder[0] — auto-opens the inline editor, pre-filled with the current name
 	if !r.propertiesEditField.HasFocus() {
 		t.Fatal("setup: expected the inline editor to have opened and taken focus")
 	}
 	nameBefore := r.propertiesEditField.GetText()
 
 	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
-	<-started // wait for hashFile's one-time read (see isolateHashFile) before this test can safely end
 
-	// See TestPropertiesHPressTriggersHash's own doc comment on why this
-	// checks that a computation started, not a finished "MD5:" result.
-	if !r.hashInProgress {
-		t.Error("pressing h while the inline editor is open should still have started computing the hash")
+	if r.hashInProgress {
+		t.Error("pressing h should no longer start computing the hash — that's Ctrl+K's job now")
 	}
-	if got := r.propertiesEditField.GetText(); got != nameBefore {
-		t.Errorf("the inline editor's own text = %q, want unchanged %q — h should not have been typed into it", got, nameBefore)
+	if got, want := r.propertiesEditField.GetText(), nameBefore+"h"; got != want {
+		t.Errorf("the inline editor's own text = %q, want %q — h should be typed into it like any other character now", got, want)
 	}
 }
 
@@ -750,8 +712,9 @@ func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
 	if !consumed {
 		t.Error("click on the hash line should be consumed")
 	}
-	// See TestPropertiesHPressTriggersHash's own doc comment on why this
-	// checks that a computation started, not a finished "MD5:" result.
+	// Checks that a computation started, not a finished "MD5:" result:
+	// the real result only ever lands via r.app.QueueUpdateDraw, which
+	// nothing here drains (see isolateHashFile's own doc comment).
 	if !r.hashInProgress {
 		t.Error("clicking the hash line should have started computing the hash")
 	}
@@ -796,8 +759,9 @@ func TestPropertiesHashLineClickTriggersHashWhileInlineEditorOpen(t *testing.T) 
 	if !consumed {
 		t.Error("click on the hash line should be consumed even while the inline editor is open")
 	}
-	// See TestPropertiesHPressTriggersHash's own doc comment on why this
-	// checks that a computation started, not a finished "MD5:" result.
+	// Checks that a computation started, not a finished "MD5:" result:
+	// the real result only ever lands via r.app.QueueUpdateDraw, which
+	// nothing here drains (see isolateHashFile's own doc comment).
 	if !r.hashInProgress {
 		t.Error("clicking the hash line while the inline editor is open should still have started computing the hash")
 	}
