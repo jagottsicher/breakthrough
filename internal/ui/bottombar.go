@@ -173,6 +173,23 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		buttonSpec{"^R Remove", buttonActionRemove},
 	)
 
+	// " | " reads as a clearer separator between buttons than a plain
+	// double space — per the user's own explicit request, which also
+	// asked for a narrower bare "|" (no surrounding spaces) once the
+	// row's own available width can't fit the wider version. Not done:
+	// buildButtonBar only ever runs again on specific state changes
+	// (toggling hidden files, entering/leaving the trash view — see
+	// refreshButtonBar's own callers), never on a bare terminal resize
+	// by itself, so a width check here would frequently judge against
+	// whatever rect r.buttonBar happened to have the *last* time some
+	// unrelated state change last rebuilt it — not the terminal's
+	// current real size — and silently keep the wrong separator until
+	// another such change happened to come along. Worth doing properly
+	// (hooking a real resize signal — e.g. Application.SetAfterDrawFunc,
+	// comparing against the last known width — to force a rebuild) as
+	// its own follow-up, not as a guess bolted onto this one.
+	const sep = " | "
+
 	var b strings.Builder
 	col := 0
 
@@ -187,7 +204,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	}
 	for i, bt := range buttons {
 		if i > 0 {
-			write("  ")
+			write(sep)
 		}
 		start := col
 		write(bt.label)
