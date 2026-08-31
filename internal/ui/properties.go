@@ -1216,8 +1216,10 @@ func (r *Root) computeHashes() {
 				r.showError(err)
 				return
 			}
-			r.propertiesHashes = &hashes
-			r.rerenderProperties()
+			// Updates propertiesHashes/re-renders itself, then mirrors
+			// into Details too if that's showing the same target — see
+			// propagateHashResult's own doc comment (detailssidebar.go).
+			r.propagateHashResult(target, hashes)
 		})
 	}()
 }
