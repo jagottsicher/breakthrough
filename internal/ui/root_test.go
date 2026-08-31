@@ -474,3 +474,117 @@ func TestPromptCancelDoesNotSubmit(t *testing.T) {
 		t.Errorf("activePage = %q, want empty after cancel", r.activePage)
 	}
 }
+
+// simulationScreen returns a real tcell.SimulationScreen sized width x
+// height, initialized and ready for handleBeforeDraw — the same
+// approach clickButtonBar (see bottombar_test.go) already uses to give
+// mouse-position tests a genuinely drawn screen to work against.
+func simulationScreen(t *testing.T, width, height int) tcell.SimulationScreen {
+	t.Helper()
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	return screen
+}
+
+// TestHandleBeforeDrawRepositionsDetailsSidebarOnResize pins the user's
+// own explicit report: the Details sidebar previously stayed at its old
+// size/position across a live terminal resize, clashing with the panel
+// underneath (which does resize correctly, being the one page in Root
+// added with AddPage's own resize=true).
+func TestHandleBeforeDrawRepositionsDetailsSidebarOnResize(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 30)
+	r.showDetailsSidebar()
+
+	x, _, width, _ := r.detailsSidebar.GetRect()
+	if x+width != 100 {
+		t.Fatalf("setup: sidebar not flush against the right edge of a 100-wide screen: x=%d width=%d", x, width)
+	}
+
+	// Simulates what Application.draw's own "fullscreen" handling
+	// already does to Root's own rect before handleBeforeDraw ever runs
+	// for real (see its own doc comment) — done by hand here since this
+	// test calls handleBeforeDraw directly, without a running
+	// Application behind it.
+	r.SetRect(0, 0, 160, 40)
+	screen := simulationScreen(t, 160, 40)
+
+	r.handleBeforeDraw(screen)
+
+	x, _, width, _ = r.detailsSidebar.GetRect()
+	if x+width != 160 {
+		t.Errorf("sidebar after resize: x=%d width=%d, want flush against the new 160-wide screen", x, width)
+	}
+}
+
+// TestHandleBeforeDrawRerendersPropertiesOnResize pins the same fix for
+// Properties: once the panel's own inner rect has actually shrunk
+// (simulated directly here — see handleBeforeDraw's own doc comment on
+// why that specifically, unlike the screen size itself, still catches
+// up one draw behind a live resize, via tview's own Pages resize=true
+// handling rather than anything this function does), a draw must
+// re-clamp Properties to fit it, not leave it sitting at whatever size
+// fit its content when it was last rendered.
+func TestHandleBeforeDrawRerendersPropertiesOnResize(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 50)
+	r.panel.SetRect(0, 0, 200, 46) // realistic — see clampToPanel's own default-rect gotcha noted elsewhere
+	r.target = path
+	r.openProperties()
+
+	_, _, wideWidth, _ := r.properties.GetRect()
+
+	r.SetRect(0, 0, 40, 50)
+	r.panel.SetRect(0, 0, 40, 46) // as if a real draw had already cascaded the resize down to it
+	screen := simulationScreen(t, 40, 50)
+
+	r.handleBeforeDraw(screen)
+
+	_, _, narrowWidth, _ := r.properties.GetRect()
+	if narrowWidth >= wideWidth {
+		t.Errorf("properties width after shrinking the panel = %d, want less than the original %d (clamped to the now-narrower panel)", narrowWidth, wideWidth)
+	}
+	if narrowWidth > 40 {
+		t.Errorf("properties width = %d, want at most the new screen width 40", narrowWidth)
+	}
+}
+
+// TestHandleBeforeDrawNoopWhenScreenSizeUnchanged pins the guard that
+// makes this cheap to call on every single draw: a call that doesn't
+// actually follow a resize must not touch anything, verified here by
+// deliberately leaving the sidebar's own rect wrong and confirming a
+// same-size call doesn't so much as notice.
+func TestHandleBeforeDrawNoopWhenScreenSizeUnchanged(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 30)
+	screen := simulationScreen(t, 100, 30)
+	r.handleBeforeDraw(screen) // establishes lastScreenWidth/Height at 100x30
+
+	r.showDetailsSidebar()
+	r.detailsSidebar.SetRect(0, 0, 5, 5) // deliberately wrong, so a real reposition would be obvious
+
+	r.handleBeforeDraw(screen) // same 100x30 screen again
+
+	x, y, width, height := r.detailsSidebar.GetRect()
+	if x != 0 || y != 0 || width != 5 || height != 5 {
+		t.Errorf("rect = (%d,%d,%d,%d), want left untouched (0,0,5,5) — the screen size never actually changed", x, y, width, height)
+	}
+}
