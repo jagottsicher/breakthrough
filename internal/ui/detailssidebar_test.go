@@ -13,6 +13,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // TestToggleDetailsSidebarShortcutShowsAndHides pins Ctrl+D's own basic
@@ -704,6 +706,121 @@ func TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen(t *testing.T) 
 	}
 	if r.hashInProgress {
 		t.Error("hashInProgress (Properties') should stay false — Properties was never opened")
+	}
+}
+
+// TestPropagateHashResultUpdatesBothWhenShowingSameTarget pins the
+// user's own explicit request: a hash computed via either side shows up
+// in both, whenever they're showing the very same file at once — tested
+// against propagateHashResult directly (see its own doc comment on why
+// it's the sole place either side's own display actually gets updated,
+// not just a bolt-on for the other one), since the real async paths
+// that call it never actually complete in this test style (nothing
+// drains QueueUpdateDraw — see isolateHashFile's own doc comment).
+func TestPropagateHashResultUpdatesBothWhenShowingSameTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1) // the only real entry
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q — both must be showing the same file for this test", r.detailsTarget, path)
+	}
+
+	r.propagateHashResult(path, fsops.Hashes{MD5: "abc123"})
+
+	if r.propertiesHashes == nil || r.propertiesHashes.MD5 != "abc123" {
+		t.Errorf("propertiesHashes = %v, want MD5 abc123", r.propertiesHashes)
+	}
+	if r.detailsHashes == nil || r.detailsHashes.MD5 != "abc123" {
+		t.Errorf("detailsHashes = %v, want MD5 abc123", r.detailsHashes)
+	}
+}
+
+// TestPropagateHashResultIgnoresUnrelatedTarget pins the other half:
+// a result computed for some other path — not what either side is
+// currently showing — must not overwrite either one's own display.
+func TestPropagateHashResultIgnoresUnrelatedTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	r.propagateHashResult(filepath.Join(dir, "unrelated.txt"), fsops.Hashes{MD5: "xyz"})
+
+	if r.propertiesHashes != nil {
+		t.Errorf("propertiesHashes = %v, want nil — the result was for a different file", r.propertiesHashes)
+	}
+	if r.detailsHashes != nil {
+		t.Errorf("detailsHashes = %v, want nil — the result was for a different file", r.detailsHashes)
+	}
+}
+
+// TestClickingDetailsHashZoneDefersToOpenProperties pins the fix for
+// the inconsistency the user's own report surfaced: the click zone used
+// to call computeDetailsHashes directly, bypassing the "Properties wins
+// while it's open" rule Ctrl+K already followed (see
+// ComputeHashesShortcut) — a click was a second way around it that
+// pressing the key wasn't.
+func TestClickingDetailsHashZoneDefersToOpenProperties(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	started := isolateHashFile(t)
+	t.Cleanup(r.cancelHashComputation)
+	t.Cleanup(r.cancelDetailsHashComputation)
+
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.openProperties()
+
+	if r.detailsHashRowStart < 0 {
+		t.Fatal("setup: detailsHashRowStart should be set for a non-directory target")
+	}
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+r.detailsHashRowStart, tcell.Button1, 0))
+	if action != tview.MouseConsumed {
+		t.Fatalf("action = %v, want MouseConsumed", action)
+	}
+	<-started
+
+	if !r.hashInProgress {
+		t.Error("clicking Details' hash zone while Properties is open should target Properties, not start its own computation")
+	}
+	if r.detailsHashInProgress {
+		t.Error("should not also start Details' own independent computation")
 	}
 }
 

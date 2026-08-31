@@ -666,10 +666,42 @@ func (r *Root) computeDetailsHashes() {
 				r.showError(err)
 				return
 			}
-			r.detailsHashes = &hashes
-			r.renderDetailsSidebar()
+			// Updates detailsHashes/renders itself, then mirrors into
+			// Properties too if that's showing the same target — see
+			// propagateHashResult's own doc comment.
+			r.propagateHashResult(target, hashes)
 		})
 	}()
+}
+
+// propagateHashResult is the one place computeHashes/computeDetailsHashes
+// both hand their finished digest to, updating whichever of
+// Properties/Details is currently showing target — including whichever
+// one actually ran the computation, not just "the other" one: its own
+// condition below is just as true for that side, so this is the sole
+// place either one's own display actually gets updated, not a
+// bolt-on for a second reader. Per the user's own explicit request:
+// since Details isn't modal (see newDetailsSidebarView's own doc
+// comment), both can be open on the very same file at once, and a hash
+// computed via either one — the keyboard shortcut, or either one's own
+// click zone (see ComputeHashesShortcut/captureDetailsSidebarMouse) —
+// is worth showing in both, not just wherever it happened to be
+// triggered.
+//
+// Deliberately only mirrors the finished result, not the in-progress
+// animation while one side is still computing — the other briefly still
+// shows its own "not computed yet" hint until this runs, rather than
+// needing the two independent progress states to stay synchronized
+// while a computation is still in flight.
+func (r *Root) propagateHashResult(target string, hashes fsops.Hashes) {
+	if r.activePage == propertiesPage && r.propertiesTarget == target {
+		r.propertiesHashes = &hashes
+		r.rerenderProperties()
+	}
+	if r.detailsSidebarVisible && r.detailsTarget == target {
+		r.detailsHashes = &hashes
+		r.renderDetailsSidebar()
+	}
 }
 
 // animateDetailsHashProgress mirrors Properties' own
@@ -772,7 +804,13 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 			r.fetchDetailsMetadata()
 			return tview.MouseConsumed, nil
 		case r.detailsHashRowStart >= 0 && row >= r.detailsHashRowStart:
-			r.computeDetailsHashes()
+			// Through the same dispatcher Ctrl+K uses, not
+			// computeDetailsHashes directly — so a click here defers to
+			// Properties too when that's the one currently open (see
+			// ComputeHashesShortcut's own doc comment), the same as
+			// pressing the key would; clicking shouldn't be a second way
+			// to bypass that rule.
+			r.ComputeHashesShortcut()
 			return tview.MouseConsumed, nil
 		}
 		return action, event
