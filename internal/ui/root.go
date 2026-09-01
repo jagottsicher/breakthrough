@@ -383,6 +383,46 @@ type Root struct {
 	searchLastDir    string
 	searchStartDir   string
 
+	// The Chmod dialog (see chmoddialog.go/newChmodDialog) — the same
+	// "plain text plus a shared inline editor" paradigm Properties/Search
+	// already use, scaled down to this dialog's own much smaller field
+	// set: a Permissions value always shown, plus (only once chmodAnyDir
+	// — see below) a "recursive" toggle for it and a whole second Files
+	// section (its own value and its own "recursive" toggle), per the
+	// user's own explicit request that folders and files be
+	// independently, optionally recursive rather than one shared setting
+	// for both.
+	//
+	// chmodTargets is every path the dialog will apply to on Apply (see
+	// openChmod/selectedOrCurrentPaths), captured once when it opens.
+	// chmodAnyDir reports whether any of them is a directory (or
+	// resolves to one — see isDirish), computed alongside chmodTargets:
+	// a selection made up entirely of plain files has nothing for either
+	// recursive toggle to apply to, so neither the toggle nor the Files
+	// section appears at all in that case (see chmodFieldOrder/
+	// renderChmodDialog).
+	//
+	// stagedChmodMode/stagedChmodRecursiveDirs/stagedChmodFilesEnabled/
+	// stagedChmodFilesMode are the dialog's own in-progress state — see
+	// applyChmodDialog for how each actually gets used, and openChmod for
+	// how they're seeded when the dialog opens.
+	chmodTargets             []string
+	chmodAnyDir              bool
+	stagedChmodMode          os.FileMode
+	stagedChmodRecursiveDirs bool
+	stagedChmodFilesEnabled  bool
+	stagedChmodFilesMode     os.FileMode
+
+	chmodPages      *tview.Pages
+	chmodText       *tview.TextView
+	chmodEditField  *tview.InputField
+	chmodEditTarget chmodField
+	chmodButtons    *tview.Flex
+	chmodCancelBtn  *tview.Button
+	chmodApplyBtn   *tview.Button
+	chmodSpans      []chmodSpan
+	chmodFocusedIdx int
+
 	// mainLayout wraps panel, bashConsole, buttonBar, and statusBar into
 	// the vertical stack registered as panelPage (see newBottomBar/
 	// NewRoot) — panel still owns its own rect the same way it always
@@ -790,6 +830,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
+	// The Chmod dialog (see openChmod/chmoddialog.go).
+	r.chmodPages = r.newChmodDialog()
+
 	// The directory picker (see openDirPicker) — built once and reset
 	// on every open, the same as everything else above.
 	r.dirPicker = r.newDirPicker()
@@ -873,6 +916,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
@@ -1804,23 +1848,5 @@ func (r *Root) openChownTextFallback(target string) {
 			return
 		}
 		r.applyChown(target, uid, gid)
-	})
-}
-
-// openChmod is the context menu's "chmod": prompts for an octal
-// permission string (e.g. "755") and applies it to the target.
-func (r *Root) openChmod() {
-	target := r.target
-	r.openPrompt("chmod (octal, e.g. 755):", "", func(text string) {
-		mode, err := fsops.ParseMode(text)
-		if err != nil {
-			r.showError(err)
-			return
-		}
-		if err := fsops.Chmod(target, mode); err != nil {
-			r.showError(err)
-			return
-		}
-		r.showError(r.panel.load(r.panel.path))
 	})
 }

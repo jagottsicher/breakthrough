@@ -132,6 +132,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
+	if r.chmodText != nil {
+		r.chmodText.SetBackgroundColor(theme.AccentBackground)
+		r.chmodEditField.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.chmodEditField.SetBackgroundColor(theme.FocusedBackground)
+		r.chmodEditField.SetFieldTextColor(theme.Text)
+		r.chmodButtons.SetBackgroundColor(theme.AccentBackground)
+		r.chmodCancelBtn.SetBackgroundColor(theme.AccentBackground)
+		r.chmodCancelBtn.SetLabelColor(theme.Text)
+		r.chmodApplyBtn.SetBackgroundColor(theme.AccentBackground)
+		r.chmodApplyBtn.SetLabelColor(theme.Text)
+		r.rerenderChmodDialog() // repaints focusTag/dimTag's own style tags with the new theme
+	}
+
 	if r.dirPicker != nil {
 		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
