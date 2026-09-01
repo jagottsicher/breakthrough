@@ -588,11 +588,28 @@ func (r *Root) chmodSpanAt(row, col int) (chmodSpan, bool) {
 // cleared (mode &^ 0o111) — the traditional dir/file relationship
 // (755/644, 750/640, 700/600), and exactly the relationship the user's
 // own example (755 dirs / 644 files) already assumes.
+//
+// HidePage("editfield") up front is a real bug fix, not defensive
+// boilerplate copied from openProperties for its own sake: clicking
+// Cancel/Apply with the *mouse* while a value's shared inline editor is
+// still open reaches chmodCancelBtn/chmodApplyBtn's own MouseHandler
+// directly — a different Primitive than chmodEditField, on a different
+// part of the screen — without ever routing through finishChmodEdit,
+// which is the only other place "editfield" gets hidden. Left showing,
+// the *next* openChmod (even on a single plain file, with chmodAnyDir
+// now false and no Files row rendered at all) still had it floating at
+// wherever it was last positioned — a real, reported symptom: a second,
+// stray octal field, in the wrong place, appearing "for no reason" even
+// for a target with nothing to have generated it. Hiding it here
+// unconditionally, on every open, means this dialog never carries
+// leftover state from whatever the *previous* session was doing,
+// regardless of how that session ended.
 func (r *Root) openChmod() {
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
+	r.chmodPages.HidePage("editfield")
 
 	mode := chmodDefaultMode
 	if info, err := fsops.Stat(targets[0]); err == nil {
@@ -620,8 +637,35 @@ func (r *Root) openChmod() {
 	x, y := r.centeredOnScreen(width, height)
 	r.resizeChmodDialog(x, y)
 
-	r.showOverlay(chmodPage, r.chmodPages)
-	r.setChmodFocus(0)
+	// showOverlayWithRestore + restoreChmodDialog, not a plain
+	// showOverlay + setChmodFocus(0): the same reason openProperties
+	// leaves propertiesFocusIndex at -1 rather than auto-focusing (and
+	// so auto-editing) Name immediately on open. chmodPages.SetRect
+	// just above does NOT cascade to chmodText's own rect synchronously
+	// — tview.Pages only resizes a resize=true child's rect inside its
+	// own Draw(), which hasn't run yet at this point in the call, still
+	// well before the app's event loop ever gets back control — so
+	// auto-editing a field here would position the shared inline editor
+	// against chmodText's stale, pre-resize rect (wherever it was left
+	// from whatever the *previous* session was doing), not this one's
+	// real, freshly computed position. Leaving nothing focused yet, the
+	// same as Properties does, defers the first real text-field
+	// activation to an actual subsequent Tab keypress — by then at
+	// least one real Draw() has already run, and chmodText's rect is
+	// correct.
+	r.showOverlayWithRestore(chmodPage, r.chmodPages, r.restoreChmodDialog)
+}
+
+// restoreChmodDialog re-applies whichever concrete Chmod dialog
+// sub-widget should hold real keyboard focus for chmodFocusedIdx's
+// current value — openChmod's own restore callback (see
+// showOverlayWithRestore), the same role restoreProperties has for
+// Properties. chmodFocusedIdx is always -1 by the time this first runs
+// (see openChmod), which setChmodFocus itself already treats as
+// "nothing focused yet, but chmodText should still hold real keyboard
+// focus" without auto-opening anything.
+func (r *Root) restoreChmodDialog() {
+	r.setChmodFocus(r.chmodFocusedIdx)
 }
 
 // chmodDefaultMode is openChmod's own fallback Permissions value if
