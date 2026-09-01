@@ -420,6 +420,58 @@ func TestCancelChmodDialogDiscardsChanges(t *testing.T) {
 	}
 }
 
+// chmodEditFieldOpen reports whether the shared inline text editor (see
+// activateChmodTextField) is currently the one showing — the same role
+// propertiesEditFieldOpen has for Properties.
+func chmodEditFieldOpen(r *Root) bool {
+	for _, p := range r.chmodPages.GetPageNames(true) {
+		if p == "editfield" {
+			return true
+		}
+	}
+	return false
+}
+
+// TestOpenChmodResetsStaleEditField pins the real, reported bug: a real
+// mouse click on Cancel/Apply while a value's shared inline editor is
+// still open reaches chmodCancelBtn/chmodApplyBtn's own MouseHandler
+// directly (see cancelChmodDialog/applyChmodDialog), never through
+// finishChmodEdit — the only other place "editfield" gets hidden — so
+// it used to stay showing, at whatever position/content it last had,
+// right into the *next* open. That surfaced as a second, stray octal
+// field in the wrong place even for a target with nothing to have
+// generated it — a single plain file, chmodAnyDir false, no Files row
+// rendered at all. openChmod's own HidePage("editfield") call (see its
+// own doc comment) is what this pins.
+func TestOpenChmodResetsStaleEditField(t *testing.T) {
+	dir := fixtureDir(t)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 1) // app-data — a directory, so it has a Files row to edit
+	r.openChmod()
+
+	filesSpan, ok := r.chmodSpanForField(chmodFieldFilesMode)
+	if !ok {
+		t.Fatal("no chmodFieldFilesMode span found")
+	}
+	r.activateChmodField(filesSpan) // opens the shared inline editor over it
+	if !chmodEditFieldOpen(r) {
+		t.Fatal("setup: editfield should be open after activating a text field")
+	}
+
+	r.cancelChmodDialog() // the real bug: bypasses finishChmodEdit entirely
+
+	selectRow(r, 2) // apple.txt — a plain file, no Files row at all this time
+	r.openChmod()
+
+	if chmodEditFieldOpen(r) {
+		t.Error("openChmod should reset a stale inline editor left open by a previous session")
+	}
+}
+
 // TestOpenChmodNoopWithoutTarget pins that opening Chmod with nothing
 // selected and nothing under the cursor (see selectedOrCurrentPaths) is
 // a harmless no-op, not a crash.
