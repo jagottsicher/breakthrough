@@ -296,31 +296,10 @@ func TestPasteConflictReportsErrorAndLeavesDestUntouched(t *testing.T) {
 	}
 }
 
-// TestChmodViaPrompt drives the actual openChmod -> type into r.prompt ->
-// finishPrompt(Enter) path, the same sequence a real keystroke-by-
-// keystroke entry followed by Enter produces.
-func TestChmodViaPrompt(t *testing.T) {
-	dir := fixtureDir(t)
-	path := filepath.Join(dir, "apple.txt")
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.target = path
-
-	r.openChmod()
-	r.prompt.SetText("600")
-	r.finishPrompt(tcell.KeyEnter)
-
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
-	}
-}
+// Chmod's own dialog (openChmod) is tested in chmoddialog_test.go now —
+// it no longer goes through r.prompt/finishPrompt at all (see
+// chmoddialog.go's own doc comment on why it was rebuilt into a full
+// dialog).
 
 // TestChownViaPromptNoopToOwnUser is Chown's counterpart, kept privilege-
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
