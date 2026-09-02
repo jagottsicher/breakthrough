@@ -2370,11 +2370,16 @@ func TestForwardReplaysSearchThenJumpDestination(t *testing.T) {
 	}
 }
 
-// TestBackForwardRestoresCursorRowForPlainDirectories pins the other
-// half of the user's own request — not just a search excursion, but any
-// ordinary Back/Forward between two real directories restoring the
-// cursor row each was left on, not always resetting to the top.
-func TestBackForwardRestoresCursorRowForPlainDirectories(t *testing.T) {
+// TestBackForwardAlwaysLandsOnTopForPlainDirectories pins the user's
+// own later, explicit reversal of the behavior
+// TestBackForwardRestoresCursorRowForPlainDirectories used to pin:
+// Back/Forward between two real directories now always lands on row 0,
+// the same as entering either one any other way already would (see
+// load's own newDirectory check) — never wherever the cursor happened
+// to be when it was last left there. A search snapshot's own frozen
+// cursor position is unaffected by this — see
+// TestBackFromSearchJumpRestoresFrozenResultsNotALiveRerun.
+func TestBackForwardAlwaysLandsOnTopForPlainDirectories(t *testing.T) {
 	dir := fixtureDir(t)
 	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
@@ -2388,13 +2393,13 @@ func TestBackForwardRestoresCursorRowForPlainDirectories(t *testing.T) {
 	}
 
 	p.back()
-	if row, _ := p.table.GetSelection(); row != 2 {
-		t.Errorf("selected row after Back = %d, want the restored 2", row)
+	if row, _ := p.table.GetSelection(); row != 0 {
+		t.Errorf("selected row after Back = %d, want 0, not the row it was left on (2)", row)
 	}
 
 	p.forward()
 	if row, _ := p.table.GetSelection(); row != 0 {
-		t.Errorf("selected row after Forward into %s (never visited before) = %d, want 0", sub, row)
+		t.Errorf("selected row after Forward into %s = %d, want 0", sub, row)
 	}
 }
 
