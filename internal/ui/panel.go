@@ -273,6 +273,27 @@ type Panel struct {
 	// to stop. Left nil the same as onSearchEscape/onOpenSearchResult.
 	onExitSearchResults func()
 
+	// lastNameClickRow/lastNameClickTime back handleNameClick's own
+	// click/double-click/rename-gesture disambiguation (see its own doc
+	// comment): the previous name-cell click's row and timestamp,
+	// tracked independently of whatever row the table's own selection
+	// currently sits on (arrow-key navigation moves that too, without
+	// this ever having been clicked at all) — only a genuine *second*
+	// click landing on the same row within the relevant window counts
+	// as a repeat. lastNameClickRow starts at -1 (see NewPanel): 0 is a
+	// real, valid row index, and would otherwise make the very first
+	// click of a session misread as a repeat of a click that never
+	// happened.
+	lastNameClickRow  int
+	lastNameClickTime time.Time
+
+	// onRenameGesture reports the click-pause-click rename gesture once
+	// handleNameClick recognizes it — Root wires this to renameRow, its
+	// own row-addressed equivalent of renameCurrentEntry. Left nil the
+	// same as onSearchEscape/onOpenSearchResult if nothing's wired it up
+	// (e.g. a test constructing a Panel directly).
+	onRenameGesture func(row int)
+
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
 	// what the Modified column itself should be called while doing so
@@ -389,14 +410,15 @@ type rowRef struct {
 // list afterwards — see Panel.openEdit.
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
-		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
-		app:          app,
-		theme:        theme,
-		table:        tview.NewTable(),
-		columnHeader: tview.NewTable(),
-		showHidden:   settings.ShowHidden,
-		sizeBytes:    settings.SizeBytes,
-		mtimeUnix:    settings.MtimeUnix,
+		Flex:             tview.NewFlex().SetDirection(tview.FlexRow),
+		app:              app,
+		theme:            theme,
+		table:            tview.NewTable(),
+		columnHeader:     tview.NewTable(),
+		showHidden:       settings.ShowHidden,
+		sizeBytes:        settings.SizeBytes,
+		mtimeUnix:        settings.MtimeUnix,
+		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
@@ -598,6 +620,7 @@ func (p *Panel) load(dir string) error {
 
 	p.table.Clear()
 	p.selected = make(map[string]bool)
+	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 	p.path = abs
 
 	text, spans := buildHeaderSpans(abs)
@@ -684,6 +707,7 @@ func (p *Panel) showSearchResults() {
 	p.searchMode = true
 	p.searchEntries = nil
 	p.selected = make(map[string]bool) // selection scoped to what's on screen, same rule load() already follows for a real directory
+	p.lastNameClickRow = -1            // see its own doc comment: a rebuilt table's row indices mean something new
 	p.table.Clear()
 	p.buildColumnHeader()
 }
@@ -1120,7 +1144,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
-		return p.activateRow(row)
+		return p.handleNameClick(row)
 	})
 	p.table.SetCell(row, colName, name)
 
@@ -1636,7 +1660,80 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// activateRow is what Enter and a click on the name cell both do. While
+// nameRenameClickWithin is handleNameClick's own timing window for a
+// second click landing on the same row as the previous one (see its
+// own doc comment): at or under this counts as the slower, deliberate
+// click-pause-click rename gesture, per the user's own explicit
+// request ("Klick, 1 Sekunde warten, und noch ein Klick... zum
+// Umbennen"); slower than this is treated as a fresh first click
+// instead. There's no separate, shorter "this counts as a double-click"
+// window to check here at all — a second click fast enough for that
+// never reaches this function in the first place (see handleNameClick's
+// own doc comment on why: tview's Application itself intercepts it as
+// MouseLeftDoubleClick before Table.MouseHandler, which has no case for
+// that action, ever gets to call this). The upper bound here is
+// deliberately generous around the user's own "one second" —
+// comfortably reachable by an unhurried second click without
+// stretching so far that an unrelated, much later click could still
+// mistakenly trigger it.
+const nameRenameClickWithin = 1500 * time.Millisecond
+
+// handleNameClick is what a plain left-click (MouseLeftClick) on the
+// name cell does — Enter still always activates immediately (see
+// NewPanel's own SetSelectedFunc), unaffected by any of this. A single
+// click on a row that isn't already the one handleNameClick itself last
+// saw clicked only selects it (returns false, the same "let tview's own
+// default Table.MouseHandler apply the selection" this always did for a
+// click activateRow itself no-ops on) — per the user's own explicit
+// report that a single click immediately navigating into a directory
+// (the previous, direct name.SetClickedFunc -> activateRow wiring) was
+// too eager, especially with the Details sidebar open for browsing
+// around: a folder should highlight/select first, exactly like a file
+// already effectively did, not jump into it on the very first click.
+//
+// Double-clicking to activate it instead (per the user's own explicit
+// request: "Doppelklick statt Klickverhalten") is NOT handled here at
+// all, even though it might look like the natural place for it — a
+// real double-click's second release fires tview's own
+// MouseLeftDoubleClick action instead of a second MouseLeftClick
+// (verified directly against tview's own Application.fireMouseActions
+// source, not guessed: DoubleClickInterval, 500ms by default, decides
+// which one), and Table.MouseHandler has no case for that action at
+// all, so it would never reach a TableCell's own ClickedFunc — this
+// function — a second time in the first place. See Root.captureMouse's
+// own MouseLeftDoubleClick case for where activation actually happens.
+//
+// What this function DOES still own is the slower gesture: a second
+// click on the same row — lastNameClickRow, tracked regardless of
+// whatever the table's own current selection is, so an
+// arrow-key-selected row doesn't retroactively count as "clicked",
+// and reset to -1 on every Panel.load so a stale row index from
+// whatever the *previous* directory's listing had can never coincide
+// with a freshly loaded one — within nameRenameClickWithin runs the
+// click-pause-click rename gesture (see Root.renameRow, wired as
+// onRenameGesture) — for a file exactly as much as a directory, per the
+// user's own explicit request that the two behave the same way here.
+// Slower than that, or a click on a different row, is simply a fresh
+// first click again.
+func (p *Panel) handleNameClick(row int) bool {
+	now := time.Now()
+	isRepeat := row == p.lastNameClickRow
+	elapsed := now.Sub(p.lastNameClickTime)
+	p.lastNameClickRow = row
+	p.lastNameClickTime = now
+
+	if isRepeat && elapsed <= nameRenameClickWithin {
+		if p.onRenameGesture != nil {
+			p.onRenameGesture(row)
+		}
+		return true
+	}
+	return false
+}
+
+// activateRow is handleNameClick's own double-click case, and what
+// Enter always does directly and immediately (see NewPanel's own
+// SetSelectedFunc) regardless of any click timing at all. While
 // showing a real directory: enter the row's directory, or do nothing
 // for a regular file — opening/viewing files is a later phase. Ignores
 // the checkbox column: a click there is handled by its own
@@ -1666,10 +1763,11 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // on a result has always had otherwise.
 //
 // Returns whether IT already settled the table's own selection itself
-// (a real user report: it always did, but the caller — addRow's own
-// name.SetClickedFunc — used to unconditionally tell tview.Table to
-// *also* select whatever cell the click's own screen position landed
-// on. Table.MouseHandler computes that position before ever calling
+// (a real user report: it always did, but the original caller —
+// addRow's own name.SetClickedFunc, before handleNameClick sat between
+// the two — used to unconditionally tell tview.Table to *also* select
+// whatever cell the click's own screen position landed on.
+// Table.MouseHandler computes that position before ever calling
 // this func at all, so once navigate/navigateAndSelect has gone on to
 // clear and rebuild the whole table underneath it — a genuinely
 // different directory, with completely different rows now sitting at
@@ -1892,6 +1990,7 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		p.searchMode = true
 		p.searchEntries = append([]searchResultEntry(nil), entry.searchEntries...)
 		p.selected = make(map[string]bool)
+		p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 		p.table.Clear()
 		p.buildColumnHeader()
 		p.renderSearchEntries()

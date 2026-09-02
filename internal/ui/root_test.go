@@ -301,6 +301,48 @@ func TestPasteConflictReportsErrorAndLeavesDestUntouched(t *testing.T) {
 // chmoddialog.go's own doc comment on why it was rebuilt into a full
 // dialog).
 
+// TestRenameRowOpensRenameForGivenRow pins renameRow's own row-addressed
+// shape (see Panel.onRenameGesture/handleNameClick): it targets
+// whichever row it's given directly, the same as renameCurrentEntry
+// already does for the panel's own cursor.
+func TestRenameRowOpensRenameForGivenRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.renameRow(2) // apple.txt
+
+	want := filepath.Join(dir, "apple.txt")
+	if r.target != want {
+		t.Errorf("target = %q, want %q", r.target, want)
+	}
+	if r.targetRow != 2 {
+		t.Errorf("targetRow = %d, want 2", r.targetRow)
+	}
+	if r.activePage != renamePage {
+		t.Errorf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+}
+
+// TestRenameRowNoopsForDotDot pins that the rename gesture can't be
+// used to rename ".." — the same exclusion CurrentRowPath already
+// applies for the keyboard path (F2/renameCurrentEntry).
+func TestRenameRowNoopsForDotDot(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.renameRow(0) // ".."
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want still closed", r.activePage)
+	}
+}
+
 // TestChownViaPromptNoopToOwnUser is Chown's counterpart, kept privilege-
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
 // ownership to anyone else needs root, but chowning to the process's own
