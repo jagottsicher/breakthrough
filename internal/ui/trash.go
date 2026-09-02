@@ -84,6 +84,14 @@ func (r *Root) moveSelectionToTrash() {
 	for _, src := range targets {
 		if err := fsops.MoveToTrash(src, dir); err != nil && firstErr == nil {
 			firstErr = err
+		} else if err == nil {
+			// Cleared ("") rather than followed to its real new location:
+			// that's an obscure, hash-named path under trashDir, not
+			// somewhere worth showing Details pointed at — "(nothing
+			// selected)" (see refreshDetailsIfShowing's own doc comment)
+			// is the more honest answer once the entry Details was
+			// showing simply isn't at src any more.
+			r.refreshDetailsIfShowing(src, "")
 		}
 	}
 	r.panel.deselectAll()
@@ -127,6 +135,8 @@ func (r *Root) openRemoveConfirm() {
 		for _, target := range targets {
 			if err := fsops.PurgeCompletely(target); err != nil && firstErr == nil {
 				firstErr = err
+			} else if err == nil {
+				r.refreshDetailsIfShowing(target, "") // permanently gone — see refreshDetailsIfShowing's own doc comment
 			}
 		}
 		r.panel.deselectAll()
@@ -193,6 +203,15 @@ func (r *Root) restoreSelectionFromTrash() {
 		}
 		if err := fsops.RestoreFromTrash(item, dir); err != nil && firstErr == nil {
 			firstErr = err
+		} else if err == nil {
+			// item.Path(dir), not target: target is already
+			// filepath.Clean(target), but the map (and so what Details
+			// could actually have keyed itself on while browsing the
+			// trash) is built from item.Path(dir) specifically — the two
+			// only differ if target itself wasn't already clean, but
+			// matching the same value used to look item up here is the
+			// robust way to say that rather than assuming they agree.
+			r.refreshDetailsIfShowing(item.Path(dir), item.OriginalPath)
 		}
 	}
 	r.panel.deselectAll()
