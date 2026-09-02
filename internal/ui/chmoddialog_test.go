@@ -223,6 +223,39 @@ func TestApplyChmodDialogPlainFile(t *testing.T) {
 	}
 }
 
+// TestApplyChmodDialogRefreshesDetailsShowingSameFile pins the user's
+// own explicit request extended to the Chmod dialog: applying it
+// immediately updates Details too, if it's showing that same target
+// (see refreshDetailsIfShowing's own doc comment).
+func TestApplyChmodDialogRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(2) // apple.txt
+	r.showDetailsSidebar()
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, path)
+	}
+	r.detailsMetadataState = "stale-marker" // see TestApplyChownRefreshesDetailsShowingSameFile's own doc comment
+
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+	r.stagedChmodMode = 0o600
+	r.applyChmodDialog()
+
+	if r.detailsTarget != path {
+		t.Fatalf("detailsTarget changed unexpectedly to %q", r.detailsTarget)
+	}
+	if r.detailsMetadataState != "" {
+		t.Error("detailsMetadataState should have been reset by loadDetailsTarget — Details wasn't actually reloaded")
+	}
+}
+
 // TestApplyChmodDialogRecursiveDirsReachesSubfoldersNotFiles pins the
 // user's own explicit request's first half: turning the folders toggle
 // on applies Permissions' own value to every subfolder too, but never
