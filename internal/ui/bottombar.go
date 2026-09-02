@@ -499,6 +499,23 @@ func (r *Root) renameCurrentEntry() {
 	r.openRename()
 }
 
+// renameRow is the click-pause-click rename gesture's own action (see
+// Panel.onRenameGesture/handleNameClick) — renameCurrentEntry's own
+// shape, for a row given directly rather than read from the panel's
+// current cursor, since the gesture already knows exactly which row it
+// fired on. Excludes ".." (rowRef.checkable is false for it) the same
+// way CurrentRowPath already does for the keyboard path — not a real
+// rename target either way.
+func (r *Root) renameRow(row int) {
+	ref, ok := r.panel.rowRef(row)
+	if !ok || !ref.checkable {
+		return
+	}
+	r.target = ref.path
+	r.targetRow = row
+	r.openRename()
+}
+
 // acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/F2/Ctrl+G/
 // Ctrl+O/Ctrl+F/Ctrl+R (see EditShortcut/LookShortcut/RenameShortcut/
 // ToggleHiddenShortcut/OptionsShortcut/SearchShortcut/PurgeShortcut,

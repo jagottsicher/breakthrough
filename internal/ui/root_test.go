@@ -296,29 +296,50 @@ func TestPasteConflictReportsErrorAndLeavesDestUntouched(t *testing.T) {
 	}
 }
 
-// TestChmodViaPrompt drives the actual openChmod -> type into r.prompt ->
-// finishPrompt(Enter) path, the same sequence a real keystroke-by-
-// keystroke entry followed by Enter produces.
-func TestChmodViaPrompt(t *testing.T) {
-	dir := fixtureDir(t)
-	path := filepath.Join(dir, "apple.txt")
+// Chmod's own dialog (openChmod) is tested in chmoddialog_test.go now —
+// it no longer goes through r.prompt/finishPrompt at all (see
+// chmoddialog.go's own doc comment on why it was rebuilt into a full
+// dialog).
 
+// TestRenameRowOpensRenameForGivenRow pins renameRow's own row-addressed
+// shape (see Panel.onRenameGesture/handleNameClick): it targets
+// whichever row it's given directly, the same as renameCurrentEntry
+// already does for the panel's own cursor.
+func TestRenameRowOpensRenameForGivenRow(t *testing.T) {
+	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.target = path
 
-	r.openChmod()
-	r.prompt.SetText("600")
-	r.finishPrompt(tcell.KeyEnter)
+	r.renameRow(2) // apple.txt
 
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
+	want := filepath.Join(dir, "apple.txt")
+	if r.target != want {
+		t.Errorf("target = %q, want %q", r.target, want)
 	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Errorf("mode = %v, want 0600", fi.Mode().Perm())
+	if r.targetRow != 2 {
+		t.Errorf("targetRow = %d, want 2", r.targetRow)
+	}
+	if r.activePage != renamePage {
+		t.Errorf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+}
+
+// TestRenameRowNoopsForDotDot pins that the rename gesture can't be
+// used to rename ".." — the same exclusion CurrentRowPath already
+// applies for the keyboard path (F2/renameCurrentEntry).
+func TestRenameRowNoopsForDotDot(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.renameRow(0) // ".."
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want still closed", r.activePage)
 	}
 }
 

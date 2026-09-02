@@ -383,6 +383,46 @@ type Root struct {
 	searchLastDir    string
 	searchStartDir   string
 
+	// The Chmod dialog (see chmoddialog.go/newChmodDialog) — the same
+	// "plain text plus a shared inline editor" paradigm Properties/Search
+	// already use, scaled down to this dialog's own much smaller field
+	// set: a Permissions value always shown, plus (only once chmodAnyDir
+	// — see below) a "recursive" toggle for it and a whole second Files
+	// section (its own value and its own "recursive" toggle), per the
+	// user's own explicit request that folders and files be
+	// independently, optionally recursive rather than one shared setting
+	// for both.
+	//
+	// chmodTargets is every path the dialog will apply to on Apply (see
+	// openChmod/selectedOrCurrentPaths), captured once when it opens.
+	// chmodAnyDir reports whether any of them is a directory (or
+	// resolves to one — see isDirish), computed alongside chmodTargets:
+	// a selection made up entirely of plain files has nothing for either
+	// recursive toggle to apply to, so neither the toggle nor the Files
+	// section appears at all in that case (see chmodFieldOrder/
+	// renderChmodDialog).
+	//
+	// stagedChmodMode/stagedChmodRecursiveDirs/stagedChmodFilesEnabled/
+	// stagedChmodFilesMode are the dialog's own in-progress state — see
+	// applyChmodDialog for how each actually gets used, and openChmod for
+	// how they're seeded when the dialog opens.
+	chmodTargets             []string
+	chmodAnyDir              bool
+	stagedChmodMode          os.FileMode
+	stagedChmodRecursiveDirs bool
+	stagedChmodFilesEnabled  bool
+	stagedChmodFilesMode     os.FileMode
+
+	chmodPages      *tview.Pages
+	chmodText       *tview.TextView
+	chmodEditField  *tview.InputField
+	chmodEditTarget chmodField
+	chmodButtons    *tview.Flex
+	chmodCancelBtn  *tview.Button
+	chmodApplyBtn   *tview.Button
+	chmodSpans      []chmodSpan
+	chmodFocusedIdx int
+
 	// mainLayout wraps panel, bashConsole, buttonBar, and statusBar into
 	// the vertical stack registered as panelPage (see newBottomBar/
 	// NewRoot) — panel still owns its own rect the same way it always
@@ -790,6 +830,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
+	// The Chmod dialog (see openChmod/chmoddialog.go).
+	r.chmodPages = r.newChmodDialog()
+
 	// The directory picker (see openDirPicker) — built once and reset
 	// on every open, the same as everything else above.
 	r.dirPicker = r.newDirPicker()
@@ -838,6 +881,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reason (see closeSearch), just reached from a result click now.
 	panel.onExitSearchResults = r.cancelSearch
 
+	// The click-pause-click gesture on an already-selected row's own
+	// name renames it (see Panel.onRenameGesture/handleNameClick's own
+	// doc comment) — per the user's own explicit request, the same for
+	// files and directories alike.
+	panel.onRenameGesture = r.renameRow
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
@@ -873,6 +922,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(optionsPage, r.optionsList, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
@@ -1385,6 +1435,34 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		r.showMenu(x, y)
 		return tview.MouseConsumed, nil
 
+	case tview.MouseLeftDoubleClick:
+		// This, not Panel.handleNameClick, is where an actual fast
+		// double-click on a row's name activates it (see
+		// handleNameClick's own doc comment for why): tview's own
+		// Application.fireMouseActions fires this action for a second
+		// click's release landing within DoubleClickInterval (500ms) of
+		// the first, INSTEAD of a second MouseLeftClick — verified
+		// directly against tview's own source, not guessed — and
+		// Table.MouseHandler has no case for it at all, so it would
+		// otherwise just be silently dropped. Scoped to the name column
+		// specifically (colName), matching exactly what a plain click
+		// there already activates via TableCell.SetClickedFunc (see
+		// addRow) — a double-click landing on the checkbox column
+		// instead stays the checkbox's own business alone; without this
+		// check, double-clicking it fast would activate the row (wrong
+		// column entirely) instead of just toggling it twice.
+		x, y := event.Position()
+		row, column := r.panel.table.CellAt(x, y)
+		if column != colName {
+			return action, event
+		}
+		if _, ok := r.panel.rowRef(row); !ok {
+			return action, event
+		}
+		r.panel.focusRow(row)
+		r.panel.activateRow(row)
+		return tview.MouseConsumed, nil
+
 	default:
 		return action, event
 	}
@@ -1804,23 +1882,5 @@ func (r *Root) openChownTextFallback(target string) {
 			return
 		}
 		r.applyChown(target, uid, gid)
-	})
-}
-
-// openChmod is the context menu's "chmod": prompts for an octal
-// permission string (e.g. "755") and applies it to the target.
-func (r *Root) openChmod() {
-	target := r.target
-	r.openPrompt("chmod (octal, e.g. 755):", "", func(text string) {
-		mode, err := fsops.ParseMode(text)
-		if err != nil {
-			r.showError(err)
-			return
-		}
-		if err := fsops.Chmod(target, mode); err != nil {
-			r.showError(err)
-			return
-		}
-		r.showError(r.panel.load(r.panel.path))
 	})
 }
