@@ -1628,10 +1628,12 @@ func (r *Root) finishRename(key tcell.Key) {
 		return
 	}
 
-	if _, err := fsops.Rename(r.target, newName); err != nil {
+	newPath, err := fsops.Rename(r.target, newName)
+	if err != nil {
 		r.showError(err)
 		return
 	}
+	r.refreshDetailsIfShowing(r.target, newPath)
 	r.showError(r.panel.load(r.panel.path))
 }
 
@@ -1796,6 +1798,15 @@ func (r *Root) pasteInto(dir string) {
 		if err != nil && firstErr == nil {
 			firstErr = err
 		}
+		// Only for a successful Move, not Copy: src is untouched by a
+		// copy (still exactly what Details would already be showing, if
+		// anything), and dst is a brand new path a copy could never
+		// already have been the target of. A move, like a rename,
+		// genuinely relocates the same real entry — Details needs to
+		// keep following it under its new path.
+		if err == nil && r.clipboardCut {
+			r.refreshDetailsIfShowing(src, dst)
+		}
 	}
 
 	if r.clipboardCut && firstErr == nil {
@@ -1868,6 +1879,7 @@ func (r *Root) applyChown(target string, uid, gid int) {
 		r.showError(err)
 		return
 	}
+	r.refreshDetailsIfShowing(target, target)
 	r.showError(r.panel.load(r.panel.path))
 }
 
