@@ -27,6 +27,12 @@ var helpText = strings.TrimLeft(`
 [::b]Global — work anywhere, even inside another dialog[::-]
 
   F1              This help
+  F3              Toggle mouse reporting on/off (see the status bar's
+                  own "Mouse on/off") — off gives your terminal's own
+                  native text selection/copy back, e.g. to grab a
+                  filename; most terminals also support their own
+                  override gesture (often Shift-drag) without needing
+                  this, but not everyone knows it
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
