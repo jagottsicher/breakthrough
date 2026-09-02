@@ -80,6 +80,76 @@ func TestMoveSelectionToTrashMovesFileAndListsIt(t *testing.T) {
 	}
 }
 
+// TestMoveSelectionToTrashClearsDetailsShowingSameFile pins the user's
+// own explicit request extended to Trash: Details, if it's showing the
+// very entry that just got trashed, must not keep claiming stale data
+// for a file that isn't there any more — cleared to "(nothing
+// selected)" (see refreshDetailsIfShowing's own doc comment on why an
+// obscure trash-internal path isn't worth following it to instead).
+func TestMoveSelectionToTrashClearsDetailsShowingSameFile(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+	if r.detailsTarget != file {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, file)
+	}
+
+	r.moveSelectionToTrash()
+
+	if r.detailsTarget != "" {
+		t.Errorf("detailsTarget after Trash = %q, want \"\" (cleared)", r.detailsTarget)
+	}
+}
+
+// TestRemoveClearsDetailsShowingSameFile is the same pin for a
+// permanent delete (see openRemoveConfirm's own confirm callback).
+func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+	if r.detailsTarget != file {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, file)
+	}
+
+	r.openRemoveConfirm()
+	r.purgeConfirm.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmPurge()
+
+	if r.detailsTarget != "" {
+		t.Errorf("detailsTarget after Remove = %q, want \"\" (cleared)", r.detailsTarget)
+	}
+}
+
+// TestRestoreFromTrashRefreshesDetailsShowingSameFile pins Restore's own
+// half: Details following the trashed item (shown while browsing the
+// trash itself) back to its own real, original path once it's restored.
+func TestRestoreFromTrashRefreshesDetailsShowingSameFile(t *testing.T) {
+	r, dir, file := newTestRootWithFile(t)
+	r.SetRect(0, 0, 100, 40)
+
+	r.moveSelectionToTrash()
+	r.openTrash()
+	r.panel.focusRow(1) // the one trashed item
+	r.showDetailsSidebar()
+
+	_, trashPath, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("setup: no current row in the trash listing")
+	}
+	if r.detailsTarget != trashPath {
+		t.Fatalf("setup: detailsTarget = %q, want the trash-internal path %q", r.detailsTarget, trashPath)
+	}
+
+	r.restoreSelectionFromTrash()
+
+	if r.detailsTarget != file {
+		t.Errorf("detailsTarget after Restore = %q, want the original path %q", r.detailsTarget, file)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatalf("setup sanity: restored file missing: %v", err)
+	}
+}
+
 func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
