@@ -434,6 +434,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.headerEdit = tview.NewInputField()
 	p.headerEdit.SetDoneFunc(p.finishEdit)
+	// A label, not extra logic in openEdit: InputField reserves exactly
+	// this much space before the field itself starts (see tview's own
+	// Draw, which measures labelWidth via TaggedStringWidth when none is
+	// set explicitly) — the path being edited lines up with the same
+	// path already shown in p.header, instead of resetting to column 0
+	// the moment editing starts, per the user's own explicit report. See
+	// headerButtonPrefix's own doc comment for why this is a named
+	// constant rather than a literal repeated here.
+	p.headerEdit.SetLabel(headerButtonPrefix)
 
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
@@ -501,6 +510,7 @@ func (p *Panel) paintStaticChrome() {
 	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
 	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
 	p.headerEdit.SetFieldTextColor(p.theme.Text)
+	p.headerEdit.SetLabelColor(p.theme.Text)
 
 	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
 	p.filterRegexBtn.SetLabelColor(p.theme.Text)
@@ -2159,6 +2169,17 @@ func (p *Panel) previousPath() (string, bool) {
 // (e.g. on a "/" separator, or in empty space after the path) is handled
 // by captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
+// headerButtonPrefix is exactly what buildHeaderSpans' own five
+// buttons plus their trailing space render as, just below — reused by
+// headerEdit's own SetLabel (see NewPanel) so the path being edited
+// starts at the exact same column the displayed one already does,
+// rather than resetting to column 0 the moment editing starts, per the
+// user's own explicit report. A single shared string constant, not a
+// derivation from buildHeaderSpans' own output, since the five buttons
+// there each need their own click span — kept in sync instead by
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+const headerButtonPrefix = "∎~<>↑ "
+
 func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
@@ -2283,7 +2304,10 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // with the current path — searchBrowsePath while search results are
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
-// and moves keyboard focus there.
+// and moves keyboard focus there. headerEdit's own label (see NewPanel)
+// already reserves the "∎~<>↑ " prefix's own width, so the path text
+// itself lines up with wherever p.header was just showing it — nothing
+// further to do here for that.
 func (p *Panel) openEdit() {
 	p.editing = true
 	p.headerEdit.SetText(p.effectiveBrowsePath())
