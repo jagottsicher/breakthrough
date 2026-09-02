@@ -218,12 +218,13 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	return b.String(), spans
 }
 
-// buildStatusBar renders the status bar's text: the current user, disk
-// and inode usage for the panel's current directory (see
-// fsops.FetchDiskUsage), the running kernel release (see
-// kernelVersionText), uptime and load average where available (see
-// uptimeText/loadAverageText — Linux only, gracefully omitted
-// elsewhere, the same "just show one less segment" degradation
+// buildStatusBar renders the status bar's text: the current user,
+// whether mouse reporting is currently on or off (see mouseStatusText/
+// Root.ToggleMouseShortcut — F3), disk and inode usage for the panel's
+// current directory (see fsops.FetchDiskUsage), the running kernel
+// release (see kernelVersionText), uptime and load average where
+// available (see uptimeText/loadAverageText — Linux only, gracefully
+// omitted elsewhere, the same "just show one less segment" degradation
 // fsops.FetchDiskUsage itself already has), and the clock. No buttons
 // here any more — see buildButtonBar.
 func (r *Root) buildStatusBar() string {
@@ -232,6 +233,8 @@ func (r *Root) buildStatusBar() string {
 	sep := func() { write(" │ ") }
 
 	write(r.currentUser)
+	sep()
+	write(mouseStatusText(r.mouseEnabled))
 	sep()
 	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
 		write(diskUsageText(u))
@@ -254,6 +257,25 @@ func (r *Root) buildStatusBar() string {
 	write(clockText())
 
 	return b.String()
+}
+
+// mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"
+// segment — per a real user report: enabling mouse reporting at all
+// (needed for this app's own clicks/drags) hands every mouse event to
+// breakthrough instead of the terminal emulator, which breaks that
+// terminal's own native text selection/copy for anyone who doesn't
+// already know its own override gesture (Shift-drag, on most
+// xterm-derived emulators). F3 (see Root.ToggleMouseShortcut) is a
+// plain, memorable way to turn reporting off (and back on) without
+// needing to know that gesture at all — this is what lets the status
+// bar answer "is it currently on" at a glance, the same way the
+// Hide/Unhide button already names what its own next click will do
+// rather than leaving the current state to be inferred.
+func mouseStatusText(enabled bool) string {
+	if enabled {
+		return "Mouse on"
+	}
+	return "Mouse off"
 }
 
 // kernelVersionText returns `uname -r`'s own output, trimmed — the same
