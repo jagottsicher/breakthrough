@@ -786,28 +786,18 @@ func (r *Root) savePropertiesEdit() {
 		}
 	}
 
-	// Per the user's own explicit request: Details, if it's showing the
-	// very same file Properties was just editing, reflects whatever
-	// actually landed on disk immediately — not stale info until the
-	// user happens to navigate away and back. Needed regardless of
-	// firstErr: even a save that failed partway through (see this
-	// function's own doc comment on why that isn't rolled back) may
-	// still have really renamed/rechmod'd/etc. the file before hitting
-	// whatever failed next, and target already reflects that. Checked
-	// against propertiesTarget, not the possibly-just-renamed target
-	// itself: that's the file Details would have been showing
-	// beforehand, under its original, pre-edit path.
-	//
-	// Deliberately not left to the panel's own reload just below to
-	// trigger this on its own: p.load only repositions the table's
-	// selection (see focusRow, which is what actually fires
-	// SetSelectionChangedFunc) when moving to a genuinely different
-	// directory — a same-directory reload, exactly this case, rebuilds
-	// every row's data in place without reselecting anything, so
-	// nothing would tell Details a rename even happened.
-	if r.detailsSidebarVisible && r.detailsTarget == r.propertiesTarget {
-		r.loadDetailsTarget(target)
-	}
+	// Details, if it's showing the very same file Properties was just
+	// editing, reflects whatever actually landed on disk immediately —
+	// see refreshDetailsIfShowing's own doc comment (this is the call
+	// that originally motivated it). Needed regardless of firstErr: even
+	// a save that failed partway through (see this function's own doc
+	// comment on why that isn't rolled back) may still have really
+	// renamed/rechmod'd/etc. the file before hitting whatever failed
+	// next, and target already reflects that. Checked against
+	// propertiesTarget, not the possibly-just-renamed target itself:
+	// that's the file Details would have been showing beforehand, under
+	// its original, pre-edit path.
+	r.refreshDetailsIfShowing(r.propertiesTarget, target)
 
 	r.hideOverlay()
 	r.showError(r.panel.load(r.panel.path))
