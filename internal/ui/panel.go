@@ -65,9 +65,18 @@ const (
 // moment the panel navigated away from it (see snapshotCurrentEntry),
 // so Back/Forward into it looks like nothing ever happened rather than
 // silently re-running a search that might behave differently by then,
-// or take a while. cursorRow applies to both alike: the row focusRow
-// should land on when returning here, captured the same way whether
-// this entry is a real directory or a search listing.
+// or take a while.
+//
+// cursorRow is captured for both alike (see snapshotCurrentEntry), but
+// only actually restored by restoreHistoryEntry for a search
+// snapshot — the same "nothing ever happened" guarantee doesn't apply
+// to a real directory, which per the user's own explicit request
+// always lands on row 0 on Back/Forward now, exactly like a fresh
+// navigate() into it already would (see load's own newDirectory
+// check), never wherever the cursor happened to be when it was last
+// left. Still captured unconditionally rather than only when
+// isSearch() is true, since which one entry will turn out to be isn't
+// decided until whatever navigates away from it next.
 type historyEntry struct {
 	path      string // "" marks a search-results snapshot — see isSearch
 	cursorRow int
@@ -1928,8 +1937,11 @@ func (p *Panel) applyDragDelta(start, from, to int) {
 
 // currentRow returns the table's own current cursor row (see
 // tview.Table.GetSelection) — an opaque number here, never re-resolved
-// against a row's own identity, used purely to freeze and later restore
-// where the cursor was (see snapshotCurrentEntry/restoreHistoryEntry).
+// against a row's own identity, used purely to freeze it away (see
+// snapshotCurrentEntry) for restoreHistoryEntry's own search-snapshot
+// case to later restore — a real directory's own cursorRow is captured
+// the same way but deliberately never restored any more (see
+// restoreHistoryEntry's own doc comment).
 func (p *Panel) currentRow() int {
 	row, _ := p.table.GetSelection()
 	return row
@@ -1938,10 +1950,12 @@ func (p *Panel) currentRow() int {
 // snapshotCurrentEntry freezes whatever the panel is showing right now
 // into history[historyIdx] — the cursor row always, plus (see
 // historyEntry.isSearch) a full copy of the current search results and
-// status if that's what this entry actually is, so navigating back to
-// it later (see restoreHistoryEntry) restores it exactly rather than a
-// plain reload silently losing the cursor, or a search's own results
-// entirely. A no-op before any history entry exists yet.
+// status if that's what this entry actually is, so navigating back to a
+// search snapshot later (see restoreHistoryEntry) restores it exactly
+// rather than a plain reload silently losing the cursor, or the
+// results entirely — a real directory's own frozen cursorRow is simply
+// never read back out again. A no-op before any history entry exists
+// yet.
 //
 // Checked against history[historyIdx].isSearch(), not the live
 // searchMode flag: activateRow's own searchMode branch already flips
@@ -1989,8 +2003,8 @@ func (p *Panel) pushHistoryEntry(entry historyEntry) {
 }
 
 // restoreHistoryEntry redisplays entry exactly as historyEntry
-// describes it: a real directory (load, then land on its own
-// cursorRow), or a frozen search-results snapshot (see
+// describes it: a real directory (just load — see below for why not
+// also its own cursorRow), or a frozen search-results snapshot (see
 // historyEntry.isSearch) redisplayed as-is — never re-run, since a
 // search might behave differently or take a while by the time anyone
 // comes back to it. Used by back/forward, which — unlike navigate —
@@ -2010,11 +2024,16 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		return nil
 	}
 
-	if err := p.load(entry.path); err != nil {
-		return err
-	}
-	p.focusRowClamped(entry.cursorRow)
-	return nil
+	// No focusRowClamped(entry.cursorRow) here, unlike the search branch
+	// above — per the user's own explicit request, Back/Forward into a
+	// real directory always lands on row 0, the same as entering it any
+	// other way already does (see load's own newDirectory check, which
+	// fires here too: entry.path is never the same as whatever p.path
+	// was a moment ago, or back()/forward() wouldn't have had anywhere
+	// to go). Landing on the old cursor row used to be the whole point
+	// of tracking it at all here — now it's just load's own ordinary
+	// "opening a directory" behavior, nothing extra to add on top.
+	return p.load(entry.path)
 }
 
 // focusRowClamped is focusRow, clamped to the table's own current row
