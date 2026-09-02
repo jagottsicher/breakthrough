@@ -460,6 +460,78 @@ func TestRightClickMovesFocus(t *testing.T) {
 	}
 }
 
+// cellPos finds the screen position of row's specific column within an
+// 80x24 SimulationScreen — findRowPos's own two-dimensional scan (row
+// and column both unknown ahead of time; a table drawn as part of a
+// full, drawnRoot-style layout doesn't start at screen row 0 the way a
+// bare Table.Draw does, so the row index and the screen y coordinate
+// aren't interchangeable here), but for a specific column rather than
+// whichever one happens to be leftmost.
+func cellPos(table *tview.Table, row, column int) (x, y int, ok bool) {
+	for tryY := 0; tryY < 24; tryY++ {
+		for tryX := 0; tryX < 80; tryX++ {
+			if r, c := table.CellAt(tryX, tryY); r == row && c == column {
+				return tryX, tryY, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// TestDoubleClickActivatesDirectory pins the user's own explicit
+// request: a single click on a directory's name only selects it (see
+// panel_test.go's own TestHandleNameClickFirstClickJustSelects for that
+// half), but a real double-click navigates into it, matching a real
+// GUI file manager's own convention ("Doppelklick statt
+// Klickverhalten"). MouseLeftDoubleClick, not two MouseLeftClick
+// events, is what a real double-click's second release actually fires
+// (see captureMouse's own MouseLeftDoubleClick case) — this drives that
+// exact action through Root's real dispatch, not handleNameClick
+// directly.
+func TestDoubleClickActivatesDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	const row = 1 // app-data
+	x, y, ok := cellPos(root.panel.table, row, colName)
+	if !ok {
+		t.Fatal("could not locate row 1's name cell screen position")
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseLeftDoubleClick, tcell.NewEventMouse(x, y, tcell.Button1, 0), func(tview.Primitive) {})
+
+	want := filepath.Join(dir, "app-data")
+	if root.panel.path != want {
+		t.Errorf("path = %q after double-clicking app-data's name, want %q", root.panel.path, want)
+	}
+}
+
+// TestDoubleClickOnCheckboxDoesNotActivate pins that a fast
+// double-click landing on the checkbox column stays the checkbox's own
+// business — captureMouse's own MouseLeftDoubleClick case is scoped to
+// colName specifically, so this must not also navigate into (or
+// otherwise activate) the row.
+func TestDoubleClickOnCheckboxDoesNotActivate(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	const row = 1 // app-data
+	x, y, ok := cellPos(root.panel.table, row, colCheckbox)
+	if !ok {
+		t.Fatal("could not locate row 1's checkbox cell screen position")
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseLeftDoubleClick, tcell.NewEventMouse(x, y, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if root.panel.path != dir {
+		t.Errorf("path = %q after double-clicking the checkbox column, want unchanged %q", root.panel.path, dir)
+	}
+}
+
 // TestRenamePositionsOverRightClickedRow is a regression test for a bug
 // where Root.targetRow stored the right-click event's raw screen y
 // coordinate instead of the table's own row *index* (see captureMouse's
