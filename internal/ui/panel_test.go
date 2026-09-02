@@ -71,6 +71,19 @@ func TestBuildHeaderSpans(t *testing.T) {
 	}
 }
 
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans pins headerButtonPrefix
+// (headerEdit's own SetLabel — see NewPanel/openEdit) in sync with what
+// buildHeaderSpans actually renders before the path itself starts —
+// the two can't share a single construction (the five buttons there
+// each need their own click span), so this is what would catch either
+// one drifting from the other instead.
+func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
+	text, _ := buildHeaderSpans("/a/bb/c")
+	if !strings.HasPrefix(text, headerButtonPrefix) {
+		t.Errorf("buildHeaderSpans' own text %q does not start with headerButtonPrefix %q", text, headerButtonPrefix)
+	}
+}
+
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
@@ -2072,6 +2085,24 @@ func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.
 	}
 	if p.path != dir {
 		t.Errorf("p.path = %q after the breadcrumb jump, want %q", p.path, dir)
+	}
+}
+
+// TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
+// real user report that switching the header into edit mode reset the
+// editable path's own start column to 0 instead of lining up with
+// where p.header was already showing it, right after the "∎~<>↑ "
+// buttons. headerEdit's own label (see NewPanel) is what reserves that
+// same width now — there's nothing further for openEdit itself to do
+// per call, so this only needs checking once, right after construction.
+func TestHeaderEditLabelMatchesButtonPrefix(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	if got := p.headerEdit.GetLabel(); got != headerButtonPrefix {
+		t.Errorf("headerEdit label = %q, want %q", got, headerButtonPrefix)
 	}
 }
 
