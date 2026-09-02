@@ -84,6 +84,22 @@ type Root struct {
 
 	app *tview.Application
 
+	// mouseEnabled mirrors whatever cmd/breakthrough's own initial
+	// app.EnableMouse(true) call left the Application in — tview itself
+	// has no getter for this (see Application.EnableMouse's own private
+	// enableMouse field), so this is Root's own copy of the same state,
+	// flipped by ToggleMouseShortcut (F3). Enabling mouse reporting is
+	// what lets this app see clicks/drags at all, but it also means the
+	// terminal emulator hands every mouse event to breakthrough instead
+	// of handling it itself — per a real user report, that breaks a
+	// terminal's own native text selection/copy (e.g. to grab a
+	// filename) for anyone who doesn't already know their terminal's own
+	// override gesture (Shift-drag, on most xterm-derived emulators).
+	// F3 is a plain, always-available escape hatch for exactly that,
+	// independent of whichever gesture (if any) the current terminal
+	// happens to support.
+	mouseEnabled bool
+
 	// lastScreenWidth/Height are the terminal's own size as of the most
 	// recent handleBeforeDraw call — how it tells a genuine resize apart
 	// from any other reason a draw happens to run (a keypress, a click,
@@ -696,6 +712,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r := &Root{
 		Pages:        tview.NewPages(),
 		app:          app,
+		mouseEnabled: true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
 		panel:        panel,
 		settings:     settings,
 		colorSchemes: colorSchemes,
@@ -1306,6 +1323,30 @@ func (r *Root) RequestCancel() {
 		return
 	}
 	r.panel.cancelEdit()
+}
+
+// ToggleMouseShortcut is F3's own action — see cmd/breakthrough. Always
+// fires regardless of what's currently open or focused, the same
+// "reachable from literally anywhere" category F1/Ctrl+Q/Ctrl+C are in
+// (see HelpShortcut's own doc comment): the whole point is grabbing
+// text via the terminal's own native selection, which can be anywhere
+// on screen — a dialog, the bash line, a plain directory listing — so
+// gating this behind acceptsGlobalShortcut the way most other shortcuts
+// are would defeat it in exactly the cases it's most likely needed.
+//
+// See mouseEnabled's own doc comment on why this exists at all: mouse
+// reporting being on is what makes this app's own clicks/drags work,
+// but it also hands the terminal emulator's own native text
+// selection/copy over to breakthrough instead — not every terminal's
+// own override gesture (Shift-drag, on most xterm-derived emulators) is
+// something everyone already knows, and this is a plain, memorable way
+// out that doesn't depend on it. refreshStatusBar repaints the "Mouse
+// on/off" segment (see buildStatusBar) immediately, rather than waiting
+// for StartClock's own once-a-second tick to eventually catch up.
+func (r *Root) ToggleMouseShortcut() {
+	r.mouseEnabled = !r.mouseEnabled
+	r.app.EnableMouse(r.mouseEnabled)
+	r.refreshStatusBar()
 }
 
 // confirmQuit is the quit overlay's "Quit breakthrough" action.
