@@ -65,9 +65,18 @@ const (
 // moment the panel navigated away from it (see snapshotCurrentEntry),
 // so Back/Forward into it looks like nothing ever happened rather than
 // silently re-running a search that might behave differently by then,
-// or take a while. cursorRow applies to both alike: the row focusRow
-// should land on when returning here, captured the same way whether
-// this entry is a real directory or a search listing.
+// or take a while.
+//
+// cursorRow is captured for both alike (see snapshotCurrentEntry), but
+// only actually restored by restoreHistoryEntry for a search
+// snapshot — the same "nothing ever happened" guarantee doesn't apply
+// to a real directory, which per the user's own explicit request
+// always lands on row 0 on Back/Forward now, exactly like a fresh
+// navigate() into it already would (see load's own newDirectory
+// check), never wherever the cursor happened to be when it was last
+// left. Still captured unconditionally rather than only when
+// isSearch() is true, since which one entry will turn out to be isn't
+// decided until whatever navigates away from it next.
 type historyEntry struct {
 	path      string // "" marks a search-results snapshot — see isSearch
 	cursorRow int
@@ -273,6 +282,27 @@ type Panel struct {
 	// to stop. Left nil the same as onSearchEscape/onOpenSearchResult.
 	onExitSearchResults func()
 
+	// lastNameClickRow/lastNameClickTime back handleNameClick's own
+	// click/double-click/rename-gesture disambiguation (see its own doc
+	// comment): the previous name-cell click's row and timestamp,
+	// tracked independently of whatever row the table's own selection
+	// currently sits on (arrow-key navigation moves that too, without
+	// this ever having been clicked at all) — only a genuine *second*
+	// click landing on the same row within the relevant window counts
+	// as a repeat. lastNameClickRow starts at -1 (see NewPanel): 0 is a
+	// real, valid row index, and would otherwise make the very first
+	// click of a session misread as a repeat of a click that never
+	// happened.
+	lastNameClickRow  int
+	lastNameClickTime time.Time
+
+	// onRenameGesture reports the click-pause-click rename gesture once
+	// handleNameClick recognizes it — Root wires this to renameRow, its
+	// own row-addressed equivalent of renameCurrentEntry. Left nil the
+	// same as onSearchEscape/onOpenSearchResult if nothing's wired it up
+	// (e.g. a test constructing a Panel directly).
+	onRenameGesture func(row int)
+
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
 	// what the Modified column itself should be called while doing so
@@ -389,14 +419,15 @@ type rowRef struct {
 // list afterwards — see Panel.openEdit.
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
-		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
-		app:          app,
-		theme:        theme,
-		table:        tview.NewTable(),
-		columnHeader: tview.NewTable(),
-		showHidden:   settings.ShowHidden,
-		sizeBytes:    settings.SizeBytes,
-		mtimeUnix:    settings.MtimeUnix,
+		Flex:             tview.NewFlex().SetDirection(tview.FlexRow),
+		app:              app,
+		theme:            theme,
+		table:            tview.NewTable(),
+		columnHeader:     tview.NewTable(),
+		showHidden:       settings.ShowHidden,
+		sizeBytes:        settings.SizeBytes,
+		mtimeUnix:        settings.MtimeUnix,
+		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
 	p.table.SetBorders(false)
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
@@ -412,6 +443,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.headerEdit = tview.NewInputField()
 	p.headerEdit.SetDoneFunc(p.finishEdit)
+	// A label, not extra logic in openEdit: InputField reserves exactly
+	// this much space before the field itself starts (see tview's own
+	// Draw, which measures labelWidth via TaggedStringWidth when none is
+	// set explicitly) — the path being edited lines up with the same
+	// path already shown in p.header, instead of resetting to column 0
+	// the moment editing starts, per the user's own explicit report. See
+	// headerButtonPrefix's own doc comment for why this is a named
+	// constant rather than a literal repeated here.
+	p.headerEdit.SetLabel(headerButtonPrefix)
 
 	p.headerPages = tview.NewPages()
 	p.headerPages.AddPage(headerDisplayPage, p.header, true, true)
@@ -479,6 +519,7 @@ func (p *Panel) paintStaticChrome() {
 	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
 	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
 	p.headerEdit.SetFieldTextColor(p.theme.Text)
+	p.headerEdit.SetLabelColor(p.theme.Text)
 
 	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
 	p.filterRegexBtn.SetLabelColor(p.theme.Text)
@@ -598,6 +639,7 @@ func (p *Panel) load(dir string) error {
 
 	p.table.Clear()
 	p.selected = make(map[string]bool)
+	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 	p.path = abs
 
 	text, spans := buildHeaderSpans(abs)
@@ -684,6 +726,7 @@ func (p *Panel) showSearchResults() {
 	p.searchMode = true
 	p.searchEntries = nil
 	p.selected = make(map[string]bool) // selection scoped to what's on screen, same rule load() already follows for a real directory
+	p.lastNameClickRow = -1            // see its own doc comment: a rebuilt table's row indices mean something new
 	p.table.Clear()
 	p.buildColumnHeader()
 }
@@ -1120,7 +1163,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	name.SetReference(ref)
 	name.SetExpansion(1) // consume the rest of the row's width
 	name.SetClickedFunc(func() bool {
-		return p.activateRow(row)
+		return p.handleNameClick(row)
 	})
 	p.table.SetCell(row, colName, name)
 
@@ -1636,7 +1679,80 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// activateRow is what Enter and a click on the name cell both do. While
+// nameRenameClickWithin is handleNameClick's own timing window for a
+// second click landing on the same row as the previous one (see its
+// own doc comment): at or under this counts as the slower, deliberate
+// click-pause-click rename gesture, per the user's own explicit
+// request ("Klick, 1 Sekunde warten, und noch ein Klick... zum
+// Umbennen"); slower than this is treated as a fresh first click
+// instead. There's no separate, shorter "this counts as a double-click"
+// window to check here at all — a second click fast enough for that
+// never reaches this function in the first place (see handleNameClick's
+// own doc comment on why: tview's Application itself intercepts it as
+// MouseLeftDoubleClick before Table.MouseHandler, which has no case for
+// that action, ever gets to call this). The upper bound here is
+// deliberately generous around the user's own "one second" —
+// comfortably reachable by an unhurried second click without
+// stretching so far that an unrelated, much later click could still
+// mistakenly trigger it.
+const nameRenameClickWithin = 1500 * time.Millisecond
+
+// handleNameClick is what a plain left-click (MouseLeftClick) on the
+// name cell does — Enter still always activates immediately (see
+// NewPanel's own SetSelectedFunc), unaffected by any of this. A single
+// click on a row that isn't already the one handleNameClick itself last
+// saw clicked only selects it (returns false, the same "let tview's own
+// default Table.MouseHandler apply the selection" this always did for a
+// click activateRow itself no-ops on) — per the user's own explicit
+// report that a single click immediately navigating into a directory
+// (the previous, direct name.SetClickedFunc -> activateRow wiring) was
+// too eager, especially with the Details sidebar open for browsing
+// around: a folder should highlight/select first, exactly like a file
+// already effectively did, not jump into it on the very first click.
+//
+// Double-clicking to activate it instead (per the user's own explicit
+// request: "Doppelklick statt Klickverhalten") is NOT handled here at
+// all, even though it might look like the natural place for it — a
+// real double-click's second release fires tview's own
+// MouseLeftDoubleClick action instead of a second MouseLeftClick
+// (verified directly against tview's own Application.fireMouseActions
+// source, not guessed: DoubleClickInterval, 500ms by default, decides
+// which one), and Table.MouseHandler has no case for that action at
+// all, so it would never reach a TableCell's own ClickedFunc — this
+// function — a second time in the first place. See Root.captureMouse's
+// own MouseLeftDoubleClick case for where activation actually happens.
+//
+// What this function DOES still own is the slower gesture: a second
+// click on the same row — lastNameClickRow, tracked regardless of
+// whatever the table's own current selection is, so an
+// arrow-key-selected row doesn't retroactively count as "clicked",
+// and reset to -1 on every Panel.load so a stale row index from
+// whatever the *previous* directory's listing had can never coincide
+// with a freshly loaded one — within nameRenameClickWithin runs the
+// click-pause-click rename gesture (see Root.renameRow, wired as
+// onRenameGesture) — for a file exactly as much as a directory, per the
+// user's own explicit request that the two behave the same way here.
+// Slower than that, or a click on a different row, is simply a fresh
+// first click again.
+func (p *Panel) handleNameClick(row int) bool {
+	now := time.Now()
+	isRepeat := row == p.lastNameClickRow
+	elapsed := now.Sub(p.lastNameClickTime)
+	p.lastNameClickRow = row
+	p.lastNameClickTime = now
+
+	if isRepeat && elapsed <= nameRenameClickWithin {
+		if p.onRenameGesture != nil {
+			p.onRenameGesture(row)
+		}
+		return true
+	}
+	return false
+}
+
+// activateRow is handleNameClick's own double-click case, and what
+// Enter always does directly and immediately (see NewPanel's own
+// SetSelectedFunc) regardless of any click timing at all. While
 // showing a real directory: enter the row's directory, or do nothing
 // for a regular file — opening/viewing files is a later phase. Ignores
 // the checkbox column: a click there is handled by its own
@@ -1666,10 +1782,11 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 // on a result has always had otherwise.
 //
 // Returns whether IT already settled the table's own selection itself
-// (a real user report: it always did, but the caller — addRow's own
-// name.SetClickedFunc — used to unconditionally tell tview.Table to
-// *also* select whatever cell the click's own screen position landed
-// on. Table.MouseHandler computes that position before ever calling
+// (a real user report: it always did, but the original caller —
+// addRow's own name.SetClickedFunc, before handleNameClick sat between
+// the two — used to unconditionally tell tview.Table to *also* select
+// whatever cell the click's own screen position landed on.
+// Table.MouseHandler computes that position before ever calling
 // this func at all, so once navigate/navigateAndSelect has gone on to
 // clear and rebuild the whole table underneath it — a genuinely
 // different directory, with completely different rows now sitting at
@@ -1820,8 +1937,11 @@ func (p *Panel) applyDragDelta(start, from, to int) {
 
 // currentRow returns the table's own current cursor row (see
 // tview.Table.GetSelection) — an opaque number here, never re-resolved
-// against a row's own identity, used purely to freeze and later restore
-// where the cursor was (see snapshotCurrentEntry/restoreHistoryEntry).
+// against a row's own identity, used purely to freeze it away (see
+// snapshotCurrentEntry) for restoreHistoryEntry's own search-snapshot
+// case to later restore — a real directory's own cursorRow is captured
+// the same way but deliberately never restored any more (see
+// restoreHistoryEntry's own doc comment).
 func (p *Panel) currentRow() int {
 	row, _ := p.table.GetSelection()
 	return row
@@ -1830,10 +1950,12 @@ func (p *Panel) currentRow() int {
 // snapshotCurrentEntry freezes whatever the panel is showing right now
 // into history[historyIdx] — the cursor row always, plus (see
 // historyEntry.isSearch) a full copy of the current search results and
-// status if that's what this entry actually is, so navigating back to
-// it later (see restoreHistoryEntry) restores it exactly rather than a
-// plain reload silently losing the cursor, or a search's own results
-// entirely. A no-op before any history entry exists yet.
+// status if that's what this entry actually is, so navigating back to a
+// search snapshot later (see restoreHistoryEntry) restores it exactly
+// rather than a plain reload silently losing the cursor, or the
+// results entirely — a real directory's own frozen cursorRow is simply
+// never read back out again. A no-op before any history entry exists
+// yet.
 //
 // Checked against history[historyIdx].isSearch(), not the live
 // searchMode flag: activateRow's own searchMode branch already flips
@@ -1881,8 +2003,8 @@ func (p *Panel) pushHistoryEntry(entry historyEntry) {
 }
 
 // restoreHistoryEntry redisplays entry exactly as historyEntry
-// describes it: a real directory (load, then land on its own
-// cursorRow), or a frozen search-results snapshot (see
+// describes it: a real directory (just load — see below for why not
+// also its own cursorRow), or a frozen search-results snapshot (see
 // historyEntry.isSearch) redisplayed as-is — never re-run, since a
 // search might behave differently or take a while by the time anyone
 // comes back to it. Used by back/forward, which — unlike navigate —
@@ -1892,6 +2014,7 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		p.searchMode = true
 		p.searchEntries = append([]searchResultEntry(nil), entry.searchEntries...)
 		p.selected = make(map[string]bool)
+		p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 		p.table.Clear()
 		p.buildColumnHeader()
 		p.renderSearchEntries()
@@ -1901,11 +2024,16 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		return nil
 	}
 
-	if err := p.load(entry.path); err != nil {
-		return err
-	}
-	p.focusRowClamped(entry.cursorRow)
-	return nil
+	// No focusRowClamped(entry.cursorRow) here, unlike the search branch
+	// above — per the user's own explicit request, Back/Forward into a
+	// real directory always lands on row 0, the same as entering it any
+	// other way already does (see load's own newDirectory check, which
+	// fires here too: entry.path is never the same as whatever p.path
+	// was a moment ago, or back()/forward() wouldn't have had anywhere
+	// to go). Landing on the old cursor row used to be the whole point
+	// of tracking it at all here — now it's just load's own ordinary
+	// "opening a directory" behavior, nothing extra to add on top.
+	return p.load(entry.path)
 }
 
 // focusRowClamped is focusRow, clamped to the table's own current row
@@ -2060,6 +2188,17 @@ func (p *Panel) previousPath() (string, bool) {
 // (e.g. on a "/" separator, or in empty space after the path) is handled
 // by captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
+// headerButtonPrefix is exactly what buildHeaderSpans' own five
+// buttons plus their trailing space render as, just below — reused by
+// headerEdit's own SetLabel (see NewPanel) so the path being edited
+// starts at the exact same column the displayed one already does,
+// rather than resetting to column 0 the moment editing starts, per the
+// user's own explicit report. A single shared string constant, not a
+// derivation from buildHeaderSpans' own output, since the five buttons
+// there each need their own click span — kept in sync instead by
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+const headerButtonPrefix = "∎~<>↑ "
+
 func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
@@ -2184,7 +2323,10 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // with the current path — searchBrowsePath while search results are
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
-// and moves keyboard focus there.
+// and moves keyboard focus there. headerEdit's own label (see NewPanel)
+// already reserves the "∎~<>↑ " prefix's own width, so the path text
+// itself lines up with wherever p.header was just showing it — nothing
+// further to do here for that.
 func (p *Panel) openEdit() {
 	p.editing = true
 	p.headerEdit.SetText(p.effectiveBrowsePath())

@@ -71,6 +71,19 @@ func TestBuildHeaderSpans(t *testing.T) {
 	}
 }
 
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans pins headerButtonPrefix
+// (headerEdit's own SetLabel — see NewPanel/openEdit) in sync with what
+// buildHeaderSpans actually renders before the path itself starts —
+// the two can't share a single construction (the five buttons there
+// each need their own click span), so this is what would catch either
+// one drifting from the other instead.
+func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
+	text, _ := buildHeaderSpans("/a/bb/c")
+	if !strings.HasPrefix(text, headerButtonPrefix) {
+		t.Errorf("buildHeaderSpans' own text %q does not start with headerButtonPrefix %q", text, headerButtonPrefix)
+	}
+}
+
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
@@ -1373,6 +1386,139 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 	}
 }
 
+// TestHandleNameClickFirstClickJustSelects pins the user's own explicit
+// report: a single click on a directory's name used to navigate into it
+// immediately (the old direct name.SetClickedFunc -> activateRow
+// wiring) — the first click on a row now only selects it (returns
+// false, letting tview's own default Table.MouseHandler apply the
+// selection), exactly like a click on a file already effectively did.
+func TestHandleNameClickFirstClickJustSelects(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	consumed := p.handleNameClick(1) // app-data/
+
+	if consumed {
+		t.Error("a first click should return false, not report the selection as already handled")
+	}
+	if p.path != dir {
+		t.Errorf("a first click should not navigate, p.path = %q, want %q", p.path, dir)
+	}
+}
+
+// The double-click this replaces a bare single click with, per the
+// user's own explicit request ("Doppelklick statt Klickverhalten"), is
+// NOT testable by calling handleNameClick twice in quick succession
+// here — that's not what a real fast double-click ever does (see
+// handleNameClick's own doc comment on why a genuine second click that
+// fast never reaches it at all). See table_click_test.go's own
+// TestDoubleClickActivatesDirectory for the real thing, driven through
+// Root's actual mouse dispatch with the MouseLeftDoubleClick action
+// tview itself would fire.
+
+// TestHandleNameClickSlowRepeatTriggersRename pins the user's own
+// explicit request for the click-pause-click rename gesture: a second
+// click landing well after the double-click window, but still within
+// nameRenameClickWithin, renames instead of activating.
+func TestHandleNameClickSlowRepeatTriggersRename(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	renamedRow := -1
+	p.onRenameGesture = func(row int) { renamedRow = row }
+
+	p.handleNameClick(1)                                   // app-data/ — first click
+	p.lastNameClickTime = time.Now().Add(-1 * time.Second) // simulate the user's own "wait ~1 second"
+	consumed := p.handleNameClick(1)
+
+	if !consumed {
+		t.Error("the rename gesture should report the selection as already handled")
+	}
+	if renamedRow != 1 {
+		t.Errorf("onRenameGesture fired for row %d, want 1", renamedRow)
+	}
+	if p.path != dir {
+		t.Error("the rename gesture should not navigate into the directory")
+	}
+}
+
+// TestHandleNameClickRenameGestureWorksForFiles pins the user's own
+// explicit request that files get the exact same rename gesture as
+// directories.
+func TestHandleNameClickRenameGestureWorksForFiles(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	renamedRow := -1
+	p.onRenameGesture = func(row int) { renamedRow = row }
+
+	p.handleNameClick(2) // apple.txt
+	p.lastNameClickTime = time.Now().Add(-1 * time.Second)
+	p.handleNameClick(2)
+
+	if renamedRow != 2 {
+		t.Errorf("onRenameGesture fired for row %d, want 2 (apple.txt)", renamedRow)
+	}
+}
+
+// TestHandleNameClickTooSlowIsFreshClick pins the upper bound: a second
+// click any later than nameRenameClickWithin is just a fresh, unrelated
+// click — neither activates nor renames.
+func TestHandleNameClickTooSlowIsFreshClick(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	renamed := false
+	p.onRenameGesture = func(int) { renamed = true }
+
+	p.handleNameClick(1)                                   // app-data/
+	p.lastNameClickTime = time.Now().Add(-3 * time.Second) // well past nameRenameClickWithin
+	consumed := p.handleNameClick(1)
+
+	if consumed {
+		t.Error("a click slower than the rename window should be a fresh click, not consumed")
+	}
+	if renamed {
+		t.Error("should not trigger the rename gesture")
+	}
+	if p.path != dir {
+		t.Error("should not navigate")
+	}
+}
+
+// TestHandleNameClickDifferentRowResetsSequence pins that clicking a
+// different row doesn't inherit whatever click sequence was in
+// progress on the previous one — arrow-key navigation moving the
+// table's own selection between two clicks has the same effect (see
+// handleNameClick's own doc comment on tracking lastNameClickRow
+// independently of the table's current selection).
+func TestHandleNameClickDifferentRowResetsSequence(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	p.handleNameClick(1)             // app-data/
+	consumed := p.handleNameClick(2) // apple.txt, immediately after — a different row
+
+	if consumed {
+		t.Error("a click on a different row should just select it, not be treated as a repeat")
+	}
+	if p.path != dir {
+		t.Error("should not navigate")
+	}
+}
+
 // TestSelectAllDeselectAll pins the context menu's "Select all"/
 // "Deselect all": every checkable row ends up checked or unchecked, and
 // the ".." row (not checkable) is left alone either way.
@@ -1942,6 +2088,24 @@ func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.
 	}
 }
 
+// TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
+// real user report that switching the header into edit mode reset the
+// editable path's own start column to 0 instead of lining up with
+// where p.header was already showing it, right after the "∎~<>↑ "
+// buttons. headerEdit's own label (see NewPanel) is what reserves that
+// same width now — there's nothing further for openEdit itself to do
+// per call, so this only needs checking once, right after construction.
+func TestHeaderEditLabelMatchesButtonPrefix(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	if got := p.headerEdit.GetLabel(); got != headerButtonPrefix {
+		t.Errorf("headerEdit label = %q, want %q", got, headerButtonPrefix)
+	}
+}
+
 // TestOpenEditDuringSearchModeUsesSearchBrowsePath pins openEdit's own
 // searchMode branch (see effectiveBrowsePath): the field is pre-filled
 // with searchBrowsePath, not p.path, which stays frozen at wherever the
@@ -2206,11 +2370,16 @@ func TestForwardReplaysSearchThenJumpDestination(t *testing.T) {
 	}
 }
 
-// TestBackForwardRestoresCursorRowForPlainDirectories pins the other
-// half of the user's own request — not just a search excursion, but any
-// ordinary Back/Forward between two real directories restoring the
-// cursor row each was left on, not always resetting to the top.
-func TestBackForwardRestoresCursorRowForPlainDirectories(t *testing.T) {
+// TestBackForwardAlwaysLandsOnTopForPlainDirectories pins the user's
+// own later, explicit reversal of the behavior
+// TestBackForwardRestoresCursorRowForPlainDirectories used to pin:
+// Back/Forward between two real directories now always lands on row 0,
+// the same as entering either one any other way already would (see
+// load's own newDirectory check) — never wherever the cursor happened
+// to be when it was last left there. A search snapshot's own frozen
+// cursor position is unaffected by this — see
+// TestBackFromSearchJumpRestoresFrozenResultsNotALiveRerun.
+func TestBackForwardAlwaysLandsOnTopForPlainDirectories(t *testing.T) {
 	dir := fixtureDir(t)
 	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
 	if err != nil {
@@ -2224,13 +2393,13 @@ func TestBackForwardRestoresCursorRowForPlainDirectories(t *testing.T) {
 	}
 
 	p.back()
-	if row, _ := p.table.GetSelection(); row != 2 {
-		t.Errorf("selected row after Back = %d, want the restored 2", row)
+	if row, _ := p.table.GetSelection(); row != 0 {
+		t.Errorf("selected row after Back = %d, want 0, not the row it was left on (2)", row)
 	}
 
 	p.forward()
 	if row, _ := p.table.GetSelection(); row != 0 {
-		t.Errorf("selected row after Forward into %s (never visited before) = %d, want 0", sub, row)
+		t.Errorf("selected row after Forward into %s = %d, want 0", sub, row)
 	}
 }
 
