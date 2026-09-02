@@ -881,6 +881,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// reason (see closeSearch), just reached from a result click now.
 	panel.onExitSearchResults = r.cancelSearch
 
+	// The click-pause-click gesture on an already-selected row's own
+	// name renames it (see Panel.onRenameGesture/handleNameClick's own
+	// doc comment) — per the user's own explicit request, the same for
+	// files and directories alike.
+	panel.onRenameGesture = r.renameRow
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
@@ -1427,6 +1433,34 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 		r.target = path
 		r.targetRow = row
 		r.showMenu(x, y)
+		return tview.MouseConsumed, nil
+
+	case tview.MouseLeftDoubleClick:
+		// This, not Panel.handleNameClick, is where an actual fast
+		// double-click on a row's name activates it (see
+		// handleNameClick's own doc comment for why): tview's own
+		// Application.fireMouseActions fires this action for a second
+		// click's release landing within DoubleClickInterval (500ms) of
+		// the first, INSTEAD of a second MouseLeftClick — verified
+		// directly against tview's own source, not guessed — and
+		// Table.MouseHandler has no case for it at all, so it would
+		// otherwise just be silently dropped. Scoped to the name column
+		// specifically (colName), matching exactly what a plain click
+		// there already activates via TableCell.SetClickedFunc (see
+		// addRow) — a double-click landing on the checkbox column
+		// instead stays the checkbox's own business alone; without this
+		// check, double-clicking it fast would activate the row (wrong
+		// column entirely) instead of just toggling it twice.
+		x, y := event.Position()
+		row, column := r.panel.table.CellAt(x, y)
+		if column != colName {
+			return action, event
+		}
+		if _, ok := r.panel.rowRef(row); !ok {
+			return action, event
+		}
+		r.panel.focusRow(row)
+		r.panel.activateRow(row)
 		return tview.MouseConsumed, nil
 
 	default:
