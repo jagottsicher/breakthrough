@@ -278,6 +278,41 @@ func (r *Root) refreshDetailsSidebar() {
 	r.loadDetailsTarget(path)
 }
 
+// refreshDetailsIfShowing tells Details to reload oldTarget's own data,
+// under its possibly-new path newTarget, if oldTarget is exactly what
+// it's currently showing — per the user's own explicit request, the
+// fix every action that mutates a file or directory (rename, chmod,
+// chown, Copy/Move, Trash, Remove, Restore, ...) needs, not just
+// Properties' own Save (savePropertiesEdit, the first place this
+// existed, before this became its own shared helper).
+//
+// Needed because a same-directory panel reload (see Panel.load) never
+// re-fires SetSelectionChangedFunc — that only happens when moving to a
+// genuinely different directory (see refreshDetailsSidebar's own doc
+// comment) — so without this, Details would keep showing stale cached
+// data (an old permission/owner/size/hash/preview, or a target that no
+// longer even exists where it's still claiming to be) for the very
+// entry an action just changed, until the user happened to navigate
+// away and back.
+//
+// newTarget is usually oldTarget again (chmod/chown/SetModTime never
+// move or rename anything) — it only differs for an actual rename or
+// move, where Details needs to keep following the same real entry
+// under its new name/path rather than a now-nonexistent old one, and
+// it's "" for Trash/Remove, where there's no "new place" to follow to
+// at all (loadDetailsTarget("") shows "(nothing selected)", the
+// accurate answer once the entry Details was showing simply doesn't
+// exist there any more). Safe to call unconditionally after a
+// partially-failed multi-step action (see savePropertiesEdit's own
+// doc comment on why that isn't rolled back): whatever already
+// actually landed on disk before the failure is exactly what this
+// reflects.
+func (r *Root) refreshDetailsIfShowing(oldTarget, newTarget string) {
+	if r.detailsSidebarVisible && r.detailsTarget == oldTarget {
+		r.loadDetailsTarget(newTarget)
+	}
+}
+
 // loadDetailsTarget stats path (""=nothing meaningfully selected, e.g.
 // the ".." row or an otherwise-empty listing) and, for a non-directory
 // it successfully stats, tries loading a preview too — an image

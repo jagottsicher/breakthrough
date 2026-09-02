@@ -243,6 +243,75 @@ func TestCutToClipboardThenPasteRemovesSource(t *testing.T) {
 	}
 }
 
+// TestPasteMoveRefreshesDetailsShowingSameFile pins the user's own
+// explicit request extended to Cut+Paste: a moved file is the same real
+// entry under a new path, exactly like a rename — Details needs to keep
+// following it (see refreshDetailsIfShowing's own doc comment and
+// pasteInto's own "only for a successful Move, not Copy" scoping). The
+// panel deliberately never navigates away here (pasteInto can target
+// any directory directly, not just wherever the panel currently is —
+// see its own doc comment): moving away would already reset Details on
+// its own via the ordinary SetSelectionChangedFunc path, which isn't
+// what this is pinning.
+func TestPasteMoveRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := fixtureDir(t)
+	otherDir := t.TempDir()
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	src := filepath.Join(dir, "banana.txt")
+	r.target = src
+	r.cutToClipboard()
+
+	r.panel.focusRow(4) // banana.txt — the panel itself stays in dir throughout
+	r.showDetailsSidebar()
+	if r.detailsTarget != src {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
+	}
+
+	r.pasteInto(otherDir)
+
+	want := filepath.Join(otherDir, "banana.txt")
+	if r.detailsTarget != want {
+		t.Errorf("detailsTarget after Cut+Paste = %q, want %q", r.detailsTarget, want)
+	}
+}
+
+// TestPasteCopyDoesNotDisturbDetails is the copy-side counterpart: the
+// source is untouched by a copy, so Details showing it must not be
+// redirected anywhere — unlike Move, there's no "same entry, new path"
+// to follow.
+func TestPasteCopyDoesNotDisturbDetails(t *testing.T) {
+	dir := fixtureDir(t)
+	otherDir := t.TempDir()
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	src := filepath.Join(dir, "banana.txt")
+	r.target = src
+	r.copyToClipboard()
+
+	r.panel.focusRow(4) // banana.txt
+	r.showDetailsSidebar()
+	if r.detailsTarget != src {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
+	}
+
+	r.pasteInto(otherDir)
+
+	if r.detailsTarget != src {
+		t.Errorf("detailsTarget after Copy+Paste = %q, want unchanged %q", r.detailsTarget, src)
+	}
+}
+
 // TestClipboardTargetsPrefersSelectionOverTarget pins clipboardTargets'
 // rule: the checkbox selection wins over the right-clicked target when
 // there is one, so Copy/Cut on a multi-row selection acts on all of it
@@ -343,6 +412,37 @@ func TestRenameRowNoopsForDotDot(t *testing.T) {
 	}
 }
 
+// TestFinishRenameRefreshesDetailsShowingSameFile pins the user's own
+// explicit request: committing a rename (F2, or the click-pause-click
+// gesture) immediately updates Details too, if it's showing that same
+// file — following it to its own new path, the same fix
+// savePropertiesEdit already needed for a rename via Properties (see
+// refreshDetailsIfShowing's own doc comment).
+func TestFinishRenameRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	path := filepath.Join(dir, "apple.txt")
+	r.panel.focusRow(2) // apple.txt
+	r.showDetailsSidebar()
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, path)
+	}
+
+	r.renameRow(2)
+	r.rename.SetText("renamed.txt")
+	r.finishRename(tcell.KeyEnter)
+
+	want := filepath.Join(dir, "renamed.txt")
+	if r.detailsTarget != want {
+		t.Errorf("detailsTarget after rename = %q, want %q", r.detailsTarget, want)
+	}
+}
+
 // TestChownViaPromptNoopToOwnUser is Chown's counterpart, kept privilege-
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
 // ownership to anyone else needs root, but chowning to the process's own
@@ -369,6 +469,42 @@ func TestChownTextFallbackNoopToOwnUser(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("chown to own uid/gid should succeed, got error overlay: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestApplyChownRefreshesDetailsShowingSameFile pins the user's own
+// explicit request extended to the standalone chown action: applying it
+// immediately updates Details too, if it's showing that same file (see
+// refreshDetailsIfShowing's own doc comment).
+func TestApplyChownRefreshesDetailsShowingSameFile(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(2) // apple.txt
+	r.showDetailsSidebar()
+	if r.detailsTarget != path {
+		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, path)
+	}
+	// A same-uid/gid chown (see TestChownNoopToOwnUser in fsops for why
+	// that's the only privilege-free option here) leaves detailsStat's
+	// own content unchanged either way, so a value comparison can't tell
+	// "reloaded" apart from "never touched" — detailsMetadataState,
+	// unconditionally reset by loadDetailsTarget (see its own doc
+	// comment) regardless of what the fresh stat comes back as, can.
+	r.detailsMetadataState = "stale-marker"
+
+	r.applyChown(path, os.Getuid(), os.Getgid())
+
+	if r.detailsTarget != path {
+		t.Fatalf("detailsTarget changed unexpectedly to %q", r.detailsTarget)
+	}
+	if r.detailsMetadataState != "" {
+		t.Error("detailsMetadataState should have been reset by loadDetailsTarget — Details wasn't actually reloaded")
 	}
 }
 

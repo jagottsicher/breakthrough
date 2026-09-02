@@ -689,13 +689,18 @@ func (r *Root) cancelChmodDialog() {
 // applyChmodToTarget), continuing through the rest even if one fails —
 // the same "collect only the first error, keep going" convention
 // pasteInto's own multi-target loop already uses, rather than
-// abandoning the whole batch over one bad target.
+// abandoning the whole batch over one bad target. Refreshes Details for
+// each target regardless of its own outcome (see
+// refreshDetailsIfShowing's own doc comment on why that's safe even
+// after a partial failure) — a no-op for every target but whichever
+// one, if any, Details actually happens to be showing.
 func (r *Root) applyChmodDialog() {
 	var firstErr error
 	for _, target := range r.chmodTargets {
 		if err := r.applyChmodToTarget(target); err != nil && firstErr == nil {
 			firstErr = err
 		}
+		r.refreshDetailsIfShowing(target, target)
 	}
 
 	r.hideOverlay()
