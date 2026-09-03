@@ -75,15 +75,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// updateOverlayTitleBarColors below instead, since — per the user's
 	// own explicit request — it now depends on whether the context menu
 	// is the currently active overlay, the same as propertiesTitleBar.
-	r.menu.SetBackgroundColor(theme.AccentBackground)
-	r.menu.SetMainTextColor(theme.Text)
-	// SelectionBackground (the same turquoise/darkcyan the panel's own
-	// current row already highlights with — see Panel.paintStaticChrome)
-	// instead of tview.List's own uncustomized default (a plain white
-	// background), per the user's own explicit request.
-	r.menu.SetSelectedStyle(tcell.StyleDefault.
-		Background(theme.SelectionBackground).
-		Foreground(theme.Text))
+	styleList(r.menu, theme)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
 	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
@@ -96,14 +88,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.prompt.SetLabelColor(theme.Text)
 	r.prompt.SetFieldTextColor(theme.Text)
 
-	r.quitConfirm.SetBackgroundColor(theme.AccentBackground)
-	r.quitConfirm.SetMainTextColor(theme.Text)
+	styleList(r.quitConfirm, theme)
 
-	r.purgeConfirm.SetBackgroundColor(theme.AccentBackground)
-	r.purgeConfirm.SetMainTextColor(theme.Text)
+	styleList(r.purgeConfirm, theme)
 
-	r.picker.SetBackgroundColor(theme.AccentBackground)
-	r.picker.SetMainTextColor(theme.Text)
+	styleList(r.picker, theme)
 
 	r.errorView.SetTextColor(theme.Text)
 	r.errorView.SetBackgroundColor(theme.ErrorBackground)
@@ -150,8 +139,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	if r.optionsList != nil {
-		r.optionsList.SetBackgroundColor(theme.AccentBackground)
-		r.optionsList.SetMainTextColor(theme.Text)
+		styleList(r.optionsList, theme)
 	}
 
 	if r.searchTop != nil {
@@ -182,8 +170,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerHeader.SetTextColor(theme.Text)
-		r.dirPickerList.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerList.SetMainTextColor(theme.Text)
+		styleList(r.dirPickerList, theme)
 		styleButton(r.dirPickerSelectBtn, theme)
 		styleButton(r.dirPickerCancelBtn, theme)
 	}
@@ -228,16 +215,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedForm.SetLabelColor(theme.Text)
 	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.sedForm.SetFieldTextColor(theme.Text)
-	r.sedFlagsList.SetBackgroundColor(theme.AccentBackground)
-	r.sedFlagsList.SetMainTextColor(theme.Text)
-	r.sedActions.SetBackgroundColor(theme.AccentBackground)
-	r.sedActions.SetMainTextColor(theme.Text)
+	styleList(r.sedFlagsList, theme)
+	styleList(r.sedActions, theme)
 
 	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewStatus.SetTextColor(theme.Text)
 	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewActions.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewActions.SetMainTextColor(theme.Text)
+	r.sedPreviewTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.FocusedBackground).
+		Foreground(theme.Text))
+	styleList(r.sedPreviewActions, theme)
 
 	r.panel.applyTheme(theme)
 }
@@ -263,4 +250,20 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 func styleButton(b *tview.Button, theme config.ResolvedTheme) {
 	b.SetStyle(tcell.StyleDefault.Background(theme.ButtonBackground).Foreground(theme.Text))
 	b.SetActivatedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
+}
+
+// styleList applies this app's own list look — AccentBackground overall,
+// white text, FocusedBackground on whichever item is currently selected
+// — to a real tview.List (the context menu, quit/purge confirmation,
+// the owner/group and directory pickers, Options, Sed Replace's own
+// flag/action lists, ...). Per the user's own explicit request to apply
+// the context menu's own selection fix (see its own PR) everywhere a
+// list exists: every one of these was still showing tview.List's own
+// entirely uncustomized selected-item look (a plain white background)
+// — the same real, previously-unnoticed gap styleButton's own doc
+// comment documents for buttons, just for List instead of Button.
+func styleList(l *tview.List, theme config.ResolvedTheme) {
+	l.SetBackgroundColor(theme.AccentBackground)
+	l.SetMainTextColor(theme.Text)
+	l.SetSelectedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
 }
