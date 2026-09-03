@@ -483,6 +483,29 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
 
+	// Not SetFocusFunc/SetBlurFunc, unlike every other focus-dependent
+	// widget in this file — verified directly against tview's own
+	// inputfield.go/textarea.go, not guessed: InputField wraps an inner
+	// *TextArea, and TextArea.MouseHandler's own click handling calls
+	// setFocus(t) with itself, not with the outer InputField. tview's
+	// Application tracks whatever setFocus was last given, so after a
+	// mouse click into filterField, Application's own focus pointer holds
+	// the inner textArea directly. The InputField constructor forwards
+	// the textArea's focus callback up to the outer Box (which is why
+	// SetFocusFunc above would still fire), but there's no matching
+	// blur-forwarding line — so the next time focus moves elsewhere,
+	// Application blurs the textArea directly, bypassing
+	// InputField.Blur() (and therefore SetBlurFunc) entirely. Confirmed
+	// live: the field correctly turned FocusedBackground on click but
+	// never reverted on blur. HasFocus() itself isn't affected by any
+	// of this (it ORs the textArea's own correctly-toggling flag), so a
+	// SetDrawFunc — run on every screen refresh, not just on a focus
+	// transition — sidesteps the missing callback rather than fighting it.
+	p.filterField.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		p.setFilterFieldStyle(p.filterField.HasFocus())
+		return x, y, width, height
+	})
+
 	p.paintStaticChrome()
 
 	// headerRow puts the path bar and the filter side by side in the
@@ -519,26 +542,28 @@ func (p *Panel) paintStaticChrome() {
 	p.header.SetTextColor(p.theme.Text)
 	p.header.SetBackgroundColor(p.theme.AccentBackground)
 
-	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
-	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
+	// FocusedBackground, not AccentBackground: like propertiesEditField/
+	// chmodEditField/searchEditField, headerEdit only ever exists on
+	// screen while it's the thing actually accepting keystrokes (see
+	// openEdit/finishEdit's own headerPages.SwitchToPage calls) — there's
+	// no "visible but not focused" state for it to distinguish from, so
+	// it's always the "currently active input" color, per the user's own
+	// explicit request that every input field in the app follow the same
+	// active/inactive/grayed-out convention consistently.
+	p.headerEdit.SetFieldBackgroundColor(p.theme.FocusedBackground)
+	p.headerEdit.SetBackgroundColor(p.theme.FocusedBackground)
 	p.headerEdit.SetFieldTextColor(p.theme.Text)
 	p.headerEdit.SetLabelColor(p.theme.Text)
 
 	styleButton(p.filterRegexBtn, p.theme)
 
-	// SetPlaceholderStyle, not SetPlaceholderTextColor: the latter only
-	// ever touches the placeholder's own foreground, never its
-	// background — verified directly against tview's own
-	// inputfield.go, not guessed — so the field's own background while
-	// showing its "filter" placeholder (i.e. empty) was still tview's
-	// entirely uncustomized default (a plain blue) regardless, the same
-	// class of bug styleButton's own doc comment documents for buttons.
-	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.
-		Background(p.theme.AccentBackground).
-		Foreground(p.theme.PlaceholderText))
-	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
-	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
-	p.filterField.SetFieldTextColor(p.theme.Text)
+	// Unlike headerEdit above, filterField DOES have a real "sometimes
+	// focused, sometimes not" cycle — it sits permanently in the header
+	// row alongside filterRegexBtn, not shown/hidden the way headerEdit
+	// is — so it gets the same FocusedBackground/EditableBackground
+	// focus-dependent pair every other multi-state panel in this app
+	// already has (see setFilterFieldStyle's own doc comment).
+	p.setFilterFieldStyle(p.filterField.HasFocus())
 
 	// The panel's own current-row highlight — see setSelectionStyle's own
 	// doc comment for why this isn't just a fixed color the way it used
@@ -575,6 +600,31 @@ func (p *Panel) setSelectionStyle(focused bool) {
 		bg = p.theme.FocusedBackground
 	}
 	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
+}
+
+// setFilterFieldStyle sets filterField's own background (and its
+// placeholder's, which needs setting separately — see paintStaticChrome's
+// own comment on SetPlaceholderStyle) to FocusedBackground if focused,
+// EditableBackground otherwise — per the user's own explicit request
+// that every input field in the app show the same active/inactive
+// distinction consistently, not just the newer panels.
+//
+// Takes focused explicitly, the same shape setSelectionStyle uses, but
+// for a different reason here: its only two callers are paintStaticChrome
+// and filterField's own SetDrawFunc (see NewPanel), both of which already
+// have a trustworthy answer in hand (SetDrawFunc's is freshly queried via
+// HasFocus() right before calling this) — see NewPanel's own comment for
+// why filterField needs a SetDrawFunc at all rather than the
+// SetFocusFunc/SetBlurFunc pair every other widget here uses.
+func (p *Panel) setFilterFieldStyle(focused bool) {
+	bg := p.theme.EditableBackground
+	if focused {
+		bg = p.theme.FocusedBackground
+	}
+	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.PlaceholderText))
+	p.filterField.SetFieldBackgroundColor(bg)
+	p.filterField.SetBackgroundColor(bg)
+	p.filterField.SetFieldTextColor(p.theme.Text)
 }
 
 // applyTheme switches the panel to theme live: every already-built

@@ -376,6 +376,70 @@ func TestChmodBitsAndOctalStayInSync(t *testing.T) {
 	}
 }
 
+// TestActivateChmodFieldOctalOpensBlank pins the user's own explicit
+// request that this field, like Properties' own equivalent, start
+// blank rather than pre-filled with the current value: opening it
+// (click or Tab) should let you type a fresh 4-digit value straight
+// over it. Leaving without typing anything simply leaves stagedChmodMode
+// as it was (see applyChmodEditText's own handling of invalid/empty
+// input) — nothing is lost by this being blank.
+func TestActivateChmodFieldOctalOpensBlank(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+
+	span, ok := r.chmodSpanForField(chmodFieldMode)
+	if !ok {
+		t.Fatal("no chmodFieldMode span found")
+	}
+	r.activateChmodField(span)
+
+	if got := r.chmodEditField.GetText(); got != "" {
+		t.Errorf("edit field pre-filled with %q, want it blank", got)
+	}
+	if r.stagedChmodMode != 0o644 {
+		t.Errorf("stagedChmodMode = %o, want unchanged 0644 (opening the field alone must not change it)", r.stagedChmodMode)
+	}
+}
+
+// TestChmodEditFieldLimitsToFourDigits pins the user's own explicit
+// request that this field be capped at 4 characters while actually
+// typing — via SetAcceptanceFunc (see newChmodDialog's own doc comment
+// on why: this tview version has no real InputField.SetMaxLength to
+// reach for instead).
+func TestChmodEditFieldLimitsToFourDigits(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+
+	span, ok := r.chmodSpanForField(chmodFieldMode)
+	if !ok {
+		t.Fatal("no chmodFieldMode span found")
+	}
+	r.activateChmodField(span)
+
+	for _, ch := range "076543" { // 6 digits typed, only the first 4 should land
+		r.chmodEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+	}
+
+	if got := r.chmodEditField.GetText(); got != "0765" {
+		t.Errorf("edit field text = %q, want %q (capped at 4 characters)", got, "0765")
+	}
+}
+
 // TestApplyChmodDialogPlainFile is the base case: no recursion options
 // touched, one plain file target — behaves exactly like the old
 // single-target prompt did.
