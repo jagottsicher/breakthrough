@@ -1,5 +1,6 @@
 {
   "name": "Light",
+  "panel_background": "#ffffff",
   "accent_background": "#e4e4e4",
   "focused_background": "#1e6fd9",
   "error_background": "#c0392b",

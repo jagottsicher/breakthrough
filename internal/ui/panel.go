@@ -511,6 +511,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 // NewPanel (p.theme already set to the caller's initial value) and again,
 // after p.theme changes, from applyTheme (a live color-scheme switch).
 func (p *Panel) paintStaticChrome() {
+	p.table.SetBackgroundColor(p.theme.PanelBackground)
 	p.columnHeader.SetBackgroundColor(p.theme.AccentBackground)
 
 	p.header.SetTextColor(p.theme.Text)

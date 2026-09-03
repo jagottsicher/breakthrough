@@ -11,6 +11,7 @@ import (
 func TestDefaultThemeResolvesAllFieldsToValidColors(t *testing.T) {
 	resolved := DefaultTheme().Resolve()
 	fields := map[string]tcell.Color{
+		"PanelBackground":     resolved.PanelBackground,
 		"AccentBackground":    resolved.AccentBackground,
 		"FocusedBackground":   resolved.FocusedBackground,
 		"ErrorBackground":     resolved.ErrorBackground,

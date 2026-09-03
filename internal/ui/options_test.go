@@ -82,6 +82,12 @@ func TestApplyColorSchemeAppliesLiveAndPersists(t *testing.T) {
 	if r.theme.AccentBackground != wantTheme.AccentBackground {
 		t.Errorf("r.theme.AccentBackground = %v, want %v (applied live)", r.theme.AccentBackground, wantTheme.AccentBackground)
 	}
+	// The main panel's own background, pinned to a real themed value
+	// (PanelBackground) rather than left as the terminal's own default —
+	// per the user's own explicit request (see paintStaticChrome).
+	if got := r.panel.table.GetBackgroundColor(); got != wantTheme.PanelBackground {
+		t.Errorf("r.panel.table background = %v, want %v (applyTheme should have repainted it)", got, wantTheme.PanelBackground)
+	}
 	// EditableBackground, not AccentBackground: r.menu's own content now
 	// shares the same constant gray every panel's content area does —
 	// menuTitleBar (its title bar) is what carries AccentBackground
