@@ -768,3 +768,29 @@ func TestChmodFilesRowClickAnywhereEnablesWhenDisabled(t *testing.T) {
 		t.Error("clicking anywhere on the disabled Files row should have enabled it")
 	}
 }
+
+// TestChmodFilesRowShowsRecursiveHint pins the user's own explicit
+// follow-up request: a plain "recursive" word follows Files' own value —
+// explaining that checking the box reaches every file inside, not just
+// the folder's own immediate children — shown in both states, disabled
+// and enabled alike, and never its own clickable field either way
+// (unlike Directory's own "recursive" toggle right above it, which is).
+func TestChmodFilesRowShowsRecursiveHint(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 1) // app-data
+	r.openChmod()
+
+	if got := r.chmodText.GetText(true); !strings.Contains(got, "recursive") {
+		t.Errorf("chmodText = %q, want it to contain %q while Files is disabled", got, "recursive")
+	}
+
+	r.stagedChmodFilesEnabled = true
+	r.rerenderChmodDialog()
+	if got := r.chmodText.GetText(true); !strings.Contains(got, "recursive") {
+		t.Errorf("chmodText = %q, want it to still contain %q once Files is enabled", got, "recursive")
+	}
+}

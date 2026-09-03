@@ -39,14 +39,18 @@ const (
 	chmodFieldRecursiveDirs // toggle: also recurse into every subdirectory (fsops.ChmodDirsRecursive)
 
 	// chmodFieldFilesEnable is the "also touch files inside" checkbox —
-	// deliberately not called/labeled "recursive" (see its own render
-	// site in renderChmodDialog): recursion isn't a separate choice
-	// here, there never was a "just this folder's own files, not nested
-	// ones" option, so the checkbox's own job is purely whether files
-	// get touched at all. Files' own 9 individual rwx bits and octal
-	// value (chmodFilesModeBitFields/chmodFieldFilesMode below) only
-	// render — and so only exist as field stops at all — once this is
-	// checked; see chmodFieldOrder/permissionBitsAndOctal.
+	// deliberately not itself called/labeled "recursive" (see its own
+	// render site in renderChmodDialog): recursion isn't a separate
+	// choice here, there never was a "just this folder's own files, not
+	// nested ones" option, so the checkbox's own job is purely whether
+	// files get touched at all. A plain, non-interactive "recursive"
+	// word after its own value is what explains what checking it
+	// actually does (every file inside, not just the folder's own
+	// immediate children) — see renderChmodDialog. Files' own 9
+	// individual rwx bits and octal value
+	// (chmodFilesModeBitFields/chmodFieldFilesMode below) only render —
+	// and so only exist as field stops at all — once this is checked;
+	// see chmodFieldOrder/permissionBitsAndOctal.
 	chmodFieldFilesEnable
 
 	// Files' own mirror of Permissions' own bit block above, toggling
@@ -410,7 +414,11 @@ func (cb *chmodBuilder) toggle(checked bool, label string, field chmodField) {
 // instead: whether files get touched at all, not a recursion depth
 // choice (there never was a non-recursive "just this one folder's own
 // files" option to distinguish it from — see chmodFieldFilesEnable's
-// own doc comment).
+// own doc comment). A plain "recursive" word, with no checkbox or span
+// of its own, follows Files' own value anyway — per the user's own
+// explicit request for a hint that checking it reaches every file
+// inside, not just the folder's own immediate children, without a
+// second clickable control implying it's a separate choice.
 func (r *Root) renderChmodDialog() {
 	cb := &chmodBuilder{root: r}
 	cb.newline() // blank margin row — no border of its own, matching Properties/Search
@@ -443,6 +451,19 @@ func (r *Root) renderChmodDialog() {
 		labelEnd := cb.col
 		cb.padTo(chmodLabelWidth)
 		cb.permissionBitsAndOctal(r.stagedChmodFilesMode, chmodFilesModeBitFields, chmodFieldFilesMode, !r.stagedChmodFilesEnabled)
+
+		// "recursive" itself is never a span of its own (see
+		// chmodFieldFilesEnable's own doc comment) — while disabled it
+		// simply falls inside the one whole-row span appended below, the
+		// same as every other dimmed character on this row.
+		cb.text("   ")
+		if !r.stagedChmodFilesEnabled {
+			cb.tag(dimTag)
+		}
+		cb.text("recursive")
+		if !r.stagedChmodFilesEnabled {
+			cb.tag("[-:-:-]")
+		}
 
 		if r.stagedChmodFilesEnabled {
 			// Enabled: the checkbox+label keeps its own narrow span (to
