@@ -55,10 +55,10 @@ const detailsSidebarMinWidth = 26
 // scrolling while it has focus is exactly the same "browsing paused,
 // reading instead" tradeoff a real MC info panel accepts too.
 //
-// The content area's own background is a constant EditableBackground —
-// the same light gray every panel floating over the main one shares
-// (toolWindow's own content area included — see toolwindow.go), per the
-// user's own explicit request — regardless of focus; it's
+// The content area's own background is a constant AccentBackground —
+// the "normal panel background" every panel floating over the main one
+// shares (toolWindow's own content area included — see toolwindow.go),
+// per the user's own explicit request — regardless of focus; it's
 // detailsTitleBar (see newDetailsTitleBar), not this content area
 // itself, that shows whether Details currently has real keyboard focus.
 func (r *Root) newDetailsSidebarView() *tview.TextView {
@@ -66,24 +66,25 @@ func (r *Root) newDetailsSidebarView() *tview.TextView {
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
-	v.SetBackgroundColor(r.theme.EditableBackground)
+	v.SetBackgroundColor(r.theme.AccentBackground)
 	v.SetMouseCapture(r.captureDetailsSidebarMouse)
-	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.AccentBackground) })
-	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
+	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
+	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.AccentBackground) })
 	return v
 }
 
 // newDetailsTitleBar builds the "Details" label above the sidebar's own
 // content — the same one-row, solid-colored title-bar shape toolWindow
-// uses for consistency (see toolwindow.go): the accent color while
+// uses for consistency (see toolwindow.go): EditableBackground while
 // Details has real keyboard focus (see newDetailsSidebarView's own
-// focus/blur hooks), the same light gray the content area always has
-// while it doesn't.
+// focus/blur hooks) — a lighter "pop" against the content area, which
+// is AccentBackground itself now (see above) — the same
+// AccentBackground the content area always has while it doesn't.
 func (r *Root) newDetailsTitleBar() *tview.TextView {
 	bar := tview.NewTextView()
 	bar.SetWrap(false)
 	bar.SetText(" Details ")
-	bar.SetBackgroundColor(r.theme.EditableBackground)
+	bar.SetBackgroundColor(r.theme.AccentBackground)
 	return bar
 }
 
