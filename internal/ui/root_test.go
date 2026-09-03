@@ -72,6 +72,8 @@ func TestContextMenuStructure(t *testing.T) {
 		"Copy", "Cut", "Paste", "chown", "chmod", "Sed Replace",
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
+		menuSectionLabel("Tools"),
+		"Ping (test)", // placeholder entry point for the first toolWindow slice — see toolwindow.go
 		menuSectionLabel("Globals"),
 		"Hide hidden files",      // dotfiles are shown by default now
 		"Show size in bytes",     // human-readable is the default
