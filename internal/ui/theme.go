@@ -76,6 +76,13 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// is the currently active overlay, the same as propertiesTitleBar.
 	r.menu.SetBackgroundColor(theme.AccentBackground)
 	r.menu.SetMainTextColor(theme.Text)
+	// SelectionBackground (the same turquoise/darkcyan the panel's own
+	// current row already highlights with — see Panel.paintStaticChrome)
+	// instead of tview.List's own uncustomized default (a plain white
+	// background), per the user's own explicit request.
+	r.menu.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.Text))
 	r.menuTitleBar.SetTextColor(theme.Text)
 
 	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
