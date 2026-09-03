@@ -68,23 +68,23 @@ func (r *Root) newDetailsSidebarView() *tview.TextView {
 	v.SetBorderPadding(0, 0, 1, 1)
 	v.SetBackgroundColor(r.theme.AccentBackground)
 	v.SetMouseCapture(r.captureDetailsSidebarMouse)
-	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
-	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.AccentBackground) })
+	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.FocusedBackground) })
+	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
 	return v
 }
 
 // newDetailsTitleBar builds the "Details" label above the sidebar's own
 // content — the same one-row, solid-colored title-bar shape toolWindow
-// uses for consistency (see toolwindow.go): EditableBackground while
-// Details has real keyboard focus (see newDetailsSidebarView's own
-// focus/blur hooks) — a lighter "pop" against the content area, which
-// is AccentBackground itself now (see above) — the same
-// AccentBackground the content area always has while it doesn't.
+// uses for consistency (see toolwindow.go): FocusedBackground (a dark
+// cyan/"petrol" tone) while Details has real keyboard focus (see
+// newDetailsSidebarView's own focus/blur hooks), EditableBackground (the
+// lighter slate gray) while it doesn't — independent of the content
+// area's own separate, constant AccentBackground (see above).
 func (r *Root) newDetailsTitleBar() *tview.TextView {
 	bar := tview.NewTextView()
 	bar.SetWrap(false)
 	bar.SetText(" Details ")
-	bar.SetBackgroundColor(r.theme.AccentBackground)
+	bar.SetBackgroundColor(r.theme.EditableBackground)
 	return bar
 }
 

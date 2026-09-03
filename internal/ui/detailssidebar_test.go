@@ -194,8 +194,9 @@ func TestLoadDetailsTargetResetsScrollPosition(t *testing.T) {
 // TestDetailsSidebarBackgroundReflectsFocusState pins the visual cue
 // SetFocusFunc/SetBlurFunc give (see newDetailsSidebarView's own doc
 // comment): the content area stays a constant AccentBackground
-// regardless of focus, while detailsTitleBar swaps to EditableBackground
-// while Details itself has real keyboard focus.
+// regardless of focus, while detailsTitleBar swaps to FocusedBackground
+// (a dark cyan/"petrol" tone) while Details itself has real keyboard
+// focus, and EditableBackground while it doesn't.
 func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -216,21 +217,21 @@ func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 		t.Errorf("content background = %v, want the constant AccentBackground %v", got, want)
 	}
 
-	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("title bar background before focus = %v, want AccentBackground %v", got, want)
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background before focus = %v, want EditableBackground %v", got, want)
 	}
 
 	r.CycleFocusShortcut()
 	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
 		t.Errorf("content background while focused = %v, want still the constant AccentBackground %v", got, want)
 	}
-	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("title bar background while focused = %v, want EditableBackground %v", got, want)
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("title bar background while focused = %v, want FocusedBackground %v", got, want)
 	}
 
 	r.CycleFocusShortcut()
-	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("title bar background after losing focus again = %v, want AccentBackground %v", got, want)
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
 	}
 }
 
