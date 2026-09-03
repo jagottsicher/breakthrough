@@ -128,6 +128,53 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 	}
 }
 
+// TestUpdateOverlayTitleBarColorsTracksActiveOverlay pins the user's own
+// explicit request that this active/inactive title-bar distinction apply
+// to every panel with one, not just tool windows'/Details' own:
+// whichever of Properties/the context menu is currently the topmost
+// overlay gets FocusedBackground on its own title bar, the other (or
+// both, if neither is open) gets EditableBackground — see
+// updateOverlayTitleBarColors' own doc comment.
+func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("propertiesTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	}
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	}
+
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("propertiesTitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar while Properties (not the menu) is open = %v, want EditableBackground %v", got, want)
+	}
+
+	// showMenu (via showOverlay/closeAllOverlays) closes Properties first
+	// — the same "only one overlay at a time" policy every other opener
+	// already follows.
+	r.showMenu(0, 0)
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("menuTitleBar while the menu is open = %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("propertiesTitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
+	}
+
+	r.hideOverlay()
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar after closing it = %v, want EditableBackground %v", got, want)
+	}
+}
+
 // TestToggleHiddenViaMenu drives the actual menu action, and pins that
 // the item's own label flips to describe the next click, not the current
 // state.
