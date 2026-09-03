@@ -56,12 +56,20 @@ type Theme struct {
 	// focusable element in this app already follows.
 	ButtonBackground string `json:"button_background"`
 	// FocusedBackground highlights whichever field currently has
-	// keyboard focus in the Properties overlay.
+	// keyboard focus in the Properties overlay, a list's currently
+	// selected item, and the panel's own currently selected row while it
+	// (rather than some other panel — Details, a tool window, ...) has
+	// real keyboard focus — one single "this is where keyboard input
+	// goes right now" color, used consistently everywhere in the app
+	// that needs one. Was two separate, always-identical fields
+	// (FocusedBackground and SelectionBackground) before the user's own
+	// explicit request to merge them: every shipped color scheme,
+	// including this app's own default, had already set them to the
+	// exact same value, making the distinction real in the type system
+	// but never in practice.
 	FocusedBackground string `json:"focused_background"`
 	// ErrorBackground is the error overlay's background.
 	ErrorBackground string `json:"error_background"`
-	// SelectionBackground highlights the panel's currently selected row.
-	SelectionBackground string `json:"selection_background"`
 	// DirectoryBackground highlights an entry's own name — not the
 	// trailing "/" beside it, nor a symlink's " -> target" arrow, nor the
 	// rest of the row — whenever Enter navigates into it: directories,
@@ -138,7 +146,6 @@ type ResolvedTheme struct {
 	ButtonBackground    tcell.Color
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
-	SelectionBackground tcell.Color
 	DirectoryBackground tcell.Color
 
 	Text               tcell.Color
@@ -167,7 +174,6 @@ func DefaultTheme() Theme {
 		ButtonBackground:    "lightseagreen",
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
-		SelectionBackground: "darkcyan",
 		DirectoryBackground: "darkgoldenrod",
 
 		Text:               "white",
@@ -207,7 +213,6 @@ func (t Theme) Resolve() ResolvedTheme {
 		ButtonBackground:    resolve(t.ButtonBackground, def.ButtonBackground),
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
-		SelectionBackground: resolve(t.SelectionBackground, def.SelectionBackground),
 		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
 
 		Text:               resolve(t.Text, def.Text),
