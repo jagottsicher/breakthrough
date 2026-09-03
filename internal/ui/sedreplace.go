@@ -29,7 +29,7 @@ const (
 
 var sedFlagOrder = []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup}
 
-// openSedReplace is the context menu's "Sed Replace", and (through
+// openSedReplace is the context menu's "sed", and (through
 // SedReplaceShortcut) Ctrl+S's action: opens a dialog to run a real
 // sed(1) substitution against the current selection (or the current
 // row) — see internal/replace's own package doc for why this shells out
@@ -552,7 +552,7 @@ func (r *Root) confirmApplySed() {
 
 // SedReplaceShortcut is Ctrl+S's global action (see cmd/breakthrough and
 // acceptsGlobalShortcut) — the keyboard/button-bar equivalent of the
-// context menu's "Sed Replace".
+// context menu's "sed".
 func (r *Root) SedReplaceShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openSedReplace()
