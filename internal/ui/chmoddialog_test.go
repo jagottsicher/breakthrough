@@ -139,7 +139,12 @@ func TestChmodDialogHidesRecursiveSectionForPlainFiles(t *testing.T) {
 }
 
 // TestChmodDialogShowsRecursiveSectionForDirectory is the mirror image:
-// once any target is a directory, every field shows.
+// once any target is a directory, Permissions'/Directory's own field
+// plus the folders toggle and the Files-enable checkbox all show right
+// away. Files' own individual bits/octal value are a further step:
+// they only become field stops once stagedChmodFilesEnabled is actually
+// checked (see chmodFieldOrder's own doc comment) — this pins both
+// halves, before and after checking it.
 func TestChmodDialogShowsRecursiveSectionForDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -152,10 +157,19 @@ func TestChmodDialogShowsRecursiveSectionForDirectory(t *testing.T) {
 	if !r.chmodAnyDir {
 		t.Fatal("chmodAnyDir should be true for a directory target")
 	}
-	for _, f := range []chmodField{chmodFieldMode, chmodFieldRecursiveDirs, chmodFieldFilesMode, chmodFieldFilesEnable} {
+	for _, f := range []chmodField{chmodFieldMode, chmodFieldRecursiveDirs, chmodFieldFilesEnable} {
 		if _, ok := r.chmodSpanForField(f); !ok {
 			t.Errorf("field %v should be rendered for a directory target", f)
 		}
+	}
+	if _, ok := r.chmodSpanForField(chmodFieldFilesMode); ok {
+		t.Error("chmodFieldFilesMode should not have its own field yet — Files isn't enabled")
+	}
+
+	r.stagedChmodFilesEnabled = true
+	r.rerenderChmodDialog()
+	if _, ok := r.chmodSpanForField(chmodFieldFilesMode); !ok {
+		t.Error("chmodFieldFilesMode should have its own field once Files is enabled")
 	}
 }
 
@@ -294,7 +308,9 @@ func TestChmodBitKeyboardShortcuts(t *testing.T) {
 
 // TestChmodFilesBitKeyboardShortcuts is the same pin for Files' own 9
 // bits — independent of Permissions', toggling stagedChmodFilesMode
-// instead.
+// instead. Files must actually be enabled first: its own bits aren't
+// field stops at all until then (see chmodFieldOrder's own doc
+// comment).
 func TestChmodFilesBitKeyboardShortcuts(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -303,6 +319,7 @@ func TestChmodFilesBitKeyboardShortcuts(t *testing.T) {
 	}
 	selectRow(r, 1) // app-data — a directory, so the Files row exists
 	r.openChmod()
+	r.stagedChmodFilesEnabled = true
 	r.stagedChmodFilesMode = 0
 
 	idx, _ := r.chmodFieldIndex(chmodFieldFilesGroupWrite)
@@ -646,6 +663,8 @@ func TestOpenChmodResetsStaleEditField(t *testing.T) {
 	}
 	selectRow(r, 1) // app-data — a directory, so it has a Files row to edit
 	r.openChmod()
+	r.stagedChmodFilesEnabled = true // Files' own bits/octal aren't field stops otherwise
+	r.rerenderChmodDialog()
 
 	filesSpan, ok := r.chmodSpanForField(chmodFieldFilesMode)
 	if !ok {
@@ -680,5 +699,72 @@ func TestOpenChmodNoopWithoutTarget(t *testing.T) {
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q, want still closed", r.activePage)
+	}
+}
+
+// TestChmodFirstRowLabelSwitchesOnDirectory pins the user's own explicit
+// request: the first row reads "Permissions:" for a plain-file-only
+// selection (there's no separate Files row to disambiguate it from) and
+// "Directory:" once a directory is involved (Files' own row exists
+// alongside it then, so the more specific word — plus the shared
+// "Permissions" column heading above both rows — says which one this is).
+func TestChmodFirstRowLabelSwitchesOnDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	selectRow(r, 2) // apple.txt — plain file
+	r.openChmod()
+	got := r.chmodText.GetText(true)
+	if !strings.Contains(got, "Permissions:") {
+		t.Errorf("chmodText = %q, want it to contain %q for a plain-file selection", got, "Permissions:")
+	}
+	if strings.Contains(got, "Directory:") {
+		t.Errorf("chmodText = %q, should not contain %q for a plain-file selection", got, "Directory:")
+	}
+
+	selectRow(r, 1) // app-data — a directory
+	r.openChmod()
+	got = r.chmodText.GetText(true)
+	if !strings.Contains(got, "Directory:") {
+		t.Errorf("chmodText = %q, want it to contain %q once a directory is selected", got, "Directory:")
+	}
+	if !strings.Contains(got, "Permissions") {
+		t.Errorf("chmodText = %q, want it to still contain the %q column heading", got, "Permissions")
+	}
+}
+
+// TestChmodFilesRowClickAnywhereEnablesWhenDisabled pins the user's own
+// explicit request: while Files isn't enabled yet, a click doesn't have
+// to land precisely on the ○ glyph — anywhere on that same row (e.g.
+// over the dimmed permission display itself) turns it on too.
+func TestChmodFilesRowClickAnywhereEnablesWhenDisabled(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 1) // app-data
+	r.openChmod()
+
+	if r.stagedChmodFilesEnabled {
+		t.Fatal("setup: Files should start disabled")
+	}
+	span, ok := r.chmodSpanForField(chmodFieldFilesEnable)
+	if !ok {
+		t.Fatal("no chmodFieldFilesEnable span found")
+	}
+	// The row's own single span, while disabled, spans well past the
+	// checkbox+label alone (see renderChmodDialog) — pin that it really
+	// does cover the dimmed permission display too, not just "○ Files:".
+	if span.endCol-span.startCol <= len("○ Files:") {
+		t.Errorf("disabled Files row span is only %d cols wide, want it to also cover the dimmed permission display", span.endCol-span.startCol)
+	}
+
+	r.activateChmodField(span)
+	if !r.stagedChmodFilesEnabled {
+		t.Error("clicking anywhere on the disabled Files row should have enabled it")
 	}
 }
