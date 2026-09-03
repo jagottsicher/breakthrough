@@ -402,10 +402,11 @@ func TestCycleFocusShortcutSkipsClosedToolWindow(t *testing.T) {
 // explicit request that every panel floating over the main one share
 // one look: the content area is always AccentBackground, the same
 // "normal panel background" Details' own content area has (see
-// detailssidebar.go's newDetailsSidebarView), and the title bar swaps
-// between that same color while unfocused and EditableBackground while
-// focused — the same two-state scheme Details' own title bar
-// (newDetailsTitleBar) uses.
+// detailssidebar.go's newDetailsSidebarView), independent of the title
+// bar's own separate two-state pair — EditableBackground while
+// unfocused, FocusedBackground (a dark cyan/"petrol" tone) while
+// focused — the same scheme Details' own title bar (newDetailsTitleBar)
+// uses.
 func TestToolWindowBackgroundMatchesDetailsSidebar(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
@@ -416,20 +417,20 @@ func TestToolWindowBackgroundMatchesDetailsSidebar(t *testing.T) {
 	if got, want := tw.content.GetBackgroundColor(), r.theme.AccentBackground; got != want {
 		t.Errorf("content background = %v, want AccentBackground %v", got, want)
 	}
-	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("title bar background before focus = %v, want AccentBackground %v", got, want)
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background before focus = %v, want EditableBackground %v", got, want)
 	}
 
 	tw.Focus(func(tview.Primitive) {})
-	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
-		t.Errorf("title bar background while focused = %v, want EditableBackground %v", got, want)
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("title bar background while focused = %v, want FocusedBackground %v", got, want)
 	}
 	if got, want := tw.content.GetBackgroundColor(), r.theme.AccentBackground; got != want {
 		t.Errorf("content background while focused = %v, want still AccentBackground %v", got, want)
 	}
 
 	tw.Blur()
-	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("title bar background after losing focus again = %v, want AccentBackground %v", got, want)
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
 	}
 }
