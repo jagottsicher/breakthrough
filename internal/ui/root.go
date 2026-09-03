@@ -100,6 +100,16 @@ type Root struct {
 	// happens to support.
 	mouseEnabled bool
 
+	// toolWindows holds every currently open toolWindow (see
+	// openToolCommand), keyed by its own Pages name — unlike every other
+	// overlay in this codebase, there can be several of these open
+	// simultaneously (e.g. a ping and a tail -f side by side), each its
+	// own dynamically added/removed Pages entry rather than one fixed
+	// page reused across opens. toolWindowSeq is the source of each new
+	// one's unique id (see openToolCommand).
+	toolWindows   map[string]*toolWindow
+	toolWindowSeq int
+
 	// lastScreenWidth/Height are the terminal's own size as of the most
 	// recent handleBeforeDraw call — how it tells a genuine resize apart
 	// from any other reason a draw happens to run (a keypress, a click,
@@ -713,6 +723,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		Pages:        tview.NewPages(),
 		app:          app,
 		mouseEnabled: true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
+		toolWindows:  make(map[string]*toolWindow),
 		panel:        panel,
 		settings:     settings,
 		colorSchemes: colorSchemes,
@@ -755,6 +766,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
 	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
 	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
+	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
+	// Ping is this first toolWindow slice's own proof of concept (see
+	// toolwindow.go) — a placeholder entry point, not itself the planned
+	// feature: the real Toolbox (networking/hardware tool departments,
+	// see feature_ideas.txt) replaces this one entry with a whole
+	// submenu once it exists.
+	r.menu.AddItem("Ping (test)", "", 0, r.openPingTestWindow)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
