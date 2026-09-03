@@ -19,25 +19,170 @@ const chmodPage = "chmod"
 type chmodField int
 
 const (
-	chmodFieldNone          chmodField = iota
-	chmodFieldMode                     // the main octal value, applied directly to every target
-	chmodFieldRecursiveDirs            // toggle: also recurse into every subdirectory (fsops.ChmodDirsRecursive)
-	chmodFieldFilesMode                // the separate octal value for files, only meaningful once...
-	chmodFieldFilesEnable              // ...this toggle is on: also chmod every file inside, recursively
+	chmodFieldNone chmodField = iota
+
+	// Permissions' own 9 individual rwx bits — mirrors
+	// fieldPermOwnerRead etc. in properties.go exactly, one-for-one,
+	// just toggling stagedChmodMode instead of Properties' own
+	// stagedMode (see chmodPermFieldBit/chmodModeBitFields).
+	chmodFieldModeOwnerRead
+	chmodFieldModeOwnerWrite
+	chmodFieldModeOwnerExec
+	chmodFieldModeGroupRead
+	chmodFieldModeGroupWrite
+	chmodFieldModeGroupExec
+	chmodFieldModeOtherRead
+	chmodFieldModeOtherWrite
+	chmodFieldModeOtherExec
+
+	chmodFieldMode          // the equivalent octal value, applied directly to every target
+	chmodFieldRecursiveDirs // toggle: also recurse into every subdirectory (fsops.ChmodDirsRecursive)
+
+	// Files' own mirror of the block above, toggling stagedChmodFilesMode
+	// instead (see chmodFilesModeBitFields).
+	chmodFieldFilesOwnerRead
+	chmodFieldFilesOwnerWrite
+	chmodFieldFilesOwnerExec
+	chmodFieldFilesGroupRead
+	chmodFieldFilesGroupWrite
+	chmodFieldFilesGroupExec
+	chmodFieldFilesOtherRead
+	chmodFieldFilesOtherWrite
+	chmodFieldFilesOtherExec
+
+	chmodFieldFilesMode   // the equivalent octal value for files, only meaningful once...
+	chmodFieldFilesEnable // ...this toggle is on: also chmod every file inside, recursively
 )
+
+// chmodModeBitFields/chmodFilesModeBitFields are the 9 individual rwx
+// bit fields for the Permissions and Files rows respectively, in
+// owner/group/other × read/write/exec order — matching
+// os.FileMode.Perm()'s own bit order, the same as properties.go's own
+// bitFields local variable in permissionsField.
+var chmodModeBitFields = [9]chmodField{
+	chmodFieldModeOwnerRead, chmodFieldModeOwnerWrite, chmodFieldModeOwnerExec,
+	chmodFieldModeGroupRead, chmodFieldModeGroupWrite, chmodFieldModeGroupExec,
+	chmodFieldModeOtherRead, chmodFieldModeOtherWrite, chmodFieldModeOtherExec,
+}
+
+var chmodFilesModeBitFields = [9]chmodField{
+	chmodFieldFilesOwnerRead, chmodFieldFilesOwnerWrite, chmodFieldFilesOwnerExec,
+	chmodFieldFilesGroupRead, chmodFieldFilesGroupWrite, chmodFieldFilesGroupExec,
+	chmodFieldFilesOtherRead, chmodFieldFilesOtherWrite, chmodFieldFilesOtherExec,
+}
+
+// chmodPermFieldBit maps each individual rwx bit field (Permissions' or
+// Files' own set alike — the bit values themselves don't depend on
+// which of the two a field belongs to) to the bit it toggles — the same
+// 9-value table properties.go's own permFieldBit already has, just
+// covering both of this dialog's own bit sets in one map since the
+// values are identical either way.
+var chmodPermFieldBit = map[chmodField]os.FileMode{
+	chmodFieldModeOwnerRead:  0o400,
+	chmodFieldModeOwnerWrite: 0o200,
+	chmodFieldModeOwnerExec:  0o100,
+	chmodFieldModeGroupRead:  0o040,
+	chmodFieldModeGroupWrite: 0o020,
+	chmodFieldModeGroupExec:  0o010,
+	chmodFieldModeOtherRead:  0o004,
+	chmodFieldModeOtherWrite: 0o002,
+	chmodFieldModeOtherExec:  0o001,
+
+	chmodFieldFilesOwnerRead:  0o400,
+	chmodFieldFilesOwnerWrite: 0o200,
+	chmodFieldFilesOwnerExec:  0o100,
+	chmodFieldFilesGroupRead:  0o040,
+	chmodFieldFilesGroupWrite: 0o020,
+	chmodFieldFilesGroupExec:  0o010,
+	chmodFieldFilesOtherRead:  0o004,
+	chmodFieldFilesOtherWrite: 0o002,
+	chmodFieldFilesOtherExec:  0o001,
+}
+
+// chmodPermFieldLetter maps each individual rwx bit field to the rwx
+// letter that explicitly turns it on (see captureChmodKey) — the same
+// role permFieldLetter has in properties.go, and the same three ways in
+// per the user's own explicit request that Chmod's own permission entry
+// work exactly like Properties' already does: the matching letter sets
+// the bit on; Delete or '-' sets it off; Space/Enter toggle whatever it
+// currently is; a plain click does too.
+var chmodPermFieldLetter = map[chmodField]byte{
+	chmodFieldModeOwnerRead: 'r', chmodFieldModeGroupRead: 'r', chmodFieldModeOtherRead: 'r',
+	chmodFieldModeOwnerWrite: 'w', chmodFieldModeGroupWrite: 'w', chmodFieldModeOtherWrite: 'w',
+	chmodFieldModeOwnerExec: 'x', chmodFieldModeGroupExec: 'x', chmodFieldModeOtherExec: 'x',
+
+	chmodFieldFilesOwnerRead: 'r', chmodFieldFilesGroupRead: 'r', chmodFieldFilesOtherRead: 'r',
+	chmodFieldFilesOwnerWrite: 'w', chmodFieldFilesGroupWrite: 'w', chmodFieldFilesOtherWrite: 'w',
+	chmodFieldFilesOwnerExec: 'x', chmodFieldFilesGroupExec: 'x', chmodFieldFilesOtherExec: 'x',
+}
+
+// chmodBitTarget returns a pointer to whichever staged mode field's own
+// bit field is being edited — stagedChmodMode for a Permissions-row
+// field, stagedChmodFilesMode for a Files-row one — and whether field
+// is a permission-bit field at all. The pointer lets toggleChmodBit/
+// setChmodBit share one implementation for both rows instead of two
+// near-identical copies differing only in which staged field they
+// touch.
+func (r *Root) chmodBitTarget(field chmodField) (target *os.FileMode, ok bool) {
+	if _, isBit := chmodPermFieldBit[field]; !isBit {
+		return nil, false
+	}
+	switch field {
+	case chmodFieldFilesOwnerRead, chmodFieldFilesOwnerWrite, chmodFieldFilesOwnerExec,
+		chmodFieldFilesGroupRead, chmodFieldFilesGroupWrite, chmodFieldFilesGroupExec,
+		chmodFieldFilesOtherRead, chmodFieldFilesOtherWrite, chmodFieldFilesOtherExec:
+		return &r.stagedChmodFilesMode, true
+	default:
+		return &r.stagedChmodMode, true
+	}
+}
+
+// toggleChmodBit flips one permission bit — the click itself *is* the
+// edit here, unlike the octal fields, which need actual typing. The
+// same role togglePermBit has in properties.go.
+func (r *Root) toggleChmodBit(field chmodField) {
+	target, ok := r.chmodBitTarget(field)
+	if !ok {
+		return
+	}
+	*target ^= chmodPermFieldBit[field]
+	r.rerenderChmodDialog()
+}
+
+// setChmodBit explicitly sets (on) or clears (!on) one permission bit —
+// the "type the matching letter to turn it on, Delete or '-' to turn it
+// off" alternative to toggleChmodBit's "flip whatever it currently is"
+// (see captureChmodKey). The same role setPermBit has in properties.go.
+func (r *Root) setChmodBit(field chmodField, on bool) {
+	target, ok := r.chmodBitTarget(field)
+	if !ok {
+		return
+	}
+	if on {
+		*target |= chmodPermFieldBit[field]
+	} else {
+		*target &^= chmodPermFieldBit[field]
+	}
+	r.rerenderChmodDialog()
+}
 
 // chmodFieldOrder returns every field stop for the dialog's current
 // session, in the same top-to-bottom, left-to-right order
 // renderChmodDialog draws them — the Tab/Backtab navigation order,
 // mirroring currentFieldOrder's own shape in properties.go. Permissions'
-// own value is always present; the recursive-folders toggle and the
-// whole Files row only exist once chmodAnyDir is true (see openChmod) —
-// a target set made up entirely of plain files has nothing for either
-// to recurse into.
+// own 9 bits plus its own octal value are always present; the
+// recursive-folders toggle and the whole Files row (its own 9 bits,
+// octal value, and recursive toggle) only exist once chmodAnyDir is
+// true (see openChmod) — a target set made up entirely of plain files
+// has nothing for either to recurse into.
 func (r *Root) chmodFieldOrder() []chmodField {
-	order := []chmodField{chmodFieldMode}
+	order := make([]chmodField, 0, len(chmodModeBitFields)+len(chmodFilesModeBitFields)+4)
+	order = append(order, chmodModeBitFields[:]...)
+	order = append(order, chmodFieldMode)
 	if r.chmodAnyDir {
-		order = append(order, chmodFieldRecursiveDirs, chmodFieldFilesMode, chmodFieldFilesEnable)
+		order = append(order, chmodFieldRecursiveDirs)
+		order = append(order, chmodFilesModeBitFields[:]...)
+		order = append(order, chmodFieldFilesMode, chmodFieldFilesEnable)
 	}
 	return order
 }
@@ -59,8 +204,10 @@ func (r *Root) chmodFieldIndex(field chmodField) (int, bool) {
 // needed first — the same convention isAutoEditField already has in
 // properties.go: both of this dialog's octal values are plain text
 // entry, where "tab to it" and "start typing" are the same action as
-// far as the user's concerned. The two checkboxes are deliberately
-// excluded, same as every checkbox/permission-bit is in Properties.
+// far as the user's concerned. Every individual permission bit (a
+// toggle, not text — see captureChmodKey's letter/Delete/Space
+// handling) and both checkboxes are deliberately excluded, the same as
+// every permission-bit/checkbox already is in Properties.
 func isAutoEditChmodField(field chmodField) bool {
 	return field == chmodFieldMode || field == chmodFieldFilesMode
 }
@@ -114,12 +261,13 @@ func (cb *chmodBuilder) focusTag(field chmodField) (tag, reset string) {
 }
 
 // octalValue writes mode as a highlighted, clickable/editable 4-digit
-// octal span (see fsops.ParseMode) — the value half of a "Label: value"
-// line, factored out from any particular label since this dialog's two
-// mode fields (Permissions/Files) don't share one uniform layout the
-// way Properties' fields do. dimmed forces the same gray "not
-// applicable right now" style search.go's own dimTag already uses
-// there (Ignore dirs' own value field while its enable checkbox is
+// octal span (see fsops.ParseMode) — factored out from any particular
+// label since this dialog's two mode fields (Permissions/Files) don't
+// share one uniform "Label: value" layout the way Properties' fields
+// do; used both on its own and as permissionBitsAndOctal's own tail
+// (the "(0644)" half of "rwxrwxrwx (0644)"). dimmed forces the same
+// gray "not applicable right now" style search.go's own dimTag already
+// uses there (Ignore dirs' own value field while its enable checkbox is
 // off) — Files' own value while stagedChmodFilesEnabled is false.
 func (cb *chmodBuilder) octalValue(mode os.FileMode, field chmodField, dimmed bool) {
 	if dimmed {
@@ -133,6 +281,46 @@ func (cb *chmodBuilder) octalValue(mode os.FileMode, field chmodField, dimmed bo
 	end := cb.col
 	cb.tag("[-:-:-]")
 	cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: start, endCol: end, field: field})
+}
+
+// permissionBitsAndOctal writes "rwxrwxrwx (0644)" — nine individually
+// toggleable rwx characters (bitFields, one of chmodModeBitFields/
+// chmodFilesModeBitFields) plus the equivalent octal value in
+// parentheses (see octalValue), itself its own editable span
+// (octalField) — two entirely equivalent ways to set the same 9 bits,
+// always shown together, per the user's own explicit request that
+// Chmod's own permission entry work exactly like Properties'
+// permissionsField already does, identically, every time. Deliberately
+// omits Properties' own leading, non-editable file-type character: a
+// chmod-only os.FileMode never carries type bits (ParseMode only ever
+// accepts 0-0777), and this dialog's own targets can freely mix files
+// and directories in the first place, so there's no one "type" a
+// leading character could meaningfully show here. dimmed dims both
+// halves together — Files' own row while stagedChmodFilesEnabled is
+// false — the same as octalValue's own dimmed case already does for
+// just the parenthesized value alone.
+func (cb *chmodBuilder) permissionBitsAndOctal(mode os.FileMode, bitFields [9]chmodField, octalField chmodField, dimmed bool) {
+	const rwx = "rwxrwxrwx"
+	for i, f := range bitFields {
+		if dimmed {
+			cb.tag(dimTag)
+		} else {
+			tag, _ := cb.focusTag(f)
+			cb.tag(tag)
+		}
+		start := cb.col
+		ch := byte('-')
+		if mode&(1<<uint(9-1-i)) != 0 {
+			ch = rwx[i]
+		}
+		cb.text(string(ch))
+		cb.tag("[-:-:-]")
+		cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: start, endCol: cb.col, field: f})
+	}
+
+	cb.text(" (")
+	cb.octalValue(mode, octalField, dimmed)
+	cb.text(")")
 }
 
 // toggle writes one "○/● label" checkbox, per checkboxText's own ○/●
@@ -171,7 +359,7 @@ func (r *Root) renderChmodDialog() {
 	cb.newline() // blank margin row — no border of its own, matching Properties/Search
 
 	cb.text(fmt.Sprintf("%-13s", "Permissions:"))
-	cb.octalValue(r.stagedChmodMode, chmodFieldMode, false)
+	cb.permissionBitsAndOctal(r.stagedChmodMode, chmodModeBitFields, chmodFieldMode, false)
 	if r.chmodAnyDir {
 		cb.text("   ")
 		cb.toggle(r.stagedChmodRecursiveDirs, "recursive", chmodFieldRecursiveDirs)
@@ -181,7 +369,7 @@ func (r *Root) renderChmodDialog() {
 	if r.chmodAnyDir {
 		cb.newline()
 		cb.text(fmt.Sprintf("%-13s", "Files:"))
-		cb.octalValue(r.stagedChmodFilesMode, chmodFieldFilesMode, !r.stagedChmodFilesEnabled)
+		cb.permissionBitsAndOctal(r.stagedChmodFilesMode, chmodFilesModeBitFields, chmodFieldFilesMode, !r.stagedChmodFilesEnabled)
 		cb.text("   ")
 		cb.toggle(r.stagedChmodFilesEnabled, "recursive", chmodFieldFilesEnable)
 		cb.newline()
@@ -396,17 +584,23 @@ func (r *Root) activateFocusedChmodStop() {
 
 // activateChmodField is what clicking any chmodSpan does — and, via
 // activateFocusedChmodStop, what pressing Enter/Space on one via
-// keyboard navigation does too: a checkbox toggles immediately; either
-// octal value instead positions and shows the shared inline edit field
-// over that exact span, pre-filled with its current staged value — the
-// same two-switch shape activatePropertyField already has (a first
-// switch for anything that's a complete action on its own, a second for
+// keyboard navigation does too: a permission bit or checkbox toggles
+// immediately; either octal value instead positions and shows the
+// shared inline edit field over that exact span, pre-filled with its
+// current staged value — the same three-way shape activatePropertyField
+// already has (a permission-bit check first, then a second switch for
+// anything else that's a complete action on its own, then a third for
 // anything that opens the shared text editor instead).
 func (r *Root) activateChmodField(span chmodSpan) {
 	if idx, ok := r.chmodFieldIndex(span.field); ok {
 		r.chmodFocusedIdx = idx
 	}
 	r.rerenderChmodDialog()
+
+	if _, ok := chmodPermFieldBit[span.field]; ok {
+		r.toggleChmodBit(span.field)
+		return
+	}
 
 	switch span.field {
 	case chmodFieldRecursiveDirs:
@@ -510,9 +704,12 @@ func (r *Root) applyChmodEditText(target chmodField, text string) {
 // on chmodText — Tab/Backtab move focus among the field
 // stops/checkboxes, Enter/Space activate whichever one currently has
 // it, Escape cancels — the same shape capturePropertiesKey already has,
-// minus the permission-bit letter/Delete handling that only makes sense
-// for Properties' own 9 individual rwx bits, not this dialog's plain
-// octal values.
+// including its own permission-bit letter/Delete handling now that this
+// dialog has individual rwx bits of its own too (see
+// chmodPermFieldBit/chmodPermFieldLetter): while one has focus, r/w/x
+// sets it directly, Delete or '-' clears it, matching Properties'
+// identical three keys alongside the plain click/Space/Enter every
+// field already has.
 func (r *Root) captureChmodKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyTab:
@@ -527,8 +724,27 @@ func (r *Root) captureChmodKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEscape:
 		r.cancelChmodDialog()
 		return nil
+	case tcell.KeyDelete:
+		field := r.focusedChmodField()
+		if _, ok := chmodPermFieldBit[field]; ok {
+			r.setChmodBit(field, false)
+			return nil
+		}
 	case tcell.KeyRune:
-		if event.Rune() == ' ' {
+		field := r.focusedChmodField()
+		if _, ok := chmodPermFieldBit[field]; ok {
+			switch {
+			case event.Rune() == ' ':
+				r.activateFocusedChmodStop() // toggle, same as Enter
+				return nil
+			case event.Rune() == '-':
+				r.setChmodBit(field, false)
+				return nil
+			case rune(chmodPermFieldLetter[field]) == event.Rune():
+				r.setChmodBit(field, true)
+				return nil
+			}
+		} else if event.Rune() == ' ' {
 			r.activateFocusedChmodStop()
 			return nil
 		}
