@@ -78,13 +78,20 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleList(r.menu, theme)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
-	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
-	r.rename.SetBackgroundColor(theme.AccentBackground)
+	// FocusedBackground, not AccentBackground: rename/prompt are always
+	// the one thing accepting keystrokes for as long as they're shown at
+	// all (both are modal, single-field overlays — see openRename/
+	// openPrompt), the same "always the active input" reasoning
+	// headerEdit's own comment gives above, per the user's own explicit
+	// request that every input field in the app follow this same
+	// convention consistently.
+	r.rename.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.rename.SetBackgroundColor(theme.FocusedBackground)
 	r.rename.SetLabelColor(theme.Text)
 	r.rename.SetFieldTextColor(theme.Text)
 
-	r.prompt.SetFieldBackgroundColor(theme.AccentBackground)
-	r.prompt.SetBackgroundColor(theme.AccentBackground)
+	r.prompt.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.prompt.SetBackgroundColor(theme.FocusedBackground)
 	r.prompt.SetLabelColor(theme.Text)
 	r.prompt.SetFieldTextColor(theme.Text)
 

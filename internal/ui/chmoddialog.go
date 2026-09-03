@@ -554,6 +554,18 @@ func (r *Root) newChmodDialog() *tview.Pages {
 	// whichever field currently has focus.
 	r.chmodEditField = tview.NewInputField()
 	r.chmodEditField.SetDoneFunc(r.finishChmodEdit)
+	// Set once, unconditionally, unlike Properties' own equivalent
+	// (activateInlineTextField): this dialog's shared edit field is
+	// always an octal value (chmodFieldMode/chmodFieldFilesMode, the
+	// only two fields that ever activate it — see activateChmodField),
+	// never a free-text one, so there's no other case here needing this
+	// cleared again. A real InputField.SetMaxLength doesn't exist in
+	// this tview version, verified directly against its own
+	// inputfield.go — rejecting anything past the 4th character here is
+	// the actual mechanism, per the user's own explicit request.
+	r.chmodEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
+		return len(textToCheck) <= 4
+	})
 
 	r.chmodButtons = r.newChmodButtons()
 
@@ -721,16 +733,19 @@ func (r *Root) activateChmodField(span chmodSpan) {
 		return
 	}
 
-	var prefill string
 	switch span.field {
-	case chmodFieldMode:
-		prefill = fmt.Sprintf("%04o", r.stagedChmodMode)
-	case chmodFieldFilesMode:
-		prefill = fmt.Sprintf("%04o", r.stagedChmodFilesMode)
+	case chmodFieldMode, chmodFieldFilesMode:
 	default:
 		return
 	}
-	r.activateChmodTextField(span, prefill)
+	// Blank, not the current value — per the user's own explicit
+	// request: clicking in or Tab-focusing this field should let you
+	// immediately type a fresh 4-digit value over it, not require
+	// deleting the old one first. Leaving without typing anything
+	// discards the (empty) edit exactly like any other invalid input
+	// already does (see applyChmodEditText), leaving the staged mode
+	// untouched.
+	r.activateChmodTextField(span, "")
 }
 
 // activateChmodTextField positions and shows the shared inline edit
