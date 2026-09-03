@@ -38,8 +38,19 @@ const (
 	chmodFieldMode          // the equivalent octal value, applied directly to every target
 	chmodFieldRecursiveDirs // toggle: also recurse into every subdirectory (fsops.ChmodDirsRecursive)
 
-	// Files' own mirror of the block above, toggling stagedChmodFilesMode
-	// instead (see chmodFilesModeBitFields).
+	// chmodFieldFilesEnable is the "also touch files inside" checkbox —
+	// deliberately not called/labeled "recursive" (see its own render
+	// site in renderChmodDialog): recursion isn't a separate choice
+	// here, there never was a "just this folder's own files, not nested
+	// ones" option, so the checkbox's own job is purely whether files
+	// get touched at all. Files' own 9 individual rwx bits and octal
+	// value (chmodFilesModeBitFields/chmodFieldFilesMode below) only
+	// render — and so only exist as field stops at all — once this is
+	// checked; see chmodFieldOrder/permissionBitsAndOctal.
+	chmodFieldFilesEnable
+
+	// Files' own mirror of Permissions' own bit block above, toggling
+	// stagedChmodFilesMode instead (see chmodFilesModeBitFields).
 	chmodFieldFilesOwnerRead
 	chmodFieldFilesOwnerWrite
 	chmodFieldFilesOwnerExec
@@ -50,9 +61,15 @@ const (
 	chmodFieldFilesOtherWrite
 	chmodFieldFilesOtherExec
 
-	chmodFieldFilesMode   // the equivalent octal value for files, only meaningful once...
-	chmodFieldFilesEnable // ...this toggle is on: also chmod every file inside, recursively
+	chmodFieldFilesMode // the equivalent octal value for files
 )
+
+// chmodLabelWidth is how wide every row's own leading label column is —
+// "Directory:", the "○ Files:" checkbox+label combo, and the
+// "Permissions" column heading above them all pad/align to this same
+// column, so the actual permission values (bits + octal) all start in
+// one straight vertical line regardless of which row they're on.
+const chmodLabelWidth = 13
 
 // chmodModeBitFields/chmodFilesModeBitFields are the 9 individual rwx
 // bit fields for the Permissions and Files rows respectively, in
@@ -171,18 +188,25 @@ func (r *Root) setChmodBit(field chmodField, on bool) {
 // renderChmodDialog draws them — the Tab/Backtab navigation order,
 // mirroring currentFieldOrder's own shape in properties.go. Permissions'
 // own 9 bits plus its own octal value are always present; the
-// recursive-folders toggle and the whole Files row (its own 9 bits,
-// octal value, and recursive toggle) only exist once chmodAnyDir is
-// true (see openChmod) — a target set made up entirely of plain files
-// has nothing for either to recurse into.
+// recursive-folders toggle and the Files-enable checkbox only exist
+// once chmodAnyDir is true (see openChmod) — a target set made up
+// entirely of plain files has nothing for either to apply to. Files'
+// own 9 bits and octal value go one step further, only becoming field
+// stops once stagedChmodFilesEnabled is actually checked — while it's
+// off they render dimmed with no field of their own at all (see
+// permissionBitsAndOctal/renderChmodDialog), so there is nothing here
+// for Tab to stop on yet either.
 func (r *Root) chmodFieldOrder() []chmodField {
 	order := make([]chmodField, 0, len(chmodModeBitFields)+len(chmodFilesModeBitFields)+4)
 	order = append(order, chmodModeBitFields[:]...)
 	order = append(order, chmodFieldMode)
 	if r.chmodAnyDir {
 		order = append(order, chmodFieldRecursiveDirs)
-		order = append(order, chmodFilesModeBitFields[:]...)
-		order = append(order, chmodFieldFilesMode, chmodFieldFilesEnable)
+		order = append(order, chmodFieldFilesEnable)
+		if r.stagedChmodFilesEnabled {
+			order = append(order, chmodFilesModeBitFields[:]...)
+			order = append(order, chmodFieldFilesMode)
+		}
 	}
 	return order
 }
@@ -250,6 +274,18 @@ func (cb *chmodBuilder) newline() {
 	cb.col = 0
 }
 
+// padTo appends spaces until col reaches at least target — the same
+// effect fmt.Sprintf("%-Ns", ...) has for a plain ASCII label, but
+// based on the builder's own tracked display width (see text) rather
+// than a byte count, so it stays correct even once a row's own leading
+// text isn't plain ASCII alone — Files' own checkbox-glyph-plus-label
+// combo (see renderChmodDialog).
+func (cb *chmodBuilder) padTo(target int) {
+	for cb.col < target {
+		cb.text(" ")
+	}
+}
+
 // focusTag mirrors propertiesBuilder's own focusTag exactly — same
 // colors, same brighter/bold style for whichever field currently has
 // keyboard focus.
@@ -295,10 +331,18 @@ func (cb *chmodBuilder) octalValue(mode os.FileMode, field chmodField, dimmed bo
 // chmod-only os.FileMode never carries type bits (ParseMode only ever
 // accepts 0-0777), and this dialog's own targets can freely mix files
 // and directories in the first place, so there's no one "type" a
-// leading character could meaningfully show here. dimmed dims both
-// halves together — Files' own row while stagedChmodFilesEnabled is
-// false — the same as octalValue's own dimmed case already does for
-// just the parenthesized value alone.
+// leading character could meaningfully show here.
+//
+// dimmed is Files' own row while its own enable checkbox
+// (chmodFieldFilesEnable) is off: styled gray throughout, and — unlike
+// every other dimmed field in this codebase — deliberately registering
+// no per-character spans of its own at all. There is nothing here yet
+// for an individual bit or the octal value to mean independently of one
+// another while files aren't even being touched, so renderChmodDialog
+// itself wraps the *entire* dimmed row (checkbox, label, and this whole
+// call's own output together) in one single span instead, per the
+// user's own explicit request that a click anywhere on that row — not
+// just precisely on the checkbox glyph — is enough to turn it on.
 func (cb *chmodBuilder) permissionBitsAndOctal(mode os.FileMode, bitFields [9]chmodField, octalField chmodField, dimmed bool) {
 	const rwx = "rwxrwxrwx"
 	for i, f := range bitFields {
@@ -315,11 +359,19 @@ func (cb *chmodBuilder) permissionBitsAndOctal(mode os.FileMode, bitFields [9]ch
 		}
 		cb.text(string(ch))
 		cb.tag("[-:-:-]")
-		cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: start, endCol: cb.col, field: f})
+		if !dimmed {
+			cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: start, endCol: cb.col, field: f})
+		}
 	}
 
 	cb.text(" (")
-	cb.octalValue(mode, octalField, dimmed)
+	if dimmed {
+		cb.tag(dimTag)
+		cb.text(fmt.Sprintf("%04o", mode))
+		cb.tag("[-:-:-]")
+	} else {
+		cb.octalValue(mode, octalField, false)
+	}
 	cb.text(")")
 }
 
@@ -342,23 +394,36 @@ func (cb *chmodBuilder) toggle(checked bool, label string, field chmodField) {
 // anything incrementally, the same "always rebuild" approach
 // renderProperties/rerenderSearchDialog already take.
 //
-// Permissions always shows; the recursive-folders toggle and the whole
-// Files row only appear once chmodAnyDir is true (see openChmod) — a
-// selection made up entirely of plain files has nothing for either to
-// apply to. "recursive" is used as both toggles' own label, per the
-// user's own explicit preference for a short word over a longer phrase
-// (the same one already settled on for Properties' own Owner/Group
-// toggles): for Permissions it means "also every subfolder inside, not
-// just the folder(s) selected"; for Files it means "recursively set
-// every file inside to its own separate value too" — there is no
-// non-recursive "files in just this one folder" option on offer, so the
-// same word covers both without introducing a second piece of
-// vocabulary for a very similar idea.
+// The first row's own permission value always shows; the
+// recursive-folders toggle and the whole Files row only appear once
+// chmodAnyDir is true (see openChmod) — a selection made up entirely of
+// plain files has nothing for either to apply to. That first row's own
+// label switches between "Permissions:" (a plain-file-only selection —
+// there's no separate Files row to disambiguate it from, so the generic
+// word already says everything there is to say) and "Directory:" (once
+// a directory is involved — the more specific word, plus the shared
+// "Permissions" column heading above both rows, is what distinguishes
+// this row's own value from Files' own, separate one right below it),
+// per the user's own explicit request. "recursive" remains the folders
+// toggle's own label — also every subfolder inside, not just the
+// folder(s) selected directly — but Files' own checkbox reads "Files:"
+// instead: whether files get touched at all, not a recursion depth
+// choice (there never was a non-recursive "just this one folder's own
+// files" option to distinguish it from — see chmodFieldFilesEnable's
+// own doc comment).
 func (r *Root) renderChmodDialog() {
 	cb := &chmodBuilder{root: r}
 	cb.newline() // blank margin row — no border of its own, matching Properties/Search
 
-	cb.text(fmt.Sprintf("%-13s", "Permissions:"))
+	firstRowLabel := "Permissions:"
+	if r.chmodAnyDir {
+		cb.padTo(chmodLabelWidth)
+		cb.text("Permissions")
+		cb.newline()
+		firstRowLabel = "Directory:"
+	}
+
+	cb.text(fmt.Sprintf("%-*s", chmodLabelWidth, firstRowLabel))
 	cb.permissionBitsAndOctal(r.stagedChmodMode, chmodModeBitFields, chmodFieldMode, false)
 	if r.chmodAnyDir {
 		cb.text("   ")
@@ -368,10 +433,32 @@ func (r *Root) renderChmodDialog() {
 
 	if r.chmodAnyDir {
 		cb.newline()
-		cb.text(fmt.Sprintf("%-13s", "Files:"))
+		// The "○ Files:" checkbox+label combo is its own single span,
+		// always chmodFieldFilesEnable regardless of state — clicking it
+		// (or Enter/Space while it has keyboard focus) always toggles
+		// stagedChmodFilesEnabled, on or off either way (see
+		// activateChmodField's own chmodFieldFilesEnable case).
+		rowStart := cb.col
+		cb.text(checkboxText(r.stagedChmodFilesEnabled) + " Files:")
+		labelEnd := cb.col
+		cb.padTo(chmodLabelWidth)
 		cb.permissionBitsAndOctal(r.stagedChmodFilesMode, chmodFilesModeBitFields, chmodFieldFilesMode, !r.stagedChmodFilesEnabled)
-		cb.text("   ")
-		cb.toggle(r.stagedChmodFilesEnabled, "recursive", chmodFieldFilesEnable)
+
+		if r.stagedChmodFilesEnabled {
+			// Enabled: the checkbox+label keeps its own narrow span (to
+			// turn it back off again); every individual bit and the
+			// octal value already registered their own real spans
+			// inside permissionBitsAndOctal above, the same as
+			// Permissions'/Directory's own row.
+			cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: rowStart, endCol: labelEnd, field: chmodFieldFilesEnable})
+		} else {
+			// Disabled: permissionBitsAndOctal registered no spans of its
+			// own at all (see its own doc comment) — one single span
+			// covering the *entire* row (checkbox, label, and the whole
+			// dimmed permission display together) stands in for all of
+			// them, so a click anywhere on this row turns it on.
+			cb.spans = append(cb.spans, chmodSpan{row: cb.row, startCol: rowStart, endCol: cb.col, field: chmodFieldFilesEnable})
+		}
 		cb.newline()
 	}
 
