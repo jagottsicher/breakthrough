@@ -67,8 +67,17 @@ func colorTag(c tcell.Color) string {
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
 
-	r.menu.SetBackgroundColor(theme.AccentBackground)
+	// EditableBackground, not AccentBackground: the shared, constant
+	// "content" gray every panel now uses (see propertiesText's own
+	// comment above for the full reasoning) — menuTitleBar is what
+	// carries AccentBackground instead, always (the same "the whole
+	// dialog reads as active for as long as it's open" reasoning
+	// propertiesTitleBar's own comment gives, context menu being just
+	// as modal).
+	r.menu.SetBackgroundColor(theme.EditableBackground)
 	r.menu.SetMainTextColor(theme.Text)
+	r.menuTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.menuTitleBar.SetTextColor(theme.Text)
 
 	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
 	r.rename.SetBackgroundColor(theme.AccentBackground)
@@ -92,8 +101,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.errorView.SetTextColor(theme.Text)
 	r.errorView.SetBackgroundColor(theme.ErrorBackground)
 
-	r.bashLine.SetBackgroundColor(theme.AccentBackground)
-	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
+	// EditableBackground, not AccentBackground: the "Bash Prompt Editor"
+	// (see bashconsole.go/bashHintText) is one of the panels the user's
+	// own explicit request named directly — its content area (bashLine)
+	// gets the same shared, constant gray every other one's does now.
+	// bashHint just below is its title bar equivalent — already only
+	// ever shown while bashLine is expanded/active, so it keeps a
+	// constant AccentBackground unconditionally, the same reasoning
+	// propertiesTitleBar's own doc comment gives above.
+	r.bashLine.SetBackgroundColor(theme.EditableBackground)
+	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.EditableBackground))
 	r.bashHint.SetBackgroundColor(theme.AccentBackground)
 	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
 	r.buttonBar.SetBackgroundColor(theme.AccentBackground)
@@ -101,11 +118,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.statusBar.SetBackgroundColor(theme.AccentBackground)
 	r.statusBar.SetTextColor(theme.Text)
 
-	r.propertiesText.SetBackgroundColor(theme.AccentBackground)
+	// EditableBackground, not AccentBackground: the shared, constant
+	// "content" gray every panel floating over the main one now uses
+	// (toolWindow/Details' own content areas included — see
+	// toolwindow.go/detailssidebar.go), per the user's own explicit
+	// request. propertiesTitleBar just below is what carries
+	// AccentBackground instead now.
+	r.propertiesText.SetBackgroundColor(theme.EditableBackground)
 	r.propertiesEditField.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetFieldTextColor(theme.Text)
-	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesButtons.SetBackgroundColor(theme.EditableBackground)
+	// Always AccentBackground, not focus-dependent the way toolWindow's/
+	// Details' own title bars are: Properties is a modal-ish dialog —
+	// the whole thing reads as "active" for as long as it's open at
+	// all, unlike those two, which coexist with other, simultaneously
+	// visible-but-unfocused panels (the same reason bashHint, also only
+	// ever shown while bashLine is active, stays a constant
+	// AccentBackground too — see below).
+	r.propertiesTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.propertiesTitleBar.SetTextColor(theme.Text)
 	r.propertiesCancelBtn.SetBackgroundColor(theme.AccentBackground)
 	r.propertiesCancelBtn.SetLabelColor(theme.Text)
 	r.propertiesSaveBtn.SetBackgroundColor(theme.AccentBackground)
