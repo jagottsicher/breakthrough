@@ -69,7 +69,7 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
-		"Copy", "Cut", "Paste", "chown", "chmod", "Sed Replace",
+		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Tools"),
