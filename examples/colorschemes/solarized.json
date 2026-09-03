@@ -1,5 +1,6 @@
 {
   "name": "Solarized Dark",
+  "panel_background": "#002b36",
   "accent_background": "#073642",
   "focused_background": "#268bd2",
   "error_background": "#dc322f",
