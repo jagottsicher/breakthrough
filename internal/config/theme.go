@@ -24,6 +24,18 @@ type Theme struct {
 	// spaces/punctuation freely.
 	Name string `json:"name"`
 
+	// PanelBackground is the main file-list panel's own background — the
+	// "bottom layer" every other panel floats over. Unlike every other
+	// field here, this one used to not be a themed value at all: the
+	// panel simply drew nothing of its own there, showing whatever the
+	// terminal's own default background happened to be. Pinned to an
+	// explicit color instead, per the user's own explicit request, in
+	// the same "slate" hue family as AccentBackground/EditableBackground
+	// (their shared blue-gray cast — the blue channel highest in all
+	// three) but darker than either, so the panel/overlay layering reads
+	// consistently across terminals regardless of the user's own
+	// terminal profile.
+	PanelBackground string `json:"panel_background"`
 	// AccentBackground colors header bars, dialogs, buttons, and other
 	// floating chrome — this app's one "everything not otherwise
 	// specified" background.
@@ -106,6 +118,7 @@ type Theme struct {
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
 // — what internal/ui actually applies to widgets (see Theme.Resolve).
 type ResolvedTheme struct {
+	PanelBackground     tcell.Color
 	AccentBackground    tcell.Color
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
@@ -133,6 +146,7 @@ func DefaultTheme() Theme {
 	return Theme{
 		Name: "Default",
 
+		PanelBackground:     "#1c3232",
 		AccentBackground:    "darkslategray",
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
@@ -171,6 +185,7 @@ func (t Theme) Resolve() ResolvedTheme {
 		return tcell.GetColor(fallback)
 	}
 	return ResolvedTheme{
+		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
