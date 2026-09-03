@@ -101,13 +101,16 @@ type Root struct {
 	mouseEnabled bool
 
 	// toolWindows holds every currently open toolWindow (see
-	// openToolCommand), keyed by its own Pages name — unlike every other
-	// overlay in this codebase, there can be several of these open
+	// openToolCommand), in the order they were opened — unlike every
+	// other overlay in this codebase, there can be several of these open
 	// simultaneously (e.g. a ping and a tail -f side by side), each its
 	// own dynamically added/removed Pages entry rather than one fixed
-	// page reused across opens. toolWindowSeq is the source of each new
-	// one's unique id (see openToolCommand).
-	toolWindows   map[string]*toolWindow
+	// page reused across opens. The order itself matters, not just
+	// membership: it's the fixed sequence CycleFocusShortcut (see
+	// detailssidebar.go) steps through with Tab. toolWindowSeq is the
+	// source of each new one's own unique Pages name (see
+	// openToolCommand).
+	toolWindows   []*toolWindow
 	toolWindowSeq int
 
 	// lastScreenWidth/Height are the terminal's own size as of the most
@@ -723,7 +726,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		Pages:        tview.NewPages(),
 		app:          app,
 		mouseEnabled: true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
-		toolWindows:  make(map[string]*toolWindow),
 		panel:        panel,
 		settings:     settings,
 		colorSchemes: colorSchemes,

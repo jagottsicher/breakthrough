@@ -31,9 +31,10 @@ import (
 // (see detailssidebar.go's own doc comment).
 type toolWindow struct {
 	*tview.Box
-	root    *Root
-	id      string // this window's own Pages name (see Root.openToolCommand)
-	content *tview.TextView
+	root     *Root
+	id       string // this window's own Pages name (see Root.openToolCommand)
+	titleBar *tview.TextView
+	content  *tview.TextView
 
 	cancel context.CancelFunc // stops the running process (see Root.openToolCommand) — called by close
 	closed bool               // guards a late QueueUpdateDraw callback against writing into a torn-down window
@@ -43,22 +44,26 @@ type toolWindow struct {
 }
 
 // newToolWindow builds one closed-over toolWindow, titled title — a
-// bordered Box (the border's own top row doubles as the title bar, both
-// for display and as the one draggable region — see MouseHandler) around
-// a plain scrollable TextView for the command's own output.
+// plain, borderless Box (deliberately: every other overlay in this
+// codebase — Properties, Chmod, Search, Help, Details — is borderless
+// too, just padded text; a real box-drawn frame here would have been
+// the only one in the whole app) topped with a one-row, solid-colored
+// title bar (both for display and as the one draggable region — see
+// MouseHandler) above a plain scrollable TextView for the command's own
+// output.
 func newToolWindow(root *Root, id, title string) *toolWindow {
 	tw := &toolWindow{Box: tview.NewBox(), root: root, id: id}
-	tw.SetBorder(true)
-	tw.SetTitle(" " + title + " ")
-	tw.SetTitleAlign(tview.AlignLeft)
-	tw.SetBorderColor(root.theme.Text)
-	// FocusedBackground on the border, not the whole window: the same
-	// "which one currently has real keyboard focus" affordance
-	// FocusedBackground already gives Details' own background (see
-	// detailssidebar.go) — here on the border instead, since the
-	// content itself should stay legible regardless of focus.
-	tw.SetFocusFunc(func() { tw.SetBorderColor(root.theme.FocusedBackground) })
-	tw.SetBlurFunc(func() { tw.SetBorderColor(root.theme.Text) })
+
+	tw.titleBar = tview.NewTextView()
+	tw.titleBar.SetWrap(false)
+	tw.titleBar.SetText(" " + title + " ")
+	tw.titleBar.SetBackgroundColor(root.theme.AccentBackground)
+	// The colored bar itself is what shows which window currently has
+	// real keyboard focus — the same role FocusedBackground already
+	// plays for Details' own background (see detailssidebar.go) — not
+	// the content area, which should stay legible regardless of focus.
+	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.FocusedBackground) })
+	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.AccentBackground) })
 
 	tw.content = tview.NewTextView()
 	tw.content.SetDynamicColors(true) // needed for appendStatus's own style tags
@@ -68,19 +73,32 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	return tw
 }
 
-// Draw draws the border+title (DrawForSubclass, the standard way any
-// Box subclass gets its own frame drawn — see box.go), then the content
-// TextView within whatever's left of the inner rect.
+// Draw draws the title bar as row 0 of this window's own rect (see
+// newToolWindow), then the content TextView across whatever rows are
+// left below it — no border, no inner-rect arithmetic (see
+// newToolWindow's own doc comment on why there's no border to account
+// for here at all).
 func (tw *toolWindow) Draw(screen tcell.Screen) {
 	tw.DrawForSubclass(screen, tw)
-	x, y, width, height := tw.GetInnerRect()
-	tw.content.SetRect(x, y, width, height)
+	x, y, width, height := tw.GetRect()
+	if height <= 0 {
+		return
+	}
+
+	tw.titleBar.SetRect(x, y, width, 1)
+	tw.titleBar.Draw(screen)
+
+	contentHeight := height - 1
+	if contentHeight < 0 {
+		contentHeight = 0
+	}
+	tw.content.SetRect(x, y+1, width, contentHeight)
 	tw.content.Draw(screen)
 }
 
 // MouseHandler drives the mouse side of moving this window: a press on
-// the title bar (the border's own top row — see newToolWindow) starts a
-// drag; every subsequent move with the left button still held (checked
+// the title bar (row 0 of this window's own rect — see newToolWindow)
+// starts a drag; every subsequent move with the left button still held (checked
 // via event.Buttons() — verified directly against tview's own
 // Application.fireMouseActions/MouseMove handling, not guessed: it fires
 // on every position change and always carries the button state current
@@ -225,7 +243,12 @@ func (tw *toolWindow) close() {
 	tw.closed = true
 	tw.cancel()
 	tw.root.RemovePage(tw.id)
-	delete(tw.root.toolWindows, tw.id)
+	for i, w := range tw.root.toolWindows {
+		if w == tw {
+			tw.root.toolWindows = append(tw.root.toolWindows[:i], tw.root.toolWindows[i+1:]...)
+			break
+		}
+	}
 }
 
 // toolWindowDefaultWidth/Height is a fixed starting size for every new
@@ -269,7 +292,7 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 		r.showError(fmt.Errorf("%s: %w", name, err))
 		return nil
 	}
-	r.toolWindows[id] = tw
+	r.toolWindows = append(r.toolWindows, tw)
 
 	go func() {
 		scanner := bufio.NewScanner(pr)
