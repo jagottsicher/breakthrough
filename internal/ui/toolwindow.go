@@ -57,18 +57,31 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	tw.titleBar = tview.NewTextView()
 	tw.titleBar.SetWrap(false)
 	tw.titleBar.SetText(" " + title + " ")
-	tw.titleBar.SetBackgroundColor(root.theme.AccentBackground)
+	tw.titleBar.SetBackgroundColor(root.theme.EditableBackground)
 	// The colored bar itself is what shows which window currently has
-	// real keyboard focus — the same role FocusedBackground already
-	// plays for Details' own background (see detailssidebar.go) — not
-	// the content area, which should stay legible regardless of focus.
-	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.FocusedBackground) })
-	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.AccentBackground) })
+	// real keyboard focus, per the user's own explicit request: the
+	// accent color while focused, the same light gray the content area
+	// always has while it isn't — the same two-state scheme Details' own
+	// title bar uses (see detailssidebar.go's newDetailsTitleBar).
+	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.AccentBackground) })
+	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.EditableBackground) })
 
 	tw.content = tview.NewTextView()
 	tw.content.SetDynamicColors(true) // needed for appendStatus's own style tags
 	tw.content.SetWrap(false)         // command output is line-oriented; wrapping would misalign it
 	tw.content.SetScrollable(true)
+	// A plain default background (i.e. none set) would blend straight
+	// into whatever's behind it — the same dark background every other
+	// overlay in this app already sits on — and no longer read as a
+	// distinct floating window at all past its own one-row title bar.
+	// EditableBackground is this app's own existing "lighter gray,
+	// content-ish" tone (already how Properties'/Chmod's own editable
+	// values read against the same dark background), reused here for
+	// the same reason rather than inventing a second, redundant gray in
+	// the theme — per the user's own explicit request, every tool
+	// window shares this one color, and the title bar/accent colors
+	// above are deliberately left alone for now.
+	tw.content.SetBackgroundColor(root.theme.EditableBackground)
 
 	return tw
 }

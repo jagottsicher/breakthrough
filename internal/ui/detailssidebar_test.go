@@ -205,18 +205,31 @@ func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
 
-	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("background before focus = %v, want AccentBackground %v", got, want)
+	// The content area's own background never changes — see
+	// newDetailsSidebarView's own doc comment: it's detailsTitleBar
+	// below, not this, that shows the current focus state, per the
+	// user's own explicit request that every panel floating over the
+	// main one (toolWindow's own content included — see toolwindow.go)
+	// share this one constant, lighter gray.
+	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("content background = %v, want the constant EditableBackground %v", got, want)
+	}
+
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background before focus = %v, want EditableBackground %v", got, want)
 	}
 
 	r.CycleFocusShortcut()
-	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
-		t.Errorf("background while focused = %v, want FocusedBackground %v", got, want)
+	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("content background while focused = %v, want still the constant EditableBackground %v", got, want)
+	}
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
+		t.Errorf("title bar background while focused = %v, want AccentBackground %v", got, want)
 	}
 
 	r.CycleFocusShortcut()
-	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("background after losing focus again = %v, want AccentBackground %v", got, want)
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
 	}
 }
 
@@ -287,7 +300,16 @@ func TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight(t *testing.T) {
 
 	r.showDetailsSidebar()
 
-	x, y, width, height := r.detailsSidebar.GetRect()
+	// detailsSidebarLayout, not detailsSidebar itself: the Flex wrapping
+	// title bar + content (see repositionDetailsSidebar's own doc
+	// comment) only actually distributes that rect down to its own
+	// children on its next real Draw() — verified directly against
+	// tview's own flex.go, the same "resize=true only cascades during
+	// Draw()" caveat chmoddialog.go's own openChmod doc comment already
+	// documents for tview.Pages. detailsSidebarLayout's own rect is what
+	// repositionDetailsSidebar actually sets synchronously, and what
+	// determines the sidebar's real on-screen position/size either way.
+	x, y, width, height := r.detailsSidebarLayout.GetRect()
 	if want := 90 / 3; width < want {
 		t.Errorf("width = %d, want at least a third of the screen (%d)", width, want)
 	}

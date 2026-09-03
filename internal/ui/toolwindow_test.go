@@ -397,3 +397,38 @@ func TestCycleFocusShortcutSkipsClosedToolWindow(t *testing.T) {
 		t.Error("focus should never land on a closed tool window")
 	}
 }
+
+// TestToolWindowBackgroundMatchesDetailsSidebar pins the user's own
+// explicit request that every panel floating over the main one share
+// one look: the content area is always the same light EditableBackground
+// gray Details' own content area has (see detailssidebar.go's
+// newDetailsSidebarView), and the title bar swaps between that same
+// gray while unfocused and the accent color while focused — the same
+// two-state scheme Details' own title bar (newDetailsTitleBar) uses.
+func TestToolWindowBackgroundMatchesDetailsSidebar(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	tw := newToolWindow(r, "tw", "test")
+
+	if got, want := tw.content.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("content background = %v, want EditableBackground %v", got, want)
+	}
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background before focus = %v, want EditableBackground %v", got, want)
+	}
+
+	tw.Focus(func(tview.Primitive) {})
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
+		t.Errorf("title bar background while focused = %v, want AccentBackground %v", got, want)
+	}
+	if got, want := tw.content.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("content background while focused = %v, want still EditableBackground %v", got, want)
+	}
+
+	tw.Blur()
+	if got, want := tw.titleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
+	}
+}
