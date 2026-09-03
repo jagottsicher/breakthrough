@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
@@ -144,10 +145,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.propertiesEditField.SetFieldTextColor(theme.Text)
 	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
 	r.propertiesTitleBar.SetTextColor(theme.Text)
-	r.propertiesCancelBtn.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesCancelBtn.SetLabelColor(theme.Text)
-	r.propertiesSaveBtn.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesSaveBtn.SetLabelColor(theme.Text)
+	styleButton(r.propertiesCancelBtn, theme)
+	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	if r.optionsList != nil {
@@ -163,10 +162,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.searchEditField.SetBackgroundColor(theme.FocusedBackground)
 		r.searchEditField.SetFieldTextColor(theme.Text)
 		r.searchButtons.SetBackgroundColor(theme.AccentBackground)
-		r.searchCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.searchCancelBtn.SetLabelColor(theme.Text)
-		r.searchSearchBtn.SetBackgroundColor(theme.AccentBackground)
-		r.searchSearchBtn.SetLabelColor(theme.Text)
+		styleButton(r.searchCancelBtn, theme)
+		styleButton(r.searchSearchBtn, theme)
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -176,10 +173,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodEditField.SetBackgroundColor(theme.FocusedBackground)
 		r.chmodEditField.SetFieldTextColor(theme.Text)
 		r.chmodButtons.SetBackgroundColor(theme.AccentBackground)
-		r.chmodCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.chmodCancelBtn.SetLabelColor(theme.Text)
-		r.chmodApplyBtn.SetBackgroundColor(theme.AccentBackground)
-		r.chmodApplyBtn.SetLabelColor(theme.Text)
+		styleButton(r.chmodCancelBtn, theme)
+		styleButton(r.chmodApplyBtn, theme)
 		r.rerenderChmodDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -189,10 +184,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.dirPickerHeader.SetTextColor(theme.Text)
 		r.dirPickerList.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerList.SetMainTextColor(theme.Text)
-		r.dirPickerSelectBtn.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerSelectBtn.SetLabelColor(theme.Text)
-		r.dirPickerCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerCancelBtn.SetLabelColor(theme.Text)
+		styleButton(r.dirPickerSelectBtn, theme)
+		styleButton(r.dirPickerCancelBtn, theme)
 	}
 
 	if r.helpView != nil {
@@ -247,4 +240,27 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedPreviewActions.SetMainTextColor(theme.Text)
 
 	r.panel.applyTheme(theme)
+}
+
+// styleButton applies this app's own button look — ButtonBackground
+// while it doesn't have real keyboard focus, FocusedBackground while it
+// does, white text either way — to a real tview.Button (Cancel/Save/
+// Apply/Select/Find, filterRegexBtn, ...). A package-level function
+// taking theme explicitly, rather than a Root method, since
+// Panel.paintStaticChrome (filterRegexBtn's own repaint site) has no
+// Root to call through — only its own p.theme.
+//
+// Per the user's own explicit request for a lighter turquoise than
+// FocusedBackground here — which surfaced a real, previously-unnoticed
+// bug in the process: a plain SetBackgroundColor/SetLabelColor call
+// (every button here used before this) has actually never done
+// anything, for any button, ever — verified directly against tview's
+// own button.go, not guessed: Button.Draw recomputes its own displayed
+// background/foreground from its internal style/activatedStyle fields
+// on every single Draw, discarding whatever SetBackgroundColor set
+// moments earlier. SetStyle/SetActivatedStyle are the ones that
+// actually reach the screen.
+func styleButton(b *tview.Button, theme config.ResolvedTheme) {
+	b.SetStyle(tcell.StyleDefault.Background(theme.ButtonBackground).Foreground(theme.Text))
+	b.SetActivatedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
 }
