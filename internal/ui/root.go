@@ -210,7 +210,18 @@ type Root struct {
 	// currently shown; unlike every overlay above it, it's deliberately
 	// not modal (see newDetailsSidebarView's own doc comment), so it
 	// can't reuse activePage/overlayStack the way those do.
+	//
+	// detailsTitleBar is its own one-row "Details" label above
+	// detailsSidebar's own content, the same shape toolWindow's own
+	// title bar has (see toolwindow.go) — detailsSidebarLayout is the
+	// Flex stacking the two, which is what's actually registered on
+	// Pages/positioned (see repositionDetailsSidebar); detailsSidebar
+	// itself remains the one real focus target throughout (SetFocus,
+	// CycleFocusShortcut, ...), unaffected by wrapping it in a layout
+	// purely for drawing purposes.
 	detailsSidebar        *tview.TextView
+	detailsTitleBar       *tview.TextView
+	detailsSidebarLayout  *tview.Flex
 	detailsSidebarVisible bool
 
 	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
@@ -884,10 +895,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
-	// The Details sidebar (see detailssidebar.go) — also a single static
-	// TextView for now, same shape as Help/the Look pager above, just
+	// The Details sidebar (see detailssidebar.go): its own content is a
+	// single static TextView, same shape as Help/the Look pager above,
+	// topped with its own "Details" title bar (see newDetailsTitleBar) —
+	// detailsSidebarLayout, the Flex stacking the two, is what's actually
 	// positioned and shown/hidden its own way (see showDetailsSidebar).
 	r.detailsSidebar = r.newDetailsSidebarView()
+	r.detailsTitleBar = r.newDetailsTitleBar()
+	r.detailsSidebarLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.detailsTitleBar, 1, 0, false).
+		AddItem(r.detailsSidebar, 0, 1, true)
 
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
@@ -963,7 +980,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
 	r.AddPage(helpPage, r.helpView, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
-	r.AddPage(detailsSidebarPage, r.detailsSidebar, false, false)
+	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)

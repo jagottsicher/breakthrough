@@ -168,8 +168,29 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.detailsSidebar != nil {
-		r.detailsSidebar.SetBackgroundColor(theme.AccentBackground)
+		// Always EditableBackground regardless of focus (see
+		// newDetailsSidebarView's own doc comment) — unlike
+		// detailsTitleBar just below, this one never needs to check
+		// current focus state at all: it doesn't have a second state to
+		// preserve.
+		r.detailsSidebar.SetBackgroundColor(theme.EditableBackground)
 		r.detailsSidebar.SetTextColor(theme.Text)
+	}
+	if r.detailsTitleBar != nil {
+		// Unlike detailsSidebar above, this one DOES have a focus-
+		// dependent state (see newDetailsTitleBar's own doc comment) —
+		// re-derive it from whichever theme.* color that state actually
+		// maps to right now, rather than always resetting to the
+		// unfocused look the way an unconditional AccentBackground here
+		// would (a real, visible bug: switching color schemes while
+		// Details has focus would otherwise show the wrong one until
+		// the next blur/focus cycle).
+		if r.detailsSidebar.HasFocus() {
+			r.detailsTitleBar.SetBackgroundColor(theme.AccentBackground)
+		} else {
+			r.detailsTitleBar.SetBackgroundColor(theme.EditableBackground)
+		}
+		r.detailsTitleBar.SetTextColor(theme.Text)
 	}
 
 	r.sedForm.SetBackgroundColor(theme.AccentBackground)

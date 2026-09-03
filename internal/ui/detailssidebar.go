@@ -54,18 +54,37 @@ const detailsSidebarMinWidth = 26
 // than teaching this sidebar its own scroll keys from scratch, and
 // scrolling while it has focus is exactly the same "browsing paused,
 // reading instead" tradeoff a real MC info panel accepts too.
-// SetFocusFunc/SetBlurFunc give a visual cue for whichever state it's
-// currently in, the same FocusedBackground/AccentBackground contrast
-// propertiesEditField already uses.
+//
+// The content area's own background is a constant EditableBackground —
+// the same light gray every panel floating over the main one shares
+// (toolWindow's own content area included — see toolwindow.go), per the
+// user's own explicit request — regardless of focus; it's
+// detailsTitleBar (see newDetailsTitleBar), not this content area
+// itself, that shows whether Details currently has real keyboard focus.
 func (r *Root) newDetailsSidebarView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
+	v.SetBackgroundColor(r.theme.EditableBackground)
 	v.SetMouseCapture(r.captureDetailsSidebarMouse)
-	v.SetFocusFunc(func() { v.SetBackgroundColor(r.theme.FocusedBackground) })
-	v.SetBlurFunc(func() { v.SetBackgroundColor(r.theme.AccentBackground) })
+	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.AccentBackground) })
+	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
 	return v
+}
+
+// newDetailsTitleBar builds the "Details" label above the sidebar's own
+// content — the same one-row, solid-colored title-bar shape toolWindow
+// uses for consistency (see toolwindow.go): the accent color while
+// Details has real keyboard focus (see newDetailsSidebarView's own
+// focus/blur hooks), the same light gray the content area always has
+// while it doesn't.
+func (r *Root) newDetailsTitleBar() *tview.TextView {
+	bar := tview.NewTextView()
+	bar.SetWrap(false)
+	bar.SetText(" Details ")
+	bar.SetBackgroundColor(r.theme.EditableBackground)
+	return bar
 }
 
 // detailsSidebarSize sizes the sidebar against the whole screen (Root's
@@ -86,15 +105,18 @@ func (r *Root) detailsSidebarSize() (width, height int) {
 
 // repositionDetailsSidebar (re)computes the sidebar's own rect from
 // detailsSidebarSize, flush against the right edge of the screen, and
-// applies it — the size/position half of showDetailsSidebar, split out
-// on its own so Root's own resize handling (see handleBeforeDraw) can
-// re-run just this, without also reloading content or resetting scroll
-// position the way showDetailsSidebar itself always does.
+// applies it to detailsSidebarLayout (the Flex stacking the title bar
+// over the content — see its own doc comment in root.go), which then
+// divides that same rect between the two on its own next Draw — the
+// size/position half of showDetailsSidebar, split out on its own so
+// Root's own resize handling (see handleBeforeDraw) can re-run just
+// this, without also reloading content or resetting scroll position the
+// way showDetailsSidebar itself always does.
 func (r *Root) repositionDetailsSidebar() {
 	width, height := r.detailsSidebarSize()
 	_, _, screenWidth, _ := r.GetRect()
 	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
-	r.detailsSidebar.SetRect(x, y, width, height)
+	r.detailsSidebarLayout.SetRect(x, y, width, height)
 }
 
 // showDetailsSidebar positions the sidebar flush against the right edge

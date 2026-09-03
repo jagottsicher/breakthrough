@@ -706,7 +706,10 @@ func TestHandleBeforeDrawRepositionsDetailsSidebarOnResize(t *testing.T) {
 	r.SetRect(0, 0, 100, 30)
 	r.showDetailsSidebar()
 
-	x, _, width, _ := r.detailsSidebar.GetRect()
+	// detailsSidebarLayout, not detailsSidebar itself — see
+	// TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight's own doc
+	// comment on why (detailssidebar_test.go).
+	x, _, width, _ := r.detailsSidebarLayout.GetRect()
 	if x+width != 100 {
 		t.Fatalf("setup: sidebar not flush against the right edge of a 100-wide screen: x=%d width=%d", x, width)
 	}
@@ -721,7 +724,7 @@ func TestHandleBeforeDrawRepositionsDetailsSidebarOnResize(t *testing.T) {
 
 	r.handleBeforeDraw(screen)
 
-	x, _, width, _ = r.detailsSidebar.GetRect()
+	x, _, width, _ = r.detailsSidebarLayout.GetRect()
 	if x+width != 160 {
 		t.Errorf("sidebar after resize: x=%d width=%d, want flush against the new 160-wide screen", x, width)
 	}
