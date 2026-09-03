@@ -103,6 +103,22 @@ func run() error {
 	// Midnight Commander, uses for exactly the same purpose. F2 (Rename)
 	// sits with the six Ctrl-letter actions instead, not with F1: it
 	// still checks its own precondition the same way they do, unlike F1
+	//
+	// F3 (toggle mouse reporting, see Root.ToggleMouseShortcut's own doc
+	// comment for why this exists at all) sits with F1/Ctrl+Q/Ctrl+C too,
+	// for the same "always fires" reason — the whole point is grabbing
+	// text via the terminal's own native selection, which needs to work
+	// no matter what else is currently open. Every Ctrl-letter is
+	// genuinely unavailable by this point (each one is either already
+	// claimed above, natively bound by tview's own TextArea — verified
+	// directly against its source the same way every claim in this
+	// comment block is — or dead at the terminal protocol level, like
+	// Ctrl+H/I/M/J: byte-identical to Backspace/Tab/Enter/breakthrough's
+	// own bash-line "insert newline", respectively), so this continues
+	// the same F-key sequence F1/F2 already started rather than reaching
+	// for an increasingly obscure modifier combination a terminal might
+	// not even deliver reliably (Alt+key relies on a terminal actually
+	// sending the ESC-prefixed Meta sequence, which isn't universal).
 	// — an F-key rather than Ctrl+R purely because Ctrl+R was needed
 	// elsewhere, not because Rename should now work from anywhere.
 	// F2/Rename is the near-universal convention across GUI file
@@ -197,6 +213,9 @@ func run() error {
 			return nil
 		case tcell.KeyF2:
 			root.RenameShortcut()
+			return nil
+		case tcell.KeyF3:
+			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlT:
 			// Falls through to bashLine's own default handling (readline-
