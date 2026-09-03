@@ -433,6 +433,8 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
 	p.table.SetSelectedFunc(func(row, column int) { p.activateRow(row) })
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
+	p.table.SetFocusFunc(func() { p.setSelectionStyle(true) })
+	p.table.SetBlurFunc(func() { p.setSelectionStyle(false) })
 
 	p.columnHeader.SetBorders(false)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
@@ -538,14 +540,41 @@ func (p *Panel) paintStaticChrome() {
 	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
 	p.filterField.SetFieldTextColor(p.theme.Text)
 
-	// The panel's one other themed color, the current row's own
-	// highlight — tview.Table's own default (StyleDefault, an inverted
-	// fg/bg rather than a fixed color pair) is never quite what a color
-	// scheme means by "selection", so this is set explicitly instead of
-	// left alone.
-	p.table.SetSelectedStyle(tcell.StyleDefault.
-		Background(p.theme.SelectionBackground).
-		Foreground(p.theme.Text))
+	// The panel's own current-row highlight — see setSelectionStyle's own
+	// doc comment for why this isn't just a fixed color the way it used
+	// to be. A plain HasFocus() query, not the table's own SetFocusFunc/
+	// SetBlurFunc closure it also uses (see NewPanel): this call is a
+	// normal, standalone one (not from inside a blur/focus event itself),
+	// where HasFocus() is trustworthy.
+	p.setSelectionStyle(p.table.HasFocus())
+}
+
+// setSelectionStyle sets the panel's own current-row highlight to
+// FocusedBackground if focused, EditableBackground otherwise — per the
+// user's own explicit request: every other focusable panel in this app
+// already shows this same "petrol means this currently has real
+// keyboard focus" distinction on its own title bar (see
+// toolwindow.go/detailssidebar.go); the main panel, predating all of
+// that work, never did.
+//
+// Takes focused explicitly rather than querying p.table.HasFocus()
+// itself, because its two callers need different answers to that exact
+// question at the exact moment each runs: paintStaticChrome (see above)
+// calls this standalone, where HasFocus() is trustworthy, but
+// NewPanel's own SetBlurFunc closure cannot use it at all — verified
+// directly against tview's own box.go, not guessed: Box.Blur() runs the
+// blur callback *before* clearing its own hasFocus flag, so HasFocus()
+// queried from inside a blur callback still (wrongly) reports true.
+// SetFocusFunc doesn't have the analogous problem (Box.Focus() sets
+// hasFocus true first, then calls the callback), but both pass their
+// own already-known answer explicitly here anyway, for the same reason
+// rather than leaving one of the two paths relying on it.
+func (p *Panel) setSelectionStyle(focused bool) {
+	bg := p.theme.EditableBackground
+	if focused {
+		bg = p.theme.FocusedBackground
+	}
+	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
 }
 
 // applyTheme switches the panel to theme live: every already-built
