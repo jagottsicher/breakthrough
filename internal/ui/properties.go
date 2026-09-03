@@ -394,10 +394,26 @@ func (r *Root) newPropertiesView() *tview.Pages {
 
 	r.propertiesButtons = r.newPropertiesButtons()
 
+	// A one-row "Properties" title bar, the same shape toolWindow's own
+	// (see toolwindow.go) and Details' own (see detailssidebar.go) title
+	// bars have, per the user's own explicit request that every one of
+	// these panels get one. Positioned like propertiesButtons below —
+	// an absolutely-positioned page of its own within pages (see
+	// resizeProperties) — rather than left to resize=true the way
+	// propertiesText is: reserving its own row is what
+	// pages.SetBorderPadding(1, 0, 0, 0) just below actually does, by
+	// shrinking propertiesText's own resize=true inner rect to leave
+	// room for it.
+	r.propertiesTitleBar = tview.NewTextView()
+	r.propertiesTitleBar.SetWrap(false)
+	r.propertiesTitleBar.SetText(" Properties ")
+
 	pages := tview.NewPages()
+	pages.SetBorderPadding(1, 0, 0, 0)
 	pages.AddPage("text", r.propertiesText, true, true)
 	pages.AddPage("editfield", r.propertiesEditField, false, false)
 	pages.AddPage("buttons", r.propertiesButtons, false, true)
+	pages.AddPage("titlebar", r.propertiesTitleBar, false, true)
 
 	// Installed on pages itself, the shared ancestor of all three pages
 	// above — see hashesMouseCapture's own doc comment for why that's
@@ -664,17 +680,19 @@ func (r *Root) renderProperties() {
 // (see renderProperties), keeping (x, y) as given but not necessarily as
 // where it last was — openProperties passes the context menu's own
 // position (first open), everything else passes wherever the overlay
-// currently sits (a resize after an edit, not a reposition). One line is
-// reserved for the Cancel/Save row, which is visible for as long as
-// Properties itself is (see newPropertiesView) — leaving that row out of
-// the reserved height would leave it with nothing of its own to sit on,
-// overlapping propertiesText's own last line instead.
+// currently sits (a resize after an edit, not a reposition). Two lines
+// are reserved beyond propertiesText's own content: the Cancel/Save row
+// at the bottom and the title bar at the top (see newPropertiesView),
+// both visible for as long as Properties itself is — leaving either out
+// of the reserved height would leave it with nothing of its own to sit
+// on, overlapping propertiesText's own first/last line instead.
 func (r *Root) resizeProperties(x, y int) {
 	width, height := textSize(r.propertiesText.GetText(true))
-	height++ // reserved button row
+	height += 2 // reserved title bar row (top) + button row (bottom)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.properties.SetRect(x, y, width, height)
+	r.propertiesTitleBar.SetRect(x, y, width, 1)
 	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
 }
 

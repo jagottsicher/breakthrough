@@ -134,13 +134,21 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	panel       *Panel
-	menu        *tview.List
-	rename      *tview.InputField
-	prompt      *tview.InputField
-	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
-	errorView   *tview.TextView
-	quitConfirm *tview.List
+	panel *Panel
+	// menu is the context menu's own List — the real focus target
+	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
+	// title bar and the Flex stacking the two, which is what's actually
+	// registered on Pages/positioned instead (the same
+	// widget/layout split detailsSidebar/detailsSidebarLayout already
+	// established — see detailssidebar.go).
+	menu         *tview.List
+	menuTitleBar *tview.TextView
+	menuLayout   *tview.Flex
+	rename       *tview.InputField
+	prompt       *tview.InputField
+	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
+	errorView    *tview.TextView
+	quitConfirm  *tview.List
 
 	// purgeConfirm backs both "Remove" and "Empty Trash" (see
 	// newPurgeConfirm/openPurgeConfirm in trash.go) — one shared,
@@ -551,6 +559,7 @@ type Root struct {
 	// addressable so setPropertiesFocus can give either one real keyboard
 	// focus) are visible the whole time Properties is open.
 	properties           *tview.Pages
+	propertiesTitleBar   *tview.TextView
 	propertiesText       *tview.TextView
 	propertiesEditField  *tview.InputField
 	propertiesEditTarget propertyField
@@ -800,6 +809,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem(mtimeFormatToggleLabel(r.panel.mtimeUnix), "", 0, r.toggleMtimeUnix)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
 
+	// A one-row "Menu" title bar above it, the same shape every other
+	// panel's now has (toolWindow, Details, Properties — see
+	// toolwindow.go/detailssidebar.go/newPropertiesView), per the user's
+	// own explicit request. menuLayout, not r.menu itself, is what's
+	// actually registered on Pages/positioned (see showMenu) — r.menu
+	// remains the real focus target throughout (showMenu still passes
+	// it, not menuLayout, to showOverlay), unaffected by wrapping it in
+	// a layout purely for drawing, the same split Details' own
+	// detailsSidebar/detailsSidebarLayout already established.
+	r.menuTitleBar = tview.NewTextView()
+	r.menuTitleBar.SetWrap(false)
+	r.menuTitleBar.SetText(" Menu ")
+	r.menuLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.menuTitleBar, 1, 0, false).
+		AddItem(r.menu, 0, 1, true)
+
 	// No label: this is positioned exactly over the target's row in
 	// openRename, so it reads as "the row itself became editable" rather
 	// than a separate prompt.
@@ -964,7 +989,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
 
 	r.AddPage(panelPage, r.mainLayout, true, true)
-	r.AddPage(contextMenuPage, r.menu, false, false)
+	r.AddPage(contextMenuPage, r.menuLayout, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
 	r.AddPage(propertiesPage, r.properties, false, false)
@@ -1571,9 +1596,10 @@ func (r *Root) showMenu(x, y int) {
 	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
 
 	width, height := listSize(r.menu)
+	height++ // reserved title bar row (see menuLayout)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
-	r.menu.SetRect(x, y, width, height)
+	r.menuLayout.SetRect(x, y, width, height)
 	r.menu.SetCurrentItem(0)
 	r.showOverlay(contextMenuPage, r.menu)
 }
