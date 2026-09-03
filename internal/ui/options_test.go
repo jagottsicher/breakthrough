@@ -88,15 +88,15 @@ func TestApplyColorSchemeAppliesLiveAndPersists(t *testing.T) {
 	if got := r.panel.table.GetBackgroundColor(); got != wantTheme.PanelBackground {
 		t.Errorf("r.panel.table background = %v, want %v (applyTheme should have repainted it)", got, wantTheme.PanelBackground)
 	}
-	// EditableBackground, not AccentBackground: r.menu's own content now
-	// shares the same constant gray every panel's content area does —
-	// menuTitleBar (its title bar) is what carries AccentBackground
-	// instead (see applyTheme's own comment in theme.go).
-	if r.menu.GetBackgroundColor() != wantTheme.EditableBackground {
-		t.Errorf("r.menu background = %v, want %v (applyTheme should have repainted it)", r.menu.GetBackgroundColor(), wantTheme.EditableBackground)
+	// AccentBackground: r.menu's own content now shares the same
+	// constant "normal panel background" every panel's content area does
+	// — menuTitleBar (its title bar) carries EditableBackground instead
+	// (see applyTheme's own comment in theme.go).
+	if r.menu.GetBackgroundColor() != wantTheme.AccentBackground {
+		t.Errorf("r.menu background = %v, want %v (applyTheme should have repainted it)", r.menu.GetBackgroundColor(), wantTheme.AccentBackground)
 	}
-	if r.menuTitleBar.GetBackgroundColor() != wantTheme.AccentBackground {
-		t.Errorf("r.menuTitleBar background = %v, want %v (applyTheme should have repainted it)", r.menuTitleBar.GetBackgroundColor(), wantTheme.AccentBackground)
+	if r.menuTitleBar.GetBackgroundColor() != wantTheme.EditableBackground {
+		t.Errorf("r.menuTitleBar background = %v, want %v (applyTheme should have repainted it)", r.menuTitleBar.GetBackgroundColor(), wantTheme.EditableBackground)
 	}
 	if r.settings.ColorScheme != "solarized" {
 		t.Errorf("r.settings.ColorScheme = %q, want %q", r.settings.ColorScheme, "solarized")
