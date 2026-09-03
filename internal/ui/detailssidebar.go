@@ -47,8 +47,8 @@ const detailsSidebarMinWidth = 26
 // instead of a one-shot snapshot the way Properties' own is.
 //
 // It CAN still take real focus, deliberately, once content grows longer
-// than it has room for: Tab toggles focus between it and the panel (see
-// ToggleDetailsFocusShortcut) so tview's own already-built-in TextView
+// than it has room for: Tab cycles focus to it (and back — see
+// CycleFocusShortcut) so tview's own already-built-in TextView
 // scrolling (arrow keys, PageUp/PageDown, Home/End, vi-style
 // j/k/g/G/h/l, mouse wheel) works for free — cheaper and more capable
 // than teaching this sidebar its own scroll keys from scratch, and
@@ -163,7 +163,7 @@ func (r *Root) preserveFocusAcross(f func()) {
 // even shown any more.
 //
 // Explicitly redirects focus to the panel's own table if the sidebar
-// itself currently has it (see ToggleDetailsFocusShortcut) — a case
+// itself currently has it (see CycleFocusShortcut) — a case
 // preserveFocusAcross alone can't handle correctly: "restore whatever
 // had focus right before" is exactly wrong here, since what had focus
 // right before *is* the widget this is about to hide. Left to it alone,
@@ -223,34 +223,61 @@ func (r *Root) ToggleDetailsSidebarShortcut() {
 	r.toggleDetailsSidebar()
 }
 
-// ToggleDetailsFocusShortcut is Tab's own action while either the
-// panel's own table or the details sidebar itself currently has real
-// keyboard focus — see cmd/breakthrough, which only consumes Tab when
-// this returns true. Everywhere else (Properties' own fields, the
-// header's path edit, the filter box, bash-line completion, ...), it
-// reports false and Tab falls through completely untouched, exactly as
-// it already does today — verified against tview's own Table/TextView
-// source: neither installs a SetDoneFunc in this codebase, so a bare
-// Tab while the table has focus was already a pure no-op before this
-// existed, nothing here takes over a working feature.
+// CycleFocusShortcut is Tab's own action while the panel's own table,
+// the Details sidebar, or any currently open tool window (see
+// toolwindow.go) currently has real keyboard focus — moving to the next
+// one in that fixed order (panel, then Details if it's showing, then
+// every open tool window in the order they were opened), wrapping back
+// to the panel after the last one. See cmd/breakthrough, which only
+// consumes Tab when this returns true. Everywhere else (Properties' own
+// fields, the header's path edit, the filter box, bash-line completion,
+// ...), it reports false and Tab falls through completely untouched,
+// exactly as it already did before any of this existed — verified
+// against tview's own Table/TextView source: none of panel.table,
+// detailsSidebar, or toolWindow install a SetDoneFunc/claim Tab
+// themselves, so a bare Tab while one of them has focus was already a
+// pure no-op, nothing here takes over a working feature.
 //
-// The sidebar only actually needs real focus once its own content
-// outgrows the space it has — see newDetailsSidebarView's own doc
-// comment on why tview's already-built-in TextView scrolling is worth
-// that trade-off (browsing pauses while it's focused, since the panel
-// isn't what's receiving arrow keys any more) rather than teaching this
-// sidebar its own separate scroll keys.
-func (r *Root) ToggleDetailsFocusShortcut() bool {
-	switch {
-	case r.detailsSidebarVisible && r.panel.table.HasFocus():
-		r.app.SetFocus(r.detailsSidebar)
-		return true
-	case r.detailsSidebar.HasFocus():
-		r.app.SetFocus(r.panel.table)
-		return true
-	default:
-		return false
+// Renamed from this feature's original CycleFocusShortcut (a
+// plain two-way toggle, panel <-> Details, before tool windows existed
+// at all) — kept fully backwards compatible: with no tool window open,
+// cycling through a two-stop list is exactly the same toggle as before.
+//
+// Deliberately does NOT reach into a modal dialog (Properties, Chmod,
+// Search, Help, ...) even if one happens to be open at the same time as
+// a tool window (Properties, for one, doesn't close an already-open
+// tool window when it opens over it — see showOverlay's own doc
+// comment on why the two aren't mutually exclusive): those each already
+// have their own, self-contained Tab semantics (field navigation), and
+// folding this cycle into that too would leave Tab meaning two
+// different things depending on context. Leave the dialog first
+// (Escape/Cancel/Apply, as always), then Tab cycles among panel/
+// Details/tool windows again.
+func (r *Root) CycleFocusShortcut() bool {
+	stops := r.focusCycleStops()
+	for i, stop := range stops {
+		if stop.HasFocus() {
+			r.app.SetFocus(stops[(i+1)%len(stops)])
+			return true
+		}
 	}
+	return false
+}
+
+// focusCycleStops is CycleFocusShortcut's own fixed stop order: the
+// panel table always first, the Details sidebar next if it's currently
+// showing, then every currently open tool window in the order they were
+// opened (see Root.toolWindows' own doc comment on why that order is
+// kept, not just membership).
+func (r *Root) focusCycleStops() []tview.Primitive {
+	stops := []tview.Primitive{r.panel.table}
+	if r.detailsSidebarVisible {
+		stops = append(stops, r.detailsSidebar)
+	}
+	for _, tw := range r.toolWindows {
+		stops = append(stops, tw)
+	}
+	return stops
 }
 
 // refreshDetailsSidebar reloads and re-renders the sidebar's content for
@@ -368,7 +395,7 @@ func (r *Root) loadDetailsTarget(path string) {
 
 	// A new target always starts showing from its own top — not
 	// wherever the previous one happened to be scrolled to (see
-	// ToggleDetailsFocusShortcut for how it gets scrolled at all).
+	// CycleFocusShortcut for how it gets scrolled at all).
 	// Deliberately not in renderDetailsSidebar itself: that also reruns
 	// on every hash-progress animation frame for the *same* target,
 	// which must never yank the scroll position back to the top out
@@ -866,7 +893,7 @@ func (r *Root) ComputeHashesShortcut() {
 // swallowed here: MouseLeftDown is what tview's own Box.MouseHandler
 // uses to actually call Application.SetFocus (see its doc comment in
 // box.go) — clicking anywhere in the sidebar, not just Tab (see
-// ToggleDetailsFocusShortcut), is a second, more discoverable way to
+// CycleFocusShortcut), is a second, more discoverable way to
 // give it real focus — and MouseScrollUp/Down is genuinely native
 // TextView behavior, working immediately regardless of focus (unlike
 // keyboard scrolling, which does need it). A MouseLeftClick landing on

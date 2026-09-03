@@ -19,14 +19,14 @@ func TestNextToolWindowPositionCascades(t *testing.T) {
 	}
 
 	x0, y0 := r.nextToolWindowPosition()
-	r.toolWindows["a"] = &toolWindow{}
+	r.toolWindows = append(r.toolWindows, &toolWindow{})
 	x1, y1 := r.nextToolWindowPosition()
 	if x1 <= x0 || y1 <= y0 {
 		t.Errorf("second position (%d,%d) should be further down-right than the first (%d,%d)", x1, y1, x0, y0)
 	}
 
-	for i := 0; i < 5; i++ { // "a" plus these 5 reaches the wrap point (6) exactly
-		r.toolWindows[string(rune('b'+i))] = &toolWindow{}
+	for i := 0; i < 5; i++ { // the first plus these 5 reaches the wrap point (6) exactly
+		r.toolWindows = append(r.toolWindows, &toolWindow{})
 	}
 	xWrap, yWrap := r.nextToolWindowPosition()
 	if xWrap != x0 || yWrap != y0 {
@@ -63,7 +63,7 @@ func TestToolWindowAppendAfterCloseIsNoop(t *testing.T) {
 	}
 	tw := newToolWindow(r, "tw", "test")
 	tw.cancel = func() {}
-	r.toolWindows["tw"] = tw
+	r.toolWindows = append(r.toolWindows, tw)
 	r.AddPage("tw", tw, false, true)
 
 	tw.close()
@@ -73,9 +73,24 @@ func TestToolWindowAppendAfterCloseIsNoop(t *testing.T) {
 	if got := tw.content.GetText(true); strings.Contains(got, "too late") {
 		t.Errorf("content = %q, appendLine/appendStatus should no-op once closed", got)
 	}
-	if _, ok := r.toolWindows["tw"]; ok {
+	if containsToolWindow(r, tw) {
 		t.Error("close should remove the window from Root.toolWindows")
 	}
+}
+
+// containsToolWindow reports whether tw is currently one of r's own open
+// tool windows — a small test helper standing in for the map membership
+// check a plain map[string]*toolWindow would have given for free, back
+// when toolWindows was one; it's an ordered []*toolWindow instead (see
+// its own doc comment in root.go on why the order itself matters, for
+// CycleFocusShortcut).
+func containsToolWindow(r *Root, tw *toolWindow) bool {
+	for _, w := range r.toolWindows {
+		if w == tw {
+			return true
+		}
+	}
+	return false
 }
 
 // TestToolWindowTitleBarDragMovesWindow drives toolWindow.MouseHandler
@@ -186,7 +201,7 @@ func TestToolWindowEscapeClosesWindow(t *testing.T) {
 	tw := newToolWindow(r, "tw", "test")
 	cancelled := false
 	tw.cancel = func() { cancelled = true }
-	r.toolWindows["tw"] = tw
+	r.toolWindows = append(r.toolWindows, tw)
 	r.AddPage("tw", tw, false, true)
 
 	handler := tw.InputHandler()
@@ -198,7 +213,7 @@ func TestToolWindowEscapeClosesWindow(t *testing.T) {
 	if !tw.closed {
 		t.Error("Escape should mark the window closed")
 	}
-	if _, ok := r.toolWindows["tw"]; ok {
+	if containsToolWindow(r, tw) {
 		t.Error("Escape should remove the window from Root.toolWindows")
 	}
 	if r.HasPage("tw") {
@@ -283,5 +298,102 @@ func TestOpenPingTestWindowPromptsForHost(t *testing.T) {
 	}
 	if got := r.prompt.GetLabel(); got != "Ping host: " {
 		t.Errorf("prompt label = %q, want %q", got, "Ping host: ")
+	}
+}
+
+// TestCycleFocusShortcutReachesToolWindow pins the whole reason
+// CycleFocusShortcut was generalized past a plain panel/Details toggle
+// in the first place: without it, a tool window could only ever be
+// focused by clicking it (or in the instant it's first opened) — there
+// was no keyboard-only way in at all. Panel -> tool window -> back to
+// panel, with no Details sidebar open at all here (see
+// TestCycleFocusShortcutOrdersDetailsBeforeToolWindows for all three
+// together).
+func TestCycleFocusShortcutReachesToolWindow(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+
+	tw := newToolWindow(r, "tw", "test")
+	tw.cancel = func() {}
+	r.toolWindows = append(r.toolWindows, tw)
+	r.AddPage("tw", tw, false, true)
+
+	if !r.CycleFocusShortcut() {
+		t.Fatal("Tab from the panel with a tool window open should report true")
+	}
+	if got := r.app.GetFocus(); got != tw {
+		t.Errorf("focus after Tab = %v, want the tool window", got)
+	}
+
+	if !r.CycleFocusShortcut() {
+		t.Fatal("Tab from the tool window should report true")
+	}
+	if got := r.app.GetFocus(); got != r.panel.table {
+		t.Errorf("focus after second Tab = %v, want back on the panel", got)
+	}
+}
+
+// TestCycleFocusShortcutOrdersDetailsBeforeToolWindows pins the fixed
+// stop order all three together follow (see focusCycleStops' own doc
+// comment): panel, then Details, then every open tool window in the
+// order they were opened.
+func TestCycleFocusShortcutOrdersDetailsBeforeToolWindows(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+	r.showDetailsSidebar()
+
+	tw1 := newToolWindow(r, "tw1", "first")
+	tw1.cancel = func() {}
+	r.toolWindows = append(r.toolWindows, tw1)
+	r.AddPage("tw1", tw1, false, true)
+
+	tw2 := newToolWindow(r, "tw2", "second")
+	tw2.cancel = func() {}
+	r.toolWindows = append(r.toolWindows, tw2)
+	r.AddPage("tw2", tw2, false, true)
+
+	wantOrder := []tview.Primitive{r.panel.table, r.detailsSidebar, tw1, tw2}
+	for i := 1; i < len(wantOrder)+1; i++ {
+		if !r.CycleFocusShortcut() {
+			t.Fatalf("Tab #%d should report true", i)
+		}
+		want := wantOrder[i%len(wantOrder)]
+		if got := r.app.GetFocus(); got != want {
+			t.Errorf("focus after Tab #%d = %v, want %v", i, got, want)
+		}
+	}
+}
+
+// TestCycleFocusShortcutSkipsClosedToolWindow pins that closing a tool
+// window (Escape — see toolWindow.close) removes it from this cycle too,
+// not just from the screen: cycling afterwards must not get stuck trying
+// to focus a Primitive that's already torn down.
+func TestCycleFocusShortcutSkipsClosedToolWindow(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.panel.table)
+
+	tw := newToolWindow(r, "tw", "test")
+	tw.cancel = func() {}
+	r.toolWindows = append(r.toolWindows, tw)
+	r.AddPage("tw", tw, false, true)
+	tw.close()
+
+	if !r.CycleFocusShortcut() {
+		t.Fatal("setup: still expect focus to move somewhere")
+	}
+	if got := r.app.GetFocus(); got == tview.Primitive(tw) {
+		t.Error("focus should never land on a closed tool window")
 	}
 }
