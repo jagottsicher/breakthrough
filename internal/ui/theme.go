@@ -66,16 +66,16 @@ func colorTag(c tcell.Color) string {
 // scheme.
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
+	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
 
 	// AccentBackground: the shared, constant "normal panel background"
 	// every panel now uses (see propertiesText's own comment below for
-	// the full reasoning) — menuTitleBar carries EditableBackground
-	// instead, always (the same "the whole dialog reads as active for as
-	// long as it's open" reasoning propertiesTitleBar's own comment
-	// gives, context menu being just as modal).
+	// the full reasoning) — menuTitleBar's own background is set via
+	// updateOverlayTitleBarColors below instead, since — per the user's
+	// own explicit request — it now depends on whether the context menu
+	// is the currently active overlay, the same as propertiesTitleBar.
 	r.menu.SetBackgroundColor(theme.AccentBackground)
 	r.menu.SetMainTextColor(theme.Text)
-	r.menuTitleBar.SetBackgroundColor(theme.EditableBackground)
 	r.menuTitleBar.SetTextColor(theme.Text)
 
 	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
@@ -104,13 +104,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// bashconsole.go/bashHintText) is one of the panels the user's own
 	// explicit request named directly — its content area (bashLine) gets
 	// the same shared, constant "normal panel background" every other
-	// one has now. bashHint just below is its title bar equivalent —
-	// already only ever shown while bashLine is expanded/active, so it
-	// keeps a constant EditableBackground unconditionally, the same
-	// reasoning propertiesTitleBar's own doc comment gives below.
+	// one has now. bashHint just below is its title bar equivalent,
+	// shown only while bashLine is expanded/focused — re-derive its
+	// color from bashLine's own current focus state (see
+	// expandBashConsole/collapseBashConsole) rather than resetting to
+	// one fixed color unconditionally, the same live-color-scheme-switch
+	// hazard detailsTitleBar's own comment below documents.
 	r.bashLine.SetBackgroundColor(theme.AccentBackground)
 	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
-	r.bashHint.SetBackgroundColor(theme.EditableBackground)
+	if r.bashLine.HasFocus() {
+		r.bashHint.SetBackgroundColor(theme.FocusedBackground)
+	} else {
+		r.bashHint.SetBackgroundColor(theme.EditableBackground)
+	}
 	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
 	r.buttonBar.SetBackgroundColor(theme.AccentBackground)
 	r.buttonBar.SetTextColor(theme.Text)
@@ -121,21 +127,15 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// every panel floating over the main one now uses (toolWindow/
 	// Details' own content areas included — see
 	// toolwindow.go/detailssidebar.go), per the user's own explicit
-	// request. propertiesTitleBar just below carries EditableBackground
-	// instead now.
+	// request. propertiesTitleBar's own background is set via
+	// updateOverlayTitleBarColors below instead, since it now depends on
+	// whether Properties is the currently active overlay — see its own
+	// doc comment.
 	r.propertiesText.SetBackgroundColor(theme.AccentBackground)
 	r.propertiesEditField.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetFieldTextColor(theme.Text)
 	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
-	// Always EditableBackground, not focus-dependent the way
-	// toolWindow's/Details' own title bars are: Properties is a
-	// modal-ish dialog — the whole thing reads as "active" for as long
-	// as it's open at all, unlike those two, which coexist with other,
-	// simultaneously visible-but-unfocused panels (the same reason
-	// bashHint, also only ever shown while bashLine is active, stays a
-	// constant EditableBackground too — see above).
-	r.propertiesTitleBar.SetBackgroundColor(theme.EditableBackground)
 	r.propertiesTitleBar.SetTextColor(theme.Text)
 	r.propertiesCancelBtn.SetBackgroundColor(theme.AccentBackground)
 	r.propertiesCancelBtn.SetLabelColor(theme.Text)

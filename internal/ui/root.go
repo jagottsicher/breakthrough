@@ -1077,11 +1077,38 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	r.activeWidget = widget
 	r.ShowPage(page)
 	r.SendToFront(page)
+	r.updateOverlayTitleBarColors()
 	if restore != nil {
 		restore()
 	} else {
 		r.app.SetFocus(widget)
 	}
+}
+
+// updateOverlayTitleBarColors recolors every modal overlay's own title
+// bar that doesn't already track its own focus state the way
+// toolWindow's/Details' do (see toolwindow.go/detailssidebar.go) —
+// currently propertiesTitleBar/menuTitleBar — based on which one, if
+// any, is currently the topmost overlay (r.activePage): FocusedBackground
+// for that one, EditableBackground for every other, per the user's own
+// explicit request that this same active/inactive distinction apply to
+// every panel with a title bar, not just tool windows'/Details' own.
+// Called from pushOverlay/hideOverlay, the only two places activePage
+// itself changes, and from applyTheme, so a live color-scheme switch
+// re-derives the right one instead of resetting to a fixed color
+// regardless of which overlay (if any) is actually active right now —
+// the same live-switch hazard detailsTitleBar's own applyTheme case
+// documents.
+func (r *Root) updateOverlayTitleBarColors() {
+	set := func(bar *tview.TextView, page string) {
+		if r.activePage == page {
+			bar.SetBackgroundColor(r.theme.FocusedBackground)
+		} else {
+			bar.SetBackgroundColor(r.theme.EditableBackground)
+		}
+	}
+	set(r.propertiesTitleBar, propertiesPage)
+	set(r.menuTitleBar, contextMenuPage)
 }
 
 // pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
@@ -1108,6 +1135,7 @@ func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
 		r.activeWidget = nil
+		r.updateOverlayTitleBarColors()
 		if top.emptyStackFocus != nil {
 			r.app.SetFocus(top.emptyStackFocus)
 		} else {
@@ -1119,6 +1147,7 @@ func (r *Root) hideOverlay() {
 	below := r.overlayStack[len(r.overlayStack)-1]
 	r.activePage = below.page
 	r.activeWidget = below.widget
+	r.updateOverlayTitleBarColors()
 	if below.restore != nil {
 		below.restore()
 	} else {

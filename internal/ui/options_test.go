@@ -90,8 +90,10 @@ func TestApplyColorSchemeAppliesLiveAndPersists(t *testing.T) {
 	}
 	// AccentBackground: r.menu's own content now shares the same
 	// constant "normal panel background" every panel's content area does
-	// — menuTitleBar (its title bar) carries EditableBackground instead
-	// (see applyTheme's own comment in theme.go).
+	// — menuTitleBar (its title bar) is EditableBackground here because
+	// the menu isn't even open (see updateOverlayTitleBarColors' own
+	// doc comment for the full active/inactive behavior, pinned in
+	// TestUpdateOverlayTitleBarColorsTracksActiveOverlay).
 	if r.menu.GetBackgroundColor() != wantTheme.AccentBackground {
 		t.Errorf("r.menu background = %v, want %v (applyTheme should have repainted it)", r.menu.GetBackgroundColor(), wantTheme.AccentBackground)
 	}
