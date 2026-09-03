@@ -933,12 +933,16 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		prefill = r.stagedName
 		minWidth = 24 // room to type a longer name than the current one
 	case fieldPermOctal:
-		// 4 digits, matching exactly what's on screen (permissionsField's
-		// own "%04o") — typing "644" still works fine too, ParseMode
-		// doesn't care about a leading zero either way, but the field you
-		// clicked shouldn't visibly change digit count out from under you
-		// the moment you start editing it.
-		prefill = fmt.Sprintf("%04o", r.stagedMode.Perm())
+		// Blank, not the current value: per the user's own explicit
+		// request, clicking in or Tab-focusing this field should let you
+		// immediately type a fresh 4-digit value over it, not require
+		// deleting the old one first. Leaving without typing anything
+		// discards the (empty) edit exactly like any other invalid input
+		// already does (see applyPropertyEditText), leaving stagedMode
+		// untouched. minWidth 4 matches permissionsField's own "%04o";
+		// activateInlineTextField's own SetAcceptanceFunc call enforces
+		// the same 4-digit limit while actually typing.
+		prefill = ""
 		minWidth = 4
 	case fieldMtimeDate:
 		prefill = r.stagedMtime.Format("2006-01-02")
@@ -1103,9 +1107,26 @@ func (r *Root) activateFocusedPropertyStop() {
 // field over span, pre-filled with prefill, at least minWidth wide — the
 // common tail for Name/Modified date/time, and the owner/group picker's
 // own text fallback when fsops.ListUsers/ListGroups isn't available.
+//
+// SetAcceptanceFunc caps the field at 4 characters for fieldPermOctal
+// specifically (see activatePropertyField's own case for why — a real
+// InputField.SetMaxLength doesn't exist in this tview version, verified
+// directly against its own inputfield.go, so rejecting anything past
+// the 4th character here is the actual mechanism), and is cleared again
+// for every other field: this same shared field is also Name (up to
+// whatever length a filename can be) and the date/time fields, none of
+// which should be limited to 4 characters just because the last thing
+// that used this field happened to be the permission value.
 func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
 	r.propertiesEditTarget = span.field
 	r.propertiesEditField.SetText(prefill)
+	if span.field == fieldPermOctal {
+		r.propertiesEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
+			return len(textToCheck) <= 4
+		})
+	} else {
+		r.propertiesEditField.SetAcceptanceFunc(nil)
+	}
 
 	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
 	width := span.endCol - span.startCol
