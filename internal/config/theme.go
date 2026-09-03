@@ -36,10 +36,25 @@ type Theme struct {
 	// consistently across terminals regardless of the user's own
 	// terminal profile.
 	PanelBackground string `json:"panel_background"`
-	// AccentBackground colors header bars, dialogs, buttons, and other
-	// floating chrome — this app's one "everything not otherwise
-	// specified" background.
+	// AccentBackground colors header bars, dialogs, and other floating
+	// chrome — this app's one "everything not otherwise specified"
+	// background.
 	AccentBackground string `json:"accent_background"`
+	// ButtonBackground is every real button's own base look (Cancel/
+	// Save/Apply/Select/Find, the filter's regex-mode toggle, ...) —
+	// per the user's own explicit request, a lighter turquoise than
+	// FocusedBackground, replacing what turned out to be tview's own
+	// entirely uncustomized default (a plain blue): a raw tview.Button
+	// recomputes its own displayed background from its internal
+	// style/activatedStyle fields on every single Draw, discarding
+	// whatever a plain SetBackgroundColor call set moments earlier —
+	// verified directly against tview's own button.go, not guessed. See
+	// internal/ui's own button styling helper for the fix (SetStyle/
+	// SetActivatedStyle, not SetBackgroundColor). A focused button
+	// switches to FocusedBackground instead, the same "petrol means
+	// this currently has real keyboard focus" convention every other
+	// focusable element in this app already follows.
+	ButtonBackground string `json:"button_background"`
 	// FocusedBackground highlights whichever field currently has
 	// keyboard focus in the Properties overlay.
 	FocusedBackground string `json:"focused_background"`
@@ -120,6 +135,7 @@ type Theme struct {
 type ResolvedTheme struct {
 	PanelBackground     tcell.Color
 	AccentBackground    tcell.Color
+	ButtonBackground    tcell.Color
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
 	SelectionBackground tcell.Color
@@ -148,6 +164,7 @@ func DefaultTheme() Theme {
 
 		PanelBackground:     "#1c3232",
 		AccentBackground:    "darkslategray",
+		ButtonBackground:    "turquoise",
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
 		SelectionBackground: "darkcyan",
@@ -187,6 +204,7 @@ func (t Theme) Resolve() ResolvedTheme {
 	return ResolvedTheme{
 		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
+		ButtonBackground:    resolve(t.ButtonBackground, def.ButtonBackground),
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		SelectionBackground: resolve(t.SelectionBackground, def.SelectionBackground),
