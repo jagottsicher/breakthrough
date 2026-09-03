@@ -164,7 +164,7 @@ func DefaultTheme() Theme {
 
 		PanelBackground:     "#1c3232",
 		AccentBackground:    "darkslategray",
-		ButtonBackground:    "turquoise",
+		ButtonBackground:    "lightseagreen",
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
 		SelectionBackground: "darkcyan",

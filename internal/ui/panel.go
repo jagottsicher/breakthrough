@@ -524,7 +524,16 @@ func (p *Panel) paintStaticChrome() {
 
 	styleButton(p.filterRegexBtn, p.theme)
 
-	p.filterField.SetPlaceholderTextColor(p.theme.PlaceholderText)
+	// SetPlaceholderStyle, not SetPlaceholderTextColor: the latter only
+	// ever touches the placeholder's own foreground, never its
+	// background — verified directly against tview's own
+	// inputfield.go, not guessed — so the field's own background while
+	// showing its "filter" placeholder (i.e. empty) was still tview's
+	// entirely uncustomized default (a plain blue) regardless, the same
+	// class of bug styleButton's own doc comment documents for buttons.
+	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.
+		Background(p.theme.AccentBackground).
+		Foreground(p.theme.PlaceholderText))
 	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
 	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
 	p.filterField.SetFieldTextColor(p.theme.Text)
