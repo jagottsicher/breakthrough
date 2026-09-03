@@ -217,9 +217,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// Details has focus would otherwise show the wrong one until
 		// the next blur/focus cycle).
 		if r.detailsSidebar.HasFocus() {
-			r.detailsTitleBar.SetBackgroundColor(theme.EditableBackground)
+			r.detailsTitleBar.SetBackgroundColor(theme.FocusedBackground)
 		} else {
-			r.detailsTitleBar.SetBackgroundColor(theme.AccentBackground)
+			r.detailsTitleBar.SetBackgroundColor(theme.EditableBackground)
 		}
 		r.detailsTitleBar.SetTextColor(theme.Text)
 	}
