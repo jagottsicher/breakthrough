@@ -83,11 +83,11 @@ func TestShowDetailsSidebarPreservesKeyboardFocus(t *testing.T) {
 	}
 }
 
-// TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar pins Tab's
+// TestCycleFocusShortcutTogglesBetweenPanelAndSidebar pins Tab's
 // own two-way action: from the panel, it moves focus onto the sidebar
 // (so its own already-built-in scrolling works); pressed again, it
 // moves focus back.
-func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
+func TestCycleFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -97,14 +97,14 @@ func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
 
-	if !r.ToggleDetailsFocusShortcut() {
+	if !r.CycleFocusShortcut() {
 		t.Fatal("first Tab (panel -> sidebar) should report true")
 	}
 	if got := r.app.GetFocus(); got != r.detailsSidebar {
 		t.Errorf("focus after first Tab = %v, want the details sidebar", got)
 	}
 
-	if !r.ToggleDetailsFocusShortcut() {
+	if !r.CycleFocusShortcut() {
 		t.Fatal("second Tab (sidebar -> panel) should report true")
 	}
 	if got := r.app.GetFocus(); got != r.panel.table {
@@ -112,13 +112,13 @@ func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	}
 }
 
-// TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies pins the
+// TestCycleFocusShortcutReturnsFalseWhenNeitherApplies pins the
 // half of Tab's contract cmd/breakthrough actually depends on: it must
 // report false — so Tab falls through untouched — whenever neither the
 // panel nor the sidebar is what currently has focus (here: Properties,
 // which needs its own Tab for moving between fields), and also
 // whenever the sidebar isn't even shown at all.
-func TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) {
+func TestCycleFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
 
@@ -128,13 +128,13 @@ func TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) 
 	}
 	r.SetRect(0, 0, 100, 40)
 
-	if r.ToggleDetailsFocusShortcut() {
+	if r.CycleFocusShortcut() {
 		t.Error("should report false when the sidebar isn't shown at all")
 	}
 
 	r.target = path
 	r.openProperties()
-	if r.ToggleDetailsFocusShortcut() {
+	if r.CycleFocusShortcut() {
 		t.Error("should report false while Properties (not the panel or the sidebar) has focus")
 	}
 	if got := r.app.GetFocus(); got == r.detailsSidebar || got == r.panel.table {
@@ -155,7 +155,7 @@ func TestHideDetailsSidebarRedirectsFocusWhenSidebarWasFocused(t *testing.T) {
 	r.SetRect(0, 0, 100, 40)
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
-	r.ToggleDetailsFocusShortcut() // panel -> sidebar
+	r.CycleFocusShortcut() // panel -> sidebar
 	if got := r.app.GetFocus(); got != r.detailsSidebar {
 		t.Fatalf("setup: focus = %v, want the details sidebar", got)
 	}
@@ -209,12 +209,12 @@ func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 		t.Errorf("background before focus = %v, want AccentBackground %v", got, want)
 	}
 
-	r.ToggleDetailsFocusShortcut()
+	r.CycleFocusShortcut()
 	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
 		t.Errorf("background while focused = %v, want FocusedBackground %v", got, want)
 	}
 
-	r.ToggleDetailsFocusShortcut()
+	r.CycleFocusShortcut()
 	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
 		t.Errorf("background after losing focus again = %v, want AccentBackground %v", got, want)
 	}
@@ -425,7 +425,7 @@ func TestCaptureDetailsSidebarMouseSwallowsUnhandledActionsInsideItsRect(t *test
 // TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough pins the fix
 // for the user's own explicit report: mouse-wheel scrolling (and a
 // plain click that focuses the sidebar via tview's own MouseLeftDown
-// handling — see ToggleDetailsFocusShortcut for the Tab-driven way in)
+// handling — see CycleFocusShortcut for the Tab-driven way in)
 // must reach the TextView's own default MouseHandler, not be swallowed
 // here the way every other action still is.
 func TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough(t *testing.T) {
