@@ -522,8 +522,7 @@ func (p *Panel) paintStaticChrome() {
 	p.headerEdit.SetFieldTextColor(p.theme.Text)
 	p.headerEdit.SetLabelColor(p.theme.Text)
 
-	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
-	p.filterRegexBtn.SetLabelColor(p.theme.Text)
+	styleButton(p.filterRegexBtn, p.theme)
 
 	p.filterField.SetPlaceholderTextColor(p.theme.PlaceholderText)
 	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
