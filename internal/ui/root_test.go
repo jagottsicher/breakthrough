@@ -4,11 +4,54 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+// TestToggleMouseShortcutFlipsState pins F3's own action (see
+// ToggleMouseShortcut) — a real user report that a mouse-aware terminal
+// app with no way to turn that off breaks the terminal's own native
+// text selection/copy, and no easy-to-remember way back.
+func TestToggleMouseShortcutFlipsState(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if !r.mouseEnabled {
+		t.Fatal("setup: mouse should start enabled, matching cmd/breakthrough's own initial EnableMouse(true)")
+	}
+
+	r.ToggleMouseShortcut()
+	if r.mouseEnabled {
+		t.Error("first F3 should disable mouse reporting")
+	}
+	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse off") {
+		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse off")
+	}
+
+	r.ToggleMouseShortcut()
+	if !r.mouseEnabled {
+		t.Error("a second F3 should re-enable mouse reporting")
+	}
+	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse on") {
+		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse on")
+	}
+}
+
+// TestMouseStatusText pins the exact wording buildStatusBar's own
+// "Mouse on/off" segment uses.
+func TestMouseStatusText(t *testing.T) {
+	if got := mouseStatusText(true); got != "Mouse on" {
+		t.Errorf("mouseStatusText(true) = %q, want %q", got, "Mouse on")
+	}
+	if got := mouseStatusText(false); got != "Mouse off" {
+		t.Errorf("mouseStatusText(false) = %q, want %q", got, "Mouse off")
+	}
+}
 
 // TestContextMenuStructure pins the menu's grouping: Properties/Edit/
 // Look/Tail -f/Rename, then a "Selection" section, a "Commands" section,
