@@ -133,20 +133,31 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 // toolWindowCloseGlyph/toolWindowResizeGlyph are drawn directly onto
 // the screen (see Draw), not appended to titleBar's own text: a plain
 // Unicode glyph, deliberately not the letter "X", per the user's own
-// explicit request — '✕' reads as an X-shape without being mistakable
-// for real title text, and '◢' is a filled lower-right triangle, the
-// same shape most GUI apps already use for a resize grip.
+// explicit request — '⛌' (CROSSING LANES, U+26CC) reads as a bold
+// X-shape without being mistakable for real title text, and '◢' is a
+// filled lower-right triangle, the same shape most GUI apps already
+// use for a resize grip.
 const (
-	toolWindowCloseGlyph  = '✕'
+	toolWindowCloseGlyph  = '⛌'
 	toolWindowResizeGlyph = '◢'
 )
 
+// toolWindowCloseButtonCol returns the close glyph's own column within
+// a window width columns wide: one column in from the right edge, not
+// the edge itself, per the user's own explicit request for a full
+// character of breathing room between the glyph and the window's own
+// border — see minWidth's own doc comment for the matching floor this
+// leaves on how narrow the window can ever get.
+func toolWindowCloseButtonCol(x, width int) int {
+	return x + width - 2
+}
+
 // Draw draws the title bar as row 0 of this window's own rect (see
-// newToolWindow), the close button glyph over its own top-right
-// corner, the content TextView across the rows in between, and finally
-// the resize-handle footer as the very last row — no border, no inner-
-// rect arithmetic otherwise (see newToolWindow's own doc comment on why
-// there's no border to account for here at all).
+// newToolWindow), the close button glyph one column in from its own
+// top-right corner, the content TextView across the rows in between,
+// and finally the resize-handle footer as the very last row — no
+// border, no inner-rect arithmetic otherwise (see newToolWindow's own
+// doc comment on why there's no border to account for here at all).
 func (tw *toolWindow) Draw(screen tcell.Screen) {
 	tw.DrawForSubclass(screen, tw)
 	x, y, width, height := tw.GetRect()
@@ -156,9 +167,9 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 
 	tw.titleBar.SetRect(x, y, width, 1)
 	tw.titleBar.Draw(screen)
-	if width > 0 {
+	if closeCol := toolWindowCloseButtonCol(x, width); closeCol >= x {
 		closeStyle := tcell.StyleDefault.Background(tw.titleBar.GetBackgroundColor()).Foreground(tw.root.theme.Text)
-		screen.SetContent(x+width-1, y, toolWindowCloseGlyph, nil, closeStyle)
+		screen.SetContent(closeCol, y, toolWindowCloseGlyph, nil, closeStyle)
 	}
 
 	tw.content.SetRect(x, y+1, width, tw.contentHeight())
@@ -201,8 +212,9 @@ func (tw *toolWindow) contentHeight() int {
 
 // MouseHandler drives the mouse side of this window's own chrome: a
 // press on the title bar (row 0 — see newToolWindow) starts a move-drag,
-// except right on its own top-right corner (the close glyph — see Draw),
-// which closes the window outright instead; a press on the resize
+// except right on the close glyph itself (one column in from its own
+// top-right corner — see toolWindowCloseButtonCol/Draw), which closes
+// the window outright instead; a press on the resize
 // handle (the bottom-right corner of the footer row — see contentHeight's
 // own doc comment) starts a resize-drag. Every subsequent move with the
 // left button still held (checked via event.Buttons() — verified
@@ -269,7 +281,7 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 		if action == tview.MouseLeftDown {
 			setFocus(tw)
 			switch {
-			case y == wy && x == wx+width-1: // the close glyph, top-right of the title bar
+			case y == wy && x == toolWindowCloseButtonCol(wx, width): // the close glyph, one column in from the title bar's own top-right corner
 				tw.close()
 				return true, nil
 			case y == wy: // the rest of the title bar
@@ -308,11 +320,13 @@ func (tw *toolWindow) moveTo(x, y, width, height int) {
 const toolWindowMinHeight = 3
 
 // minWidth is the narrowest this window can ever be resized to (see
-// resizeTo) — its own title, one space, and the close button, per the
-// user's own explicit request: any narrower and the close glyph would
-// either overlap the title text or force it to be clipped.
+// resizeTo) — its own title, one space, the close button, and one more
+// space to its right (see toolWindowCloseButtonCol's own doc comment),
+// per the user's own explicit request: any narrower and the close
+// glyph would either overlap the title text or sit flush against the
+// window's own right edge.
 func (tw *toolWindow) minWidth() int {
-	return tview.TaggedStringWidth(tw.titleBar.GetText(false)) + 2 // +1 space, +1 for the close glyph's own single cell
+	return tview.TaggedStringWidth(tw.titleBar.GetText(false)) + 3 // +1 space, +1 for the close glyph's own cell, +1 space
 }
 
 // resizeTo is the resize handle's own counterpart to moveTo: unlike a
@@ -536,6 +550,18 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 		r.showError(fmt.Errorf("%s: %w", name, err))
 		return nil
 	}
+
+	// nextToolWindowPosition reads len(r.toolWindows) to decide where
+	// this window spawns — computed (and this window's own rect set)
+	// before appending tw to that slice, not after: appending first
+	// would make even the very first window ever opened see its own
+	// not-yet-positioned self already counted, landing it one cascade
+	// step further down-right than nextToolWindowPosition's own doc
+	// comment promises.
+	x, y := r.nextToolWindowPosition()
+	tw.SetRect(x, y, toolWindowMinWidth, toolWindowDefaultHeight)
+	tw.recalculateWidth() // sizes it for real, off just the title until output starts arriving (see its own doc comment)
+
 	r.toolWindows = append(r.toolWindows, tw)
 
 	go func() {
@@ -563,10 +589,6 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 			}
 		})
 	}()
-
-	x, y := r.nextToolWindowPosition()
-	tw.SetRect(x, y, toolWindowMinWidth, toolWindowDefaultHeight)
-	tw.recalculateWidth() // sizes it for real, off just the title until output starts arriving (see its own doc comment)
 
 	r.AddPage(id, tw, false, true)
 	r.SendToFront(id)
