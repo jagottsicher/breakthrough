@@ -39,14 +39,23 @@ const (
 	KindPDF
 )
 
-// sniffLen is how much of a file's content Sniff actually inspects — the
-// same 8000-byte convention git itself uses to decide whether to diff a
-// file as text or report it as binary (verified against git's own
-// xdiff-interface.c buffer_is_binary, not guessed): generous enough not
+// sniffLen is how much of a file's content Sniff actually inspects.
+// git's own xdiff-interface.c buffer_is_binary uses 8000 bytes for
+// exactly the same text-vs-binary NUL check below — generous enough not
 // to be fooled by a text file that happens to start with a long run of
-// plain content before anything binary-looking, cheap enough to read
-// unconditionally.
-const sniffLen = 8000
+// plain content before anything binary-looking — but that number turned
+// out to be too small for the image.DecodeConfig check just below it:
+// a real, user-reported JPEG (a GIMP-authored photo with a sizeable
+// embedded EXIF block) put its own SOF marker — the thing
+// DecodeConfig actually needs to reach — at byte 12752, past the old
+// 8000-byte window, so Sniff reported KindUnsupported for a perfectly
+// valid, normally-decodable image; both Look and the Details sidebar
+// silently showed nothing for it. 64 KiB is comfortable headroom over
+// that (and over an even larger embedded thumbnail/XMP block a
+// different camera or editor might produce) while staying nowhere near
+// the cost of the real, full pixel decode this is deliberately meant to
+// stay cheaper than (see Load).
+const sniffLen = 64 << 10 // 64 KiB
 
 // Sniff decides Kind from sample, a prefix of a file's real content (see
 // Load, which always passes the file's own first sniffLen bytes — never
@@ -75,8 +84,10 @@ const sniffLen = 8000
 //     in the header, not necessarily near the start of the file —
 //     DecodeConfig needs to actually reach that offset to succeed, and
 //     a TIFF whose IFD sits past sniffLen bytes in won't be recognized
-//     here. Every other registered format's own header is self-
-//     contained well within sniffLen.
+//     here. Likewise a JPEG whose own SOF marker sits past sniffLen —
+//     sniffLen's own doc comment above already covers a real,
+//     user-reported case that used to fail this way; a pathological
+//     one with even more embedded metadata than that still could.
 func Sniff(sample []byte) Kind {
 	if bytes.HasPrefix(sample, []byte("%PDF-")) {
 		return KindPDF
