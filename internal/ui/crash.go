@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/jagottsicher/breakthrough/internal/session"
 )
 
 // DebugDir is where this app's own crash/debug logs live —
@@ -19,16 +21,14 @@ import (
 // crashLogPath below, without duplicating this same resolution logic a
 // second time. Best-effort: "" if even the fallback can't be resolved
 // (no $HOME either).
+//
+// A thin alias for session.StateDir rather than its own copy of that
+// resolution: the saved tab layout (see session.SaveTabs) needs the very
+// same directory, and two independently maintained versions of "where
+// does this app's own state live" is exactly the kind of thing that
+// silently drifts apart later.
 func DebugDir() string {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		dir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(dir, "breakthrough")
+	return session.StateDir()
 }
 
 // crashLogPath is where safeGo's own recovered panics get logged — see

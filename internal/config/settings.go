@@ -105,6 +105,15 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     PruneTrash applies, oldest item first, only if trash_max_age_days
 //     alone didn't already bring it back under quota. 10 by default. 0
 //     disables quota-based pruning entirely.
+//   - restore_tabs: whether breakthrough reopens the panel tabs that
+//     were open when it last exited (see internal/session's SaveTabs/
+//     LoadTabs and internal/ui's RestoreSavedTabs). true by default —
+//     per the user's own explicit request that each tab remember its own
+//     directory across a restart. Only ever consulted when breakthrough
+//     is started with no explicit directory argument: "breakthrough
+//     /some/path" is an unambiguous instruction about where to open, and
+//     silently reopening yesterday's tabs on top of it would be the
+//     wrong answer to it.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -115,6 +124,7 @@ type Settings struct {
 	TrashPersistent   bool
 	TrashMaxAgeDays   int
 	TrashQuotaPercent int
+	RestoreTabs       bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -133,6 +143,7 @@ func DefaultSettings() Settings {
 		TrashPersistent:   true,
 		TrashMaxAgeDays:   30,
 		TrashQuotaPercent: 10,
+		RestoreTabs:       true,
 	}
 }
 
@@ -177,6 +188,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseInt(&s.TrashMaxAgeDays)
 	case "trash_quota_percent":
 		return parseInt(&s.TrashQuotaPercent)
+	case "restore_tabs":
+		return parseBool(&s.RestoreTabs)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

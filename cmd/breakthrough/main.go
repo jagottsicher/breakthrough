@@ -71,6 +71,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	explicitDir := startDirWasGiven()
 
 	// EnablePaste turns on tcell's bracketed-paste support: without it, a
 	// terminal paste arrives as a burst of ordinary key events, which for
@@ -90,6 +91,16 @@ func run() error {
 	// own doc comment for why this can't just be read directly from
 	// within internal/ui itself.
 	root.SetVersionInfo(version, commit, date, builtBy)
+
+	// Reopen the tabs the last run left behind (see
+	// Root.RestoreSavedTabs, which additionally honours the restore_tabs
+	// setting). Skipped entirely when a directory was named on the
+	// command line: "breakthrough /some/path" says where to open in
+	// unambiguous terms, and burying that under a restored layout would
+	// be answering a different question than the one asked.
+	if !explicitDir {
+		root.RestoreSavedTabs()
+	}
 
 	// Only meaningful once Application.Run is about to start draining its
 	// update queue — see StartClock's own doc comment for why NewRoot
@@ -315,6 +326,15 @@ func run() error {
 			root.FetchMetadataShortcut()
 			return nil
 		case tcell.KeyTab:
+			// Ctrl+Tab steps through the panel tabs (see
+			// Root.NextTabShortcut); plain Tab keeps its existing
+			// meaning, below. Both arrive as KeyTab — the modifier is
+			// the only thing telling them apart, which is exactly why
+			// this is one case with a check rather than two.
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.NextTabShortcut()
+				return nil
+			}
 			// Only consumed when it actually means something (see
 			// Root.CycleFocusShortcut's own doc comment) - cycling focus
 			// among the panel, the Details sidebar once it's shown, and
@@ -325,6 +345,56 @@ func run() error {
 			// false and this falls through completely untouched, exactly
 			// as Tab already worked everywhere before this existed.
 			if root.CycleFocusShortcut() {
+				return nil
+			}
+			return event
+		case tcell.KeyBacktab:
+			// Ctrl+Shift+Tab, the other direction. tcell folds Shift+Tab
+			// into KeyBacktab and strips ModShift while doing it
+			// (verified directly against its own NewEventKey, and live
+			// against a real terminal), so what arrives here for
+			// Ctrl+Shift+Tab is KeyBacktab still carrying ModCtrl —
+			// which is what distinguishes it from a plain Shift+Tab,
+			// left untouched below.
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.PrevTabShortcut()
+				return nil
+			}
+			return event
+		case tcell.KeyF4:
+			// Opens the tab switcher (see Root.TabSwitcherShortcut's own
+			// doc comment) — the keyboard path that works on every
+			// terminal, including the ones that can't report Ctrl+Tab or
+			// Ctrl+digit at all. Continues the F1/F2/F3 sequence for the
+			// same reason F3 did: no unclaimed Ctrl letter is left.
+			root.TabSwitcherShortcut()
+			return nil
+		case tcell.KeyRune:
+			// Ctrl+1..Ctrl+9 and Ctrl+0 jump straight to a tab by its own
+			// number, with Ctrl+0 meaning the tenth — the numbering the
+			// tab strip itself shows, per the user's own explicit
+			// request.
+			//
+			// Whether these arrive at all depends on the terminal: the
+			// classic control-code encoding has no room for most
+			// Ctrl+digit combinations (Ctrl+3 is byte-identical to
+			// Escape, Ctrl+8 to Delete, and Ctrl+1/9/0 have no encoding
+			// whatsoever), so they only become distinguishable once one
+			// of the enhanced keyboard protocols is in play — kitty's
+			// CSI-u or xterm's modifyOtherKeys, both of which tcell
+			// requests at startup on any xterm-like terminal. Verified
+			// live against a real terminal, not assumed: with the
+			// protocol active all ten arrive here as KeyRune carrying
+			// ModCtrl; without it they never match this case at all and
+			// fall through exactly as before, which is why binding them
+			// costs nothing on a terminal too old to send them. F4 above
+			// is the always-available way to the same feature.
+			if event.Modifiers()&tcell.ModCtrl != 0 && event.Rune() >= '0' && event.Rune() <= '9' {
+				n := int(event.Rune() - '0')
+				if n == 0 {
+					n = 10 // Ctrl+0 is the tenth tab, continuing the row of digits
+				}
+				root.SwitchToTabShortcut(n)
 				return nil
 			}
 			return event
@@ -382,10 +452,33 @@ func run() error {
 // directory, and "breakthrough --debug /some/path" wouldn't find its
 // own path argument at all.
 func startDir() (string, error) {
-	for _, arg := range os.Args[1:] {
-		if !strings.HasPrefix(arg, "-") {
-			return arg, nil
-		}
+	if dir, ok := explicitStartDir(); ok {
+		return dir, nil
 	}
 	return os.Getwd()
+}
+
+// startDirWasGiven reports whether a directory was actually named on the
+// command line, as opposed to startDir having fallen back to the working
+// directory.
+//
+// The distinction matters only to the saved-tab restore (see run): an
+// explicitly named directory suppresses it, while a bare "breakthrough"
+// reopens the previous layout. startDir alone can't answer this — the
+// working directory it falls back to is a perfectly ordinary path, and
+// indistinguishable afterwards from the same path having been typed.
+func startDirWasGiven() bool {
+	_, ok := explicitStartDir()
+	return ok
+}
+
+// explicitStartDir is the argument scan both of the two above share: the
+// first non-flag argument, if there is one.
+func explicitStartDir() (string, bool) {
+	for _, arg := range os.Args[1:] {
+		if !strings.HasPrefix(arg, "-") {
+			return arg, true
+		}
+	}
+	return "", false
 }

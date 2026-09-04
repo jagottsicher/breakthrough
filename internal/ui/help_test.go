@@ -278,7 +278,8 @@ func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 		"Enter", "Space", "Right-click",
 		"Tab", "Escape",
 		"PageUp", "PageDown", // Look's own PDF page-turn
-		"Alt+arrow", // tool windows' own move gesture
+		"Alt+arrow",                                            // tool windows' own move gesture
+		"F4", "Ctrl+1", "Ctrl+0", "Ctrl+Tab", "Ctrl+Shift+Tab", // panel tabs
 	}
 	for _, s := range want {
 		if !strings.Contains(helpText, s) {

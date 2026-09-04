@@ -72,6 +72,8 @@ func TestContextMenuStructure(t *testing.T) {
 		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
+		menuSectionLabel("Tabs"),
+		"New tab", "Close tab", "Switch tab...",
 		menuSectionLabel("Tools"),
 		"Ping (test)", // placeholder entry point for the first toolWindow slice — see toolwindow.go
 		menuSectionLabel("Globals"),

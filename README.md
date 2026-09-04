@@ -51,6 +51,17 @@ terminal.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
+- Tabs: several directories open at once in one window, each keeping its
+  own history, filter, sort order, selection and cursor position, so
+  switching away and back leaves everything exactly as it was. `^1`
+  through `^0` jump straight to a tab, `^Tab`/`^Shift+Tab` step through
+  a switcher showing every tab's full path (F4 opens it without moving,
+  and works on terminals that can't report `^Tab` at all). A compact
+  numbered strip sits beside the filter — numbers rather than paths, so
+  the header row's width stays put as you navigate — and hides itself
+  entirely while only one tab is open. The layout is saved on exit and
+  reopened next time, unless a directory was named on the command line
+  or `restore_tabs = false` turns it off.
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),

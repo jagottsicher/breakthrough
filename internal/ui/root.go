@@ -147,7 +147,28 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	panel *Panel
+	// panel is the tab the user is currently looking at — repointed by
+	// switchToTab, so every other reference to "the panel" in this
+	// package keeps meaning the right one without knowing tabs exist.
+	//
+	// tabs holds every open tab's own Panel in tab order, activeTab
+	// indexes it, and panelHost is the Pages primitive that shows exactly
+	// one of them at a time (see tabs.go for the whole design, including
+	// why each tab is a real Panel rather than a saved bundle of fields).
+	// panel is always tabs[activeTab].
+	panel     *Panel
+	tabs      []*Panel
+	activeTab int
+	panelHost *tview.Pages
+
+	// The tab switcher overlay (see tabswitcher.go) — the same
+	// List/title-bar/Flex split every other overlay here uses, with
+	// tabSwitcher itself the real focus target and tabSwitcherLayout what
+	// Pages actually shows.
+	tabSwitcher         *tview.List
+	tabSwitcherTitleBar *tview.TextView
+	tabSwitcherLayout   *tview.Flex
+
 	// menu is the context menu's own List — the real focus target
 	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
 	// title bar and the Flex stacking the two, which is what's actually
@@ -804,8 +825,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("tail -f", "", 0, r.tailCurrentEntry) // lowercase, per the user's own explicit request — it's a command name, not a title
 	r.menu.AddItem("Properties", "", 0, r.openProperties)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
-	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
-	r.menu.AddItem("Deselect all", "", 0, r.panel.deselectAll)
+	// Closures over r.panel, not r.panel.selectAll/deselectAll directly:
+	// a bound method value captures the receiver at the moment it's
+	// taken, which here is the first tab's panel, forever. Every other
+	// entry in this menu already goes through an r.* method that reads
+	// r.panel live — these two were the only ones reaching past it, and
+	// would have kept operating on tab 1 no matter which tab was on
+	// screen (see switchToTab, which repoints r.panel).
+	r.menu.AddItem("Select all", "", 0, func() { r.panel.selectAll() })
+	r.menu.AddItem("Deselect all", "", 0, func() { r.panel.deselectAll() })
 	r.menu.AddItem("Select +", "", 0, r.openSelectPlus)
 	r.menu.AddItem("Select -", "", 0, r.openSelectMinus)
 	r.menu.AddItem(menuSectionLabel("Commands"), "", 0, nil)
@@ -821,6 +849,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
 	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
 	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
+	r.menu.AddItem(menuSectionLabel("Tabs"), "", 0, nil)
+	// The menu path to the same three things the tab strip, Ctrl+Tab and
+	// Ctrl+1..Ctrl+0 reach — this app is menu-driven by design, and the
+	// strip's own "+"/click affordances are small targets that a user
+	// who hasn't found them yet has no reason to suspect exist.
+	r.menu.AddItem("New tab", "", 0, r.newTabHere)
+	r.menu.AddItem("Close tab", "", 0, r.closeCurrentTab)
+	r.menu.AddItem("Switch tab...", "", 0, func() { r.openTabSwitcher(r.activeTab) })
 	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
 	// Ping is this first toolWindow slice's own proof of concept (see
 	// toolwindow.go) — a placeholder entry point, not itself the planned
@@ -960,6 +996,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
+	// The tab switcher overlay (see tabswitcher.go) — same
+	// list-plus-title-bar shape as the context menu above, rebuilt on
+	// every open rather than kept in sync as tabs change.
+	r.tabSwitcher = r.newTabSwitcher()
+	r.tabSwitcherTitleBar = r.newTabSwitcherTitleBar()
+	r.tabSwitcherLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.tabSwitcherTitleBar, 1, 0, false).
+		AddItem(r.tabSwitcher, 0, 1, true)
+
 	// The Details sidebar (see detailssidebar.go): its own content is a
 	// single static TextView, same shape as Help/the Look pager above,
 	// topped with its own "Details" title bar (see newDetailsTitleBar) —
@@ -971,6 +1016,88 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.detailsTitleBar, 1, 0, false).
 		AddItem(r.detailsSidebar, 0, 1, true)
 
+	r.wirePanel(panel)
+
+	// mainLayout stacks the panel above the three bottom rows — panel
+	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
+	// remaining space) and real focus by default (see NewFlex/AddItem's
+	// own "focus" parameter); bashConsole/buttonBar/statusBar are each
+	// pinned to exactly one row (1, 0) and never auto-focused — reaching
+	// bashLine is a deliberate click, not something Tab should stumble
+	// into. bashConsole's own row grows past that single row once
+	// bashLine is actually focused (see expandBashConsole/
+	// collapseBashConsole) — ResizeItem there targets it by widget
+	// identity, not position, so it's unaffected by buttonBar sitting
+	// between it and statusBar.
+	// panelHost is what actually sits in the layout where the single
+	// panel used to: a Pages holding one page per tab, showing exactly
+	// one at a time (see tabs.go). With a single tab it behaves
+	// identically to the bare panel it replaced.
+	r.panelHost = tview.NewPages()
+	r.panelHost.AddPage(tabPageName(0), panel, true, true)
+	r.tabs = []*Panel{panel}
+	r.activeTab = 0
+
+	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
+	r.mainLayout.AddItem(r.panelHost, 0, 1, true)
+	r.mainLayout.AddItem(r.bashConsole, 1, 0, false)
+	r.mainLayout.AddItem(r.buttonBar, 1, 0, false)
+	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
+
+	r.AddPage(panelPage, r.mainLayout, true, true)
+	r.AddPage(contextMenuPage, r.menuLayout, false, false)
+	r.AddPage(renamePage, r.rename, false, false)
+	r.AddPage(promptPage, r.prompt, false, false)
+	r.AddPage(propertiesPage, r.properties, false, false)
+	r.AddPage(pickerPage, r.picker, false, false)
+	r.AddPage(errorPage, r.errorView, false, false)
+	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
+	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
+	r.AddPage(sedReplacePage, r.sedLayout, false, false)
+	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	r.AddPage(optionsPage, r.optionsList, false, false)
+	r.AddPage(searchPage, r.searchPages, false, false)
+	r.AddPage(chmodPage, r.chmodPages, false, false)
+	r.AddPage(dirPickerPage, r.dirPicker, false, false)
+	r.AddPage(helpPage, r.helpLayout, false, false)
+	r.AddPage(viewerPage, r.viewerView, false, false)
+	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
+	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
+
+	r.SetMouseCapture(r.captureOutsideClick)
+	app.SetBeforeDrawFunc(r.handleBeforeDraw)
+
+	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
+	r.refreshStatusBar() // initial sync — see the onLoad comment above
+
+	// Both of these can have something to say, and both go through the
+	// same showError overlay — collected into one notice rather than
+	// risking the second call silently overwriting the first before
+	// anything's even been drawn (see pruneTrashAtStartup's own doc
+	// comment).
+	var startupNotices []string
+	if len(configWarnings) > 0 {
+		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
+	}
+	if notice := r.pruneTrashAtStartup(); notice != "" {
+		startupNotices = append(startupNotices, notice)
+	}
+	if len(startupNotices) > 0 {
+		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
+	}
+
+	return r, nil
+}
+
+// wirePanel connects one Panel to the Root callbacks every panel needs.
+//
+// Extracted from NewRoot rather than left inline because tabs mean panels
+// are now created after startup too (see newTab/RestoreSavedTabs), and a
+// newly opened tab that quietly lacked, say, the rename gesture or the
+// Details "<" button would be a subtle, hard-to-place bug. One place to
+// wire a panel means a new tab is wired exactly like the first one, by
+// construction.
+func (r *Root) wirePanel(panel *Panel) {
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -1026,66 +1153,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
 	panel.onDescribeRows = r.describeTrashRows
 
-	// mainLayout stacks the panel above the three bottom rows — panel
-	// gets the lion's share (0, 1: no fixed size, proportion 1, i.e. all
-	// remaining space) and real focus by default (see NewFlex/AddItem's
-	// own "focus" parameter); bashConsole/buttonBar/statusBar are each
-	// pinned to exactly one row (1, 0) and never auto-focused — reaching
-	// bashLine is a deliberate click, not something Tab should stumble
-	// into. bashConsole's own row grows past that single row once
-	// bashLine is actually focused (see expandBashConsole/
-	// collapseBashConsole) — ResizeItem there targets it by widget
-	// identity, not position, so it's unaffected by buttonBar sitting
-	// between it and statusBar.
-	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
-	r.mainLayout.AddItem(panel, 0, 1, true)
-	r.mainLayout.AddItem(r.bashConsole, 1, 0, false)
-	r.mainLayout.AddItem(r.buttonBar, 1, 0, false)
-	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
+	// The tab strip's own three click targets (see tabstrip.go's
+	// captureTabStripMouse): a number switches, "+" opens a new tab, and
+	// anywhere else in the strip opens the full switcher.
+	panel.onSelectTab = r.switchToTab
+	panel.onNewTab = r.newTabHere
+	panel.onOpenTabSwitcher = func() { r.openTabSwitcher(r.activeTab) }
 
-	r.AddPage(panelPage, r.mainLayout, true, true)
-	r.AddPage(contextMenuPage, r.menuLayout, false, false)
-	r.AddPage(renamePage, r.rename, false, false)
-	r.AddPage(promptPage, r.prompt, false, false)
-	r.AddPage(propertiesPage, r.properties, false, false)
-	r.AddPage(pickerPage, r.picker, false, false)
-	r.AddPage(errorPage, r.errorView, false, false)
-	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
-	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
-	r.AddPage(sedReplacePage, r.sedLayout, false, false)
-	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
-	r.AddPage(optionsPage, r.optionsList, false, false)
-	r.AddPage(searchPage, r.searchPages, false, false)
-	r.AddPage(chmodPage, r.chmodPages, false, false)
-	r.AddPage(dirPickerPage, r.dirPicker, false, false)
-	r.AddPage(helpPage, r.helpLayout, false, false)
-	r.AddPage(viewerPage, r.viewerView, false, false)
-	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
-
+	// Right-click context menu and drag-select both live on the panel
+	// itself, so each tab needs its own (only one SetMouseCapture slot
+	// exists per primitive — see Panel.editing's own doc comment).
 	panel.SetMouseCapture(r.captureMouse)
-	r.SetMouseCapture(r.captureOutsideClick)
-	app.SetBeforeDrawFunc(r.handleBeforeDraw)
-
-	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
-	r.refreshStatusBar() // initial sync — see the onLoad comment above
-
-	// Both of these can have something to say, and both go through the
-	// same showError overlay — collected into one notice rather than
-	// risking the second call silently overwriting the first before
-	// anything's even been drawn (see pruneTrashAtStartup's own doc
-	// comment).
-	var startupNotices []string
-	if len(configWarnings) > 0 {
-		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
-	}
-	if notice := r.pruneTrashAtStartup(); notice != "" {
-		startupNotices = append(startupNotices, notice)
-	}
-	if len(startupNotices) > 0 {
-		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
-	}
-
-	return r, nil
 }
 
 // SetVersionInfo lets cmd/breakthrough hand its own build-time
@@ -1514,7 +1592,16 @@ func (r *Root) ToggleMouseShortcut() {
 }
 
 // confirmQuit is the quit overlay's "Quit breakthrough" action.
+//
+// Saves the open tab layout on the way out (see saveTabs), so the next
+// run can reopen it — per the user's own explicit request that each tab
+// remember its own directory across a restart. Deliberately here, at the
+// one deliberate-exit point, rather than on every tab change: this is the
+// moment the layout is final, and writing the file continuously would
+// mean a crash or a kill could persist a half-finished state that the
+// user never actually chose to leave behind.
 func (r *Root) confirmQuit() {
+	r.saveTabs()
 	r.app.Stop()
 }
 
@@ -1710,12 +1797,19 @@ func (r *Root) showMenu(x, y int) {
 // whether dotfile entries are shown (see Panel.showHidden), reloads the
 // current directory so the change takes effect immediately, and relabels
 // the menu item itself to describe what clicking it will do next time.
+// Applied to every open tab, not just the visible one (see forEachTab):
+// this is a "Globals" toggle by name and by intent, and tabs that
+// silently disagreed with it until the next time they were switched to
+// would be a confusing kind of wrong.
 func (r *Root) toggleHidden() {
-	r.panel.showHidden = !r.panel.showHidden
-	r.showError(r.panel.load(r.panel.path))
-	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
-	r.settings.ShowHidden = r.panel.showHidden
-	r.persistSetting("show_hidden", strconv.FormatBool(r.panel.showHidden))
+	show := !r.panel.showHidden
+	r.forEachTab(func(p *Panel) {
+		p.showHidden = show
+		r.showError(p.load(p.path))
+	})
+	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(show), "")
+	r.settings.ShowHidden = show
+	r.persistSetting("show_hidden", strconv.FormatBool(show))
 }
 
 // hiddenToggleLabel renders the hidden-files toggle's label as the
@@ -1736,11 +1830,14 @@ func hiddenToggleLabel(showHidden bool) string {
 // menu item itself — the same pattern toggleHidden already uses, see its
 // own doc comment for why (dirty labels, dirty defensive re-sync).
 func (r *Root) toggleSizeBytes() {
-	r.panel.sizeBytes = !r.panel.sizeBytes
-	r.showError(r.panel.load(r.panel.path))
-	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
-	r.settings.SizeBytes = r.panel.sizeBytes
-	r.persistSetting("size_bytes", strconv.FormatBool(r.panel.sizeBytes))
+	bytes := !r.panel.sizeBytes
+	r.forEachTab(func(p *Panel) {
+		p.sizeBytes = bytes
+		r.showError(p.load(p.path))
+	})
+	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(bytes), "")
+	r.settings.SizeBytes = bytes
+	r.persistSetting("size_bytes", strconv.FormatBool(bytes))
 }
 
 // sizeFormatToggleLabel is sizeBytes's own toggleHidden-style label.
@@ -1756,11 +1853,34 @@ func sizeFormatToggleLabel(sizeBytes bool) string {
 // formatted "YYYY-MM-DD HH:MM:SS" (see Panel.mtimeUnix/
 // formatModTimeCell) — otherwise a copy of toggleSizeBytes.
 func (r *Root) toggleMtimeUnix() {
-	r.panel.mtimeUnix = !r.panel.mtimeUnix
-	r.showError(r.panel.load(r.panel.path))
+	unix := !r.panel.mtimeUnix
+	r.forEachTab(func(p *Panel) {
+		p.mtimeUnix = unix
+		r.showError(p.load(p.path))
+	})
+	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(unix), "")
+	r.settings.MtimeUnix = unix
+	r.persistSetting("mtime_unix", strconv.FormatBool(unix))
+}
+
+// syncGlobalsMenuLabels re-renders the context menu's three "Globals"
+// toggle labels from the active panel's own current state.
+//
+// Needed because those labels describe what clicking them will do next
+// (see hiddenToggleLabel), which is derived from the active panel — and
+// switchToTab changes which panel that is. In practice every tab agrees
+// on all three (see toggleHidden and friends, which apply to all of
+// them), so this is a defensive re-sync rather than a fix for a
+// divergence anything currently causes: a tab restored from a saved
+// layout, or one opened while a toggle was mid-flight, is exactly the
+// kind of case where "in practice" quietly stops holding.
+func (r *Root) syncGlobalsMenuLabels() {
+	if r.menu == nil || r.panel == nil {
+		return
+	}
+	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
+	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
 	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
-	r.settings.MtimeUnix = r.panel.mtimeUnix
-	r.persistSetting("mtime_unix", strconv.FormatBool(r.panel.mtimeUnix))
 }
 
 // mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
