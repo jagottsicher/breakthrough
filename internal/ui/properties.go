@@ -391,6 +391,15 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	// this covers it.
 	r.propertiesEditField = tview.NewInputField()
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
+	// Installed once here, not per-activation: octalDigitCapture's own
+	// active() check already looks at propertiesEditTarget fresh on
+	// every keystroke, so it only actually changes what typing does
+	// while fieldPermOctal is the field currently being edited — every
+	// other field type (Name, Owner/Group's text fallback, the
+	// date/time fields) types normally, untouched by this at all.
+	r.propertiesEditField.SetInputCapture(octalDigitCapture(r.propertiesEditField, func() bool {
+		return r.propertiesEditTarget == fieldPermOctal
+	}))
 
 	r.propertiesButtons = r.newPropertiesButtons()
 
@@ -933,16 +942,18 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		prefill = r.stagedName
 		minWidth = 24 // room to type a longer name than the current one
 	case fieldPermOctal:
-		// Blank, not the current value: per the user's own explicit
-		// request, clicking in or Tab-focusing this field should let you
-		// immediately type a fresh 4-digit value over it, not require
-		// deleting the old one first. Leaving without typing anything
-		// discards the (empty) edit exactly like any other invalid input
-		// already does (see applyPropertyEditText), leaving stagedMode
-		// untouched. minWidth 4 matches permissionsField's own "%04o";
-		// activateInlineTextField's own SetAcceptanceFunc call enforces
-		// the same 4-digit limit while actually typing.
-		prefill = ""
+		// The current value, not blank: per the user's own explicit
+		// request, clicking in or Tab-focusing this field keeps the old
+		// value on screen and lets you overwrite each digit you actually
+		// want to change, in place, leaving the rest untouched — see
+		// octalDigitCapture's own doc comment for how typing a digit
+		// overwrites rather than inserts, and
+		// resetInlineFieldCursorToStart's for why the cursor needs to be
+		// walked back to the first digit right after this prefill.
+		// minWidth 4 matches permissionsField's own "%04o";
+		// activateInlineTextField's own SetAcceptanceFunc call still caps
+		// it at 4 digits while actually typing.
+		prefill = fmt.Sprintf("%04o", r.stagedMode.Perm())
 		minWidth = 4
 	case fieldMtimeDate:
 		prefill = r.stagedMtime.Format("2006-01-02")
@@ -1117,6 +1128,15 @@ func (r *Root) activateFocusedPropertyStop() {
 // whatever length a filename can be) and the date/time fields, none of
 // which should be limited to 4 characters just because the last thing
 // that used this field happened to be the permission value.
+//
+// fieldPermOctal also gets its cursor walked back to column 0 right
+// after the prefill (see resetInlineFieldCursorToStart's own doc
+// comment) — SetText itself would otherwise leave it at the end, ready
+// to append rather than to overwrite the first digit. octalDigitCapture
+// (installed once, on construction — see NewRoot) is what actually
+// makes typed digits overwrite instead of insert; it's not touched
+// here, since its own active() check already tells it when
+// fieldPermOctal is (and isn't) the field currently being edited.
 func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
 	r.propertiesEditTarget = span.field
 	r.propertiesEditField.SetText(prefill)
@@ -1124,6 +1144,7 @@ func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWid
 		r.propertiesEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
 			return len(textToCheck) <= 4
 		})
+		resetInlineFieldCursorToStart(r.propertiesEditField)
 	} else {
 		r.propertiesEditField.SetAcceptanceFunc(nil)
 	}

@@ -566,6 +566,12 @@ func (r *Root) newChmodDialog() *tview.Pages {
 	r.chmodEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
 		return len(textToCheck) <= 4
 	})
+	// Unconditionally active (unlike Properties' own equivalent
+	// installation) for the same reason the SetAcceptanceFunc just above
+	// is set once and unconditionally too: chmodEditField is always an
+	// octal value, never a free-text one. See octalDigitCapture's own
+	// doc comment for what this actually makes typing do.
+	r.chmodEditField.SetInputCapture(octalDigitCapture(r.chmodEditField, func() bool { return true }))
 
 	r.chmodButtons = r.newChmodButtons()
 
@@ -733,19 +739,23 @@ func (r *Root) activateChmodField(span chmodSpan) {
 		return
 	}
 
+	mode := r.stagedChmodMode
 	switch span.field {
-	case chmodFieldMode, chmodFieldFilesMode:
+	case chmodFieldFilesMode:
+		mode = r.stagedChmodFilesMode
+	case chmodFieldMode:
 	default:
 		return
 	}
-	// Blank, not the current value — per the user's own explicit
-	// request: clicking in or Tab-focusing this field should let you
-	// immediately type a fresh 4-digit value over it, not require
-	// deleting the old one first. Leaving without typing anything
-	// discards the (empty) edit exactly like any other invalid input
-	// already does (see applyChmodEditText), leaving the staged mode
-	// untouched.
-	r.activateChmodTextField(span, "")
+	// The current value, not blank — per the user's own explicit
+	// request: clicking in or Tab-focusing this field keeps the old
+	// value on screen and lets you overwrite each digit you actually
+	// want to change, in place, leaving the rest untouched. See
+	// octalDigitCapture's own doc comment (installed once, on
+	// construction — see newChmodDialog) for how typing a digit
+	// overwrites rather than inserts, and activateChmodTextField's own
+	// for the matching cursor reset.
+	r.activateChmodTextField(span, fmt.Sprintf("%04o", mode))
 }
 
 // activateChmodTextField positions and shows the shared inline edit
@@ -754,9 +764,16 @@ func (r *Root) activateChmodField(span chmodSpan) {
 // minWidth parameter: both of this dialog's own text fields are a fixed
 // 4-digit octal value, so there's no case here needing a wider minimum
 // the way Name/Owner/Group's own free-text values do there.
+//
+// Also unlike Properties, unconditionally walks the cursor back to
+// column 0 after the prefill (see resetInlineFieldCursorToStart's own
+// doc comment) rather than only for one of several field types — every
+// field this dialog's shared edit field ever shows is the same 4-digit
+// octal value, so there's no other case here needing anything different.
 func (r *Root) activateChmodTextField(span chmodSpan, prefill string) {
 	r.chmodEditTarget = span.field
 	r.chmodEditField.SetText(prefill)
+	resetInlineFieldCursorToStart(r.chmodEditField)
 
 	rectX, rectY, _, _ := r.chmodText.GetInnerRect()
 	width := span.endCol - span.startCol
