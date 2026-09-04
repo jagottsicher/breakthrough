@@ -303,6 +303,20 @@ type Panel struct {
 	// (e.g. a test constructing a Panel directly).
 	onRenameGesture func(row int)
 
+	// onOpenFile reports activateRow landing on a plain file while
+	// plainly browsing (not searchMode — see its own branch there) —
+	// Root wires this to openLook, per the user's own explicit request
+	// that Enter/double-click on a file try Look, the same way they
+	// already navigate into a directory. No path parameter: by the time
+	// this runs the table's own cursor is already on the row in
+	// question (Enter's own SetSelectedFunc row *is* the cursor;
+	// captureMouse's MouseLeftDoubleClick case calls focusRow first),
+	// so openLook's own CurrentRowPath read already targets the right
+	// file, the same self-contained shape every other *Shortcut method
+	// already has. Left nil the same as onRenameGesture if nothing's
+	// wired it up.
+	onOpenFile func()
+
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
 	// what the Modified column itself should be called while doing so
@@ -1841,9 +1855,11 @@ func (p *Panel) handleNameClick(row int) bool {
 // activateRow is handleNameClick's own double-click case, and what
 // Enter always does directly and immediately (see NewPanel's own
 // SetSelectedFunc) regardless of any click timing at all. While
-// showing a real directory: enter the row's directory, or do nothing
-// for a regular file — opening/viewing files is a later phase. Ignores
-// the checkbox column: a click there is handled by its own
+// showing a real directory: enter the row's directory; for a regular
+// file, try Look instead (onOpenFile — per the user's own explicit
+// request that Enter/double-click on a file behave as usefully as they
+// already do on a directory, rather than doing nothing). Ignores the
+// checkbox column: a click there is handled by its own
 // TableCell.ClickedFunc instead (see addRow), which returns true
 // specifically so this never also runs for it.
 //
@@ -1883,11 +1899,12 @@ func (p *Panel) handleNameClick(row int) bool {
 // search result's own real archive file) with whatever row happened to
 // occupy the *old* table's row/column index instead, typically the
 // wrong entry entirely (verified against tview's own Table.MouseHandler
-// source, not guessed). Only the two branches that never touch the
-// table itself (a content match, and any click activateRow otherwise
-// no-ops on) return false, letting tview's own default selection still
-// provide the "row highlights" feedback a real file click's own no-op
-// would otherwise leave invisible.
+// source, not guessed). Only the branches that never touch the table
+// itself (a content match, a regular file's own onOpenFile — Look never
+// rebuilds this panel's own listing — and any click activateRow
+// otherwise no-ops on) return false, letting tview's own default
+// selection still provide the "row highlights" feedback a real file
+// click would otherwise leave invisible.
 func (p *Panel) activateRow(row int) (handledSelection bool) {
 	ref, ok := p.rowRef(row)
 	if !ok {
@@ -1906,6 +1923,9 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		return true
 	}
 	if !ref.isDir {
+		if p.onOpenFile != nil { // ".." is always isDir true, so this is always a real file
+			p.onOpenFile()
+		}
 		return false
 	}
 	p.reportError(p.navigate(ref.path))
