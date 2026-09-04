@@ -120,6 +120,20 @@ type Panel struct {
 	filterText     string
 	filterRegex    bool
 
+	// detailsExpandBtn sits right after filterField in the same header
+	// row (see NewPanel) — a "<" button that expands the Details
+	// sidebar, per the user's own explicit request for a mouse
+	// alternative to Ctrl+D: filterField itself gave up 3 columns
+	// (headerFilterWidth) to make room for this button's own 3-column
+	// slot ("space, <, space" — tview.Button centers its own label
+	// within whatever width it's given, so a plain "<" label already
+	// reads exactly that way with no extra padding logic needed here).
+	// onExpandDetails is Root's own wiring (showDetailsSidebar) — Panel
+	// has no direct reference to Root, the same reason
+	// onOpenFile/onRenameGesture/onOpenSearchResult all exist.
+	detailsExpandBtn *tview.Button
+	onExpandDetails  func()
+
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
 	// buildColumnHeader) explains why a second table, not a shared row 0
@@ -303,6 +317,20 @@ type Panel struct {
 	// (e.g. a test constructing a Panel directly).
 	onRenameGesture func(row int)
 
+	// onOpenFile reports activateRow landing on a plain file while
+	// plainly browsing (not searchMode — see its own branch there) —
+	// Root wires this to openLook, per the user's own explicit request
+	// that Enter/double-click on a file try Look, the same way they
+	// already navigate into a directory. No path parameter: by the time
+	// this runs the table's own cursor is already on the row in
+	// question (Enter's own SetSelectedFunc row *is* the cursor;
+	// captureMouse's MouseLeftDoubleClick case calls focusRow first),
+	// so openLook's own CurrentRowPath read already targets the right
+	// file, the same self-contained shape every other *Shortcut method
+	// already has. Left nil the same as onRenameGesture if nothing's
+	// wired it up.
+	onOpenFile func()
+
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
 	// what the Modified column itself should be called while doing so
@@ -417,6 +445,18 @@ type rowRef struct {
 // config.DefaultSettings' own built-in default. app is needed to move
 // keyboard focus into the header's edit field on click and back to the
 // list afterwards — see Panel.openEdit.
+//
+// headerFilterWidth/headerDetailsExpandWidth are filterField's and
+// detailsExpandBtn's own fixed widths in the header row (see below) —
+// named rather than inline literals since the two are directly related:
+// filterField gave up exactly headerDetailsExpandWidth columns (20 to
+// 17) to make room for detailsExpandBtn's own 3-column "space, <,
+// space" slot right after it, per the user's own explicit request.
+const (
+	headerFilterWidth        = 17
+	headerDetailsExpandWidth = 3
+)
+
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
 		Flex:             tview.NewFlex().SetDirection(tview.FlexRow),
@@ -433,6 +473,8 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
 	p.table.SetSelectedFunc(func(row, column int) { p.activateRow(row) })
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
+	p.table.SetFocusFunc(func() { p.setSelectionStyle(true) })
+	p.table.SetBlurFunc(func() { p.setSelectionStyle(false) })
 
 	p.columnHeader.SetBorders(false)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
@@ -481,6 +523,38 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
 
+	// "<" expands the Details sidebar — see detailsExpandBtn's own doc
+	// comment on the struct.
+	p.detailsExpandBtn = tview.NewButton("<")
+	p.detailsExpandBtn.SetSelectedFunc(func() {
+		if p.onExpandDetails != nil {
+			p.onExpandDetails()
+		}
+	})
+
+	// Not SetFocusFunc/SetBlurFunc, unlike every other focus-dependent
+	// widget in this file — verified directly against tview's own
+	// inputfield.go/textarea.go, not guessed: InputField wraps an inner
+	// *TextArea, and TextArea.MouseHandler's own click handling calls
+	// setFocus(t) with itself, not with the outer InputField. tview's
+	// Application tracks whatever setFocus was last given, so after a
+	// mouse click into filterField, Application's own focus pointer holds
+	// the inner textArea directly. The InputField constructor forwards
+	// the textArea's focus callback up to the outer Box (which is why
+	// SetFocusFunc above would still fire), but there's no matching
+	// blur-forwarding line — so the next time focus moves elsewhere,
+	// Application blurs the textArea directly, bypassing
+	// InputField.Blur() (and therefore SetBlurFunc) entirely. Confirmed
+	// live: the field correctly turned FocusedBackground on click but
+	// never reverted on blur. HasFocus() itself isn't affected by any
+	// of this (it ORs the textArea's own correctly-toggling flag), so a
+	// SetDrawFunc — run on every screen refresh, not just on a focus
+	// transition — sidesteps the missing callback rather than fighting it.
+	p.filterField.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		p.setFilterFieldStyle(p.filterField.HasFocus())
+		return x, y, width, height
+	})
+
 	p.paintStaticChrome()
 
 	// headerRow puts the path bar and the filter side by side in the
@@ -491,7 +565,12 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerRow.AddItem(p.headerPages, 0, 1, false)
 	headerRow.AddItem(p.filterRegexBtn, 8, 0, false)
-	headerRow.AddItem(p.filterField, 20, 0, false)
+	// filterField is 3 columns narrower than it used to be
+	// (headerFilterWidth, was 20) — detailsExpandBtn's own 3-column slot
+	// right after it (headerDetailsExpandWidth) is exactly what those 3
+	// columns went to, per the user's own explicit request.
+	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 
 	p.AddItem(headerRow, 1, 0, false)      // fixed one-line path bar + filter
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
@@ -511,32 +590,96 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 // NewPanel (p.theme already set to the caller's initial value) and again,
 // after p.theme changes, from applyTheme (a live color-scheme switch).
 func (p *Panel) paintStaticChrome() {
+	p.table.SetBackgroundColor(p.theme.PanelBackground)
 	p.columnHeader.SetBackgroundColor(p.theme.AccentBackground)
 
 	p.header.SetTextColor(p.theme.Text)
 	p.header.SetBackgroundColor(p.theme.AccentBackground)
 
-	p.headerEdit.SetFieldBackgroundColor(p.theme.AccentBackground)
-	p.headerEdit.SetBackgroundColor(p.theme.AccentBackground)
+	// FocusedBackground, not AccentBackground: like propertiesEditField/
+	// chmodEditField/searchEditField, headerEdit only ever exists on
+	// screen while it's the thing actually accepting keystrokes (see
+	// openEdit/finishEdit's own headerPages.SwitchToPage calls) — there's
+	// no "visible but not focused" state for it to distinguish from, so
+	// it's always the "currently active input" color, per the user's own
+	// explicit request that every input field in the app follow the same
+	// active/inactive/grayed-out convention consistently.
+	p.headerEdit.SetFieldBackgroundColor(p.theme.FocusedBackground)
+	p.headerEdit.SetBackgroundColor(p.theme.FocusedBackground)
 	p.headerEdit.SetFieldTextColor(p.theme.Text)
 	p.headerEdit.SetLabelColor(p.theme.Text)
 
-	p.filterRegexBtn.SetBackgroundColor(p.theme.AccentBackground)
-	p.filterRegexBtn.SetLabelColor(p.theme.Text)
+	styleButton(p.filterRegexBtn, p.theme)
+	styleButton(p.detailsExpandBtn, p.theme)
 
-	p.filterField.SetPlaceholderTextColor(p.theme.PlaceholderText)
-	p.filterField.SetFieldBackgroundColor(p.theme.AccentBackground)
-	p.filterField.SetBackgroundColor(p.theme.AccentBackground)
+	// Unlike headerEdit above, filterField DOES have a real "sometimes
+	// focused, sometimes not" cycle — it sits permanently in the header
+	// row alongside filterRegexBtn, not shown/hidden the way headerEdit
+	// is — so it gets the same FocusedBackground/EditableBackground
+	// focus-dependent pair every other multi-state panel in this app
+	// already has (see setFilterFieldStyle's own doc comment).
+	p.setFilterFieldStyle(p.filterField.HasFocus())
+
+	// The panel's own current-row highlight — see setSelectionStyle's own
+	// doc comment for why this isn't just a fixed color the way it used
+	// to be. A plain HasFocus() query, not the table's own SetFocusFunc/
+	// SetBlurFunc closure it also uses (see NewPanel): this call is a
+	// normal, standalone one (not from inside a blur/focus event itself),
+	// where HasFocus() is trustworthy.
+	p.setSelectionStyle(p.table.HasFocus())
+}
+
+// setSelectionStyle sets the panel's own current-row highlight to
+// FocusedBackground if focused, EditableBackground otherwise — per the
+// user's own explicit request: every other focusable panel in this app
+// already shows this same "petrol means this currently has real
+// keyboard focus" distinction on its own title bar (see
+// toolwindow.go/detailssidebar.go); the main panel, predating all of
+// that work, never did.
+//
+// Takes focused explicitly rather than querying p.table.HasFocus()
+// itself, because its two callers need different answers to that exact
+// question at the exact moment each runs: paintStaticChrome (see above)
+// calls this standalone, where HasFocus() is trustworthy, but
+// NewPanel's own SetBlurFunc closure cannot use it at all — verified
+// directly against tview's own box.go, not guessed: Box.Blur() runs the
+// blur callback *before* clearing its own hasFocus flag, so HasFocus()
+// queried from inside a blur callback still (wrongly) reports true.
+// SetFocusFunc doesn't have the analogous problem (Box.Focus() sets
+// hasFocus true first, then calls the callback), but both pass their
+// own already-known answer explicitly here anyway, for the same reason
+// rather than leaving one of the two paths relying on it.
+func (p *Panel) setSelectionStyle(focused bool) {
+	bg := p.theme.EditableBackground
+	if focused {
+		bg = p.theme.FocusedBackground
+	}
+	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
+}
+
+// setFilterFieldStyle sets filterField's own background (and its
+// placeholder's, which needs setting separately — see paintStaticChrome's
+// own comment on SetPlaceholderStyle) to FocusedBackground if focused,
+// EditableBackground otherwise — per the user's own explicit request
+// that every input field in the app show the same active/inactive
+// distinction consistently, not just the newer panels.
+//
+// Takes focused explicitly, the same shape setSelectionStyle uses, but
+// for a different reason here: its only two callers are paintStaticChrome
+// and filterField's own SetDrawFunc (see NewPanel), both of which already
+// have a trustworthy answer in hand (SetDrawFunc's is freshly queried via
+// HasFocus() right before calling this) — see NewPanel's own comment for
+// why filterField needs a SetDrawFunc at all rather than the
+// SetFocusFunc/SetBlurFunc pair every other widget here uses.
+func (p *Panel) setFilterFieldStyle(focused bool) {
+	bg := p.theme.EditableBackground
+	if focused {
+		bg = p.theme.FocusedBackground
+	}
+	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.PlaceholderText))
+	p.filterField.SetFieldBackgroundColor(bg)
+	p.filterField.SetBackgroundColor(bg)
 	p.filterField.SetFieldTextColor(p.theme.Text)
-
-	// The panel's one other themed color, the current row's own
-	// highlight — tview.Table's own default (StyleDefault, an inverted
-	// fg/bg rather than a fixed color pair) is never quite what a color
-	// scheme means by "selection", so this is set explicitly instead of
-	// left alone.
-	p.table.SetSelectedStyle(tcell.StyleDefault.
-		Background(p.theme.SelectionBackground).
-		Foreground(p.theme.Text))
 }
 
 // applyTheme switches the panel to theme live: every already-built
@@ -1753,9 +1896,11 @@ func (p *Panel) handleNameClick(row int) bool {
 // activateRow is handleNameClick's own double-click case, and what
 // Enter always does directly and immediately (see NewPanel's own
 // SetSelectedFunc) regardless of any click timing at all. While
-// showing a real directory: enter the row's directory, or do nothing
-// for a regular file — opening/viewing files is a later phase. Ignores
-// the checkbox column: a click there is handled by its own
+// showing a real directory: enter the row's directory; for a regular
+// file, try Look instead (onOpenFile — per the user's own explicit
+// request that Enter/double-click on a file behave as usefully as they
+// already do on a directory, rather than doing nothing). Ignores the
+// checkbox column: a click there is handled by its own
 // TableCell.ClickedFunc instead (see addRow), which returns true
 // specifically so this never also runs for it.
 //
@@ -1795,11 +1940,12 @@ func (p *Panel) handleNameClick(row int) bool {
 // search result's own real archive file) with whatever row happened to
 // occupy the *old* table's row/column index instead, typically the
 // wrong entry entirely (verified against tview's own Table.MouseHandler
-// source, not guessed). Only the two branches that never touch the
-// table itself (a content match, and any click activateRow otherwise
-// no-ops on) return false, letting tview's own default selection still
-// provide the "row highlights" feedback a real file click's own no-op
-// would otherwise leave invisible.
+// source, not guessed). Only the branches that never touch the table
+// itself (a content match, a regular file's own onOpenFile — Look never
+// rebuilds this panel's own listing — and any click activateRow
+// otherwise no-ops on) return false, letting tview's own default
+// selection still provide the "row highlights" feedback a real file
+// click would otherwise leave invisible.
 func (p *Panel) activateRow(row int) (handledSelection bool) {
 	ref, ok := p.rowRef(row)
 	if !ok {
@@ -1818,6 +1964,9 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		return true
 	}
 	if !ref.isDir {
+		if p.onOpenFile != nil { // ".." is always isDir true, so this is always a real file
+			p.onOpenFile()
+		}
 		return false
 	}
 	p.reportError(p.navigate(ref.path))

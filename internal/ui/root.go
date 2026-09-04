@@ -100,6 +100,32 @@ type Root struct {
 	// happens to support.
 	mouseEnabled bool
 
+	// appVersion/appCommit/appBuildDate/appBuiltBy are the Help
+	// overlay's own About section's source (see help.go's aboutText) —
+	// cmd/breakthrough's own version/commit/date/builtBy vars, set via
+	// ldflags by the release pipeline (see .goreleaser.yaml), passed in
+	// through SetVersionInfo once NewRoot returns rather than as
+	// parameters here, so every one of this package's own tests
+	// constructing a Root directly doesn't need to pass them. Defaulted
+	// to exactly the same literals cmd/breakthrough's own vars start
+	// with, so a Root nothing ever calls SetVersionInfo on (every test)
+	// shows the same "dev build" text a real, plain "go build" binary
+	// would too.
+	appVersion, appCommit, appBuildDate, appBuiltBy string
+
+	// toolWindows holds every currently open toolWindow (see
+	// openToolCommand), in the order they were opened — unlike every
+	// other overlay in this codebase, there can be several of these open
+	// simultaneously (e.g. a ping and a tail -f side by side), each its
+	// own dynamically added/removed Pages entry rather than one fixed
+	// page reused across opens. The order itself matters, not just
+	// membership: it's the fixed sequence CycleFocusShortcut (see
+	// detailssidebar.go) steps through with Tab. toolWindowSeq is the
+	// source of each new one's own unique Pages name (see
+	// openToolCommand).
+	toolWindows   []*toolWindow
+	toolWindowSeq int
+
 	// lastScreenWidth/Height are the terminal's own size as of the most
 	// recent handleBeforeDraw call — how it tells a genuine resize apart
 	// from any other reason a draw happens to run (a keypress, a click,
@@ -121,13 +147,21 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
-	panel       *Panel
-	menu        *tview.List
-	rename      *tview.InputField
-	prompt      *tview.InputField
-	picker      *tview.List // owner/group picker — see openOwnerGroupPicker
-	errorView   *tview.TextView
-	quitConfirm *tview.List
+	panel *Panel
+	// menu is the context menu's own List — the real focus target
+	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
+	// title bar and the Flex stacking the two, which is what's actually
+	// registered on Pages/positioned instead (the same
+	// widget/layout split detailsSidebar/detailsSidebarLayout already
+	// established — see detailssidebar.go).
+	menu         *tview.List
+	menuTitleBar *tview.TextView
+	menuLayout   *tview.Flex
+	rename       *tview.InputField
+	prompt       *tview.InputField
+	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
+	errorView    *tview.TextView
+	quitConfirm  *tview.List
 
 	// purgeConfirm backs both "Remove" and "Empty Trash" (see
 	// newPurgeConfirm/openPurgeConfirm in trash.go) — one shared,
@@ -189,15 +223,34 @@ type Root struct {
 	sedPreviewCurrentPos string
 
 	optionsList *tview.List     // Options overlay — see openOptions
-	helpView    *tview.TextView // Help overlay — see help.go/openHelp
+	helpView    *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+
+	// helpTitleBar/helpLayout are Help's own one-row title bar (see
+	// newHelpTitleBar) and the Flex stacking it over helpView (the same
+	// shape detailsSidebarLayout has over detailsSidebar — see
+	// detailssidebar.go) — helpLayout, not helpView directly, is what
+	// openHelp actually sizes/positions and pushes as the overlay now.
+	helpTitleBar *tview.TextView
+	helpLayout   *tview.Flex
 
 	// detailsSidebar is the right-hand Details layer toggled by Ctrl+D
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
 	// currently shown; unlike every overlay above it, it's deliberately
 	// not modal (see newDetailsSidebarView's own doc comment), so it
 	// can't reuse activePage/overlayStack the way those do.
+	//
+	// detailsTitleBar is its own one-row "Details" label above
+	// detailsSidebar's own content, the same shape toolWindow's own
+	// title bar has (see toolwindow.go) — detailsSidebarLayout is the
+	// Flex stacking the two, which is what's actually registered on
+	// Pages/positioned (see repositionDetailsSidebar); detailsSidebar
+	// itself remains the one real focus target throughout (SetFocus,
+	// CycleFocusShortcut, ...), unaffected by wrapping it in a layout
+	// purely for drawing purposes.
 	detailsSidebar        *tview.TextView
+	detailsTitleBar       *tview.TextView
+	detailsSidebarLayout  *tview.Flex
 	detailsSidebarVisible bool
 
 	// detailsTarget/Stat/StatErr/Image cache what the sidebar is
@@ -527,6 +580,7 @@ type Root struct {
 	// addressable so setPropertiesFocus can give either one real keyboard
 	// focus) are visible the whole time Properties is open.
 	properties           *tview.Pages
+	propertiesTitleBar   *tview.TextView
 	propertiesText       *tview.TextView
 	propertiesEditField  *tview.InputField
 	propertiesEditTarget propertyField
@@ -717,6 +771,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settings:     settings,
 		colorSchemes: colorSchemes,
 		theme:        theme,
+		// Matches cmd/breakthrough's own version/commit/date/builtBy
+		// vars' own default literals exactly — see SetVersionInfo's own
+		// doc comment and the struct field comment above.
+		appVersion:   "dev",
+		appCommit:    "none",
+		appBuildDate: "unknown",
+		appBuiltBy:   "source",
 		// -1: "nothing focused yet" — see focusedPropertyField/
 		// setPropertiesFocus. Set here rather than only in openProperties
 		// so it's already correct for anything that renders Properties
@@ -731,12 +792,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// by applyTheme near the end of this function, not per widget here).
 	r.menu = tview.NewList().ShowSecondaryText(false)
 	r.menu.SetHighlightFullLine(true)
-	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
-	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
-	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
+	// Look first and default-selected (see showMenu's own
+	// SetCurrentItem(0)), per the user's own explicit request — the
+	// same read-only, no-side-effects action Enter on a plain file now
+	// tries too (see Panel.activateRow), so it's also this menu's own
+	// most-likely-wanted default.
 	r.menu.AddItem("Look", "", 0, r.lookCurrentEntry)
-	r.menu.AddItem("Tail -f", "", 0, r.tailCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
+	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.AddItem("tail -f", "", 0, r.tailCurrentEntry) // lowercase, per the user's own explicit request — it's a command name, not a title
+	r.menu.AddItem("Properties", "", 0, r.openProperties)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
 	r.menu.AddItem("Deselect all", "", 0, r.panel.deselectAll)
@@ -748,13 +814,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
-	r.menu.AddItem("Sed Replace", "", 0, r.openSedReplace)
+	r.menu.AddItem("sed", "", 0, r.openSedReplace)
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
 	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
 	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
 	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
+	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
+	// Ping is this first toolWindow slice's own proof of concept (see
+	// toolwindow.go) — a placeholder entry point, not itself the planned
+	// feature: the real Toolbox (networking/hardware tool departments,
+	// see feature_ideas.txt) replaces this one entry with a whole
+	// submenu once it exists.
+	r.menu.AddItem("Ping (test)", "", 0, r.openPingTestWindow)
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
@@ -768,6 +841,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.mtimeFormatToggleIdx = r.menu.GetItemCount()
 	r.menu.AddItem(mtimeFormatToggleLabel(r.panel.mtimeUnix), "", 0, r.toggleMtimeUnix)
 	r.menu.SetDoneFunc(r.closeMenu) // Escape
+
+	// A one-row "Menu" title bar above it, the same shape every other
+	// panel's now has (toolWindow, Details, Properties — see
+	// toolwindow.go/detailssidebar.go/newPropertiesView), per the user's
+	// own explicit request. menuLayout, not r.menu itself, is what's
+	// actually registered on Pages/positioned (see showMenu) — r.menu
+	// remains the real focus target throughout (showMenu still passes
+	// it, not menuLayout, to showOverlay), unaffected by wrapping it in
+	// a layout purely for drawing, the same split Details' own
+	// detailsSidebar/detailsSidebarLayout already established.
+	r.menuTitleBar = tview.NewTextView()
+	r.menuTitleBar.SetWrap(false)
+	r.menuTitleBar.SetText(" Menu ")
+	r.menuLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.menuTitleBar, 1, 0, false).
+		AddItem(r.menu, 0, 1, true)
 
 	// No label: this is positioned exactly over the target's row in
 	// openRename, so it reads as "the row itself became editable" rather
@@ -856,18 +945,31 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Help overlay (see help.go/openHelp) — a single, static,
 	// read-only TextView, the simplest of all of these (nothing to
-	// reset or repopulate on open).
+	// reset or repopulate on open) — now topped with its own one-row
+	// title bar (helpTitleBar/helpLayout), per the user's own explicit
+	// request that Help get the same title bar (and close button) every
+	// other overlay in this app already has.
 	r.helpView = r.newHelpView()
+	r.helpTitleBar = r.newHelpTitleBar()
+	r.helpLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.helpTitleBar, 1, 0, false).
+		AddItem(r.helpView, 0, 1, true)
 
 	// The Look overlay's built-in pager (see viewer.go/openLook) — same
 	// single-static-TextView shape as Help, just with its own text set
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
 
-	// The Details sidebar (see detailssidebar.go) — also a single static
-	// TextView for now, same shape as Help/the Look pager above, just
+	// The Details sidebar (see detailssidebar.go): its own content is a
+	// single static TextView, same shape as Help/the Look pager above,
+	// topped with its own "Details" title bar (see newDetailsTitleBar) —
+	// detailsSidebarLayout, the Flex stacking the two, is what's actually
 	// positioned and shown/hidden its own way (see showDetailsSidebar).
 	r.detailsSidebar = r.newDetailsSidebarView()
+	r.detailsTitleBar = r.newDetailsTitleBar()
+	r.detailsSidebarLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.detailsTitleBar, 1, 0, false).
+		AddItem(r.detailsSidebar, 0, 1, true)
 
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
@@ -904,6 +1006,21 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// files and directories alike.
 	panel.onRenameGesture = r.renameRow
 
+	// Enter/double-click on a plain file tries Look now, the same way
+	// they already navigate into a directory (see Panel.onOpenFile's
+	// own doc comment) — per the user's own explicit request.
+	panel.onOpenFile = r.openLook
+
+	// The header row's own "<" button expands the Details sidebar (see
+	// Panel.onExpandDetails/detailsExpandBtn's own doc comments) —
+	// showDetailsSidebar directly, not the toggle: this button only
+	// ever means "expand", the same one-directional meaning the
+	// sidebar's own ">" collapse button (see newDetailsTitleBar) has in
+	// the other direction, per the user's own explicit request for two
+	// separate, fixed-direction mouse controls rather than one shared
+	// toggle.
+	panel.onExpandDetails = r.showDetailsSidebar
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
@@ -927,7 +1044,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.mainLayout.AddItem(r.statusBar, 1, 0, false)
 
 	r.AddPage(panelPage, r.mainLayout, true, true)
-	r.AddPage(contextMenuPage, r.menu, false, false)
+	r.AddPage(contextMenuPage, r.menuLayout, false, false)
 	r.AddPage(renamePage, r.rename, false, false)
 	r.AddPage(promptPage, r.prompt, false, false)
 	r.AddPage(propertiesPage, r.properties, false, false)
@@ -941,9 +1058,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
-	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(helpPage, r.helpLayout, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
-	r.AddPage(detailsSidebarPage, r.detailsSidebar, false, false)
+	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 
 	panel.SetMouseCapture(r.captureMouse)
 	r.SetMouseCapture(r.captureOutsideClick)
@@ -969,6 +1086,23 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	return r, nil
+}
+
+// SetVersionInfo lets cmd/breakthrough hand its own build-time
+// version/commit/date/builtBy vars (set via ldflags by the release
+// pipeline — see .goreleaser.yaml) to the Help overlay's own About
+// section (help.go's aboutText), once NewRoot has already returned —
+// there's no other point before then this package could read them at,
+// since they're main's own package-level vars, not this one's. Never
+// called at all by this package's own tests, which is exactly why
+// NewRoot seeds every one of these fields with cmd/breakthrough's own
+// default literals already (see the struct field's own doc comment):
+// a Root nothing ever calls this on still shows sensible text.
+func (r *Root) SetVersionInfo(version, commit, date, builtBy string) {
+	r.appVersion = version
+	r.appCommit = commit
+	r.appBuildDate = date
+	r.appBuiltBy = builtBy
 }
 
 // showOverlay closes whatever overlay (or stack of layered overlays) is
@@ -1015,11 +1149,39 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 	r.activeWidget = widget
 	r.ShowPage(page)
 	r.SendToFront(page)
+	r.updateOverlayTitleBarColors()
 	if restore != nil {
 		restore()
 	} else {
 		r.app.SetFocus(widget)
 	}
+}
+
+// updateOverlayTitleBarColors recolors every modal overlay's own title
+// bar that doesn't already track its own focus state the way
+// toolWindow's/Details' do (see toolwindow.go/detailssidebar.go) —
+// currently propertiesTitleBar/menuTitleBar/helpTitleBar — based on
+// which one, if any, is currently the topmost overlay (r.activePage):
+// FocusedBackground for that one, EditableBackground for every other,
+// per the user's own explicit request that this same active/inactive
+// distinction apply to every panel with a title bar, not just tool
+// windows'/Details' own. Called from pushOverlay/hideOverlay, the only
+// two places activePage itself changes, and from applyTheme, so a live
+// color-scheme switch re-derives the right one instead of resetting to
+// a fixed color regardless of which overlay (if any) is actually active
+// right now — the same live-switch hazard detailsTitleBar's own
+// applyTheme case documents.
+func (r *Root) updateOverlayTitleBarColors() {
+	set := func(bar *tview.TextView, page string) {
+		if r.activePage == page {
+			bar.SetBackgroundColor(r.theme.FocusedBackground)
+		} else {
+			bar.SetBackgroundColor(r.theme.EditableBackground)
+		}
+	}
+	set(r.propertiesTitleBar, propertiesPage)
+	set(r.menuTitleBar, contextMenuPage)
+	set(r.helpTitleBar, helpPage)
 }
 
 // pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
@@ -1046,6 +1208,7 @@ func (r *Root) hideOverlay() {
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
 		r.activeWidget = nil
+		r.updateOverlayTitleBarColors()
 		if top.emptyStackFocus != nil {
 			r.app.SetFocus(top.emptyStackFocus)
 		} else {
@@ -1057,6 +1220,7 @@ func (r *Root) hideOverlay() {
 	below := r.overlayStack[len(r.overlayStack)-1]
 	r.activePage = below.page
 	r.activeWidget = below.widget
+	r.updateOverlayTitleBarColors()
 	if below.restore != nil {
 		below.restore()
 	} else {
@@ -1534,9 +1698,10 @@ func (r *Root) showMenu(x, y int) {
 	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
 
 	width, height := listSize(r.menu)
+	height++ // reserved title bar row (see menuLayout)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
-	r.menu.SetRect(x, y, width, height)
+	r.menuLayout.SetRect(x, y, width, height)
 	r.menu.SetCurrentItem(0)
 	r.showOverlay(contextMenuPage, r.menu)
 }
