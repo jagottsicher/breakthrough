@@ -64,14 +64,18 @@ var helpText = strings.TrimLeft(`
                   nowhere left to move an already-trashed item to
   Ctrl+R          Remove — permanently delete the selection (asks
                   first); Ctrl+Delete does the same, best-effort
-  Enter           Open the selected directory
+  Enter           Open the selected directory, or try Look on a file —
+                  double-clicking a name does the same either way
   Space           Select/deselect the selected file
-  Right-click     Context menu (Properties, Edit, Look, Tail -f,
-                  Rename, Select all/Deselect all/Select +/Select -,
-                  Copy, Cut, Paste, chown, chmod, Sed Replace, Move to
-                  Trash, Remove, Go to Trash, Restore from Trash,
-                  Empty Trash, and three toggles: hidden files, size
-                  format, modified-time format)
+  Click, pause,   Rename — the pause is deliberately generous (about a
+  click again     second), so an unhurried second click still counts;
+                  slower than that is just a fresh first click again
+  Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
+                  Select all/Deselect all/Select +/Select -, Copy, Cut,
+                  Paste, chown, chmod, sed, Move to Trash, Remove, Go to
+                  Trash, Restore from Trash, Empty Trash, Ping (test),
+                  and three toggles: hidden files, size format,
+                  modified-time format)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);

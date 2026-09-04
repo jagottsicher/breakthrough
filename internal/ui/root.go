@@ -764,12 +764,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// by applyTheme near the end of this function, not per widget here).
 	r.menu = tview.NewList().ShowSecondaryText(false)
 	r.menu.SetHighlightFullLine(true)
-	r.menu.SetBorderPadding(0, 0, 1, 1)                   // 1-char left/right padding; no border needed for this
-	r.menu.AddItem("Properties", "", 0, r.openProperties) // first and default-selected
-	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
+	// Look first and default-selected (see showMenu's own
+	// SetCurrentItem(0)), per the user's own explicit request — the
+	// same read-only, no-side-effects action Enter on a plain file now
+	// tries too (see Panel.activateRow), so it's also this menu's own
+	// most-likely-wanted default.
 	r.menu.AddItem("Look", "", 0, r.lookCurrentEntry)
-	r.menu.AddItem("Tail -f", "", 0, r.tailCurrentEntry)
 	r.menu.AddItem("Rename", "", 0, r.openRename)
+	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
+	r.menu.AddItem("tail -f", "", 0, r.tailCurrentEntry) // lowercase, per the user's own explicit request — it's a command name, not a title
+	r.menu.AddItem("Properties", "", 0, r.openProperties)
 	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
 	r.menu.AddItem("Select all", "", 0, r.panel.selectAll)
 	r.menu.AddItem("Deselect all", "", 0, r.panel.deselectAll)
@@ -965,6 +970,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// doc comment) — per the user's own explicit request, the same for
 	// files and directories alike.
 	panel.onRenameGesture = r.renameRow
+
+	// Enter/double-click on a plain file tries Look now, the same way
+	// they already navigate into a directory (see Panel.onOpenFile's
+	// own doc comment) — per the user's own explicit request.
+	panel.onOpenFile = r.openLook
 
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
