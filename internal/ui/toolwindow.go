@@ -71,6 +71,20 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	tw.content.SetDynamicColors(true) // needed for appendStatus's own style tags
 	tw.content.SetWrap(false)         // command output is line-oriented; wrapping would misalign it
 	tw.content.SetScrollable(true)
+	// A TextView's own "track the end" flag starts false even though
+	// it's scrollable — verified directly against tview's own
+	// textview.go, not guessed: NewTextView never sets it, so newly
+	// written lines just pile up past the bottom of whatever's currently
+	// visible (starting at the very top) instead of following along.
+	// ScrollToEnd flips it on from the start, so this window opens
+	// already tracking its own process's newest output — appendLine/
+	// appendStatus's later writes then keep it pinned there as they
+	// arrive, scrolling older lines off the top, per the user's own
+	// explicit request. A manual scroll (arrow keys, the mouse wheel,
+	// dragging the scrollbar) turns tracking back off on its own — tview
+	// treats that as "the user wants to read history now" — so this
+	// doesn't fight anyone who deliberately scrolls up to look back.
+	tw.content.ScrollToEnd()
 	// A plain default background (i.e. none set) would blend straight
 	// into whatever's behind it — the same dark background every other
 	// overlay in this app already sits on — and no longer read as a
