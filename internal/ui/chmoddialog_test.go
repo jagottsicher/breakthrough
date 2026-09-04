@@ -376,14 +376,14 @@ func TestChmodBitsAndOctalStayInSync(t *testing.T) {
 	}
 }
 
-// TestActivateChmodFieldOctalOpensBlank pins the user's own explicit
-// request that this field, like Properties' own equivalent, start
-// blank rather than pre-filled with the current value: opening it
-// (click or Tab) should let you type a fresh 4-digit value straight
-// over it. Leaving without typing anything simply leaves stagedChmodMode
-// as it was (see applyChmodEditText's own handling of invalid/empty
-// input) — nothing is lost by this being blank.
-func TestActivateChmodFieldOctalOpensBlank(t *testing.T) {
+// TestActivateChmodFieldOctalOpensPrefilled pins the user's own explicit
+// request that this field, like Properties' own equivalent, keep the
+// current value on screen when opened (click or Tab) rather than start
+// blank: octalDigitCapture (see its own doc comment) is what then makes
+// each digit overwrite the one already there instead of appending after
+// it. Opening the field alone, without typing anything, still must not
+// change stagedChmodMode.
+func TestActivateChmodFieldOctalOpensPrefilled(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
 	if err := os.Chmod(path, 0o644); err != nil {
@@ -403,8 +403,8 @@ func TestActivateChmodFieldOctalOpensBlank(t *testing.T) {
 	}
 	r.activateChmodField(span)
 
-	if got := r.chmodEditField.GetText(); got != "" {
-		t.Errorf("edit field pre-filled with %q, want it blank", got)
+	if got := r.chmodEditField.GetText(); got != "0644" {
+		t.Errorf("edit field pre-filled with %q, want %q", got, "0644")
 	}
 	if r.stagedChmodMode != 0o644 {
 		t.Errorf("stagedChmodMode = %o, want unchanged 0644 (opening the field alone must not change it)", r.stagedChmodMode)
@@ -413,9 +413,12 @@ func TestActivateChmodFieldOctalOpensBlank(t *testing.T) {
 
 // TestChmodEditFieldLimitsToFourDigits pins the user's own explicit
 // request that this field be capped at 4 characters while actually
-// typing — via SetAcceptanceFunc (see newChmodDialog's own doc comment
-// on why: this tview version has no real InputField.SetMaxLength to
-// reach for instead).
+// typing: octalDigitCapture makes each digit overwrite the one already
+// at the cursor and advance, so after 4 valid keystrokes the cursor sits
+// past the last digit with nothing left to overwrite — the field's own
+// SetAcceptanceFunc (see newChmodDialog's own doc comment on why: this
+// tview version has no real InputField.SetMaxLength to reach for
+// instead) then rejects the 5th and 6th outright.
 func TestChmodEditFieldLimitsToFourDigits(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -437,6 +440,73 @@ func TestChmodEditFieldLimitsToFourDigits(t *testing.T) {
 
 	if got := r.chmodEditField.GetText(); got != "0765" {
 		t.Errorf("edit field text = %q, want %q (capped at 4 characters)", got, "0765")
+	}
+}
+
+// TestChmodEditFieldOverwritesInPlace pins the user's own explicit
+// request that typing fewer than 4 digits only overwrites the digits
+// actually typed, left to right, leaving the rest of the pre-filled
+// value untouched — the same guarantee
+// TestActivatePropertyFieldOctalOverwritesInPlace pins for Properties.
+func TestChmodEditFieldOverwritesInPlace(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+
+	span, ok := r.chmodSpanForField(chmodFieldMode)
+	if !ok {
+		t.Fatal("no chmodFieldMode span found")
+	}
+	r.activateChmodField(span)
+
+	for _, ch := range "17" { // only the first two digits are touched
+		r.chmodEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+	}
+
+	if got := r.chmodEditField.GetText(); got != "1744" {
+		t.Errorf("edit field text = %q, want %q (first two digits overwritten, last two untouched)", got, "1744")
+	}
+}
+
+// TestChmodEditFieldRejectsNonOctalDigits pins the user's own explicit
+// request that only 0-7 be typeable at all here — the same guarantee
+// TestActivatePropertyFieldOctalRejectsNonOctalDigits pins for
+// Properties.
+func TestChmodEditFieldRejectsNonOctalDigits(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+
+	span, ok := r.chmodSpanForField(chmodFieldMode)
+	if !ok {
+		t.Fatal("no chmodFieldMode span found")
+	}
+	r.activateChmodField(span)
+
+	for _, ch := range "89x5" { // '8', '9', 'x' rejected; '5' overwrites the first digit
+		r.chmodEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+	}
+
+	if got := r.chmodEditField.GetText(); got != "5644" {
+		t.Errorf("edit field text = %q, want %q ('8'/'9'/'x' rejected, only '5' landing)", got, "5644")
 	}
 }
 
