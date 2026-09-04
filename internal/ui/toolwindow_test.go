@@ -52,6 +52,57 @@ func TestToolWindowAppendLineEscapesContent(t *testing.T) {
 	}
 }
 
+// TestToolWindowGrowsToFitLongLine pins the user's own explicit
+// request that a tool window widen itself to fit its own longest
+// visible line, rather than clipping it or requiring a manual resize —
+// there's no manual resize here at all (see toolWindowDefaultHeight's
+// own doc comment), only this automatic one.
+func TestToolWindowGrowsToFitLongLine(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 40)
+	tw := newToolWindow(r, "tw", "t")
+	tw.SetRect(5, 5, toolWindowMinWidth, 6)
+
+	long := strings.Repeat("x", 80)
+	tw.appendLine(long)
+
+	if _, _, width, _ := tw.GetRect(); width != len(long) {
+		t.Errorf("width = %d, want %d (grown to fit the one line actually on screen)", width, len(long))
+	}
+}
+
+// TestToolWindowShrinksWhenVisibleLinesShorten pins the other half of
+// the same request: once a long line has scrolled out of view (see
+// ScrollToEnd's own doc comment in newToolWindow — new lines push old
+// ones off the top), it must stop holding the window open wide, even
+// though it's still sitting in the TextView's own scrollback above
+// what's currently shown.
+func TestToolWindowShrinksWhenVisibleLinesShorten(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 40)
+	tw := newToolWindow(r, "tw", "t")
+	tw.SetRect(5, 5, toolWindowMinWidth, 4) // contentHeight = 3
+
+	tw.appendLine(strings.Repeat("x", 80))
+	if _, _, width, _ := tw.GetRect(); width != 80 {
+		t.Fatalf("setup: width = %d, want 80 right after the long line", width)
+	}
+
+	tw.appendLine("short1")
+	tw.appendLine("short2")
+	tw.appendLine("short3") // exactly contentHeight lines now — the long one has scrolled fully out of view
+
+	if _, _, width, _ := tw.GetRect(); width != toolWindowMinWidth {
+		t.Errorf("width = %d, want it back down to the floor %d now that only short lines are visible", width, toolWindowMinWidth)
+	}
+}
+
 // TestToolWindowAppendAfterCloseIsNoop pins the closed guard both
 // appendLine and appendStatus start with: a stray, already-in-flight
 // QueueUpdateDraw callback from a process that's still shutting down

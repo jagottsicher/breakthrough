@@ -41,6 +41,12 @@ type toolWindow struct {
 
 	dragging                 bool // the title bar was pressed and the button is still down
 	dragOffsetX, dragOffsetY int  // click position minus the window's own x/y at drag-start — kept constant for the rest of the drag
+
+	// lineWidths is appendLine/appendStatus's own display-width tally,
+	// one entry per line ever written to content, in the same order —
+	// what recalculateWidth looks at to decide how wide this window
+	// should be right now (see its own doc comment).
+	lineWidths []int
 }
 
 // newToolWindow builds one closed-over toolWindow, titled title — a
@@ -244,7 +250,10 @@ func (tw *toolWindow) appendLine(line string) {
 	if tw.closed {
 		return
 	}
-	_, _ = fmt.Fprintln(tw.content, tview.Escape(line)) // a TextView's own Write never fails
+	escaped := tview.Escape(line)
+	_, _ = fmt.Fprintln(tw.content, escaped) // a TextView's own Write never fails
+	tw.lineWidths = append(tw.lineWidths, tview.TaggedStringWidth(escaped))
+	tw.recalculateWidth()
 }
 
 // appendStatus appends one of this window's own status lines (process
@@ -257,6 +266,50 @@ func (tw *toolWindow) appendStatus(s string) {
 		return
 	}
 	_, _ = fmt.Fprintln(tw.content, s) // a TextView's own Write never fails
+	tw.lineWidths = append(tw.lineWidths, tview.TaggedStringWidth(s))
+	tw.recalculateWidth()
+}
+
+// recalculateWidth resizes this window to exactly fit what's actually
+// on screen right now: its own title, and the widest of the visible
+// content lines — the last contentHeight entries of lineWidths, since
+// ScrollToEnd (see newToolWindow's own doc comment) always keeps the
+// newest ones in view — never a line that has already scrolled out of
+// view. Called after every appendLine/appendStatus, so the window
+// grows the moment a longer line arrives and shrinks back again just
+// as promptly once the visible lines get shorter, per the user's own
+// explicit request: a long line from early in a long-running command's
+// output shouldn't keep the window wide forever after it's scrolled
+// away. toolWindowMinWidth is a floor for when both the title and the
+// visible content are narrower than that.
+//
+// Position and height are left untouched — this only ever changes
+// width. Growing past the right edge of the screen is handled the same
+// way dragging a window there already is, via moveTo's own
+// clampToScreen call.
+func (tw *toolWindow) recalculateWidth() {
+	x, y, _, height := tw.GetRect()
+	contentHeight := height - 1
+	if contentHeight < 0 {
+		contentHeight = 0
+	}
+
+	visible := tw.lineWidths
+	if len(visible) > contentHeight {
+		visible = visible[len(visible)-contentHeight:]
+	}
+
+	width := tview.TaggedStringWidth(tw.titleBar.GetText(false))
+	for _, w := range visible {
+		if w > width {
+			width = w
+		}
+	}
+	if width < toolWindowMinWidth {
+		width = toolWindowMinWidth
+	}
+
+	tw.moveTo(x, y, width, height)
 }
 
 // close stops the running process, if it's still running (via cancel —
@@ -279,10 +332,18 @@ func (tw *toolWindow) close() {
 	}
 }
 
-// toolWindowDefaultWidth/Height is a fixed starting size for every new
-// tool window — resizing isn't part of this first slice (see
-// openToolCommand), only moving.
-const toolWindowDefaultWidth, toolWindowDefaultHeight = 60, 16
+// toolWindowDefaultHeight is a fixed height for every tool window, for
+// its whole lifetime — unlike width (see recalculateWidth), height
+// isn't part of the user's own auto-fit request, so it's still exactly
+// what it was before that: a plain fixed starting size, never resized
+// afterward.
+const toolWindowDefaultHeight = 16
+
+// toolWindowMinWidth is the floor recalculateWidth never shrinks below,
+// even once both the title and the visible content are narrower than
+// this — enough room for a short title or a short output line to still
+// read comfortably, rather than collapsing to an awkwardly thin sliver.
+const toolWindowMinWidth = 24
 
 // openToolCommand starts name(args...) and shows its combined
 // stdout+stderr, live, in a new draggable toolWindow titled title — the
@@ -349,8 +410,8 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 	}()
 
 	x, y := r.nextToolWindowPosition()
-	x, y, width, height := r.clampToScreen(x, y, toolWindowDefaultWidth, toolWindowDefaultHeight)
-	tw.SetRect(x, y, width, height)
+	tw.SetRect(x, y, toolWindowMinWidth, toolWindowDefaultHeight)
+	tw.recalculateWidth() // sizes it for real, off just the title until output starts arriving (see its own doc comment)
 
 	r.AddPage(id, tw, false, true)
 	r.SendToFront(id)
