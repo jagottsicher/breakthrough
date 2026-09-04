@@ -53,8 +53,8 @@ func TestMouseStatusText(t *testing.T) {
 	}
 }
 
-// TestContextMenuStructure pins the menu's grouping: Properties/Edit/
-// Look/Tail -f/Rename, then a "Selection" section, a "Commands" section,
+// TestContextMenuStructure pins the menu's grouping: Look/Rename/Edit/
+// tail -f/Properties, then a "Selection" section, a "Commands" section,
 // a "Delete" section, and a "Globals" section, in that order — the shape
 // Root.NewRoot builds it in.
 func TestContextMenuStructure(t *testing.T) {
@@ -65,7 +65,7 @@ func TestContextMenuStructure(t *testing.T) {
 	}
 
 	want := []string{
-		"Properties", "Edit", "Look", "Tail -f", "Rename",
+		"Look", "Rename", "Edit", "tail -f", "Properties",
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
