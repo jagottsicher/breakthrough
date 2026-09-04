@@ -213,10 +213,11 @@ func TestToolWindowContentClickDoesNotStartDrag(t *testing.T) {
 }
 
 // TestToolWindowCloseButtonClosesWindow pins the user's own explicit
-// request for a close button in the title bar's own top-right corner
-// (the toolWindowCloseGlyph drawn there — see Draw): clicking exactly
-// that cell closes the window the same way Escape already does, rather
-// than starting a move-drag the way the rest of the title bar would.
+// request for a close button one column in from the title bar's own
+// top-right corner (the toolWindowCloseGlyph drawn there — see
+// Draw/toolWindowCloseButtonCol): clicking exactly that cell closes the
+// window the same way Escape already does, rather than starting a
+// move-drag the way the rest of the title bar would.
 func TestToolWindowCloseButtonClosesWindow(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
@@ -231,7 +232,7 @@ func TestToolWindowCloseButtonClosesWindow(t *testing.T) {
 	tw.SetRect(10, 5, 40, 10)
 
 	handler := tw.MouseHandler()
-	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 5, tcell.Button1, 0), func(tview.Primitive) {}) // (wx+width-1, wy)
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(48, 5, tcell.Button1, 0), func(tview.Primitive) {}) // toolWindowCloseButtonCol(10, 40) = 48
 
 	if !cancelled {
 		t.Error("clicking the close button should cancel the underlying process")
@@ -480,6 +481,35 @@ func TestOpenToolCommandRegistersRunningWindow(t *testing.T) {
 		t.Error("openToolCommand should give the new window real keyboard focus")
 	}
 	tw.close() // stop the process rather than leaving it running past the test
+}
+
+// TestOpenToolCommandFirstWindowUsesFirstCascadePosition pins a real
+// bug found by hand: openToolCommand used to append tw to
+// r.toolWindows *before* calling nextToolWindowPosition, so even the
+// very first window ever opened already saw itself counted (len == 1),
+// landing one cascade step further down-right than
+// nextToolWindowPosition's own doc comment promises for a first
+// window. Position is computed (and the rect set) before the append
+// now, so the very first window must land exactly where
+// nextToolWindowPosition(), called with the slice still empty, would
+// have put it.
+func TestOpenToolCommandFirstWindowUsesFirstCascadePosition(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)                   // realistic screen size — clampToScreen (see moveTo) needs real bounds to not itself distort this test's own math
+	wantX, wantY := r.nextToolWindowPosition() // computed against the still-empty slice, same as openToolCommand's own first call should see
+
+	tw := r.openToolCommand("echo test", "echo", []string{"hello"})
+	if tw == nil {
+		t.Fatal("openToolCommand returned nil for a real, valid command")
+	}
+	defer tw.close()
+
+	if x, y, _, _ := tw.GetRect(); x != wantX || y != wantY {
+		t.Errorf("first window position = (%d,%d), want (%d,%d) — nextToolWindowPosition's own first cascade spot", x, y, wantX, wantY)
+	}
 }
 
 // TestOpenToolCommandReportsStartFailure pins the synchronous failure
