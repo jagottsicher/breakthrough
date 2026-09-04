@@ -138,12 +138,17 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 // toolWindowCloseGlyph/toolWindowResizeGlyph are drawn directly onto
 // the screen (see Draw), not appended to titleBar's own text: a plain
 // Unicode glyph, deliberately not the letter "X", per the user's own
-// explicit request — '⛌' (CROSSING LANES, U+26CC) reads as a bold
-// X-shape without being mistakable for real title text, and '◢' is a
-// filled lower-right triangle, the same shape most GUI apps already
-// use for a resize grip.
+// explicit request. '✕' (MULTIPLICATION X, U+2715) rather than '⛌'
+// (CROSSING LANES, U+26CC, tried first): the user's own terminal
+// rendered CROSSING LANES as a double-width glyph, eating into
+// toolWindowCloseButtonCol's own one-column gap even though
+// TaggedStringWidth (and every width calculation here) still counts it
+// as a single column — MULTIPLICATION X is confirmed single-width by
+// hand, via the exact same live check, so it's the safe choice here,
+// not just the first one tried. '◢' is a filled lower-right triangle,
+// the same shape most GUI apps already use for a resize grip.
 const (
-	toolWindowCloseGlyph  = '⛌'
+	toolWindowCloseGlyph  = '✕'
 	toolWindowResizeGlyph = '◢'
 )
 
