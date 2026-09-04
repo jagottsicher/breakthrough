@@ -91,9 +91,10 @@ func TestToolWindowContentShowsAllLinesThatFit(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		want := fmt.Sprintf("LINE%d", i+1)
-		row := 6 + i // row 5 is the title bar; content starts at row 6
+		row := 6 + i                         // row 5 is the title bar; content starts at row 6
+		col0 := 5 + toolWindowContentPadding // content's own left padding — see newToolWindow's SetBorderPadding
 		var got strings.Builder
-		for col := 5; col < 5+len(want); col++ {
+		for col := col0; col < col0+len(want); col++ {
 			ch, _, _ := screen.Get(col, row)
 			got.WriteString(ch)
 		}
@@ -120,8 +121,9 @@ func TestToolWindowGrowsToFitLongLine(t *testing.T) {
 	long := strings.Repeat("x", 80)
 	tw.appendLine(long)
 
-	if _, _, width, _ := tw.GetRect(); width != len(long) {
-		t.Errorf("width = %d, want %d (grown to fit the one line actually on screen)", width, len(long))
+	want := len(long) + 2*toolWindowContentPadding // content's own left/right padding — see newToolWindow's SetBorderPadding
+	if _, _, width, _ := tw.GetRect(); width != want {
+		t.Errorf("width = %d, want %d (grown to fit the one line actually on screen, plus its own padding)", width, want)
 	}
 }
 
@@ -141,8 +143,9 @@ func TestToolWindowShrinksWhenVisibleLinesShorten(t *testing.T) {
 	tw.SetRect(5, 5, toolWindowMinWidth, 4) // contentHeight = 3
 
 	tw.appendLine(strings.Repeat("x", 80))
-	if _, _, width, _ := tw.GetRect(); width != 80 {
-		t.Fatalf("setup: width = %d, want 80 right after the long line", width)
+	wantLong := 80 + 2*toolWindowContentPadding // content's own left/right padding — see newToolWindow's SetBorderPadding
+	if _, _, width, _ := tw.GetRect(); width != wantLong {
+		t.Fatalf("setup: width = %d, want %d right after the long line", width, wantLong)
 	}
 
 	tw.appendLine("short1")
