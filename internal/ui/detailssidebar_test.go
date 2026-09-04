@@ -83,11 +83,11 @@ func TestShowDetailsSidebarPreservesKeyboardFocus(t *testing.T) {
 	}
 }
 
-// TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar pins Tab's
+// TestCycleFocusShortcutTogglesBetweenPanelAndSidebar pins Tab's
 // own two-way action: from the panel, it moves focus onto the sidebar
 // (so its own already-built-in scrolling works); pressed again, it
 // moves focus back.
-func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
+func TestCycleFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -97,14 +97,14 @@ func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
 
-	if !r.ToggleDetailsFocusShortcut() {
+	if !r.CycleFocusShortcut() {
 		t.Fatal("first Tab (panel -> sidebar) should report true")
 	}
 	if got := r.app.GetFocus(); got != r.detailsSidebar {
 		t.Errorf("focus after first Tab = %v, want the details sidebar", got)
 	}
 
-	if !r.ToggleDetailsFocusShortcut() {
+	if !r.CycleFocusShortcut() {
 		t.Fatal("second Tab (sidebar -> panel) should report true")
 	}
 	if got := r.app.GetFocus(); got != r.panel.table {
@@ -112,13 +112,13 @@ func TestToggleDetailsFocusShortcutTogglesBetweenPanelAndSidebar(t *testing.T) {
 	}
 }
 
-// TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies pins the
+// TestCycleFocusShortcutReturnsFalseWhenNeitherApplies pins the
 // half of Tab's contract cmd/breakthrough actually depends on: it must
 // report false — so Tab falls through untouched — whenever neither the
 // panel nor the sidebar is what currently has focus (here: Properties,
 // which needs its own Tab for moving between fields), and also
 // whenever the sidebar isn't even shown at all.
-func TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) {
+func TestCycleFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
 
@@ -128,13 +128,13 @@ func TestToggleDetailsFocusShortcutReturnsFalseWhenNeitherApplies(t *testing.T) 
 	}
 	r.SetRect(0, 0, 100, 40)
 
-	if r.ToggleDetailsFocusShortcut() {
+	if r.CycleFocusShortcut() {
 		t.Error("should report false when the sidebar isn't shown at all")
 	}
 
 	r.target = path
 	r.openProperties()
-	if r.ToggleDetailsFocusShortcut() {
+	if r.CycleFocusShortcut() {
 		t.Error("should report false while Properties (not the panel or the sidebar) has focus")
 	}
 	if got := r.app.GetFocus(); got == r.detailsSidebar || got == r.panel.table {
@@ -155,7 +155,7 @@ func TestHideDetailsSidebarRedirectsFocusWhenSidebarWasFocused(t *testing.T) {
 	r.SetRect(0, 0, 100, 40)
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
-	r.ToggleDetailsFocusShortcut() // panel -> sidebar
+	r.CycleFocusShortcut() // panel -> sidebar
 	if got := r.app.GetFocus(); got != r.detailsSidebar {
 		t.Fatalf("setup: focus = %v, want the details sidebar", got)
 	}
@@ -193,8 +193,10 @@ func TestLoadDetailsTargetResetsScrollPosition(t *testing.T) {
 
 // TestDetailsSidebarBackgroundReflectsFocusState pins the visual cue
 // SetFocusFunc/SetBlurFunc give (see newDetailsSidebarView's own doc
-// comment) — the same FocusedBackground/AccentBackground contrast
-// propertiesEditField already uses elsewhere.
+// comment): the content area stays a constant AccentBackground
+// regardless of focus, while detailsTitleBar swaps to FocusedBackground
+// (a dark cyan/"petrol" tone) while Details itself has real keyboard
+// focus, and EditableBackground while it doesn't.
 func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -205,18 +207,31 @@ func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 	r.app.SetFocus(r.panel.table)
 	r.showDetailsSidebar()
 
+	// The content area's own background never changes — see
+	// newDetailsSidebarView's own doc comment: it's detailsTitleBar
+	// below, not this, that shows the current focus state, per the
+	// user's own explicit request that every panel floating over the
+	// main one (toolWindow's own content included — see toolwindow.go)
+	// share this one constant "normal panel background".
 	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("background before focus = %v, want AccentBackground %v", got, want)
+		t.Errorf("content background = %v, want the constant AccentBackground %v", got, want)
 	}
 
-	r.ToggleDetailsFocusShortcut()
-	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
-		t.Errorf("background while focused = %v, want FocusedBackground %v", got, want)
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background before focus = %v, want EditableBackground %v", got, want)
 	}
 
-	r.ToggleDetailsFocusShortcut()
+	r.CycleFocusShortcut()
 	if got, want := r.detailsSidebar.GetBackgroundColor(), r.theme.AccentBackground; got != want {
-		t.Errorf("background after losing focus again = %v, want AccentBackground %v", got, want)
+		t.Errorf("content background while focused = %v, want still the constant AccentBackground %v", got, want)
+	}
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("title bar background while focused = %v, want FocusedBackground %v", got, want)
+	}
+
+	r.CycleFocusShortcut()
+	if got, want := r.detailsTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("title bar background after losing focus again = %v, want EditableBackground %v", got, want)
 	}
 }
 
@@ -287,7 +302,16 @@ func TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight(t *testing.T) {
 
 	r.showDetailsSidebar()
 
-	x, y, width, height := r.detailsSidebar.GetRect()
+	// detailsSidebarLayout, not detailsSidebar itself: the Flex wrapping
+	// title bar + content (see repositionDetailsSidebar's own doc
+	// comment) only actually distributes that rect down to its own
+	// children on its next real Draw() — verified directly against
+	// tview's own flex.go, the same "resize=true only cascades during
+	// Draw()" caveat chmoddialog.go's own openChmod doc comment already
+	// documents for tview.Pages. detailsSidebarLayout's own rect is what
+	// repositionDetailsSidebar actually sets synchronously, and what
+	// determines the sidebar's real on-screen position/size either way.
+	x, y, width, height := r.detailsSidebarLayout.GetRect()
 	if want := 90 / 3; width < want {
 		t.Errorf("width = %d, want at least a third of the screen (%d)", width, want)
 	}
@@ -389,6 +413,81 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	}
 }
 
+// TestDetailsExpandButtonShowsSidebar pins the user's own explicit
+// request for a mouse alternative to Ctrl+D: the header row's own "<"
+// button (see Panel.detailsExpandBtn/onExpandDetails) shows the
+// sidebar, the same as clicking the button bar's own Details button —
+// but only ever that one direction (expand), unlike the button bar's
+// own toggle.
+func TestDetailsExpandButtonShowsSidebar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if r.detailsSidebarVisible {
+		t.Fatal("setup: sidebar should start hidden")
+	}
+
+	r.panel.detailsExpandBtn.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if !r.detailsSidebarVisible {
+		t.Error("clicking the \"<\" button should show the sidebar")
+	}
+}
+
+// TestDetailsTitleBarCollapsesOnCollapseButtonClick pins the user's own
+// explicit request for a ">" collapse button on the sidebar's own
+// title bar, mirroring the header row's own "<" expand button in the
+// other direction — the same one-column-in-from-the-edge spacing
+// toolWindow's/Help's own close buttons use (toolWindowCloseButtonCol).
+func TestDetailsTitleBarCollapsesOnCollapseButtonClick(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+	if !r.detailsSidebarVisible {
+		t.Fatal("setup: sidebar should be visible")
+	}
+
+	x, y, width, _ := r.detailsTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width)
+	captured, _ := r.captureDetailsTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the collapse button should consume the click")
+	}
+	if r.detailsSidebarVisible {
+		t.Error("clicking the collapse button should hide the sidebar")
+	}
+}
+
+// TestDetailsTitleBarClickElsewhereDoesNothing pins that only the exact
+// collapse-button cell does anything — the same "otherwise inert" shape
+// Help's own title bar has (see TestHelpTitleBarClickElsewhereDoesNothing).
+func TestDetailsTitleBarClickElsewhereDoesNothing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+
+	x, y, _, _ := r.detailsTitleBar.GetRect()
+	captured, _ := r.captureDetailsTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y, tcell.ButtonNone, 0))
+
+	if captured == tview.MouseConsumed {
+		t.Error("a click away from the collapse button should not be consumed")
+	}
+	if !r.detailsSidebarVisible {
+		t.Error("the sidebar should still be visible")
+	}
+}
+
 // TestCaptureDetailsSidebarMouseSwallowsEveryActionInsideItsRect pins
 // the fix for a real gap: tview.Box's own default MouseHandler only
 // ever consumes MouseLeftDown, so without this capture, a right-click or
@@ -425,7 +524,7 @@ func TestCaptureDetailsSidebarMouseSwallowsUnhandledActionsInsideItsRect(t *test
 // TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough pins the fix
 // for the user's own explicit report: mouse-wheel scrolling (and a
 // plain click that focuses the sidebar via tview's own MouseLeftDown
-// handling — see ToggleDetailsFocusShortcut for the Tab-driven way in)
+// handling — see CycleFocusShortcut for the Tab-driven way in)
 // must reach the TextView's own default MouseHandler, not be swallowed
 // here the way every other action still is.
 func TestCaptureDetailsSidebarMouseLetsScrollAndFocusThrough(t *testing.T) {

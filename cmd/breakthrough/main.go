@@ -62,6 +62,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// For the Help overlay's own About section — see Root.SetVersionInfo's
+	// own doc comment for why this can't just be read directly from
+	// within internal/ui itself.
+	root.SetVersionInfo(version, commit, date, builtBy)
 
 	// Only meaningful once Application.Run is about to start draining its
 	// update queue — see StartClock's own doc comment for why NewRoot
@@ -166,22 +170,23 @@ func run() error {
 	// comment for why), which the full AcceptsGlobalShortcut Ctrl+T/
 	// Ctrl+P/Ctrl+S/Ctrl+B below still use would otherwise block.
 	//
-	// Tab moves focus between the panel and the Details sidebar (see
-	// Root.ToggleDetailsFocusShortcut) - considered and rejected first:
-	// Ctrl+Tab, the more obvious "cycle between things" mnemonic. Verified
-	// directly against tcell's own key.go, not assumed: there's no
-	// KeyCtrlTab constant at all, because the classic terminal encoding
-	// tcell parses here has no room left to represent it - Tab itself
-	// already occupies the one byte (0x09) Ctrl+I would also use, so a
-	// real Ctrl+Tab keypress arrives as plain Tab, indistinguishable, on
-	// most terminals (the same class of problem as Ctrl+H/Ctrl+M above,
-	// just with no extended-protocol fallback tcell's decoder even
-	// attempts here) - and separately, most terminal emulators intercept
-	// Ctrl+Tab themselves for their own tab-switching before it would ever
-	// reach an application at all. Plain Tab is safe here specifically
-	// because it's genuinely unclaimed while the panel or the sidebar has
-	// focus: neither installs a SetDoneFunc, so it was already a pure
-	// no-op in exactly the two states this repurposes it for.
+	// Tab cycles focus among the panel, the Details sidebar (if it's
+	// showing) and every currently open tool window (see
+	// Root.CycleFocusShortcut) - considered and rejected first: Ctrl+Tab,
+	// the more obvious "cycle between things" mnemonic. Verified directly
+	// against tcell's own key.go, not assumed: there's no KeyCtrlTab
+	// constant at all, because the classic terminal encoding tcell parses
+	// here has no room left to represent it - Tab itself already
+	// occupies the one byte (0x09) Ctrl+I would also use, so a real
+	// Ctrl+Tab keypress arrives as plain Tab, indistinguishable, on most
+	// terminals (the same class of problem as Ctrl+H/Ctrl+M above, just
+	// with no extended-protocol fallback tcell's decoder even attempts
+	// here) - and separately, most terminal emulators intercept Ctrl+Tab
+	// themselves for their own tab-switching before it would ever reach
+	// an application at all. Plain Tab is safe here specifically because
+	// it's genuinely unclaimed while any of those has focus: none of
+	// them installs a SetDoneFunc, so it was already a pure no-op in
+	// every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyCtrlQ:
@@ -287,15 +292,15 @@ func run() error {
 			return nil
 		case tcell.KeyTab:
 			// Only consumed when it actually means something (see
-			// Root.ToggleDetailsFocusShortcut's own doc comment) - moving
-			// focus between the panel and the Details sidebar once it's
-			// shown, so its own already-built-in scrolling works once its
-			// content outgrows the space it has. Everywhere else (a
-			// Properties field, the header path edit, the filter box, bash-
-			// line completion, ...), it reports false and this falls
-			// through completely untouched, exactly as Tab already worked
-			// everywhere before this existed.
-			if root.ToggleDetailsFocusShortcut() {
+			// Root.CycleFocusShortcut's own doc comment) - cycling focus
+			// among the panel, the Details sidebar once it's shown, and
+			// any open tool window, so each one's own already-built-in
+			// scrolling works once its content outgrows the space it has.
+			// Everywhere else (a Properties field, the header path edit,
+			// the filter box, bash-line completion, ...), it reports
+			// false and this falls through completely untouched, exactly
+			// as Tab already worked everywhere before this existed.
+			if root.CycleFocusShortcut() {
 				return nil
 			}
 			return event
