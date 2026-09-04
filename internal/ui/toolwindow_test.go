@@ -212,6 +212,182 @@ func TestToolWindowContentClickDoesNotStartDrag(t *testing.T) {
 	}
 }
 
+// TestToolWindowCloseButtonClosesWindow pins the user's own explicit
+// request for a close button in the title bar's own top-right corner
+// (the toolWindowCloseGlyph drawn there — see Draw): clicking exactly
+// that cell closes the window the same way Escape already does, rather
+// than starting a move-drag the way the rest of the title bar would.
+func TestToolWindowCloseButtonClosesWindow(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	cancelled := false
+	tw.cancel = func() { cancelled = true }
+	r.toolWindows = append(r.toolWindows, tw)
+	r.AddPage("tw", tw, false, true)
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 5, tcell.Button1, 0), func(tview.Primitive) {}) // (wx+width-1, wy)
+
+	if !cancelled {
+		t.Error("clicking the close button should cancel the underlying process")
+	}
+	if !tw.closed {
+		t.Error("clicking the close button should mark the window closed")
+	}
+	if tw.dragging {
+		t.Error("clicking the close button should not also start a move-drag")
+	}
+	if containsToolWindow(r, tw) {
+		t.Error("clicking the close button should remove the window from Root.toolWindows")
+	}
+}
+
+// TestToolWindowResizeHandleDragResizesWindow pins the user's own
+// explicit request for a resize handle in the footer row's own
+// bottom-right corner (the toolWindowResizeGlyph drawn there — see
+// Draw): dragging it changes width and height together by the drag's
+// own offset, while x and y — the opposite corner — stay exactly where
+// they were, the same "grab one corner, the other stays put" behavior
+// a real resize grip has.
+func TestToolWindowResizeHandleDragResizesWindow(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	// Press on the resize handle: (wx+width-1, wy+height-1) = (49, 14).
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 14, tcell.Button1, 0), func(tview.Primitive) {})
+	if !tw.resizing {
+		t.Fatal("pressing the resize handle should start a resize")
+	}
+
+	// Move 6 columns right, 6 rows down, button still held.
+	handler(tview.MouseMove, tcell.NewEventMouse(55, 20, tcell.Button1, 0), func(tview.Primitive) {})
+	x, y, width, height := tw.GetRect()
+	if x != 10 || y != 5 {
+		t.Errorf("rect origin after resize = (%d,%d), want it to stay at (10,5) — only the dragged corner should move", x, y)
+	}
+	if width != 46 || height != 16 {
+		t.Errorf("rect size after resize = %dx%d, want 46x16 (grown by the same 6x6 the drag moved)", width, height)
+	}
+	if !tw.manuallyResized {
+		t.Error("dragging the resize handle should set manuallyResized")
+	}
+
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(55, 20, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	if tw.resizing {
+		t.Error("MouseLeftUp should end the resize")
+	}
+}
+
+// TestToolWindowResizeHandleRespectsMinWidth pins the user's own
+// explicit request for a floor on how narrow a manual resize can make
+// this window: its own title, one space, and the close button (see
+// minWidth's own doc comment) — dragging the handle further left than
+// that must stop shrinking there instead of overlapping or clipping
+// either one.
+func TestToolWindowResizeHandleRespectsMinWidth(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 14, tcell.Button1, 0), func(tview.Primitive) {})
+	handler(tview.MouseMove, tcell.NewEventMouse(0, 14, tcell.Button1, 0), func(tview.Primitive) {}) // far past the left edge
+
+	if _, _, width, _ := tw.GetRect(); width != tw.minWidth() {
+		t.Errorf("width = %d, want it floored at minWidth() = %d", width, tw.minWidth())
+	}
+}
+
+// TestToolWindowResizeHandleRespectsMinHeight is
+// TestToolWindowResizeHandleRespectsMinWidth's own height counterpart:
+// toolWindowMinHeight (title bar + one content row + the footer row
+// itself).
+func TestToolWindowResizeHandleRespectsMinHeight(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 14, tcell.Button1, 0), func(tview.Primitive) {})
+	handler(tview.MouseMove, tcell.NewEventMouse(49, 0, tcell.Button1, 0), func(tview.Primitive) {}) // far past the top edge
+
+	if _, _, _, height := tw.GetRect(); height != toolWindowMinHeight {
+		t.Errorf("height = %d, want it floored at toolWindowMinHeight = %d", height, toolWindowMinHeight)
+	}
+}
+
+// TestToolWindowManualResizeDisablesAutoFit pins the user's own
+// implicit requirement that a manual resize actually stick: without
+// manuallyResized (see its own doc comment), the very next appendLine
+// would immediately snap the width back to whatever recalculateWidth's
+// own auto-fit logic alone would have chosen, undoing the drag.
+func TestToolWindowManualResizeDisablesAutoFit(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 200, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(49, 14, tcell.Button1, 0), func(tview.Primitive) {})
+	handler(tview.MouseMove, tcell.NewEventMouse(55, 20, tcell.Button1, 0), func(tview.Primitive) {})
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(55, 20, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	_, _, wantWidth, wantHeight := tw.GetRect()
+
+	tw.appendLine(strings.Repeat("x", 200)) // would grow the window a lot if auto-fit were still active
+	if _, _, width, height := tw.GetRect(); width != wantWidth || height != wantHeight {
+		t.Errorf("rect after appendLine = %dx%d, want unchanged %dx%d — a manual resize should disable auto-fit", width, height, wantWidth, wantHeight)
+	}
+}
+
+// TestToolWindowFooterRowClickDoesNotStartDrag pins that only the exact
+// resize-handle cell starts a resize — a press anywhere else on the
+// footer row (which otherwise always stays empty — see contentHeight's
+// own doc comment) must do nothing at all, not move or resize the
+// window.
+func TestToolWindowFooterRowClickDoesNotStartDrag(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(20, 14, tcell.Button1, 0), func(tview.Primitive) {}) // footer row, not its own corner
+	if tw.dragging || tw.resizing {
+		t.Fatal("pressing the footer row away from its own corner should neither move nor resize the window")
+	}
+
+	handler(tview.MouseMove, tcell.NewEventMouse(30, 25, tcell.Button1, 0), func(tview.Primitive) {})
+	if x, y, width, height := tw.GetRect(); x != 10 || y != 5 || width != 40 || height != 10 {
+		t.Errorf("rect = %d,%d %dx%d, want unchanged 10,5 40x10", x, y, width, height)
+	}
+}
+
 // TestToolWindowAltArrowMovesWindow pins the keyboard side of moving a
 // tool window, per the user's own explicit request: Alt+arrow keys
 // reposition it; a plain arrow (no Alt) must not, since that's needed

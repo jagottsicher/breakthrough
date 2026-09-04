@@ -42,6 +42,29 @@ type toolWindow struct {
 	dragging                 bool // the title bar was pressed and the button is still down
 	dragOffsetX, dragOffsetY int  // click position minus the window's own x/y at drag-start — kept constant for the rest of the drag
 
+	// resizing/resizeStart* are the drag-handle's own equivalent of
+	// dragging/dragOffsetX/Y above — see MouseHandler's own doc comment.
+	// The start position and size (not an incremental delta) are what's
+	// kept constant for the rest of the drag, the same reason dragOffsetX/Y
+	// are: recomputing the target size fresh from a fixed baseline on
+	// every move event, rather than accumulating from whatever the
+	// previous (possibly already-clamped) size was, avoids drift once
+	// resizeTo's own minimum/screen-edge clamping starts kicking in.
+	resizing                             bool
+	resizeStartMouseX, resizeStartMouseY int
+	resizeStartWidth, resizeStartHeight  int
+
+	// manuallyResized is set the moment the resize handle is ever
+	// dragged, and never cleared again — per the user's own explicit
+	// request that the resize handle actually let them pick a size,
+	// this permanently opts the window out of recalculateWidth's own
+	// automatic width-fit (see its own doc comment): the two would
+	// otherwise fight each other, since the very next line of output
+	// would immediately snap a manually-widened window back down (or a
+	// manually-narrowed one back up) to whatever the auto-fit logic
+	// alone would have chosen.
+	manuallyResized bool
+
 	// lineWidths is appendLine/appendStatus's own display-width tally,
 	// one entry per line ever written to content, in the same order —
 	// what recalculateWidth looks at to decide how wide this window
@@ -107,11 +130,23 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	return tw
 }
 
+// toolWindowCloseGlyph/toolWindowResizeGlyph are drawn directly onto
+// the screen (see Draw), not appended to titleBar's own text: a plain
+// Unicode glyph, deliberately not the letter "X", per the user's own
+// explicit request — '✕' reads as an X-shape without being mistakable
+// for real title text, and '◢' is a filled lower-right triangle, the
+// same shape most GUI apps already use for a resize grip.
+const (
+	toolWindowCloseGlyph  = '✕'
+	toolWindowResizeGlyph = '◢'
+)
+
 // Draw draws the title bar as row 0 of this window's own rect (see
-// newToolWindow), then the content TextView across whatever rows are
-// left below it — no border, no inner-rect arithmetic (see
-// newToolWindow's own doc comment on why there's no border to account
-// for here at all).
+// newToolWindow), the close button glyph over its own top-right
+// corner, the content TextView across the rows in between, and finally
+// the resize-handle footer as the very last row — no border, no inner-
+// rect arithmetic otherwise (see newToolWindow's own doc comment on why
+// there's no border to account for here at all).
 func (tw *toolWindow) Draw(screen tcell.Screen) {
 	tw.DrawForSubclass(screen, tw)
 	x, y, width, height := tw.GetRect()
@@ -121,29 +156,69 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 
 	tw.titleBar.SetRect(x, y, width, 1)
 	tw.titleBar.Draw(screen)
-
-	contentHeight := height - 1
-	if contentHeight < 0 {
-		contentHeight = 0
+	if width > 0 {
+		closeStyle := tcell.StyleDefault.Background(tw.titleBar.GetBackgroundColor()).Foreground(tw.root.theme.Text)
+		screen.SetContent(x+width-1, y, toolWindowCloseGlyph, nil, closeStyle)
 	}
-	tw.content.SetRect(x, y+1, width, contentHeight)
+
+	tw.content.SetRect(x, y+1, width, tw.contentHeight())
 	tw.content.Draw(screen)
+
+	// The footer row — see contentHeight's own doc comment on why it's
+	// excluded from content's own rect above — always stays empty
+	// except for the resize handle in its own bottom-right corner, per
+	// the user's own explicit request. Only drawn once there's actually
+	// room for it distinct from the title row (height >= 2); painted
+	// across its own full width first so it reads as part of the same
+	// solid box as the title bar and content above it, not a gap
+	// showing whatever's behind this window.
+	if height >= 2 {
+		footerY := y + height - 1
+		footerStyle := tcell.StyleDefault.Background(tw.root.theme.AccentBackground).Foreground(tw.root.theme.Text)
+		for col := x; col < x+width; col++ {
+			screen.SetContent(col, footerY, ' ', nil, footerStyle)
+		}
+		if width > 0 {
+			screen.SetContent(x+width-1, footerY, toolWindowResizeGlyph, nil, footerStyle)
+		}
+	}
 }
 
-// MouseHandler drives the mouse side of moving this window: a press on
-// the title bar (row 0 of this window's own rect — see newToolWindow)
-// starts a drag; every subsequent move with the left button still held (checked
-// via event.Buttons() — verified directly against tview's own
-// Application.fireMouseActions/MouseMove handling, not guessed: it fires
-// on every position change and always carries the button state current
-// as of that exact event) repositions the window by the same offset the
-// drag started with, so the window doesn't jump to have its corner
-// snap to the cursor. Anything else within the window's own rect — the
-// content area, or the title bar outside of an active drag — is
-// forwarded to the content TextView, and the click is consumed
-// regardless of whether content itself did anything with it: visually
-// this window fully occludes whatever's beneath it, so nothing should
-// ever click through it to the panel below.
+// contentHeight returns how many rows are actually available for
+// content: this window's own current height, minus the title bar (row
+// 0) and the resize-handle footer row (always the very last row) —
+// Draw's own layout above and recalculateWidth both need exactly this
+// same number and must always agree, since recalculateWidth's whole
+// point is to react to what's actually visible on screen.
+func (tw *toolWindow) contentHeight() int {
+	_, _, _, height := tw.GetRect()
+	h := height - 2
+	if h < 0 {
+		h = 0
+	}
+	return h
+}
+
+// MouseHandler drives the mouse side of this window's own chrome: a
+// press on the title bar (row 0 — see newToolWindow) starts a move-drag,
+// except right on its own top-right corner (the close glyph — see Draw),
+// which closes the window outright instead; a press on the resize
+// handle (the bottom-right corner of the footer row — see contentHeight's
+// own doc comment) starts a resize-drag. Every subsequent move with the
+// left button still held (checked via event.Buttons() — verified
+// directly against tview's own Application.fireMouseActions/MouseMove
+// handling, not guessed: it fires on every position change and always
+// carries the button state current as of that exact event) repositions
+// or resizes the window relative to wherever the drag started, so
+// neither the window's corner nor its size snaps straight to the
+// cursor. Anything else within the window's own rect — the content
+// area, the title bar outside of an active drag, or the otherwise-empty
+// rest of the footer row — is forwarded to the content TextView (the
+// footer row's own clicks just land outside its rect and do nothing),
+// and the click is consumed regardless of whether content itself did
+// anything with it: visually this window fully occludes whatever's
+// beneath it, so nothing should ever click through it to the panel
+// below.
 func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
 	return tw.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
 		x, y := event.Position()
@@ -169,15 +244,44 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 			return true, nil // swallow everything else for the duration of the drag
 		}
 
+		if tw.resizing {
+			switch action {
+			case tview.MouseMove:
+				if event.Buttons()&tcell.ButtonPrimary == 0 {
+					tw.resizing = false // same stray-release case dragging's own MouseMove case guards against
+					return true, nil
+				}
+				newWidth := tw.resizeStartWidth + (x - tw.resizeStartMouseX)
+				newHeight := tw.resizeStartHeight + (y - tw.resizeStartMouseY)
+				tw.resizeTo(newWidth, newHeight)
+				return true, nil
+			case tview.MouseLeftUp:
+				tw.resizing = false
+				return true, nil
+			}
+			return true, nil // swallow everything else for the duration of the resize
+		}
+
 		if !tw.InRect(x, y) {
 			return false, nil
 		}
 
 		if action == tview.MouseLeftDown {
 			setFocus(tw)
-			if y == wy { // the title bar itself
+			switch {
+			case y == wy && x == wx+width-1: // the close glyph, top-right of the title bar
+				tw.close()
+				return true, nil
+			case y == wy: // the rest of the title bar
 				tw.dragging = true
 				tw.dragOffsetX, tw.dragOffsetY = x-wx, y-wy
+				return true, nil
+			case y == wy+height-1 && x == wx+width-1: // the resize handle, bottom-right of the footer row
+				tw.resizing = true
+				tw.resizeStartMouseX, tw.resizeStartMouseY = x, y
+				tw.resizeStartWidth, tw.resizeStartHeight = width, height
+				return true, nil
+			case y == wy+height-1: // the rest of the footer row — always empty, per the user's own explicit request
 				return true, nil
 			}
 		}
@@ -195,6 +299,54 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 // dialog is; see clampToScreen's own doc comment).
 func (tw *toolWindow) moveTo(x, y, width, height int) {
 	x, y, width, height = tw.root.clampToScreen(x, y, width, height)
+	tw.SetRect(x, y, width, height)
+}
+
+// toolWindowMinHeight is the shortest this window can ever be resized
+// to (see resizeTo) — the title bar, one row of actual content, and the
+// resize-handle footer row itself, per the user's own explicit request.
+const toolWindowMinHeight = 3
+
+// minWidth is the narrowest this window can ever be resized to (see
+// resizeTo) — its own title, one space, and the close button, per the
+// user's own explicit request: any narrower and the close glyph would
+// either overlap the title text or force it to be clipped.
+func (tw *toolWindow) minWidth() int {
+	return tview.TaggedStringWidth(tw.titleBar.GetText(false)) + 2 // +1 space, +1 for the close glyph's own single cell
+}
+
+// resizeTo is the resize handle's own counterpart to moveTo: unlike a
+// move, x and y themselves must never change here — only width and
+// height, floored at minWidth/toolWindowMinHeight and capped so the
+// window's own far edge never grows past the screen's, the same way
+// clampToScreen already caps width/height for a window whose position
+// would otherwise put it there (see moveTo), just without moveTo's own
+// additional freedom to shift x/y to compensate — the corner being
+// dragged is the only one allowed to move.
+//
+// Setting manuallyResized permanently opts this window out of
+// recalculateWidth's own automatic width-fit from here on — see
+// manuallyResized's own doc comment on the struct for why the two can't
+// coexist.
+func (tw *toolWindow) resizeTo(width, height int) {
+	if minW := tw.minWidth(); width < minW {
+		width = minW
+	}
+	if height < toolWindowMinHeight {
+		height = toolWindowMinHeight
+	}
+
+	x, y, _, _ := tw.GetRect()
+	if _, _, sw, sh := tw.root.GetRect(); sw > 0 && sh > 0 {
+		if maxWidth := sw - x; width > maxWidth {
+			width = maxWidth
+		}
+		if maxHeight := sh - y; height > maxHeight {
+			height = maxHeight
+		}
+	}
+
+	tw.manuallyResized = true
 	tw.SetRect(x, y, width, height)
 }
 
@@ -287,15 +439,18 @@ func (tw *toolWindow) appendStatus(s string) {
 // width. Growing past the right edge of the screen is handled the same
 // way dragging a window there already is, via moveTo's own
 // clampToScreen call.
+//
+// A no-op once manuallyResized is set — see its own doc comment on the
+// struct for why the resize handle permanently takes over from this
+// once it's ever been used.
 func (tw *toolWindow) recalculateWidth() {
-	x, y, _, height := tw.GetRect()
-	contentHeight := height - 1
-	if contentHeight < 0 {
-		contentHeight = 0
+	if tw.manuallyResized {
+		return
 	}
 
+	x, y, _, height := tw.GetRect()
 	visible := tw.lineWidths
-	if len(visible) > contentHeight {
+	if contentHeight := tw.contentHeight(); len(visible) > contentHeight {
 		visible = visible[len(visible)-contentHeight:]
 	}
 
