@@ -155,6 +155,57 @@ func TestHelpTitleBarActiveColorTracksTopmostOverlay(t *testing.T) {
 	}
 }
 
+// TestHelpSizeWidthMatchesContentNotScreen pins a real, user-reported
+// bug: helpSize used to size the window against a fixed percentage of
+// the screen's own width (90%), which on a wide terminal left most of
+// it as dead space — helpText's own lines are hand-wrapped at a fixed
+// width for readability in the source, and SetWrap(true) only wraps a
+// line *longer* than the window, never un-wraps a shorter one to use
+// more of it. helpSize's own width must now track helpContentWidth
+// (the text's own longest real line, plus its 1-column left/right
+// border padding) regardless of how wide the screen actually is, as
+// long as the screen is wide enough to show it at all.
+func TestHelpSizeWidthMatchesContentNotScreen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 300, 60) // deliberately much wider than the content needs
+
+	width, _ := r.helpSize()
+	if want := helpContentWidth(); width != want {
+		t.Errorf("width = %d, want %d (helpContentWidth) — a wide screen must not stretch it further", width, want)
+	}
+	if width == 300*9/10 {
+		t.Error("width still matches the old, screen-percentage-based formula")
+	}
+}
+
+// TestHelpSizeWidthNeverExceedsScreen pins the other side of the same
+// change: helpContentWidth can be wider than a genuinely narrow
+// terminal, and helpSize must still never ask for more than the screen
+// actually has (clampToScreen, called right after in openHelp, would
+// otherwise silently absorb this instead — better to never produce an
+// oversized value in the first place). Screen width is comfortably
+// above helpMinWidth here so that floor — a separate, pre-existing
+// concern for a genuinely tiny terminal, left to openHelp's own
+// clampToScreen as the real final safety net — can't mask this check.
+func TestHelpSizeWidthNeverExceedsScreen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	screenWidth := helpMinWidth + 10 // above the floor, still narrower than helpContentWidth()
+	r.SetRect(0, 0, screenWidth, 60)
+
+	width, _ := r.helpSize()
+	if width > screenWidth {
+		t.Errorf("width = %d, want at most the screen's own width %d", width, screenWidth)
+	}
+}
+
 // TestHelpTextMentionsEveryRealShortcut pins that the help content
 // itself actually names the keybindings this app has — a stale or
 // incomplete reference would be worse than none at all.

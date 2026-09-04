@@ -10,8 +10,9 @@ import (
 const helpPage = "help"
 
 // helpMinWidth/Height are helpSize's own floor — a small terminal
-// still gets a usable Help window, just not the generous 90%/80%
-// share of the screen a bigger one does (see helpSize).
+// still gets a usable Help window, just not the width helpContentWidth
+// would otherwise give it, or the generous 80% height share a bigger
+// terminal gets (see helpSize).
 const helpMinWidth, helpMinHeight = 60, 20
 
 // helpText is the Help overlay's own content — every real keyboard
@@ -296,14 +297,43 @@ func (r *Root) openHelp() {
 	r.pushOverlay(helpPage, r.helpLayout, nil)
 }
 
-// helpSize sizes Help generously against the whole terminal, not
-// clamped to one panel the way most overlays are (see clampToPanel):
-// it's a read-only reference, not a form tied to the current panel's
-// own context, and its content is long enough that more visible room
-// genuinely means less scrolling.
+// helpContentWidth returns the widest line helpText actually has (via
+// tview.TaggedStringWidth, so a "[::b]"/"[::-]" bold tag around a
+// section heading doesn't count against it) — helpSize's own real
+// target width, plus helpView's own 1-column left/right border padding
+// (see newHelpView's SetBorderPadding). helpText is hand-wrapped at a
+// fixed width for readability in the source, not reflowed to fill
+// whatever width the window happens to be (SetWrap(true) only wraps a
+// line *longer* than the window, never un-wraps one that already fits
+// to use more of it) — a real, user-reported problem this fixes:
+// sizing the window against a screen-width percentage the way it used
+// to left most of a wide terminal's own width as dead space down the
+// right side, with every line still breaking at the same narrow point
+// regardless.
+func helpContentWidth() int {
+	width := 0
+	for _, line := range strings.Split(helpText, "\n") {
+		if w := tview.TaggedStringWidth(line); w > width {
+			width = w
+		}
+	}
+	return width + 2
+}
+
+// helpSize sizes Help against its own content's real width
+// (helpContentWidth) — not clamped to one panel the way most overlays
+// are (see clampToPanel), since it's a read-only reference, not a form
+// tied to the current panel's own context — and generously tall
+// (80% of the whole terminal): its content is long enough that more
+// visible height genuinely means less scrolling, unlike width, which
+// past helpContentWidth just leaves dead space (see its own doc
+// comment).
 func (r *Root) helpSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
-	width = screenWidth * 9 / 10
+	width = helpContentWidth()
+	if width > screenWidth {
+		width = screenWidth
+	}
 	height = screenHeight * 8 / 10
 	if width < helpMinWidth {
 		width = helpMinWidth
