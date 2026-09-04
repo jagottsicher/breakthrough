@@ -100,8 +100,36 @@ var helpText = strings.TrimLeft(`
   With a permission bit focused: r / w / x sets that bit directly,
   Space toggles it, Delete or - clears it.
 
+  The octal value field opens pre-filled with the current mode: typing
+  a digit (0-7 only) overwrites the one under the cursor and moves on,
+  rather than replacing the whole thing — type just the digits you
+  mean to change, leave the rest as they were.
+
   Ctrl+K (see the file panel's own entry above) computes hashes here
   too — click the hash hint works as well.
+
+[::b]Look (Ctrl+L, or Enter/double-click a file)[::-]
+
+  Escape            Close
+  PageUp / PageDown  On a PDF: turn a page instead of scrolling (a
+                    rendered page already fits the screen, so there's
+                    nothing to scroll within one anyway)
+  g / t             On a PDF: force graphic (rasterized) or text
+                    rendering for the current page — a text-heavy page
+                    can turn to illegible mush as a raster image at a
+                    realistic terminal size, so this is a manual
+                    override, not just whichever tier auto-detection
+                    picked
+
+[::b]Chmod dialog (context menu's "chmod")[::-]
+
+  Tab / Shift+Tab   Move between fields/checkboxes
+  Enter / Space     Toggle the focused checkbox, or open the focused
+                    octal field for typing
+  Escape            Cancel and close
+
+  Permission bits and the octal value field work exactly like
+  Properties' own above, for both the Directory and Files rows.
 
 [::b]Search dialog (Ctrl+F)[::-]
 
@@ -128,6 +156,22 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
+[::b]Tool windows (context menu's "Ping (test)", more to come)[::-]
+
+  A small floating window running one command's live output — unlike
+  every dialog above, not modal: the panel underneath (and any other
+  open tool window) stays fully usable while it floats on top.
+
+  Escape                  Close it, stopping the process if it's still
+                           running
+  Drag the title bar       Move the window; Alt+arrow keys do the same
+  Click the title bar's ✕  Close it, same as Escape
+  Drag the bottom-right ◢  Resize it — the title, its own close button,
+                           and one content row plus the handle's own
+                           row are the smallest it'll ever get
+  Arrow keys/PageUp/       Scroll the output once it's longer than the
+  PageDown/mouse wheel     window currently shows
+
 [::b]Bash line[::-]
 
   Click to expand         Grows upward toward mid-screen while focused
@@ -153,13 +197,14 @@ var helpText = strings.TrimLeft(`
                            scrollable pick list instead of doing nothing
 `, "\n")
 
-// newHelpView builds the Help overlay: a single, scrollable, read-only
-// TextView (see helpText) — no interactive fields, so none of the
-// span-tracking machinery Properties/Search need for their own
-// clickable text. Escape/Enter/Tab/Backtab all dismiss it
-// (TextView.SetDoneFunc fires for all four — see errorView's own doc
-// comment for the same shape), as does a click outside (Root's own
-// captureOutsideClick, unchanged) or Ctrl+C.
+// newHelpView builds the Help overlay's own scrollable content (see
+// helpText) — no interactive fields, so none of the span-tracking
+// machinery Properties/Search need for their own clickable text.
+// Escape/Enter/Tab/Backtab all dismiss it (TextView.SetDoneFunc fires
+// for all four — see errorView's own doc comment for the same shape),
+// as does a click outside (Root's own captureOutsideClick, unchanged),
+// Ctrl+C, or the title bar's own close button (see
+// captureHelpTitleBarMouse).
 func (r *Root) newHelpView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
@@ -170,21 +215,82 @@ func (r *Root) newHelpView() *tview.TextView {
 	return v
 }
 
+// newHelpTitleBar builds Help's own one-row title bar — the same shape
+// toolWindow's/Details' own title bars have (see toolwindow.go/
+// detailssidebar.go), plus a close button (see captureHelpTitleBarMouse),
+// per the user's own explicit request that Help get both. Its own text
+// (the "Help" label plus the close glyph, right-aligned) is set by
+// renderHelpTitleBar, not here, since it depends on the bar's own
+// width, not known yet at construction time.
+func (r *Root) newHelpTitleBar() *tview.TextView {
+	bar := tview.NewTextView()
+	bar.SetWrap(false)
+	bar.SetBackgroundColor(r.theme.EditableBackground)
+	bar.SetMouseCapture(r.captureHelpTitleBarMouse)
+	return bar
+}
+
+// renderHelpTitleBar sets helpTitleBar's own text to " Help ", padded
+// out to width columns, with the close glyph placed
+// toolWindowCloseButtonCol's own one-column-in-from-the-edge spacing —
+// the same convention toolWindow's own close button uses (see
+// toolwindow.go), reused here rather than duplicated with a different
+// number, per the user's own explicit request that this button behave
+// consistently everywhere it appears. Called from openHelp, since width
+// can change (a live terminal resize) between one open and the next —
+// there's no live-resize-while-open support for Help yet (see
+// handleBeforeDraw's own doc comment), so this only needs to run at
+// open time, not on every Draw the way toolWindow's own Draw override
+// does for its own close button.
+func (r *Root) renderHelpTitleBar(width int) {
+	const label = " Help "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - len(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.helpTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+}
+
+// captureHelpTitleBarMouse closes Help when the click lands exactly on
+// its own close glyph (see renderHelpTitleBar/toolWindowCloseButtonCol)
+// — every other click on the title bar is otherwise inert, the same as
+// every other modal overlay's own title bar in this app (Properties',
+// the context menu's, ...), none of which are draggable the way a
+// non-modal toolWindow's is.
+func (r *Root) captureHelpTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick {
+		return action, event
+	}
+	x, y := event.Position()
+	rectX, rectY, width, _ := r.helpTitleBar.GetRect()
+	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
+		return action, event
+	}
+	r.hideOverlay()
+	return tview.MouseConsumed, nil
+}
+
 // openHelp shows the Help overlay, centered and sized generously (see
 // helpSize) — pushed on top of whatever's already open (pushOverlay),
 // not replacing it the way every other overlay in this app does (see
 // showOverlay) — so pulling up Help in the middle of something else
 // (Properties half-edited, Search's own fields half-filled) doesn't
 // lose any of it. Closing Help (see newHelpView's own SetDoneFunc,
-// or captureOutsideClick) returns to exactly that, still intact —
-// the same "floats on top rather than replacing" behavior
-// openOwnerGroupPicker already has over Properties.
+// captureHelpTitleBarMouse, or captureOutsideClick) returns to exactly
+// that, still intact — the same "floats on top rather than replacing"
+// behavior openOwnerGroupPicker already has over Properties.
+//
+// Sizes/positions helpLayout (the title bar + helpView, stacked — see
+// NewRoot), not helpView directly, so the title bar always occupies
+// the same rect helpView itself used to.
 func (r *Root) openHelp() {
 	width, height := r.helpSize()
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.helpView.SetRect(x, y, width, height)
-	r.pushOverlay(helpPage, r.helpView, nil)
+	r.renderHelpTitleBar(width)
+	r.helpLayout.SetRect(x, y, width, height)
+	r.pushOverlay(helpPage, r.helpLayout, nil)
 }
 
 // helpSize sizes Help generously against the whole terminal, not
