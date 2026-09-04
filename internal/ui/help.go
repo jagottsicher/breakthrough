@@ -50,7 +50,10 @@ var helpText = strings.TrimLeft(`
                   updating panel of file info (stat fields; for an
                   image or PDF, a preview with its own click zone/
                   Ctrl+L for fullscreen; hashes) for whichever entry
-                  is currently selected
+                  is currently selected. The "<" button right after
+                  the filter box expands it the same way; once open,
+                  the ">" button in its own top-right corner collapses
+                  it again
   Ctrl+K          Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512)
                   for Properties if that's open, otherwise the Details
                   sidebar; shown in both at once if both are open on
