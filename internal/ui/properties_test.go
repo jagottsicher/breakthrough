@@ -1237,22 +1237,24 @@ func TestActivatePropertyFieldOctalOpensInlineEditor(t *testing.T) {
 	}
 	r.activatePropertyField(span)
 
-	// Blank, not "0644" — per the user's own explicit request: opening
-	// this field (click or Tab) should let you type a fresh 4-digit
-	// value straight over it, not require deleting the old one first.
-	// Tabbing/clicking away without typing anything simply leaves
-	// stagedMode as it was (see applyPropertyEditText's own handling of
-	// invalid/empty input) — nothing is lost by this being blank.
-	if got := r.propertiesEditField.GetText(); got != "" {
-		t.Errorf("edit field pre-filled with %q, want it blank", got)
+	// The current value, not blank — per the user's own explicit
+	// request: opening this field (click or Tab) keeps "0644" on screen
+	// so each digit can be overwritten in place (see octalDigitCapture's
+	// own doc comment) rather than requiring the whole value to be
+	// retyped from scratch.
+	if got := r.propertiesEditField.GetText(); got != "0644" {
+		t.Errorf("edit field pre-filled with %q, want %q", got, "0644")
 	}
 }
 
 // TestActivatePropertyFieldOctalLimitsToFourDigits pins the user's own
 // explicit request that this field be capped at 4 characters while
-// actually typing — via SetAcceptanceFunc (see activateInlineTextField's
-// own doc comment on why: this tview version has no real
-// InputField.SetMaxLength to reach for instead).
+// actually typing: octalDigitCapture makes each digit overwrite the one
+// already at the cursor and advance, so after 4 valid keystrokes the
+// cursor sits past the last digit with nothing left to overwrite — the
+// field's own SetAcceptanceFunc (see activateInlineTextField's own doc
+// comment on why: this tview version has no real InputField.SetMaxLength
+// to reach for instead) then rejects the 5th and 6th outright.
 func TestActivatePropertyFieldOctalLimitsToFourDigits(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "apple.txt")
@@ -1276,6 +1278,74 @@ func TestActivatePropertyFieldOctalLimitsToFourDigits(t *testing.T) {
 
 	if got := r.propertiesEditField.GetText(); got != "0765" {
 		t.Errorf("edit field text = %q, want %q (capped at 4 characters)", got, "0765")
+	}
+}
+
+// TestActivatePropertyFieldOctalOverwritesInPlace pins the user's own
+// explicit request that typing fewer than 4 digits only overwrites the
+// digits actually typed, left to right, leaving the rest of the
+// pre-filled value untouched — as opposed to the field's normal
+// insert-at-cursor behavior, which would instead grow "0644" into
+// "170644".
+func TestActivatePropertyFieldOctalOverwritesInPlace(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldPermOctal)
+	if !ok {
+		t.Fatal("no fieldPermOctal span found")
+	}
+	r.activatePropertyField(span)
+
+	for _, ch := range "17" { // only the first two digits are touched
+		r.propertiesEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+	}
+
+	if got := r.propertiesEditField.GetText(); got != "1744" {
+		t.Errorf("edit field text = %q, want %q (first two digits overwritten, last two untouched)", got, "1744")
+	}
+}
+
+// TestActivatePropertyFieldOctalRejectsNonOctalDigits pins the user's
+// own explicit request that only 0-7 be typeable at all here — '8', '9',
+// and anything else are rejected outright rather than landing in the
+// field, per octalDigitCapture's own doc comment.
+func TestActivatePropertyFieldOctalRejectsNonOctalDigits(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+
+	span, ok := findPropertySpan(r, fieldPermOctal)
+	if !ok {
+		t.Fatal("no fieldPermOctal span found")
+	}
+	r.activatePropertyField(span)
+
+	for _, ch := range "89x5" { // '8', '9', 'x' rejected; '5' overwrites the first digit
+		r.propertiesEditField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ch, tcell.ModNone), func(tview.Primitive) {})
+	}
+
+	if got := r.propertiesEditField.GetText(); got != "5644" {
+		t.Errorf("edit field text = %q, want %q ('8'/'9'/'x' rejected, only '5' landing)", got, "5644")
 	}
 }
 
