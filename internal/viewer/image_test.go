@@ -111,6 +111,64 @@ func TestLoadDecodesRealImageFile(t *testing.T) {
 	}
 }
 
+// TestLoadDecodesJPEGWithLargeMetadataBeforeSOF is a regression test for
+// a real, user-reported bug: a JPEG with a sizeable embedded metadata
+// block (EXIF with a thumbnail, XMP, an ICC profile, ...) can legitimately
+// put its own SOF marker — the thing image.DecodeConfig actually needs
+// to reach — tens of kilobytes into the file, well past what sniffLen
+// used to cover (8000 bytes; see its own doc comment for the concrete
+// file that first exposed this). Sniff misclassified such a file as
+// KindUnsupported despite it being perfectly decodable, so neither Look
+// nor the Details sidebar showed anything for it at all — no image, no
+// error either.
+//
+// Builds a real, valid JPEG (jpeg.Encode), then hand-inserts an oversized
+// APP1 marker segment (the same marker family EXIF actually uses) right
+// after the SOI, pushing everything else — SOF marker included — well
+// past both the old and the new sniffLen, to prove this isn't just
+// papering over the one specific file that was first reported: 20000
+// bytes of filler comfortably exceeds the old 8000-byte window while
+// still fitting the new 64 KiB one with room to spare.
+func TestLoadDecodesJPEGWithLargeMetadataBeforeSOF(t *testing.T) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, testImage(10, 10), nil); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+		t.Fatalf("encoded JPEG doesn't start with a plain SOI marker: %x", data[:4])
+	}
+
+	filler := make([]byte, 20000)
+	segLen := len(filler) + 2 // JPEG's own marker-length field counts itself
+	segment := append([]byte{0xFF, 0xE1, byte(segLen >> 8), byte(segLen)}, filler...)
+	injected := append(append(append([]byte{}, data[:2]...), segment...), data[2:]...)
+	const oldSniffLen = 8000 // sniffLen's own value before this fix — see its own doc comment
+	if len(injected) <= oldSniffLen {
+		t.Fatalf("setup: injected file (%d bytes) should exceed the old sniffLen (%d), or this wouldn't actually be exercising the bug this test guards against", len(injected), oldSniffLen)
+	}
+	if len(injected) > sniffLen {
+		t.Fatalf("setup: injected file (%d bytes) should still fit within the current sniffLen (%d), or this test wouldn't prove the fix actually works", len(injected), sniffLen)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.jpg")
+	if err := os.WriteFile(path, injected, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Load(path, DefaultPreviewLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != KindImage {
+		t.Fatalf("Kind = %v, want KindImage — a decodable JPEG shouldn't be misclassified just because its own SOF marker sits deep past a large metadata block", result.Kind)
+	}
+	if got := result.Image.Bounds(); got.Dx() != 10 || got.Dy() != 10 {
+		t.Errorf("decoded bounds = %v, want 10x10", got)
+	}
+}
+
 // TestLoadReportsTooLargeImageAsUnsupportedWithReason pins the one real
 // failure mode Load itself can produce for image-shaped content: a file
 // whose header passes Sniff but whose full data runs past
