@@ -105,6 +105,14 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	tw.content.SetDynamicColors(true) // needed for appendStatus's own style tags
 	tw.content.SetWrap(false)         // command output is line-oriented; wrapping would misalign it
 	tw.content.SetScrollable(true)
+	// One blank column of padding on each side, the same
+	// SetBorderPadding(0, 0, 1, 1) virtually every other overlay's own
+	// content area in this app already has (Properties, Chmod, the
+	// context menu, Search, ...), per the user's own explicit request
+	// that this window match that same convention. recalculateWidth's
+	// own width-fit accounts for these two extra columns so a line
+	// still isn't clipped just because of them.
+	tw.content.SetBorderPadding(0, 0, toolWindowContentPadding, toolWindowContentPadding)
 	// A TextView's own "track the end" flag starts false even though
 	// it's scrollable — verified directly against tview's own
 	// textview.go, not guessed: NewTextView never sets it, so newly
@@ -484,7 +492,11 @@ func (tw *toolWindow) writeContentLine(s string) {
 // explicit request: a long line from early in a long-running command's
 // output shouldn't keep the window wide forever after it's scrolled
 // away. toolWindowMinWidth is a floor for when both the title and the
-// visible content are narrower than that.
+// visible content are narrower than that. Each visible line's own
+// width gets toolWindowContentPadding added back in on both sides
+// (content's own left/right border padding — see newToolWindow), so
+// that padding is never what ends up clipping a line that would
+// otherwise fit exactly.
 //
 // Position and height are left untouched — this only ever changes
 // width. Growing past the right edge of the screen is handled the same
@@ -507,8 +519,8 @@ func (tw *toolWindow) recalculateWidth() {
 
 	width := tview.TaggedStringWidth(tw.titleBar.GetText(false))
 	for _, w := range visible {
-		if w > width {
-			width = w
+		if padded := w + 2*toolWindowContentPadding; padded > width {
+			width = padded
 		}
 	}
 	if width < toolWindowMinWidth {
@@ -550,6 +562,13 @@ const toolWindowDefaultHeight = 16
 // this — enough room for a short title or a short output line to still
 // read comfortably, rather than collapsing to an awkwardly thin sliver.
 const toolWindowMinWidth = 24
+
+// toolWindowContentPadding is content's own left/right border padding
+// (see newToolWindow's SetBorderPadding call) — one blank column on
+// each side, so recalculateWidth's own line-width comparisons know to
+// add both back in: a line that's exactly window-width-wide once this
+// padding is accounted for would otherwise get clipped by it.
+const toolWindowContentPadding = 1
 
 // openToolCommand starts name(args...) and shows its combined
 // stdout+stderr, live, in a new draggable toolWindow titled title — the
