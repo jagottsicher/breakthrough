@@ -80,12 +80,62 @@ func (r *Root) newDetailsSidebarView() *tview.TextView {
 // newDetailsSidebarView's own focus/blur hooks), EditableBackground (the
 // lighter slate gray) while it doesn't — independent of the content
 // area's own separate, constant AccentBackground (see above).
+//
+// Its own text (the "Details" label plus the ">" collapse button,
+// right-aligned) is set by renderDetailsTitleBar instead, not here,
+// since it depends on the bar's own width — not yet known at
+// construction time, and, unlike Help's own title bar, able to change
+// later too: the sidebar is one of the two overlays (Properties is the
+// other) that already reposition themselves on a live terminal resize
+// (see handleBeforeDraw/repositionDetailsSidebar).
 func (r *Root) newDetailsTitleBar() *tview.TextView {
 	bar := tview.NewTextView()
 	bar.SetWrap(false)
-	bar.SetText(" Details ")
 	bar.SetBackgroundColor(r.theme.EditableBackground)
+	bar.SetMouseCapture(r.captureDetailsTitleBarMouse)
 	return bar
+}
+
+// renderDetailsTitleBar sets detailsTitleBar's own text to " Details ",
+// padded out to width columns, with a ">" collapse button placed
+// toolWindowCloseButtonCol's own one-column-in-from-the-edge spacing —
+// the same convention every other close/collapse button in this app
+// now uses (toolWindow's own close button, Help's own — see
+// toolwindow.go/help.go), reused here rather than duplicated with a
+// different number, even though this one collapses a sidebar rather
+// than closing a dialog. Called from repositionDetailsSidebar, so a
+// live terminal resize keeps the button's own position correct, not
+// just once at showDetailsSidebar time the way Help's own
+// (non-resizing) title bar only needs.
+func (r *Root) renderDetailsTitleBar(width int) {
+	const label = " Details "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - len(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.detailsTitleBar.SetText(label + strings.Repeat(" ", padding) + ">" + " ")
+}
+
+// captureDetailsTitleBarMouse collapses the sidebar when the click
+// lands exactly on its own ">" button (see renderDetailsTitleBar) — the
+// user's own explicit request for a mouse counterpart to Ctrl+D,
+// mirroring the header row's own "<" expand button (see
+// Panel.onExpandDetails) in the other direction. hideDetailsSidebar
+// directly, not the toggle, the same one-directional reasoning
+// onExpandDetails's own doc comment gives. Every other click on the
+// title bar is otherwise inert, same as Help's own.
+func (r *Root) captureDetailsTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick {
+		return action, event
+	}
+	x, y := event.Position()
+	rectX, rectY, width, _ := r.detailsTitleBar.GetRect()
+	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
+		return action, event
+	}
+	r.hideDetailsSidebar()
+	return tview.MouseConsumed, nil
 }
 
 // detailsSidebarSize sizes the sidebar against the whole screen (Root's
@@ -117,6 +167,7 @@ func (r *Root) repositionDetailsSidebar() {
 	width, height := r.detailsSidebarSize()
 	_, _, screenWidth, _ := r.GetRect()
 	x, y, width, height := r.clampToScreen(screenWidth-width, 0, width, height)
+	r.renderDetailsTitleBar(width)
 	r.detailsSidebarLayout.SetRect(x, y, width, height)
 }
 

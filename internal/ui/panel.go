@@ -120,6 +120,20 @@ type Panel struct {
 	filterText     string
 	filterRegex    bool
 
+	// detailsExpandBtn sits right after filterField in the same header
+	// row (see NewPanel) — a "<" button that expands the Details
+	// sidebar, per the user's own explicit request for a mouse
+	// alternative to Ctrl+D: filterField itself gave up 3 columns
+	// (headerFilterWidth) to make room for this button's own 3-column
+	// slot ("space, <, space" — tview.Button centers its own label
+	// within whatever width it's given, so a plain "<" label already
+	// reads exactly that way with no extra padding logic needed here).
+	// onExpandDetails is Root's own wiring (showDetailsSidebar) — Panel
+	// has no direct reference to Root, the same reason
+	// onOpenFile/onRenameGesture/onOpenSearchResult all exist.
+	detailsExpandBtn *tview.Button
+	onExpandDetails  func()
+
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
 	// buildColumnHeader) explains why a second table, not a shared row 0
@@ -431,6 +445,18 @@ type rowRef struct {
 // config.DefaultSettings' own built-in default. app is needed to move
 // keyboard focus into the header's edit field on click and back to the
 // list afterwards — see Panel.openEdit.
+//
+// headerFilterWidth/headerDetailsExpandWidth are filterField's and
+// detailsExpandBtn's own fixed widths in the header row (see below) —
+// named rather than inline literals since the two are directly related:
+// filterField gave up exactly headerDetailsExpandWidth columns (20 to
+// 17) to make room for detailsExpandBtn's own 3-column "space, <,
+// space" slot right after it, per the user's own explicit request.
+const (
+	headerFilterWidth        = 17
+	headerDetailsExpandWidth = 3
+)
+
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
 		Flex:             tview.NewFlex().SetDirection(tview.FlexRow),
@@ -497,6 +523,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
 
+	// "<" expands the Details sidebar — see detailsExpandBtn's own doc
+	// comment on the struct.
+	p.detailsExpandBtn = tview.NewButton("<")
+	p.detailsExpandBtn.SetSelectedFunc(func() {
+		if p.onExpandDetails != nil {
+			p.onExpandDetails()
+		}
+	})
+
 	// Not SetFocusFunc/SetBlurFunc, unlike every other focus-dependent
 	// widget in this file — verified directly against tview's own
 	// inputfield.go/textarea.go, not guessed: InputField wraps an inner
@@ -530,7 +565,12 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerRow.AddItem(p.headerPages, 0, 1, false)
 	headerRow.AddItem(p.filterRegexBtn, 8, 0, false)
-	headerRow.AddItem(p.filterField, 20, 0, false)
+	// filterField is 3 columns narrower than it used to be
+	// (headerFilterWidth, was 20) — detailsExpandBtn's own 3-column slot
+	// right after it (headerDetailsExpandWidth) is exactly what those 3
+	// columns went to, per the user's own explicit request.
+	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 
 	p.AddItem(headerRow, 1, 0, false)      // fixed one-line path bar + filter
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
@@ -570,6 +610,7 @@ func (p *Panel) paintStaticChrome() {
 	p.headerEdit.SetLabelColor(p.theme.Text)
 
 	styleButton(p.filterRegexBtn, p.theme)
+	styleButton(p.detailsExpandBtn, p.theme)
 
 	// Unlike headerEdit above, filterField DOES have a real "sometimes
 	// focused, sometimes not" cycle — it sits permanently in the header

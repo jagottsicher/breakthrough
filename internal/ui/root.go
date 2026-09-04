@@ -991,6 +991,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// own doc comment) — per the user's own explicit request.
 	panel.onOpenFile = r.openLook
 
+	// The header row's own "<" button expands the Details sidebar (see
+	// Panel.onExpandDetails/detailsExpandBtn's own doc comments) —
+	// showDetailsSidebar directly, not the toggle: this button only
+	// ever means "expand", the same one-directional meaning the
+	// sidebar's own ">" collapse button (see newDetailsTitleBar) has in
+	// the other direction, per the user's own explicit request for two
+	// separate, fixed-direction mouse controls rather than one shared
+	// toggle.
+	panel.onExpandDetails = r.showDetailsSidebar
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
