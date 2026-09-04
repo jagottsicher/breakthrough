@@ -757,10 +757,15 @@ func (r *Root) runEditor(path string, line int) {
 // QueueUpdateDraw blocks forever if nothing's actually running the event
 // loop to drain it — cmd/breakthrough calls this itself, once, right
 // before Run. Returns a function that stops the ticker.
+//
+// Wrapped in safeGo (see its own doc comment) like every other
+// background goroutine in this app: a panic in this one specifically
+// would just stop the clock ticking (no "in progress" state of its own
+// to reset — onPanic is nil), not the whole process.
 func (r *Root) StartClock() (stop func()) {
 	ticker := time.NewTicker(time.Second)
 	done := make(chan struct{})
-	go func() {
+	r.safeGo("status clock", nil, func() {
 		for {
 			select {
 			case <-ticker.C:
@@ -772,6 +777,6 @@ func (r *Root) StartClock() (stop func()) {
 				return
 			}
 		}
-	}()
+	})
 	return func() { close(done) }
 }

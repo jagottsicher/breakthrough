@@ -816,8 +816,20 @@ func (r *Root) computeDetailsHashes() {
 	r.renderDetailsSidebar()
 
 	target := r.detailsTarget
-	go r.animateDetailsHashProgress(ctx)
-	go func() {
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack — onPanic here resets the
+	// same "in progress" state cancelDetailsHashComputation already
+	// resets on the normal completion path just below, so a recovered
+	// panic doesn't leave the sidebar stuck believing a computation is
+	// still running forever.
+	onPanic := func() {
+		r.cancelDetailsHashComputation()
+		r.renderDetailsSidebar()
+	}
+	r.safeGo("Details hash progress animation", onPanic, func() { r.animateDetailsHashProgress(ctx) })
+	r.safeGo("Details hash computation", onPanic, func() {
 		hashes, err := hashFile(ctx, target, r.detailsHashBytesRead.Store)
 		if ctx.Err() != nil {
 			return // superseded before we even got to report anything — see cancelDetailsHashComputation
@@ -836,7 +848,7 @@ func (r *Root) computeDetailsHashes() {
 			// propagateHashResult's own doc comment.
 			r.propagateHashResult(target, hashes)
 		})
-	}()
+	})
 }
 
 // propagateHashResult is the one place computeHashes/computeDetailsHashes
