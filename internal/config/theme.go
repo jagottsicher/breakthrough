@@ -24,17 +24,52 @@ type Theme struct {
 	// spaces/punctuation freely.
 	Name string `json:"name"`
 
-	// AccentBackground colors header bars, dialogs, buttons, and other
-	// floating chrome — this app's one "everything not otherwise
-	// specified" background.
+	// PanelBackground is the main file-list panel's own background — the
+	// "bottom layer" every other panel floats over. Unlike every other
+	// field here, this one used to not be a themed value at all: the
+	// panel simply drew nothing of its own there, showing whatever the
+	// terminal's own default background happened to be. Pinned to an
+	// explicit color instead, per the user's own explicit request, in
+	// the same "slate" hue family as AccentBackground/EditableBackground
+	// (their shared blue-gray cast — the blue channel highest in all
+	// three) but darker than either, so the panel/overlay layering reads
+	// consistently across terminals regardless of the user's own
+	// terminal profile.
+	PanelBackground string `json:"panel_background"`
+	// AccentBackground colors header bars, dialogs, and other floating
+	// chrome — this app's one "everything not otherwise specified"
+	// background.
 	AccentBackground string `json:"accent_background"`
+	// ButtonBackground is every real button's own base look (Cancel/
+	// Save/Apply/Select/Find, the filter's regex-mode toggle, ...) —
+	// per the user's own explicit request, a lighter turquoise than
+	// FocusedBackground, replacing what turned out to be tview's own
+	// entirely uncustomized default (a plain blue): a raw tview.Button
+	// recomputes its own displayed background from its internal
+	// style/activatedStyle fields on every single Draw, discarding
+	// whatever a plain SetBackgroundColor call set moments earlier —
+	// verified directly against tview's own button.go, not guessed. See
+	// internal/ui's own button styling helper for the fix (SetStyle/
+	// SetActivatedStyle, not SetBackgroundColor). A focused button
+	// switches to FocusedBackground instead, the same "petrol means
+	// this currently has real keyboard focus" convention every other
+	// focusable element in this app already follows.
+	ButtonBackground string `json:"button_background"`
 	// FocusedBackground highlights whichever field currently has
-	// keyboard focus in the Properties overlay.
+	// keyboard focus in the Properties overlay, a list's currently
+	// selected item, and the panel's own currently selected row while it
+	// (rather than some other panel — Details, a tool window, ...) has
+	// real keyboard focus — one single "this is where keyboard input
+	// goes right now" color, used consistently everywhere in the app
+	// that needs one. Was two separate, always-identical fields
+	// (FocusedBackground and SelectionBackground) before the user's own
+	// explicit request to merge them: every shipped color scheme,
+	// including this app's own default, had already set them to the
+	// exact same value, making the distinction real in the type system
+	// but never in practice.
 	FocusedBackground string `json:"focused_background"`
 	// ErrorBackground is the error overlay's background.
 	ErrorBackground string `json:"error_background"`
-	// SelectionBackground highlights the panel's currently selected row.
-	SelectionBackground string `json:"selection_background"`
 	// DirectoryBackground highlights an entry's own name — not the
 	// trailing "/" beside it, nor a symlink's " -> target" arrow, nor the
 	// rest of the row — whenever Enter navigates into it: directories,
@@ -106,10 +141,11 @@ type Theme struct {
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
 // — what internal/ui actually applies to widgets (see Theme.Resolve).
 type ResolvedTheme struct {
+	PanelBackground     tcell.Color
 	AccentBackground    tcell.Color
+	ButtonBackground    tcell.Color
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
-	SelectionBackground tcell.Color
 	DirectoryBackground tcell.Color
 
 	Text               tcell.Color
@@ -133,10 +169,11 @@ func DefaultTheme() Theme {
 	return Theme{
 		Name: "Default",
 
+		PanelBackground:     "#1c3232",
 		AccentBackground:    "darkslategray",
+		ButtonBackground:    "lightseagreen",
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
-		SelectionBackground: "darkcyan",
 		DirectoryBackground: "darkgoldenrod",
 
 		Text:               "white",
@@ -171,10 +208,11 @@ func (t Theme) Resolve() ResolvedTheme {
 		return tcell.GetColor(fallback)
 	}
 	return ResolvedTheme{
+		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
+		ButtonBackground:    resolve(t.ButtonBackground, def.ButtonBackground),
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
-		SelectionBackground: resolve(t.SelectionBackground, def.SelectionBackground),
 		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
 
 		Text:               resolve(t.Text, def.Text),

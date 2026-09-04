@@ -32,10 +32,11 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 
 		resolved := th.Resolve()
 		fields := map[string]tcell.Color{
+			"PanelBackground":     resolved.PanelBackground,
+			"ButtonBackground":    resolved.ButtonBackground,
 			"AccentBackground":    resolved.AccentBackground,
 			"FocusedBackground":   resolved.FocusedBackground,
 			"ErrorBackground":     resolved.ErrorBackground,
-			"SelectionBackground": resolved.SelectionBackground,
 			"DirectoryBackground": resolved.DirectoryBackground,
 			"Text":                resolved.Text,
 			"EditableBackground":  resolved.EditableBackground,
@@ -51,10 +52,11 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 		}
 		defaults := DefaultTheme().Resolve()
 		defaultFields := map[string]tcell.Color{
+			"PanelBackground":     defaults.PanelBackground,
+			"ButtonBackground":    defaults.ButtonBackground,
 			"AccentBackground":    defaults.AccentBackground,
 			"FocusedBackground":   defaults.FocusedBackground,
 			"ErrorBackground":     defaults.ErrorBackground,
-			"SelectionBackground": defaults.SelectionBackground,
 			"DirectoryBackground": defaults.DirectoryBackground,
 			"Text":                defaults.Text,
 			"EditableBackground":  defaults.EditableBackground,

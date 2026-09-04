@@ -1386,6 +1386,43 @@ func TestActivateRowNavigatesIntoDirectorySymlink(t *testing.T) {
 	}
 }
 
+// TestActivateRowOnFileTriesOnOpenFile pins the user's own explicit
+// request that Enter/double-click on a plain file try Look, the same
+// way they already navigate into a directory — activateRow's own
+// onOpenFile hook (wired to Root.openLook — see NewRoot) fires instead
+// of the previous silent no-op, without navigating this panel away
+// from its own current directory (see activateRow's own doc comment on
+// why this still returns false: nothing about the table itself changed).
+func TestActivateRowOnFileTriesOnOpenFile(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	var opened int
+	p.onOpenFile = func() { opened++ }
+
+	row := -1
+	for i := 0; i < p.table.GetRowCount(); i++ {
+		if ref, ok := p.rowRef(i); ok && ref.name == "apple.txt" {
+			row = i
+		}
+	}
+	if row < 0 {
+		t.Fatal("apple.txt row not found")
+	}
+
+	if handled := p.activateRow(row); handled {
+		t.Error("activateRow on a file should return false — it never touches this panel's own table")
+	}
+	if opened != 1 {
+		t.Errorf("onOpenFile called %d times, want 1", opened)
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q, want unchanged %q — Look must not navigate the panel", p.path, dir)
+	}
+}
+
 // TestHandleNameClickFirstClickJustSelects pins the user's own explicit
 // report: a single click on a directory's name used to navigate into it
 // immediately (the old direct name.SetClickedFunc -> activateRow

@@ -82,8 +82,23 @@ func TestApplyColorSchemeAppliesLiveAndPersists(t *testing.T) {
 	if r.theme.AccentBackground != wantTheme.AccentBackground {
 		t.Errorf("r.theme.AccentBackground = %v, want %v (applied live)", r.theme.AccentBackground, wantTheme.AccentBackground)
 	}
+	// The main panel's own background, pinned to a real themed value
+	// (PanelBackground) rather than left as the terminal's own default —
+	// per the user's own explicit request (see paintStaticChrome).
+	if got := r.panel.table.GetBackgroundColor(); got != wantTheme.PanelBackground {
+		t.Errorf("r.panel.table background = %v, want %v (applyTheme should have repainted it)", got, wantTheme.PanelBackground)
+	}
+	// AccentBackground: r.menu's own content now shares the same
+	// constant "normal panel background" every panel's content area does
+	// — menuTitleBar (its title bar) is EditableBackground here because
+	// the menu isn't even open (see updateOverlayTitleBarColors' own
+	// doc comment for the full active/inactive behavior, pinned in
+	// TestUpdateOverlayTitleBarColorsTracksActiveOverlay).
 	if r.menu.GetBackgroundColor() != wantTheme.AccentBackground {
 		t.Errorf("r.menu background = %v, want %v (applyTheme should have repainted it)", r.menu.GetBackgroundColor(), wantTheme.AccentBackground)
+	}
+	if r.menuTitleBar.GetBackgroundColor() != wantTheme.EditableBackground {
+		t.Errorf("r.menuTitleBar background = %v, want %v (applyTheme should have repainted it)", r.menuTitleBar.GetBackgroundColor(), wantTheme.EditableBackground)
 	}
 	if r.settings.ColorScheme != "solarized" {
 		t.Errorf("r.settings.ColorScheme = %q, want %q", r.settings.ColorScheme, "solarized")

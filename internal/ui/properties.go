@@ -391,13 +391,38 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	// this covers it.
 	r.propertiesEditField = tview.NewInputField()
 	r.propertiesEditField.SetDoneFunc(r.finishPropertyEdit)
+	// Installed once here, not per-activation: octalDigitCapture's own
+	// active() check already looks at propertiesEditTarget fresh on
+	// every keystroke, so it only actually changes what typing does
+	// while fieldPermOctal is the field currently being edited — every
+	// other field type (Name, Owner/Group's text fallback, the
+	// date/time fields) types normally, untouched by this at all.
+	r.propertiesEditField.SetInputCapture(octalDigitCapture(r.propertiesEditField, func() bool {
+		return r.propertiesEditTarget == fieldPermOctal
+	}))
 
 	r.propertiesButtons = r.newPropertiesButtons()
 
+	// A one-row "Properties" title bar, the same shape toolWindow's own
+	// (see toolwindow.go) and Details' own (see detailssidebar.go) title
+	// bars have, per the user's own explicit request that every one of
+	// these panels get one. Positioned like propertiesButtons below —
+	// an absolutely-positioned page of its own within pages (see
+	// resizeProperties) — rather than left to resize=true the way
+	// propertiesText is: reserving its own row is what
+	// pages.SetBorderPadding(1, 0, 0, 0) just below actually does, by
+	// shrinking propertiesText's own resize=true inner rect to leave
+	// room for it.
+	r.propertiesTitleBar = tview.NewTextView()
+	r.propertiesTitleBar.SetWrap(false)
+	r.propertiesTitleBar.SetText(" Properties ")
+
 	pages := tview.NewPages()
+	pages.SetBorderPadding(1, 0, 0, 0)
 	pages.AddPage("text", r.propertiesText, true, true)
 	pages.AddPage("editfield", r.propertiesEditField, false, false)
 	pages.AddPage("buttons", r.propertiesButtons, false, true)
+	pages.AddPage("titlebar", r.propertiesTitleBar, false, true)
 
 	// Installed on pages itself, the shared ancestor of all three pages
 	// above — see hashesMouseCapture's own doc comment for why that's
@@ -664,17 +689,19 @@ func (r *Root) renderProperties() {
 // (see renderProperties), keeping (x, y) as given but not necessarily as
 // where it last was — openProperties passes the context menu's own
 // position (first open), everything else passes wherever the overlay
-// currently sits (a resize after an edit, not a reposition). One line is
-// reserved for the Cancel/Save row, which is visible for as long as
-// Properties itself is (see newPropertiesView) — leaving that row out of
-// the reserved height would leave it with nothing of its own to sit on,
-// overlapping propertiesText's own last line instead.
+// currently sits (a resize after an edit, not a reposition). Two lines
+// are reserved beyond propertiesText's own content: the Cancel/Save row
+// at the bottom and the title bar at the top (see newPropertiesView),
+// both visible for as long as Properties itself is — leaving either out
+// of the reserved height would leave it with nothing of its own to sit
+// on, overlapping propertiesText's own first/last line instead.
 func (r *Root) resizeProperties(x, y int) {
 	width, height := textSize(r.propertiesText.GetText(true))
-	height++ // reserved button row
+	height += 2 // reserved title bar row (top) + button row (bottom)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.properties.SetRect(x, y, width, height)
+	r.propertiesTitleBar.SetRect(x, y, width, 1)
 	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
 }
 
@@ -915,11 +942,17 @@ func (r *Root) activatePropertyField(span propertySpan) {
 		prefill = r.stagedName
 		minWidth = 24 // room to type a longer name than the current one
 	case fieldPermOctal:
-		// 4 digits, matching exactly what's on screen (permissionsField's
-		// own "%04o") — typing "644" still works fine too, ParseMode
-		// doesn't care about a leading zero either way, but the field you
-		// clicked shouldn't visibly change digit count out from under you
-		// the moment you start editing it.
+		// The current value, not blank: per the user's own explicit
+		// request, clicking in or Tab-focusing this field keeps the old
+		// value on screen and lets you overwrite each digit you actually
+		// want to change, in place, leaving the rest untouched — see
+		// octalDigitCapture's own doc comment for how typing a digit
+		// overwrites rather than inserts, and
+		// resetInlineFieldCursorToStart's for why the cursor needs to be
+		// walked back to the first digit right after this prefill.
+		// minWidth 4 matches permissionsField's own "%04o";
+		// activateInlineTextField's own SetAcceptanceFunc call still caps
+		// it at 4 digits while actually typing.
 		prefill = fmt.Sprintf("%04o", r.stagedMode.Perm())
 		minWidth = 4
 	case fieldMtimeDate:
@@ -1085,9 +1118,36 @@ func (r *Root) activateFocusedPropertyStop() {
 // field over span, pre-filled with prefill, at least minWidth wide — the
 // common tail for Name/Modified date/time, and the owner/group picker's
 // own text fallback when fsops.ListUsers/ListGroups isn't available.
+//
+// SetAcceptanceFunc caps the field at 4 characters for fieldPermOctal
+// specifically (see activatePropertyField's own case for why — a real
+// InputField.SetMaxLength doesn't exist in this tview version, verified
+// directly against its own inputfield.go, so rejecting anything past
+// the 4th character here is the actual mechanism), and is cleared again
+// for every other field: this same shared field is also Name (up to
+// whatever length a filename can be) and the date/time fields, none of
+// which should be limited to 4 characters just because the last thing
+// that used this field happened to be the permission value.
+//
+// fieldPermOctal also gets its cursor walked back to column 0 right
+// after the prefill (see resetInlineFieldCursorToStart's own doc
+// comment) — SetText itself would otherwise leave it at the end, ready
+// to append rather than to overwrite the first digit. octalDigitCapture
+// (installed once, on construction — see NewRoot) is what actually
+// makes typed digits overwrite instead of insert; it's not touched
+// here, since its own active() check already tells it when
+// fieldPermOctal is (and isn't) the field currently being edited.
 func (r *Root) activateInlineTextField(span propertySpan, prefill string, minWidth int) {
 	r.propertiesEditTarget = span.field
 	r.propertiesEditField.SetText(prefill)
+	if span.field == fieldPermOctal {
+		r.propertiesEditField.SetAcceptanceFunc(func(textToCheck string, lastChar rune) bool {
+			return len(textToCheck) <= 4
+		})
+		resetInlineFieldCursorToStart(r.propertiesEditField)
+	} else {
+		r.propertiesEditField.SetAcceptanceFunc(nil)
+	}
 
 	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
 	width := span.endCol - span.startCol

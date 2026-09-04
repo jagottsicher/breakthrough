@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
@@ -66,55 +67,86 @@ func colorTag(c tcell.Color) string {
 // scheme.
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
+	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
 
-	r.menu.SetBackgroundColor(theme.AccentBackground)
-	r.menu.SetMainTextColor(theme.Text)
+	// AccentBackground: the shared, constant "normal panel background"
+	// every panel now uses (see propertiesText's own comment below for
+	// the full reasoning) — menuTitleBar's own background is set via
+	// updateOverlayTitleBarColors below instead, since — per the user's
+	// own explicit request — it now depends on whether the context menu
+	// is the currently active overlay, the same as propertiesTitleBar.
+	styleList(r.menu, theme)
+	r.menuTitleBar.SetTextColor(theme.Text)
 
-	r.rename.SetFieldBackgroundColor(theme.AccentBackground)
-	r.rename.SetBackgroundColor(theme.AccentBackground)
+	// FocusedBackground, not AccentBackground: rename/prompt are always
+	// the one thing accepting keystrokes for as long as they're shown at
+	// all (both are modal, single-field overlays — see openRename/
+	// openPrompt), the same "always the active input" reasoning
+	// headerEdit's own comment gives above, per the user's own explicit
+	// request that every input field in the app follow this same
+	// convention consistently.
+	r.rename.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.rename.SetBackgroundColor(theme.FocusedBackground)
 	r.rename.SetLabelColor(theme.Text)
 	r.rename.SetFieldTextColor(theme.Text)
 
-	r.prompt.SetFieldBackgroundColor(theme.AccentBackground)
-	r.prompt.SetBackgroundColor(theme.AccentBackground)
+	r.prompt.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.prompt.SetBackgroundColor(theme.FocusedBackground)
 	r.prompt.SetLabelColor(theme.Text)
 	r.prompt.SetFieldTextColor(theme.Text)
 
-	r.quitConfirm.SetBackgroundColor(theme.AccentBackground)
-	r.quitConfirm.SetMainTextColor(theme.Text)
+	styleList(r.quitConfirm, theme)
 
-	r.purgeConfirm.SetBackgroundColor(theme.AccentBackground)
-	r.purgeConfirm.SetMainTextColor(theme.Text)
+	styleList(r.purgeConfirm, theme)
 
-	r.picker.SetBackgroundColor(theme.AccentBackground)
-	r.picker.SetMainTextColor(theme.Text)
+	styleList(r.picker, theme)
 
 	r.errorView.SetTextColor(theme.Text)
 	r.errorView.SetBackgroundColor(theme.ErrorBackground)
 
+	// AccentBackground: the "Bash Prompt Editor" (see
+	// bashconsole.go/bashHintText) is one of the panels the user's own
+	// explicit request named directly — its content area (bashLine) gets
+	// the same shared, constant "normal panel background" every other
+	// one has now. bashHint just below is its title bar equivalent,
+	// shown only while bashLine is expanded/focused — re-derive its
+	// color from bashLine's own current focus state (see
+	// expandBashConsole/collapseBashConsole) rather than resetting to
+	// one fixed color unconditionally, the same live-color-scheme-switch
+	// hazard detailsTitleBar's own comment below documents.
 	r.bashLine.SetBackgroundColor(theme.AccentBackground)
 	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
-	r.bashHint.SetBackgroundColor(theme.AccentBackground)
+	if r.bashLine.HasFocus() {
+		r.bashHint.SetBackgroundColor(theme.FocusedBackground)
+	} else {
+		r.bashHint.SetBackgroundColor(theme.EditableBackground)
+	}
 	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
 	r.buttonBar.SetBackgroundColor(theme.AccentBackground)
 	r.buttonBar.SetTextColor(theme.Text)
 	r.statusBar.SetBackgroundColor(theme.AccentBackground)
 	r.statusBar.SetTextColor(theme.Text)
 
+	// AccentBackground: the shared, constant "normal panel background"
+	// every panel floating over the main one now uses (toolWindow/
+	// Details' own content areas included — see
+	// toolwindow.go/detailssidebar.go), per the user's own explicit
+	// request. propertiesTitleBar's own background is set via
+	// updateOverlayTitleBarColors below instead, since it now depends on
+	// whether Properties is the currently active overlay — see its own
+	// doc comment.
 	r.propertiesText.SetBackgroundColor(theme.AccentBackground)
 	r.propertiesEditField.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetBackgroundColor(theme.FocusedBackground)
 	r.propertiesEditField.SetFieldTextColor(theme.Text)
 	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesCancelBtn.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesCancelBtn.SetLabelColor(theme.Text)
-	r.propertiesSaveBtn.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesSaveBtn.SetLabelColor(theme.Text)
+	r.propertiesTitleBar.SetTextColor(theme.Text)
+	styleButton(r.propertiesCancelBtn, theme)
+	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
 	if r.optionsList != nil {
-		r.optionsList.SetBackgroundColor(theme.AccentBackground)
-		r.optionsList.SetMainTextColor(theme.Text)
+		styleList(r.optionsList, theme)
 	}
 
 	if r.searchTop != nil {
@@ -125,10 +157,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.searchEditField.SetBackgroundColor(theme.FocusedBackground)
 		r.searchEditField.SetFieldTextColor(theme.Text)
 		r.searchButtons.SetBackgroundColor(theme.AccentBackground)
-		r.searchCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.searchCancelBtn.SetLabelColor(theme.Text)
-		r.searchSearchBtn.SetBackgroundColor(theme.AccentBackground)
-		r.searchSearchBtn.SetLabelColor(theme.Text)
+		styleButton(r.searchCancelBtn, theme)
+		styleButton(r.searchSearchBtn, theme)
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -138,10 +168,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodEditField.SetBackgroundColor(theme.FocusedBackground)
 		r.chmodEditField.SetFieldTextColor(theme.Text)
 		r.chmodButtons.SetBackgroundColor(theme.AccentBackground)
-		r.chmodCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.chmodCancelBtn.SetLabelColor(theme.Text)
-		r.chmodApplyBtn.SetBackgroundColor(theme.AccentBackground)
-		r.chmodApplyBtn.SetLabelColor(theme.Text)
+		styleButton(r.chmodCancelBtn, theme)
+		styleButton(r.chmodApplyBtn, theme)
 		r.rerenderChmodDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -149,17 +177,20 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
 		r.dirPickerHeader.SetTextColor(theme.Text)
-		r.dirPickerList.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerList.SetMainTextColor(theme.Text)
-		r.dirPickerSelectBtn.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerSelectBtn.SetLabelColor(theme.Text)
-		r.dirPickerCancelBtn.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerCancelBtn.SetLabelColor(theme.Text)
+		styleList(r.dirPickerList, theme)
+		styleButton(r.dirPickerSelectBtn, theme)
+		styleButton(r.dirPickerCancelBtn, theme)
 	}
 
 	if r.helpView != nil {
 		r.helpView.SetBackgroundColor(theme.AccentBackground)
 		r.helpView.SetTextColor(theme.Text)
+	}
+	if r.helpTitleBar != nil {
+		// Background is set via updateOverlayTitleBarColors above
+		// instead, since it depends on whether Help is currently the
+		// active overlay, the same as propertiesTitleBar/menuTitleBar.
+		r.helpTitleBar.SetTextColor(theme.Text)
 	}
 
 	if r.viewerView != nil {
@@ -168,24 +199,84 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.detailsSidebar != nil {
+		// Always AccentBackground regardless of focus (see
+		// newDetailsSidebarView's own doc comment) — unlike
+		// detailsTitleBar just below, this one never needs to check
+		// current focus state at all: it doesn't have a second state to
+		// preserve.
 		r.detailsSidebar.SetBackgroundColor(theme.AccentBackground)
 		r.detailsSidebar.SetTextColor(theme.Text)
+	}
+	if r.detailsTitleBar != nil {
+		// Unlike detailsSidebar above, this one DOES have a focus-
+		// dependent state (see newDetailsTitleBar's own doc comment) —
+		// re-derive it from whichever theme.* color that state actually
+		// maps to right now, rather than always resetting to the
+		// unfocused look the way an unconditional EditableBackground
+		// here would (a real, visible bug: switching color schemes while
+		// Details has focus would otherwise show the wrong one until
+		// the next blur/focus cycle).
+		if r.detailsSidebar.HasFocus() {
+			r.detailsTitleBar.SetBackgroundColor(theme.FocusedBackground)
+		} else {
+			r.detailsTitleBar.SetBackgroundColor(theme.EditableBackground)
+		}
+		r.detailsTitleBar.SetTextColor(theme.Text)
 	}
 
 	r.sedForm.SetBackgroundColor(theme.AccentBackground)
 	r.sedForm.SetLabelColor(theme.Text)
 	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
 	r.sedForm.SetFieldTextColor(theme.Text)
-	r.sedFlagsList.SetBackgroundColor(theme.AccentBackground)
-	r.sedFlagsList.SetMainTextColor(theme.Text)
-	r.sedActions.SetBackgroundColor(theme.AccentBackground)
-	r.sedActions.SetMainTextColor(theme.Text)
+	styleList(r.sedFlagsList, theme)
+	styleList(r.sedActions, theme)
 
 	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewStatus.SetTextColor(theme.Text)
 	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewActions.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewActions.SetMainTextColor(theme.Text)
+	r.sedPreviewTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.FocusedBackground).
+		Foreground(theme.Text))
+	styleList(r.sedPreviewActions, theme)
 
 	r.panel.applyTheme(theme)
+}
+
+// styleButton applies this app's own button look — ButtonBackground
+// while it doesn't have real keyboard focus, FocusedBackground while it
+// does, white text either way — to a real tview.Button (Cancel/Save/
+// Apply/Select/Find, filterRegexBtn, ...). A package-level function
+// taking theme explicitly, rather than a Root method, since
+// Panel.paintStaticChrome (filterRegexBtn's own repaint site) has no
+// Root to call through — only its own p.theme.
+//
+// Per the user's own explicit request for a lighter turquoise than
+// FocusedBackground here — which surfaced a real, previously-unnoticed
+// bug in the process: a plain SetBackgroundColor/SetLabelColor call
+// (every button here used before this) has actually never done
+// anything, for any button, ever — verified directly against tview's
+// own button.go, not guessed: Button.Draw recomputes its own displayed
+// background/foreground from its internal style/activatedStyle fields
+// on every single Draw, discarding whatever SetBackgroundColor set
+// moments earlier. SetStyle/SetActivatedStyle are the ones that
+// actually reach the screen.
+func styleButton(b *tview.Button, theme config.ResolvedTheme) {
+	b.SetStyle(tcell.StyleDefault.Background(theme.ButtonBackground).Foreground(theme.Text))
+	b.SetActivatedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
+}
+
+// styleList applies this app's own list look — AccentBackground overall,
+// white text, FocusedBackground on whichever item is currently selected
+// — to a real tview.List (the context menu, quit/purge confirmation,
+// the owner/group and directory pickers, Options, Sed Replace's own
+// flag/action lists, ...). Per the user's own explicit request to apply
+// the context menu's own selection fix (see its own PR) everywhere a
+// list exists: every one of these was still showing tview.List's own
+// entirely uncustomized selected-item look (a plain white background)
+// — the same real, previously-unnoticed gap styleButton's own doc
+// comment documents for buttons, just for List instead of Button.
+func styleList(l *tview.List, theme config.ResolvedTheme) {
+	l.SetBackgroundColor(theme.AccentBackground)
+	l.SetMainTextColor(theme.Text)
+	l.SetSelectedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
 }

@@ -53,8 +53,8 @@ func TestMouseStatusText(t *testing.T) {
 	}
 }
 
-// TestContextMenuStructure pins the menu's grouping: Properties/Edit/
-// Look/Tail -f/Rename, then a "Selection" section, a "Commands" section,
+// TestContextMenuStructure pins the menu's grouping: Look/Rename/Edit/
+// tail -f/Properties, then a "Selection" section, a "Commands" section,
 // a "Delete" section, and a "Globals" section, in that order — the shape
 // Root.NewRoot builds it in.
 func TestContextMenuStructure(t *testing.T) {
@@ -65,13 +65,15 @@ func TestContextMenuStructure(t *testing.T) {
 	}
 
 	want := []string{
-		"Properties", "Edit", "Look", "Tail -f", "Rename",
+		"Look", "Rename", "Edit", "tail -f", "Properties",
 		menuSectionLabel("Selection"),
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
-		"Copy", "Cut", "Paste", "chown", "chmod", "Sed Replace",
+		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
+		menuSectionLabel("Tools"),
+		"Ping (test)", // placeholder entry point for the first toolWindow slice — see toolwindow.go
 		menuSectionLabel("Globals"),
 		"Hide hidden files",      // dotfiles are shown by default now
 		"Show size in bytes",     // human-readable is the default
@@ -123,6 +125,53 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("selecting Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestUpdateOverlayTitleBarColorsTracksActiveOverlay pins the user's own
+// explicit request that this active/inactive title-bar distinction apply
+// to every panel with one, not just tool windows'/Details' own:
+// whichever of Properties/the context menu is currently the topmost
+// overlay gets FocusedBackground on its own title bar, the other (or
+// both, if neither is open) gets EditableBackground — see
+// updateOverlayTitleBarColors' own doc comment.
+func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("propertiesTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	}
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar with nothing open = %v, want EditableBackground %v", got, want)
+	}
+
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("propertiesTitleBar while Properties is open = %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar while Properties (not the menu) is open = %v, want EditableBackground %v", got, want)
+	}
+
+	// showMenu (via showOverlay/closeAllOverlays) closes Properties first
+	// — the same "only one overlay at a time" policy every other opener
+	// already follows.
+	r.showMenu(0, 0)
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
+		t.Errorf("menuTitleBar while the menu is open = %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := r.propertiesTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("propertiesTitleBar after Properties was closed = %v, want EditableBackground %v", got, want)
+	}
+
+	r.hideOverlay()
+	if got, want := r.menuTitleBar.GetBackgroundColor(), r.theme.EditableBackground; got != want {
+		t.Errorf("menuTitleBar after closing it = %v, want EditableBackground %v", got, want)
 	}
 }
 
@@ -704,7 +753,10 @@ func TestHandleBeforeDrawRepositionsDetailsSidebarOnResize(t *testing.T) {
 	r.SetRect(0, 0, 100, 30)
 	r.showDetailsSidebar()
 
-	x, _, width, _ := r.detailsSidebar.GetRect()
+	// detailsSidebarLayout, not detailsSidebar itself — see
+	// TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight's own doc
+	// comment on why (detailssidebar_test.go).
+	x, _, width, _ := r.detailsSidebarLayout.GetRect()
 	if x+width != 100 {
 		t.Fatalf("setup: sidebar not flush against the right edge of a 100-wide screen: x=%d width=%d", x, width)
 	}
@@ -719,7 +771,7 @@ func TestHandleBeforeDrawRepositionsDetailsSidebarOnResize(t *testing.T) {
 
 	r.handleBeforeDraw(screen)
 
-	x, _, width, _ = r.detailsSidebar.GetRect()
+	x, _, width, _ = r.detailsSidebarLayout.GetRect()
 	if x+width != 160 {
 		t.Errorf("sidebar after resize: x=%d width=%d, want flush against the new 160-wide screen", x, width)
 	}
