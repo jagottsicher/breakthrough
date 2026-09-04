@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -49,6 +50,56 @@ func TestToolWindowAppendLineEscapesContent(t *testing.T) {
 
 	if got := tw.content.GetText(true); !strings.Contains(got, "[ERROR] something broke") {
 		t.Errorf("content = %q, want the literal line preserved (escaped, not swallowed as a style tag)", got)
+	}
+}
+
+// TestToolWindowContentShowsAllLinesThatFit pins a real, hand-found bug
+// (see writeContentLine's own doc comment): appendLine/appendStatus
+// used to write every line via fmt.Fprintln, leaving the underlying
+// text ending in a trailing newline after the *last* line too — which
+// TextView's own trackEnd scrolling (ScrollToEnd, see newToolWindow)
+// reads as one more, empty trailing line, permanently occupying this
+// window's own last visible content row. Every window, at every
+// height, was showing exactly one real line fewer than its content
+// height should allow, no matter how much real output there actually
+// was. Appends exactly as many lines as the window's own content
+// height, then renders to a real tcell.SimulationScreen (GetText alone
+// can't reveal a scrolling bug like this one, since the text itself is
+// perfectly correct — only what actually ends up on screen isn't) and
+// checks every one of those rows shows its own real line, with no
+// spare row left over for a mystery blank one.
+func TestToolWindowContentShowsAllLinesThatFit(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "t")
+	const n = 5
+	tw.SetRect(5, 5, toolWindowMinWidth, n+2) // contentHeight == n exactly
+
+	for i := 1; i <= n; i++ {
+		tw.appendLine(fmt.Sprintf("LINE%d", i))
+	}
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	screen.SetSize(100, 40)
+	tw.Draw(screen)
+
+	for i := 0; i < n; i++ {
+		want := fmt.Sprintf("LINE%d", i+1)
+		row := 6 + i // row 5 is the title bar; content starts at row 6
+		var got strings.Builder
+		for col := 5; col < 5+len(want); col++ {
+			ch, _, _ := screen.Get(col, row)
+			got.WriteString(ch)
+		}
+		if got.String() != want {
+			t.Errorf("row %d = %q, want %q — a content row this window's own height has room for should never be blank", row, got.String(), want)
+		}
 	}
 }
 

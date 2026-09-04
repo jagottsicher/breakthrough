@@ -70,6 +70,11 @@ type toolWindow struct {
 	// what recalculateWidth looks at to decide how wide this window
 	// should be right now (see its own doc comment).
 	lineWidths []int
+
+	// hasContent tracks whether writeContentLine has ever written
+	// anything yet, so it knows whether the next line needs a leading
+	// newline before it — see writeContentLine's own doc comment.
+	hasContent bool
 }
 
 // newToolWindow builds one closed-over toolWindow, titled title — a
@@ -417,7 +422,7 @@ func (tw *toolWindow) appendLine(line string) {
 		return
 	}
 	escaped := tview.Escape(line)
-	_, _ = fmt.Fprintln(tw.content, escaped) // a TextView's own Write never fails
+	tw.writeContentLine(escaped)
 	tw.lineWidths = append(tw.lineWidths, tview.TaggedStringWidth(escaped))
 	tw.recalculateWidth()
 }
@@ -431,9 +436,36 @@ func (tw *toolWindow) appendStatus(s string) {
 	if tw.closed {
 		return
 	}
-	_, _ = fmt.Fprintln(tw.content, s) // a TextView's own Write never fails
+	tw.writeContentLine(s)
 	tw.lineWidths = append(tw.lineWidths, tview.TaggedStringWidth(s))
 	tw.recalculateWidth()
+}
+
+// writeContentLine appends one line to content — appendLine/
+// appendStatus's own shared tail — without ever leaving a trailing
+// newline in the underlying text. A trailing newline after *every*
+// line (fmt.Fprintln's own behavior, used here originally) is a real
+// bug, found by hand and confirmed by rendering this window to a
+// tcell.SimulationScreen at several heights, not guessed: a TextView's
+// own trackEnd scrolling (see ScrollToEnd in newToolWindow) treats a
+// trailing newline as introducing one more, empty trailing line of
+// text, which then permanently occupies this window's own very last
+// visible content row — every window, at every height, was showing
+// exactly one real line fewer than its content height should allow,
+// with a mystery blank row in its place; at the resize handle's own
+// minimum height (a single content row), that one row was always
+// empty, no matter how much real output there actually was to show.
+// Writing a *leading* newline before every line except the first,
+// instead of a trailing one after every line, keeps the underlying
+// text exactly as many real lines as have actually been appended, with
+// nothing dangling off the end.
+func (tw *toolWindow) writeContentLine(s string) {
+	if tw.hasContent {
+		_, _ = fmt.Fprint(tw.content, "\n", s) // a TextView's own Write never fails
+		return
+	}
+	_, _ = fmt.Fprint(tw.content, s)
+	tw.hasContent = true
 }
 
 // recalculateWidth resizes this window to exactly fit what's actually
