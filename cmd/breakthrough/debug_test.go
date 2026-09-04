@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 // TestEnableDebugModeRedirectsStderr pins the core mechanism --debug
@@ -21,18 +22,18 @@ import (
 // later test's own stderr output for the rest of this whole test
 // binary, not just this one test.
 func TestEnableDebugModeRedirectsStderr(t *testing.T) {
-	origStderr, err := syscall.Dup(int(os.Stderr.Fd()))
+	origStderr, err := unix.Dup(int(os.Stderr.Fd()))
 	if err != nil {
 		t.Fatalf("dup(2): %v", err)
 	}
 	defer func() {
-		if err := syscall.Dup2(origStderr, int(os.Stderr.Fd())); err != nil {
+		if err := unix.Dup2(origStderr, int(os.Stderr.Fd())); err != nil {
 			// t.Fatal itself wouldn't even reach a real terminal any
 			// more if this failed — panic is the only way left to make
 			// this loud enough to notice.
 			panic(fmt.Sprintf("failed to restore the real stderr after TestEnableDebugModeRedirectsStderr: %v", err))
 		}
-		_ = syscall.Close(origStderr)
+		_ = unix.Close(origStderr)
 	}()
 
 	dir := t.TempDir()

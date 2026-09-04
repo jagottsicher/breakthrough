@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"syscall"
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/ui"
+	"golang.org/x/sys/unix"
 )
 
 // enableDebugMode is --debug's own action (see main) — redirects this
@@ -26,6 +26,14 @@ import (
 // runtime can't depend on still working correctly during a crash) —
 // verified by hand, not guessed: a plain "os.Stderr = f" reassignment
 // never actually caught a real panic's own output in testing, dup2 did.
+//
+// Uses golang.org/x/sys/unix rather than the standard syscall package
+// because the standard library doesn't define Dup2 for every platform
+// this project targets — linux/arm64's kernel has no dup2 syscall at
+// all, only dup3, so syscall.Dup2 simply doesn't exist there (confirmed
+// against a real linux/arm64 build, not assumed). x/sys/unix provides
+// Dup2 uniformly across all of them, transparently backed by dup3 where
+// that's the only option.
 //
 // Everything written to stderr from this point on — this app's own
 // error messages, and critically any crash — goes to the log file
@@ -49,7 +57,7 @@ func enableDebugMode() (logPath string, err error) {
 	if err != nil {
 		return "", err
 	}
-	if err := syscall.Dup2(int(f.Fd()), int(os.Stderr.Fd())); err != nil {
+	if err := unix.Dup2(int(f.Fd()), int(os.Stderr.Fd())); err != nil {
 		_ = f.Close()
 		return "", fmt.Errorf("redirecting stderr: %w", err)
 	}
