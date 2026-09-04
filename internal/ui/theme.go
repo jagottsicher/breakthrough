@@ -186,6 +186,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.helpView.SetBackgroundColor(theme.AccentBackground)
 		r.helpView.SetTextColor(theme.Text)
 	}
+	if r.helpTitleBar != nil {
+		// Background is set via updateOverlayTitleBarColors above
+		// instead, since it depends on whether Help is currently the
+		// active overlay, the same as propertiesTitleBar/menuTitleBar.
+		r.helpTitleBar.SetTextColor(theme.Text)
+	}
 
 	if r.viewerView != nil {
 		r.viewerView.SetBackgroundColor(theme.AccentBackground)
