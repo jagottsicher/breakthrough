@@ -413,6 +413,81 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	}
 }
 
+// TestDetailsExpandButtonShowsSidebar pins the user's own explicit
+// request for a mouse alternative to Ctrl+D: the header row's own "<"
+// button (see Panel.detailsExpandBtn/onExpandDetails) shows the
+// sidebar, the same as clicking the button bar's own Details button —
+// but only ever that one direction (expand), unlike the button bar's
+// own toggle.
+func TestDetailsExpandButtonShowsSidebar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if r.detailsSidebarVisible {
+		t.Fatal("setup: sidebar should start hidden")
+	}
+
+	r.panel.detailsExpandBtn.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if !r.detailsSidebarVisible {
+		t.Error("clicking the \"<\" button should show the sidebar")
+	}
+}
+
+// TestDetailsTitleBarCollapsesOnCollapseButtonClick pins the user's own
+// explicit request for a ">" collapse button on the sidebar's own
+// title bar, mirroring the header row's own "<" expand button in the
+// other direction — the same one-column-in-from-the-edge spacing
+// toolWindow's/Help's own close buttons use (toolWindowCloseButtonCol).
+func TestDetailsTitleBarCollapsesOnCollapseButtonClick(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+	if !r.detailsSidebarVisible {
+		t.Fatal("setup: sidebar should be visible")
+	}
+
+	x, y, width, _ := r.detailsTitleBar.GetRect()
+	closeX := x + toolWindowCloseButtonCol(0, width)
+	captured, _ := r.captureDetailsTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(closeX, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the collapse button should consume the click")
+	}
+	if r.detailsSidebarVisible {
+		t.Error("clicking the collapse button should hide the sidebar")
+	}
+}
+
+// TestDetailsTitleBarClickElsewhereDoesNothing pins that only the exact
+// collapse-button cell does anything — the same "otherwise inert" shape
+// Help's own title bar has (see TestHelpTitleBarClickElsewhereDoesNothing).
+func TestDetailsTitleBarClickElsewhereDoesNothing(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+
+	x, y, _, _ := r.detailsTitleBar.GetRect()
+	captured, _ := r.captureDetailsTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y, tcell.ButtonNone, 0))
+
+	if captured == tview.MouseConsumed {
+		t.Error("a click away from the collapse button should not be consumed")
+	}
+	if !r.detailsSidebarVisible {
+		t.Error("the sidebar should still be visible")
+	}
+}
+
 // TestCaptureDetailsSidebarMouseSwallowsEveryActionInsideItsRect pins
 // the fix for a real gap: tview.Box's own default MouseHandler only
 // ever consumes MouseLeftDown, so without this capture, a right-click or
