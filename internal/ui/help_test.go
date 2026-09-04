@@ -174,7 +174,7 @@ func TestHelpSizeWidthMatchesContentNotScreen(t *testing.T) {
 	r.SetRect(0, 0, 300, 60) // deliberately much wider than the content needs
 
 	width, _ := r.helpSize()
-	if want := helpContentWidth(); width != want {
+	if want := r.helpContentWidth(); width != want {
 		t.Errorf("width = %d, want %d (helpContentWidth) — a wide screen must not stretch it further", width, want)
 	}
 	if width == 300*9/10 {
@@ -203,6 +203,67 @@ func TestHelpSizeWidthNeverExceedsScreen(t *testing.T) {
 	width, _ := r.helpSize()
 	if width > screenWidth {
 		t.Errorf("width = %d, want at most the screen's own width %d", width, screenWidth)
+	}
+}
+
+// TestHelpShowsAboutSectionWithVersionInfo pins the user's own explicit
+// request for an About section at the bottom of Help, with version
+// info in it: SetVersionInfo's own values show up in what actually
+// gets displayed (fullHelpText, via openHelp) once Help is open.
+func TestHelpShowsAboutSectionWithVersionInfo(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetVersionInfo("v1.2.3", "abc1234", "2026-09-05", "goreleaser")
+
+	r.HelpShortcut()
+
+	got := r.helpView.GetText(true)
+	for _, want := range []string{"About", "v1.2.3", "abc1234", "2026-09-05", "goreleaser"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("displayed help text is missing %q", want)
+		}
+	}
+}
+
+// TestAboutTextDefaultsMatchPlainBuild pins that a Root nothing ever
+// calls SetVersionInfo on (every test in this package, and a real
+// binary if main's own call to it were ever removed) shows exactly the
+// same "dev build" text cmd/breakthrough's own version/commit/date/
+// builtBy vars default to for a plain "go build" with no ldflags.
+func TestAboutTextDefaultsMatchPlainBuild(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	got := r.aboutText()
+	for _, want := range []string{"dev", "none", "unknown", "source"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("aboutText() is missing the default %q: %s", want, got)
+		}
+	}
+}
+
+// TestHelpTextNeverMentionsAI is a regression guard for this project's
+// own strict rule against any AI/assistant attribution anywhere in its
+// own output — the About section is exactly the kind of place that
+// convention could otherwise slip into unnoticed.
+func TestHelpTextNeverMentionsAI(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	got := strings.ToLower(r.fullHelpText())
+	for _, bad := range []string{"claude", "anthropic", "ai-generated", "ai generated"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("help text contains %q, which must never appear here", bad)
+		}
 	}
 }
 
