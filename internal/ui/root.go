@@ -210,8 +210,16 @@ type Root struct {
 	sedPreviewCurrentPos string
 
 	optionsList *tview.List     // Options overlay — see openOptions
-	helpView    *tview.TextView // Help overlay — see help.go/openHelp
+	helpView    *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+
+	// helpTitleBar/helpLayout are Help's own one-row title bar (see
+	// newHelpTitleBar) and the Flex stacking it over helpView (the same
+	// shape detailsSidebarLayout has over detailsSidebar — see
+	// detailssidebar.go) — helpLayout, not helpView directly, is what
+	// openHelp actually sizes/positions and pushes as the overlay now.
+	helpTitleBar *tview.TextView
+	helpLayout   *tview.Flex
 
 	// detailsSidebar is the right-hand Details layer toggled by Ctrl+D
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
@@ -917,8 +925,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Help overlay (see help.go/openHelp) — a single, static,
 	// read-only TextView, the simplest of all of these (nothing to
-	// reset or repopulate on open).
+	// reset or repopulate on open) — now topped with its own one-row
+	// title bar (helpTitleBar/helpLayout), per the user's own explicit
+	// request that Help get the same title bar (and close button) every
+	// other overlay in this app already has.
 	r.helpView = r.newHelpView()
+	r.helpTitleBar = r.newHelpTitleBar()
+	r.helpLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.helpTitleBar, 1, 0, false).
+		AddItem(r.helpView, 0, 1, true)
 
 	// The Look overlay's built-in pager (see viewer.go/openLook) — same
 	// single-static-TextView shape as Help, just with its own text set
@@ -1013,7 +1028,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
-	r.AddPage(helpPage, r.helpView, false, false)
+	r.AddPage(helpPage, r.helpLayout, false, false)
 	r.AddPage(viewerPage, r.viewerView, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 
@@ -1098,17 +1113,17 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 // updateOverlayTitleBarColors recolors every modal overlay's own title
 // bar that doesn't already track its own focus state the way
 // toolWindow's/Details' do (see toolwindow.go/detailssidebar.go) —
-// currently propertiesTitleBar/menuTitleBar — based on which one, if
-// any, is currently the topmost overlay (r.activePage): FocusedBackground
-// for that one, EditableBackground for every other, per the user's own
-// explicit request that this same active/inactive distinction apply to
-// every panel with a title bar, not just tool windows'/Details' own.
-// Called from pushOverlay/hideOverlay, the only two places activePage
-// itself changes, and from applyTheme, so a live color-scheme switch
-// re-derives the right one instead of resetting to a fixed color
-// regardless of which overlay (if any) is actually active right now —
-// the same live-switch hazard detailsTitleBar's own applyTheme case
-// documents.
+// currently propertiesTitleBar/menuTitleBar/helpTitleBar — based on
+// which one, if any, is currently the topmost overlay (r.activePage):
+// FocusedBackground for that one, EditableBackground for every other,
+// per the user's own explicit request that this same active/inactive
+// distinction apply to every panel with a title bar, not just tool
+// windows'/Details' own. Called from pushOverlay/hideOverlay, the only
+// two places activePage itself changes, and from applyTheme, so a live
+// color-scheme switch re-derives the right one instead of resetting to
+// a fixed color regardless of which overlay (if any) is actually active
+// right now — the same live-switch hazard detailsTitleBar's own
+// applyTheme case documents.
 func (r *Root) updateOverlayTitleBarColors() {
 	set := func(bar *tview.TextView, page string) {
 		if r.activePage == page {
@@ -1119,6 +1134,7 @@ func (r *Root) updateOverlayTitleBarColors() {
 	}
 	set(r.propertiesTitleBar, propertiesPage)
 	set(r.menuTitleBar, contextMenuPage)
+	set(r.helpTitleBar, helpPage)
 }
 
 // pushOverlayReturningFocusTo is pushOverlay, plus emptyStackFocus (see
