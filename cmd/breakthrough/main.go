@@ -62,6 +62,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// For the Help overlay's own About section — see Root.SetVersionInfo's
+	// own doc comment for why this can't just be read directly from
+	// within internal/ui itself.
+	root.SetVersionInfo(version, commit, date, builtBy)
 
 	// Only meaningful once Application.Run is about to start draining its
 	// update queue — see StartClock's own doc comment for why NewRoot

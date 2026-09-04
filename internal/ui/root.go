@@ -100,6 +100,19 @@ type Root struct {
 	// happens to support.
 	mouseEnabled bool
 
+	// appVersion/appCommit/appBuildDate/appBuiltBy are the Help
+	// overlay's own About section's source (see help.go's aboutText) —
+	// cmd/breakthrough's own version/commit/date/builtBy vars, set via
+	// ldflags by the release pipeline (see .goreleaser.yaml), passed in
+	// through SetVersionInfo once NewRoot returns rather than as
+	// parameters here, so every one of this package's own tests
+	// constructing a Root directly doesn't need to pass them. Defaulted
+	// to exactly the same literals cmd/breakthrough's own vars start
+	// with, so a Root nothing ever calls SetVersionInfo on (every test)
+	// shows the same "dev build" text a real, plain "go build" binary
+	// would too.
+	appVersion, appCommit, appBuildDate, appBuiltBy string
+
 	// toolWindows holds every currently open toolWindow (see
 	// openToolCommand), in the order they were opened — unlike every
 	// other overlay in this codebase, there can be several of these open
@@ -758,6 +771,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settings:     settings,
 		colorSchemes: colorSchemes,
 		theme:        theme,
+		// Matches cmd/breakthrough's own version/commit/date/builtBy
+		// vars' own default literals exactly — see SetVersionInfo's own
+		// doc comment and the struct field comment above.
+		appVersion:   "dev",
+		appCommit:    "none",
+		appBuildDate: "unknown",
+		appBuiltBy:   "source",
 		// -1: "nothing focused yet" — see focusedPropertyField/
 		// setPropertiesFocus. Set here rather than only in openProperties
 		// so it's already correct for anything that renders Properties
@@ -1066,6 +1086,23 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	return r, nil
+}
+
+// SetVersionInfo lets cmd/breakthrough hand its own build-time
+// version/commit/date/builtBy vars (set via ldflags by the release
+// pipeline — see .goreleaser.yaml) to the Help overlay's own About
+// section (help.go's aboutText), once NewRoot has already returned —
+// there's no other point before then this package could read them at,
+// since they're main's own package-level vars, not this one's. Never
+// called at all by this package's own tests, which is exactly why
+// NewRoot seeds every one of these fields with cmd/breakthrough's own
+// default literals already (see the struct field's own doc comment):
+// a Root nothing ever calls this on still shows sensible text.
+func (r *Root) SetVersionInfo(version, commit, date, builtBy string) {
+	r.appVersion = version
+	r.appCommit = commit
+	r.appBuildDate = date
+	r.appBuiltBy = builtBy
 }
 
 // showOverlay closes whatever overlay (or stack of layered overlays) is

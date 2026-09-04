@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -201,20 +202,61 @@ var helpText = strings.TrimLeft(`
                            scrollable pick list instead of doing nothing
 `, "\n")
 
+// aboutText builds the Help overlay's own About section — version,
+// license, and a disclaimer, per the user's own explicit request. The
+// tagline and copyright line are the exact same wording README.md/
+// NOTICE already use, not a separate description invented here.
+//
+// A method, not a plain const the way helpText itself is: appVersion/
+// appCommit/appBuildDate/appBuiltBy only become known once main calls
+// SetVersionInfo, which happens after helpText's own package-level
+// initializer has already run — see fullHelpText's own doc comment for
+// where this actually gets appended.
+func (r *Root) aboutText() string {
+	return fmt.Sprintf(strings.TrimLeft(`
+[::b]About[::-]
+
+  breakthrough — a mouse-and-menu-driven TUI file manager for your
+  POSIX-compliant terminal, built around a real embedded bash shell.
+
+  Version    %s (commit %s, built %s by %s)
+  License    Apache License, Version 2.0
+  Copyright  2026 jagottsicher
+  Homepage   github.com/jagottsicher/breakthrough
+
+  Provided "AS IS", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+  either express or implied — see the LICENSE file for the full text.
+`, "\n"), r.appVersion, r.appCommit, r.appBuildDate, r.appBuiltBy)
+}
+
+// fullHelpText is what helpView actually shows (see openHelp) —
+// helpText plus aboutText, joined with a blank line the same way every
+// other section break in helpText already has one. Computed fresh on
+// every open rather than cached: version info never changes once
+// SetVersionInfo has been called, so this costs nothing worth avoiding,
+// and it sidesteps ever wondering whether a cache is stale.
+func (r *Root) fullHelpText() string {
+	return helpText + "\n" + r.aboutText()
+}
+
 // newHelpView builds the Help overlay's own scrollable content (see
-// helpText) — no interactive fields, so none of the span-tracking
-// machinery Properties/Search need for their own clickable text.
-// Escape/Enter/Tab/Backtab all dismiss it (TextView.SetDoneFunc fires
-// for all four — see errorView's own doc comment for the same shape),
-// as does a click outside (Root's own captureOutsideClick, unchanged),
-// Ctrl+C, or the title bar's own close button (see
-// captureHelpTitleBarMouse).
+// helpText/aboutText) — no interactive fields, so none of the
+// span-tracking machinery Properties/Search need for their own
+// clickable text. Escape/Enter/Tab/Backtab all dismiss it
+// (TextView.SetDoneFunc fires for all four — see errorView's own doc
+// comment for the same shape), as does a click outside (Root's own
+// captureOutsideClick, unchanged), Ctrl+C, or the title bar's own close
+// button (see captureHelpTitleBarMouse).
+//
+// Its own text is set by openHelp instead of here (see fullHelpText's
+// own doc comment): appVersion/appCommit/appBuildDate/appBuiltBy aren't
+// known yet this early — SetVersionInfo only runs once NewRoot itself
+// has already returned.
 func (r *Root) newHelpView() *tview.TextView {
 	v := tview.NewTextView()
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
-	v.SetText(helpText)
 	v.SetDoneFunc(func(tcell.Key) { r.hideOverlay() })
 	return v
 }
@@ -289,6 +331,7 @@ func (r *Root) captureHelpTitleBarMouse(action tview.MouseAction, event *tcell.E
 // NewRoot), not helpView directly, so the title bar always occupies
 // the same rect helpView itself used to.
 func (r *Root) openHelp() {
+	r.helpView.SetText(r.fullHelpText())
 	width, height := r.helpSize()
 	x, y := r.centeredOnScreen(width, height)
 	x, y, width, height = r.clampToScreen(x, y, width, height)
@@ -297,22 +340,22 @@ func (r *Root) openHelp() {
 	r.pushOverlay(helpPage, r.helpLayout, nil)
 }
 
-// helpContentWidth returns the widest line helpText actually has (via
-// tview.TaggedStringWidth, so a "[::b]"/"[::-]" bold tag around a
-// section heading doesn't count against it) — helpSize's own real
-// target width, plus helpView's own 1-column left/right border padding
-// (see newHelpView's SetBorderPadding). helpText is hand-wrapped at a
-// fixed width for readability in the source, not reflowed to fill
-// whatever width the window happens to be (SetWrap(true) only wraps a
-// line *longer* than the window, never un-wraps one that already fits
-// to use more of it) — a real, user-reported problem this fixes:
-// sizing the window against a screen-width percentage the way it used
-// to left most of a wide terminal's own width as dead space down the
-// right side, with every line still breaking at the same narrow point
-// regardless.
-func helpContentWidth() int {
+// helpContentWidth returns the widest line helpText/aboutText actually
+// have between them (via tview.TaggedStringWidth, so a "[::b]"/"[::-]"
+// bold tag around a section heading doesn't count against it) —
+// helpSize's own real target width, plus helpView's own 1-column
+// left/right border padding (see newHelpView's SetBorderPadding).
+// helpText is hand-wrapped at a fixed width for readability in the
+// source, not reflowed to fill whatever width the window happens to be
+// (SetWrap(true) only wraps a line *longer* than the window, never
+// un-wraps one that already fits to use more of it) — a real,
+// user-reported problem this fixes: sizing the window against a
+// screen-width percentage the way it used to left most of a wide
+// terminal's own width as dead space down the right side, with every
+// line still breaking at the same narrow point regardless.
+func (r *Root) helpContentWidth() int {
 	width := 0
-	for _, line := range strings.Split(helpText, "\n") {
+	for _, line := range strings.Split(r.fullHelpText(), "\n") {
 		if w := tview.TaggedStringWidth(line); w > width {
 			width = w
 		}
@@ -330,7 +373,7 @@ func helpContentWidth() int {
 // comment).
 func (r *Root) helpSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
-	width = helpContentWidth()
+	width = r.helpContentWidth()
 	if width > screenWidth {
 		width = screenWidth
 	}
