@@ -1408,8 +1408,20 @@ func (r *Root) computeHashes() {
 	r.rerenderProperties()
 
 	target := r.propertiesTarget
-	go r.animateHashProgress(ctx)
-	go func() {
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack — onPanic here resets the
+	// same "in progress" state cancelHashComputation already resets on
+	// the normal completion path just below, so a recovered panic
+	// doesn't leave Properties stuck believing a computation is still
+	// running forever.
+	onPanic := func() {
+		r.cancelHashComputation()
+		r.rerenderProperties()
+	}
+	r.safeGo("Properties hash progress animation", onPanic, func() { r.animateHashProgress(ctx) })
+	r.safeGo("Properties hash computation", onPanic, func() {
 		// hashFile itself stops reading — and stops calling
 		// r.hashBytesRead.Store — as soon as ctx is cancelled (see
 		// fsops.Hash's own doc comment); this check only covers the
@@ -1439,7 +1451,7 @@ func (r *Root) computeHashes() {
 			// propagateHashResult's own doc comment (detailssidebar.go).
 			r.propagateHashResult(target, hashes)
 		})
-	}()
+	})
 }
 
 // animateHashProgress advances hashAnimFrame every hashAnimationInterval

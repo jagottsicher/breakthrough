@@ -274,7 +274,19 @@ func (r *Root) runSedPreview() {
 	r.sedPreviewTable.Clear()
 	r.showOverlay(sedPreviewPage, r.sedPreviewLayout)
 
-	go r.animateSedPreviewProgress(ctx)
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack — onPanic here resets the
+	// same "in progress" state cancelSedPreview already resets on the
+	// normal completion path just below, so a recovered panic doesn't
+	// leave this dialog stuck believing a preview is still running
+	// forever.
+	onPanic := func() {
+		r.cancelSedPreview()
+		r.renderSedPreviewStatus()
+	}
+	r.safeGo("sed preview progress animation", onPanic, func() { r.animateSedPreviewProgress(ctx) })
 	// Snapshotting the var here, on the calling goroutine, rather than
 	// reading sedPreviewFunc directly inside the goroutine below: a test
 	// overriding it (see isolateSedPreviewFunc) restores the original via
@@ -283,7 +295,7 @@ func (r *Root) runSedPreview() {
 	// the var exactly once, before the goroutine starts, avoids the race
 	// entirely rather than needing to synchronize the two.
 	preview := sedPreviewFunc
-	go func() {
+	r.safeGo("sed preview", onPanic, func() {
 		changes, skipped, err := preview(targets, script, extendedRegex, func(path string) {
 			r.app.QueueUpdateDraw(func() {
 				if ctx.Err() != nil {
@@ -301,7 +313,7 @@ func (r *Root) runSedPreview() {
 			r.cancelSedPreview()
 			r.showSedPreviewResult(changes, skipped, err)
 		})
-	}()
+	})
 }
 
 // cancelSedPreview stops whatever sedPreviewFunc call is currently in

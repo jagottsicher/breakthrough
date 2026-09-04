@@ -7,11 +7,22 @@
 // startDir. That directory also becomes the header's Start button target.
 // "breakthrough --version" (or "-v") prints version information instead
 // of starting the TUI — see the version/commit/date/builtBy vars below.
+// "breakthrough --debug" redirects this process's own stderr to a log
+// file for the whole run instead of starting normally — see
+// enableDebugMode (debug.go) — a real, user-reported crash that came
+// back as only a single, truncated stack frame is what this is for: a
+// panic in one of this app's own background goroutines takes the whole
+// process down without ever restoring the terminal first (see
+// internal/ui/crash.go's own doc comment for the full, hand-verified
+// reasoning), easy to miss on a broken terminal even when it prints in
+// full — a durable log file survives that regardless.
 package main
 
 import (
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -34,6 +45,19 @@ func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		fmt.Printf("breakthrough %s (commit %s, built %s by %s)\n", version, commit, date, builtBy)
 		return
+	}
+
+	if slices.Contains(os.Args[1:], "--debug") {
+		logPath, err := enableDebugMode()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "breakthrough: --debug:", err)
+			os.Exit(1)
+		}
+		// To the real, still-unredirected stdout — enableDebugMode
+		// already moved stderr to logPath by this point, so this is the
+		// last thing that'll actually reach the visible terminal until
+		// the TUI itself takes over the screen.
+		fmt.Println("breakthrough: debug mode — stderr (including any crash) is being written to", logPath)
 	}
 
 	if err := run(); err != nil {
@@ -350,9 +374,18 @@ func run() error {
 // becomes the panel's "Start" button target (see ui.Panel's header) — an
 // invalid or unreadable argument is left for Panel's own load to reject,
 // rather than duplicating that validation here.
+//
+// Skips over any flag (--debug, --version, -v, or anything else
+// starting with "-") rather than blindly taking os.Args[1] — otherwise
+// "breakthrough --debug" would try to open a directory literally named
+// "--debug" instead of enabling debug mode and opening the current
+// directory, and "breakthrough --debug /some/path" wouldn't find its
+// own path argument at all.
 func startDir() (string, error) {
-	if len(os.Args) > 1 {
-		return os.Args[1], nil
+	for _, arg := range os.Args[1:] {
+		if !strings.HasPrefix(arg, "-") {
+			return arg, nil
+		}
 	}
 	return os.Getwd()
 }
