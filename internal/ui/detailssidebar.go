@@ -438,6 +438,7 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
 	r.detailsDirSize = nil
+	r.detailsDirSizeMeasured = ""
 	r.detailsMetadataState = ""
 	r.detailsTarget = path
 	// Adopts Properties' own result immediately if it's already open on
@@ -807,6 +808,13 @@ func (r *Root) renderDetailsSidebar() {
 		switch {
 		case r.detailsDirSizeInProgress:
 			sizeText = hashAnimationFrames[r.detailsDirSizeAnimFrame%len(hashAnimationFrames)] + " Computing size (du -hs)"
+		case r.detailsDirSize != nil && r.detailsDirSizeMeasured != "":
+			// A symlink: the number describes the resolved target, not
+			// the selected entry, so name the target rather than
+			// letting the size be read as the link's own (see
+			// fsops.DirSize, which resolves the whole chain).
+			sizeText = fmt.Sprintf("Size (du -hs): %s\nof link target: %s",
+				humanSize(*r.detailsDirSize), r.detailsDirSizeMeasured)
 		case r.detailsDirSize != nil:
 			// Not infoField: its own fixed 13-column label width is
 			// sized for the short, single-word labels every other stat
@@ -1027,7 +1035,7 @@ func (r *Root) computeDetailsDirSize() {
 	}
 	r.safeGo("Details directory size progress animation", onPanic, func() { r.animateDetailsDirSizeProgress(ctx) })
 	r.safeGo("Details directory size computation", onPanic, func() {
-		size, ok := dirSize(target)
+		size, measured, ok := dirSize(target)
 		if ctx.Err() != nil {
 			return // superseded before we even got to report anything — see cancelDetailsDirSizeComputation
 		}
@@ -1037,11 +1045,20 @@ func (r *Root) computeDetailsDirSize() {
 			}
 			r.cancelDetailsDirSizeComputation()
 			if !ok {
-				r.showError(fmt.Errorf("computing the size of %s: du failed or isn't installed", target))
+				r.showError(fmt.Errorf("computing the size of %s: du failed, isn't installed, or the path couldn't be resolved", target))
 				return
 			}
 			if r.detailsSidebarVisible && r.detailsTarget == target {
 				r.detailsDirSize = &size
+				// Only when it differs from what's selected — i.e. the
+				// selection was a symlink and the number describes
+				// somewhere else, which the display has to say plainly
+				// rather than letting the size look like the link's own.
+				if measured != target {
+					r.detailsDirSizeMeasured = measured
+				} else {
+					r.detailsDirSizeMeasured = ""
+				}
 				r.renderDetailsSidebar()
 			}
 		})

@@ -57,8 +57,8 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_RUNTIME_DIR", filepath.Join(os.TempDir(), "breakthrough-test-xdg-runtime"))     //nolint:errcheck
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
 
-	loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
-		return config.DefaultSettings(), config.LoadColorSchemes("", ""), nil
+	loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
+		return config.DefaultSettings(), map[string]config.Origin{}, config.LoadColorSchemes("", ""), nil
 	}
 	userConfigFilePath = func() string {
 		return filepath.Join(os.TempDir(), "breakthrough-test-config-does-not-exist")

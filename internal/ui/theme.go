@@ -17,10 +17,14 @@ import (
 // machine running `go test` might actually contain — the same class of
 // problem the bash-history tests solved via a forced HISTFILE (see
 // historyFilePath).
-var loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
-	settings, warnings := config.Load(config.SystemConfigFile(), config.UserConfigFile())
+// Also returns each setting's own origin (see config.LoadWithOrigins) —
+// which tier the effective value actually came from — for the Options
+// screen to show alongside each value, and to make its "reset" honest
+// (see Root.resetSetting).
+var loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
+	settings, origins, warnings := config.LoadWithOrigins(config.SystemConfigFile(), config.UserConfigFile())
 	schemes := config.LoadColorSchemes(config.SystemColorSchemeDir(), config.UserColorSchemeDir())
-	return settings, schemes, warnings
+	return settings, origins, schemes, warnings
 }
 
 // userConfigFilePath is where a setting change gets persisted (see
@@ -39,13 +43,90 @@ var userConfigFilePath = config.UserConfigFile
 // new value is in effect either way, just not guaranteed to survive a
 // restart if saving it failed.
 func (r *Root) persistSetting(key, value string) {
+	if r.suppressPersist {
+		// Deliberately applying a value that came *from* disk (a reset,
+		// or a reload after an external edit) — writing it straight back
+		// would undo the very thing that produced it. See
+		// applyWithoutPersisting.
+		return
+	}
 	path := userConfigFilePath()
 	if path == "" {
 		return // no user config tier available (see config.UserDir's own doc comment) — nothing to persist to
 	}
 	if err := config.SetKey(path, key, value); err != nil {
 		r.showError(fmt.Errorf("saving %s: %w", key, err))
+		return
 	}
+	r.settingOrigins[key] = config.OriginUser
+}
+
+// applyWithoutPersisting runs fn with persistSetting suppressed.
+//
+// Exists for the two places that apply a value which already reflects
+// what's on disk: resetting a setting (see resetOptions) and reloading
+// after the config file was edited externally (see
+// reloadSettingsFromDisk). Both have to put the value into effect
+// through the setting's own normal apply path — that's where all the
+// live consequences live, from reloading every tab to relabelling the
+// context menu — but must not write it back out, which for a reset
+// would re-create the exact key the reset just removed.
+//
+// Restores the previous value rather than clearing the flag outright,
+// so nesting can't silently re-enable persistence half way through.
+func (r *Root) applyWithoutPersisting(fn func()) {
+	previous := r.suppressPersist
+	r.suppressPersist = true
+	defer func() { r.suppressPersist = previous }()
+	fn()
+}
+
+// resetSetting is persistSetting's counterpart: it removes key from the
+// user's own config file entirely (see config.UnsetKey) rather than
+// writing a default value into it, so the effective value falls back
+// through the tiers — to a system administrator's setting where one
+// exists, and only to the built-in default where none does.
+//
+// Returns the value now in force, which the caller applies the same way
+// it would apply any other change: this only touches what's stored, not
+// what's currently running. Deliberately split that way — the "apply a
+// value" half is already written once per setting (see
+// optionSpec.apply), and reset has no business duplicating it.
+func (r *Root) resetSetting(key string) string {
+	path := userConfigFilePath()
+	if path != "" {
+		if err := config.UnsetKey(path, key); err != nil {
+			r.showError(fmt.Errorf("resetting %s: %w", key, err))
+			return r.effectiveSettingValue(key)
+		}
+	}
+
+	// Re-read from disk rather than assuming the built-in default: the
+	// whole point of removing the key is to find out what the tier below
+	// actually has, which only a fresh merge can answer.
+	_, origins, _, _ := loadInitialSettings()
+	if origin, ok := origins[key]; ok {
+		r.settingOrigins[key] = origin
+	} else {
+		r.settingOrigins[key] = config.OriginDefault
+	}
+	return r.effectiveSettingValue(key)
+}
+
+// effectiveSettingValue is the value key currently has on disk once both
+// tiers are merged — what resetSetting hands back for the caller to
+// apply. Falls back to the built-in default for an unrecognized key,
+// which can't happen through the Options screen (it only ever names
+// keys from config.SettingDocs) but is the safe answer regardless.
+func (r *Root) effectiveSettingValue(key string) string {
+	settings, _, _, _ := loadInitialSettings()
+	if value, ok := settingValueByKey(settings, key); ok {
+		return value
+	}
+	if doc, ok := config.FindSettingDoc(key); ok {
+		return doc.Default
+	}
+	return ""
 }
 
 // colorTag renders c as the color specifier tview's own "[fg:bg:flags]"
@@ -145,8 +226,41 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
-	if r.optionsList != nil {
-		styleList(r.optionsList, theme)
+	// The Options screen (see optionsscreen.go). Guarded because
+	// applyTheme also runs from NewRoot, before newOptionsScreen has
+	// built any of these.
+	if r.optionsCategories != nil {
+		styleList(r.optionsCategories, theme)
+		styleList(r.optionsPicker, theme)
+
+		r.optionsLayout.SetBackgroundColor(theme.AccentBackground)
+		r.optionsButtons.SetBackgroundColor(theme.AccentBackground)
+
+		r.optionsTitleBar.SetBackgroundColor(theme.FocusedBackground)
+		r.optionsTitleBar.SetTextColor(theme.Text)
+		r.optionsHint.SetBackgroundColor(theme.EditableBackground)
+		r.optionsHint.SetTextColor(theme.Text)
+
+		r.optionsTable.SetBackgroundColor(theme.AccentBackground)
+		r.optionsTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.FocusedBackground).
+			Foreground(theme.Text))
+
+		r.optionsInfo.SetBackgroundColor(theme.EditableBackground)
+		r.optionsInfo.SetTextColor(theme.Text)
+
+		r.optionsInput.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.optionsInput.SetBackgroundColor(theme.FocusedBackground)
+		r.optionsInput.SetFieldTextColor(theme.Text)
+		r.optionsInput.SetLabelColor(theme.Text)
+
+		for _, b := range r.optionsButtonList() {
+			styleButton(b, theme)
+		}
+
+		// Re-render: the table's own cell colors are baked in per cell
+		// (see renderOptions), not looked up live at draw time.
+		r.renderOptions()
 	}
 
 	if r.searchTop != nil {
