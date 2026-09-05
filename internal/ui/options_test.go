@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -19,8 +20,8 @@ import (
 func isolateInitialSettings(t *testing.T, settings config.Settings, schemes []config.NamedTheme) {
 	t.Helper()
 	original := loadInitialSettings
-	loadInitialSettings = func() (config.Settings, []config.NamedTheme, []string) {
-		return settings, schemes, nil
+	loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
+		return settings, map[string]config.Origin{}, schemes, nil
 	}
 	t.Cleanup(func() { loadInitialSettings = original })
 }
@@ -34,7 +35,12 @@ func solarizedTheme() config.Theme {
 	return config.Theme{Name: "Solarized", AccentBackground: "#002b36"}
 }
 
-func TestOpenOptionsListsSchemesWithCurrentMarked(t *testing.T) {
+// TestOpenOptionsShowsTheActiveSchemeAsAValue pins that the Options
+// screen opens on the Appearance category with the color scheme's own
+// current value rendered by its display name — not by the config slug,
+// and not as a bare list of schemes the way the old overlay this
+// replaced did.
+func TestOpenOptionsShowsTheActiveSchemeAsAValue(t *testing.T) {
 	schemes := []config.NamedTheme{
 		{Slug: "default", Theme: config.DefaultTheme()},
 		{Slug: "solarized", Theme: solarizedTheme()},
@@ -51,15 +57,31 @@ func TestOpenOptionsListsSchemesWithCurrentMarked(t *testing.T) {
 	if r.activePage != optionsPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, optionsPage)
 	}
-	if got, want := r.optionsList.GetItemCount(), len(schemes); got != want {
-		t.Fatalf("optionsList has %d items, want %d", got, want)
-	}
 
-	current := r.optionsList.GetCurrentItem()
-	label, _ := r.optionsList.GetItemText(current)
-	if label != "Solarized (current)" {
-		t.Errorf("current item label = %q, want %q", label, "Solarized (current)")
+	row, ok := optionRowByKey(r, "color_scheme")
+	if !ok {
+		t.Fatal("no color_scheme row in the Appearance category")
 	}
+	// Trimmed: the cells are space-padded to fixed column widths (see
+	// padRight) so the columns line up across categories.
+	if got := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColValue).Text); got != "Solarized" {
+		t.Errorf("color scheme value cell = %q, want %q", got, "Solarized")
+	}
+}
+
+// optionRowByKey finds the table row currently showing the setting named
+// key, in whichever category is selected.
+func optionRowByKey(r *Root, key string) (int, bool) {
+	cat, ok := r.currentOptionCategory()
+	if !ok {
+		return 0, false
+	}
+	for i, opt := range cat.options {
+		if opt.key == key {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 func TestApplyColorSchemeAppliesLiveAndPersists(t *testing.T) {
@@ -220,7 +242,11 @@ func TestApplyColorSchemeWithNoUserConfigTierDoesNotError(t *testing.T) {
 	}
 }
 
-func TestOpenOptionsCancelRunsClosesOverlay(t *testing.T) {
+// TestOpenOptionsEscapeClosesTheScreen pins Escape from the settings
+// table — which, unlike a List, has no DoneFunc of its own, so this only
+// works because captureOptionsKey handles it for every focus stop on the
+// screen (see its own doc comment).
+func TestOpenOptionsEscapeClosesTheScreen(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -228,14 +254,19 @@ func TestOpenOptionsCancelRunsClosesOverlay(t *testing.T) {
 	}
 
 	r.openOptions()
-	r.optionsList.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after Escape, want closed", r.activePage)
 	}
 }
 
-func TestOptionsListPickAppliesAndCloses(t *testing.T) {
+// TestOptionsSchemePickAppliesAndReturnsToTheScreen pins the enum path
+// end to end: activating the color scheme row opens the picker, and
+// choosing an entry applies it and drops back to the Options screen —
+// which stays open, unlike the old overlay this replaced, since there
+// may well be more to change.
+func TestOptionsSchemePickAppliesAndReturnsToTheScreen(t *testing.T) {
 	schemes := []config.NamedTheme{
 		{Slug: "default", Theme: config.DefaultTheme()},
 		{Slug: "solarized", Theme: solarizedTheme()},
@@ -250,16 +281,25 @@ func TestOptionsListPickAppliesAndCloses(t *testing.T) {
 	}
 
 	r.openOptions()
-	// "solarized" is the second item — see isolateInitialSettings' fixed
-	// schemes slice above (LoadColorSchemes-style slug ordering, sorted).
-	r.optionsList.SetCurrentItem(1)
-	r.optionsList.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	row, ok := optionRowByKey(r, "color_scheme")
+	if !ok {
+		t.Fatal("no color_scheme row in the Appearance category")
+	}
+	r.activateOptionRow(row)
+	if r.activePage != optionsPickerPage {
+		t.Fatalf("activePage = %q, want the scheme picker %q", r.activePage, optionsPickerPage)
+	}
+
+	// "solarized" is the second entry — see isolateInitialSettings' own
+	// fixed schemes slice above.
+	r.optionsPicker.SetCurrentItem(1)
+	r.optionsPicker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.settings.ColorScheme != "solarized" {
 		t.Errorf("ColorScheme = %q after picking it, want %q", r.settings.ColorScheme, "solarized")
 	}
-	if r.activePage != "" {
-		t.Errorf("activePage = %q after picking a scheme, want closed", r.activePage)
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after picking a scheme, want back on %q", r.activePage, optionsPage)
 	}
 }
 

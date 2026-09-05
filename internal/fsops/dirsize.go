@@ -2,11 +2,32 @@ package fsops
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
-// DirSize runs `du -sk dir` and returns its own total, in bytes.
+// DirSize runs `du -sk` against dir and returns its own total, in
+// bytes, alongside the path actually measured.
+//
+// dir is resolved through any symlinks first (see filepath.EvalSymlinks,
+// which follows an entire chain, not just the first hop), and measured
+// is that resolved path — which differs from dir exactly when dir was a
+// symlink, and is what the caller should show so the number is never
+// attributed to the wrong directory. Resolving matters because `du` on a
+// symlink reports the link itself, a handful of bytes, rather than
+// anything about what it points at: for a directory symlink, that
+// answer is never the one being asked for. Per the user's own explicit
+// request, including the multi-hop case a chain of links produces.
+//
+// A mount point needs no equivalent handling: du descends into a mounted
+// filesystem by default (it's --one-file-system that would stop it, and
+// that's deliberately not passed), so the files actually stored there
+// are already counted.
+//
+// Symlinks *inside* the tree are still not followed — that's du's own
+// default, and matches what `du -hs` reports at a shell prompt, which is
+// the number this is meant to reproduce.
 //
 // Deliberately not `du -sh`: -h's own human-readable formatting is
 // locale-dependent, the exact same reason FetchDiskUsage requests `df
@@ -28,13 +49,22 @@ import (
 // Only a du that produced no parseable output at all — it never started
 // (not installed), or crashed before printing anything — is reported as
 // failure here.
-func DirSize(dir string) (bytes int64, ok bool) {
-	out, err := exec.Command("du", "-sk", dir).Output()
+func DirSize(dir string) (bytes int64, measured string, ok bool) {
+	// A broken link, or one pointing outside anything readable, can't be
+	// measured at all — report failure rather than falling back to
+	// measuring the link itself, which would produce a confidently wrong
+	// handful of bytes.
+	measured, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return 0, dir, false
+	}
+
+	out, err := exec.Command("du", "-sk", measured).Output()
 	if err != nil {
 		if _, isExitErr := err.(*exec.ExitError); !isExitErr {
 			// du didn't even run (not on PATH, permission to exec it
 			// denied, ...) — no partial stdout exists to fall back to.
-			return 0, false
+			return 0, measured, false
 		}
 		// A non-zero exit with du specifically: fall through and try to
 		// parse whatever it did manage to write to stdout — see this
@@ -43,11 +73,11 @@ func DirSize(dir string) (bytes int64, ok bool) {
 
 	fields := strings.Fields(string(out))
 	if len(fields) == 0 {
-		return 0, false
+		return 0, measured, false
 	}
 	kb, err := strconv.ParseInt(fields[0], 10, 64)
 	if err != nil {
-		return 0, false
+		return 0, measured, false
 	}
-	return kb * 1024, true
+	return kb * 1024, measured, true
 }
