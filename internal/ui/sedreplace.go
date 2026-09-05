@@ -80,7 +80,7 @@ func (r *Root) openSedReplace() {
 // styling fight, since it never forces one color onto every row.
 //
 // No border, matching every other floating widget in this app (see
-// NewRoot's own comment on menu/quitConfirm/purgeConfirm) — a plain
+// NewRoot's own comment on menu/quitConfirm/confirmDialog) — a plain
 // background color set apart from the panel already does the same job.
 func (r *Root) newSedForm() *tview.Form {
 	f := tview.NewForm()
@@ -491,7 +491,7 @@ func (r *Root) renderSedPreviewTable(changes []replace.FileChange, skipped map[s
 // NewRoot: a one-line status (progress while running, a summary once
 // done — see renderSedPreviewStatus/renderSedPreviewTable), the
 // Name/Line/Excerpt table itself, and Apply/Back/Cancel below it — the
-// same three-choice shape purgeConfirm already has.
+// same three-choice shape confirmDialog already has.
 func (r *Root) newSedPreviewLayout() *tview.Flex {
 	r.sedPreviewStatus = tview.NewTextView()
 
