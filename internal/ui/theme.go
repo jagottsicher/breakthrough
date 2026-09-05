@@ -360,7 +360,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Foreground(theme.Text))
 	styleList(r.sedPreviewActions, theme)
 
-	styleList(r.tabSwitcher, theme)
+	r.tabSwitcher.SetBackgroundColor(theme.AccentBackground)
+	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.FocusedBackground).
+		Foreground(theme.Text))
 	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
 	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
 
