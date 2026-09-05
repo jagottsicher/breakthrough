@@ -15,6 +15,24 @@ project_name: breakthrough
 before:
   hooks:
     - go mod tidy
+    # Generates the /etc/breakthrough/config the .deb/.rpm packages ship
+    # below (see nfpms.contents) straight from the exact same function
+    # the running application itself uses to write a fresh user config
+    # — see cmd/gen-etc-config's own doc comment for why a generated
+    # file here, not a second, hand-copied listing that could drift out
+    # of sync with the settings breakthrough actually recognizes.
+    #
+    # sh -c rather than a bare command: GoReleaser runs a hook's own cmd
+    # directly (split on whitespace), with no shell and therefore no
+    # redirection support of its own — confirmed live, not just from the
+    # docs, by running `goreleaser check` against this file. The docs'
+    # own "cmd:/output:" map form for a hook entry, also checked live the
+    # same way, turned out to be rejected by before.hooks specifically at
+    # the GoReleaser version this was verified against (v2, installed
+    # fresh via `go install .../goreleaser/v2@latest`) — "cannot
+    # unmarshal !!map into string" — so this stays the plain string form
+    # despite the map form existing elsewhere in GoReleaser's own schema.
+    - sh -c "mkdir -p .goreleaser-generated && go run ./cmd/gen-etc-config > .goreleaser-generated/etc-breakthrough-config"
 
 builds:
   - id: breakthrough
@@ -76,6 +94,39 @@ nfpms:
     formats:
       - deb
       - rpm
+    # Ships a real, documented starting point for a system-wide setting
+    # under /etc/breakthrough — schema verified against the current nfpm
+    # docs (nfpm.goreleaser.com), not assumed, the same discipline this
+    # project already applies to GoReleaser's own config. Before this,
+    # installing the package left /etc/breakthrough not existing at all;
+    # nothing here ever created it, and breakthrough itself, running as
+    # an ordinary user, has no business writing to it — see
+    # config.LoadWithOrigins/Origin for what a value actually sitting
+    # there means to a running instance. The user tier
+    # (~/.config/breakthrough or $XDG_CONFIG_HOME/breakthrough) and the
+    # trash under $XDG_DATA_HOME/breakthrough/trash are unaffected by
+    # any of this: both are created lazily by breakthrough itself the
+    # first time something is actually written there (see
+    # config.SetKey/EnsureUserFile and internal/session.TrashDir), which
+    # already works correctly regardless of how breakthrough was
+    # installed.
+    contents:
+      - src: .goreleaser-generated/etc-breakthrough-config
+        dst: /etc/breakthrough/config
+        file_info:
+          mode: 0o644
+        # config|noreplace: corresponds to rpm's own %config(noreplace)
+        # and is deb's own conffile handling otherwise — an
+        # administrator's own edits survive a package upgrade instead of
+        # being silently overwritten by a newer template.
+        type: config|noreplace
+      # An empty directory for a system-wide custom color scheme (see
+      # config.SystemColorSchemeDir) — otherwise there would be nowhere
+      # on disk documenting that this is even a place breakthrough looks.
+      - dst: /etc/breakthrough/colorschemes
+        type: dir
+        file_info:
+          mode: 0o755
 
 changelog:
   use: git

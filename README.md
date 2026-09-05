@@ -224,9 +224,19 @@ further ones from `colorschemes/*.json` in either config tier —
 `/etc/breakthrough/colorschemes/` for system-wide schemes,
 `~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
 if set) for your own; a user file with the same name replaces a system
-one. Switch between whatever's found via the Settings overlay (`^X`, or
+one. Switch between whatever's found via the Options screen (`^O`, or
 its button in the bottom bar) — the pick applies immediately and is
 saved to your own `~/.config/breakthrough/config`.
+
+The `.deb`/`.rpm` packages (see [Installing](#installing)) create
+`/etc/breakthrough/config` and `/etc/breakthrough/colorschemes/` for
+you — the config file already fully documented and commented out, ready
+for a system administrator to uncomment and edit — so a package install
+gives you a real, discoverable starting point rather than a path that
+simply doesn't exist yet. A plain `.tar.gz` install has no installer to
+do that for it; the Options screen's own "Edit config file" button
+creates your *user* config the same way, on first use, if you'd rather
+start from that tier instead.
 
 Two ready-made examples ship in [`examples/colorschemes/`](examples/colorschemes/)
 — a dark Solarized-based scheme and a light one:

@@ -155,17 +155,27 @@ func FindSettingDoc(key string) (SettingDoc, bool) {
 // explains the two-tier merge and the commented-out convention up
 // front: someone opening this file for the first time is exactly the
 // person who doesn't know either yet.
+//
+// Deliberately tier-neutral ("this file", never "your personal config"):
+// the exact same template is EnsureUserFile's own text for a user's
+// first config AND, via cmd/gen-etc-config, what the .deb/.rpm packages
+// ship as /etc/breakthrough/config — the system tier, not owned by
+// whichever one person happens to be reading it. Wording that assumed
+// the user tier would read as flatly wrong on a machine an
+// administrator set this up for other people to log into.
 const defaultFileHeader = `# breakthrough configuration
 #
-# This is your personal config. Anything set here overrides the
-# system-wide defaults in /etc/breakthrough/config, which in turn
-# override breakthrough's own built-in defaults.
+# This file lists every setting breakthrough recognizes, commented out,
+# showing its built-in default. There are two tiers of this file:
+# /etc/breakthrough/config (system-wide) and ~/.config/breakthrough/config
+# (or $XDG_CONFIG_HOME/breakthrough/config) for one user's own overrides.
+# A value set in the user tier wins; the system tier wins over
+# breakthrough's own built-in default below that.
 #
-# Every recognized setting is listed below, commented out, showing the
-# built-in default. Uncomment a line and change its value to override
-# it. Deleting a line (or commenting it out again) restores whatever the
-# tier below would have used — which is exactly what the Options
-# screen's own "reset" does.
+# Uncomment a line and change its value to set it in *this* file.
+# Deleting a line (or commenting it out again) restores whatever the
+# tier below this one would have used — which is exactly what the
+# Options screen's own "reset" does.
 #
 # Format: one "key = value" per line. Lines starting with "#" are
 # comments. Booleans accept true/false (also 1/0, yes/no).
