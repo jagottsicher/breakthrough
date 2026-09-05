@@ -213,11 +213,23 @@ func (p *Panel) refreshTabStrip() {
 	}
 
 	text, spans := renderTabStrip(p.tabCount, p.tabActive, p.theme.Text, p.theme.FocusedBackground)
-	p.tabStrip.SetText(text)
+
+	// headerTabStripGap columns of lead-in before the first glyph, drawn
+	// as plain spaces in the strip's own text rather than a separate
+	// blank Flex item beside it — the widget's own background color
+	// (see styleTabStrip) then covers that gap the same as everywhere
+	// else in it, instead of leaving a visibly different-colored seam
+	// where a colorless spacer item used to sit (a real user report).
+	leadIn := strings.Repeat(" ", headerTabStripGap)
+	p.tabStrip.SetText(leadIn + text)
+	for i := range spans {
+		spans[i].start += headerTabStripGap
+		spans[i].end += headerTabStripGap
+	}
 	p.tabStripSpans = spans
 	// One trailing column of breathing room before the Details "<"
 	// button, so the "+" doesn't sit flush against it.
-	p.headerRow.ResizeItem(p.tabStrip, tview.TaggedStringWidth(text)+1, 0)
+	p.headerRow.ResizeItem(p.tabStrip, headerTabStripGap+tview.TaggedStringWidth(text)+1, 0)
 }
 
 // captureTabStripMouse turns a click on a tab number into a switch, and a

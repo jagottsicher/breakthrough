@@ -843,6 +843,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
 	r.menu.AddItem("sed", "", 0, r.openSedReplace)
+	// Placeholder — see placeholderMenuAction's own doc comment. Sits
+	// beside sed rather than up with plain Rename: this operates on the
+	// checkbox selection with a pattern, the same shape every other
+	// entry in this section already has, not on a single targeted entry
+	// the way Rename does.
+	r.menu.AddItem("Mass rename", "", 0, r.placeholderMenuAction("Mass rename"))
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
@@ -864,6 +870,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// see feature_ideas.txt) replaces this one entry with a whole
 	// submenu once it exists.
 	r.menu.AddItem("Ping (test)", "", 0, r.openPingTestWindow)
+	// grep/zgrep: also placeholders (see placeholderMenuAction), added
+	// alongside Ping rather than under a new section of their own —
+	// they're the same kind of thing, a real command-line tool this menu
+	// will eventually wrap in a toolWindow the way Ping already
+	// demonstrates, just not wired up to actually run one yet.
+	r.menu.AddItem("grep", "", 0, r.placeholderMenuAction("grep"))
+	r.menu.AddItem("zgrep", "", 0, r.placeholderMenuAction("zgrep"))
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
@@ -1771,6 +1784,19 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 // what's cosmetic.
 func menuSectionLabel(name string) string {
 	return fmt.Sprintf("[::d]── %s ──[::-]", name)
+}
+
+// placeholderMenuAction is a context-menu item's action while the
+// feature behind it isn't built yet — a reminder that the entry exists
+// and is planned, not a dead button someone might mistake for a bug the
+// next time they click it by accident. Reuses the error overlay for a
+// plain informational notice the same way pruneTrashAtStartup's own
+// "trash was cleaned up" message already does — there's no separate,
+// dedicated info channel in this app yet.
+func (r *Root) placeholderMenuAction(name string) func() {
+	return func() {
+		r.showError(fmt.Errorf("%s: not implemented yet — this menu entry is a placeholder for a planned feature", name))
+	}
 }
 
 // showMenu positions the context menu near (x, y), clamped to the panel's

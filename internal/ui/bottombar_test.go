@@ -323,6 +323,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	wantActions := map[buttonBarAction]string{
 		buttonActionHelp:         "F1 Help",
 		buttonActionRename:       "F2 Rename",
+		buttonActionTabSwitcher:  "F4 Tabs",
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
 		buttonActionProperties:   "^P Properties",
@@ -504,6 +505,33 @@ func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestCaptureButtonBarMouseTabsClickOpensTheSwitcher pins the "F4 Tabs"
+// button (see buildButtonBar/runButtonBarAction) to the same switcher F4
+// itself opens (see Root.TabSwitcherShortcut) — a mouse alternative for
+// terminals that can't report Ctrl+1..Ctrl+0 or Ctrl+Tab at all, per the
+// user's own explicit request. Direct action, not the shortcut wrapper
+// (see runButtonBarAction's own case for why), so this works regardless
+// of what else currently has focus — unlike TabSwitcherShortcut itself,
+// gated by acceptsGlobalShortcut.
+func TestCaptureButtonBarMouseTabsClickOpensTheSwitcher(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	span, ok := buttonBarSpanFor(r, buttonActionTabSwitcher)
+	if !ok {
+		t.Fatal("no Tabs span found")
+	}
+
+	clickButtonBar(t, r, span.startCol)
+
+	if r.activePage != tabSwitcherPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
 	}
 }
 

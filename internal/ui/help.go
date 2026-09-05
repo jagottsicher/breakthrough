@@ -78,10 +78,11 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
                   Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Move to Trash, Remove, Go to
-                  Trash, Restore from Trash, Empty Trash, New tab, Close
-                  tab, Switch tab..., Ping (test), and three toggles:
-                  hidden files, size format, modified-time format)
+                  Paste, chown, chmod, sed, Mass rename*, Move to Trash,
+                  Remove, Go to Trash, Restore from Trash, Empty Trash,
+                  New tab, Close tab, Switch tab..., Ping (test), grep*,
+                  zgrep*, and three toggles: hidden files, size format,
+                  modified-time format — *planned, not built yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -104,7 +105,8 @@ var helpText = strings.TrimLeft(`
   and cursor position — switching away and back leaves everything
   exactly as you left it.
 
-  Ctrl+1 ... Ctrl+0  Jump straight to that tab (Ctrl+0 is the tenth)
+  Ctrl+1 ... Ctrl+0  Jump straight to that tab (...+0 is the tenth) —
+  Alt+1 ... Alt+0    either modifier, whichever your terminal reports
   Ctrl+Tab           Open the switcher on the next tab; press again to
   Ctrl+Shift+Tab     keep moving, Enter to go there, Escape to stay put
   F4                 Open the switcher without moving off the current tab
@@ -121,10 +123,12 @@ var helpText = strings.TrimLeft(`
   too. With only one tab open the strip is just a "+" — no numbers to
   show yet, but still the one place to start.
 
-  Ctrl+Tab and Ctrl+1...Ctrl+0 need a terminal that reports Ctrl
-  together with those keys — most modern ones do, some older ones
-  can't, in which case nothing happens and F4, the strip and the
-  context menu all still work.
+  Ctrl+1...Ctrl+0, Alt+1...Alt+0, and Ctrl+Tab/Ctrl+Shift+Tab each
+  depend on the terminal actually reporting that key combination —
+  most modern terminals report at least one of Ctrl or Alt, some older
+  ones report neither, in which case nothing happens. F4, the button
+  bar's own "F4 Tabs", the strip, and the context menu all work
+  regardless of what your terminal can report.
 
   The open tabs are saved when you quit and reopened next time. Starting
   breakthrough with an explicit directory ("breakthrough /some/path")

@@ -370,29 +370,46 @@ func run() error {
 			root.TabSwitcherShortcut()
 			return nil
 		case tcell.KeyRune:
-			// Ctrl+1..Ctrl+9 and Ctrl+0 jump straight to a tab by its own
-			// number, with Ctrl+0 meaning the tenth — the numbering the
-			// tab strip itself shows, per the user's own explicit
-			// request.
+			// Ctrl+1..Ctrl+9/Ctrl+0 and Alt+1..Alt+9/Alt+0 both jump
+			// straight to a tab by its own number, with …+0 meaning the
+			// tenth — the numbering the tab strip itself shows, per the
+			// user's own explicit request. Two modifiers bound to the
+			// same action because neither is reliable everywhere on its
+			// own — a terminal missing one of them is the whole reason
+			// the other exists here too, not redundancy.
 			//
-			// Whether these arrive at all depends on the terminal: the
-			// classic control-code encoding has no room for most
-			// Ctrl+digit combinations (Ctrl+3 is byte-identical to
-			// Escape, Ctrl+8 to Delete, and Ctrl+1/9/0 have no encoding
-			// whatsoever), so they only become distinguishable once one
-			// of the enhanced keyboard protocols is in play — kitty's
-			// CSI-u or xterm's modifyOtherKeys, both of which tcell
-			// requests at startup on any xterm-like terminal. Verified
-			// live against a real terminal, not assumed: with the
-			// protocol active all ten arrive here as KeyRune carrying
-			// ModCtrl; without it they never match this case at all and
-			// fall through exactly as before, which is why binding them
-			// costs nothing on a terminal too old to send them. F4 above
-			// is the always-available way to the same feature.
-			if event.Modifiers()&tcell.ModCtrl != 0 && event.Rune() >= '0' && event.Rune() <= '9' {
+			// Ctrl+digit depends on the terminal: the classic control-
+			// code encoding has no room for most Ctrl+digit combinations
+			// (Ctrl+3 is byte-identical to Escape, Ctrl+8 to Delete, and
+			// Ctrl+1/9/0 have no encoding whatsoever), so they only
+			// become distinguishable once one of the enhanced keyboard
+			// protocols is in play — kitty's CSI-u or xterm's
+			// modifyOtherKeys, both of which tcell requests at startup
+			// on any xterm-like terminal, but which several real
+			// terminals (VTE-based ones among them, per a real user
+			// report) simply don't implement.
+			//
+			// Alt+digit instead relies on the older, near-universal
+			// ESC-prefixed "Meta" convention (plain ESC followed by the
+			// key) — verified live, not assumed, the same as the
+			// Ctrl+digit path above. Its own tradeoff: this is
+			// inherently ambiguous with a bare Escape keypress followed
+			// immediately by an unrelated digit, told apart only by
+			// tcell's own short timing heuristic after seeing ESC alone
+			// — the same mechanism vim/tmux already rely on for their
+			// own Alt+key bindings, and an accepted, low-probability
+			// tradeoff per the user's own explicit request to add this
+			// anyway.
+			//
+			// Whichever modifier a given terminal can't report, the
+			// bound one simply never matches this case at all and falls
+			// through exactly as before — which is why binding both
+			// costs nothing where neither is supported. F4 above is the
+			// always-available way to the same feature regardless.
+			if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) != 0 && event.Rune() >= '0' && event.Rune() <= '9' {
 				n := int(event.Rune() - '0')
 				if n == 0 {
-					n = 10 // Ctrl+0 is the tenth tab, continuing the row of digits
+					n = 10 // …+0 is the tenth tab, continuing the row of digits
 				}
 				root.SwitchToTabShortcut(n)
 				return nil

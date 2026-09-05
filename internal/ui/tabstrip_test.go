@@ -190,11 +190,20 @@ func TestPanelTabStripShowsJustPlusWithASingleTab(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if got := r.panel.tabStrip.GetText(true); got != tabStripNewLabel {
-		t.Errorf("tab strip with one tab = %q, want %q", got, tabStripNewLabel)
+	// The widget's own drawn text carries a headerTabStripGap-wide leading
+	// space in front of the real content (see refreshTabStrip's own doc
+	// comment on why that's baked into the text, not a separate spacer
+	// item) — spans are shifted the same amount so a click still maps to
+	// the right column.
+	want := strings.Repeat(" ", headerTabStripGap) + tabStripNewLabel
+	if got := r.panel.tabStrip.GetText(true); got != want {
+		t.Errorf("tab strip with one tab = %q, want %q", got, want)
 	}
 	if len(r.panel.tabStripSpans) != 1 || r.panel.tabStripSpans[0].tab != tabStripSpanNew {
 		t.Errorf("tab strip spans = %v, want a single span targeting tabStripSpanNew", r.panel.tabStripSpans)
+	}
+	if got, want := r.panel.tabStripSpans[0].start, headerTabStripGap; got != want {
+		t.Errorf("the + span starts at column %d, want %d (right after the leading gap)", got, want)
 	}
 }
 
@@ -209,13 +218,43 @@ func TestTabStripPlusClickWithASingleTabOpensANewTab(t *testing.T) {
 	}
 	r.panel.tabStrip.SetRect(0, 0, 10, 1)
 
+	// Column headerTabStripGap, not 0: the "+" itself starts right after
+	// the leading gap the widget now draws as part of its own text (see
+	// refreshTabStrip). Clicking column 0 — inside the gap, not the "+"
+	// — is covered separately below.
 	r.panel.captureTabStripMouse(
 		tview.MouseLeftClick,
-		tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0),
+		tcell.NewEventMouse(headerTabStripGap, 0, tcell.ButtonNone, 0),
 	)
 
 	if got := r.tabCount(); got != 2 {
 		t.Errorf("tab count after clicking the lone + = %d, want 2", got)
+	}
+}
+
+// TestTabStripLeadingGapOpensTheSwitcherNotANewTab pins that the gap
+// itself behaves like any other non-glyph column in the strip (see
+// captureTabStripMouse's own doc comment) — it's part of the tab
+// indicator visually, but a click there isn't a click on "+" and
+// shouldn't be mistaken for one.
+func TestTabStripLeadingGapOpensTheSwitcherNotANewTab(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.tabStrip.SetRect(0, 0, 10, 1)
+
+	r.panel.captureTabStripMouse(
+		tview.MouseLeftClick,
+		tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0), // inside the leading gap
+	)
+
+	if got := r.tabCount(); got != 1 {
+		t.Errorf("tab count after clicking the leading gap = %d, want 1 (no new tab)", got)
+	}
+	if r.activePage != tabSwitcherPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
 	}
 }
 

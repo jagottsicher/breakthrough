@@ -54,9 +54,11 @@ terminal.
 - Tabs: several directories open at once in one window, each keeping its
   own history, filter, sort order, selection and cursor position, so
   switching away and back leaves everything exactly as it was. `^1`
-  through `^0` jump straight to a tab, `^Tab`/`^Shift+Tab` step through
-  a switcher showing every tab's full path (F4 opens it without moving,
-  and works on terminals that can't report `^Tab` at all). A compact
+  through `^0` (or `Alt+1`...`Alt+0` — bound to the same tabs, for
+  terminals that can't report one or the other) jump straight to a tab,
+  `^Tab`/`^Shift+Tab` step through a switcher showing every tab's full
+  path. F4 (or the button bar's own "F4 Tabs") opens the same switcher
+  without moving, and works everywhere the others might not. A compact
   numbered strip sits beside the filter — numbers rather than paths, so
   the header row's width stays put as you navigate — and shrinks to just
   a "+" while only one tab is open. The layout is saved on exit and

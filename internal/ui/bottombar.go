@@ -39,6 +39,7 @@ const (
 	buttonActionRemove
 	buttonActionSed
 	buttonActionDetails
+	buttonActionTabSwitcher
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -120,8 +121,8 @@ func (r *Root) refreshButtonBar() {
 // buildButtonBar renders the button bar's text: the quick-action
 // buttons in nano's own "^X Label" style (instantly recognizable as
 // "Ctrl+X does this" without needing a separate legend) — Help, Rename,
-// Edit, Look, Properties, Find, Sed, toggle hidden files, Options,
-// Trash, Trashbin/Restore, Remove, in that fixed order.
+// Tabs, Edit, Look, Properties, Details, Find, Sed, toggle hidden files,
+// Options, Trash, Trashbin/Restore, Remove, in that fixed order.
 //
 // Two of these aren't fixed labels any more (see refreshButtonBar for
 // when this gets called again): the hidden-files toggle reads "Hide" or
@@ -156,6 +157,12 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	buttons := []buttonSpec{
 		{"F1 Help", buttonActionHelp},
 		{"F2 Rename", buttonActionRename},
+		// F4, not F3: F3 (toggle mouse reporting) has no button here at
+		// all — it exists specifically for when clicking has already
+		// stopped working (native terminal selection took mouse
+		// reporting's place), so a button for it would be unreachable in
+		// exactly the situation it's for. F4 has no such problem.
+		{"F4 Tabs", buttonActionTabSwitcher},
 		{"^E Edit", buttonActionEdit},
 		{"^L Look", buttonActionLook},
 		{"^P Properties", buttonActionProperties},
@@ -488,6 +495,14 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openSedReplace()
 	case buttonActionDetails:
 		r.toggleDetailsSidebar()
+	case buttonActionTabSwitcher:
+		// Direct, not TabSwitcherShortcut: a click is always deliberate
+		// (see this func's own doc comment), so the same
+		// acceptsGlobalShortcut gate that keeps the keyboard shortcut
+		// from firing while typing in the bash line or another overlay
+		// is open doesn't apply here — every other button above already
+		// bypasses its own keyboard-shortcut wrapper the same way.
+		r.openTabSwitcher(r.activeTab)
 	}
 }
 

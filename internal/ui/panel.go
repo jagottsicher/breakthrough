@@ -481,12 +481,19 @@ const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
 
-	// headerTabStripGap is a single blank column between filterField and
-	// the tab strip — without it the strip's own leading glyph ("+", or
-	// the first tab number) sits flush against the filter box with no
+	// headerTabStripGap is one column of lead-in the tab strip draws for
+	// itself before its own first glyph ("+", or the first tab number) —
+	// without it that glyph sat flush against the filter box with no
 	// visual breathing room at all, per a real user report once the
 	// strip started always showing at least the "+" button (see
 	// tabstrip.go's own doc comment on why that button is never hidden).
+	//
+	// Drawn as part of the strip's own text (see refreshTabStrip), not a
+	// separate blank Flex item alongside it: a plain nil spacer item has
+	// no background color of its own to set, so it painted as a visibly
+	// different-colored seam right in front of the strip instead of
+	// reading as part of it — a second real report, this time about the
+	// fix for the first one.
 	headerTabStripGap = 1
 )
 
@@ -612,7 +619,6 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// right after it (headerDetailsExpandWidth) is exactly what those 3
 	// columns went to, per the user's own explicit request.
 	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
-	headerRow.AddItem(nil, headerTabStripGap, 0, false)
 	// The tab strip goes between the filter and the Details button, per
 	// the user's own explicit request. refreshTabStrip resizes this slot
 	// itself as tabs come and go, which is why headerRow is kept as a
