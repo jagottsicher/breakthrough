@@ -78,8 +78,15 @@ const tabStripSpanNew = -1
 // are multi-byte runes that still occupy exactly one column each, so
 // spans are advanced by rune width throughout.
 func renderTabStrip(count, active int, textColor, activeBackground tcell.Color) (string, []tabStripSpan) {
-	if count <= 0 {
-		return "", nil
+	if count < 2 {
+		// Numbering a single tab says nothing useful, but the "+" itself
+		// still has to be somewhere — it's the only way to create a
+		// second tab at all, and hiding it entirely (an earlier version
+		// of this did exactly that) turned out to hide the whole feature
+		// along with it: nothing in the header row hinted that tabs
+		// existed, per a real user report. One button, not the full
+		// strip, is the smallest fix that still leaves an entry point.
+		return tabStripNewLabel, []tabStripSpan{{start: 0, end: len([]rune(tabStripNewLabel)), tab: tabStripSpanNew}}
 	}
 	if active < 0 || active >= count {
 		active = 0
@@ -191,21 +198,18 @@ func (p *Panel) setTabs(count, active int) {
 // refreshTabStrip redraws the strip from p.tabCount/p.tabActive and
 // resizes its slot in the header row to match.
 //
-// A single tab draws nothing at all and takes no width: tabs are an
-// opt-in feature, and someone who never opens a second one shouldn't
-// permanently lose header columns to a control that would only ever
-// show "1". The "+" button goes with it — the context menu's own "New
-// tab" entry and Ctrl+Tab both still reach the feature from a standing
-// start, so it isn't hidden, just not occupying space it doesn't need.
+// With a single tab, renderTabStrip draws just the "+" — no numbers (one
+// tab has nothing to number against) but not nothing either: an earlier
+// version of this hid the whole strip down to zero width whenever there
+// was only one tab, on the reasoning that tabs are opt-in and shouldn't
+// cost header room nobody's using. In practice that hid the feature's
+// only discoverable entry point along with it — a user who doesn't
+// already know a keyboard shortcut exists has no way to find it (a real
+// report caught this within minutes of testing). One small button is a
+// far cheaper cost than that.
 func (p *Panel) refreshTabStrip() {
 	if p.tabStrip == nil || p.headerRow == nil {
 		return // not built yet (a Panel mid-construction) — nothing to draw on
-	}
-	if p.tabCount <= 1 {
-		p.tabStrip.SetText("")
-		p.tabStripSpans = nil
-		p.headerRow.ResizeItem(p.tabStrip, 0, 0)
-		return
 	}
 
 	text, spans := renderTabStrip(p.tabCount, p.tabActive, p.theme.Text, p.theme.FocusedBackground)

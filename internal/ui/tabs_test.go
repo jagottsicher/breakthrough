@@ -606,6 +606,74 @@ func TestTabCycleSkipsTheNewTabRow(t *testing.T) {
 	}
 }
 
+// TestTabSwitcherOpensNearTheStripNotAtThePanelsLeftEdge pins a real
+// reported bug: the switcher used to anchor its own left edge to the tab
+// strip's left edge, which sits hard against the screen's right side —
+// with a switcher wide enough to hold a full path, that pushed most of
+// it off-screen, and clampToPanel then yanked the whole thing back to
+// the panel's far left edge, landing nowhere near what it opened from.
+// Anchoring the switcher's own right edge to the strip's right edge
+// keeps it opening up-and-to-the-left from the control, regardless of
+// how wide the panel is.
+func TestTabSwitcherOpensNearTheStripNotAtThePanelsLeftEdge(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	// A real screen, not a nil one: tview's Flex only lays out its
+	// children during Draw, and Draw itself touches the screen for
+	// styling — so a genuine (if simulated) screen is needed to get
+	// tabStrip's own real rect the way a live draw cycle would.
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	// Wide and short — the tab strip sits far to the right; the
+	// switcher's own width, set by a full path up to
+	// tabSwitcherMaxPathWidth, comfortably exceeds the room to the right
+	// of it, which is exactly what reproduces the bug.
+	screen.SetSize(100, 24)
+	r.SetRect(0, 0, 100, 24)
+	r.Draw(screen)
+
+	r.newTab(dir)
+	// A second draw: the tab newTab just created is a brand-new Panel
+	// that has never been through a layout pass, so its own rect (and
+	// tabStrip's) is still tview's own construction-time default (15x10)
+	// until one happens — exactly what a live Application.Run() loop's
+	// own continuous redraws do for free, and exactly what's needed here
+	// to make tabStrip's rect (what tabStripAnchor actually reads) real.
+	r.Draw(screen)
+	stripX, _, stripWidth, _ := r.panel.tabStrip.GetRect()
+	stripRight := stripX + stripWidth
+
+	r.openTabSwitcher(0)
+	x, _, width, _ := r.tabSwitcherLayout.GetRect()
+
+	// The switcher's own width here (driven by fixtureDir's short path,
+	// well under tabSwitcherMaxPathWidth) comfortably fits without
+	// clampToPanel needing to intervene at all, so the fix's own
+	// invariant — right edge flush with the strip's right edge — should
+	// hold exactly, not just approximately.
+	//
+	// This is what actually distinguishes the fix from the old, buggy
+	// left-edge anchor: the old code's clampToPanel fallback used the
+	// *panel's* own right edge once it needed to intervene, which sits a
+	// few columns past the strip's own right edge (the Details "<"
+	// button occupies exactly that gap) — a real, if easy to
+	// under-measure, difference that a looser "is it near enough" check
+	// let slip through once already.
+	if got, want := x+width, stripRight; got != want {
+		t.Errorf("switcher's right edge = %d, want %d (flush with the tab strip's own right edge)", got, want)
+	}
+	if x < 0 {
+		t.Errorf("switcher x = %d, want it kept on screen", x)
+	}
+}
+
 // TestShortenPathLeftKeepsTheDistinctiveEnd pins the truncation
 // direction: the deepest part of a path is what tells two tabs apart, so
 // that's the half that survives.

@@ -480,6 +480,14 @@ type rowRef struct {
 const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
+
+	// headerTabStripGap is a single blank column between filterField and
+	// the tab strip — without it the strip's own leading glyph ("+", or
+	// the first tab number) sits flush against the filter box with no
+	// visual breathing room at all, per a real user report once the
+	// strip started always showing at least the "+" button (see
+	// tabstrip.go's own doc comment on why that button is never hidden).
+	headerTabStripGap = 1
 )
 
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
@@ -604,9 +612,9 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// right after it (headerDetailsExpandWidth) is exactly what those 3
 	// columns went to, per the user's own explicit request.
 	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	headerRow.AddItem(nil, headerTabStripGap, 0, false)
 	// The tab strip goes between the filter and the Details button, per
-	// the user's own explicit request. Zero-width to start with, and for
-	// as long as there's only one tab — refreshTabStrip resizes this slot
+	// the user's own explicit request. refreshTabStrip resizes this slot
 	// itself as tabs come and go, which is why headerRow is kept as a
 	// field.
 	headerRow.AddItem(p.tabStrip, 0, 0, false)

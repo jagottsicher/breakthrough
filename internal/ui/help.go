@@ -118,7 +118,8 @@ var helpText = strings.TrimLeft(`
   switcher — which lists every tab's full directory, since the numbers
   themselves deliberately don't say what any tab holds. The context
   menu's own "Tabs" section reaches New tab, Close tab and the switcher
-  too. The strip is hidden entirely while only one tab is open.
+  too. With only one tab open the strip is just a "+" — no numbers to
+  show yet, but still the one place to start.
 
   Ctrl+Tab and Ctrl+1...Ctrl+0 need a terminal that reports Ctrl
   together with those keys — most modern ones do, some older ones

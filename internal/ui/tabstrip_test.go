@@ -140,12 +140,30 @@ func TestTabStripWindowNeverExceedsMaxVisible(t *testing.T) {
 // TestRenderTabStripHandlesDegenerateInput pins that a zero/negative
 // count and an out-of-range active index can't panic or produce a
 // nonsense highlight — both are reachable from a corrupted saved layout.
+// A non-positive count still gets the bare "+" (see the count < 2 case
+// below it never draws literally nothing), the same as the ordinary
+// single-tab case.
 func TestRenderTabStripHandlesDegenerateInput(t *testing.T) {
-	if text, spans := renderTabStrip(0, 0, tcell.ColorWhite, tcell.ColorBlack); text != "" || spans != nil {
-		t.Errorf("renderTabStrip(0, 0) = %q/%v, want empty", text, spans)
+	if got, want := stripText(0, 0), tabStripNewLabel; got != want {
+		t.Errorf("renderTabStrip(0, 0) = %q, want %q", got, want)
 	}
 	if got, want := stripText(2, 99), "1 2 +"; got != want {
 		t.Errorf("out-of-range active: %q, want %q (highlight falls back to the first)", got, want)
+	}
+}
+
+// TestRenderTabStripWithASingleTabIsJustThePlusButton pins the fix for a
+// real reported gap: hiding the strip entirely with one tab (an earlier
+// version of this) also hid the only way to discover that tabs exist at
+// all. A single tab draws no number — there's nothing to number against
+// — but the "+" itself stays, as a real, clickable entry point.
+func TestRenderTabStripWithASingleTabIsJustThePlusButton(t *testing.T) {
+	text, spans := renderTabStrip(1, 0, tcell.ColorWhite, tcell.ColorBlack)
+	if text != tabStripNewLabel {
+		t.Errorf("renderTabStrip(1, 0) = %q, want just %q", text, tabStripNewLabel)
+	}
+	if len(spans) != 1 || spans[0].tab != tabStripSpanNew {
+		t.Errorf("spans = %v, want a single span targeting tabStripSpanNew", spans)
 	}
 }
 
@@ -161,22 +179,43 @@ func TestTabStripWidthMatchesRenderedText(t *testing.T) {
 	}
 }
 
-// TestPanelTabStripHiddenWithASingleTab pins the user's own concern that
-// tabs not cost header room when they aren't being used: one tab draws
-// nothing at all and reserves no columns, so a session that never opens
-// a second tab looks exactly as it did before tabs existed.
-func TestPanelTabStripHiddenWithASingleTab(t *testing.T) {
+// TestPanelTabStripShowsJustPlusWithASingleTab pins the fix for a real
+// reported gap: an earlier version of this hid the strip entirely with
+// one tab, which also hid the only way to discover tabs exist at all.
+// One tab now still shows a bare "+", with its own click span.
+func TestPanelTabStripShowsJustPlusWithASingleTab(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	if got := r.panel.tabStrip.GetText(true); got != "" {
-		t.Errorf("tab strip with one tab = %q, want empty", got)
+	if got := r.panel.tabStrip.GetText(true); got != tabStripNewLabel {
+		t.Errorf("tab strip with one tab = %q, want %q", got, tabStripNewLabel)
 	}
-	if r.panel.tabStripSpans != nil {
-		t.Errorf("tab strip has %d click spans with one tab, want none", len(r.panel.tabStripSpans))
+	if len(r.panel.tabStripSpans) != 1 || r.panel.tabStripSpans[0].tab != tabStripSpanNew {
+		t.Errorf("tab strip spans = %v, want a single span targeting tabStripSpanNew", r.panel.tabStripSpans)
+	}
+}
+
+// TestTabStripPlusClickWithASingleTabOpensANewTab pins the mouse path
+// this whole fix is for: clicking the lone "+" with only one tab open
+// actually creates a second one.
+func TestTabStripPlusClickWithASingleTabOpensANewTab(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.tabStrip.SetRect(0, 0, 10, 1)
+
+	r.panel.captureTabStripMouse(
+		tview.MouseLeftClick,
+		tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0),
+	)
+
+	if got := r.tabCount(); got != 2 {
+		t.Errorf("tab count after clicking the lone + = %d, want 2", got)
 	}
 }
 

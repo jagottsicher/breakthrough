@@ -58,8 +58,8 @@ terminal.
   a switcher showing every tab's full path (F4 opens it without moving,
   and works on terminals that can't report `^Tab` at all). A compact
   numbered strip sits beside the filter — numbers rather than paths, so
-  the header row's width stays put as you navigate — and hides itself
-  entirely while only one tab is open. The layout is saved on exit and
+  the header row's width stays put as you navigate — and shrinks to just
+  a "+" while only one tab is open. The layout is saved on exit and
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
 - A right-click context menu: Properties (editable — name, permissions,

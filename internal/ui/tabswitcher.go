@@ -138,9 +138,20 @@ func (r *Root) openTabSwitcher(selected int) {
 
 	// Anchored under the tab strip rather than centered on screen: the
 	// strip is what this drops down from, so appearing anywhere else
-	// would read as an unrelated dialog. clampToPanel keeps it on screen
-	// when the panel is too narrow or too short for it there.
-	x, y := r.tabStripAnchor()
+	// would read as an unrelated dialog. Right-aligned to the strip's own
+	// right edge, not left-aligned to its left edge: the strip sits hard
+	// against the screen's right side (right before the Details "<"
+	// button), while the switcher itself is wide enough to hold a full
+	// path — left-aligning it there would push most of it off-screen and
+	// clampToPanel would then yank the whole thing back to the panel's
+	// left edge instead, landing it nowhere near what it opened from
+	// (confirmed live: exactly this happened before this alignment
+	// existed). Opening up-and-to-the-left from a right-edge control is
+	// the same convention an ordinary right-aligned dropdown menu uses.
+	// clampToPanel still runs as the backstop for a panel too narrow to
+	// fit it even flush against the left edge.
+	right, y := r.tabStripAnchor()
+	x := right - width
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.tabSwitcherLayout.SetRect(x, y, width, height)
@@ -148,18 +159,20 @@ func (r *Root) openTabSwitcher(selected int) {
 }
 
 // tabStripAnchor is the screen position the switcher drops down from —
-// the left edge of the panel's own tab strip, one row below it.
+// the right edge of the panel's own tab strip, one row below it (see
+// openTabSwitcher's own doc comment on why the right edge, not the
+// left).
 //
-// Falls back to the panel's own top-left when the strip has no rect yet
+// Falls back to the panel's own top-right when the strip has no rect yet
 // (nothing drawn so far, e.g. in a test), which clampToPanel then keeps
 // on screen regardless.
-func (r *Root) tabStripAnchor() (x, y int) {
+func (r *Root) tabStripAnchor() (right, y int) {
 	sx, sy, sw, _ := r.panel.tabStrip.GetRect()
 	if sw == 0 {
-		px, py, _, _ := r.panel.GetRect()
-		return px, py + 1
+		px, py, pw, _ := r.panel.GetRect()
+		return px + pw, py + 1
 	}
-	return sx, sy + 1
+	return sx + sw, sy + 1
 }
 
 // tabSwitcherRowLabel renders one row: the tab's own number, then its
