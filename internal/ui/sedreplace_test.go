@@ -251,13 +251,13 @@ func TestConfirmApplySedCancelPreselectedDoesNotWrite(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	if r.activePage != purgeConfirmPage {
-		t.Fatalf("activePage = %q, want %q", r.activePage, purgeConfirmPage)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.purgeConfirm.GetCurrentItem(); got != 1 {
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
 		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
-	r.cancelPurge()
+	r.cancelConfirm()
 
 	data, _ := os.ReadFile(file)
 	if string(data) != "hello world\n" {
@@ -271,8 +271,8 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.purgeConfirm.SetCurrentItem(2) // "Yes, delete permanently" - see newPurgeConfirm
-	r.confirmPurge()
+	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently" - see newPurgeConfirm
+	r.acceptConfirm()
 
 	data, err := os.ReadFile(file)
 	if err != nil || string(data) != "goodbye world\n" {
@@ -281,7 +281,7 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	if len(r.sedPendingChanges) != 0 {
 		t.Error("sedPendingChanges should be cleared after applying")
 	}
-	if r.activePage == sedPreviewPage || r.activePage == purgeConfirmPage {
+	if r.activePage == sedPreviewPage || r.activePage == confirmPage {
 		t.Errorf("activePage = %q, want the dialog closed", r.activePage)
 	}
 }
@@ -293,8 +293,8 @@ func TestConfirmApplySedWithBackupKeepsOriginal(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.purgeConfirm.SetCurrentItem(2)
-	r.confirmPurge()
+	r.confirmDialog.SetCurrentItem(2)
+	r.acceptConfirm()
 
 	backup, err := os.ReadFile(file + ".bak")
 	if err != nil || string(backup) != "hello world\n" {
