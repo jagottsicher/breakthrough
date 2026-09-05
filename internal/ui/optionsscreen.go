@@ -165,6 +165,28 @@ func (r *Root) newOptionsScreen() {
 	// Both panes additionally get the left/right arrow keys that move
 	// between them (see captureOptionsPaneArrows).
 	r.optionsCategories.SetInputCapture(chainKeyCaptures(r.captureOptionsKey, r.captureOptionsPaneArrows))
+
+	// Which pane has keyboard focus has to be visible — without it the
+	// two selected rows look identical and there's no telling which one
+	// the arrow keys will move (a real report).
+	//
+	// Driven by the focus events themselves, not re-derived during Draw:
+	// a style set from inside a draw callback only takes effect on the
+	// *next* draw, so the highlight lagged a frame behind the focus (a
+	// real bug, caught by reading the colors off an actually-drawn
+	// screen rather than trusting the widgets). Neither callback queries
+	// HasFocus() either — tview's own Box.Blur runs its callback before
+	// clearing the focus flag, so the answer there is wrong, the same
+	// trap Panel.setSelectionStyle documents. Each pane simply states
+	// its own new state, which is never ambiguous.
+	r.optionsCategories.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, true) })
+	r.optionsCategories.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, false) })
+	r.optionsTable.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsTable, true) })
+	r.optionsTable.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsTable, false) })
+	// Neither pane has been focused yet, so start both in the unfocused
+	// look; the first real focus event corrects whichever one gains it.
+	r.setOptionsPaneFocused(r.optionsCategories, false)
+	r.setOptionsPaneFocused(r.optionsTable, false)
 	r.optionsTable.SetInputCapture(chainKeyCaptures(r.captureOptionsKey,
 		chainKeyCaptures(r.captureOptionsPaneArrows, r.captureOptionsTableKey)))
 }
@@ -331,7 +353,17 @@ func (r *Root) openOptions() {
 	}
 	r.renderOptionCategories()
 	r.renderOptions()
-	r.showOverlay(optionsPage, r.optionsTable)
+	// The whole layout is the overlay, not just the settings table:
+	// captureOutsideClick closes an overlay on any click outside the
+	// widget it was shown with, so registering only the table made a
+	// click on the categories — or the buttons, or the title bar — count
+	// as "outside" and shut the screen (a real report). Focus still
+	// starts on the table, via the restore callback, exactly the way
+	// Properties already registers its own full layout and then focuses
+	// a field inside it.
+	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
+		r.app.SetFocus(r.optionsTable)
+	})
 }
 
 // closeOptions hides the Options screen. Nothing to save or discard —
@@ -409,6 +441,34 @@ func (r *Root) renderOptions() {
 	// list under it.
 	if row, _ := r.optionsTable.GetSelection(); row >= r.optionsTable.GetRowCount() {
 		r.optionsTable.Select(0, 0)
+	}
+}
+
+// setOptionsPaneFocused paints one pane's own selected-row highlight for
+// the focus state it has just entered: FocusedBackground when it has
+// keyboard focus, EditableBackground when it doesn't.
+//
+// The same "petrol means this is where keystrokes go right now"
+// convention the rest of this app already follows — the main panel's own
+// current row, every overlay title bar, every focused button. Without
+// it, both panes highlight a row identically and nothing says which of
+// them the arrow keys are actually driving.
+//
+// Takes the state explicitly rather than asking the widget, and takes
+// the widget explicitly rather than checking both: see the wiring in
+// newOptionsScreen for why either shortcut would be wrong.
+func (r *Root) setOptionsPaneFocused(pane tview.Primitive, focused bool) {
+	background := r.theme.EditableBackground
+	if focused {
+		background = r.theme.FocusedBackground
+	}
+	style := tcell.StyleDefault.Background(background).Foreground(r.theme.Text)
+
+	switch p := pane.(type) {
+	case *tview.List:
+		p.SetSelectedStyle(style)
+	case *tview.Table:
+		p.SetSelectedStyle(style)
 	}
 }
 
@@ -702,6 +762,13 @@ func (r *Root) captureOptionsTableMouse(action tview.MouseAction, event *tcell.E
 	return tview.MouseConsumed, nil
 }
 
+// Both resets ask first, through the same shared confirmation every
+// other hard-to-undo action in this app goes through (see openConfirm in
+// trash.go) rather than a dialog of their own: a reset discards work —
+// possibly a long-tuned set of preferences — and, unlike every single
+// setting change on this screen, there is no equally quick way back.
+// Cancel is preselected, so a stray Enter can never trigger one.
+
 // resetCurrentOptionCategory resets every setting in the category
 // currently shown — "Reset category".
 func (r *Root) resetCurrentOptionCategory() {
@@ -709,7 +776,13 @@ func (r *Root) resetCurrentOptionCategory() {
 	if !ok {
 		return
 	}
-	r.resetOptions(cat.options)
+	// Named rather than "this category": the button sits under a pane
+	// that may not be the one the reader is looking at.
+	r.openConfirm(
+		fmt.Sprintf("Reset every setting under %q to its default?", cat.name),
+		"Yes, reset "+cat.name,
+		func() { r.resetOptions(cat.options) },
+	)
 }
 
 // resetAllOptions resets every setting in every category — "Reset all".
@@ -718,7 +791,11 @@ func (r *Root) resetAllOptions() {
 	for _, cat := range optionCategories() {
 		all = append(all, cat.options...)
 	}
-	r.resetOptions(all)
+	r.openConfirm(
+		fmt.Sprintf("Reset all %d settings, in every category, to their defaults?", len(all)),
+		"Yes, reset everything",
+		func() { r.resetOptions(all) },
+	)
 }
 
 // resetOptions is the shared body of both reset buttons: stop

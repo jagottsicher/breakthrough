@@ -20,15 +20,15 @@ import (
 )
 
 const (
-	panelPage        = "panel"
-	contextMenuPage  = "context-menu"
-	renamePage       = "rename"
-	promptPage       = "prompt"
-	pickerPage       = "owner-group-picker"
-	quitConfirmPage  = "quit-confirm"
-	purgeConfirmPage = "purge-confirm"
-	sedReplacePage   = "sed-replace"
-	sedPreviewPage   = "sed-preview"
+	panelPage       = "panel"
+	contextMenuPage = "context-menu"
+	renamePage      = "rename"
+	promptPage      = "prompt"
+	pickerPage      = "owner-group-picker"
+	quitConfirmPage = "quit-confirm"
+	confirmPage     = "confirm"
+	sedReplacePage  = "sed-replace"
+	sedPreviewPage  = "sed-preview"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -222,14 +222,15 @@ type Root struct {
 	errorView    *tview.TextView
 	quitConfirm  *tview.List
 
-	// purgeConfirm backs both "Remove" and "Empty Trash" (see
-	// newPurgeConfirm/openPurgeConfirm in trash.go) — one shared,
-	// repopulated widget, the same pattern r.picker/r.prompt already use.
-	// pendingPurge is the action confirmPurge runs once the user actually
-	// confirms, set by whichever of openRemoveConfirm/openEmptyTrashConfirm
-	// opened the dialog.
-	purgeConfirm *tview.List
-	pendingPurge func()
+	// confirmDialog backs every confirmation in this app — Remove,
+	// Empty Trash, and the Options screen's own two resets — as one
+	// shared, repopulated widget rather than one dialog per action (see
+	// newConfirmDialog/openConfirm in trash.go for why). Same pattern
+	// r.picker/r.prompt already use. pendingConfirm is the action
+	// acceptConfirm runs once the user actually confirms, set by
+	// whichever caller opened the dialog.
+	confirmDialog  *tview.List
+	pendingConfirm func()
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -240,7 +241,7 @@ type Root struct {
 	// highlight real fields get). sedLayout stacks the other three and
 	// is what sedReplacePage actually shows. All three (plus sedFlags)
 	// are rebuilt fresh on every open (see resetSedForm), unlike
-	// purgeConfirm's shared, repopulated single widget, since Form has
+	// confirmDialog's shared, repopulated single widget, since Form has
 	// no equivalent of List's SetItemText to reset one in place.
 	// sedFindField/sedReplaceField/sedAdvancedField are kept directly
 	// (their typed text values are read back in runSedPreview);
@@ -261,7 +262,7 @@ type Root struct {
 	// show Preview's own dry-run result (runSedPreview): a one-line
 	// status (progress while running, a summary once done), the actual
 	// Name/Line/Excerpt table (see sedPreviewRows), and Apply/Back/
-	// Cancel — the same three-choice shape purgeConfirm already has.
+	// Cancel — the same three-choice shape confirmDialog already has.
 	// sedPendingChanges is what confirmApplySed actually writes if the
 	// user goes on to confirm.
 	//
@@ -1035,7 +1036,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The Remove/Empty-Trash confirmation (see trash.go) — same "one
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
-	r.purgeConfirm = r.newPurgeConfirm()
+	r.confirmDialog = r.newConfirmDialog()
 
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
@@ -1142,7 +1143,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
-	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
+	r.AddPage(confirmPage, r.confirmDialog, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	// resize=true: the Options screen deliberately fills the whole

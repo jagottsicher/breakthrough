@@ -287,56 +287,95 @@ func (r *Root) TrashbinShortcut() {
 	}
 }
 
-// newPurgeConfirm builds the shared Remove/Empty-Trash confirmation list,
-// called once from NewRoot the same way quitConfirm is.
+// newConfirmDialog builds the one confirmation list every irreversible
+// or hard-to-undo action in this app shares, called once from NewRoot
+// the same way quitConfirm is.
+//
+// One dialog rather than one per action, deliberately: the wording of
+// the question and of the confirming answer are the only things that
+// ever differ, and both are parameters of openConfirm. A second
+// hand-built confirmation would be a second place for the "Cancel is
+// preselected" rule below to be got wrong.
 //
 // Deliberately NOT SetCurrentItem(0) the way RequestQuit's quitConfirm
 // is: Ctrl+Q is already a single, deliberate keypress toward quitting, so
 // defaulting to "Quit" on Enter is low-friction and cheaply undone
-// (restart the app). Remove/Empty Trash are unrecoverable data loss from
-// a single stray Enter — see openPurgeConfirm, which always preselects
-// index 1 ("Cancel") instead.
-func (r *Root) newPurgeConfirm() *tview.List {
+// (restart the app). What comes through here — Remove, Empty Trash,
+// resetting settings — is either unrecoverable or tedious to redo from a
+// single stray Enter, so openConfirm always preselects index 1
+// ("Cancel") instead.
+func (r *Root) newConfirmDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetBorderPadding(0, 0, 1, 1)
-	l.AddItem("", "", 0, nil) // index 0: message, set fresh by openPurgeConfirm before every show
-	l.AddItem("Cancel", "", 0, r.cancelPurge)
-	l.AddItem("Yes, delete permanently", "", 0, r.confirmPurge)
-	l.SetDoneFunc(r.cancelPurge) // Escape
+	// Both index 0 (the question) and index 2 (the confirming answer)
+	// are set fresh by openConfirm before every show.
+	l.AddItem("", "", 0, nil)
+	l.AddItem("Cancel", "", 0, r.cancelConfirm)
+	l.AddItem("", "", 0, r.acceptConfirm)
+	l.SetDoneFunc(r.cancelConfirm) // Escape
 	return l
 }
 
-// openPurgeConfirm shows message with Cancel preselected (see
-// newPurgeConfirm) and runs action only if the user explicitly moves
-// focus to and confirms "Yes, delete permanently" — pressing Enter again
-// without moving focus, or pressing Escape, always lands on cancelPurge
-// instead, never action.
-func (r *Root) openPurgeConfirm(message string, action func()) {
-	r.pendingPurge = action
-	r.purgeConfirm.SetItemText(0, message, "")
+// openConfirm asks message, labels the confirming answer confirmLabel,
+// and runs action only if the user explicitly moves focus to that answer
+// and selects it — pressing Enter again without moving focus, or
+// pressing Escape, always cancels instead, never action.
+//
+// The single entry point for every confirmation in this app: Remove and
+// Empty Trash (see openPurgeConfirm just below, which is only a fixed
+// wording for this) and the Options screen's own two resets.
+//
+// confirmLabel is the action itself, phrased as an answer ("Yes, delete
+// permanently", "Yes, reset"), not a bare "OK" — at the moment of
+// deciding, the button should say what it will do rather than make the
+// reader remember the question above it.
+func (r *Root) openConfirm(message, confirmLabel string, action func()) {
+	r.pendingConfirm = action
+	r.confirmDialog.SetItemText(0, message, "")
+	r.confirmDialog.SetItemText(2, confirmLabel, "")
 
-	width, height := listSize(r.purgeConfirm)
+	width, height := listSize(r.confirmDialog)
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 
-	r.purgeConfirm.SetRect(x, y, width, height)
-	r.purgeConfirm.SetCurrentItem(1) // "Cancel" - see newPurgeConfirm's own comment
-	r.showOverlay(purgeConfirmPage, r.purgeConfirm)
+	r.confirmDialog.SetRect(x, y, width, height)
+	r.confirmDialog.SetCurrentItem(1) // "Cancel" - see newConfirmDialog's own comment
+	// Layered on top of whatever asked, rather than replacing it:
+	// answering a question is not a reason to close the thing that
+	// raised it. The Options screen in particular has to still be there
+	// afterwards — a real bug had confirming a reset close the whole
+	// screen, because this used to replace the stack instead of pushing
+	// onto it. Callers that genuinely should not survive their own
+	// confirmation close themselves first (see openPurgeConfirm).
+	r.pushOverlay(confirmPage, r.confirmDialog, nil)
 }
 
-func (r *Root) confirmPurge() {
-	action := r.pendingPurge
-	r.pendingPurge = nil
+// openPurgeConfirm is openConfirm with the wording every permanent
+// deletion shares — Remove and Empty Trash both ask their own question
+// but give the same answer.
+//
+// Closes whatever is open first, unlike openConfirm's own layering:
+// these are reached from the context menu, which has nothing left to
+// offer once a deletion has been decided, and leaving it open behind
+// the question would put the user back in it afterwards.
+func (r *Root) openPurgeConfirm(message string, action func()) {
+	r.closeAllOverlays()
+	r.openConfirm(message, "Yes, delete permanently", action)
+}
+
+func (r *Root) acceptConfirm() {
+	action := r.pendingConfirm
+	r.pendingConfirm = nil
 	r.hideOverlay()
 	if action != nil {
 		action()
 	}
 }
 
-func (r *Root) cancelPurge() {
-	r.pendingPurge = nil
+func (r *Root) cancelConfirm() {
+	r.pendingConfirm = nil
 	r.hideOverlay()
 }
 
