@@ -134,6 +134,31 @@ type Panel struct {
 	detailsExpandBtn *tview.Button
 	onExpandDetails  func()
 
+	// tabStrip is the compact row of tab numbers sitting between
+	// filterField and detailsExpandBtn (see tabstrip.go for the whole
+	// design, and NewPanel for the header row it's added to) — per the
+	// user's own explicit request for that exact position. headerRow is
+	// kept as a field purely so refreshTabStrip can ResizeItem the strip's
+	// own slot as the tab count changes; nothing else needs it.
+	//
+	// tabCount/tabActive are what setTabs was last told — Panel renders
+	// the tab set but never owns it (see setTabs' own doc comment: Root
+	// does). tabStripSpans maps a click's column back to a tab, the same
+	// shape headerSpans uses for the path bar.
+	//
+	// onSelectTab/onNewTab/onOpenTabSwitcher are Root's own wiring, the
+	// same reason onExpandDetails/onOpenFile/onRenameGesture all exist:
+	// Panel has no reference to Root and no business deciding what
+	// switching a tab actually entails.
+	headerRow         *tview.Flex
+	tabStrip          *tview.TextView
+	tabStripSpans     []tabStripSpan
+	tabCount          int
+	tabActive         int
+	onSelectTab       func(int)
+	onNewTab          func()
+	onOpenTabSwitcher func()
+
 	// columnHeader is a second, single-row table sitting between the path
 	// bar and the data table (table) — its own doc comment (see
 	// buildColumnHeader) explains why a second table, not a shared row 0
@@ -455,6 +480,21 @@ type rowRef struct {
 const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
+
+	// headerTabStripGap is one column of lead-in the tab strip draws for
+	// itself before its own first glyph ("+", or the first tab number) —
+	// without it that glyph sat flush against the filter box with no
+	// visual breathing room at all, per a real user report once the
+	// strip started always showing at least the "+" button (see
+	// tabstrip.go's own doc comment on why that button is never hidden).
+	//
+	// Drawn as part of the strip's own text (see refreshTabStrip), not a
+	// separate blank Flex item alongside it: a plain nil spacer item has
+	// no background color of its own to set, so it painted as a visibly
+	// different-colored seam right in front of the strip instead of
+	// reading as part of it — a second real report, this time about the
+	// fix for the first one.
+	headerTabStripGap = 1
 )
 
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
@@ -523,6 +563,15 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
 
+	// The tab strip — see tabstrip.go. Starts empty and zero-width: a
+	// lone tab draws nothing (see refreshTabStrip), so a session that
+	// never opens a second one looks exactly as it did before tabs
+	// existed.
+	p.tabStrip = tview.NewTextView()
+	p.tabStrip.SetWrap(false)
+	p.tabStrip.SetDynamicColors(true) // the active tab's own highlight is a color tag
+	p.tabStrip.SetMouseCapture(p.captureTabStripMouse)
+
 	// "<" expands the Details sidebar — see detailsExpandBtn's own doc
 	// comment on the struct.
 	p.detailsExpandBtn = tview.NewButton("<")
@@ -570,7 +619,13 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// right after it (headerDetailsExpandWidth) is exactly what those 3
 	// columns went to, per the user's own explicit request.
 	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	// The tab strip goes between the filter and the Details button, per
+	// the user's own explicit request. refreshTabStrip resizes this slot
+	// itself as tabs come and go, which is why headerRow is kept as a
+	// field.
+	headerRow.AddItem(p.tabStrip, 0, 0, false)
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
+	p.headerRow = headerRow
 
 	p.AddItem(headerRow, 1, 0, false)      // fixed one-line path bar + filter
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
@@ -611,6 +666,11 @@ func (p *Panel) paintStaticChrome() {
 
 	styleButton(p.filterRegexBtn, p.theme)
 	styleButton(p.detailsExpandBtn, p.theme)
+	p.styleTabStrip(p.theme)
+	// Re-render rather than only recolor: the active tab's own highlight
+	// is baked into the text as a color tag (see renderTabStrip), so a
+	// live scheme switch has to rebuild the text to pick up the new one.
+	p.refreshTabStrip()
 
 	// Unlike headerEdit above, filterField DOES have a real "sometimes
 	// focused, sometimes not" cycle — it sits permanently in the header

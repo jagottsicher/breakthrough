@@ -1150,9 +1150,21 @@ func (r *Root) runSearch() {
 	r.searchStartDir = scope
 	r.renderSearchStatus()
 
-	go r.animateSearchProgress(ctx)
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack — onPanic here resets the
+	// same "in progress" state cancelSearch already resets on the
+	// normal completion path (see streamSearchResults), so a recovered
+	// panic doesn't leave this search stuck believing it's still
+	// running forever.
+	onPanic := func() {
+		r.cancelSearch()
+		r.renderSearchStatus()
+	}
+	r.safeGo("search progress animation", onPanic, func() { r.animateSearchProgress(ctx) })
 	results, errs := searchRun(ctx, req)
-	go r.streamSearchResults(ctx, req, results, errs)
+	r.safeGo("search", onPanic, func() { r.streamSearchResults(ctx, req, results, errs) })
 }
 
 // searchRun is search.Run — a package-level var, not called directly,
