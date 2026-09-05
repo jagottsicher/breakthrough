@@ -281,9 +281,19 @@ func run() error {
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
 			// rather than always consuming the key the way the seven
-			// furthest above do - see Root.AcceptsGlobalShortcut's own
-			// doc comment.
-			if !root.AcceptsGlobalShortcut() {
+			// furthest above do.
+			//
+			// Checked via BashLineHasFocus alone, not the full
+			// AcceptsGlobalShortcut those others use: that also refuses
+			// whenever *any* overlay is open, and the tab switcher is
+			// one — so pressing Ctrl+T again to walk to the next tab
+			// (see Root.TabSwitcherShortcut) never reached it and did
+			// nothing at all. A real bug, and one the unit tests missed
+			// entirely by calling the shortcut method directly rather
+			// than through this dispatch. TabSwitcherShortcut applies
+			// the remaining guard itself, so every other overlay still
+			// blocks it.
+			if root.BashLineHasFocus() {
 				return event
 			}
 			root.TabSwitcherShortcut()
