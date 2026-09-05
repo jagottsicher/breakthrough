@@ -36,9 +36,8 @@ import (
 // knows how to render and edit *a* setting, never which ones exist.
 
 const (
-	optionsInfoPage   = "options-info"
-	optionsPickerPage = "options-picker"
-	optionsInputPage  = "options-input"
+	optionsInfoPage  = "options-info"
+	optionsInputPage = "options-input"
 
 	// optionsCategoryWidth is the fixed width of the left-hand category
 	// list. Wide enough for the longest category name plus the list's
@@ -51,11 +50,16 @@ const (
 // Column indices within optionsTable. Named rather than inline literals
 // because captureOptionsTableMouse maps a click's column back to an
 // action through exactly these.
+// The info button deliberately comes before the default hint, even
+// though the hint reads more naturally right after the value: on a
+// terminal too narrow for the whole row, the rightmost column is the
+// one that gets clipped, and losing a dim "default: ..." note costs far
+// less than losing the button that explains the setting.
 const (
 	optionsColLabel = iota
 	optionsColValue
-	optionsColOrigin
 	optionsColInfo
+	optionsColDefault
 )
 
 // optionsInfoGlyph marks the per-setting info button at the end of each
@@ -68,9 +72,9 @@ const optionsInfoGlyph = "[?]"
 // re-flowed every time the category changed would make the whole right
 // pane appear to jump sideways.
 const (
-	optionsLabelWidth  = 30
-	optionsValueWidth  = 34
-	optionsOriginWidth = 15
+	optionsLabelWidth   = 30
+	optionsValueWidth   = 34
+	optionsDefaultWidth = 16
 )
 
 // padRight pads s with spaces to at least width display columns.
@@ -122,7 +126,7 @@ func (r *Root) newOptionsScreen() {
 
 	r.optionsHint = tview.NewTextView()
 	r.optionsHint.SetWrap(false)
-	r.optionsHint.SetText(" ←/→: pane · ↑/↓: move · Enter: change · ?: explain · Tab: buttons · Esc: close ")
+	r.optionsHint.SetText(" ←/→: pane · ↑/↓: move · Enter/Space: change · ?: explain · Tab: buttons · Esc: close ")
 
 	r.optionsButtons = r.newOptionsButtons()
 
@@ -149,14 +153,10 @@ func (r *Root) newOptionsScreen() {
 	r.optionsInfo.SetWordWrap(true)
 	r.optionsInfo.SetBorderPadding(1, 1, 2, 2)
 
-	// One shared picker and one shared input field for editing a value,
-	// repopulated per use — the same "one widget, reused" pattern
-	// r.picker and r.prompt already follow.
-	r.optionsPicker = tview.NewList().ShowSecondaryText(false)
-	r.optionsPicker.SetHighlightFullLine(true)
-	r.optionsPicker.SetBorderPadding(0, 0, 1, 1)
-	r.optionsPicker.SetDoneFunc(func() { r.hideOverlay() }) // Escape
-
+	// One shared input field for a typed value, repopulated per use —
+	// the same "one widget, reused" pattern r.prompt already follows.
+	// Enum settings need no widget of their own: activating the row
+	// cycles them in place (see cycleOptionChoice).
 	r.optionsInput = tview.NewInputField()
 
 	// The shared Tab/Escape handling (see captureOptionsKey) goes on the
@@ -165,6 +165,28 @@ func (r *Root) newOptionsScreen() {
 	// Both panes additionally get the left/right arrow keys that move
 	// between them (see captureOptionsPaneArrows).
 	r.optionsCategories.SetInputCapture(chainKeyCaptures(r.captureOptionsKey, r.captureOptionsPaneArrows))
+
+	// Which pane has keyboard focus has to be visible — without it the
+	// two selected rows look identical and there's no telling which one
+	// the arrow keys will move (a real report).
+	//
+	// Driven by the focus events themselves, not re-derived during Draw:
+	// a style set from inside a draw callback only takes effect on the
+	// *next* draw, so the highlight lagged a frame behind the focus (a
+	// real bug, caught by reading the colors off an actually-drawn
+	// screen rather than trusting the widgets). Neither callback queries
+	// HasFocus() either — tview's own Box.Blur runs its callback before
+	// clearing the focus flag, so the answer there is wrong, the same
+	// trap Panel.setSelectionStyle documents. Each pane simply states
+	// its own new state, which is never ambiguous.
+	r.optionsCategories.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, true) })
+	r.optionsCategories.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsCategories, false) })
+	r.optionsTable.SetFocusFunc(func() { r.setOptionsPaneFocused(r.optionsTable, true) })
+	r.optionsTable.SetBlurFunc(func() { r.setOptionsPaneFocused(r.optionsTable, false) })
+	// Neither pane has been focused yet, so start both in the unfocused
+	// look; the first real focus event corrects whichever one gains it.
+	r.setOptionsPaneFocused(r.optionsCategories, false)
+	r.setOptionsPaneFocused(r.optionsTable, false)
 	r.optionsTable.SetInputCapture(chainKeyCaptures(r.captureOptionsKey,
 		chainKeyCaptures(r.captureOptionsPaneArrows, r.captureOptionsTableKey)))
 }
@@ -331,7 +353,17 @@ func (r *Root) openOptions() {
 	}
 	r.renderOptionCategories()
 	r.renderOptions()
-	r.showOverlay(optionsPage, r.optionsTable)
+	// The whole layout is the overlay, not just the settings table:
+	// captureOutsideClick closes an overlay on any click outside the
+	// widget it was shown with, so registering only the table made a
+	// click on the categories — or the buttons, or the title bar — count
+	// as "outside" and shut the screen (a real report). Focus still
+	// starts on the table, via the restore callback, exactly the way
+	// Properties already registers its own full layout and then focuses
+	// a field inside it.
+	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
+		r.app.SetFocus(r.optionsTable)
+	})
 }
 
 // closeOptions hides the Options screen. Nothing to save or discard —
@@ -390,10 +422,12 @@ func (r *Root) renderOptions() {
 				SetTextColor(r.theme.Text).
 				SetSelectable(true))
 
-		// Dimmed: the origin is context for the value beside it, not a
-		// value in its own right, and shouldn't compete with it.
-		r.optionsTable.SetCell(row, optionsColOrigin,
-			tview.NewTableCell(padRight(r.settingOriginLabel(opt.key), optionsOriginWidth)).
+		// Dimmed, and empty whenever the value already is the default:
+		// this is context for the value beside it, not a value in its
+		// own right, and a permanent marker on every row would be
+		// noise. See optionDefaultHint.
+		r.optionsTable.SetCell(row, optionsColDefault,
+			tview.NewTableCell(padRight(r.optionDefaultHint(opt), optionsDefaultWidth)).
 				SetTextColor(r.theme.PlaceholderText).
 				SetSelectable(true))
 
@@ -410,12 +444,51 @@ func (r *Root) renderOptions() {
 	}
 }
 
+// setOptionsPaneFocused paints one pane's own selected-row highlight for
+// the focus state it has just entered: FocusedBackground when it has
+// keyboard focus, EditableBackground when it doesn't.
+//
+// The same "petrol means this is where keystrokes go right now"
+// convention the rest of this app already follows — the main panel's own
+// current row, every overlay title bar, every focused button. Without
+// it, both panes highlight a row identically and nothing says which of
+// them the arrow keys are actually driving.
+//
+// Takes the state explicitly rather than asking the widget, and takes
+// the widget explicitly rather than checking both: see the wiring in
+// newOptionsScreen for why either shortcut would be wrong.
+func (r *Root) setOptionsPaneFocused(pane tview.Primitive, focused bool) {
+	background := r.theme.EditableBackground
+	if focused {
+		background = r.theme.FocusedBackground
+	}
+	style := tcell.StyleDefault.Background(background).Foreground(r.theme.Text)
+
+	switch p := pane.(type) {
+	case *tview.List:
+		p.SetSelectedStyle(style)
+	case *tview.Table:
+		p.SetSelectedStyle(style)
+	}
+}
+
 // optionValueDisplay renders one setting's current value for the table:
 // a readable Yes/No for a boolean, an enum choice's own label rather
 // than its config literal, and the raw value for everything else.
 func (r *Root) optionValueDisplay(opt optionSpec) string {
-	value := opt.value(r)
+	return r.renderOptionValue(opt, opt.value(r))
+}
 
+// renderOptionValue renders one literal value for opt the way the screen
+// shows it — the radio glyph for a boolean, an enum choice's own label
+// rather than its config literal, the raw text otherwise.
+//
+// Takes the value rather than reading the current one, so the default
+// hint beside a changed setting is rendered in exactly the same
+// vocabulary as the value it's being compared against (see
+// optionDefaultHint) — a hint reading "default: false" next to a value
+// reading "○" would make the reader do the translation themselves.
+func (r *Root) renderOptionValue(opt optionSpec, value string) string {
 	doc, ok := opt.doc()
 	if ok && doc.Kind == config.KindBool {
 		// The same filled/outline circle this app already uses for a
@@ -435,8 +508,32 @@ func (r *Root) optionValueDisplay(opt optionSpec) string {
 	return value
 }
 
+// optionDefaultHint is what the table shows beside a value: nothing at
+// all while the value is the default, and "default: <value>" once it
+// isn't.
+//
+// Replaces an earlier column that named where the value came from
+// ("default" / "system-wide" / "changed by you"), which a real report
+// rightly called out as both noise and misleading: toggling a setting
+// twice puts the default value back, but the key stays in the config
+// file, so that column went on claiming "changed by you" about a value
+// that plainly wasn't changed any more. Comparing against the default
+// can't drift that way — it describes the value on screen rather than
+// the history behind it.
+//
+// The provenance itself is still worth knowing occasionally, and still
+// shown, in the one place with room to explain it properly: the info
+// window (see showOptionInfo).
+func (r *Root) optionDefaultHint(opt optionSpec) string {
+	doc, ok := opt.doc()
+	if !ok || doc.Default == opt.value(r) {
+		return ""
+	}
+	return "default: " + r.renderOptionValue(opt, doc.Default)
+}
+
 // settingOriginLabel renders where a setting's current value came from,
-// for the table's own origin column.
+// for the info window (see optionDefaultHint on why it left the table).
 func (r *Root) settingOriginLabel(key string) string {
 	origin, ok := r.settingOrigins[key]
 	if !ok {
@@ -481,72 +578,43 @@ func (r *Root) activateOptionRow(row int) {
 		opt.apply(r, strconv.FormatBool(opt.value(r) != "true"))
 		r.renderOptions()
 	case opt.choices != nil:
-		r.openOptionPicker(opt)
+		r.cycleOptionChoice(opt)
 	default:
 		r.editOptionValue(opt)
 	}
 }
 
-// openOptionPicker shows the list of values for an enum setting, the
-// current one preselected.
+// cycleOptionChoice advances an enum setting to its next value and
+// applies it there and then.
 //
-// For color_scheme specifically the pick applies live as the cursor
-// moves, so the scheme can actually be seen before committing to it —
-// choosing a color scheme from a list of names alone is guesswork.
-// Escape then puts the original back (see the restore closure below),
-// so browsing costs nothing.
-func (r *Root) openOptionPicker(opt optionSpec) {
+// No intermediate picker dialog, per the user's own explicit request
+// that every option be set immediately: activating the row *is* the
+// change, exactly as it already is for a boolean, rather than opening a
+// list to choose from and then confirming. For a color scheme that also
+// means each step is visible at once, which is the only honest way to
+// pick one — a scheme name says very little about what it looks like.
+//
+// Wraps around, so the list is reachable in either direction by going
+// far enough, and an unrecognized current value (a hand-edited config
+// naming a scheme that no longer exists) starts from the first choice
+// rather than sticking.
+func (r *Root) cycleOptionChoice(opt optionSpec) {
 	choices := opt.choices(r)
 	if len(choices) == 0 {
 		return
 	}
-	original := opt.value(r)
-	livePreview := opt.key == "color_scheme"
 
-	r.optionsPicker.Clear()
-	current := 0
+	next := 0
+	current := opt.value(r)
 	for i, c := range choices {
-		choice := c // captured per iteration: the callbacks outlive it
-		if choice.value == original {
-			current = i
+		if c.value == current {
+			next = (i + 1) % len(choices)
+			break
 		}
-		r.optionsPicker.AddItem(choice.label, "", 0, func() {
-			opt.apply(r, choice.value)
-			r.hideOverlay()
-			r.renderOptions()
-		})
 	}
 
-	if livePreview {
-		r.optionsPicker.SetChangedFunc(func(_ int, _, _ string, _ rune) {
-			row := r.optionsPicker.GetCurrentItem()
-			if row >= 0 && row < len(choices) {
-				// Applied without persisting — this is a preview, and
-				// only the committed pick above should reach the config
-				// file.
-				r.applyThemeOnly(choices[row].value)
-			}
-		})
-	} else {
-		r.optionsPicker.SetChangedFunc(nil)
-	}
-
-	// Escape restores whatever was in force before browsing started.
-	r.optionsPicker.SetDoneFunc(func() {
-		if livePreview {
-			r.applyThemeOnly(original)
-		}
-		r.hideOverlay()
-		r.renderOptions()
-	})
-
-	width, height := listSize(r.optionsPicker)
-	x, y := r.centeredOnScreen(width, height)
-	x, y, width, height = r.clampToScreen(x, y, width, height)
-	r.optionsPicker.SetRect(x, y, width, height)
-	r.optionsPicker.SetCurrentItem(current)
-
-	r.pushOverlay(optionsPickerPage, r.optionsPicker, nil)
+	opt.apply(r, choices[next].value)
+	r.renderOptions()
 }
 
 // editOptionValue opens a one-line input for a setting typed rather than
@@ -644,10 +712,21 @@ func (r *Root) optionsInfoSize(text string) (width, height int) {
 // like this while F1 is what this app already means by help everywhere
 // else — and neither costs anything the table itself was using.
 func (r *Root) captureOptionsTableKey(event *tcell.EventKey) *tcell.EventKey {
+	row, _ := r.optionsTable.GetSelection()
+
+	// Space changes the selected setting, the same as Enter — per the
+	// user's own explicit request, and matching every other toggle in
+	// this app, where Space has always been the second way to flip the
+	// thing under the cursor (the panel's own checkbox column, every
+	// button here — see spaceAlsoActivates).
+	if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
+		r.activateOptionRow(row)
+		return nil
+	}
+
 	if event.Key() != tcell.KeyF1 && event.Rune() != '?' {
 		return event
 	}
-	row, _ := r.optionsTable.GetSelection()
 	if opt, ok := r.optionAtRow(row); ok {
 		r.showOptionInfo(opt)
 	}
@@ -683,6 +762,13 @@ func (r *Root) captureOptionsTableMouse(action tview.MouseAction, event *tcell.E
 	return tview.MouseConsumed, nil
 }
 
+// Both resets ask first, through the same shared confirmation every
+// other hard-to-undo action in this app goes through (see openConfirm in
+// trash.go) rather than a dialog of their own: a reset discards work —
+// possibly a long-tuned set of preferences — and, unlike every single
+// setting change on this screen, there is no equally quick way back.
+// Cancel is preselected, so a stray Enter can never trigger one.
+
 // resetCurrentOptionCategory resets every setting in the category
 // currently shown — "Reset category".
 func (r *Root) resetCurrentOptionCategory() {
@@ -690,7 +776,13 @@ func (r *Root) resetCurrentOptionCategory() {
 	if !ok {
 		return
 	}
-	r.resetOptions(cat.options)
+	// Named rather than "this category": the button sits under a pane
+	// that may not be the one the reader is looking at.
+	r.openConfirm(
+		fmt.Sprintf("Reset every setting under %q to its default?", cat.name),
+		"Yes, reset "+cat.name,
+		func() { r.resetOptions(cat.options) },
+	)
 }
 
 // resetAllOptions resets every setting in every category — "Reset all".
@@ -699,7 +791,11 @@ func (r *Root) resetAllOptions() {
 	for _, cat := range optionCategories() {
 		all = append(all, cat.options...)
 	}
-	r.resetOptions(all)
+	r.openConfirm(
+		fmt.Sprintf("Reset all %d settings, in every category, to their defaults?", len(all)),
+		"Yes, reset everything",
+		func() { r.resetOptions(all) },
+	)
 }
 
 // resetOptions is the shared body of both reset buttons: stop

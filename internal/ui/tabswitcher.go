@@ -24,11 +24,30 @@ import (
 //
 // The list is rebuilt on every open rather than kept in sync as tabs
 // change, matching how the owner/group picker and the Options overlay
-// already work (see r.picker/r.optionsList): the contents are cheap to
-// rebuild and only ever looked at while open, so there's nothing to gain
-// from maintaining them the rest of the time.
+// already work (see r.picker): the contents are cheap to rebuild and
+// only ever looked at while open, so there's nothing to gain from
+// maintaining them the rest of the time.
+//
+// A Table rather than a List, because each row carries two independent
+// things to act on: the tab itself, and a close button beside it. Cell
+// selection gives that its own navigation for free — Up/Down moves
+// between tabs, Right steps onto the close button and highlights it,
+// Left comes back — which a List, with one selectable thing per row,
+// cannot express without hand-rolling both the movement and the
+// highlight.
 
 const tabSwitcherPage = "tab-switcher"
+
+// Column indices within the switcher table.
+const (
+	tabSwitcherColLabel = iota
+	tabSwitcherColClose
+)
+
+// tabSwitcherCloseGlyph is the per-row close button, the same '✕' every
+// panel's own title bar uses (see toolWindowCloseGlyph) so "close this"
+// looks identical wherever it appears.
+const tabSwitcherCloseGlyph = string(toolWindowCloseGlyph)
 
 // tabSwitcherMaxPathWidth caps how much of a long path a row shows before
 // it's shortened from the left (see shortenPathLeft). Chosen so the
@@ -41,16 +60,74 @@ const tabSwitcherMaxPathWidth = 60
 // read as the same action in two places.
 const tabSwitcherNewRowLabel = " +  New tab"
 
-// newTabSwitcher builds the switcher's List — same construction as every
-// other list overlay in this package (no border, full-line highlight, one
-// column of side padding).
-func (r *Root) newTabSwitcher() *tview.List {
-	list := tview.NewList().ShowSecondaryText(false)
-	list.SetHighlightFullLine(true)
-	list.SetBorderPadding(0, 0, 1, 1)
-	list.SetDoneFunc(r.closeTabSwitcher) // Escape
-	list.SetInputCapture(r.captureTabSwitcherKey)
-	return list
+// newTabSwitcher builds the switcher's Table — no border, one column of
+// side padding, and cell selection so the close button in each row is
+// its own navigable target (see this file's own doc comment).
+func (r *Root) newTabSwitcher() *tview.Table {
+	table := tview.NewTable()
+	table.SetBorders(false)
+	table.SetBorderPadding(0, 0, 1, 1)
+	table.SetSelectable(true, true) // individual cells: the tab, or its close button
+	table.SetInputCapture(r.captureTabSwitcherKey)
+	table.SetSelectedFunc(func(row, column int) { r.activateTabSwitcherCell(row, column) })
+	return table
+}
+
+// activateTabSwitcherCell is Enter, Space or a click on one cell: the
+// label switches to that tab, the close button closes it, and the
+// trailing row opens a new one.
+func (r *Root) activateTabSwitcherCell(row, column int) {
+	// The row past the real tabs is "New tab" — see openTabSwitcher.
+	if row < 0 || row >= len(r.tabs) {
+		r.hideOverlay()
+		r.newTabHere()
+		return
+	}
+	if column == tabSwitcherColClose {
+		r.closeTabFromSwitcher(row)
+		return
+	}
+	r.commitTabSwitcher(row)
+}
+
+// clickTabSwitcherCell is one cell's own mouse action: the same thing
+// Enter and Space do on it.
+//
+// Per cell rather than a mouse capture over the whole table, because
+// tview's Table does not run a row's selected function on a click at all
+// — it only moves the selection there (verified directly against its own
+// MouseHandler, after a live click on a ✕ did nothing but highlight it).
+// A per-cell Clicked func is tview's own answer to that.
+//
+// Returns true to tell tview not to also move the selection afterwards:
+// every one of these actions rebuilds or closes the table underneath,
+// so the row and column it would select are about to mean something
+// else, or nothing at all.
+func (r *Root) clickTabSwitcherCell(row, column int) func() bool {
+	return func() bool {
+		r.activateTabSwitcherCell(row, column)
+		return true
+	}
+}
+
+// closeTabFromSwitcher closes the tab on one row and leaves the switcher
+// open, reselecting the row above it.
+//
+// Above rather than the one that slid up into its place, per the user's
+// own explicit request — and it reads better too: closing several in a
+// row then walks steadily upward instead of standing still while the
+// list shortens underneath the cursor.
+//
+// Refuses the first tab outright: it's the one tab that always stays
+// open (see closeTab, which enforces the same rule for every other path
+// to closing one), so its row has no close button to reach in the first
+// place and this is only a backstop.
+func (r *Root) closeTabFromSwitcher(row int) {
+	if row <= 0 || row >= len(r.tabs) {
+		return
+	}
+	r.closeTab(row)
+	r.openTabSwitcher(row - 1)
 }
 
 // captureTabSwitcherKey adds Delete to the switcher's own keys: it closes
@@ -64,22 +141,31 @@ func (r *Root) newTabSwitcher() *tview.List {
 // cursor" action in the panel itself, and because a tab manager that
 // closes entries with Delete needs no explaining.
 func (r *Root) captureTabSwitcherKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() != tcell.KeyDelete {
-		return event
-	}
-	i := r.tabSwitcher.GetCurrentItem()
-	if i < 0 || i >= len(r.tabs) {
-		return nil // the "New tab" row: nothing to close
-	}
-	if len(r.tabs) == 1 {
-		return nil // closeTab would refuse anyway; don't stack an error overlay over the switcher
-	}
+	row, column := r.tabSwitcher.GetSelection()
 
-	r.closeTab(i)
-	// Rebuild in place so the list reflects the close immediately,
-	// keeping the cursor near where it was rather than jumping home.
-	r.openTabSwitcher(min(i, len(r.tabs)-1))
-	return nil
+	switch {
+	case event.Key() == tcell.KeyEscape:
+		// A Table has no DoneFunc of its own, unlike the List this
+		// replaced — Escape has to be handled here or it does nothing.
+		r.closeTabSwitcher()
+		return nil
+
+	case event.Key() == tcell.KeyRune && event.Rune() == ' ':
+		// Space acts on the selected cell exactly as Enter does, the
+		// same as everywhere else in this app.
+		r.activateTabSwitcherCell(row, column)
+		return nil
+
+	case event.Key() == tcell.KeyDelete:
+		// Closes the selected tab wherever the cursor is within its row,
+		// so it works without first stepping onto the close button.
+		if row <= 0 || row >= len(r.tabs) {
+			return nil // the first tab never closes, and "New tab" has nothing to close
+		}
+		r.closeTabFromSwitcher(row)
+		return nil
+	}
+	return event
 }
 
 // newTabSwitcherTitleBar is the one-row title above the list, the same
@@ -108,13 +194,27 @@ func (r *Root) openTabSwitcher(selected int) {
 
 	r.tabSwitcher.Clear()
 	for i, p := range r.tabs {
+		row := i // captured per cell callback below, which outlives this iteration
 		label := tabSwitcherRowLabel(i, p.path, i == r.activeTab, r.theme.PlaceholderText)
-		// A captured copy, not the loop variable: the callback outlives
-		// this iteration. (Go 1.22+ scopes loop variables per iteration,
-		// making this safe either way — kept explicit because the intent
-		// is easier to see than the language version it relies on.)
-		target := i
-		r.tabSwitcher.AddItem(label, "", 0, func() { r.commitTabSwitcher(target) })
+		r.tabSwitcher.SetCell(i, tabSwitcherColLabel,
+			tview.NewTableCell(label).
+				SetTextColor(r.theme.Text).
+				SetSelectable(true).
+				SetClickedFunc(r.clickTabSwitcherCell(row, tabSwitcherColLabel)))
+
+		// No close button on the first tab: one tab always stays open
+		// (see closeTab), so offering a control that would only ever
+		// refuse is worse than not offering one. A non-selectable blank
+		// keeps the column present — tview skips unselectable cells when
+		// moving, so Right on this row simply stays put.
+		closeCell := tview.NewTableCell(" ").SetSelectable(false)
+		if i > 0 {
+			closeCell = tview.NewTableCell(" " + tabSwitcherCloseGlyph + " ").
+				SetTextColor(r.theme.Text).
+				SetSelectable(true).
+				SetClickedFunc(r.clickTabSwitcherCell(row, tabSwitcherColClose))
+		}
+		r.tabSwitcher.SetCell(i, tabSwitcherColClose, closeCell)
 	}
 
 	// A trailing "New tab" row, which is what makes the whole feature
@@ -126,15 +226,23 @@ func (r *Root) openTabSwitcher(selected int) {
 	// is either already claimed or collides with the bash line's own
 	// readline editing (Ctrl+W, the obvious borrow from browsers, deletes
 	// a word there).
-	r.tabSwitcher.AddItem(tabSwitcherNewRowLabel, "", 0, func() {
-		r.hideOverlay()
-		r.newTabHere()
-	})
+	//
+	// No close button of its own either — there is nothing there to
+	// close yet.
+	newRow := len(r.tabs)
+	r.tabSwitcher.SetCell(newRow, tabSwitcherColLabel,
+		tview.NewTableCell(tabSwitcherNewRowLabel).
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTabSwitcherCell(newRow, tabSwitcherColLabel)))
+	r.tabSwitcher.SetCell(newRow, tabSwitcherColClose,
+		tview.NewTableCell(" ").SetSelectable(false))
 
-	r.tabSwitcher.SetCurrentItem(selected)
+	// Always on the label column: the close button is somewhere you
+	// deliberately steer to, never where the cursor lands on its own.
+	r.tabSwitcher.Select(selected, tabSwitcherColLabel)
 
-	width, height := listSize(r.tabSwitcher)
-	height++ // the title bar's own row (see tabSwitcherLayout)
+	width, height := r.tabSwitcherSize()
 
 	// Anchored under the tab strip rather than centered on screen: the
 	// strip is what this drops down from, so appearing anywhere else
@@ -156,6 +264,48 @@ func (r *Root) openTabSwitcher(selected int) {
 
 	r.tabSwitcherLayout.SetRect(x, y, width, height)
 	r.showOverlay(tabSwitcherPage, r.tabSwitcher)
+}
+
+// tabSwitcherSize is the overlay's own size: wide enough for its widest
+// row plus the close-button column, tall enough for every row plus the
+// title bar.
+//
+// Measured from the cells actually built rather than from a fixed guess,
+// the same reason listSize exists for this package's list overlays —
+// which this can't use, being a Table.
+func (r *Root) tabSwitcherSize() (width, height int) {
+	rows := r.tabSwitcher.GetRowCount()
+
+	// Per column, not per row: tview lays each column out at the widest
+	// cell *in that column*, so summing a single row's own cells
+	// under-counts whenever the longest label and the close button sit
+	// on different rows — which is the normal case, since the row
+	// carrying "(current)" is usually the widest and the first tab has
+	// no close button at all. A real, observed bug: the ✕ ended up
+	// clipped off the right edge.
+	columnWidths := make([]int, tabSwitcherColClose+1)
+	for row := 0; row < rows; row++ {
+		for column := range columnWidths {
+			cell := r.tabSwitcher.GetCell(row, column)
+			if cell == nil {
+				continue
+			}
+			if w := tview.TaggedStringWidth(cell.Text); w > columnWidths[column] {
+				columnWidths[column] = w
+			}
+		}
+	}
+	for i, w := range columnWidths {
+		width += w
+		if i > 0 {
+			width++ // the single column tview leaves between cells
+		}
+	}
+
+	// +2 for the table's own left/right border padding.
+	width += 2
+	// +1 for the title bar's own row (see tabSwitcherLayout).
+	return width, rows + 1
 }
 
 // tabStripAnchor is the screen position the switcher drops down from —
@@ -234,7 +384,7 @@ func (r *Root) stepTabSwitcher(delta int) {
 		if count == 0 {
 			return
 		}
-		current := r.tabSwitcher.GetCurrentItem()
+		current, _ := r.tabSwitcher.GetSelection()
 		if current >= count {
 			current = r.activeTab // stepping off the "New tab" row resumes from the real one
 		}
@@ -245,7 +395,9 @@ func (r *Root) stepTabSwitcher(delta int) {
 		if next < 0 {
 			next += count
 		}
-		r.tabSwitcher.SetCurrentItem(next)
+		// Back onto the label column: Ctrl+Tab means "the next tab", so
+		// it should never leave the cursor parked on a close button.
+		r.tabSwitcher.Select(next, tabSwitcherColLabel)
 	case r.acceptsGlobalShortcut():
 		if len(r.tabs) < 2 {
 			return // nothing to switch between; don't open an overlay to say so

@@ -38,6 +38,23 @@ func selectOptionCategory(t *testing.T, r *Root, name string) {
 	t.Fatalf("no option category named %q", name)
 }
 
+// confirmReset answers the shared confirmation dialog (see openConfirm)
+// with its confirming choice — what a reset now goes through, so a test
+// exercising one has to as well.
+//
+// Deliberately selects index 2 explicitly rather than pressing Enter on
+// whatever is preselected: the dialog opens on "Cancel" on purpose, and
+// a helper that quietly relied on that ordering would stop confirming
+// anything the moment it changed.
+func confirmReset(t *testing.T, r *Root) {
+	t.Helper()
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirmation dialog %q", r.activePage, confirmPage)
+	}
+	r.confirmDialog.SetCurrentItem(2)
+	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+}
+
 // TestOptionCatalogMatchesSettingDocs is the drift guard between the
 // Options screen's own catalogue and the config package's canonical key
 // list: every setting offered here must be a key config actually
@@ -112,27 +129,56 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 	}
 }
 
-// TestToggleOptionMarksTheOriginAsChanged pins the origin column
-// following a change — the thing that makes reset's own behaviour
-// visible.
-func TestToggleOptionMarksTheOriginAsChanged(t *testing.T) {
+// TestDefaultHintAppearsOnlyWhileTheValueDiffers pins the column that
+// replaced the old origin one, and the exact complaint that prompted it:
+// toggling a setting twice puts the default value back, and the hint has
+// to disappear again rather than going on claiming the value was
+// changed.
+func TestDefaultHintAppearsOnlyWhileTheValueDiffers(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
 	row, ok := optionRowByKey(r, "show_hidden")
 	if !ok {
 		t.Fatal("no show_hidden row")
 	}
-	if got := r.settingOriginLabel("show_hidden"); got != config.OriginDefault.String() {
-		t.Fatalf("origin before the change = %q, want %q", got, config.OriginDefault.String())
+	hint := func() string {
+		return strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+	}
+
+	if got := hint(); got != "" {
+		t.Errorf("default hint at the default value = %q, want empty", got)
 	}
 
 	r.activateOptionRow(row)
-
-	if got, want := r.settingOriginLabel("show_hidden"), config.OriginUser.String(); got != want {
-		t.Errorf("origin after the change = %q, want %q", got, want)
+	if got := hint(); !strings.HasPrefix(got, "default:") {
+		t.Errorf("default hint after changing the value = %q, want it to name the default", got)
 	}
-	if got := r.optionsTable.GetCell(row, optionsColOrigin).Text; !strings.Contains(got, "changed by you") {
-		t.Errorf("origin cell = %q, want it to say the value was changed", got)
+
+	r.activateOptionRow(row) // back to the default value
+	if got := hint(); got != "" {
+		t.Errorf("default hint after toggling back = %q, want empty again — this is the whole point of the column", got)
+	}
+}
+
+// TestDefaultHintRendersInTheSameVocabularyAsTheValue pins that a
+// boolean's default hint shows the radio glyph rather than the literal
+// "true"/"false", so the reader isn't left translating between two
+// notations to compare them.
+func TestDefaultHintRendersInTheSameVocabularyAsTheValue(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "show_hidden")
+	if !ok {
+		t.Fatal("no show_hidden row")
+	}
+	r.activateOptionRow(row) // make it differ, so the hint shows at all
+
+	got := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+	if strings.Contains(got, "true") || strings.Contains(got, "false") {
+		t.Errorf("default hint = %q, want the radio glyph rather than a boolean literal", got)
+	}
+	if !strings.Contains(got, checkboxText(true)) && !strings.Contains(got, checkboxText(false)) {
+		t.Errorf("default hint = %q, want it to contain a radio glyph", got)
 	}
 }
 
@@ -154,6 +200,7 @@ func TestResetRemovesTheKeyRatherThanWritingTheDefault(t *testing.T) {
 	}
 
 	r.resetCurrentOptionCategory()
+	confirmReset(t, r)
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -187,6 +234,7 @@ func TestResetRestoresTheDefaultLive(t *testing.T) {
 	}
 
 	r.resetCurrentOptionCategory()
+	confirmReset(t, r)
 
 	if r.panel.showHidden != original {
 		t.Errorf("showHidden = %v after reset, want the default %v back in effect", r.panel.showHidden, original)
@@ -218,6 +266,7 @@ func TestResetAllCoversEveryCategory(t *testing.T) {
 	r.activateOptionRow(trashRow)
 
 	r.resetAllOptions()
+	confirmReset(t, r)
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -233,37 +282,23 @@ func TestResetAllCoversEveryCategory(t *testing.T) {
 	}
 }
 
-// TestOptionsPickerEscapeKeepsTheOriginalScheme pins that browsing the
-// scheme list and backing out leaves the original in force — the live
-// preview must not turn "I looked at it" into "I chose it".
-func TestOptionsPickerEscapeKeepsTheOriginalScheme(t *testing.T) {
-	schemes := []config.NamedTheme{
-		{Slug: "default", Theme: config.DefaultTheme()},
-		{Slug: "solarized", Theme: solarizedTheme()},
-	}
-	isolateInitialSettings(t, config.DefaultSettings(), schemes)
-	isolateUserConfigFile(t)
+// TestOptionsSpaceActivatesTheSelectedRow pins the user's own explicit
+// request that Space toggle a radio button too, not just Enter —
+// matching every other toggle in this app.
+func TestOptionsSpaceActivatesTheSelectedRow(t *testing.T) {
+	r, _ := newOptionsRoot(t)
 
-	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.openOptions()
-	original := r.settings.ColorScheme
-
-	row, ok := optionRowByKey(r, "color_scheme")
+	row, ok := optionRowByKey(r, "show_hidden")
 	if !ok {
-		t.Fatal("no color_scheme row")
+		t.Fatal("no show_hidden row")
 	}
-	r.activateOptionRow(row)
-	r.optionsPicker.SetCurrentItem(1) // preview the other scheme
-	r.optionsPicker.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.optionsTable.Select(row, 0)
+	before := r.panel.showHidden
 
-	if r.settings.ColorScheme != original {
-		t.Errorf("ColorScheme = %q after backing out, want the original %q", r.settings.ColorScheme, original)
-	}
-	if r.activePage != optionsPage {
-		t.Errorf("activePage = %q, want back on the Options screen", r.activePage)
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), func(tview.Primitive) {})
+
+	if r.panel.showHidden == before {
+		t.Error("Space didn't toggle the selected setting")
 	}
 }
 
@@ -468,5 +503,226 @@ func TestOptionsCategoryChangeSwapsTheSettingsShown(t *testing.T) {
 	}
 	if _, ok := optionRowByKey(r, "trash_persistent"); !ok {
 		t.Error("the Trash category's settings aren't shown after switching to it")
+	}
+}
+
+// TestClickingACategoryDoesNotCloseTheScreen pins a real reported bug:
+// the screen was registered as an overlay with only the settings table
+// as its widget, so captureOutsideClick — which closes an overlay on any
+// click outside the widget it was shown with — treated a click on the
+// categories, the buttons or the title bar as "outside" and shut the
+// whole thing.
+func TestClickingACategoryDoesNotCloseTheScreen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(110, 30)
+	r.SetRect(0, 0, 110, 30)
+	r.Draw(screen)
+
+	// A point inside the categories pane — which is emphatically part of
+	// the Options screen, however "outside the focused widget" it is.
+	x, y, _, _ := r.optionsCategories.GetRect()
+	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y+1, tcell.Button1, 0))
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after clicking a category, want the screen still open", r.activePage)
+	}
+}
+
+// TestClickingTheButtonRowDoesNotCloseTheScreen is the same bug from the
+// other side of the layout — the buttons are as much part of the screen
+// as the categories are.
+func TestClickingTheButtonRowDoesNotCloseTheScreen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(110, 30)
+	r.SetRect(0, 0, 110, 30)
+	r.Draw(screen)
+
+	x, y, _, _ := r.optionsResetAllBtn.GetRect()
+	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y, tcell.Button1, 0))
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after clicking a button, want the screen still open", r.activePage)
+	}
+}
+
+// TestOptionsFocusIsVisiblyDistinct pins the other half of that report:
+// with no visual difference between the two panes, there was no telling
+// which one the arrow keys were driving. The focused pane's selected row
+// takes FocusedBackground, the other one EditableBackground — the same
+// "petrol means keystrokes go here" convention the rest of the app uses.
+//
+// Read off a real drawn screen rather than from the widgets: tview
+// exposes no getter for a selected style, and what actually reaches the
+// terminal is the thing worth pinning anyway.
+func TestOptionsFocusIsVisiblyDistinct(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(110, 30)
+	r.SetRect(0, 0, 110, 30)
+
+	// backgroundAt returns the background color actually drawn at a
+	// point, after a full redraw.
+	backgroundAt := func(x, y int) tcell.Color {
+		r.Draw(screen)
+		_, style, _ := screen.Get(x, y)
+		_, bg, _ := style.Decompose()
+		return bg
+	}
+
+	// One draw first: tview lays a Flex's children out during Draw, so
+	// before that every rect here is still the construction-time default
+	// and any coordinate read from it points somewhere else entirely.
+	r.Draw(screen)
+
+	// The first row of each pane is the selected one on a fresh open.
+	catX, catY, _, _ := r.optionsCategories.GetInnerRect()
+	tableX, tableY, _, _ := r.optionsTable.GetInnerRect()
+
+	r.app.SetFocus(r.optionsTable)
+	if got, want := backgroundAt(tableX, tableY), r.theme.FocusedBackground; got != want {
+		t.Errorf("focused settings row drew %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := backgroundAt(catX, catY), r.theme.EditableBackground; got != want {
+		t.Errorf("unfocused category row drew %v, want EditableBackground %v", got, want)
+	}
+
+	r.app.SetFocus(r.optionsCategories)
+	if got, want := backgroundAt(catX, catY), r.theme.FocusedBackground; got != want {
+		t.Errorf("focused category row drew %v, want FocusedBackground %v", got, want)
+	}
+	if got, want := backgroundAt(tableX, tableY), r.theme.EditableBackground; got != want {
+		t.Errorf("unfocused settings row drew %v, want EditableBackground %v", got, want)
+	}
+}
+
+// TestResetAsksBeforeDiscardingAnything pins the safeguard the user
+// asked for: a reset opens the shared confirmation rather than acting
+// straight away, and Cancel leaves everything exactly as it was.
+func TestResetAsksBeforeDiscardingAnything(t *testing.T) {
+	r, configPath := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "show_hidden")
+	if !ok {
+		t.Fatal("no show_hidden row")
+	}
+	r.activateOptionRow(row)
+	changed := r.panel.showHidden
+
+	r.resetCurrentOptionCategory()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want a confirmation before anything is discarded", r.activePage)
+	}
+	if r.panel.showHidden != changed {
+		t.Error("the reset already took effect before being confirmed")
+	}
+
+	// Cancel — index 1, and also what the dialog opens on.
+	r.confirmDialog.SetCurrentItem(1)
+	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.panel.showHidden != changed {
+		t.Error("cancelling the confirmation still reset the value")
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading config: %v", err)
+	}
+	if !strings.Contains(string(data), "show_hidden =") {
+		t.Errorf("cancelling still removed the key from the config file:\n%s", data)
+	}
+}
+
+// TestResetConfirmationOpensOnCancel pins that a stray Enter can never
+// trigger a reset — the dialog preselects Cancel, the same rule every
+// other irreversible action in this app follows.
+func TestResetConfirmationOpensOnCancel(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.resetAllOptions()
+
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Errorf("confirmation opened on item %d, want 1 (Cancel)", got)
+	}
+}
+
+// TestResetConfirmationNamesTheAction pins that the confirming answer
+// says what it will do rather than a bare "OK", and that the two resets
+// are told apart — "Reset category" and "Reset all" ask genuinely
+// different questions.
+func TestResetConfirmationNamesTheAction(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.resetCurrentOptionCategory()
+	categoryQuestion, _ := r.confirmDialog.GetItemText(0)
+	categoryAnswer, _ := r.confirmDialog.GetItemText(2)
+	r.cancelConfirm()
+
+	r.resetAllOptions()
+	allQuestion, _ := r.confirmDialog.GetItemText(0)
+	allAnswer, _ := r.confirmDialog.GetItemText(2)
+	r.cancelConfirm()
+
+	if categoryQuestion == allQuestion {
+		t.Errorf("both resets ask the same question %q — they do different things", categoryQuestion)
+	}
+	for _, answer := range []string{categoryAnswer, allAnswer} {
+		if !strings.Contains(strings.ToLower(answer), "reset") {
+			t.Errorf("confirming answer = %q, want it to name the action", answer)
+		}
+	}
+}
+
+// TestResetLeavesTheOptionsScreenOpen pins a real bug found by driving
+// the screen live: the confirmation used to replace the whole overlay
+// stack rather than layering on top of it, so confirming a reset closed
+// the Options screen along with the dialog and dropped the user back in
+// the file panel. Answering a question is no reason to close the thing
+// that asked it.
+func TestResetLeavesTheOptionsScreenOpen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "show_hidden")
+	if !ok {
+		t.Fatal("no show_hidden row")
+	}
+	r.activateOptionRow(row)
+
+	r.resetCurrentOptionCategory()
+	confirmReset(t, r)
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after confirming a reset, want the Options screen still open", r.activePage)
+	}
+}
+
+// TestCancellingAResetLeavesTheOptionsScreenOpen is the same guarantee
+// for the other answer — backing out of a question must be even less
+// destructive than answering it.
+func TestCancellingAResetLeavesTheOptionsScreenOpen(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.resetAllOptions()
+	r.cancelConfirm()
+
+	if r.activePage != optionsPage {
+		t.Errorf("activePage = %q after cancelling, want the Options screen still open", r.activePage)
 	}
 }

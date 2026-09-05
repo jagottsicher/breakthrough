@@ -17,5 +17,8 @@ github-token.txt
 *.test
 *.out
 
-# GoReleaser build output
+# GoReleaser build output, and the release pipeline's own before.hooks
+# output (see .goreleaser.yaml — the generated /etc/breakthrough/config
+# the .deb/.rpm packages ship, regenerated fresh on every release)
 dist/
+.goreleaser-generated/
