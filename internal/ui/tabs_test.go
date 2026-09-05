@@ -12,6 +12,22 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/session"
 )
 
+// tabSwitcherRow is the switcher table's currently selected row — the
+// Table equivalent of the List's own GetCurrentItem this replaced.
+func tabSwitcherRow(r *Root) int {
+	row, _ := r.tabSwitcher.GetSelection()
+	return row
+}
+
+// tabSwitcherLabel is one switcher row's own label text.
+func tabSwitcherLabel(r *Root, row int) string {
+	cell := r.tabSwitcher.GetCell(row, tabSwitcherColLabel)
+	if cell == nil {
+		return ""
+	}
+	return cell.Text
+}
+
 // newTabbedRoot is the shared setup for the tests here: a Root with an
 // isolated $XDG_STATE_HOME (so nothing touches the real saved layout)
 // and a second directory to open tabs on.
@@ -365,7 +381,7 @@ func TestNextTabShortcutOpensTheSwitcherOnTheNeighbour(t *testing.T) {
 	if r.activePage != tabSwitcherPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
 	}
-	if got := r.tabSwitcher.GetCurrentItem(); got != 1 {
+	if got := tabSwitcherRow(r); got != 1 {
 		t.Errorf("switcher preselected row %d, want 1 (the next tab)", got)
 	}
 	if r.activeTab != 0 {
@@ -384,11 +400,11 @@ func TestNextTabShortcutSteppedRepeatedlyKeepsMoving(t *testing.T) {
 
 	r.NextTabShortcut() // opens on 1
 	r.NextTabShortcut() // -> 2
-	if got := r.tabSwitcher.GetCurrentItem(); got != 2 {
+	if got := tabSwitcherRow(r); got != 2 {
 		t.Errorf("selection after two steps = %d, want 2", got)
 	}
 	r.NextTabShortcut() // wraps back to 0
-	if got := r.tabSwitcher.GetCurrentItem(); got != 0 {
+	if got := tabSwitcherRow(r); got != 0 {
 		t.Errorf("selection after wrapping = %d, want 0", got)
 	}
 }
@@ -407,7 +423,7 @@ func TestPrevTabShortcutStepsBackwards(t *testing.T) {
 	if r.activePage != tabSwitcherPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
 	}
-	if got := r.tabSwitcher.GetCurrentItem(); got != 2 {
+	if got := tabSwitcherRow(r); got != 2 {
 		t.Errorf("selection = %d, want 2 (wrapped to the last tab)", got)
 	}
 }
@@ -438,7 +454,7 @@ func TestTabSwitcherShortcutOpensOnTheCurrentTab(t *testing.T) {
 	if r.activePage != tabSwitcherPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
 	}
-	if got := r.tabSwitcher.GetCurrentItem(); got != 1 {
+	if got := tabSwitcherRow(r); got != 1 {
 		t.Errorf("switcher preselected row %d, want 1 (the current tab)", got)
 	}
 }
@@ -454,14 +470,14 @@ func TestTabSwitcherListsEveryTabWithItsPath(t *testing.T) {
 	r.openTabSwitcher(r.activeTab)
 
 	// Two tabs plus the trailing "New tab" row.
-	if got, want := r.tabSwitcher.GetItemCount(), 3; got != want {
+	if got, want := r.tabSwitcher.GetRowCount(), 3; got != want {
 		t.Fatalf("switcher has %d rows, want %d", got, want)
 	}
-	if last, _ := r.tabSwitcher.GetItemText(2); last != tabSwitcherNewRowLabel {
+	if last := tabSwitcherLabel(r, 2); last != tabSwitcherNewRowLabel {
 		t.Errorf("last row = %q, want %q", last, tabSwitcherNewRowLabel)
 	}
 	for i, wantPath := range []string{dir, other} {
-		main, _ := r.tabSwitcher.GetItemText(i)
+		main := tabSwitcherLabel(r, i)
 		// Compared against the tail: a long path is shortened from the
 		// left for display (see shortenPathLeft).
 		tail := wantPath
@@ -482,7 +498,7 @@ func TestTabSwitcherMarksTheCurrentTab(t *testing.T) {
 	r.newTab(other) // active is now tab 2
 	r.openTabSwitcher(0)
 
-	current, _ := r.tabSwitcher.GetItemText(1)
+	current := tabSwitcherLabel(r, 1)
 	if !strings.Contains(current, "(current)") {
 		t.Errorf("the active tab's row = %q, want it marked as current", current)
 	}
@@ -490,7 +506,7 @@ func TestTabSwitcherMarksTheCurrentTab(t *testing.T) {
 		t.Errorf("the active tab's row = %q, want it dimmed", current)
 	}
 
-	other0, _ := r.tabSwitcher.GetItemText(0)
+	other0 := tabSwitcherLabel(r, 0)
 	if strings.Contains(other0, "(current)") {
 		t.Errorf("row 0 = %q, want only the active tab marked", other0)
 	}
@@ -540,7 +556,7 @@ func TestTabSwitcherNewTabRowOpensATab(t *testing.T) {
 	r.newTab(other)
 	r.openTabSwitcher(0)
 
-	r.tabSwitcher.SetCurrentItem(2) // the "New tab" row
+	r.tabSwitcher.Select(2, tabSwitcherColLabel) // the "New tab" row
 	r.tabSwitcher.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.tabCount(); got != 3 {
@@ -558,7 +574,9 @@ func TestTabSwitcherDeleteClosesTheHighlightedTab(t *testing.T) {
 	r, dir, other := newTabbedRoot(t)
 	r.newTab(other)
 	r.newTab(dir)
-	r.openTabSwitcher(0)
+	// Row 1, not row 0: the first tab never closes (see
+	// TestTabSwitcherRefusesToCloseTheFirstTab just below).
+	r.openTabSwitcher(1)
 
 	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone))
 
@@ -568,7 +586,7 @@ func TestTabSwitcherDeleteClosesTheHighlightedTab(t *testing.T) {
 	if r.activePage != tabSwitcherPage {
 		t.Errorf("activePage = %q, want the switcher still open", r.activePage)
 	}
-	if got := r.tabSwitcher.GetItemCount(); got != 3 { // two tabs plus "New tab"
+	if got := r.tabSwitcher.GetRowCount(); got != 3 { // two tabs plus "New tab"
 		t.Errorf("switcher has %d rows after the close, want 3 — it should have rebuilt", got)
 	}
 }
@@ -601,7 +619,7 @@ func TestTabCycleSkipsTheNewTabRow(t *testing.T) {
 	r.NextTabShortcut() // opens on tab 2 (row 1)
 	r.NextTabShortcut() // must wrap to tab 1 (row 0), not the "New tab" row 2
 
-	if got := r.tabSwitcher.GetCurrentItem(); got != 0 {
+	if got := tabSwitcherRow(r); got != 0 {
 		t.Errorf("selection = %d, want 0 — cycling must skip the \"New tab\" row", got)
 	}
 }
@@ -826,4 +844,281 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestTabSwitcherRowsHaveACloseButton pins the per-row close button the
+// user asked for: every tab except the first carries one, and the
+// trailing "New tab" row has none — there's nothing there to close yet.
+func TestTabSwitcherRowsHaveACloseButton(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+	r.openTabSwitcher(0)
+
+	// The first tab always stays open, so it gets no button at all —
+	// offering one that would only ever refuse is worse than none.
+	if cell := r.tabSwitcher.GetCell(0, tabSwitcherColClose); cell == nil || strings.Contains(cell.Text, tabSwitcherCloseGlyph) {
+		t.Errorf("the first tab's close cell = %q, want no close glyph", cell.Text)
+	}
+	if cell := r.tabSwitcher.GetCell(0, tabSwitcherColClose); cell != nil && !cell.NotSelectable {
+		t.Error("the first tab's close cell is selectable — Right would land on a button that does nothing")
+	}
+
+	for row := 1; row < r.tabCount(); row++ {
+		cell := r.tabSwitcher.GetCell(row, tabSwitcherColClose)
+		if cell == nil || !strings.Contains(cell.Text, tabSwitcherCloseGlyph) {
+			t.Errorf("tab row %d has no close button", row)
+		}
+		if cell != nil && cell.NotSelectable {
+			t.Errorf("tab row %d's close button isn't selectable — Right couldn't reach it", row)
+		}
+	}
+
+	newRow := r.tabCount()
+	if cell := r.tabSwitcher.GetCell(newRow, tabSwitcherColClose); cell == nil || strings.Contains(cell.Text, tabSwitcherCloseGlyph) {
+		t.Error(`the "New tab" row has a close button, want none`)
+	}
+}
+
+// TestTabSwitcherOpensOnTheLabelColumn pins that the cursor never starts
+// on a close button — that's somewhere you deliberately steer to, not
+// somewhere you land by default and might press Enter on by reflex.
+func TestTabSwitcherOpensOnTheLabelColumn(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.openTabSwitcher(1)
+
+	if _, column := r.tabSwitcher.GetSelection(); column != tabSwitcherColLabel {
+		t.Errorf("switcher opened on column %d, want the label column %d", column, tabSwitcherColLabel)
+	}
+}
+
+// TestTabSwitcherCloseButtonClosesAndSelectsTheRowAbove pins the whole
+// requested gesture: activating a row's close button closes that tab,
+// leaves the switcher open, and puts the cursor on the row above.
+func TestTabSwitcherCloseButtonClosesAndSelectsTheRowAbove(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+	r.openTabSwitcher(2)
+	closed := r.tabs[2]
+
+	r.activateTabSwitcherCell(2, tabSwitcherColClose)
+
+	if got := r.tabCount(); got != 2 {
+		t.Fatalf("tab count = %d, want 2", got)
+	}
+	for i, p := range r.tabs {
+		if p == closed {
+			t.Errorf("the closed tab is still open at index %d", i)
+		}
+	}
+	if r.activePage != tabSwitcherPage {
+		t.Errorf("activePage = %q, want the switcher still open", r.activePage)
+	}
+	if got := tabSwitcherRow(r); got != 1 {
+		t.Errorf("selection = row %d, want row 1 (the one above the closed tab)", got)
+	}
+}
+
+// TestTabSwitcherCloseButtonRefusesTheFirstTab pins the one tab that
+// always stays open, even against a direct call — the row has no button
+// to reach, and this is the backstop behind that.
+func TestTabSwitcherCloseButtonRefusesTheFirstTab(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.openTabSwitcher(0)
+
+	r.activateTabSwitcherCell(0, tabSwitcherColClose)
+
+	if got := r.tabCount(); got != 2 {
+		t.Errorf("tab count = %d, want both tabs kept — the first one never closes", got)
+	}
+	if r.activePage != tabSwitcherPage {
+		t.Errorf("activePage = %q, want the switcher still open", r.activePage)
+	}
+}
+
+// TestTabSwitcherSpaceActivatesTheSelectedCell pins Space as a second
+// way to act on whichever cell is selected — switching from the label,
+// closing from the close button — matching every other toggle and
+// button in this app.
+func TestTabSwitcherSpaceActivatesTheSelectedCell(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+
+	// Space on a label switches to that tab.
+	r.openTabSwitcher(0)
+	r.tabSwitcher.Select(1, tabSwitcherColLabel)
+	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if r.activeTab != 1 {
+		t.Errorf("activeTab = %d after Space on a label, want 1", r.activeTab)
+	}
+
+	// Space on a close button closes that tab.
+	r.openTabSwitcher(2)
+	before := r.tabCount()
+	r.tabSwitcher.Select(2, tabSwitcherColClose)
+	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if got := r.tabCount(); got != before-1 {
+		t.Errorf("tab count = %d after Space on a close button, want %d", got, before-1)
+	}
+}
+
+// TestTabSwitcherEscapeStillClosesIt pins Escape on the Table, which —
+// unlike the List this replaced — has no DoneFunc of its own, so it only
+// works because captureTabSwitcherKey handles it.
+func TestTabSwitcherEscapeStillClosesIt(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.openTabSwitcher(0)
+
+	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+
+	if r.activePage != "" {
+		t.Errorf("activePage = %q after Escape, want the switcher closed", r.activePage)
+	}
+}
+
+// TestTabSwitcherIsWideEnoughForTheCloseColumn pins a real bug found by
+// driving the switcher live: the width was summed per *row*, but tview
+// lays each column out at the widest cell in that column — so whenever
+// the longest label and the close button sat on different rows (the
+// normal case, since the "(current)" row is usually widest and the
+// first tab has no close button at all), the overlay came out too narrow
+// and clipped the ✕ off its right edge.
+func TestTabSwitcherIsWideEnoughForTheCloseColumn(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+	// The widest label on the *first* row, and a close button only on
+	// later ones — exactly the arrangement that used to under-measure.
+	r.switchToTab(0)
+	r.openTabSwitcher(0)
+
+	width, _ := r.tabSwitcherSize()
+
+	widestLabel, widestClose := 0, 0
+	for row := 0; row < r.tabSwitcher.GetRowCount(); row++ {
+		if cell := r.tabSwitcher.GetCell(row, tabSwitcherColLabel); cell != nil {
+			if w := tview.TaggedStringWidth(cell.Text); w > widestLabel {
+				widestLabel = w
+			}
+		}
+		if cell := r.tabSwitcher.GetCell(row, tabSwitcherColClose); cell != nil {
+			if w := tview.TaggedStringWidth(cell.Text); w > widestClose {
+				widestClose = w
+			}
+		}
+	}
+
+	// widest label + the single inter-column gap + the close column +
+	// the table's own two columns of border padding. Leaving the padding
+	// out of this sum is what let the old, per-row calculation squeak
+	// past: it landed exactly two columns short, which is precisely the
+	// padding, so the ✕ was pushed out of the drawn area.
+	if need := widestLabel + 1 + widestClose + 2; width < need {
+		t.Errorf("switcher width = %d, want at least %d (widest label %d + gap + close column %d + padding) — the ✕ would be clipped",
+			width, need, widestLabel, widestClose)
+	}
+}
+
+// TestTabSwitcherShortcutStepsWhileOpen pins the user's own explicit
+// request: with the list already open, pressing the same key again picks
+// the next tab rather than doing nothing, so the key walks the list and
+// Enter or Space commits wherever you stop.
+func TestTabSwitcherShortcutStepsWhileOpen(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+	r.switchToTab(0)
+
+	r.TabSwitcherShortcut() // opens, no move
+	if r.activePage != tabSwitcherPage {
+		t.Fatalf("activePage = %q, want the switcher open", r.activePage)
+	}
+	if got := tabSwitcherRow(r); got != 0 {
+		t.Fatalf("opened on row %d, want the current tab's row 0", got)
+	}
+
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 1 {
+		t.Errorf("row after a second press = %d, want 1", got)
+	}
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 2 {
+		t.Errorf("row after a third press = %d, want 2", got)
+	}
+	// Wraps, and never stops on the trailing "New tab" row — stepping
+	// through tabs shouldn't land on something that creates one.
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 0 {
+		t.Errorf("row after wrapping = %d, want back to 0", got)
+	}
+
+	// Still on the label column throughout, so Enter/Space commits the
+	// tab rather than hitting a close button.
+	if _, column := r.tabSwitcher.GetSelection(); column != tabSwitcherColLabel {
+		t.Errorf("column = %d, want the label column %d", column, tabSwitcherColLabel)
+	}
+
+	// And committing goes to whatever is selected.
+	r.TabSwitcherShortcut() // -> row 1
+	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if r.activeTab != 1 {
+		t.Errorf("activeTab = %d after committing, want 1", r.activeTab)
+	}
+}
+
+// TestTabSwitcherShortcutStillBlockedByOtherOverlays pins that only the
+// switcher's own page unlocks the stepping path — with Properties open,
+// the shortcut must still stand down rather than swapping the directory
+// out from under it.
+func TestTabSwitcherShortcutStillBlockedByOtherOverlays(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	r.TabSwitcherShortcut()
+
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want %q still open and untouched", r.activePage, propertiesPage)
+	}
+}
+
+// TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen pins the
+// contract cmd/breakthrough's own Ctrl+T dispatch depends on, and the
+// reason a real bug slipped past the tests once already: with the
+// switcher open, AcceptsGlobalShortcut is false — it treats any open
+// overlay as a reason to stand down — yet the shortcut must still act,
+// because that press means "walk to the next tab".
+//
+// The dispatch therefore cannot gate Ctrl+T behind AcceptsGlobalShortcut
+// the way most shortcuts are gated; it checks only BashLineHasFocus and
+// lets TabSwitcherShortcut apply the rest of the rule itself. Guarding it
+// the usual way made every press after the first one a no-op, which the
+// tests missed entirely by calling the method directly rather than
+// through that dispatch.
+func TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.switchToTab(0)
+
+	r.TabSwitcherShortcut()
+	if r.activePage != tabSwitcherPage {
+		t.Fatalf("setup: activePage = %q, want the switcher open", r.activePage)
+	}
+	if r.AcceptsGlobalShortcut() {
+		t.Fatal("setup: AcceptsGlobalShortcut should be false with an overlay open — that's the whole point here")
+	}
+
+	before := tabSwitcherRow(r)
+	r.TabSwitcherShortcut()
+
+	if got := tabSwitcherRow(r); got == before {
+		t.Errorf("selection stayed on row %d — the shortcut must still act while the switcher is open, "+
+			"even though AcceptsGlobalShortcut is false", got)
+	}
 }

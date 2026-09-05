@@ -112,8 +112,8 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 	}
 
 	r.openRemoveConfirm()
-	r.purgeConfirm.SetCurrentItem(2) // "Yes, delete permanently"
-	r.confirmPurge()
+	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
+	r.acceptConfirm()
 
 	if r.detailsTarget != "" {
 		t.Errorf("detailsTarget after Remove = %q, want \"\" (cleared)", r.detailsTarget)
@@ -154,10 +154,10 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
-	if r.activePage != purgeConfirmPage {
-		t.Fatalf("activePage = %q, want %q", r.activePage, purgeConfirmPage)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.purgeConfirm.GetCurrentItem(); got != 1 {
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
 		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
 
@@ -167,7 +167,7 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	if _, err := os.Lstat(file); err != nil {
 		t.Fatalf("a.txt was removed despite Cancel being preselected: %v", err)
 	}
-	if r.activePage == purgeConfirmPage {
+	if r.activePage == confirmPage {
 		t.Fatal("purge confirm overlay is still open after resolving it")
 	}
 }
@@ -175,16 +175,16 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 // resolvePurgeConfirmByCurrentFocus resolves the currently open
 // purgeConfirm exactly the way pressing Enter on the table's current
 // selection would: it does not force a particular outcome, unlike
-// calling r.confirmPurge()/r.cancelPurge() directly would.
+// calling r.acceptConfirm()/r.cancelConfirm() directly would.
 func (r *Root) resolvePurgeConfirmByCurrentFocus(t *testing.T) {
 	t.Helper()
-	switch r.purgeConfirm.GetCurrentItem() {
+	switch r.confirmDialog.GetCurrentItem() {
 	case 1:
-		r.cancelPurge()
+		r.cancelConfirm()
 	case 2:
-		r.confirmPurge()
+		r.acceptConfirm()
 	default:
-		t.Fatalf("unexpected purgeConfirm focus %d", r.purgeConfirm.GetCurrentItem())
+		t.Fatalf("unexpected purgeConfirm focus %d", r.confirmDialog.GetCurrentItem())
 	}
 }
 
@@ -192,7 +192,7 @@ func TestOpenRemoveConfirmConfirmedDeletesPermanently(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
-	r.purgeConfirm.SetCurrentItem(2) // deliberately move to "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(2) // deliberately move to "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	if _, err := os.Lstat(file); !os.IsNotExist(err) {
@@ -308,10 +308,10 @@ func TestOpenEmptyTrashConfirmRemovesEverything(t *testing.T) {
 	}
 
 	r.openEmptyTrashConfirm()
-	if r.activePage != purgeConfirmPage {
-		t.Fatalf("activePage = %q, want %q", r.activePage, purgeConfirmPage)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	r.purgeConfirm.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	trashDir, err := r.trashDir()
@@ -349,10 +349,10 @@ func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
 
 	r.moveSelectionToTrash()
 
-	if r.activePage != purgeConfirmPage {
-		t.Fatalf("activePage = %q, want %q", r.activePage, purgeConfirmPage)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.purgeConfirm.GetCurrentItem(); got != 1 {
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
 		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
 

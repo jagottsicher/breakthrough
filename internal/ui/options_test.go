@@ -261,12 +261,11 @@ func TestOpenOptionsEscapeClosesTheScreen(t *testing.T) {
 	}
 }
 
-// TestOptionsSchemePickAppliesAndReturnsToTheScreen pins the enum path
-// end to end: activating the color scheme row opens the picker, and
-// choosing an entry applies it and drops back to the Options screen —
-// which stays open, unlike the old overlay this replaced, since there
-// may well be more to change.
-func TestOptionsSchemePickAppliesAndReturnsToTheScreen(t *testing.T) {
+// TestOptionsSchemeCyclesImmediately pins the enum path: activating the
+// color scheme row sets the next scheme there and then, with no picker
+// dialog in between — per the user's own explicit request that every
+// option be set immediately.
+func TestOptionsSchemeCyclesImmediately(t *testing.T) {
 	schemes := []config.NamedTheme{
 		{Slug: "default", Theme: config.DefaultTheme()},
 		{Slug: "solarized", Theme: solarizedTheme()},
@@ -285,21 +284,20 @@ func TestOptionsSchemePickAppliesAndReturnsToTheScreen(t *testing.T) {
 	if !ok {
 		t.Fatal("no color_scheme row in the Appearance category")
 	}
-	r.activateOptionRow(row)
-	if r.activePage != optionsPickerPage {
-		t.Fatalf("activePage = %q, want the scheme picker %q", r.activePage, optionsPickerPage)
-	}
 
-	// "solarized" is the second entry — see isolateInitialSettings' own
-	// fixed schemes slice above.
-	r.optionsPicker.SetCurrentItem(1)
-	r.optionsPicker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.activateOptionRow(row)
 
 	if r.settings.ColorScheme != "solarized" {
-		t.Errorf("ColorScheme = %q after picking it, want %q", r.settings.ColorScheme, "solarized")
+		t.Errorf("ColorScheme = %q after one activation, want the next scheme %q", r.settings.ColorScheme, "solarized")
 	}
 	if r.activePage != optionsPage {
-		t.Errorf("activePage = %q after picking a scheme, want back on %q", r.activePage, optionsPage)
+		t.Errorf("activePage = %q, want no dialog to have opened at all", r.activePage)
+	}
+
+	// And it wraps back around.
+	r.activateOptionRow(row)
+	if r.settings.ColorScheme != "default" {
+		t.Errorf("ColorScheme = %q after wrapping, want %q", r.settings.ColorScheme, "default")
 	}
 }
 

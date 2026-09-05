@@ -178,7 +178,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 
 	styleList(r.quitConfirm, theme)
 
-	styleList(r.purgeConfirm, theme)
+	styleList(r.confirmDialog, theme)
 
 	styleList(r.picker, theme)
 
@@ -231,7 +231,6 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// built any of these.
 	if r.optionsCategories != nil {
 		styleList(r.optionsCategories, theme)
-		styleList(r.optionsPicker, theme)
 
 		r.optionsLayout.SetBackgroundColor(theme.AccentBackground)
 		r.optionsButtons.SetBackgroundColor(theme.AccentBackground)
@@ -242,9 +241,6 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.optionsHint.SetTextColor(theme.Text)
 
 		r.optionsTable.SetBackgroundColor(theme.AccentBackground)
-		r.optionsTable.SetSelectedStyle(tcell.StyleDefault.
-			Background(theme.FocusedBackground).
-			Foreground(theme.Text))
 
 		r.optionsInfo.SetBackgroundColor(theme.EditableBackground)
 		r.optionsInfo.SetTextColor(theme.Text)
@@ -257,6 +253,17 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		for _, b := range r.optionsButtonList() {
 			styleButton(b, theme)
 		}
+
+		// Last, and deliberately after styleList above: that sets one
+		// fixed FocusedBackground selection color, which is right for
+		// every other list in this app but would erase the two panes'
+		// own focus-dependent highlight (see setOptionsPaneFocused) —
+		// a real bug, caught by reading the drawn colors back off a
+		// screen. Re-derived from each pane's actual focus, which is
+		// trustworthy here: applyTheme is never called from inside a
+		// blur callback, the one place HasFocus lies.
+		r.setOptionsPaneFocused(r.optionsCategories, r.optionsCategories.HasFocus())
+		r.setOptionsPaneFocused(r.optionsTable, r.optionsTable.HasFocus())
 
 		// Re-render: the table's own cell colors are baked in per cell
 		// (see renderOptions), not looked up live at draw time.
@@ -353,7 +360,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Foreground(theme.Text))
 	styleList(r.sedPreviewActions, theme)
 
-	styleList(r.tabSwitcher, theme)
+	r.tabSwitcher.SetBackgroundColor(theme.AccentBackground)
+	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.FocusedBackground).
+		Foreground(theme.Text))
 	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
 	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
 
