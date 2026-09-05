@@ -203,7 +203,7 @@ type Root struct {
 	// List/title-bar/Flex split every other overlay here uses, with
 	// tabSwitcher itself the real focus target and tabSwitcherLayout what
 	// Pages actually shows.
-	tabSwitcher         *tview.List
+	tabSwitcher         *tview.Table
 	tabSwitcherTitleBar *tview.TextView
 	tabSwitcherLayout   *tview.Flex
 
