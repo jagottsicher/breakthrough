@@ -47,7 +47,7 @@ var helpText = strings.TrimLeft(`
   Ctrl+G          Toggle hidden files — the button bar's own label
                   flips between Hide/Unhide to match
   Ctrl+F          Find
-  Ctrl+O          Options
+  Ctrl+O          Options — see "Options screen" below
   Ctrl+P          Properties
   Ctrl+D          Toggle the Details sidebar — a read-only, live-
                   updating panel of file info (stat fields; for an
@@ -101,6 +101,33 @@ var helpText = strings.TrimLeft(`
   and Tab again moves focus back to the panel. A click anywhere in the
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
+
+[::b]Options screen (Ctrl+O)[::-]
+
+  Categories down the left, that category's settings on the right.
+
+  Up / Down         Move between categories, or between settings
+  Tab / Shift+Tab   Move between the categories, the settings and the
+                    buttons underneath them
+  Enter             Change the selected setting — toggles a yes/no
+                    directly, opens a list for a choice, or a field for
+                    a number (Enter commits it, Escape discards)
+  ? or F1           Explain the selected setting in a small window
+  Escape            Close the Options screen
+
+  There is no save button: every change takes effect and is written to
+  your config file the moment you make it.
+
+  Each setting shows where its value comes from — "default",
+  "system-wide" (set in /etc/breakthrough/config), or "changed by you".
+  "Reset category" and "Reset all" remove your own overrides rather than
+  writing defaults over them, so a value falls back to the system-wide
+  setting where there is one.
+
+  "Edit config file" opens your config in your editor, creating it first
+  with every setting listed and commented out if you don't have one yet.
+  "New color scheme" copies the current scheme and opens that for
+  editing; either way the change is picked up when the editor closes.
 
 [::b]Tabs[::-]
 

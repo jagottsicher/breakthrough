@@ -1156,10 +1156,10 @@ func isolateDirSize(t *testing.T) <-chan struct{} {
 	original := dirSize
 	started := make(chan struct{})
 	unblock := make(chan struct{})
-	dirSize = func(string) (int64, bool) {
+	dirSize = func(dir string) (int64, string, bool) {
 		close(started)
 		<-unblock
-		return 0, false
+		return 0, dir, false
 	}
 	t.Cleanup(func() {
 		close(unblock)
@@ -1250,7 +1250,7 @@ func TestComputeDetailsDirSizeSkipsNonDirectories(t *testing.T) {
 	r.SetRect(0, 0, 100, 40)
 	original := dirSize
 	called := false
-	dirSize = func(string) (int64, bool) { called = true; return 0, true }
+	dirSize = func(dir string) (int64, string, bool) { called = true; return 0, dir, true }
 	t.Cleanup(func() { dirSize = original })
 
 	r.showDetailsSidebar()
@@ -1337,7 +1337,7 @@ func TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible(t *testing.T) {
 	}
 	original := dirSize
 	called := false
-	dirSize = func(string) (int64, bool) { called = true; return 0, true }
+	dirSize = func(dir string) (int64, string, bool) { called = true; return 0, dir, true }
 	t.Cleanup(func() { dirSize = original })
 
 	r.ComputeDirSizeShortcut()
