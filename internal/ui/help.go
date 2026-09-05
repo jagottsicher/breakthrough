@@ -82,11 +82,12 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
                   Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Mass rename*, Move to Trash,
-                  Remove, Go to Trash, Restore from Trash, Empty Trash,
-                  New tab, Close tab, Switch tab..., Ping (test), grep*,
-                  zgrep*, du*, df*, and three toggles: hidden files, size
-                  format, modified-time format — *planned, not built yet)
+                  Paste, chown, chmod, sed, Batch rename, Undo last
+                  rename, Move to Trash, Remove, Go to Trash, Restore
+                  from Trash, Empty Trash, New tab, Close tab, Switch
+                  tab..., Ping (test), grep*, zgrep*, du*, df*, and
+                  three toggles: hidden files, size format,
+                  modified-time format — *planned, not built yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -128,6 +129,36 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]Batch rename (context menu's "Batch rename")[::-]
+
+  Steps down the left, that step's own settings on the right, a live
+  preview of every selected file underneath — updated on every change,
+  no separate "Preview" button to press first.
+
+  Left / Right      Move between the steps and the settings
+  Up / Down         Move between steps, or between one step's settings
+  Enter / Space     Change the selected setting — toggles a yes/no
+                    directly, cycles a choice, or opens a field for
+                    text/a number (Enter commits it, Escape discards)
+  Tab / Shift+Tab   Move between the steps, the settings, the preview
+                    and the buttons underneath them
+  Escape            Close without renaming anything
+
+  The steps always run in this order: Search & Replace, Case, Trim,
+  Numbering, Extension — a step left at its default setting does
+  nothing, there's no separate on/off switch to also set. Search &
+  Replace and Case only ever touch the name, never the extension;
+  Extension only ever touches the extension.
+
+  The preview shows every selected file, changed or not: an unchanged
+  name is dimmed, a conflict (would collide with another renamed file,
+  or with something already on disk) is shown in red with why, right
+  where it's about to happen — nothing is written until "Rename" is
+  pressed and confirmed. "Reset all steps" clears the whole pipeline
+  without closing the screen; "Undo last rename" (context menu, right
+  below "Batch rename") reverses whatever the last confirmed rename
+  actually did.
 
 [::b]Tabs[::-]
 

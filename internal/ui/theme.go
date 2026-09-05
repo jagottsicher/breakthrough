@@ -270,6 +270,46 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderOptions()
 	}
 
+	// The Batch Rename screen (see batchrename.go) — guarded the same
+	// way the Options block above is (applyTheme also runs from
+	// NewRoot, before newBatchRenameScreen has built any of these).
+	if r.batchRenameStepsList != nil {
+		styleList(r.batchRenameStepsList, theme)
+
+		r.batchRenameLayout.SetBackgroundColor(theme.AccentBackground)
+		r.batchRenameButtons.SetBackgroundColor(theme.AccentBackground)
+
+		r.batchRenameTitleBar.SetBackgroundColor(theme.FocusedBackground)
+		r.batchRenameTitleBar.SetTextColor(theme.Text)
+		r.batchRenameHint.SetBackgroundColor(theme.EditableBackground)
+		r.batchRenameHint.SetTextColor(theme.Text)
+
+		r.batchRenameFieldsTable.SetBackgroundColor(theme.AccentBackground)
+		r.batchRenamePreviewTable.SetBackgroundColor(theme.AccentBackground)
+		r.batchRenameStatus.SetBackgroundColor(theme.AccentBackground)
+		r.batchRenameStatus.SetTextColor(theme.Text)
+
+		r.batchRenameInput.SetFieldBackgroundColor(theme.FocusedBackground)
+		r.batchRenameInput.SetBackgroundColor(theme.FocusedBackground)
+		r.batchRenameInput.SetFieldTextColor(theme.Text)
+		r.batchRenameInput.SetLabelColor(theme.Text)
+
+		for _, b := range r.batchRenameButtonList() {
+			styleButton(b, theme)
+		}
+
+		// Last, and deliberately after styleList above — see
+		// applyTheme's own identical comment on the Options screen's
+		// two panes just above for why.
+		r.setOptionsPaneFocused(r.batchRenameStepsList, r.batchRenameStepsList.HasFocus())
+		r.setOptionsPaneFocused(r.batchRenameFieldsTable, r.batchRenameFieldsTable.HasFocus())
+
+		// Re-render: both tables' own cell colors are baked in per cell
+		// at render time, not looked up live at draw time.
+		r.renderBatchRenameFields()
+		r.renderBatchRenamePreview()
+	}
+
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.AccentBackground)
 		r.searchLeft.SetBackgroundColor(theme.AccentBackground)
