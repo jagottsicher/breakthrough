@@ -13,6 +13,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/replace"
@@ -281,6 +282,38 @@ type Root struct {
 	sedPreviewProcessed  int
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
+
+	// The Batch Rename screen (see batchrename.go) — the same
+	// steps-list-on-the-left/settings-table-on-the-right shape the
+	// Options screen already establishes (batchRenameStepsList plays
+	// optionsCategories' own role, batchRenameFieldsTable plays
+	// optionsTable's), plus a live preview table and status line
+	// underneath, which Options has no equivalent of.
+	//
+	// batchRenameRules/batchRenameTargets/batchRenameStep are this
+	// open's own working state — reset fresh by openBatchRename every
+	// time, never remembered across opens (see its own doc comment).
+	// batchRenamePendingChanges is what the preview most recently
+	// computed (see renderBatchRenamePreview); batchRenameUndo is what
+	// confirmApplyBatchRename most recently actually applied, kept
+	// around only until undoLastBatchRename consumes it.
+	batchRenameLayout         *tview.Flex
+	batchRenameTitleBar       *tview.TextView
+	batchRenameHint           *tview.TextView
+	batchRenameStepsList      *tview.List
+	batchRenameFieldsTable    *tview.Table
+	batchRenamePreviewTable   *tview.Table
+	batchRenameStatus         *tview.TextView
+	batchRenameButtons        *tview.Flex
+	batchRenameApplyBtn       *tview.Button
+	batchRenameResetBtn       *tview.Button
+	batchRenameCancelBtn      *tview.Button
+	batchRenameInput          *tview.InputField
+	batchRenameStep           int
+	batchRenameRules          batchrename.Rules
+	batchRenameTargets        []string
+	batchRenamePendingChanges []batchrename.Change
+	batchRenameUndo           []batchrename.Change
 
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -913,12 +946,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
 	r.menu.AddItem("sed", "", 0, r.openSedReplace)
-	// Placeholder — see placeholderMenuAction's own doc comment. Sits
-	// beside sed rather than up with plain Rename: this operates on the
-	// checkbox selection with a pattern, the same shape every other
+	// Sits beside sed rather than up with plain Rename: this operates on
+	// the checkbox selection with a pattern, the same shape every other
 	// entry in this section already has, not on a single targeted entry
-	// the way Rename does.
-	r.menu.AddItem("Mass rename", "", 0, r.placeholderMenuAction("Mass rename"))
+	// the way Rename does. See batchrename.go for the screen itself.
+	r.menu.AddItem("Batch rename", "", 0, r.openBatchRename)
+	// "Undo last rename" undoes whatever Batch Rename most recently
+	// actually applied — a plain informational notice (the same
+	// showError-reused channel placeholderMenuAction uses) if there's
+	// nothing to undo, rather than a disabled/hidden entry: this app has
+	// no concept of a disabled menu item.
+	r.menu.AddItem("Undo last rename", "", 0, r.undoLastBatchRename)
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
@@ -1049,6 +1087,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sedLayout = r.newSedLayout()
 	r.sedPreviewLayout = r.newSedPreviewLayout()
 
+	// The Batch Rename screen (see batchrename.go) — built once here,
+	// the same as the Options screen just below; only its contents are
+	// rebuilt per open (see openBatchRename).
+	r.newBatchRenameScreen()
+
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
 	// prompt/propertiesEditField already use.
@@ -1146,6 +1189,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(confirmPage, r.confirmDialog, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	// resize=true: the Batch Rename screen deliberately fills the whole
+	// terminal too, the same reasoning the Options screen's own comment
+	// just below gives.
+	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
+	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.

@@ -70,7 +70,7 @@ func TestContextMenuStructure(t *testing.T) {
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
-		"Mass rename", // placeholder — see placeholderMenuAction
+		"Batch rename", "Undo last rename", // see batchrename.go
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Tabs"),
@@ -134,14 +134,14 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 }
 
 // TestContextMenuPlaceholderItemsShowANotImplementedNotice pins
-// placeholderMenuAction's own behavior for the three reminder-only menu
-// entries (grep, zgrep, Mass rename — see NewRoot's own comments on each)
+// placeholderMenuAction's own behavior for the reminder-only menu
+// entries (grep, zgrep, du, df — see NewRoot's own comments on each)
 // added ahead of the real features they stand in for: selecting one shows
 // a plain notice rather than doing nothing at all, so it reads as "not
 // built yet" instead of a dead, possibly-broken button.
 func TestContextMenuPlaceholderItemsShowANotImplementedNotice(t *testing.T) {
 	dir := fixtureDir(t)
-	for _, label := range []string{"grep", "zgrep", "Mass rename", "du", "df"} {
+	for _, label := range []string{"grep", "zgrep", "du", "df"} {
 		t.Run(label, func(t *testing.T) {
 			r, err := NewRoot(tview.NewApplication(), dir)
 			if err != nil {
