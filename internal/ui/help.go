@@ -140,7 +140,8 @@ var helpText = strings.TrimLeft(`
   Alt+1 ... Alt+0    either modifier, whichever your terminal reports
   Ctrl+Tab           Open the switcher on the next tab; press again to
   Ctrl+Shift+Tab     keep moving, Enter to go there, Escape to stay put
-  F4 / Ctrl+T        Open the switcher without moving off the current tab
+  F4 / Ctrl+T        Open the switcher on the current tab; press again
+                     to walk to the next one
 
   In the switcher: Up/Down picks a tab, Enter or Space goes to it,
   Escape stays put, and the last row opens a new one. Right steps onto
