@@ -147,6 +147,44 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
+	// settingOrigins says, per config key, which tier the value
+	// currently in force actually came from (see config.Origin) — shown
+	// in the Options screen's own origin column, and what gives its
+	// "reset" a visible meaning. Kept updated alongside settings:
+	// persistSetting marks a key as user-set, resetSetting re-reads what
+	// the tier below had.
+	settingOrigins map[string]config.Origin
+
+	// suppressPersist turns persistSetting into a no-op while a value
+	// that already came from disk is being applied — see
+	// applyWithoutPersisting, the only thing that sets it.
+	suppressPersist bool
+
+	// The Options screen (see optionsscreen.go) — a full-screen editor
+	// with the categories down the left (optionsCategories) and the
+	// selected one's settings on the right (optionsTable), the action
+	// buttons beneath them, and optionsLayout stacking the lot.
+	// optionsCategory is the currently selected category's index, kept
+	// across opens so reopening returns to where you were.
+	//
+	// optionsInfo/optionsPicker/optionsInput are the three small windows
+	// it layers on top of itself: a setting's explanation, an enum's
+	// value list, and a one-line editor for a typed value.
+	optionsLayout           *tview.Flex
+	optionsTitleBar         *tview.TextView
+	optionsHint             *tview.TextView
+	optionsCategories       *tview.List
+	optionsTable            *tview.Table
+	optionsButtons          *tview.Flex
+	optionsResetCategoryBtn *tview.Button
+	optionsResetAllBtn      *tview.Button
+	optionsEditFileBtn      *tview.Button
+	optionsNewSchemeBtn     *tview.Button
+	optionsCategory         int
+	optionsInfo             *tview.TextView
+	optionsPicker           *tview.List
+	optionsInput            *tview.InputField
+
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
 	// package keeps meaning the right one without knowing tabs exist.
@@ -243,9 +281,8 @@ type Root struct {
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
 
-	optionsList *tview.List     // Options overlay — see openOptions
-	helpView    *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
-	viewerView  *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
+	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
 	// helpTitleBar/helpLayout are Help's own one-row title bar (see
 	// newHelpTitleBar) and the Flex stacking it over helpView (the same
@@ -339,6 +376,11 @@ type Root struct {
 	// to be live at once, but keeping them as separate fields still
 	// avoids overloading one set of fields with two different meanings
 	// depending on what detailsStat currently is.
+	// detailsDirSizeMeasured names the path the size was actually taken
+	// at, but only when that differs from the selected entry — i.e. the
+	// selection was a symlink and fsops.DirSize resolved it. "" for the
+	// ordinary case of a real directory measuring itself.
+	detailsDirSizeMeasured   string
 	detailsDirSize           *int64
 	detailsDirSizeInProgress bool
 	detailsDirSizeAnimFrame  int
@@ -802,7 +844,7 @@ type Root struct {
 // the Panel, which needs it to move keyboard focus into its header's edit
 // field — see Panel.openEdit.
 func NewRoot(app *tview.Application, path string) (*Root, error) {
-	settings, colorSchemes, configWarnings := loadInitialSettings()
+	settings, settingOrigins, colorSchemes, configWarnings := loadInitialSettings()
 	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
 
 	panel, err := NewPanel(app, path, theme, settings)
@@ -811,13 +853,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	}
 
 	r := &Root{
-		Pages:        tview.NewPages(),
-		app:          app,
-		mouseEnabled: true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
-		panel:        panel,
-		settings:     settings,
-		colorSchemes: colorSchemes,
-		theme:        theme,
+		Pages:          tview.NewPages(),
+		app:            app,
+		mouseEnabled:   true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
+		panel:          panel,
+		settings:       settings,
+		colorSchemes:   colorSchemes,
+		settingOrigins: settingOrigins,
+		theme:          theme,
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -1014,7 +1057,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Options overlay (see openOptions) — same "one shared,
 	// repopulated List" pattern as r.picker above.
-	r.optionsList = r.newOptionsList()
+	r.newOptionsScreen()
 
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
@@ -1102,7 +1145,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(purgeConfirmPage, r.purgeConfirm, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
-	r.AddPage(optionsPage, r.optionsList, false, false)
+	// resize=true: the Options screen deliberately fills the whole
+	// terminal (see optionsscreen.go), unlike every other overlay here,
+	// which is positioned explicitly instead.
+	r.AddPage(optionsPage, r.optionsLayout, true, false)
+	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
+	r.AddPage(optionsPickerPage, r.optionsPicker, false, false)
+	r.AddPage(optionsInputPage, r.optionsInput, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
@@ -1862,7 +1911,16 @@ func (r *Root) showMenu(x, y int) {
 // silently disagreed with it until the next time they were switched to
 // would be a confusing kind of wrong.
 func (r *Root) toggleHidden() {
-	show := !r.panel.showHidden
+	r.setShowHidden(!r.panel.showHidden)
+}
+
+// setShowHidden is toggleHidden's own body with the target value passed
+// in rather than derived by flipping — split out so the Options screen
+// (see optionsscreen.go) can set a specific value through exactly the
+// same path the context menu's own toggle uses, instead of reproducing
+// the "apply to every tab, relabel the menu, persist" sequence a second
+// time and risking the two drifting apart.
+func (r *Root) setShowHidden(show bool) {
 	r.forEachTab(func(p *Panel) {
 		p.showHidden = show
 		r.showError(p.load(p.path))
@@ -1890,7 +1948,12 @@ func hiddenToggleLabel(showHidden bool) string {
 // menu item itself — the same pattern toggleHidden already uses, see its
 // own doc comment for why (dirty labels, dirty defensive re-sync).
 func (r *Root) toggleSizeBytes() {
-	bytes := !r.panel.sizeBytes
+	r.setSizeBytes(!r.panel.sizeBytes)
+}
+
+// setSizeBytes is toggleSizeBytes with the target value passed in — see
+// setShowHidden's own doc comment for why this split exists.
+func (r *Root) setSizeBytes(bytes bool) {
 	r.forEachTab(func(p *Panel) {
 		p.sizeBytes = bytes
 		r.showError(p.load(p.path))
@@ -1913,7 +1976,12 @@ func sizeFormatToggleLabel(sizeBytes bool) string {
 // formatted "YYYY-MM-DD HH:MM:SS" (see Panel.mtimeUnix/
 // formatModTimeCell) — otherwise a copy of toggleSizeBytes.
 func (r *Root) toggleMtimeUnix() {
-	unix := !r.panel.mtimeUnix
+	r.setMtimeUnix(!r.panel.mtimeUnix)
+}
+
+// setMtimeUnix is toggleMtimeUnix with the target value passed in — see
+// setShowHidden's own doc comment for why this split exists.
+func (r *Root) setMtimeUnix(unix bool) {
 	r.forEachTab(func(p *Panel) {
 		p.mtimeUnix = unix
 		r.showError(p.load(p.path))
