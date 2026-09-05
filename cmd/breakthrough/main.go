@@ -71,6 +71,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	explicitDir := startDirWasGiven()
 
 	// EnablePaste turns on tcell's bracketed-paste support: without it, a
 	// terminal paste arrives as a burst of ordinary key events, which for
@@ -90,6 +91,16 @@ func run() error {
 	// own doc comment for why this can't just be read directly from
 	// within internal/ui itself.
 	root.SetVersionInfo(version, commit, date, builtBy)
+
+	// Reopen the tabs the last run left behind (see
+	// Root.RestoreSavedTabs, which additionally honours the restore_tabs
+	// setting). Skipped entirely when a directory was named on the
+	// command line: "breakthrough /some/path" says where to open in
+	// unambiguous terms, and burying that under a restored layout would
+	// be answering a different question than the one asked.
+	if !explicitDir {
+		root.RestoreSavedTabs()
+	}
 
 	// Only meaningful once Application.Run is about to start draining its
 	// update queue — see StartClock's own doc comment for why NewRoot
@@ -247,14 +258,28 @@ func run() error {
 			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlT:
+			// A second keyboard path to the tab switcher, alongside F4
+			// (see Root.TabSwitcherShortcut) — per the user's own
+			// explicit request for a Ctrl combo too, since F-keys aren't
+			// available on every terminal/window-manager combination
+			// either. Not Trash's own key any more: Trash already had a
+			// second, more conventional trigger of its own (the physical
+			// Delete key, matching every mainstream file manager's
+			// convention — see TrashShortcut's own doc comment), which
+			// made Ctrl+T the one genuinely spare binding to repurpose
+			// rather than reaching for a letter that would cost bashLine
+			// a real, working readline feature for nothing already
+			// covered elsewhere.
+			//
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
-			// rather than always consuming the key the way the seven above
-			// do - see Root.AcceptsGlobalShortcut's own doc comment.
+			// rather than always consuming the key the way the seven
+			// furthest above do - see Root.AcceptsGlobalShortcut's own
+			// doc comment.
 			if !root.AcceptsGlobalShortcut() {
 				return event
 			}
-			root.TrashShortcut()
+			root.TabSwitcherShortcut()
 			return nil
 		case tcell.KeyCtrlS:
 			// Falls through while bashLine has focus for the same reason
@@ -314,7 +339,36 @@ func run() error {
 			}
 			root.FetchMetadataShortcut()
 			return nil
+		case tcell.KeyCtrlU:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+D/Ctrl+K above - tview's own TextArea binds Ctrl+U
+			// to "delete the current line" (verified directly against its
+			// source, the same as every claim in this comment block).
+			// Chosen for the Details sidebar's own directory-size section
+			// (see Root.ComputeDirSizeShortcut, internal/ui/
+			// detailssidebar.go) for its "du" mnemonic — one of the few
+			// letters left with any real native TextArea binding still
+			// worth naming precisely rather than reaching for one of the
+			// three already earmarked for Paste/Cut/Undo. Needs to keep
+			// working while Properties specifically is open too, the same
+			// as Ctrl+D/Ctrl+K/Ctrl+N, so it's checked via
+			// BashLineHasFocus alone rather than the full
+			// AcceptsGlobalShortcut.
+			if root.BashLineHasFocus() {
+				return event
+			}
+			root.ComputeDirSizeShortcut()
+			return nil
 		case tcell.KeyTab:
+			// Ctrl+Tab steps through the panel tabs (see
+			// Root.NextTabShortcut); plain Tab keeps its existing
+			// meaning, below. Both arrive as KeyTab — the modifier is
+			// the only thing telling them apart, which is exactly why
+			// this is one case with a check rather than two.
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.NextTabShortcut()
+				return nil
+			}
 			// Only consumed when it actually means something (see
 			// Root.CycleFocusShortcut's own doc comment) - cycling focus
 			// among the panel, the Details sidebar once it's shown, and
@@ -328,9 +382,78 @@ func run() error {
 				return nil
 			}
 			return event
+		case tcell.KeyBacktab:
+			// Ctrl+Shift+Tab, the other direction. tcell folds Shift+Tab
+			// into KeyBacktab and strips ModShift while doing it
+			// (verified directly against its own NewEventKey, and live
+			// against a real terminal), so what arrives here for
+			// Ctrl+Shift+Tab is KeyBacktab still carrying ModCtrl —
+			// which is what distinguishes it from a plain Shift+Tab,
+			// left untouched below.
+			if event.Modifiers()&tcell.ModCtrl != 0 {
+				root.PrevTabShortcut()
+				return nil
+			}
+			return event
+		case tcell.KeyF4:
+			// Opens the tab switcher (see Root.TabSwitcherShortcut's own
+			// doc comment) — the keyboard path that works on every
+			// terminal, including the ones that can't report Ctrl+Tab or
+			// Ctrl+digit at all, or that intercept function keys before
+			// this app ever sees them (see Ctrl+T below, this feature's
+			// second such path for exactly that reason). Continues the
+			// F1/F2/F3 sequence for the same reason F3 did.
+			root.TabSwitcherShortcut()
+			return nil
+		case tcell.KeyRune:
+			// Ctrl+1..Ctrl+9/Ctrl+0 and Alt+1..Alt+9/Alt+0 both jump
+			// straight to a tab by its own number, with …+0 meaning the
+			// tenth — the numbering the tab strip itself shows, per the
+			// user's own explicit request. Two modifiers bound to the
+			// same action because neither is reliable everywhere on its
+			// own — a terminal missing one of them is the whole reason
+			// the other exists here too, not redundancy.
+			//
+			// Ctrl+digit depends on the terminal: the classic control-
+			// code encoding has no room for most Ctrl+digit combinations
+			// (Ctrl+3 is byte-identical to Escape, Ctrl+8 to Delete, and
+			// Ctrl+1/9/0 have no encoding whatsoever), so they only
+			// become distinguishable once one of the enhanced keyboard
+			// protocols is in play — kitty's CSI-u or xterm's
+			// modifyOtherKeys, both of which tcell requests at startup
+			// on any xterm-like terminal, but which several real
+			// terminals (VTE-based ones among them, per a real user
+			// report) simply don't implement.
+			//
+			// Alt+digit instead relies on the older, near-universal
+			// ESC-prefixed "Meta" convention (plain ESC followed by the
+			// key) — verified live, not assumed, the same as the
+			// Ctrl+digit path above. Its own tradeoff: this is
+			// inherently ambiguous with a bare Escape keypress followed
+			// immediately by an unrelated digit, told apart only by
+			// tcell's own short timing heuristic after seeing ESC alone
+			// — the same mechanism vim/tmux already rely on for their
+			// own Alt+key bindings, and an accepted, low-probability
+			// tradeoff per the user's own explicit request to add this
+			// anyway.
+			//
+			// Whichever modifier a given terminal can't report, the
+			// bound one simply never matches this case at all and falls
+			// through exactly as before — which is why binding both
+			// costs nothing where neither is supported. F4 above is the
+			// always-available way to the same feature regardless.
+			if event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) != 0 && event.Rune() >= '0' && event.Rune() <= '9' {
+				n := int(event.Rune() - '0')
+				if n == 0 {
+					n = 10 // …+0 is the tenth tab, continuing the row of digits
+				}
+				root.SwitchToTabShortcut(n)
+				return nil
+			}
+			return event
 		case tcell.KeyCtrlB:
 			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+T/Ctrl+P above - readline-style Ctrl+B is
+			// as Ctrl+S/Ctrl+P above - readline-style Ctrl+B is
 			// "backward-char", and tview's TextArea binds it to its own
 			// PgUp-style movement.
 			if !root.AcceptsGlobalShortcut() {
@@ -350,7 +473,7 @@ func run() error {
 			// what this resolves to on any given terminal.
 			//
 			// Falls through un-consumed while bashLine has focus, the same
-			// as Ctrl+T/Ctrl+P above - otherwise this would eat a plain
+			// as Ctrl+S/Ctrl+P above - otherwise this would eat a plain
 			// forward-delete keystroke while typing a command.
 			if !root.AcceptsGlobalShortcut() {
 				return event
@@ -382,10 +505,33 @@ func run() error {
 // directory, and "breakthrough --debug /some/path" wouldn't find its
 // own path argument at all.
 func startDir() (string, error) {
-	for _, arg := range os.Args[1:] {
-		if !strings.HasPrefix(arg, "-") {
-			return arg, nil
-		}
+	if dir, ok := explicitStartDir(); ok {
+		return dir, nil
 	}
 	return os.Getwd()
+}
+
+// startDirWasGiven reports whether a directory was actually named on the
+// command line, as opposed to startDir having fallen back to the working
+// directory.
+//
+// The distinction matters only to the saved-tab restore (see run): an
+// explicitly named directory suppresses it, while a bare "breakthrough"
+// reopens the previous layout. startDir alone can't answer this — the
+// working directory it falls back to is a perfectly ordinary path, and
+// indistinguishable afterwards from the same path having been typed.
+func startDirWasGiven() bool {
+	_, ok := explicitStartDir()
+	return ok
+}
+
+// explicitStartDir is the argument scan both of the two above share: the
+// first non-flag argument, if there is one.
+func explicitStartDir() (string, bool) {
+	for _, arg := range os.Args[1:] {
+		if !strings.HasPrefix(arg, "-") {
+			return arg, true
+		}
+	}
+	return "", false
 }
