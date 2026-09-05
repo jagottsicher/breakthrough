@@ -32,8 +32,15 @@ import (
 
 // version, commit, date, and builtBy are set via "go build -ldflags -X
 // ..." by the release pipeline (see .goreleaser.yaml, which relies on
-// exactly these four names existing here) — the defaults below are what
-// a plain "go build", with no ldflags at all, reports instead.
+// exactly these four names existing here). builtBy stays "source" for
+// any other build, always accurately — nothing else ever sets it. The
+// other three would likewise stay at these bare, uninformative literals
+// for a plain "go build ./..." too, if applyDevBuildVersion's own init
+// call below didn't step in first: it overwrites version/commit/date
+// from the binary's own embedded VCS info whenever version is still
+// exactly this literal "dev", so a contributor's own ordinary build
+// reports a real commit and dirty-tree flag instead — see version.go
+// for the full reasoning.
 var (
 	version = "dev"
 	commit  = "none"
