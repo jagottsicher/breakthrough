@@ -173,7 +173,12 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		{"^O Options", buttonActionOptions},
 	}
 	if !inTrash {
-		buttons = append(buttons, buttonSpec{"^T Trash", buttonActionTrash})
+		// "Del", not "^T": Trash's own Ctrl-letter binding moved to the
+		// tab switcher (see cmd/breakthrough's own KeyCtrlT case) once
+		// Entf turned out to already cover Trash on its own — labeling
+		// this "^T" now would name a shortcut that no longer does this
+		// any more.
+		buttons = append(buttons, buttonSpec{"Del Trash", buttonActionTrash})
 	}
 	buttons = append(buttons,
 		buttonSpec{trashbinLabel, trashbinAction},
@@ -578,9 +583,10 @@ func (r *Root) acceptsGlobalShortcut() bool {
 }
 
 // AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
-// cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Ctrl+T/Entf (see
-// TrashShortcut in trash.go), Ctrl+B (see TrashbinShortcut), and Ctrl+S
-// (see SedReplaceShortcut) need to decide, before even calling their
+// cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Entf (see
+// TrashShortcut in trash.go), Ctrl+T (see TabSwitcherShortcut in
+// tabs.go), Ctrl+B (see TrashbinShortcut), and Ctrl+S (see
+// SedReplaceShortcut) need to decide, before even calling their
 // own Shortcut method, whether to consume the key at all — unlike the
 // seven above, which always return
 // nil regardless (an accepted, minor imperfection for keys TextArea

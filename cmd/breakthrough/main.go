@@ -258,14 +258,28 @@ func run() error {
 			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlT:
+			// A second keyboard path to the tab switcher, alongside F4
+			// (see Root.TabSwitcherShortcut) — per the user's own
+			// explicit request for a Ctrl combo too, since F-keys aren't
+			// available on every terminal/window-manager combination
+			// either. Not Trash's own key any more: Trash already had a
+			// second, more conventional trigger of its own (the physical
+			// Delete key, matching every mainstream file manager's
+			// convention — see TrashShortcut's own doc comment), which
+			// made Ctrl+T the one genuinely spare binding to repurpose
+			// rather than reaching for a letter that would cost bashLine
+			// a real, working readline feature for nothing already
+			// covered elsewhere.
+			//
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
-			// rather than always consuming the key the way the seven above
-			// do - see Root.AcceptsGlobalShortcut's own doc comment.
+			// rather than always consuming the key the way the seven
+			// furthest above do - see Root.AcceptsGlobalShortcut's own
+			// doc comment.
 			if !root.AcceptsGlobalShortcut() {
 				return event
 			}
-			root.TrashShortcut()
+			root.TabSwitcherShortcut()
 			return nil
 		case tcell.KeyCtrlS:
 			// Falls through while bashLine has focus for the same reason
@@ -325,6 +339,26 @@ func run() error {
 			}
 			root.FetchMetadataShortcut()
 			return nil
+		case tcell.KeyCtrlU:
+			// Falls through while bashLine has focus for the same reason
+			// as Ctrl+D/Ctrl+K above - tview's own TextArea binds Ctrl+U
+			// to "delete the current line" (verified directly against its
+			// source, the same as every claim in this comment block).
+			// Chosen for the Details sidebar's own directory-size section
+			// (see Root.ComputeDirSizeShortcut, internal/ui/
+			// detailssidebar.go) for its "du" mnemonic — one of the few
+			// letters left with any real native TextArea binding still
+			// worth naming precisely rather than reaching for one of the
+			// three already earmarked for Paste/Cut/Undo. Needs to keep
+			// working while Properties specifically is open too, the same
+			// as Ctrl+D/Ctrl+K/Ctrl+N, so it's checked via
+			// BashLineHasFocus alone rather than the full
+			// AcceptsGlobalShortcut.
+			if root.BashLineHasFocus() {
+				return event
+			}
+			root.ComputeDirSizeShortcut()
+			return nil
 		case tcell.KeyTab:
 			// Ctrl+Tab steps through the panel tabs (see
 			// Root.NextTabShortcut); plain Tab keeps its existing
@@ -365,8 +399,10 @@ func run() error {
 			// Opens the tab switcher (see Root.TabSwitcherShortcut's own
 			// doc comment) — the keyboard path that works on every
 			// terminal, including the ones that can't report Ctrl+Tab or
-			// Ctrl+digit at all. Continues the F1/F2/F3 sequence for the
-			// same reason F3 did: no unclaimed Ctrl letter is left.
+			// Ctrl+digit at all, or that intercept function keys before
+			// this app ever sees them (see Ctrl+T below, this feature's
+			// second such path for exactly that reason). Continues the
+			// F1/F2/F3 sequence for the same reason F3 did.
 			root.TabSwitcherShortcut()
 			return nil
 		case tcell.KeyRune:
@@ -417,7 +453,7 @@ func run() error {
 			return event
 		case tcell.KeyCtrlB:
 			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+T/Ctrl+P above - readline-style Ctrl+B is
+			// as Ctrl+S/Ctrl+P above - readline-style Ctrl+B is
 			// "backward-char", and tview's TextArea binds it to its own
 			// PgUp-style movement.
 			if !root.AcceptsGlobalShortcut() {
@@ -437,7 +473,7 @@ func run() error {
 			// what this resolves to on any given terminal.
 			//
 			// Falls through un-consumed while bashLine has focus, the same
-			// as Ctrl+T/Ctrl+P above - otherwise this would eat a plain
+			// as Ctrl+S/Ctrl+P above - otherwise this would eat a plain
 			// forward-delete keystroke while typing a command.
 			if !root.AcceptsGlobalShortcut() {
 				return event

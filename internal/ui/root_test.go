@@ -78,6 +78,7 @@ func TestContextMenuStructure(t *testing.T) {
 		menuSectionLabel("Tools"),
 		"Ping (test)",   // placeholder entry point for the first toolWindow slice — see toolwindow.go
 		"grep", "zgrep", // also placeholders — see placeholderMenuAction
+		"du", "df", // also placeholders — see placeholderMenuAction
 		menuSectionLabel("Globals"),
 		"Hide hidden files",      // dotfiles are shown by default now
 		"Show size in bytes",     // human-readable is the default
@@ -140,7 +141,7 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 // built yet" instead of a dead, possibly-broken button.
 func TestContextMenuPlaceholderItemsShowANotImplementedNotice(t *testing.T) {
 	dir := fixtureDir(t)
-	for _, label := range []string{"grep", "zgrep", "Mass rename"} {
+	for _, label := range []string{"grep", "zgrep", "Mass rename", "du", "df"} {
 		t.Run(label, func(t *testing.T) {
 			r, err := NewRoot(tview.NewApplication(), dir)
 			if err != nil {

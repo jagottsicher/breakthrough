@@ -319,6 +319,32 @@ type Root struct {
 	detailsHashBytesRead  atomic.Int64
 	detailsHashRowStart   int
 
+	// detailsDirSize/InProgress/AnimFrame/Cancel/RowStart are the
+	// directory-size counterpart to detailsHashes/InProgress/AnimFrame/
+	// Cancel/RowStart just above — same on-demand-computation shape
+	// (idle hint until triggered, animated while running, cancelable),
+	// but for a directory's own total size (`du -hs`, see
+	// computeDetailsDirSize) rather than a file's content hashes. No
+	// BytesRead equivalent: du reports one final number, not a running
+	// byte count to animate against the way streaming a file's own bytes
+	// through a hash does.
+	//
+	// A separate copy rather than reusing the hash fields for the same
+	// reason Details' own hash fields are already a separate copy from
+	// Properties' (see the comment above): independent state, this time
+	// because the two are mutually exclusive by content rather than by
+	// which overlay shows them — isDirish(detailsStat) picks exactly one
+	// of "has hashes" or "has a directory size" to ever be relevant for
+	// the current target, so there's no scenario where both would need
+	// to be live at once, but keeping them as separate fields still
+	// avoids overloading one set of fields with two different meanings
+	// depending on what detailsStat currently is.
+	detailsDirSize           *int64
+	detailsDirSizeInProgress bool
+	detailsDirSizeAnimFrame  int
+	detailsDirSizeCancel     context.CancelFunc
+	detailsDirSizeRowStart   int
+
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
 	// turnPDFPage/setPDFViewMode) — viewerPDFPath is "" whenever Look
@@ -877,6 +903,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// demonstrates, just not wired up to actually run one yet.
 	r.menu.AddItem("grep", "", 0, r.placeholderMenuAction("grep"))
 	r.menu.AddItem("zgrep", "", 0, r.placeholderMenuAction("zgrep"))
+	// du/df: also placeholders, deliberately distinct from the real,
+	// already-built `du -hs` single-value hint in the Details sidebar
+	// (see computeDetailsDirSize) — per the user's own explicit request,
+	// these stand for a fuller, interactive command-output view (a whole
+	// toolWindow, the way Ping's own eventual real version will be),
+	// not a duplicate entry point to that same single number.
+	r.menu.AddItem("du", "", 0, r.placeholderMenuAction("du"))
+	r.menu.AddItem("df", "", 0, r.placeholderMenuAction("df"))
 	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
 	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
 	// computed rather than hardcoded literals, so they keep pointing at
@@ -2070,9 +2104,9 @@ func (r *Root) clipboardTargets() []string {
 // selection if there is one, otherwise whichever entry the table's
 // cursor is currently on — the same fallback shape clipboardTargets
 // uses for Copy/Cut, but read directly from the panel's cursor instead
-// of r.target, so it also works for the keyboard-shortcut path (Ctrl+T/
-// Entf, Ctrl+R/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never
-// goes through a right-click that would have set r.target at all.
+// of r.target, so it also works for the keyboard-shortcut path (Entf,
+// Ctrl+R/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never goes
+// through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
 	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
 		return paths

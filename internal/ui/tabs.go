@@ -351,18 +351,22 @@ func (r *Root) NextTabShortcut() { r.stepTabSwitcher(1) }
 func (r *Root) PrevTabShortcut() { r.stepTabSwitcher(-1) }
 
 // TabSwitcherShortcut opens the switcher without moving the selection —
-// F4's own action (see cmd/breakthrough), the keyboard path that works
-// on every terminal.
+// F4's own action, and also Ctrl+T's (see cmd/breakthrough), per the
+// user's own explicit request for a Ctrl combo alongside F4: an F-key
+// isn't available on every terminal/window-manager combination either
+// (some intercept function keys before an application ever sees them),
+// so having only one keyboard path in reserve wasn't enough on its own.
 //
 // Ctrl+Tab and Ctrl+1..Ctrl+0 both depend on the terminal actually
 // reporting the modifier, which needs one of the enhanced keyboard
 // protocols tcell requests at startup (kitty's CSI-u, xterm's
 // modifyOtherKeys). Modern terminals answer; older ones silently don't,
 // and there send a bare Tab or a bare digit that this app can't tell
-// from the unmodified key. F4 is a plain function key with no such
-// dependency, so the feature is always reachable from the keyboard
-// regardless — the same reason F1/F2/F3 exist alongside their own
-// Ctrl-letter neighbours here.
+// from the unmodified key. F4 and Ctrl+T are both a plain single key
+// with no such dependency, so the feature stays reachable from the
+// keyboard even on a terminal that can't report either — the same
+// reason F1/F2/F3 exist alongside their own Ctrl-letter neighbours
+// here.
 // Opening and closing tabs deliberately have no global keybinding of
 // their own: both live inside the switcher this opens (its "New tab" row
 // and Delete — see tabswitcher.go), alongside the context menu's own

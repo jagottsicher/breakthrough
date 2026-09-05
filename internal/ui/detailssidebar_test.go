@@ -638,7 +638,10 @@ func TestRefreshDetailsSidebarShowsPlaceholderForDotDot(t *testing.T) {
 
 // TestDetailsSidebarSkipsHashSectionForDirectory mirrors
 // TestComputeHashesSkipsDirectories (see properties_test.go) for
-// Details: a directory gets no hash hint/section at all.
+// Details: a directory gets no hash hint/section at all — a directory
+// size hint (see the test right below) takes that section's place
+// instead, per the user's own explicit request, rather than the empty
+// space this used to leave there.
 func TestDetailsSidebarSkipsHashSectionForDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -650,11 +653,34 @@ func TestDetailsSidebarSkipsHashSectionForDirectory(t *testing.T) {
 	r.detailsSidebarVisible = true // renderDetailsSidebar itself doesn't check this — showDetailsSidebar already has by the time it's called for real
 
 	text := r.detailsSidebar.GetText(true)
-	if strings.Contains(text, "compute") || strings.Contains(text, "SHA-256") {
+	if strings.Contains(text, "SHA-256") {
 		t.Errorf("a directory's Details sidebar should not offer to compute a hash, got:\n%s", text)
 	}
 	if r.detailsHashRowStart != -1 {
 		t.Errorf("detailsHashRowStart = %d, want -1 (no hash section) for a directory", r.detailsHashRowStart)
+	}
+}
+
+// TestDetailsSidebarShowsDirSizeHintForDirectory is the other half of the
+// test just above: what actually takes the hash section's place for a
+// directory — an idle "press Ctrl+U or click" hint until triggered, the
+// same shape the hash section itself has before Ctrl+K.
+func TestDetailsSidebarShowsDirSizeHintForDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+	r.detailsSidebarVisible = true
+
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, "Ctrl+U") || !strings.Contains(text, "du -hs") {
+		t.Errorf("a directory's Details sidebar should hint at Ctrl+U/du -hs, got:\n%s", text)
+	}
+	if r.detailsDirSizeRowStart < 0 {
+		t.Errorf("detailsDirSizeRowStart = %d, want >= 0 for a directory", r.detailsDirSizeRowStart)
 	}
 }
 
@@ -1119,6 +1145,200 @@ func TestHideDetailsSidebarCancelsInProgressHashComputation(t *testing.T) {
 
 	if r.detailsHashInProgress {
 		t.Error("hiding the sidebar should cancel an in-progress hash computation")
+	}
+}
+
+// isolateDirSize mirrors isolateHashFile's own doc comment exactly —
+// same blocking-fake shape, same LIFO-cleanup-ordering caveat, just for
+// dirSize/fsops.DirSize instead of hashFile/fsops.Hash.
+func isolateDirSize(t *testing.T) <-chan struct{} {
+	t.Helper()
+	original := dirSize
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	dirSize = func(string) (int64, bool) {
+		close(started)
+		<-unblock
+		return 0, false
+	}
+	t.Cleanup(func() {
+		close(unblock)
+		dirSize = original
+	})
+	return started
+}
+
+// TestComputeDetailsDirSizeShowsAnimationImmediately mirrors
+// TestComputeHashesShowsAnimationImmediately for the directory-size
+// section: du can take a real, visible amount of time on a large tree,
+// so this must show a moving "in progress" indicator right away.
+func TestComputeDetailsDirSizeShowsAnimationImmediately(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	started := isolateDirSize(t)
+	t.Cleanup(r.cancelDetailsDirSizeComputation)
+
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+	r.computeDetailsDirSize()
+	<-started // wait for dirSize's one-time read (see isolateDirSize) before this test can safely end
+
+	if !r.detailsDirSizeInProgress {
+		t.Fatal("detailsDirSizeInProgress should be true right after computeDetailsDirSize starts")
+	}
+	text := r.detailsSidebar.GetText(true)
+	if !strings.Contains(text, hashAnimationFrames[0]) || !strings.Contains(text, "Computing size") {
+		t.Errorf("detailsSidebar should show the first animation frame (%q) and \"Computing size\", got:\n%s", hashAnimationFrames[0], text)
+	}
+}
+
+// TestComputeDetailsDirSizeStoresResult pins the render side of the
+// happy path: a computed result shows as a human-readable size, in
+// place of the idle hint. Mirrors TestComputeHashesUpdatesPropertiesText
+// exactly (see its own doc comment on why): computeDetailsDirSize itself
+// only ever *starts* a background computation, and the actual result
+// only ever lands via r.app.QueueUpdateDraw, which nothing here drains
+// (see isolateDirSize's own doc comment) — so this sets detailsDirSize
+// directly and pins renderDetailsSidebar's own handling of it instead.
+func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+
+	before := r.detailsSidebar.GetText(true)
+	if !strings.Contains(before, "Ctrl+U") {
+		t.Errorf("before computing a size, the sidebar should show the hint, got:\n%s", before)
+	}
+
+	size := int64(5 * 1024 * 1024) // 5.0M
+	r.detailsDirSize = &size
+	r.renderDetailsSidebar()
+
+	after := r.detailsSidebar.GetText(true)
+	if !strings.Contains(after, "5.0M") {
+		t.Errorf("detailsSidebar after computing a size should show 5.0M, got:\n%s", after)
+	}
+	if strings.Contains(after, "Ctrl+U") {
+		t.Errorf("detailsSidebar after computing a size should no longer show the hint, got:\n%s", after)
+	}
+}
+
+// TestComputeDetailsDirSizeSkipsNonDirectories mirrors
+// TestComputeHashesSkipsDirectories in reverse: a plain file has hashes,
+// not a directory-size section, so triggering this on one must do
+// nothing.
+func TestComputeDetailsDirSizeSkipsNonDirectories(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	original := dirSize
+	called := false
+	dirSize = func(string) (int64, bool) { called = true; return 0, true }
+	t.Cleanup(func() { dirSize = original })
+
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "apple.txt"))
+
+	r.computeDetailsDirSize()
+
+	if called {
+		t.Error("computeDetailsDirSize ran dirSize against a plain file")
+	}
+	if r.detailsDirSizeInProgress {
+		t.Error("detailsDirSizeInProgress should stay false for a plain file")
+	}
+}
+
+// TestHideDetailsSidebarCancelsInProgressDirSizeComputation mirrors
+// TestHideDetailsSidebarCancelsInProgressHashComputation: an expensive
+// computation running purely for the sidebar's own benefit stops the
+// moment the sidebar itself is hidden again.
+func TestHideDetailsSidebarCancelsInProgressDirSizeComputation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	started := isolateDirSize(t)
+	t.Cleanup(r.cancelDetailsDirSizeComputation)
+
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+	r.computeDetailsDirSize()
+	<-started
+	if !r.detailsDirSizeInProgress {
+		t.Fatal("setup: detailsDirSizeInProgress should be true right after computeDetailsDirSize starts")
+	}
+
+	r.hideDetailsSidebar()
+
+	if r.detailsDirSizeInProgress {
+		t.Error("hiding the sidebar should cancel an in-progress directory-size computation")
+	}
+}
+
+// TestDetailsDirSizeClickZoneTriggersComputation pins the mouse path:
+// clicking the hint row starts the same computation Ctrl+U does.
+func TestDetailsDirSizeClickZoneTriggersComputation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	started := isolateDirSize(t)
+	t.Cleanup(r.cancelDetailsDirSizeComputation)
+
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+	if r.detailsDirSizeRowStart < 0 {
+		t.Fatal("setup: expected a directory-size row")
+	}
+
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	action, _ := r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x, rectY+r.detailsDirSizeRowStart, tcell.Button1, 0))
+	if action != tview.MouseConsumed {
+		t.Fatalf("action = %v, want MouseConsumed", action)
+	}
+	<-started
+
+	if !r.detailsDirSizeInProgress {
+		t.Error("clicking the directory-size hint should start a computation")
+	}
+}
+
+// TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible pins Ctrl+U's own
+// precondition: nothing to compute a size for if Details isn't even
+// showing.
+func TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	original := dirSize
+	called := false
+	dirSize = func(string) (int64, bool) { called = true; return 0, true }
+	t.Cleanup(func() { dirSize = original })
+
+	r.ComputeDirSizeShortcut()
+
+	if called {
+		t.Error("ComputeDirSizeShortcut ran dirSize while Details isn't visible")
 	}
 }
 
