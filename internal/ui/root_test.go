@@ -70,10 +70,15 @@ func TestContextMenuStructure(t *testing.T) {
 		"Select all", "Deselect all", "Select +", "Select -",
 		menuSectionLabel("Commands"),
 		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
+		"Mass rename", // placeholder — see placeholderMenuAction
 		menuSectionLabel("Delete"),
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
+		menuSectionLabel("Tabs"),
+		"New tab", "Close tab", "Switch tab...",
 		menuSectionLabel("Tools"),
-		"Ping (test)", // placeholder entry point for the first toolWindow slice — see toolwindow.go
+		"Ping (test)",   // placeholder entry point for the first toolWindow slice — see toolwindow.go
+		"grep", "zgrep", // also placeholders — see placeholderMenuAction
+		"du", "df", // also placeholders — see placeholderMenuAction
 		menuSectionLabel("Globals"),
 		"Hide hidden files",      // dotfiles are shown by default now
 		"Show size in bytes",     // human-readable is the default
@@ -125,6 +130,51 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("selecting Edit should not report an error here, got: %q", r.errorView.GetText(true))
+	}
+}
+
+// TestContextMenuPlaceholderItemsShowANotImplementedNotice pins
+// placeholderMenuAction's own behavior for the three reminder-only menu
+// entries (grep, zgrep, Mass rename — see NewRoot's own comments on each)
+// added ahead of the real features they stand in for: selecting one shows
+// a plain notice rather than doing nothing at all, so it reads as "not
+// built yet" instead of a dead, possibly-broken button.
+func TestContextMenuPlaceholderItemsShowANotImplementedNotice(t *testing.T) {
+	dir := fixtureDir(t)
+	for _, label := range []string{"grep", "zgrep", "Mass rename", "du", "df"} {
+		t.Run(label, func(t *testing.T) {
+			r, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			r.showMenu(0, 0)
+
+			idx := -1
+			for i := 0; i < r.menu.GetItemCount(); i++ {
+				if main, _ := r.menu.GetItemText(i); main == label {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				t.Fatalf("no %q item found in the context menu", label)
+			}
+
+			r.menu.SetCurrentItem(idx)
+			r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+			if r.activePage != errorPage {
+				t.Fatalf("activePage = %q, want %q (the placeholder notice)", r.activePage, errorPage)
+			}
+			// The error view wraps long lines, so the notice's own text
+			// can arrive with newlines mid-word — collapse whitespace
+			// before checking, the actual wrapping isn't what this test
+			// is about.
+			got := strings.Join(strings.Fields(r.errorView.GetText(true)), " ")
+			if !strings.Contains(got, label) || !strings.Contains(got, "not implemented yet") {
+				t.Errorf("notice = %q, want it to name %q and say \"not implemented yet\"", got, label)
+			}
+		})
 	}
 }
 
