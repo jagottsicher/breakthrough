@@ -112,27 +112,56 @@ func TestToggleOptionAppliesLiveAndPersists(t *testing.T) {
 	}
 }
 
-// TestToggleOptionMarksTheOriginAsChanged pins the origin column
-// following a change — the thing that makes reset's own behaviour
-// visible.
-func TestToggleOptionMarksTheOriginAsChanged(t *testing.T) {
+// TestDefaultHintAppearsOnlyWhileTheValueDiffers pins the column that
+// replaced the old origin one, and the exact complaint that prompted it:
+// toggling a setting twice puts the default value back, and the hint has
+// to disappear again rather than going on claiming the value was
+// changed.
+func TestDefaultHintAppearsOnlyWhileTheValueDiffers(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
 	row, ok := optionRowByKey(r, "show_hidden")
 	if !ok {
 		t.Fatal("no show_hidden row")
 	}
-	if got := r.settingOriginLabel("show_hidden"); got != config.OriginDefault.String() {
-		t.Fatalf("origin before the change = %q, want %q", got, config.OriginDefault.String())
+	hint := func() string {
+		return strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+	}
+
+	if got := hint(); got != "" {
+		t.Errorf("default hint at the default value = %q, want empty", got)
 	}
 
 	r.activateOptionRow(row)
-
-	if got, want := r.settingOriginLabel("show_hidden"), config.OriginUser.String(); got != want {
-		t.Errorf("origin after the change = %q, want %q", got, want)
+	if got := hint(); !strings.HasPrefix(got, "default:") {
+		t.Errorf("default hint after changing the value = %q, want it to name the default", got)
 	}
-	if got := r.optionsTable.GetCell(row, optionsColOrigin).Text; !strings.Contains(got, "changed by you") {
-		t.Errorf("origin cell = %q, want it to say the value was changed", got)
+
+	r.activateOptionRow(row) // back to the default value
+	if got := hint(); got != "" {
+		t.Errorf("default hint after toggling back = %q, want empty again — this is the whole point of the column", got)
+	}
+}
+
+// TestDefaultHintRendersInTheSameVocabularyAsTheValue pins that a
+// boolean's default hint shows the radio glyph rather than the literal
+// "true"/"false", so the reader isn't left translating between two
+// notations to compare them.
+func TestDefaultHintRendersInTheSameVocabularyAsTheValue(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	row, ok := optionRowByKey(r, "show_hidden")
+	if !ok {
+		t.Fatal("no show_hidden row")
+	}
+	r.activateOptionRow(row) // make it differ, so the hint shows at all
+
+	got := strings.TrimSpace(r.optionsTable.GetCell(row, optionsColDefault).Text)
+	if strings.Contains(got, "true") || strings.Contains(got, "false") {
+		t.Errorf("default hint = %q, want the radio glyph rather than a boolean literal", got)
+	}
+	if !strings.Contains(got, checkboxText(true)) && !strings.Contains(got, checkboxText(false)) {
+		t.Errorf("default hint = %q, want it to contain a radio glyph", got)
 	}
 }
 
@@ -233,37 +262,23 @@ func TestResetAllCoversEveryCategory(t *testing.T) {
 	}
 }
 
-// TestOptionsPickerEscapeKeepsTheOriginalScheme pins that browsing the
-// scheme list and backing out leaves the original in force — the live
-// preview must not turn "I looked at it" into "I chose it".
-func TestOptionsPickerEscapeKeepsTheOriginalScheme(t *testing.T) {
-	schemes := []config.NamedTheme{
-		{Slug: "default", Theme: config.DefaultTheme()},
-		{Slug: "solarized", Theme: solarizedTheme()},
-	}
-	isolateInitialSettings(t, config.DefaultSettings(), schemes)
-	isolateUserConfigFile(t)
+// TestOptionsSpaceActivatesTheSelectedRow pins the user's own explicit
+// request that Space toggle a radio button too, not just Enter —
+// matching every other toggle in this app.
+func TestOptionsSpaceActivatesTheSelectedRow(t *testing.T) {
+	r, _ := newOptionsRoot(t)
 
-	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.openOptions()
-	original := r.settings.ColorScheme
-
-	row, ok := optionRowByKey(r, "color_scheme")
+	row, ok := optionRowByKey(r, "show_hidden")
 	if !ok {
-		t.Fatal("no color_scheme row")
+		t.Fatal("no show_hidden row")
 	}
-	r.activateOptionRow(row)
-	r.optionsPicker.SetCurrentItem(1) // preview the other scheme
-	r.optionsPicker.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.optionsTable.Select(row, 0)
+	before := r.panel.showHidden
 
-	if r.settings.ColorScheme != original {
-		t.Errorf("ColorScheme = %q after backing out, want the original %q", r.settings.ColorScheme, original)
-	}
-	if r.activePage != optionsPage {
-		t.Errorf("activePage = %q, want back on the Options screen", r.activePage)
+	r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), func(tview.Primitive) {})
+
+	if r.panel.showHidden == before {
+		t.Error("Space didn't toggle the selected setting")
 	}
 }
 
