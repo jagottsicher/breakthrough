@@ -49,21 +49,21 @@ func (r *Root) inTrash() bool {
 }
 
 // moveSelectionToTrash is the context menu's "Move to Trash", and
-// (through TrashShortcut) Ctrl+T/Entf's action. No confirmation — per
-// this project's own feature notes, moving to the trash is the reversible
+// (through TrashShortcut) Entf's action. No confirmation — per this
+// project's own feature notes, moving to the trash is the reversible
 // action by design, unlike Remove/Empty Trash below. A directory goes in
 // whole, recursively, the same way a plain move always has — there is
 // nothing to warn about since nothing is actually being destroyed yet.
 //
 // Redirects to openRemoveConfirm instead when r.inTrash(): an item
 // that's already in the trash has nowhere sensible left to be "moved to
-// trash" a second time, so this is the one case where Ctrl+T/Entf (and
-// this same context menu entry, still wired here) means Remove instead
-// — its own confirmation dialog is exactly the "are you sure" a second,
+// trash" a second time, so this is the one case where Entf (and this
+// same context menu entry, still wired here) means Remove instead — its
+// own confirmation dialog is exactly the "are you sure" a second,
 // otherwise-silent send-to-trash would need of its own anyway. The
 // button bar hides its own "Trash" button entirely in this state
 // instead of relabeling it (see buildButtonBar) — this redirect is what
-// still fires if Ctrl+T/Entf gets pressed out of habit regardless.
+// still fires if Entf gets pressed out of habit regardless.
 func (r *Root) moveSelectionToTrash() {
 	if r.inTrash() {
 		r.openRemoveConfirm()
@@ -242,18 +242,25 @@ func (r *Root) openEmptyTrashConfirm() {
 	})
 }
 
-// TrashShortcut and PurgeShortcut are Ctrl+T/Entf and Ctrl+R/Ctrl+Entf's
-// global actions (see cmd/breakthrough and acceptsGlobalShortcut). Entf
+// TrashShortcut and PurgeShortcut are Entf and Ctrl+R/Ctrl+Entf's global
+// actions (see cmd/breakthrough and acceptsGlobalShortcut). Entf
 // deliberately triggers the safe action (Trash), not Purge, matching
 // both the physical key's own label and the near-universal file-manager
 // convention (Windows/macOS/GNOME/Total Commander: the bare Delete key is
 // always the reversible one, a modifier is required for the permanent
 // variant). Ctrl+Delete for Purge is best-effort — see cmd/breakthrough's
 // own comment on tcell's modifier-detection caveat; Ctrl+R is the
-// reliable path regardless. Unlike Ctrl+T, Ctrl+R needs no fallthrough
+// reliable path regardless. Unlike Entf, Ctrl+R needs no fallthrough
 // guard at the cmd/breakthrough dispatch level: nothing in bashLine
 // binds it, so it joins Edit/Look/Rename/etc.'s "always consumed, no-op
 // internally if the precondition fails" group instead.
+//
+// Trash no longer has a Ctrl-letter binding of its own at all — Entf
+// already covered it on its own, matching the physical key's own label,
+// which freed Ctrl+T to become a second keyboard path to the tab
+// switcher instead (see cmd/breakthrough's own KeyCtrlT case) per the
+// user's own explicit request, rather than that binding sitting unused
+// as a pure duplicate of a key that already existed.
 func (r *Root) TrashShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.moveSelectionToTrash()
