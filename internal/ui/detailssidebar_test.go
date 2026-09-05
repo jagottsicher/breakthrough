@@ -1224,8 +1224,13 @@ func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
 	r.renderDetailsSidebar()
 
 	after := r.detailsSidebar.GetText(true)
-	if !strings.Contains(after, "5.0M") {
-		t.Errorf("detailsSidebar after computing a size should show 5.0M, got:\n%s", after)
+	// A real, observed bug once had the value flush against the colon
+	// with no space (see this line's own doc comment in
+	// renderDetailsSidebar) — pinned explicitly here, not just via a
+	// bare "5.0M" substring check that a regression like that would
+	// still pass.
+	if !strings.Contains(after, "Size (du -hs): 5.0M") {
+		t.Errorf("detailsSidebar after computing a size should show \"Size (du -hs): 5.0M\", got:\n%s", after)
 	}
 	if strings.Contains(after, "Ctrl+U") {
 		t.Errorf("detailsSidebar after computing a size should no longer show the hint, got:\n%s", after)

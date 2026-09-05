@@ -808,7 +808,14 @@ func (r *Root) renderDetailsSidebar() {
 		case r.detailsDirSizeInProgress:
 			sizeText = hashAnimationFrames[r.detailsDirSizeAnimFrame%len(hashAnimationFrames)] + " Computing size (du -hs)"
 		case r.detailsDirSize != nil:
-			sizeText = infoField("Size (du -hs)", humanSize(*r.detailsDirSize))
+			// Not infoField: its own fixed 13-column label width is
+			// sized for the short, single-word labels every other stat
+			// line uses (Type, Permissions, Owner, ...) — "Size (du
+			// -hs):" is already 14 characters wide on its own, past that
+			// width, so infoField's padding never kicks in at all and
+			// the value lands flush against the colon with no space
+			// (a real, observed bug once the label got this long).
+			sizeText = fmt.Sprintf("Size (du -hs): %s", humanSize(*r.detailsDirSize))
 		default:
 			sizeText = "Press Ctrl+U or click here to compute this directory's total size (du -hs)"
 		}
