@@ -64,6 +64,16 @@ terminal.
   a "+" while only one tab is open. The layout is saved on exit and
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
+- Split view: two of those tabs on screen at once, side by side or
+  stacked. F5 splits and unsplits (F6 flips the arrangement, or set
+  `split_stacked` once and forget it); with a single tab open, F5 opens
+  a second one on the same directory — the usual starting point for
+  copying between two places in one tree. To choose the other pane
+  yourself, the tab list (F4) gives every row a `◫` button, including
+  its "+ New tab" row. Tab, or a click, moves between the panes, and the
+  one you are in keeps the keyboard, the context menu and every
+  shortcut; the highlighted row shows which that is. The split is saved
+  and reopened alongside the tabs.
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),

@@ -331,10 +331,23 @@ func (r *Root) ToggleDetailsSidebarShortcut() {
 func (r *Root) CycleFocusShortcut() bool {
 	stops := r.focusCycleStops()
 	for i, stop := range stops {
-		if stop.HasFocus() {
-			r.app.SetFocus(stops[(i+1)%len(stops)])
+		if !stop.HasFocus() {
+			continue
+		}
+		next := stops[(i+1)%len(stops)]
+
+		// Landing on the other split pane is not just a focus move: that
+		// pane's tab becomes the active one, so everything else in this
+		// package (the context menu, every shortcut, the Details sidebar)
+		// follows the focus across the divider — see split.go's own doc
+		// comment. switchToTab does the focusing itself.
+		if partner, ok := r.splitPartner(); ok && next == r.tabs[partner].table {
+			r.switchToTab(partner)
 			return true
 		}
+
+		r.app.SetFocus(next)
+		return true
 	}
 	return false
 }
@@ -346,6 +359,14 @@ func (r *Root) CycleFocusShortcut() bool {
 // kept, not just membership).
 func (r *Root) focusCycleStops() []tview.Primitive {
 	stops := []tview.Primitive{r.panel.table}
+	// The other split pane comes immediately after the focused one, so
+	// Tab moves between the two panes first and only then out into the
+	// sidebar and any tool windows — crossing the divider is by far the
+	// most frequent move in a two-pane layout, and it should be the
+	// cheapest one.
+	if partner, ok := r.splitPartner(); ok {
+		stops = append(stops, r.tabs[partner].table)
+	}
 	if r.detailsSidebarVisible {
 		stops = append(stops, r.detailsSidebar)
 	}
