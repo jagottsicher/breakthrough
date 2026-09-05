@@ -142,8 +142,12 @@ var helpText = strings.TrimLeft(`
   Ctrl+Shift+Tab     keep moving, Enter to go there, Escape to stay put
   F4 / Ctrl+T        Open the switcher without moving off the current tab
 
-  In the switcher: Enter goes to the highlighted tab, Escape stays put,
-  Delete closes the highlighted tab, and the last row opens a new one.
+  In the switcher: Up/Down picks a tab, Enter or Space goes to it,
+  Escape stays put, and the last row opens a new one. Right steps onto
+  that row's own "✕" button and Enter or Space there closes the tab
+  (Delete does the same from anywhere in the row); the cursor then moves
+  to the row above. The first tab has no "✕" — one tab always stays
+  open.
 
   The numbered strip after the filter box shows the open tabs; the
   highlighted number is the one you're on. Click a number to switch,
