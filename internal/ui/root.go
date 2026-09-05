@@ -167,9 +167,10 @@ type Root struct {
 	// optionsCategory is the currently selected category's index, kept
 	// across opens so reopening returns to where you were.
 	//
-	// optionsInfo/optionsPicker/optionsInput are the three small windows
-	// it layers on top of itself: a setting's explanation, an enum's
-	// value list, and a one-line editor for a typed value.
+	// optionsInfo/optionsInput are the two small windows it layers on
+	// top of itself: a setting's explanation, and a one-line editor for
+	// a typed value. Enum settings need no window of their own —
+	// activating the row cycles them in place (see cycleOptionChoice).
 	optionsLayout           *tview.Flex
 	optionsTitleBar         *tview.TextView
 	optionsHint             *tview.TextView
@@ -182,7 +183,6 @@ type Root struct {
 	optionsNewSchemeBtn     *tview.Button
 	optionsCategory         int
 	optionsInfo             *tview.TextView
-	optionsPicker           *tview.List
 	optionsInput            *tview.InputField
 
 	// panel is the tab the user is currently looking at — repointed by
@@ -1150,7 +1150,6 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// which is positioned explicitly instead.
 	r.AddPage(optionsPage, r.optionsLayout, true, false)
 	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
-	r.AddPage(optionsPickerPage, r.optionsPicker, false, false)
 	r.AddPage(optionsInputPage, r.optionsInput, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
