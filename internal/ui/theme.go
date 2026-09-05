@@ -231,7 +231,6 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// built any of these.
 	if r.optionsCategories != nil {
 		styleList(r.optionsCategories, theme)
-		styleList(r.optionsPicker, theme)
 
 		r.optionsLayout.SetBackgroundColor(theme.AccentBackground)
 		r.optionsButtons.SetBackgroundColor(theme.AccentBackground)
