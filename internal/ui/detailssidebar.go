@@ -245,6 +245,7 @@ func (r *Root) preserveFocusAcross(f func()) {
 // left able to receive it back.
 func (r *Root) hideDetailsSidebar() {
 	r.cancelDetailsHashComputation()
+	r.cancelDetailsDirSizeComputation()
 	hadFocus := r.detailsSidebar.HasFocus()
 	r.preserveFocusAcross(func() { r.HidePage(detailsSidebarPage) })
 	if hadFocus {
@@ -435,6 +436,8 @@ func (r *Root) refreshDetailsIfShowing(oldTarget, newTarget string) {
 // account for.
 func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
+	r.cancelDetailsDirSizeComputation()
+	r.detailsDirSize = nil
 	r.detailsMetadataState = ""
 	r.detailsTarget = path
 	// Adopts Properties' own result immediately if it's already open on
@@ -667,6 +670,7 @@ func (r *Root) renderDetailsSidebar() {
 	r.detailsPreviewRowStart, r.detailsPreviewRowEnd = -1, -1
 	r.detailsMetaRowStart, r.detailsMetaRowEnd = -1, -1
 	r.detailsHashRowStart = -1
+	r.detailsDirSizeRowStart = -1
 
 	if r.detailsTarget == "" {
 		r.detailsSidebar.SetText("(nothing selected)")
@@ -773,7 +777,8 @@ func (r *Root) renderDetailsSidebar() {
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))
 
-	if !isDirish(r.detailsStat) {
+	switch {
+	case !isDirish(r.detailsStat):
 		var hashText string
 		switch {
 		case r.detailsHashInProgress:
@@ -788,6 +793,33 @@ func (r *Root) renderDetailsSidebar() {
 			hashText = hashLines(r.detailsHashes, "Press Ctrl+K or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", innerWidth)
 		}
 		r.detailsHashRowStart, _ = writeSection(hashText)
+
+	default:
+		// A directory (or a symlink resolving to one) has no content of
+		// its own to hash — see isDirish — but a real du-hs-style total
+		// size instead, per the user's own explicit request. On demand,
+		// the same "idle hint until triggered, animated while running"
+		// shape the hash section just above has, for the same reason:
+		// walking a large tree can take a real, visible amount of time,
+		// so this must never run just because the cursor happened to
+		// land on a directory.
+		var sizeText string
+		switch {
+		case r.detailsDirSizeInProgress:
+			sizeText = hashAnimationFrames[r.detailsDirSizeAnimFrame%len(hashAnimationFrames)] + " Computing size (du -hs)"
+		case r.detailsDirSize != nil:
+			// Not infoField: its own fixed 13-column label width is
+			// sized for the short, single-word labels every other stat
+			// line uses (Type, Permissions, Owner, ...) — "Size (du
+			// -hs):" is already 14 characters wide on its own, past that
+			// width, so infoField's padding never kicks in at all and
+			// the value lands flush against the colon with no space
+			// (a real, observed bug once the label got this long).
+			sizeText = fmt.Sprintf("Size (du -hs): %s", humanSize(*r.detailsDirSize))
+		default:
+			sizeText = "Press Ctrl+U or click here to compute this directory's total size (du -hs)"
+		}
+		r.detailsDirSizeRowStart, _ = writeSection(sizeText)
 	}
 
 	r.detailsSidebar.SetText(b.String())
@@ -816,8 +848,20 @@ func (r *Root) computeDetailsHashes() {
 	r.renderDetailsSidebar()
 
 	target := r.detailsTarget
-	go r.animateDetailsHashProgress(ctx)
-	go func() {
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack — onPanic here resets the
+	// same "in progress" state cancelDetailsHashComputation already
+	// resets on the normal completion path just below, so a recovered
+	// panic doesn't leave the sidebar stuck believing a computation is
+	// still running forever.
+	onPanic := func() {
+		r.cancelDetailsHashComputation()
+		r.renderDetailsSidebar()
+	}
+	r.safeGo("Details hash progress animation", onPanic, func() { r.animateDetailsHashProgress(ctx) })
+	r.safeGo("Details hash computation", onPanic, func() {
 		hashes, err := hashFile(ctx, target, r.detailsHashBytesRead.Store)
 		if ctx.Err() != nil {
 			return // superseded before we even got to report anything — see cancelDetailsHashComputation
@@ -836,7 +880,7 @@ func (r *Root) computeDetailsHashes() {
 			// propagateHashResult's own doc comment.
 			r.propagateHashResult(target, hashes)
 		})
-	}()
+	})
 }
 
 // propagateHashResult is the one place computeHashes/computeDetailsHashes
@@ -935,6 +979,123 @@ func (r *Root) cancelDetailsHashComputation() {
 	r.detailsHashInProgress = false
 }
 
+// dirSize is fsops.DirSize, indirected through a package var the same
+// way properties.go's own hashFile is — so a test can substitute a
+// controllable fake (see isolateDirSize in detailssidebar_test.go)
+// instead of waiting on a real `du` invocation to finish naturally,
+// exactly the same reason hashFile exists as a var rather than a direct
+// call.
+var dirSize = fsops.DirSize
+
+// computeDetailsDirSize is Ctrl+U/the directory-size section's own click
+// zone's action — mirrors computeDetailsHashes's own shape (background
+// goroutine, animated progress, cancelable — see its doc comment for the
+// full reasoning on all three), but for fsops.DirSize instead of a
+// content hash, and with no Properties side to coordinate with:
+// Properties never shows a directory's own hash section in the first
+// place (isDirish excludes it there too), so unlike hashes there's no
+// second display anywhere that could ever need this same result mirrored
+// into it.
+//
+// du can genuinely take a while on a large or deep tree — this is
+// exactly why it's on-demand rather than run the instant the cursor
+// lands on a directory, the same restraint computeDetailsHashes already
+// applies to hashing a large file.
+func (r *Root) computeDetailsDirSize() {
+	if r.detailsTarget == "" || !isDirish(r.detailsStat) || r.detailsDirSizeInProgress {
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.detailsDirSizeCancel = cancel
+	r.detailsDirSizeInProgress = true
+	r.detailsDirSizeAnimFrame = 0
+	r.renderDetailsSidebar()
+
+	target := r.detailsTarget
+	// Both wrapped in safeGo (see its own doc comment) for the same
+	// reason computeDetailsHashes's own two goroutines are: a panic in
+	// either one runs detached from Application.Run's own call stack, so
+	// without this it would take the whole process down without even
+	// restoring the terminal. onPanic resets the same "in progress" state
+	// cancelDetailsDirSizeComputation already resets on the normal
+	// completion path just below, so a recovered panic doesn't leave the
+	// sidebar stuck believing a computation is still running forever.
+	onPanic := func() {
+		r.cancelDetailsDirSizeComputation()
+		r.renderDetailsSidebar()
+	}
+	r.safeGo("Details directory size progress animation", onPanic, func() { r.animateDetailsDirSizeProgress(ctx) })
+	r.safeGo("Details directory size computation", onPanic, func() {
+		size, ok := dirSize(target)
+		if ctx.Err() != nil {
+			return // superseded before we even got to report anything — see cancelDetailsDirSizeComputation
+		}
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			r.cancelDetailsDirSizeComputation()
+			if !ok {
+				r.showError(fmt.Errorf("computing the size of %s: du failed or isn't installed", target))
+				return
+			}
+			if r.detailsSidebarVisible && r.detailsTarget == target {
+				r.detailsDirSize = &size
+				r.renderDetailsSidebar()
+			}
+		})
+	})
+}
+
+// animateDetailsDirSizeProgress mirrors animateDetailsHashProgress — see
+// its own doc comment.
+func (r *Root) animateDetailsDirSizeProgress(ctx context.Context) {
+	ticker := time.NewTicker(hashAnimationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
+			r.app.QueueUpdateDraw(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				r.detailsDirSizeAnimFrame++
+				r.renderDetailsSidebar()
+			})
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// cancelDetailsDirSizeComputation mirrors cancelDetailsHashComputation —
+// see its own doc comment. Called once a result arrives, when the target
+// changes (see loadDetailsTarget), and when the sidebar is hidden (see
+// hideDetailsSidebar).
+func (r *Root) cancelDetailsDirSizeComputation() {
+	if r.detailsDirSizeCancel != nil {
+		r.detailsDirSizeCancel()
+		r.detailsDirSizeCancel = nil
+	}
+	r.detailsDirSizeInProgress = false
+}
+
+// ComputeDirSizeShortcut is Ctrl+U's own action — see cmd/breakthrough.
+// Details-only: directories have no equivalent section in Properties to
+// target instead (see computeDetailsDirSize's own doc comment), so
+// unlike ComputeHashesShortcut just below, there's no Properties-vs-
+// Details dispatch to make here — a no-op whenever Details itself isn't
+// even showing.
+func (r *Root) ComputeDirSizeShortcut() {
+	if r.detailsSidebarVisible {
+		r.computeDetailsDirSize()
+	}
+}
+
 // ComputeHashesShortcut is Ctrl+K's own action — see cmd/breakthrough.
 // Also Properties' *only* way to trigger this now (see
 // hashesMouseCapture's own doc comment on why the bare 'h' it used to
@@ -1007,6 +1168,9 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 			// pressing the key would; clicking shouldn't be a second way
 			// to bypass that rule.
 			r.ComputeHashesShortcut()
+			return tview.MouseConsumed, nil
+		case r.detailsDirSizeRowStart >= 0 && row >= r.detailsDirSizeRowStart:
+			r.computeDetailsDirSize()
 			return tview.MouseConsumed, nil
 		}
 		return action, event

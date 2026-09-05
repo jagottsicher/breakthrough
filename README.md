@@ -51,13 +51,26 @@ terminal.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
+- Tabs: several directories open at once in one window, each keeping its
+  own history, filter, sort order, selection and cursor position, so
+  switching away and back leaves everything exactly as it was. `^1`
+  through `^0` (or `Alt+1`...`Alt+0` — bound to the same tabs, for
+  terminals that can't report one or the other) jump straight to a tab,
+  `^Tab`/`^Shift+Tab` step through a switcher showing every tab's full
+  path. F4/`^T` (or the button bar's own "F4 Tabs") opens the same
+  switcher without moving, and works everywhere the others might not. A
+  compact numbered strip sits beside the filter — numbers rather than paths, so
+  the header row's width stays put as you navigate — and shrinks to just
+  a "+" while only one tab is open. The layout is saved on exit and
+  reopened next time, unless a directory was named on the command line
+  or `restore_tabs = false` turns it off.
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
   Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
   glob-pattern Select +/-), Copy/Cut/Paste, chmod, chown, Sed Replace,
   and the trash actions below.
-- Move to Trash / Remove: `^T` or Entf moves the current selection to
+- Move to Trash / Remove: Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `^R`, Ctrl+Entf (best-effort —
   terminal-dependent; `^R` is always the reliable one), or the context
@@ -135,12 +148,12 @@ terminal.
   Properties (`^P`), Search (`^F`, see below), Sed Replace (`^S`),
   toggle hidden files (`^G` — labeled Hide or Unhide, whichever it would
   do next, not whichever state you're currently in), Options (`^O`),
-  Move to Trash (`^T`), Trashbin (`^B`, jumps straight into your own
+  Move to Trash (Entf), Trashbin (`^B`, jumps straight into your own
   trash without needing to know its path), and Remove (`^R`). Two of
   these change with where you are: Trash disappears and Trashbin turns
   into Restore while you're actually browsing the trash itself — moving
   something already in the trash to the trash again doesn't mean
-  anything, so `^T`/Entf there does a Remove instead, with the exact
+  anything, so Entf there does a Remove instead, with the exact
   same confirmation any other Remove has. Each button is also reachable
   from the context menu, and each still works the same way whichever
   panel or field currently has focus, except while the command line
