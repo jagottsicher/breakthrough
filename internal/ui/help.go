@@ -35,6 +35,7 @@ var helpText = strings.TrimLeft(`
                   filename; most terminals also support their own
                   override gesture (often Shift-drag) without needing
                   this, but not everyone knows it
+  F4              Open the tab switcher — see "Tabs" below
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
@@ -51,20 +52,24 @@ var helpText = strings.TrimLeft(`
   Ctrl+D          Toggle the Details sidebar — a read-only, live-
                   updating panel of file info (stat fields; for an
                   image or PDF, a preview with its own click zone/
-                  Ctrl+L for fullscreen; hashes) for whichever entry
-                  is currently selected. The "<" button right after
-                  the filter box expands it the same way; once open,
-                  the ">" button in its own top-right corner collapses
-                  it again
+                  Ctrl+L for fullscreen; hashes, or for a directory, its
+                  total size) for whichever entry is currently selected.
+                  The "<" button right after the filter box expands it
+                  the same way; once open, the ">" button in its own
+                  top-right corner collapses it again
   Ctrl+K          Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512)
                   for Properties if that's open, otherwise the Details
                   sidebar; shown in both at once if both are open on
                   the same file, however it was triggered
   Ctrl+N          Load an image's metadata in the Details sidebar
                   (EXIF etc. — not implemented yet)
+  Ctrl+U          Compute a directory's total size (du -hs) in the
+                  Details sidebar, for whichever directory is currently
+                  selected — on demand, since it can take a real,
+                  visible amount of time on a large tree
   Ctrl+S          Sed Replace on the selected file(s)
   Ctrl+B          Go to Trash — browse it directly
-  Ctrl+T / Delete Move the selection to Trash (reversible); already
+  Delete          Move the selection to Trash (reversible); already
                   inside the trash itself, does a Remove instead —
                   nowhere left to move an already-trashed item to
   Ctrl+R          Remove — permanently delete the selection (asks
@@ -77,10 +82,11 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
                   Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Move to Trash, Remove, Go to
-                  Trash, Restore from Trash, Empty Trash, Ping (test),
-                  and three toggles: hidden files, size format,
-                  modified-time format)
+                  Paste, chown, chmod, sed, Mass rename*, Move to Trash,
+                  Remove, Go to Trash, Restore from Trash, Empty Trash,
+                  New tab, Close tab, Switch tab..., Ping (test), grep*,
+                  zgrep*, du*, df*, and three toggles: hidden files, size
+                  format, modified-time format — *planned, not built yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -95,6 +101,43 @@ var helpText = strings.TrimLeft(`
   and Tab again moves focus back to the panel. A click anywhere in the
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
+
+[::b]Tabs[::-]
+
+  Several directories open at once in the same window, one visible at a
+  time. Each tab keeps its own history, filter, sort order, selection
+  and cursor position — switching away and back leaves everything
+  exactly as you left it.
+
+  Ctrl+1 ... Ctrl+0  Jump straight to that tab (...+0 is the tenth) —
+  Alt+1 ... Alt+0    either modifier, whichever your terminal reports
+  Ctrl+Tab           Open the switcher on the next tab; press again to
+  Ctrl+Shift+Tab     keep moving, Enter to go there, Escape to stay put
+  F4 / Ctrl+T        Open the switcher without moving off the current tab
+
+  In the switcher: Enter goes to the highlighted tab, Escape stays put,
+  Delete closes the highlighted tab, and the last row opens a new one.
+
+  The numbered strip after the filter box shows the open tabs; the
+  highlighted number is the one you're on. Click a number to switch,
+  click "+" for a new tab, click anywhere else in the strip to open the
+  switcher — which lists every tab's full directory, since the numbers
+  themselves deliberately don't say what any tab holds. The context
+  menu's own "Tabs" section reaches New tab, Close tab and the switcher
+  too. With only one tab open the strip is just a "+" — no numbers to
+  show yet, but still the one place to start.
+
+  Ctrl+1...Ctrl+0, Alt+1...Alt+0, and Ctrl+Tab/Ctrl+Shift+Tab each
+  depend on the terminal actually reporting that key combination —
+  most modern terminals report at least one of Ctrl or Alt, some older
+  ones report neither, in which case nothing happens. F4/Ctrl+T, the
+  button bar's own "F4 Tabs", the strip, and the context menu all work
+  regardless of what your terminal can report.
+
+  The open tabs are saved when you quit and reopened next time. Starting
+  breakthrough with an explicit directory ("breakthrough /some/path")
+  opens just that instead; setting "restore_tabs = false" in the config
+  turns the whole thing off.
 
 [::b]Properties dialog[::-]
 

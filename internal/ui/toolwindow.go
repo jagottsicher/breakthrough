@@ -620,15 +620,23 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 
 	r.toolWindows = append(r.toolWindows, tw)
 
-	go func() {
+	// Both wrapped in safeGo (see its own doc comment): a panic in
+	// either one used to take the whole process down without even
+	// restoring the terminal, since neither runs inside
+	// tview.Application.Run's own call stack. No onPanic cleanup beyond
+	// what safeGo already does on its own — a lost output line or a
+	// missing final status line isn't itself a stuck "in progress"
+	// state the way a hash/search/sed computation's is, so there's
+	// nothing further here worth resetting.
+	r.safeGo("tool window output", nil, func() {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
 			line := scanner.Text()
 			r.app.QueueUpdateDraw(func() { tw.appendLine(line) })
 		}
-	}()
+	})
 
-	go func() {
+	r.safeGo("tool window process wait", nil, func() {
 		waitErr := cmd.Wait()
 		_ = pw.Close() // unblocks the scanning goroutine's Read with EOF; io.PipeWriter.Close never fails
 		r.app.QueueUpdateDraw(func() {
@@ -644,7 +652,7 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 				tw.appendStatus(dimTag + "— finished —" + "[-:-:-]")
 			}
 		})
-	}()
+	})
 
 	r.AddPage(id, tw, false, true)
 	r.SendToFront(id)

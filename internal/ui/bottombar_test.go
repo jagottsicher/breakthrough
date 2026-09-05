@@ -323,6 +323,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	wantActions := map[buttonBarAction]string{
 		buttonActionHelp:         "F1 Help",
 		buttonActionRename:       "F2 Rename",
+		buttonActionTabSwitcher:  "F4 Tabs",
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
 		buttonActionProperties:   "^P Properties",
@@ -331,7 +332,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		buttonActionSed:          "^S Sed",
 		buttonActionToggleHidden: "^G Hide", // ShowHidden defaults to true — see config.DefaultSettings
 		buttonActionOptions:      "^O Options",
-		buttonActionTrash:        "^T Trash",
+		buttonActionTrash:        "Del Trash",
 		buttonActionTrashbin:     "^B Trashbin", // not inside the trash — see TestButtonBarSwapsTrashbinForRestoreInsideTrash for that state
 		buttonActionRemove:       "^R Remove",
 	}
@@ -449,7 +450,7 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	if !strings.Contains(text, r.currentUser) {
 		t.Errorf("status bar text should contain the current user %q, got:\n%s", r.currentUser, text)
 	}
-	for _, label := range []string{"^E Edit", "^T Trash", "^R Remove", "^P Properties"} {
+	for _, label := range []string{"^E Edit", "Del Trash", "^R Remove", "^P Properties"} {
 		if strings.Contains(text, label) {
 			t.Errorf("status bar text should no longer contain button label %q, got:\n%s", label, text)
 		}
@@ -507,10 +508,37 @@ func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
 	}
 }
 
-// TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "^T Trash"
-// button (see buildButtonBar/runButtonBarAction) to the same
-// moveSelectionToTrash a right-click menu's "Move to Trash" and Ctrl+T/
-// Entf already run — one action, three ways to reach it.
+// TestCaptureButtonBarMouseTabsClickOpensTheSwitcher pins the "F4 Tabs"
+// button (see buildButtonBar/runButtonBarAction) to the same switcher F4
+// itself opens (see Root.TabSwitcherShortcut) — a mouse alternative for
+// terminals that can't report Ctrl+1..Ctrl+0 or Ctrl+Tab at all, per the
+// user's own explicit request. Direct action, not the shortcut wrapper
+// (see runButtonBarAction's own case for why), so this works regardless
+// of what else currently has focus — unlike TabSwitcherShortcut itself,
+// gated by acceptsGlobalShortcut.
+func TestCaptureButtonBarMouseTabsClickOpensTheSwitcher(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	span, ok := buttonBarSpanFor(r, buttonActionTabSwitcher)
+	if !ok {
+		t.Fatal("no Tabs span found")
+	}
+
+	clickButtonBar(t, r, span.startCol)
+
+	if r.activePage != tabSwitcherPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
+	}
+}
+
+// TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "Del
+// Trash" button (see buildButtonBar/runButtonBarAction) to the same
+// moveSelectionToTrash a right-click menu's "Move to Trash" and Entf
+// already run — one action, three ways to reach it.
 func TestCaptureButtonBarMouseTrashClickMovesFileToTrash(t *testing.T) {
 	dir := fixtureDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())

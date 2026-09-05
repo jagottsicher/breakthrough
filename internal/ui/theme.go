@@ -239,7 +239,15 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Foreground(theme.Text))
 	styleList(r.sedPreviewActions, theme)
 
-	r.panel.applyTheme(theme)
+	styleList(r.tabSwitcher, theme)
+	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
+
+	// Every tab, not just the visible one: a color scheme is as global as
+	// a setting gets, and a background tab still holding the old palette
+	// would repaint jarringly the moment it was switched to. See
+	// Root.forEachTab's own doc comment.
+	r.forEachTab(func(p *Panel) { p.applyTheme(theme) })
 }
 
 // styleButton applies this app's own button look — ButtonBackground
