@@ -376,6 +376,22 @@ func (r *Root) PrevTabShortcut() { r.stepTabSwitcher(-1) }
 // — and one key that reaches all of tab management is easier to remember
 // than three that each do a piece of it.
 func (r *Root) TabSwitcherShortcut() {
+	// Already open: advance to the next tab rather than doing nothing,
+	// per the user's own explicit request — so holding down nothing and
+	// simply pressing the same key again walks the list, with Enter or
+	// Space committing wherever you stop. The same behaviour Ctrl+Tab
+	// already has (see stepTabSwitcher, which this shares), so the two
+	// keys don't need to be learned separately.
+	//
+	// Checked before acceptsGlobalShortcut, not after: that guard treats
+	// any open overlay as a reason to stand down, and the switcher
+	// itself is one — so asking it first would make every press after
+	// the one that opened the list a no-op, which is exactly what it
+	// used to do.
+	if r.activePage == tabSwitcherPage {
+		r.stepTabSwitcher(1)
+		return
+	}
 	if !r.acceptsGlobalShortcut() {
 		return
 	}

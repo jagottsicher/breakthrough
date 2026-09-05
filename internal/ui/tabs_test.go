@@ -1023,3 +1023,102 @@ func TestTabSwitcherIsWideEnoughForTheCloseColumn(t *testing.T) {
 			width, need, widestLabel, widestClose)
 	}
 }
+
+// TestTabSwitcherShortcutStepsWhileOpen pins the user's own explicit
+// request: with the list already open, pressing the same key again picks
+// the next tab rather than doing nothing, so the key walks the list and
+// Enter or Space commits wherever you stop.
+func TestTabSwitcherShortcutStepsWhileOpen(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.newTab(dir)
+	r.switchToTab(0)
+
+	r.TabSwitcherShortcut() // opens, no move
+	if r.activePage != tabSwitcherPage {
+		t.Fatalf("activePage = %q, want the switcher open", r.activePage)
+	}
+	if got := tabSwitcherRow(r); got != 0 {
+		t.Fatalf("opened on row %d, want the current tab's row 0", got)
+	}
+
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 1 {
+		t.Errorf("row after a second press = %d, want 1", got)
+	}
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 2 {
+		t.Errorf("row after a third press = %d, want 2", got)
+	}
+	// Wraps, and never stops on the trailing "New tab" row — stepping
+	// through tabs shouldn't land on something that creates one.
+	r.TabSwitcherShortcut()
+	if got := tabSwitcherRow(r); got != 0 {
+		t.Errorf("row after wrapping = %d, want back to 0", got)
+	}
+
+	// Still on the label column throughout, so Enter/Space commits the
+	// tab rather than hitting a close button.
+	if _, column := r.tabSwitcher.GetSelection(); column != tabSwitcherColLabel {
+		t.Errorf("column = %d, want the label column %d", column, tabSwitcherColLabel)
+	}
+
+	// And committing goes to whatever is selected.
+	r.TabSwitcherShortcut() // -> row 1
+	r.captureTabSwitcherKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if r.activeTab != 1 {
+		t.Errorf("activeTab = %d after committing, want 1", r.activeTab)
+	}
+}
+
+// TestTabSwitcherShortcutStillBlockedByOtherOverlays pins that only the
+// switcher's own page unlocks the stepping path — with Properties open,
+// the shortcut must still stand down rather than swapping the directory
+// out from under it.
+func TestTabSwitcherShortcutStillBlockedByOtherOverlays(t *testing.T) {
+	r, dir, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	r.TabSwitcherShortcut()
+
+	if r.activePage != propertiesPage {
+		t.Errorf("activePage = %q, want %q still open and untouched", r.activePage, propertiesPage)
+	}
+}
+
+// TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen pins the
+// contract cmd/breakthrough's own Ctrl+T dispatch depends on, and the
+// reason a real bug slipped past the tests once already: with the
+// switcher open, AcceptsGlobalShortcut is false — it treats any open
+// overlay as a reason to stand down — yet the shortcut must still act,
+// because that press means "walk to the next tab".
+//
+// The dispatch therefore cannot gate Ctrl+T behind AcceptsGlobalShortcut
+// the way most shortcuts are gated; it checks only BashLineHasFocus and
+// lets TabSwitcherShortcut apply the rest of the rule itself. Guarding it
+// the usual way made every press after the first one a no-op, which the
+// tests missed entirely by calling the method directly rather than
+// through that dispatch.
+func TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)
+	r.switchToTab(0)
+
+	r.TabSwitcherShortcut()
+	if r.activePage != tabSwitcherPage {
+		t.Fatalf("setup: activePage = %q, want the switcher open", r.activePage)
+	}
+	if r.AcceptsGlobalShortcut() {
+		t.Fatal("setup: AcceptsGlobalShortcut should be false with an overlay open — that's the whole point here")
+	}
+
+	before := tabSwitcherRow(r)
+	r.TabSwitcherShortcut()
+
+	if got := tabSwitcherRow(r); got == before {
+		t.Errorf("selection stayed on row %d — the shortcut must still act while the switcher is open, "+
+			"even though AcceptsGlobalShortcut is false", got)
+	}
+}
