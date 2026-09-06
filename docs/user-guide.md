@@ -7,6 +7,7 @@ material, always matching the version you are actually running.
 
 ## Contents
 
+- [The key prefix](#the-key-prefix)
 - [Getting around](#getting-around)
 - [Selecting files](#selecting-files)
 - [Tabs](#tabs)
@@ -23,6 +24,66 @@ material, always matching the version you are actually running.
 - [Options and configuration](#options-and-configuration)
 - [Settings reference](#settings-reference)
 - [Keyboard reference](#keyboard-reference)
+
+---
+
+## The key prefix
+
+`Ctrl+_`, then one letter. The button bar becomes the list of what's
+available the moment you press it:
+
+```
+ ^_  s Split  o Orient  p otherPane  d Details │ t Tabs  n New tab
+     w Close tab │ r Rename  m Mouse  , Options  ? Help │ 1-0 Tab N │ Esc cancel
+```
+
+| Verb | Action | also on |
+|---|---|---|
+| `s` | Split view on/off | `F5` |
+| `o` | Flip split orientation | `F6` |
+| `p` | Jump to the other pane | `Tab` |
+| `d` | Details sidebar | `Ctrl+D` |
+| `t` | Tab switcher | `F4`, `Ctrl+T` |
+| `n` | New tab | — |
+| `w` | Close tab | — |
+| `1`…`0` | Jump straight to tab 1–10 | `Ctrl`/`Alt`+digit |
+| `r` | Rename | `F2` |
+| `m` | Toggle mouse reporting | `F3` |
+| `,` | Options | `Ctrl+O` |
+| `?` | Help | `F1` |
+
+**Why it exists.** On a MacBook, `F1`–`F6` are media keys unless you
+change a system setting, so a feature reachable only by function key is
+a feature a Mac user can't reach. Every entry above is also still on its
+own key — the prefix is a second route, never a replacement.
+
+It also fixes a smaller problem: `Ctrl`+digit needs an enhanced keyboard
+protocol that several terminals don't implement, so jumping to a tab by
+number silently does nothing there. `Ctrl+_ 1` works everywhere.
+
+**Why `Ctrl+_`.** The single-key namespace is genuinely full: four
+`Ctrl`+letter combinations are structurally unavailable in a terminal
+(`Ctrl+I` is Tab, `Ctrl+M` is Enter, `Ctrl+H` is Backspace, `Ctrl+[` is
+Escape — identical bytes, indistinguishable), most of the rest are
+bound, and the remainder are readline keys the command line needs. More
+importantly, no terminal multiplexer claims `Ctrl+_`: tmux takes
+`Ctrl+B`, screen and byobu `Ctrl+A`, dtach and abduco `Ctrl+\`. A
+multiplexer intercepts its own prefix before the application inside ever
+sees the key, so any of those would have been dead weight for anyone
+working inside one.
+
+**How it behaves.**
+
+- The prefix does **nothing on its own**, which is what makes a timeout
+  unnecessary — there's no "did they mean the prefix, or the start of a
+  chord" to resolve by waiting. Take as long as you like.
+- `Escape` cancels, so does pressing `Ctrl+_` again, and so does any key
+  that isn't a verb (which says so rather than failing silently).
+- Every key is consumed while the prefix is waiting, so one keypress can
+  never both pick a verb and trigger its own shortcut.
+- While the command line has focus, `Ctrl+_` is left alone for the
+  shell — the same as every other global shortcut there.
+- Clicking `^_ More` in the button bar opens the same legend.
 
 ---
 
@@ -437,6 +498,7 @@ Every key breakthrough recognizes, with its default:
 | `F4` | Tab switcher |
 | `F5` | Split view on/off |
 | `F6` | Flip split orientation |
+| `Ctrl`+`_` | Key prefix — one letter reaches all of the above, without function keys (see [The key prefix](#the-key-prefix)) |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
 
