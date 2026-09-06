@@ -422,6 +422,25 @@ func run() error {
 			// F1/F2/F3 sequence for the same reason F3 did.
 			root.TabSwitcherShortcut()
 			return nil
+		case tcell.KeyF5:
+			// Split view on/off (see Root.ToggleSplitShortcut) —
+			// continuing the F1..F4 sequence for the same reason F4 did:
+			// a bare function key needs none of the enhanced keyboard
+			// protocols Ctrl+digit/Ctrl+Tab depend on, and every Ctrl
+			// letter left is either already bound here or a readline key
+			// the bash line genuinely needs.
+			root.ToggleSplitShortcut()
+			return nil
+		case tcell.KeyF6:
+			// Flips split view between side by side and stacked (see
+			// Root.SplitOrientationShortcut). Deliberately a key of its
+			// own rather than a third state of F5 above: which
+			// arrangement fits depends on the terminal, so it's a setting
+			// someone picks once — and folding it into the on/off toggle
+			// would mean cycling through a layout you don't want every
+			// time you close the split.
+			root.SplitOrientationShortcut()
+			return nil
 		case tcell.KeyRune:
 			// Ctrl+1..Ctrl+9/Ctrl+0 and Alt+1..Alt+9/Alt+0 both jump
 			// straight to a tab by its own number, with …+0 meaning the

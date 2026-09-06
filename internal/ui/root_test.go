@@ -75,6 +75,7 @@ func TestContextMenuStructure(t *testing.T) {
 		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
 		menuSectionLabel("Tabs"),
 		"New tab", "Close tab", "Switch tab...",
+		"Split view", "Split above/below", // relabelled per state — see splitToggleLabel
 		menuSectionLabel("Tools"),
 		"Ping (test)",   // placeholder entry point for the first toolWindow slice — see toolwindow.go
 		"grep", "zgrep", // also placeholders — see placeholderMenuAction

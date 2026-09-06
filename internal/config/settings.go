@@ -114,6 +114,14 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     /some/path" is an unambiguous instruction about where to open, and
 //     silently reopening yesterday's tabs on top of it would be the
 //     wrong answer to it.
+//   - split_stacked: which way split view divides the window when it's
+//     turned on (see internal/ui's split.go) — false, the default, puts
+//     the two panes side by side; true stacks them above each other.
+//     A stored preference rather than only a live toggle because which
+//     one actually works depends on the terminal it's being used in: a
+//     wide terminal has room for two full listings beside each other, a
+//     short-but-wide one over SSH often doesn't have the rows to spare
+//     for stacking, and neither answer is right for everyone.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -125,6 +133,7 @@ type Settings struct {
 	TrashMaxAgeDays   int
 	TrashQuotaPercent int
 	RestoreTabs       bool
+	SplitStacked      bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -144,6 +153,7 @@ func DefaultSettings() Settings {
 		TrashMaxAgeDays:   30,
 		TrashQuotaPercent: 10,
 		RestoreTabs:       true,
+		SplitStacked:      false,
 	}
 }
 
@@ -190,6 +200,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseInt(&s.TrashQuotaPercent)
 	case "restore_tabs":
 		return parseBool(&s.RestoreTabs)
+	case "split_stacked":
+		return parseBool(&s.SplitStacked)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
