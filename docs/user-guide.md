@@ -373,7 +373,12 @@ timestamps, path), and on demand:
   target's real size, naming what it actually measured.
 
 Images and PDFs get an inline preview with its own click zone for
-fullscreen. `Tab` moves keyboard focus into the sidebar so its own
+fullscreen. Previews load in the background and only once the cursor has
+rested briefly, so holding an arrow key through a directory costs
+nothing: each row passed over cancels the one before it, and for a PDF
+that cancellation kills the `pdftoppm` subprocess rather than leaving it
+running. Only the stat block is read synchronously — one syscall, and
+it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
 
