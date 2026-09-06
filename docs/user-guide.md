@@ -342,7 +342,11 @@ Read-only, full-screen.
   200 languages, with no external dependency. Files larger than 8 MiB
   show their first 8 MiB rather than loading entirely.
 - **Images** (PNG, JPEG, GIF, BMP, TIFF, WebP) render in the terminal,
-  decoded and scaled in pure Go.
+  decoded and scaled in pure Go. Anything past 50 megapixels is refused
+  with a note saying so, rather than spending seconds and hundreds of
+  megabytes decoding a picture the terminal shows a few hundred
+  characters of — the size is read from the header, so the refusal is
+  free.
 - **PDFs** open page by page: as real rendered images where
   [poppler-utils](https://poppler.freedesktop.org/)' `pdftoppm` is
   installed, as extracted text otherwise. `PageUp`/`PageDown` turn
@@ -373,7 +377,12 @@ timestamps, path), and on demand:
   target's real size, naming what it actually measured.
 
 Images and PDFs get an inline preview with its own click zone for
-fullscreen. `Tab` moves keyboard focus into the sidebar so its own
+fullscreen. Previews load in the background and only once the cursor has
+rested briefly, so holding an arrow key through a directory costs
+nothing: each row passed over cancels the one before it, and for a PDF
+that cancellation kills the `pdftoppm` subprocess rather than leaving it
+running. Only the stat block is read synchronously — one syscall, and
+it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
 

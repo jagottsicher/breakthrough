@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -250,7 +251,7 @@ func TestRasterizePDFPageWithRealPdftoppm(t *testing.T) {
 	dir := t.TempDir()
 	path := writePDFFixture(t, dir, "doc.pdf", "Hello PDF rasterized")
 
-	img, format, err := rasterizePDFPage(path, 1)
+	img, format, err := rasterizePDFPage(context.Background(), path, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,5 +338,34 @@ func TestExtractPDFPageTextSurvivesAMalformedFile(t *testing.T) {
 				t.Error("expected an error for a malformed file, got none")
 			}
 		})
+	}
+}
+
+// TestLoadPDFPageContextHonoursCancellation pins the wiring that makes
+// abandoning a preview actually free: rasterizing runs pdftoppm as a
+// subprocess, and a context that only guarded the *result* would leave
+// that process running to completion. A caller that drops previews as a
+// cursor moves would then accumulate one pdftoppm per file it passed
+// over — the stall gone from the screen and still there on the machine.
+//
+// exec.CommandContext is what kills it; with a plain exec.Command this
+// returns a rendered page instead of an error.
+func TestLoadPDFPageContextHonoursCancellation(t *testing.T) {
+	requireTool(t, "pdftoppm")
+	dir := t.TempDir()
+	path := writePDFFixture(t, dir, "doc.pdf", "cancel me")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already dead before the subprocess is even started
+
+	// Graphic mode reports a failed rasterize as KindUnsupported rather
+	// than an error (see LoadPDFPageContext), so what proves the
+	// subprocess was actually killed is the absence of an image.
+	result, err := LoadPDFPageContext(ctx, path, 1, PDFViewGraphic)
+	if err != nil {
+		t.Fatalf("LoadPDFPageContext: %v", err)
+	}
+	if result.Kind == KindImage {
+		t.Error("a cancelled context still produced a rendered page — pdftoppm ran to completion")
 	}
 }

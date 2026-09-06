@@ -397,8 +397,15 @@ type Root struct {
 	detailsHashInProgress bool
 	detailsHashAnimFrame  int
 	detailsHashCancel     context.CancelFunc
-	detailsHashBytesRead  atomic.Int64
-	detailsHashRowStart   int
+
+	// detailsPreviewCancel stops the image/PDF preview load for a target
+	// the cursor has already moved off (see startDetailsPreview). That
+	// work is the expensive part of showing an entry — decoding an
+	// image, and for a PDF running pdftoppm as a subprocess — and it
+	// used to happen synchronously, on the UI goroutine, once per row.
+	detailsPreviewCancel context.CancelFunc
+	detailsHashBytesRead atomic.Int64
+	detailsHashRowStart  int
 
 	// detailsDirSize/InProgress/AnimFrame/Cancel/RowStart are the
 	// directory-size counterpart to detailsHashes/InProgress/AnimFrame/
