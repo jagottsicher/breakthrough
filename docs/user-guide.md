@@ -100,6 +100,29 @@ like a real directory, and returning to one restores the cursor row you
 left it on. A search's results come back as they were, rather than being
 re-run.
 
+### Column widths
+
+Size and Modified are sized from what they actually contain, and never
+truncated — a clipped number or half a timestamp tells you nothing, and
+there is no way to tell one from a real value. Human-readable sizes need
+six columns, exact byte counts as many as the largest file needs, a Unix
+timestamp ten, a full date and time nineteen; switching either format
+reflows the columns straight away and hands the difference to the name.
+
+If the header no longer fits, the *header* abbreviates — "Modify time
+(mtime)" becomes "Modified", then "Time" — because the label still says
+what the column is where a cut-off value would not.
+
+The name column takes whatever is left, and is the one thing shortened
+when there isn't enough: with a middle ellipsis, so both the start (which
+distinguishes it from its neighbours) and the extension survive —
+`annual-report-2026-final.pdf` becomes `annual-re…final.pdf`. A
+directory's trailing `/` and a symlink's `-> target` are kept whole where
+they can be, since they say what kind of entry it is.
+
+This matters most in [split view](#split-view), where each pane is half
+the width.
+
 Sort by clicking a column heading (Name, Size, Modified). The filter box
 in the top row narrows the listing as you type; its own button switches
 between glob and regular-expression matching.
