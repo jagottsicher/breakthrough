@@ -52,8 +52,8 @@ terminal.
   content needs — six columns for human-readable sizes, ten for a Unix
   timestamp, nineteen for a full date — and the name column absorbs the
   difference. Switching either format reflows them immediately, and the
-  column header abbreviates itself ("Modify time (mtime)" → "Modified" →
-  "Time") rather than letting a value be cut. When something has to give
+  column header is simply "mtime", short enough never to constrain the
+  column. When something has to give
   it is the filename, shortened in the middle (`annual-re…final.pdf`) so
   both the identifying start and the extension survive. This matters most
   in split view, where each pane is half as wide: before, Size collapsed

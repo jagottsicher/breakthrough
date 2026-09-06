@@ -109,9 +109,13 @@ six columns, exact byte counts as many as the largest file needs, a Unix
 timestamp ten, a full date and time nineteen; switching either format
 reflows the columns straight away and hands the difference to the name.
 
-If the header no longer fits, the *header* abbreviates — "Modify time
-(mtime)" becomes "Modified", then "Time" — because the label still says
-what the column is where a cut-off value would not.
+The modification column's header is just "mtime" — the word anyone
+working at a shell already uses, and short enough to fit whichever
+format the column is in, so it never costs the name column room. Where a
+label genuinely is too long for its data (the trash's own "Deletion
+time" beside a column of Unix timestamps), the *label* abbreviates
+rather than the value, because a shortened label still says what the
+column is where a cut-off timestamp would not.
 
 The name column takes whatever is left, and is the one thing shortened
 when there isn't enough: with a middle ellipsis, so both the start (which

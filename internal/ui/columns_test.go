@@ -122,18 +122,34 @@ func TestComputeColumnLayoutShrinksWithTheFormat(t *testing.T) {
 	}
 }
 
-// TestComputeColumnLayoutAbbreviatesTheHeaderRatherThanTheData pins the
-// other half of that: the full "Modify time (mtime)" label is 19
-// columns, so in timestamp mode it cannot fit a 10-column column — and
-// it is the *label* that gives way.
+// TestComputeColumnLayoutModHeaderIsAlwaysMtime pins the label itself:
+// short enough that it fits every format the column can be in, so it
+// never costs the name column room.
+func TestComputeColumnLayoutModHeaderIsAlwaysMtime(t *testing.T) {
+	for _, widestMod := range []int{10, 19} { // timestamp, formatted
+		layout := computeColumnLayout(120, 6, widestMod, false, false, false)
+		if layout.modHeader != "mtime" {
+			t.Errorf("data width %d: header = %q, want %q", widestMod, layout.modHeader, "mtime")
+		}
+		if layout.mod != widestMod {
+			t.Errorf("data width %d: column = %d, want the data's own width — the label is never the constraint",
+				widestMod, layout.mod)
+		}
+	}
+}
+
+// TestComputeColumnLayoutAbbreviatesTheHeaderRatherThanTheData pins that
+// the variant mechanism still works where it is actually needed: the
+// trash's own "Deletion time" is genuinely too long for a column of
+// Unix timestamps, and it is the *label* that gives way, never the data.
 func TestComputeColumnLayoutAbbreviatesTheHeaderRatherThanTheData(t *testing.T) {
-	layout := computeColumnLayout(120, 6, 10, false, false, false)
+	layout := computeColumnLayout(120, 6, 10, true, false, false)
 
 	if layout.mod < 10 {
 		t.Errorf("mod column = %d, want at least the 10 columns a timestamp needs", layout.mod)
 	}
-	if layout.modHeader == "Modify time (mtime)" {
-		t.Error("the full header can't fit 10 columns — a shorter variant should have been picked")
+	if layout.modHeader == "Deletion time" {
+		t.Error("the full label can't fit 10 columns — a shorter variant should have been picked")
 	}
 	if utf8.RuneCountInString(layout.modHeader) > layout.mod {
 		t.Errorf("header %q (%d) doesn't fit its own column (%d)",
@@ -156,7 +172,8 @@ func TestComputeColumnLayoutLeavesRoomForTheSortArrow(t *testing.T) {
 
 // TestComputeColumnLayoutInTheTrashUsesTheDeletionLabel pins that
 // browsing the trash keeps its own column name through the abbreviation
-// logic rather than reverting to "Modified", which would be wrong there.
+// logic rather than reverting to the modification-time label, which
+// would be plainly wrong there.
 func TestComputeColumnLayoutInTheTrashUsesTheDeletionLabel(t *testing.T) {
 	wide := computeColumnLayout(120, 6, 19, true, false, false)
 	if wide.modHeader != "Deletion time" {

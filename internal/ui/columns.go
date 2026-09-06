@@ -55,8 +55,15 @@ const fixedColumnsWidth = 3 + 2 + 7
 // hold it (see columnLayout).
 //
 // Abbreviating the header rather than the data is the same principle as
-// shortening the name rather than the numbers: "Modified" and "Time"
-// still say what the column is, where "2026-09-0" says nothing.
+// shortening the name rather than the numbers: a shortened label still
+// says what the column is, where "2026-09-0" says nothing.
+//
+// The modification column is simply "mtime", per the user's own
+// explicit request — the word everyone working at a shell already uses
+// for it, and short enough to fit whichever format the column is in, so
+// it never costs the name column a single column of room. The variant
+// mechanism still earns its keep for the trash's own label, which is
+// genuinely too long for a column of Unix timestamps.
 func sizeHeaderVariants() []string {
 	return []string{"Size"}
 }
@@ -64,9 +71,12 @@ func sizeHeaderVariants() []string {
 func modHeaderVariants(trashView bool) []string {
 	if trashView {
 		// See onDescribeRows: browsing the trash relabels this column.
+		// Not "mtime" — what's shown there is when the item was deleted,
+		// not when it was last modified, and saying otherwise would be
+		// plainly wrong rather than merely terse.
 		return []string{"Deletion time", "Deleted", "Del"}
 	}
-	return []string{"Modify time (mtime)", "Modified", "Time"}
+	return []string{"mtime"}
 }
 
 // columnLayout is how wide each variable column should be for one
