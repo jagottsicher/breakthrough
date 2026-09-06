@@ -544,6 +544,10 @@ func TestApplySortPreferenceTiesBreakByName(t *testing.T) {
 	}
 }
 
+// TestFormatSizeCell pins that these render the value and nothing else.
+// They used to pad to a fixed 14/21 columns; the width is now decided
+// per render from what the listing actually holds (see columns.go), and
+// padding here as well would double it.
 func TestFormatSizeCell(t *testing.T) {
 	tests := []struct {
 		size      int64
@@ -552,14 +556,11 @@ func TestFormatSizeCell(t *testing.T) {
 	}{
 		{2184, false, humanSize(2184)},
 		{2184, true, "2184"},
+		{0, false, "0B"},
 	}
 	for _, tt := range tests {
-		got := formatSizeCell(tt.size, tt.bytesMode)
-		if len([]rune(got)) != sizeColumnWidth {
-			t.Errorf("formatSizeCell(%d, %v) = %q, width %d, want %d", tt.size, tt.bytesMode, got, len([]rune(got)), sizeColumnWidth)
-		}
-		if strings.TrimSpace(got) != tt.want {
-			t.Errorf("formatSizeCell(%d, %v) = %q, want (trimmed) %q", tt.size, tt.bytesMode, got, tt.want)
+		if got := formatSizeCell(tt.size, tt.bytesMode); got != tt.want {
+			t.Errorf("formatSizeCell(%d, %v) = %q, want %q (unpadded)", tt.size, tt.bytesMode, got, tt.want)
 		}
 	}
 }
@@ -567,20 +568,32 @@ func TestFormatSizeCell(t *testing.T) {
 func TestFormatModTimeCell(t *testing.T) {
 	when := time.Date(2026, time.August, 19, 9, 12, 3, 0, time.Local)
 
-	formatted := formatModTimeCell(when, false)
-	if len([]rune(formatted)) != modColumnWidth {
-		t.Errorf("formatted width = %d, want %d", len([]rune(formatted)), modColumnWidth)
+	if got := formatModTimeCell(when, false); got != "2026-08-19 09:12:03" {
+		t.Errorf("formatted = %q, want %q (unpadded)", got, "2026-08-19 09:12:03")
 	}
-	if strings.TrimSpace(formatted) != "2026-08-19 09:12:03" {
-		t.Errorf("formatModTimeCell(formatted) = %q, want %q", formatted, "2026-08-19 09:12:03")
+	if got, want := formatModTimeCell(when, true), strconv.FormatInt(when.Unix(), 10); got != want {
+		t.Errorf("unix = %q, want %q (unpadded)", got, want)
+	}
+}
+
+// TestMeasureDataColumnsIgnoresTheParentRow pins that "..", which has no
+// size or time of its own, doesn't drag a zero value into the widths —
+// its rowRef carries zeroes that would render as "0B" and a year-1
+// timestamp.
+func TestMeasureDataColumnsIgnoresTheParentRow(t *testing.T) {
+	when := time.Date(2026, time.August, 19, 9, 12, 3, 0, time.Local)
+	refs := []rowRef{
+		{checkable: false},                           // ".."
+		{checkable: true, size: 2184, modTime: when}, // 2.1K
 	}
 
-	unix := formatModTimeCell(when, true)
-	if len([]rune(unix)) != modColumnWidth {
-		t.Errorf("unix width = %d, want %d", len([]rune(unix)), modColumnWidth)
+	size, mod := measureDataColumns(refs, false, false)
+
+	if want := len(humanSize(2184)); size != want {
+		t.Errorf("widest size = %d, want %d", size, want)
 	}
-	if strings.TrimSpace(unix) != strconv.FormatInt(when.Unix(), 10) {
-		t.Errorf("formatModTimeCell(unix) = %q, want %q", unix, strconv.FormatInt(when.Unix(), 10))
+	if mod != len("2026-08-19 09:12:03") {
+		t.Errorf("widest mod = %d, want %d", mod, len("2026-08-19 09:12:03"))
 	}
 }
 
