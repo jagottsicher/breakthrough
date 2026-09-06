@@ -2515,8 +2515,14 @@ func TestPropertiesOpensOnTheRowItIsAbout(t *testing.T) {
 	if gotY != wantY {
 		t.Errorf("Properties y = %d, want the target row's own %d", gotY, wantY)
 	}
-	if gotX != wantX {
-		t.Errorf("Properties x = %d, want the target row's own %d (panel starts at %d)", gotX, wantX, panelX)
+	// x is checked as a range, not an exact match: clampToPanel pulls the
+	// window left when it would otherwise overflow the panel, and how
+	// wide it is depends on the content — owner and group names differ
+	// between machines, which is exactly how this first failed, on macOS
+	// only. The regression this test exists for was y, which is exact
+	// above.
+	if gotX > wantX || gotX < panelX {
+		t.Errorf("Properties x = %d, want between the panel's own %d and the target row's %d", gotX, panelX, wantX)
 	}
 }
 
