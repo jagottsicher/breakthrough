@@ -48,6 +48,16 @@ terminal.
   working symlink to a file, orange for a socket/FIFO/device, magenta
   for a recognized archive extension, and a dim gray for a dotfile/
   dotdir (unless one of the other cases above already applies).
+- Columns that never lie: Size and Modified take exactly the width their
+  content needs — six columns for human-readable sizes, ten for a Unix
+  timestamp, nineteen for a full date — and the name column absorbs the
+  difference. Switching either format reflows them immediately, and the
+  column header is simply "mtime", short enough never to constrain the
+  column. When something has to give
+  it is the filename, shortened in the middle (`annual-re…final.pdf`) so
+  both the identifying start and the extension survive. This matters most
+  in split view, where each pane is half as wide: before, Size collapsed
+  to `…` and Modified disappeared off the right edge entirely.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
