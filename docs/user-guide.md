@@ -41,7 +41,7 @@ available the moment you press it:
 |---|---|---|
 | `s` | Split view on/off | `F5` |
 | `o` | Flip split orientation | `F6` |
-| `p` | Jump to the other pane | `Tab` |
+| `p` | Switch to the other pane | `Tab`, a click |
 | `d` | Details sidebar | `Ctrl+D` |
 | `t` | Tab switcher | `Ctrl+T` |
 | `n` | New tab | — |

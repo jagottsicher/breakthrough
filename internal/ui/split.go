@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/rivo/tview"
@@ -381,6 +382,21 @@ func (r *Root) splitWithNewTab() {
 		return
 	}
 	r.enterSplit(created)
+}
+
+// switchPaneOrExplain is the prefix's own "Switch pane" verb: move to
+// the other pane, or say why there isn't one.
+//
+// Saying so matters more here than for most verbs. Split view is the
+// precondition, it is not obvious from a single pane that the key even
+// needs one, and a key that silently does nothing reads as broken
+// rather than as inapplicable — the same reason an unrecognized prefix
+// key names itself instead of failing quietly.
+func (r *Root) switchPaneOrExplain() {
+	if r.FocusOtherPane() {
+		return
+	}
+	r.showError(fmt.Errorf("there is no other pane — press Ctrl+_ s (or F5) to split the window first"))
 }
 
 // FocusOtherPaneShortcut moves keyboard focus to the other pane, which
