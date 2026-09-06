@@ -130,3 +130,47 @@ func TestSafeGoRecoversPanicWithoutCrashingProcess(t *testing.T) {
 		t.Errorf("crash log is missing the expected task name/panic value, got:\n%s", got)
 	}
 }
+
+// TestReportPanicWritesTheCrashLog pins the one thing that made a real,
+// regularly-reproducible crash impossible to act on: a panic on the main
+// goroutine left no evidence at all, because nothing recovered it and
+// nothing wrote it down (see ReportPanic's own doc comment).
+func TestReportPanicWritesTheCrashLog(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	path := ReportPanic("main", "something went wrong")
+
+	if path == "" {
+		t.Fatal("ReportPanic reported no log path")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the crash log: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "something went wrong") {
+		t.Errorf("crash log doesn't name the panic:\n%s", got)
+	}
+	if !strings.Contains(got, `panic in "main"`) {
+		t.Errorf("crash log doesn't say where it came from:\n%s", got)
+	}
+	if !strings.Contains(got, "goroutine ") {
+		t.Errorf("crash log has no stack trace — the part that makes it useful:\n%s", got)
+	}
+}
+
+// TestReportPanicSurvivesAnUnwritableStateDir pins that the reporter
+// can't itself become the crash: it runs from inside a panic-recovery
+// path, where a second failure would replace a diagnosable report with
+// nothing at all.
+func TestReportPanicSurvivesAnUnwritableStateDir(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/proc/nonexistent-and-unwritable")
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("ReportPanic panicked instead of degrading: %v", rec)
+		}
+	}()
+	ReportPanic("main", "boom")
+}

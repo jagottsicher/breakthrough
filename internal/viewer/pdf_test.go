@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -271,5 +272,70 @@ func requireTool(t *testing.T, name string) {
 	t.Helper()
 	if _, err := exec.LookPath(name); err != nil {
 		t.Skipf("%s not available in this environment: %v", name, err)
+	}
+}
+
+// malformedPDFs writes a set of files that get far enough into
+// ledongthuc/pdf to reach its lexer, and returns their paths.
+//
+// Padded past 100 bytes deliberately: the library reads the last 100
+// bytes to find "%%EOF", so anything shorter is rejected up front with
+// a clean error and never exercises the code that actually panics.
+func malformedPDFs(t *testing.T) []string {
+	t.Helper()
+	dir := t.TempDir()
+	pad := "% " + strings.Repeat("padding past the 100-byte tail window ", 3) + "\n"
+
+	files := map[string]string{
+		// startxref pointing past the end of the file — reading there
+		// panics inside the library's own buffer.
+		"bogus-offset.pdf": "%PDF-1.5\n" + pad + "trailer\n<< >>\nstartxref\n99999\n%%EOF\n",
+		// An "object" that is really the xref keyword, the shape that
+		// crashed a real user (see withPDFRecover).
+		"xref-keyword.pdf": "%PDF-1.5\n1 0 xref\n" + pad + "trailer\n<< /Size 2 >>\nstartxref\n9\n%%EOF\n",
+		"garbage.pdf":      "%PDF-1.7\n" + pad + "\x00\x01\x02\xff\xfe trailer startxref 12 \n%%EOF\n",
+	}
+
+	var paths []string
+	for name, content := range files {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// TestPDFPageCountSurvivesAMalformedFile is a regression test for a
+// crash that killed breakthrough for a real user: ledongthuc/pdf
+// reports malformed input by panicking rather than returning an error,
+// and the Details sidebar calls this for whatever the cursor is on — so
+// arrowing past a broken PDF took the whole application down from
+// inside tview's input handler.
+//
+// Removing withPDFRecover makes this fail with a panic, not a failed
+// assertion.
+func TestPDFPageCountSurvivesAMalformedFile(t *testing.T) {
+	for _, path := range malformedPDFs(t) {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			count, err := PDFPageCount(path)
+			if err == nil {
+				t.Errorf("got %d pages and no error — a malformed file should report one", count)
+			}
+		})
+	}
+}
+
+// TestExtractPDFPageTextSurvivesAMalformedFile covers the other route
+// into the same library. Its lexer is used lazily when pages and text
+// are read, so a file that opened cleanly can still panic here.
+func TestExtractPDFPageTextSurvivesAMalformedFile(t *testing.T) {
+	for _, path := range malformedPDFs(t) {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			if _, err := extractPDFPageText(path, 1); err == nil {
+				t.Error("expected an error for a malformed file, got none")
+			}
+		})
 	}
 }

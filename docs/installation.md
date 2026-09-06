@@ -238,6 +238,14 @@ bottom takes priority over global shortcuts while it has focus, since it
 needs those same keys for readline-style editing. Press `Escape` or
 click the panel to get out of it.
 
+**breakthrough crashed.** It writes a full report to
+`~/.local/state/breakthrough/crash.log` — the panic, and every
+goroutine's stack — and prints the same thing to the terminal before
+exiting. Please attach that file to a bug report; it is the difference
+between a fixable crash and an unreproducible one. Adding `--debug`
+additionally captures anything else the program writes to stderr for
+that run.
+
 **A setting won't stick.** breakthrough writes to
 `~/.config/breakthrough/config`; if `$XDG_CONFIG_HOME` points somewhere
 unwritable, the save is reported as an error but the value still applies
