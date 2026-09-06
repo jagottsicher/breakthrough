@@ -79,7 +79,15 @@ func prefixTree() []prefixGroup {
 		{verbs: []prefixVerb{
 			{'s', "Split", func(r *Root) { r.toggleSplit() }},
 			{'o', "Orient", func(r *Root) { r.toggleSplitStacked() }},
-			{'p', "otherPane", func(r *Root) { r.FocusOtherPane() }},
+			// "Switch pane", not "otherPane": the label is the only
+			// thing standing between a user and finding this at all, and
+			// the first wording said what the pane *is* rather than what
+			// the key *does*. Someone looking for a way to switch panes
+			// read straight past it — reported.
+			{'p', "Switch pane", func(r *Root) { r.switchPaneOrExplain() }},
+			// x for "exchange", the same letter vim binds Ctrl+W x to
+			// for exactly this — swapping two windows' positions.
+			{'x', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
 			{'d', "Details", func(r *Root) { r.toggleDetailsSidebar() }},
 		}},
 		{verbs: []prefixVerb{

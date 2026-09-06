@@ -285,3 +285,80 @@ func TestPrefixRenameTargetsTheCursorRow(t *testing.T) {
 		t.Errorf("target/targetRow = %q/%d, want the cursor's own %q/%d", r.target, r.targetRow, path, row)
 	}
 }
+
+// TestPrefixSwitchPaneMovesBetweenPanes pins the verb the user came
+// looking for — and, by asserting the label, pins the wording too: the
+// first version called it "otherPane", which described the destination
+// rather than the action and was read straight past by someone
+// searching the legend for a way to switch panes.
+func TestPrefixSwitchPaneMovesBetweenPanes(t *testing.T) {
+	r := newPrefixRoot(t)
+	r.newTab(t.TempDir())
+	r.switchToTab(0)
+	r.enterSplit(1)
+
+	pressPrefixVerb(r, 'p')
+	if r.activeTab != 1 {
+		t.Errorf("activeTab = %d, want ^_ p to move to the other pane", r.activeTab)
+	}
+	pressPrefixVerb(r, 'p')
+	if r.activeTab != 0 {
+		t.Errorf("activeTab = %d, want ^_ p to move back", r.activeTab)
+	}
+
+	verb, ok := prefixVerbFor('p')
+	if !ok {
+		t.Fatal("no verb bound to p")
+	}
+	if !strings.Contains(strings.ToLower(verb.label), "switch") {
+		t.Errorf("label = %q, want it to say what the key does, not what the pane is", verb.label)
+	}
+}
+
+// TestPrefixSwitchPaneExplainsItselfWithoutASplit pins that the key
+// says why it did nothing rather than appearing broken: split view is
+// its precondition and that isn't obvious from a single pane.
+func TestPrefixSwitchPaneExplainsItselfWithoutASplit(t *testing.T) {
+	r := newPrefixRoot(t)
+
+	pressPrefixVerb(r, 'p')
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want a notice on %q", r.activePage, errorPage)
+	}
+	got := strings.Join(strings.Fields(r.errorView.GetText(true)), " ")
+	if !strings.Contains(got, "no other pane") {
+		t.Errorf("notice = %q, want it to explain there is no other pane", got)
+	}
+}
+
+// TestPrefixSwapPanesExchangesSides pins the verb the swap is reached
+// by — x, the same letter vim uses for exchanging two windows.
+func TestPrefixSwapPanesExchangesSides(t *testing.T) {
+	r := newPrefixRoot(t)
+	r.newTab(t.TempDir())
+	r.switchToTab(0)
+	r.enterSplit(1)
+
+	pressPrefixVerb(r, 'x')
+
+	if r.splitPanes != [2]int{1, 0} {
+		t.Errorf("splitPanes = %v, want ^_ x to exchange them", r.splitPanes)
+	}
+	if r.activeTab != 0 {
+		t.Errorf("activeTab = %d, want the focused tab to keep the keyboard", r.activeTab)
+	}
+}
+
+func TestPrefixSwapPanesExplainsItselfWithoutASplit(t *testing.T) {
+	r := newPrefixRoot(t)
+
+	pressPrefixVerb(r, 'x')
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want a notice on %q", r.activePage, errorPage)
+	}
+	if got := strings.Join(strings.Fields(r.errorView.GetText(true)), " "); !strings.Contains(got, "no panes to swap") {
+		t.Errorf("notice = %q, want it to explain there is nothing to swap", got)
+	}
+}

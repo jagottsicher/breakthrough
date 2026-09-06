@@ -1002,6 +1002,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem(splitToggleLabel(r.splitActive), "", 0, r.toggleSplit)
 	r.splitOrientationIdx = r.menu.GetItemCount()
 	r.menu.AddItem(splitOrientationLabel(r.settings.SplitStacked), "", 0, r.toggleSplitStacked)
+	// Swapping the two panes over is a layout action like the two above,
+	// so it belongs beside them rather than behind the prefix alone —
+	// this menu is where someone who doesn't know a shortcut exists goes
+	// looking.
+	r.menu.AddItem("Swap panes", "", 0, r.swapPanesOrExplain)
 	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
 	// Ping is this first toolWindow slice's own proof of concept (see
 	// toolwindow.go) — a placeholder entry point, not itself the planned
