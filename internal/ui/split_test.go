@@ -452,3 +452,72 @@ func TestSplitIsDroppedWhenAPaneDirectoryVanished(t *testing.T) {
 		t.Errorf("mounted %d panels, want 1", len(got))
 	}
 }
+
+// TestEventOutsideAPaneDoesNotSwitchToIt is a regression test for a
+// subtle one: tview runs a box's mouse capture for every event, whether
+// or not it landed inside that box (Box.WrapMouseHandler calls the
+// capture before the handler that does the InRect test). In split view
+// both panes therefore see every event.
+//
+// Without a position check, one press inside a pane switched the active
+// tab twice — correctly from the pane it landed in, then straight back
+// from the other one. Invisible from the outside, but it cancelled
+// right-drag selection in the inactive pane: the drag started, the same
+// event arrived again with the wrong pane active, found no row under
+// the pointer there, and cleared it. A real report.
+func TestEventOutsideAPaneDoesNotSwitchToIt(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1)
+	drawRoot(t, r, 120, 30)
+	r.switchToTab(1) // the second pane is active
+	before := r.activeTab
+
+	// A press whose coordinates are inside the *first* pane, offered to
+	// the second pane's capture — exactly what tview does.
+	x, y, _, _ := r.tabs[0].GetInnerRect()
+	r.captureMouseOnPanel(r.tabs[1], tview.MouseLeftDown,
+		tcell.NewEventMouse(x+1, y+1, tcell.Button1, tcell.ModNone))
+
+	if r.activeTab != before {
+		t.Errorf("activeTab = %d, want it left at %d — the event was not inside that pane", r.activeTab, before)
+	}
+}
+
+// TestRightDragInTheInactivePaneStillSelects is the behaviour the bug
+// above actually broke, driven through the same entry point tview uses.
+func TestRightDragInTheInactivePaneStillSelects(t *testing.T) {
+	r, first, _ := newSplitRoot(t)
+	// newSplitRoot's first directory is empty; a drag needs real rows.
+	for _, name := range []string{"a.txt", "b.txt", "c.txt", "d.txt"} {
+		if err := os.WriteFile(filepath.Join(first, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.tabs[0].load(first); err != nil {
+		t.Fatal(err)
+	}
+	r.enterSplit(1)
+	drawRoot(t, r, 120, 30)
+	r.switchToTab(1) // the pane we are about to drag in is NOT the active one
+
+	left := r.tabs[0]
+	press := func(action tview.MouseAction, row int, button tcell.ButtonMask) {
+		x, y, _, ok := left.nameCellRect(row)
+		if !ok {
+			t.Fatalf("row %d has no rectangle", row)
+		}
+		// Both panes' captures see every event, in mount order.
+		for _, p := range []*Panel{r.tabs[0], r.tabs[1]} {
+			r.captureMouseOnPanel(p, action, tcell.NewEventMouse(x, y, button, tcell.ModNone))
+		}
+	}
+
+	press(tview.MouseRightDown, 1, tcell.Button2)
+	press(tview.MouseMove, 2, tcell.Button2)
+	press(tview.MouseMove, 3, tcell.Button2)
+	press(tview.MouseRightUp, 3, tcell.Button2)
+
+	if got := len(left.SelectedPaths()); got == 0 {
+		t.Error("a right-drag in the inactive pane selected nothing")
+	}
+}

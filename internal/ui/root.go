@@ -1372,9 +1372,31 @@ func (r *Root) wirePanel(panel *Panel) {
 // bug this package's own test had pinned in place rather than caught,
 // by exercising it with MouseMove.
 func (r *Root) captureMouseOnPanel(panel *Panel, action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if panel != r.panel && activatesPaneOnClick(action) {
-		if i, ok := r.tabIndexOf(panel); ok {
-			r.switchToTab(i)
+	if panel != r.panel {
+		// The position check is essential, not defensive: tview runs a
+		// box's mouse capture for *every* event, whether or not it
+		// landed inside that box (see Box.WrapMouseHandler, which calls
+		// the capture before the handler that does the InRect test). So
+		// in split view both panes see every event, and without this a
+		// single press inside one pane switched the active tab twice —
+		// once correctly, from the pane it landed in, and then straight
+		// back from the other one. That second switch is what broke
+		// right-drag selection in the inactive pane: the drag started,
+		// then the same event arrived again with the wrong pane active,
+		// found no row under the pointer there, and cancelled it. A real
+		// report, and invisible from the outside — the pane flipped and
+		// flipped back within one event.
+		if activatesPaneOnClick(action) && panel.InRect(event.Position()) {
+			if i, ok := r.tabIndexOf(panel); ok {
+				r.switchToTab(i)
+			}
+		}
+		if panel != r.panel {
+			// Still not the active pane, so this event is not ours to
+			// interpret: captureMouse works entirely in terms of
+			// r.panel, and running it from here would apply one event to
+			// the other pane's state twice.
+			return action, event
 		}
 	}
 	return r.captureMouse(action, event)
