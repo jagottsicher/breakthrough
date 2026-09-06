@@ -43,12 +43,12 @@ available the moment you press it:
 | `o` | Flip split orientation | `F6` |
 | `p` | Jump to the other pane | `Tab` |
 | `d` | Details sidebar | `Ctrl+D` |
-| `t` | Tab switcher | `F4`, `Ctrl+T` |
+| `t` | Tab switcher | `Ctrl+T` |
 | `n` | New tab | — |
 | `w` | Close tab | — |
 | `1`…`0` | Jump straight to tab 1–10 | `Ctrl`/`Alt`+digit |
-| `r` | Rename | `F2` |
-| `m` | Toggle mouse reporting | `F3` |
+| `r` | Rename | context menu, click-pause-click |
+| `m` | Toggle mouse reporting | `F12` |
 | `,` | Options | `Ctrl+O` |
 | `?` | Help | `F1` |
 
@@ -99,6 +99,33 @@ Back and Forward treat a trip into search results or the trash exactly
 like a real directory, and returning to one restores the cursor row you
 left it on. A search's results come back as they were, rather than being
 re-run.
+
+### Column widths
+
+Size and Modified are sized from what they actually contain, and never
+truncated — a clipped number or half a timestamp tells you nothing, and
+there is no way to tell one from a real value. Human-readable sizes need
+six columns, exact byte counts as many as the largest file needs, a Unix
+timestamp ten, a full date and time nineteen; switching either format
+reflows the columns straight away and hands the difference to the name.
+
+The modification column's header is just "mtime" — the word anyone
+working at a shell already uses, and short enough to fit whichever
+format the column is in, so it never costs the name column room. Where a
+label genuinely is too long for its data (the trash's own "Deletion
+time" beside a column of Unix timestamps), the *label* abbreviates
+rather than the value, because a shortened label still says what the
+column is where a cut-off timestamp would not.
+
+The name column takes whatever is left, and is the one thing shortened
+when there isn't enough: with a middle ellipsis, so both the start (which
+distinguishes it from its neighbours) and the extension survive —
+`annual-report-2026-final.pdf` becomes `annual-re…final.pdf`. A
+directory's trailing `/` and a symlink's `-> target` are kept whole where
+they can be, since they say what kind of entry it is.
+
+This matters most in [split view](#split-view), where each pane is half
+the width.
 
 Sort by clicking a column heading (Name, Size, Modified). The filter box
 in the top row narrows the listing as you type; its own button switches
@@ -193,7 +220,7 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-Right-click anywhere in the listing. The menu is grouped: the entry
+`F2`, or right-click anywhere in the listing. The menu is grouped: the entry
 under the cursor first (Look, Rename, Edit, `tail -f`, Properties), then
 Selection, Commands, Delete, Tabs, Tools, and Globals.
 
@@ -491,13 +518,18 @@ Every key breakthrough recognizes, with its default:
 
 ### Anywhere
 
-| Key | Action |
-|---|---|
-| `F1` | Help |
-| `F3` | Toggle mouse reporting (gives your terminal's own selection back) |
-| `F4` | Tab switcher |
-| `F5` | Split view on/off |
-| `F6` | Flip split orientation |
+The `F1`–`F4` row follows Midnight Commander's own layout, so muscle
+memory carries over.
+
+| Key | Action | also on |
+|---|---|---|
+| `F1` | Help | `Ctrl+_ ?` |
+| `F2` | Context menu for the row under the cursor | right-click, `Ctrl+_` legend |
+| `F3` | Look at the selected file | `Ctrl+L` |
+| `F4` | Edit the selected file | `Ctrl+E` |
+| `F5` | Split view on/off | `Ctrl+_ s` |
+| `F6` | Flip split orientation | `Ctrl+_ o` |
+| `F12` | Toggle mouse reporting | `Ctrl+_ m` |
 | `Ctrl`+`_` | Key prefix — one letter reaches all of the above, without function keys (see [The key prefix](#the-key-prefix)) |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
@@ -509,9 +541,8 @@ Every key breakthrough recognizes, with its default:
 | `Enter` | Open a directory, or Look at a file |
 | `Space` | Select / deselect |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows |
-| `F2` | Rename |
-| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` |
-| `Ctrl`+`L` | Look |
+| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` (also `F4`) |
+| `Ctrl`+`L` | Look (also `F3`) |
 | `Ctrl`+`P` | Properties |
 | `Ctrl`+`D` | Details sidebar |
 | `Ctrl`+`K` | Compute hashes |

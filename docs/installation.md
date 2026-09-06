@@ -168,7 +168,7 @@ all pure Go and need nothing installed.
 The binary is self-contained, so it runs from wherever it happens to be:
 
 ```sh
-tar xzf breakthrough_0.14.0_linux_amd64.tar.gz
+tar xzf breakthrough_0.15.0_linux_amd64.tar.gz
 ./breakthrough /some/directory
 ```
 
@@ -194,7 +194,7 @@ Check what you're actually running with:
 
 ```sh
 breakthrough --version
-# breakthrough 0.14.0 (commit 1a2b3c4, built 2026-08-28T20:11:03Z by goreleaser)
+# breakthrough 0.15.0 (commit 1a2b3c4, built 2026-08-28T20:11:03Z by goreleaser)
 ```
 
 ## Uninstalling
@@ -237,6 +237,14 @@ precisely for this case.
 bottom takes priority over global shortcuts while it has focus, since it
 needs those same keys for readline-style editing. Press `Escape` or
 click the panel to get out of it.
+
+**breakthrough crashed.** It writes a full report to
+`~/.local/state/breakthrough/crash.log` — the panic, and every
+goroutine's stack — and prints the same thing to the terminal before
+exiting. Please attach that file to a bug report; it is the difference
+between a fixable crash and an unreproducible one. Adding `--debug`
+additionally captures anything else the program writes to stderr for
+that run.
 
 **A setting won't stick.** breakthrough writes to
 `~/.config/breakthrough/config`; if `$XDG_CONFIG_HOME` points somewhere

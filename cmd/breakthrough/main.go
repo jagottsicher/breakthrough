@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -66,6 +67,36 @@ func main() {
 		// the TUI itself takes over the screen.
 		fmt.Println("breakthrough: debug mode — stderr (including any crash) is being written to", logPath)
 	}
+
+	// Catches a panic on the main goroutine — a key handler, a mouse
+	// handler, a draw callback, tview's own event loop — which is the
+	// one place internal/ui's safeGo cannot reach.
+	//
+	// Without this such a crash left no evidence anywhere: tview's Run
+	// restores the terminal and re-panics, so the traceback goes to a
+	// stderr that has just been switched out of the alternate screen
+	// buffer and is usually scrolled away or wiped before it can be
+	// read, and nothing writes it to a file. A real, regularly
+	// reproducible crash was consequently undiagnosable.
+	//
+	// Deliberately not an attempt to keep going: see ui.ReportPanic.
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			return
+		}
+		path := ui.ReportPanic("main", rec)
+		fmt.Fprintf(os.Stderr, "\nbreakthrough: internal error: %v\n", rec)
+		if path != "" {
+			fmt.Fprintf(os.Stderr, "A full report was written to %s\n", path)
+			fmt.Fprintln(os.Stderr, "Please include it when reporting this: https://github.com/jagottsicher/breakthrough/issues")
+		}
+		// The stack to stderr as well as to the log: someone watching a
+		// terminal that did keep its scrollback should not have to go
+		// find a file to see what happened.
+		fmt.Fprintf(os.Stderr, "\n%s", debug.Stack())
+		os.Exit(2)
+	}()
 
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "breakthrough:", err)
@@ -282,9 +313,37 @@ func run() error {
 			root.HelpShortcut()
 			return nil
 		case tcell.KeyF2:
-			root.RenameShortcut()
+			// Midnight Commander's own F2 is its user menu — a
+			// configurable macro list breakthrough has no equivalent of.
+			// Its nearest counterpart here is the context menu, and
+			// putting it on F2 closes a real gap rather than only moving
+			// a key: until now that menu opened on right-click and
+			// nothing else, in an application whose own rule is that
+			// every mouse gesture has a keyboard equivalent.
+			root.MenuShortcut()
 			return nil
 		case tcell.KeyF3:
+			// View, as in Midnight Commander. Ctrl+L still does the same
+			// (the button bar names both).
+			root.LookShortcut()
+			return nil
+		case tcell.KeyF4:
+			// Edit, as in Midnight Commander. Ctrl+E still does the same.
+			root.EditShortcut()
+			return nil
+		case tcell.KeyF12:
+			// Mouse reporting, displaced from F3 by the Midnight
+			// Commander layout above.
+			//
+			// A function key rather than the prefix alone, deliberately:
+			// this one has to work from *anywhere*, including inside a
+			// dialog (see Root.ToggleMouseShortcut), because the whole
+			// point of it is getting the terminal's own text selection
+			// back — and what you want to select may well be in a
+			// dialog. The prefix stands down while an overlay is open,
+			// so Ctrl+_ m alone would have quietly lost that. Far from
+			// the F1-F6 row so it collides with no Midnight Commander
+			// binding.
 			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlT:
@@ -435,16 +494,6 @@ func run() error {
 				return nil
 			}
 			return event
-		case tcell.KeyF4:
-			// Opens the tab switcher (see Root.TabSwitcherShortcut's own
-			// doc comment) — the keyboard path that works on every
-			// terminal, including the ones that can't report Ctrl+Tab or
-			// Ctrl+digit at all, or that intercept function keys before
-			// this app ever sees them (see Ctrl+T below, this feature's
-			// second such path for exactly that reason). Continues the
-			// F1/F2/F3 sequence for the same reason F3 did.
-			root.TabSwitcherShortcut()
-			return nil
 		case tcell.KeyF5:
 			// Split view on/off (see Root.ToggleSplitShortcut) —
 			// continuing the F1..F4 sequence for the same reason F4 did:

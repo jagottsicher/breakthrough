@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -115,6 +116,10 @@ type Panel struct {
 	// current values, read by load() on every call; filterField's own
 	// SetChangedFunc is what actually drives a live reload as the user
 	// types (see NewPanel).
+	// layout is the current column sizing (see columns.go), recomputed
+	// whenever the panel's width or the data format changes.
+	layout columnLayout
+
 	filterField    *tview.InputField
 	filterRegexBtn *tview.Button
 	filterText     string
@@ -510,6 +515,30 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
 	p.table.SetBorders(false)
+	// Re-lay the columns out whenever the panel's width changes — a
+	// terminal resize, split view opening or flipping, the Details
+	// sidebar appearing. A draw callback rather than a hook on each of
+	// those, because it catches every cause including ones added later,
+	// and because the width is only actually knowable at draw time.
+	//
+	// The usual objection to computing in a draw callback — that what it
+	// sets lands one frame late (see Panel.setSelectionStyle, which had
+	// exactly that bug) — does not apply here: tview's Table.Draw calls
+	// DrawForSubclass, and so this callback, *before* it lays out and
+	// paints any cell (verified in tview's own table.go, not assumed), so
+	// cells changed here are painted this frame. It also can't loop —
+	// relayoutColumns returns without touching anything when the width
+	// hasn't changed.
+	//
+	// The width comes in as a parameter rather than from GetRect: an
+	// undrawn table still reports a small non-zero rect (15 columns, as
+	// it happens), which is indistinguishable from a genuinely narrow
+	// pane and would shorten every name against a width that was never
+	// real.
+	p.table.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		p.relayoutColumns(width)
+		return x, y, width, height
+	})
 	p.table.SetSelectable(true, false) // whole rows, not individual cells
 	p.table.SetSelectedFunc(func(row, column int) { p.activateRow(row) })
 	p.table.SetInputCapture(p.captureTableKey) // space toggles the checkbox
@@ -848,6 +877,12 @@ func (p *Panel) load(dir string) error {
 	text, spans := buildHeaderSpans(abs)
 	p.header.SetText(text)
 	p.headerSpans = spans
+
+	// Before the rows, not after: addRow shortens each name against the
+	// name column's width, which is whatever the Size and Modified
+	// columns leave over — so those two have to be sized from the data
+	// first (see columns.go).
+	p.sizeColumnsFor(entries)
 
 	row := 0
 	if parent := filepath.Dir(abs); parent != abs {
@@ -1326,8 +1361,6 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	}
 	p.table.SetCell(row, colCheckbox, checkbox)
 
-	color := p.entryColor(ref)
-
 	// The type-indicator glyph itself stays the plain Text color — only
 	// the name (below) picks up entryColor's own distinction, per the
 	// user's own explicit request. MC's own skin colors both; this app
@@ -1339,36 +1372,55 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
-	// tview.TableCell.Text is parsed for style tags (see tview.Print), so
-	// any literal "[" in an entry's own name — an unusual but entirely
-	// legal filename character — must be escaped before it's used here,
-	// or it would be misread as (the start of) a tag and corrupt this and
-	// every tag after it. This applies to every row, not just directories.
-	label := tview.Escape(ref.name)
+	p.setRowCells(row, ref)
+}
+
+// setRowCells fills the three width-dependent cells of one row — Name,
+// Size and Modified — from the panel's current column layout.
+//
+// Split out of addRow so relayoutColumns can re-render an existing row
+// after the panel's width changed, without rebuilding the whole listing
+// or touching the filesystem.
+func (p *Panel) setRowCells(row int, ref rowRef) {
+	color := p.entryColor(ref)
+
+	// The suffix travels separately from the name so shortenNameLabel
+	// can protect it: a trailing "/" or " -> target" says what kind of
+	// entry this is, which a shortened name alone no longer does.
+	suffix := ""
+	if ref.entryType == fsops.TypeDir {
+		suffix = "/"
+	}
+	if ref.linkTarget != "" {
+		suffix = " -> " + ref.linkTarget
+	}
+	name, suffix := shortenNameLabel(ref.name, suffix, p.nameColumnWidth())
+
+	// Escaping happens *after* shortening, and shortening works on plain
+	// text: tview.TableCell.Text is parsed for style tags (see
+	// tview.Print), so any literal "[" in a filename — unusual but
+	// entirely legal — has to be escaped before it reaches a cell, and
+	// cutting a string that already contained tags would slice through
+	// one and corrupt every style after it.
+	label := tview.Escape(name)
 	if ref.isDir {
 		// Wrap just the name itself in a style tag that sets its
 		// background to DirectoryBackground, leaving the foreground
 		// untouched (see nameHighlightTags's own doc comment) — not the
 		// trailing "/" or the symlink arrow appended below, and not the
 		// column's own blank padding out to the row's right edge, the
-		// way SetBackgroundColor on the whole cell would (that column
-		// has SetExpansion(1), see below, so it consumes whatever's left
-		// of the row's width).
+		// way SetBackgroundColor on the whole cell would.
 		label = nameHighlightTags(label, p.theme.DirectoryBackground)
 	}
-	if ref.entryType == fsops.TypeDir {
-		label += "/"
-	}
-	if ref.linkTarget != "" {
-		label += " -> " + tview.Escape(ref.linkTarget)
-	}
-	name := tview.NewTableCell(label).SetTextColor(color)
-	name.SetReference(ref)
-	name.SetExpansion(1) // consume the rest of the row's width
-	name.SetClickedFunc(func() bool {
+	label += tview.Escape(suffix)
+
+	nameCell := tview.NewTableCell(label).SetTextColor(color)
+	nameCell.SetReference(ref)
+	nameCell.SetExpansion(1) // consume the rest of the row's width
+	nameCell.SetClickedFunc(func() bool {
 		return p.handleNameClick(row)
 	})
-	p.table.SetCell(row, colName, name)
+	p.table.SetCell(row, colName, nameCell)
 
 	// ".." (checkable false) has no real Entry behind it, so ref.size/
 	// modTime are just zero values — blank cells instead of formatting
@@ -1379,9 +1431,23 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
 	p.table.SetCell(row, colSizeSep, p.columnSeparator())
-	p.table.SetCell(row, colSize, tview.NewTableCell(sizeText).SetTextColor(p.theme.Text))
+	p.table.SetCell(row, colSize,
+		tview.NewTableCell(padLeft(sizeText, p.layout.size)).SetTextColor(p.theme.Text))
 	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
-	p.table.SetCell(row, colModified, tview.NewTableCell(mtimeText).SetTextColor(p.theme.Text))
+	p.table.SetCell(row, colModified,
+		tview.NewTableCell(padLeft(mtimeText, p.layout.mod)).SetTextColor(p.theme.Text))
+}
+
+// nameColumnWidth is how much room a row's name has. Falls back to a
+// generous width before the panel has ever been drawn (layout.name is
+// zero then), so a listing built before the first draw isn't shortened
+// against a width of nothing — relayoutColumns re-renders it with the
+// real figure as soon as there is one.
+func (p *Panel) nameColumnWidth() int {
+	if p.layout.name <= 0 {
+		return 1 << 30
+	}
+	return p.layout.name
 }
 
 // nameHighlightTags wraps escapedName (see addRow's own escaping, right
@@ -1411,41 +1477,90 @@ func (p *Panel) columnSeparator() *tview.TableCell {
 	return tview.NewTableCell("│").SetTextColor(p.theme.Text)
 }
 
-// sizeColumnWidth is the fixed width every Size cell — data or header —
-// is formatted to, so toggling between byte and human-readable format
-// (see Root's "Globals" menu) never reflows the column. Wide enough for
-// the exact byte count of a multi-terabyte file (13 digits) plus a
-// little breathing room.
-const sizeColumnWidth = 14
-
-// formatSizeCell renders size right-aligned within sizeColumnWidth, as
-// either the exact byte count (bytesMode) or humanSize's shorthand.
+// formatSizeCell renders size as either the exact byte count
+// (bytesMode) or humanSize's shorthand.
+//
+// Unpadded: how wide the column ends up is decided per render from what
+// the whole listing actually contains (see computeColumnLayout in
+// columns.go), not by a constant here. Both this and formatModTimeCell
+// used to pad to a fixed width — 14 and 21 columns — which reserved
+// room for a worst case that most directories never contain and, in a
+// split pane, pushed the Size and Modified columns off the right edge
+// entirely.
 func formatSizeCell(size int64, bytesMode bool) string {
-	s := humanSize(size)
 	if bytesMode {
-		s = strconv.FormatInt(size, 10)
+		return strconv.FormatInt(size, 10)
 	}
-	return fmt.Sprintf("%*s", sizeColumnWidth, s)
+	return humanSize(size)
 }
 
-// modColumnWidth is Modified's counterpart to sizeColumnWidth: wide
-// enough for the column header's own "Modify time (mtime) ↓/↑" (21
-// characters, the widest of the two — see buildColumnHeader/sortArrow),
-// which comfortably fits "2026-08-19 09:12:03" (19 characters) or a
-// Unix timestamp (10 digits until the year 2286) within it too — so
-// toggling the data format, or which column is sorted, never reflows
-// the column.
-const modColumnWidth = 21
-
-// formatModTimeCell renders t right-aligned within modColumnWidth, as
-// either a Unix timestamp (unixMode) or the same "2006-01-02 15:04:05"
-// layout the Properties overlay's Modified field uses.
+// formatModTimeCell renders t as either a Unix timestamp (unixMode) or
+// the same "2006-01-02 15:04:05" layout the Properties overlay's
+// Modified field uses. Unpadded — see formatSizeCell.
 func formatModTimeCell(t time.Time, unixMode bool) string {
-	s := t.Format("2006-01-02 15:04:05")
 	if unixMode {
-		s = strconv.FormatInt(t.Unix(), 10)
+		return strconv.FormatInt(t.Unix(), 10)
 	}
-	return fmt.Sprintf("%*s", modColumnWidth, s)
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// measureDataColumns is the widest Size and Modified value the given
+// rows would render to, in the formats currently in force — what
+// computeColumnLayout sizes those two columns against.
+func measureDataColumns(refs []rowRef, bytesMode, unixMode bool) (widestSize, widestMod int) {
+	for _, ref := range refs {
+		if !ref.checkable {
+			continue // ".." has no size or time of its own — see addRow
+		}
+		if w := utf8.RuneCountInString(formatSizeCell(ref.size, bytesMode)); w > widestSize {
+			widestSize = w
+		}
+		if w := utf8.RuneCountInString(formatModTimeCell(ref.modTime, unixMode)); w > widestMod {
+			widestMod = w
+		}
+	}
+	return widestSize, widestMod
+}
+
+// relayoutColumns recomputes the column widths for the panel's current
+// width and re-renders every row's Name/Size/Modified cell into them.
+//
+// Re-renders from each row's own stored rowRef rather than re-reading
+// the directory: nothing about the filesystem has changed, only how much
+// room there is to show it in, and a reload here would turn every
+// terminal resize into a burst of disk access.
+//
+// Returns whether anything actually changed, so the draw hook that calls
+// this can avoid asking for a redraw it doesn't need.
+func (p *Panel) relayoutColumns(width int) bool {
+	if width <= 0 {
+		return false
+	}
+
+	refs := make([]rowRef, 0, p.table.GetRowCount())
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			refs = append(refs, ref)
+		}
+	}
+
+	widestSize, widestMod := measureDataColumns(refs, p.sizeBytes, p.mtimeUnix)
+	layout := computeColumnLayout(width, widestSize, widestMod, p.inTrashView,
+		p.sortKey == sortBySize, p.sortKey == sortByModified)
+	if layout == p.layout {
+		return false
+	}
+	p.layout = layout
+
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok {
+			continue
+		}
+		p.setRowCells(row, ref)
+	}
+	p.buildColumnHeader()
+	return true
 }
 
 // sortArrow is the small suffix buildColumnHeader appends to whichever
@@ -1505,14 +1620,14 @@ func (p *Panel) buildColumnHeader() {
 	})
 	p.columnHeader.SetCell(0, colName, nameCell)
 
+	// Widths and labels both come from the layout, which sized them
+	// against the data actually on screen and picked the longest header
+	// variant that fits (see computeColumnLayout) — including the
+	// trash's own "Deletion time" wording, see onDescribeRows.
 	p.columnHeader.SetCell(0, colSizeSep, p.columnSeparator())
-	p.setColumnHeaderCell(colSize, sizeColumnWidth, "Size", sortBySize)
+	p.setColumnHeaderCell(colSize, p.layout.size, p.layout.sizeHeader, sortBySize)
 	p.columnHeader.SetCell(0, colModifiedSep, p.columnSeparator())
-	modLabel := "Modify time (mtime)"
-	if p.inTrashView {
-		modLabel = "Deletion time" // see onDescribeRows' own doc comment
-	}
-	p.setColumnHeaderCell(colModified, modColumnWidth, modLabel, sortByModified)
+	p.setColumnHeaderCell(colModified, p.layout.mod, p.layout.modHeader, sortByModified)
 }
 
 // setColumnHeaderCell builds one of columnHeader's fixed-width, right-
@@ -1522,7 +1637,7 @@ func (p *Panel) setColumnHeaderCell(col, width int, label string, key sortKey) {
 	if p.sortKey == key {
 		text += sortArrow(p.sortDescending)
 	}
-	cell := tview.NewTableCell(fmt.Sprintf("%*s", width, text)).SetTextColor(p.theme.Text)
+	cell := tview.NewTableCell(padLeft(text, width)).SetTextColor(p.theme.Text)
 	cell.SetClickedFunc(func() bool {
 		p.setSortKey(key)
 		return false
@@ -2771,4 +2886,31 @@ func longestCommonPrefix(values []string) string {
 		}
 	}
 	return string(prefix)
+}
+
+// sizeColumnsFor sizes the two data columns for a listing about to be
+// built — load's own counterpart to relayoutColumns, which re-measures
+// rows already on screen.
+//
+// Deliberately leaves the name column alone. How wide that can be
+// depends on the panel's width, which is only knowable at draw time (an
+// undrawn table reports a plausible-looking but meaningless rect), so
+// the draw callback owns it: until the first draw the name column reads
+// as zero, which nameColumnWidth treats as "don't shorten anything yet",
+// and after one it keeps the last real value until the next draw
+// corrects it.
+//
+// Takes fsops.Entry rather than rowRef because load has the entries in
+// hand before any row exists to read a ref back off.
+func (p *Panel) sizeColumnsFor(entries []fsops.Entry) {
+	refs := make([]rowRef, 0, len(entries))
+	for _, e := range entries {
+		refs = append(refs, rowRef{checkable: true, size: e.Size, modTime: e.ModTime})
+	}
+	widestSize, widestMod := measureDataColumns(refs, p.sizeBytes, p.mtimeUnix)
+
+	name := p.layout.name
+	p.layout = computeColumnLayout(0, widestSize, widestMod, p.inTrashView,
+		p.sortKey == sortBySize, p.sortKey == sortByModified)
+	p.layout.name = name
 }

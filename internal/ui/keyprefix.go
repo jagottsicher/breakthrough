@@ -88,7 +88,12 @@ func prefixTree() []prefixGroup {
 			{'w', "Close tab", func(r *Root) { r.closeCurrentTab() }},
 		}},
 		{verbs: []prefixVerb{
-			{'r', "Rename", func(r *Root) { r.openRename() }},
+			// renameCurrentEntry, not openRename: the latter renames
+			// r.target/r.targetRow, which only a right-click sets, so
+			// reaching it from the keyboard aimed at whatever was last
+			// right-clicked — or, on a fresh start, at row 0, the ".."
+			// entry. A real bug; see the regression test.
+			{'r', "Rename", func(r *Root) { r.renameCurrentEntry() }},
 			{'m', "Mouse", func(r *Root) { r.ToggleMouseShortcut() }},
 			{',', "Options", func(r *Root) { r.openOptions() }},
 			{'?', "Help", func(r *Root) { r.openHelp() }},
