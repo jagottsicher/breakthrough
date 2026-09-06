@@ -322,12 +322,11 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 
 	wantActions := map[buttonBarAction]string{
 		buttonActionHelp:         "F1 Help",
-		buttonActionRename:       "F2 Rename",
-		buttonActionTabSwitcher:  "F4 Tabs",
+		buttonActionMenu:         "F2 Menu",
 		buttonActionToggleSplit:  "F5 Split", // not split right now — see splitButtonLabel
 		buttonActionPrefix:       "^_ More",  // the key-prefix legend — see keyprefix.go
-		buttonActionEdit:         "^E Edit",
-		buttonActionLook:         "^L Look",
+		buttonActionEdit:         "F4/^E Edit",
+		buttonActionLook:         "F3/^L Look",
 		buttonActionProperties:   "^P Properties",
 		buttonActionDetails:      "^D Details",
 		buttonActionSearch:       "^F Find",
@@ -510,33 +509,6 @@ func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
 	}
 }
 
-// TestCaptureButtonBarMouseTabsClickOpensTheSwitcher pins the "F4 Tabs"
-// button (see buildButtonBar/runButtonBarAction) to the same switcher F4
-// itself opens (see Root.TabSwitcherShortcut) — a mouse alternative for
-// terminals that can't report Ctrl+1..Ctrl+0 or Ctrl+Tab at all, per the
-// user's own explicit request. Direct action, not the shortcut wrapper
-// (see runButtonBarAction's own case for why), so this works regardless
-// of what else currently has focus — unlike TabSwitcherShortcut itself,
-// gated by acceptsGlobalShortcut.
-func TestCaptureButtonBarMouseTabsClickOpensTheSwitcher(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	span, ok := buttonBarSpanFor(r, buttonActionTabSwitcher)
-	if !ok {
-		t.Fatal("no Tabs span found")
-	}
-
-	clickButtonBar(t, r, span.startCol)
-
-	if r.activePage != tabSwitcherPage {
-		t.Errorf("activePage = %q, want %q", r.activePage, tabSwitcherPage)
-	}
-}
-
 // TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "Del
 // Trash" button (see buildButtonBar/runButtonBarAction) to the same
 // moveSelectionToTrash a right-click menu's "Move to Trash" and Entf
@@ -609,7 +581,12 @@ func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
 // ever sharing that line. See TestBuildStatusBarContainsUserNoButtons for
 // the split itself.
 
-func TestCaptureButtonBarMouseRenameClickOpensRename(t *testing.T) {
+// TestCaptureButtonBarMouseMenuClickOpensTheContextMenu pins the part
+// of the F2/menu button that is easy to get wrong: several context-menu
+// entries read r.target/r.targetRow rather than the panel's own cursor,
+// so opening the menu by any route other than a right-click has to set
+// both, or the menu would act on whatever was last right-clicked.
+func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -622,14 +599,14 @@ func TestCaptureButtonBarMouseRenameClickOpensRename(t *testing.T) {
 		t.Fatal("setup: no current row")
 	}
 
-	span, ok := buttonBarSpanFor(r, buttonActionRename)
+	span, ok := buttonBarSpanFor(r, buttonActionMenu)
 	if !ok {
-		t.Fatal("no Rename span found")
+		t.Fatal("no Menu span found")
 	}
 	clickButtonBar(t, r, span.startCol)
 
-	if r.activePage != renamePage {
-		t.Errorf("activePage = %q, want %q", r.activePage, renamePage)
+	if r.activePage != contextMenuPage {
+		t.Errorf("activePage = %q, want %q", r.activePage, contextMenuPage)
 	}
 	if r.target != path || r.targetRow != row {
 		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)

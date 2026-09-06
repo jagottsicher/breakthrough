@@ -564,15 +564,16 @@ func TestGoToTrashSortByModifiedUsesDeletionTime(t *testing.T) {
 // TestOrdinaryDirectoryUnaffectedByTrashRowDescriptions is a regression
 // guard for describeTrashRows: browsing a perfectly ordinary directory
 // (never the trash) must still show real names, the file's own real
-// mtime, and the usual "Modify time (mtime)" column label.
+// mtime, and the ordinary "mtime" column label rather than the trash's
+// own "Deletion time".
 func TestOrdinaryDirectoryUnaffectedByTrashRowDescriptions(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	if r.panel.inTrashView {
 		t.Error("inTrashView = true for an ordinary directory, want false")
 	}
-	if got := strings.TrimSpace(r.panel.columnHeader.GetCell(0, colModified).Text); got != "Modify time (mtime)" {
-		t.Errorf("Modified column header = %q, want the usual %q", got, "Modify time (mtime)")
+	if got := strings.TrimSpace(r.panel.columnHeader.GetCell(0, colModified).Text); got != "mtime" {
+		t.Errorf("Modified column header = %q, want the usual %q", got, "mtime")
 	}
 
 	r.panel.focusRow(1)

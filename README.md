@@ -48,6 +48,16 @@ terminal.
   working symlink to a file, orange for a socket/FIFO/device, magenta
   for a recognized archive extension, and a dim gray for a dotfile/
   dotdir (unless one of the other cases above already applies).
+- Columns that never lie: Size and Modified take exactly the width their
+  content needs — six columns for human-readable sizes, ten for a Unix
+  timestamp, nineteen for a full date — and the name column absorbs the
+  difference. Switching either format reflows them immediately, and the
+  column header is simply "mtime", short enough never to constrain the
+  column. When something has to give
+  it is the filename, shortened in the middle (`annual-re…final.pdf`) so
+  both the identifying start and the extension survive. This matters most
+  in split view, where each pane is half as wide: before, Size collapsed
+  to `…` and Modified disappeared off the right edge entirely.
 - A live filter, right in the top row: type to narrow the listing on
   every keystroke, with a Glob/Regex toggle for how the pattern is
   interpreted.
@@ -90,7 +100,15 @@ terminal.
   `^\` — and a multiplexer always swallows its own prefix before the
   application inside sees it. See
   [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
-- A right-click context menu: Properties (editable — name, permissions,
+- Midnight Commander's own F-key layout where it maps onto something
+  breakthrough has: `F1` help, `F2` the context menu, `F3` view, `F4`
+  edit. Where a feature also has a Ctrl binding the button bar names
+  both (`F3/^L Look`), so neither has to be guessed at. The mouse
+  toggle moved out to `F12`, deliberately away from that row — it has
+  to work from inside a dialog too, which is the one place the key
+  prefix stands down. `F5`/`F6` stay on split view for now; Copy and
+  Move with a destination dialog, MC's own F5/F6, aren't built yet.
+- A context menu on `F2` or right-click: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
   Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
@@ -329,7 +347,7 @@ need one, it cross-compiles from source in one command — see
 ### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
 
 ```sh
-VERSION=0.14.0                     # or whatever the latest release is
+VERSION=0.15.0                     # or whatever the latest release is
 ARCH=$(dpkg --print-architecture)  # amd64 or arm64
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
 sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
@@ -342,7 +360,7 @@ same way; remove with `sudo apt remove breakthrough`.
 ### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
 
 ```sh
-VERSION=0.14.0
+VERSION=0.15.0
 ARCH=$(uname -m)                   # x86_64 or aarch64
 case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
@@ -361,7 +379,7 @@ and `%config(noreplace)` on RPM.
 Works on any distribution, with or without root:
 
 ```sh
-VERSION=0.14.0
+VERSION=0.15.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;
