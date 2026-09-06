@@ -225,3 +225,77 @@ func TestSaveTabsWithNoStateDirectory(t *testing.T) {
 		t.Errorf("LoadTabs(\"\") = %+v, want zero value", got)
 	}
 }
+
+// TestSaveLoadSplitRoundTrip pins that a split-view layout survives the
+// trip through the file, alongside the tabs it refers to.
+func TestSaveLoadSplitRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tabs")
+	want := TabState{
+		Paths:      []string{"/one", "/two", "/three"},
+		Active:     2,
+		Split:      true,
+		SplitPanes: []int{2, 0},
+	}
+
+	if err := SaveTabs(path, want); err != nil {
+		t.Fatalf("SaveTabs: %v", err)
+	}
+	got, err := LoadTabs(path)
+	if err != nil {
+		t.Fatalf("LoadTabs: %v", err)
+	}
+
+	if !got.Split {
+		t.Error("Split was not restored")
+	}
+	if len(got.SplitPanes) != 2 || got.SplitPanes[0] != 2 || got.SplitPanes[1] != 0 {
+		t.Errorf("SplitPanes = %v, want [2 0] in that order", got.SplitPanes)
+	}
+}
+
+// TestSaveTabsOmitsSplitWhenThereIsNone pins that an ordinary
+// single-pane layout's file stays exactly as short as it always was —
+// nothing about split view appears in it at all.
+func TestSaveTabsOmitsSplitWhenThereIsNone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tabs")
+	if err := SaveTabs(path, TabState{Paths: []string{"/one"}, Active: 0}); err != nil {
+		t.Fatalf("SaveTabs: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "split") {
+		t.Errorf("file mentions split with none saved:\n%s", data)
+	}
+}
+
+// TestLoadTabsDropsAnUnusableSplit pins that half a split is never
+// handed back: an index naming a tab that isn't there, the same tab
+// twice, or a single lonely pane all mean "open single-pane instead"
+// rather than something the UI would have to defend itself against.
+func TestLoadTabsDropsAnUnusableSplit(t *testing.T) {
+	cases := map[string]string{
+		"out of range":   "path = /one\npath = /two\nsplit = true\nsplit_pane = 0\nsplit_pane = 9\n",
+		"same tab twice": "path = /one\npath = /two\nsplit = true\nsplit_pane = 1\nsplit_pane = 1\n",
+		"only one pane":  "path = /one\npath = /two\nsplit = true\nsplit_pane = 0\n",
+		"no panes":       "path = /one\npath = /two\nsplit = true\n",
+		"negative":       "path = /one\npath = /two\nsplit = true\nsplit_pane = -1\nsplit_pane = 1\n",
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tabs")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := LoadTabs(path)
+			if err != nil {
+				t.Fatalf("LoadTabs: %v", err)
+			}
+			if got.Split {
+				t.Errorf("Split = true with panes %v, want the split dropped", got.SplitPanes)
+			}
+		})
+	}
+}

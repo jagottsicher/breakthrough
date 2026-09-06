@@ -59,9 +59,22 @@ func TabsPath() string {
 // stale filter box would more often be a puzzle than a convenience,
 // and every one of those is one keystroke away from being set up again
 // anyway.
+// Split/SplitPanes carry the split-view layout alongside the tabs (see
+// internal/ui's split.go): whether two panes were showing, and which two
+// tabs they held, in screen order. Saved for the same reason the tab
+// list itself is — a dual-pane arrangement is set up deliberately and is
+// tedious to rebuild by hand every morning.
+//
+// SplitPanes holds indices into Paths, not paths of their own: the two
+// panes are always two of the tabs, never separate browsing contexts, so
+// storing paths again would let the two halves of this file disagree
+// about what a pane is showing. LoadTabs drops the split entirely rather
+// than guessing if either index turns out not to name a restored tab.
 type TabState struct {
-	Paths  []string
-	Active int
+	Paths      []string
+	Active     int
+	Split      bool
+	SplitPanes []int
 }
 
 // tabsFileHeader is written at the top of every saved tabs file. Purely
@@ -103,6 +116,16 @@ func SaveTabs(path string, state TabState) error {
 			continue // see this func's own doc comment
 		}
 		b.WriteString("path = " + p + "\n")
+	}
+	// Only written when there actually was a split, so an ordinary
+	// single-pane layout's file stays exactly as short as it always was.
+	// "split_pane" repeats and its order carries meaning, the same shape
+	// (and for the same reason) "path" above already has.
+	if state.Split {
+		b.WriteString("split = true\n")
+		for _, i := range state.SplitPanes {
+			b.WriteString("split_pane = " + strconv.Itoa(i) + "\n")
+		}
 	}
 
 	dir := filepath.Dir(path)
@@ -183,6 +206,18 @@ func LoadTabs(path string) (TabState, error) {
 			if value != "" {
 				state.Paths = append(state.Paths, value)
 			}
+		case "split":
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				continue // leaves Split false — no split restored, see below
+			}
+			state.Split = b
+		case "split_pane":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				continue
+			}
+			state.SplitPanes = append(state.SplitPanes, n)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -193,5 +228,29 @@ func LoadTabs(path string) (TabState, error) {
 	if state.Active < 0 || state.Active >= len(state.Paths) {
 		state.Active = 0
 	}
+	// A split needs exactly two distinct, in-range panes to mean
+	// anything. Anything else — a truncated file, a hand-edit, one index
+	// naming a tab whose path has since disappeared — drops the split
+	// rather than restoring half of one: opening single-pane is always a
+	// valid state to land in, a split missing a pane is not.
+	if state.Split && !validSplitPanes(state.SplitPanes, len(state.Paths)) {
+		state.Split = false
+		state.SplitPanes = nil
+	}
 	return state, nil
+}
+
+// validSplitPanes reports whether panes is a usable pair for a tab list
+// of n entries: exactly two of them, both in range, and not the same tab
+// twice (which would show one tab beside itself).
+func validSplitPanes(panes []int, n int) bool {
+	if len(panes) != 2 || panes[0] == panes[1] {
+		return false
+	}
+	for _, i := range panes {
+		if i < 0 || i >= n {
+			return false
+		}
+	}
+	return true
 }
