@@ -1,6 +1,9 @@
 package viewer
 
-import "image"
+import (
+	"fmt"
+	"image"
+)
 
 // Result is what Load returns: Kind decides how internal/ui presents
 // the file (see showBuiltinLook).
@@ -87,6 +90,14 @@ func Load(path string, limit int64) (Result, error) {
 		data, truncated, err := ReadPreview(path, ImagePreviewLimit)
 		if err != nil {
 			return Result{}, err
+		}
+		// Before decoding, not after: the header says how big this will
+		// expand to, and a picture past the budget costs seconds and
+		// hundreds of megabytes to produce something a terminal shows a
+		// few hundred characters of (see ImagePixelBudget).
+		if tooLarge, pixels := ImageTooLarge(data); tooLarge {
+			return Result{Kind: KindUnsupported, Reason: fmt.Sprintf(
+				"image is %d megapixels — too large to preview", pixels/(1<<20))}, nil
 		}
 		img, format, err := DecodeImage(data)
 		if err != nil {

@@ -342,7 +342,11 @@ Read-only, full-screen.
   200 languages, with no external dependency. Files larger than 8 MiB
   show their first 8 MiB rather than loading entirely.
 - **Images** (PNG, JPEG, GIF, BMP, TIFF, WebP) render in the terminal,
-  decoded and scaled in pure Go.
+  decoded and scaled in pure Go. Anything past 50 megapixels is refused
+  with a note saying so, rather than spending seconds and hundreds of
+  megabytes decoding a picture the terminal shows a few hundred
+  characters of — the size is read from the header, so the refusal is
+  free.
 - **PDFs** open page by page: as real rendered images where
   [poppler-utils](https://poppler.freedesktop.org/)' `pdftoppm` is
   installed, as extracted text otherwise. `PageUp`/`PageDown` turn

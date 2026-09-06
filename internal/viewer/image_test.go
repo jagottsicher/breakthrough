@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -9,7 +10,9 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
@@ -257,5 +260,80 @@ func TestScaleForTerminalGuardsDegenerateInputs(t *testing.T) {
 		if b.Dx() < 1 || b.Dy() < 1 {
 			t.Errorf("ScaleForTerminal(cols=%d, rows=%d) produced a degenerate %v image", tc.cols, tc.rows, b)
 		}
+	}
+}
+
+// bigJPEG writes a JPEG of the given pixel dimensions and returns its
+// path. Sparse content, so encoding stays quick even at large sizes.
+func bigJPEG(t *testing.T, dir string, w, h int) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y += 11 {
+		for x := 0; x < w; x += 11 {
+			img.Set(x, y, color.RGBA{uint8(x), uint8(y), 128, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 70}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, fmt.Sprintf("%dx%d.jpg", w, h))
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestLoadRefusesAnOverSizedImageBeforeDecodingIt pins the pixel budget.
+//
+// The byte limit bounds what is read; it says nothing about what that
+// expands to. Measured before this existed: a 108 MP JPEG cost 1.8
+// seconds and 186 MiB of heap and then produced nothing usable anyway,
+// for a preview a few hundred characters wide. The refusal is made from
+// the header, so it costs essentially nothing.
+func TestLoadRefusesAnOverSizedImageBeforeDecodingIt(t *testing.T) {
+	dir := t.TempDir()
+	// Comfortably past ImagePixelBudget (50 MP) without being slow to
+	// encode here.
+	path := bigJPEG(t, dir, 9000, 7000) // 63 MP
+
+	start := time.Now()
+	result, err := Load(path, DefaultPreviewLimit)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if result.Kind == KindImage {
+		t.Fatal("a 63 MP image was decoded; the budget should have refused it")
+	}
+	if !strings.Contains(result.Reason, "megapixels") {
+		t.Errorf("Reason = %q, want it to say why", result.Reason)
+	}
+	// The point of checking the header is that refusing is cheap. Decoding
+	// this took well over a second before.
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("refusing took %s — that suggests it decoded the image first", elapsed.Round(time.Millisecond))
+	}
+}
+
+// TestLoadStillDecodesAnOrdinaryPhoto guards the other side: the budget
+// must not refuse the sizes people actually have.
+func TestLoadStillDecodesAnOrdinaryPhoto(t *testing.T) {
+	dir := t.TempDir()
+	path := bigJPEG(t, dir, 6000, 4000) // 24 MP, an ordinary phone picture
+
+	result, err := Load(path, DefaultPreviewLimit)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if result.Kind != KindImage {
+		t.Errorf("Kind = %v (%q), want a decoded image", result.Kind, result.Reason)
+	}
+}
+
+func TestImageTooLargeIgnoresUnreadableHeaders(t *testing.T) {
+	if tooLarge, _ := ImageTooLarge([]byte("not an image at all")); tooLarge {
+		t.Error("garbage was reported as over-sized; that is DecodeImage's error to report, not this one's")
 	}
 }
