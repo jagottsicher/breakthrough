@@ -36,6 +36,10 @@ var helpText = strings.TrimLeft(`
                   override gesture (often Shift-drag) without needing
                   this, but not everyone knows it
   F4              Open the tab switcher — see "Tabs" below
+  F5              Split view on/off — see "Split view" below
+  F6              Flip split view between side-by-side and stacked
+  Ctrl+_          Key prefix — see "The key prefix" below; reaches
+                  everything the function keys do, without them
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
@@ -130,6 +134,38 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]The key prefix (Ctrl+_)[::-]
+
+  Press Ctrl+_ and the button bar turns into a list of single-letter
+  commands; press one of them to run it. Nothing happens on the prefix
+  alone, so there is no waiting and no timeout — take as long as you
+  like before choosing.
+
+  s   Split view on/off        t   Tab switcher
+  o   Flip split orientation   n   New tab
+  p   Jump to the other pane   w   Close tab
+  d   Details sidebar          1-0 Jump straight to tab 1...10
+
+  r   Rename        m   Toggle mouse reporting
+  ,   Options       ?   This help
+
+  Escape leaves without running anything, as does any key that isn't in
+  the list. Pressing Ctrl+_ a second time also cancels.
+
+  This exists so none of it needs a function key: on a Mac, F1-F6 are
+  media keys unless you change a system setting, which makes them a
+  poor way to reach a feature. Everything here is also still on its own
+  key (F5, F2, Ctrl+O ...) — the prefix is a second route, not a
+  replacement.
+
+  Ctrl+_ specifically because no terminal multiplexer claims it: tmux
+  uses Ctrl+B, screen and byobu Ctrl+A, dtach Ctrl+\ — and whichever
+  of those you run breakthrough inside would swallow its own prefix
+  before this application ever saw the key.
+
+  The bar keeps its ordinary buttons while the command line has focus,
+  where Ctrl+_ is left alone for the shell.
 
 [::b]Split view (F5)[::-]
 

@@ -77,6 +77,19 @@ terminal.
   replaces only the pane you're in — the panes never swap sides. The
   split is saved and reopened alongside the tabs. See
   [docs/user-guide.md](docs/user-guide.md#split-view) for the details.
+- A key prefix (`^_`), for everything the function keys reach — without
+  them. Press it and the button bar turns into a list of single-letter
+  commands (`s` split, `o` orientation, `t` tabs, `n` new tab, `w` close
+  tab, `1`–`0` jump to tab N, `r` rename, `m` mouse, `,` options,
+  `?` help); press one to run it. The prefix does nothing on its own, so
+  there is no timeout and no guessing — and the legend means you don't
+  have to memorize the tree to use it. Mostly for macOS, where F1–F6 are
+  media keys until you change a system setting; nothing is taken away,
+  every existing key still works. `^_` was picked because no terminal
+  multiplexer claims it — tmux takes `^B`, screen and byobu `^A`, dtach
+  `^\` — and a multiplexer always swallows its own prefix before the
+  application inside sees it. See
+  [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),

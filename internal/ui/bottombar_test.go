@@ -325,6 +325,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		buttonActionRename:       "F2 Rename",
 		buttonActionTabSwitcher:  "F4 Tabs",
 		buttonActionToggleSplit:  "F5 Split", // not split right now — see splitButtonLabel
+		buttonActionPrefix:       "^_ More",  // the key-prefix legend — see keyprefix.go
 		buttonActionEdit:         "^E Edit",
 		buttonActionLook:         "^L Look",
 		buttonActionProperties:   "^P Properties",

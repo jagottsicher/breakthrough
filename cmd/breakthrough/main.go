@@ -230,7 +230,30 @@ func run() error {
 	// them installs a SetDoneFunc, so it was already a pure no-op in
 	// every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Prefix mode swallows the whole next keystroke as a verb (see
+		// internal/ui's keyprefix.go), so it has to be asked before the
+		// switch below rather than inside it: several verbs are letters
+		// that are themselves global shortcuts, and one keypress must
+		// never fire both.
+		if root.HandlePrefixKey(event) {
+			return nil
+		}
+
 		switch event.Key() {
+		case tcell.KeyCtrlUnderscore:
+			// Ctrl+_ opens the prefix — the second, function-key-free
+			// route to split view, tabs, rename, options and the rest
+			// (see Root.PrefixShortcut). Chosen over the remaining spare
+			// Ctrl letters because no terminal multiplexer claims it:
+			// tmux takes Ctrl+B, screen and byobu Ctrl+A, dtach and
+			// abduco Ctrl+\, and a multiplexer intercepts its own prefix
+			// before the application inside ever sees the key.
+			//
+			// Falls through while the command line has focus, the same
+			// as Ctrl+S/Ctrl+P/Ctrl+D below — PrefixShortcut applies
+			// that check itself.
+			root.PrefixShortcut()
+			return nil
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
 			return nil
