@@ -28,7 +28,6 @@ const (
 	buttonActionProperties buttonBarAction = iota
 	buttonActionEdit
 	buttonActionLook
-	buttonActionRename
 	buttonActionToggleHidden
 	buttonActionOptions
 	buttonActionSearch
@@ -39,9 +38,9 @@ const (
 	buttonActionRemove
 	buttonActionSed
 	buttonActionDetails
-	buttonActionTabSwitcher
 	buttonActionToggleSplit
 	buttonActionPrefix
+	buttonActionMenu
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -156,24 +155,31 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		trashbinLabel, trashbinAction = "^B Restore", buttonActionRestore
 	}
 
+	// The F1-F6 row follows Midnight Commander's own layout, per the
+	// user's own explicit request: F1 Help, F2 menu, F3 view, F4 edit.
+	// Where a feature also has a Ctrl binding, both are named in the
+	// one label ("F3/^L Look") rather than given two entries — the row
+	// is already the widest thing on screen, and a user who knows one
+	// of the two doesn't need to be told twice.
+	//
+	// The mouse toggle has no button here at all: it exists for when
+	// clicking has already stopped working (native terminal selection
+	// took mouse reporting's place), so a button for it would be
+	// unreachable in exactly the situation it's for. It sits on F12 and
+	// on the prefix instead.
 	buttons := []buttonSpec{
 		{"F1 Help", buttonActionHelp},
-		{"F2 Rename", buttonActionRename},
-		// F4, not F3: F3 (toggle mouse reporting) has no button here at
-		// all — it exists specifically for when clicking has already
-		// stopped working (native terminal selection took mouse
-		// reporting's place), so a button for it would be unreachable in
-		// exactly the situation it's for. F4 has no such problem.
-		{"F4 Tabs", buttonActionTabSwitcher},
+		{"F2 Menu", buttonActionMenu},
+		{"F3/^L Look", buttonActionLook},
+		{"F4/^E Edit", buttonActionEdit},
 		{splitButtonLabel(r.splitActive), buttonActionToggleSplit},
 		// The prefix's own entry, so the feature is discoverable at all
 		// — the whole point of it is reaching things without the
 		// function keys, which nobody looks for unless something says
 		// it exists. Clicking it opens the verb legend exactly as the
-		// key does (see keyprefix.go).
+		// key does (see keyprefix.go). It is also where Rename and the
+		// tab switcher now live, both displaced from the F-keys above.
 		{"^_ More", buttonActionPrefix},
-		{"^E Edit", buttonActionEdit},
-		{"^L Look", buttonActionLook},
 		{"^P Properties", buttonActionProperties},
 		{"^D Details", buttonActionDetails},
 		{"^F Find", buttonActionSearch},
@@ -487,8 +493,6 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.editCurrentEntry()
 	case buttonActionLook:
 		r.lookCurrentEntry()
-	case buttonActionRename:
-		r.renameCurrentEntry()
 	case buttonActionToggleHidden:
 		r.toggleHidden()
 	case buttonActionOptions:
@@ -509,20 +513,16 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openSedReplace()
 	case buttonActionDetails:
 		r.toggleDetailsSidebar()
+	case buttonActionMenu:
+		r.MenuShortcut()
 	case buttonActionPrefix:
 		r.startPrefix()
 	case buttonActionToggleSplit:
-		// Direct, for the same reason buttonActionTabSwitcher just below
-		// is — a click is always deliberate.
+		// Direct, not the keyboard shortcut's own wrapper: a click is
+		// always deliberate (see this func's own doc comment), so the
+		// acceptsGlobalShortcut gate that keeps a key from firing while
+		// the bash line has focus doesn't apply.
 		r.toggleSplit()
-	case buttonActionTabSwitcher:
-		// Direct, not TabSwitcherShortcut: a click is always deliberate
-		// (see this func's own doc comment), so the same
-		// acceptsGlobalShortcut gate that keeps the keyboard shortcut
-		// from firing while typing in the bash line or another overlay
-		// is open doesn't apply here — every other button above already
-		// bypasses its own keyboard-shortcut wrapper the same way.
-		r.openTabSwitcher(r.activeTab)
 	}
 }
 
