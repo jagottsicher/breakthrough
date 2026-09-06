@@ -669,7 +669,13 @@ type Root struct {
 	bashHint       *tview.TextView
 	buttonBar      *tview.TextView
 	buttonBarSpans []buttonBarSpan
-	statusBar      *tview.TextView
+
+	// prefixActive is true between Ctrl+_ and the verb key that follows
+	// it (see keyprefix.go). While it's set, the button bar shows the
+	// verb legend instead of the ordinary buttons, and every key is
+	// consumed as a verb rather than reaching its own shortcut.
+	prefixActive bool
+	statusBar    *tview.TextView
 
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
