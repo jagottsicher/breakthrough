@@ -133,3 +133,35 @@ func (r *Root) safeGo(name string, onPanic func(), fn func()) {
 		fn()
 	}()
 }
+
+// ReportPanic writes a panic and every goroutine's stack to the crash
+// log, and reports where it went ("" if no log could be written).
+//
+// The exported counterpart to what safeGo already does for the
+// goroutines it owns — for the one place safeGo cannot reach: the main
+// goroutine. A panic there (in a key handler, a mouse handler, a draw
+// callback, tview's own event loop) unwinds through
+// tview.Application.Run, which restores the terminal and re-panics, and
+// the traceback then goes to stderr — where, on a terminal that has just
+// been switched back out of the alternate screen buffer, it is very
+// often scrolled away or wiped before anyone can read it.
+//
+// The practical consequence was that a real, repeatable crash left
+// behind no evidence at all: no crash.log, because nothing recovered it,
+// and nothing on screen either. Reported by a user hitting it regularly
+// while browsing with the Details sidebar open in split view — a crash
+// nobody could act on because nobody could see it.
+//
+// Deliberately does not attempt to keep the application alive. A panic
+// means some invariant this program believed in is already false, and a
+// file manager that carries on regardless is exactly the kind of program
+// that then does something irreversible to somebody's files. The job
+// here is to leave a usable report and stop.
+func ReportPanic(name string, rec any) string {
+	logCrash(name, rec, allStacks())
+	return crashLogPath()
+}
+
+// CrashLogPath is where ReportPanic writes, for a caller that wants to
+// name it before anything has gone wrong.
+func CrashLogPath() string { return crashLogPath() }
