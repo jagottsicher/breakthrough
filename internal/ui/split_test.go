@@ -521,3 +521,49 @@ func TestRightDragInTheInactivePaneStillSelects(t *testing.T) {
 		t.Error("a right-drag in the inactive pane selected nothing")
 	}
 }
+
+// TestSwapPanesExchangesTheirPositions pins what swapping is: the two
+// panes trade sides, and nothing else moves.
+func TestSwapPanesExchangesTheirPositions(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1) // panes [0, 1], tab 0 focused and on the left
+
+	if !r.swapPanes() {
+		t.Fatal("swapPanes reported nothing to do while split")
+	}
+
+	if r.splitPanes != [2]int{1, 0} {
+		t.Errorf("splitPanes = %v, want them exchanged to {1, 0}", r.splitPanes)
+	}
+	// The pane that had the keyboard keeps it — it has moved sides, not
+	// handed over. Swapping focus too would make this two actions in one.
+	if r.activeTab != 0 {
+		t.Errorf("activeTab = %d, want the focused tab unchanged at 0", r.activeTab)
+	}
+	// And the mounted order follows, which is the part the user sees.
+	mounted := mountedPanels(r)
+	if len(mounted) != 2 || mounted[0] != r.tabs[1] || mounted[1] != r.tabs[0] {
+		t.Error("the panels are not mounted in the swapped order")
+	}
+}
+
+func TestSwapPanesTwiceIsWhereYouStarted(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1)
+	before := r.splitPanes
+
+	r.swapPanes()
+	r.swapPanes()
+
+	if r.splitPanes != before {
+		t.Errorf("splitPanes = %v, want back to %v", r.splitPanes, before)
+	}
+}
+
+func TestSwapPanesRefusesWithoutASplit(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+
+	if r.swapPanes() {
+		t.Error("swapPanes claimed to have done something with only one pane")
+	}
+}
