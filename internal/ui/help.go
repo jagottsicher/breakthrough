@@ -85,9 +85,10 @@ var helpText = strings.TrimLeft(`
                   Paste, chown, chmod, sed, Batch rename, Undo last
                   rename, Move to Trash, Remove, Go to Trash, Restore
                   from Trash, Empty Trash, New tab, Close tab, Switch
-                  tab..., Ping (test), grep*, zgrep*, du*, df*, and
-                  three toggles: hidden files, size format,
-                  modified-time format — *planned, not built yet)
+                  tab..., Split view, Split above/below, Ping (test),
+                  grep*, zgrep*, du*, df*, and three toggles: hidden
+                  files, size format, modified-time format — *planned,
+                  not built yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -129,6 +130,39 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]Split view (F5)[::-]
+
+  Two of your open tabs on screen at once, instead of one at a time.
+
+  F5                Split / unsplit — the button bar's own "F5 Split"
+                    does the same
+  F6                Flip between side by side and above/below
+  Tab               Move between the two panes; clicking a pane does the
+                    same
+
+  The pane you are in keeps the keyboard, the context menu, and every
+  shortcut — the other one just sits there until you move to it, and the
+  highlighted row shows you which is which at a glance. Each pane's own
+  number strip marks the tab it holds.
+
+  With only one tab open, F5 opens a second one on the same directory,
+  which is the usual starting point for copying between two places in
+  one tree. Otherwise it pairs you with the tab you last split with, or
+  the next one along.
+
+  To pick the other pane yourself, open the tab list (F4) and use a
+  row's "◫" button — on a real tab to show that one beside the current
+  one, or on the "+ New tab" row to make a fresh tab and split with it
+  in one go.
+
+  Switching tabs while split (Ctrl+1...Ctrl+0, or the list) replaces
+  what the pane you are in shows; the other pane stays put, and neither
+  ever swaps sides. Closing either pane's own tab ends the split.
+
+  Whether panes sit side by side or stacked is a setting
+  ("split_stacked", also in Options → Behavior), so it survives a
+  restart — as does the split itself, along with the tabs.
 
 [::b]Batch rename (context menu's "Batch rename")[::-]
 
