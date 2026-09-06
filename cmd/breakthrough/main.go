@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -66,6 +67,36 @@ func main() {
 		// the TUI itself takes over the screen.
 		fmt.Println("breakthrough: debug mode — stderr (including any crash) is being written to", logPath)
 	}
+
+	// Catches a panic on the main goroutine — a key handler, a mouse
+	// handler, a draw callback, tview's own event loop — which is the
+	// one place internal/ui's safeGo cannot reach.
+	//
+	// Without this such a crash left no evidence anywhere: tview's Run
+	// restores the terminal and re-panics, so the traceback goes to a
+	// stderr that has just been switched out of the alternate screen
+	// buffer and is usually scrolled away or wiped before it can be
+	// read, and nothing writes it to a file. A real, regularly
+	// reproducible crash was consequently undiagnosable.
+	//
+	// Deliberately not an attempt to keep going: see ui.ReportPanic.
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			return
+		}
+		path := ui.ReportPanic("main", rec)
+		fmt.Fprintf(os.Stderr, "\nbreakthrough: internal error: %v\n", rec)
+		if path != "" {
+			fmt.Fprintf(os.Stderr, "A full report was written to %s\n", path)
+			fmt.Fprintln(os.Stderr, "Please include it when reporting this: https://github.com/jagottsicher/breakthrough/issues")
+		}
+		// The stack to stderr as well as to the log: someone watching a
+		// terminal that did keep its scrollback should not have to go
+		// find a file to see what happened.
+		fmt.Fprintf(os.Stderr, "\n%s", debug.Stack())
+		os.Exit(2)
+	}()
 
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "breakthrough:", err)

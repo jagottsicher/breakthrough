@@ -28,13 +28,52 @@ import (
 // parser — could have rendered it anyway. Not worth a second, separate
 // "can pdftoppm even open this" probe just to hedge against that rare
 // case.
-func PDFPageCount(path string) (int, error) {
-	f, r, err := pdf.Open(path)
+// withPDFRecover runs fn, turning a panic from inside ledongthuc/pdf
+// into an ordinary error.
+//
+// Necessary because that library reports malformed input by panicking
+// rather than by returning an error: its lexer calls a buffer.errorf
+// that panics outright (see its own lex.go), and pdf.Open's xref
+// reading goes straight through it. A PDF this program cannot parse is
+// an entirely ordinary thing to meet while browsing a directory — it
+// is not a reason to take the process down.
+//
+// This is not theoretical. It killed breakthrough for a real user, in
+// the most innocuous situation imaginable: with the Details sidebar
+// open, that sidebar loads a preview for whatever the cursor is on, so
+// simply arrowing past a malformed PDF crashed the whole application,
+// mid-keystroke, from inside tview's own input handler. The crash
+// report that identified it is in this repository's own history — see
+// ui.ReportPanic, added because that panic had until then left no
+// trace at all.
+//
+// Wraps the whole open-and-use sequence rather than just the Open call:
+// the same lexer is used lazily when pages and text are read, so
+// NumPage, Page and GetPlainText can all panic on the same file, well
+// after Open itself returned cleanly.
+func withPDFRecover(path string, fn func() error) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("%s: unreadable PDF: %v", filepath.Base(path), rec)
+		}
+	}()
+	return fn()
+}
+
+func PDFPageCount(path string) (count int, err error) {
+	err = withPDFRecover(path, func() error {
+		f, r, err := pdf.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }() // read-only — nothing further to report on a Close failure
+		count = r.NumPage()
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = f.Close() }() // read-only — nothing further to report on a Close failure
-	return r.NumPage(), nil
+	return count, nil
 }
 
 // PDFTextFallbackNotice is what internal/ui appends to a PDF page's
@@ -162,15 +201,22 @@ func rasterizePDFPage(path string, page int) (img image.Image, format string, er
 // (this package never keeps a Reader open across calls, so there's
 // nothing to reuse), and GetPlainText itself resolves whatever it
 // needs from the page's own font resources either way.
-func extractPDFPageText(path string, page int) (string, error) {
-	f, r, err := pdf.Open(path)
+func extractPDFPageText(path string, page int) (text string, err error) {
+	err = withPDFRecover(path, func() error {
+		f, r, err := pdf.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }() // read-only — nothing further to report on a Close failure
+
+		if page < 1 || page > r.NumPage() {
+			return fmt.Errorf("page %d out of range (1-%d)", page, r.NumPage())
+		}
+		text, err = r.Page(page).GetPlainText(nil)
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }() // read-only — nothing further to report on a Close failure
-
-	if page < 1 || page > r.NumPage() {
-		return "", fmt.Errorf("page %d out of range (1-%d)", page, r.NumPage())
-	}
-	return r.Page(page).GetPlainText(nil)
+	return text, nil
 }
