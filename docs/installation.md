@@ -168,7 +168,7 @@ all pure Go and need nothing installed.
 The binary is self-contained, so it runs from wherever it happens to be:
 
 ```sh
-tar xzf breakthrough_0.16.0_linux_amd64.tar.gz
+tar xzf breakthrough_0.16.1_linux_amd64.tar.gz
 ./breakthrough /some/directory
 ```
 
@@ -194,7 +194,7 @@ Check what you're actually running with:
 
 ```sh
 breakthrough --version
-# breakthrough 0.16.0 (commit 1a2b3c4, built 2026-08-28T20:11:03Z by goreleaser)
+# breakthrough 0.16.1 (commit 1a2b3c4, built 2026-08-28T20:11:03Z by goreleaser)
 ```
 
 ## Uninstalling
