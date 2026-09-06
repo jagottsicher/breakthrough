@@ -1362,13 +1362,40 @@ func (r *Root) wirePanel(panel *Panel) {
 // one. Clicking into the other pane therefore both moves keyboard focus
 // there and makes it the tab every subsequent action applies to, which
 // is the same thing clicking a pane means in every two-pane file manager.
+//
+// Only on a deliberate press, though — see activatesPaneOnClick. This
+// originally switched on *any* mouse event, which meant the pointer
+// merely resting over the other pane was enough: a user who had last
+// clicked on the right, then selected something on the left, would have
+// the active pane yanked back to the right by the next stray movement
+// event, seconds later and with no apparent cause. A real report, and a
+// bug this package's own test had pinned in place rather than caught,
+// by exercising it with MouseMove.
 func (r *Root) captureMouseOnPanel(panel *Panel, action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if panel != r.panel {
+	if panel != r.panel && activatesPaneOnClick(action) {
 		if i, ok := r.tabIndexOf(panel); ok {
 			r.switchToTab(i)
 		}
 	}
 	return r.captureMouse(action, event)
+}
+
+// activatesPaneOnClick reports whether a mouse action is deliberate
+// enough to move the active pane to whichever one it landed in.
+//
+// Button presses are; movement and the scroll wheel are not. Hovering
+// somewhere is not a decision, and scrolling an inactive pane to look at
+// it is a reason to leave the keyboard where it is, not to move it —
+// both would otherwise change what every subsequent keystroke acts on
+// without the user having asked for anything.
+func activatesPaneOnClick(action tview.MouseAction) bool {
+	switch action {
+	case tview.MouseLeftDown, tview.MouseLeftClick, tview.MouseLeftDoubleClick,
+		tview.MouseMiddleDown, tview.MouseMiddleClick, tview.MouseMiddleDoubleClick,
+		tview.MouseRightDown, tview.MouseRightClick, tview.MouseRightDoubleClick:
+		return true
+	}
+	return false
 }
 
 // tabIndexOf is which tab panel is, if it's one of the open ones.

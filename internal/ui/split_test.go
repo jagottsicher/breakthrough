@@ -271,12 +271,37 @@ func TestClickingTheOtherPaneMakesItActive(t *testing.T) {
 	r, _, _ := newSplitRoot(t)
 	r.enterSplit(1)
 
-	// A plain move (not a click) is enough: captureMouseOnPanel activates
-	// the pane an event landed on before anything else looks at it.
-	r.captureMouseOnPanel(r.tabs[1], tview.MouseMove, tcell.NewEventMouse(0, 0, tcell.ButtonNone, tcell.ModNone))
+	r.captureMouseOnPanel(r.tabs[1], tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.Button1, tcell.ModNone))
 
 	if r.activeTab != 1 {
 		t.Errorf("activeTab = %d, want the clicked pane to become active", r.activeTab)
+	}
+}
+
+// TestMerelyPointingAtTheOtherPaneDoesNotActivateIt is a regression test
+// for a real report: the active pane used to follow *any* mouse event,
+// so a pointer left resting over one pane would yank the keyboard back
+// to it seconds after the user had deliberately selected something in
+// the other — with nothing on screen to explain why.
+//
+// This test previously asserted the opposite, having been written with
+// MouseMove on the assumption that any event meant a click. It pinned
+// the bug in place instead of catching it.
+func TestMerelyPointingAtTheOtherPaneDoesNotActivateIt(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1)
+	before := r.activeTab
+
+	for _, action := range []tview.MouseAction{
+		tview.MouseMove,
+		tview.MouseScrollUp,
+		tview.MouseScrollDown,
+	} {
+		r.captureMouseOnPanel(r.tabs[1], action, tcell.NewEventMouse(0, 0, tcell.ButtonNone, tcell.ModNone))
+		if r.activeTab != before {
+			t.Errorf("action %v moved the active pane to %d — only a deliberate press should", action, r.activeTab)
+			r.switchToTab(before)
+		}
 	}
 }
 
