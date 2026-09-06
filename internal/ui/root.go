@@ -2001,6 +2001,51 @@ func (r *Root) placeholderMenuAction(name string) func() {
 	}
 }
 
+// MenuShortcut is F2's own action: open the context menu for whichever
+// row the cursor is on, without a mouse.
+//
+// Until this existed the context menu was reachable by right-click and
+// nothing else — a real gap in an application whose own guardrail is
+// that every mouse gesture has a keyboard equivalent, and the reason
+// F2 landing here (Midnight Commander's own F2 is its user menu) fills
+// a hole rather than just moving one key onto another.
+//
+// Sets r.target/r.targetRow the same way the right-click path does (see
+// captureMouse's MouseRightClick case) — several menu entries read them
+// rather than the panel's cursor, so opening the menu any other way
+// would leave them pointing at whatever was last right-clicked.
+func (r *Root) MenuShortcut() {
+	if !r.acceptsGlobalShortcut() {
+		return
+	}
+	row, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return // an empty listing has no entry for a menu to be about
+	}
+	r.target = path
+	r.targetRow = row
+	x, y := r.menuAnchorForCurrentRow()
+	r.showMenu(x, y)
+}
+
+// menuAnchorForCurrentRow is where a keyboard-opened context menu
+// appears: just below and slightly right of the cursor row, so it reads
+// as belonging to that row the same way a right-click menu does.
+//
+// Falls back to the panel's own top-left when the table has no rect yet
+// (nothing drawn — e.g. in a test), which showMenu's own clampToPanel
+// then keeps on screen regardless.
+func (r *Root) menuAnchorForCurrentRow() (x, y int) {
+	px, py, _, _ := r.panel.table.GetRect()
+	if px == 0 && py == 0 {
+		px, py, _, _ = r.panel.GetRect()
+	}
+	// The cursor's own row offset within the table, so the menu opens
+	// next to the entry it is about rather than always at the top.
+	row, _ := r.panel.table.GetSelection()
+	return px + 2, py + row + 1
+}
+
 // showMenu positions the context menu near (x, y), clamped to the panel's
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.

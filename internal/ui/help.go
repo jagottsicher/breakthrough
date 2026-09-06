@@ -28,26 +28,39 @@ const helpMinWidth, helpMinHeight = 60, 20
 var helpText = strings.TrimLeft(`
 [::b]Global — work anywhere, even inside another dialog[::-]
 
+  The F1-F4 row follows Midnight Commander's own layout.
+
   F1              This help
-  F3              Toggle mouse reporting on/off (see the status bar's
+  F2              Context menu for the row under the cursor — the same
+                  menu a right-click opens (Midnight Commander's own F2
+                  is its user menu; this is the nearest thing here)
+  F3              Look at the selected file — same as Ctrl+L
+  F4              Edit the selected file — same as Ctrl+E
+  F5              Split view on/off — see "Split view" below
+  F6              Flip split view between side-by-side and stacked
+  F12             Toggle mouse reporting on/off (see the status bar's
                   own "Mouse on/off") — off gives your terminal's own
                   native text selection/copy back, e.g. to grab a
                   filename; most terminals also support their own
                   override gesture (often Shift-drag) without needing
-                  this, but not everyone knows it
-  F4              Open the tab switcher — see "Tabs" below
-  F5              Split view on/off — see "Split view" below
-  F6              Flip split view between side-by-side and stacked
+                  this, but not everyone knows it. Out on F12, away
+                  from the Midnight Commander row, because it has to
+                  work from inside a dialog too — which is exactly
+                  where the key prefix stands down
   Ctrl+_          Key prefix — see "The key prefix" below; reaches
                   everything the function keys do, without them
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
+  Rename moved off F2 to the prefix (Ctrl+_ r), the context menu, and
+  the click-pause-click gesture; the tab switcher is on Ctrl+T and
+  Ctrl+_ t.
+
 [::b]File panel[::-]
 
-  Ctrl+E          Edit the selected file
-  Ctrl+L          Look at the selected file (read-only)
-  F2              Rename the selected file
+  Ctrl+E          Edit the selected file — F4 does the same
+  Ctrl+L          Look at the selected file (read-only) — F3 does the
+                  same
   Ctrl+G          Toggle hidden files — the button bar's own label
                   flips between Hide/Unhide to match
   Ctrl+F          Find
@@ -147,7 +160,7 @@ var helpText = strings.TrimLeft(`
   p   Jump to the other pane   w   Close tab
   d   Details sidebar          1-0 Jump straight to tab 1...10
 
-  r   Rename        m   Toggle mouse reporting
+  r   Rename        m   Toggle mouse reporting (also F12)
   ,   Options       ?   This help
 
   Escape leaves without running anything, as does any key that isn't in
