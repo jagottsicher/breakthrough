@@ -1009,6 +1009,48 @@ func (r *Root) cancelDetailsHashComputation() {
 // stopping deliberately still feels immediate.
 const detailsPreviewDebounce = 120 * time.Millisecond
 
+// detailsPreviewFor is the actual work behind a preview: decode the
+// image, or for a PDF count its pages and rasterize the first one.
+//
+// A plain function taking a context, separate from the goroutine that
+// normally calls it, for two reasons. It is the expensive part and
+// deserves to be readable on its own; and it is directly callable, which
+// is the only way tests can exercise it — startDetailsPreview reports
+// its result through Application.QueueUpdateDraw, and that blocks
+// forever without a running event loop to drain it (the same constraint
+// sedPreviewFunc's own doc comment describes).
+//
+// Returns a nil image for anything with no preview, which is the
+// ordinary case and not an error worth reporting: the sidebar simply
+// shows the stat block on its own.
+func detailsPreviewFor(ctx context.Context, path string) (image *viewer.Result, pageCount int) {
+	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
+	if err != nil || ctx.Err() != nil {
+		return nil, 0
+	}
+
+	switch result.Kind {
+	case viewer.KindImage:
+		return &result, 0
+	case viewer.KindPDF:
+		if count, err := viewer.PDFPageCount(path); err == nil {
+			pageCount = count
+		}
+		if ctx.Err() != nil {
+			return nil, pageCount // rasterizing below is the expensive part; don't start it if we're already stale
+		}
+		// The context variant: cancelling has to kill pdftoppm, not
+		// merely discard what it produces, or scrolling past a run of
+		// PDFs would still leave one subprocess per file behind — the
+		// stall would be gone from the UI and still be there on the
+		// machine.
+		if page, err := viewer.LoadPDFPageContext(ctx, path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
+			return &page, pageCount
+		}
+	}
+	return nil, pageCount
+}
+
 // cancelDetailsPreview stops the preview load for whatever target the
 // cursor has moved off.
 func (r *Root) cancelDetailsPreview() {
@@ -1050,27 +1092,7 @@ func (r *Root) startDetailsPreview(path string) {
 		case <-time.After(detailsPreviewDebounce):
 		}
 
-		result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
-		if err != nil || ctx.Err() != nil {
-			return
-		}
-
-		var image *viewer.Result
-		pageCount := 0
-		switch result.Kind {
-		case viewer.KindImage:
-			image = &result
-		case viewer.KindPDF:
-			if count, err := viewer.PDFPageCount(path); err == nil {
-				pageCount = count
-			}
-			if ctx.Err() != nil {
-				return // pdftoppm below is the expensive one; don't start it if we're already stale
-			}
-			if page, err := viewer.LoadPDFPage(path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
-				image = &page
-			}
-		}
+		image, pageCount := detailsPreviewFor(ctx, path)
 		if ctx.Err() != nil {
 			return
 		}

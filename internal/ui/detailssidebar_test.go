@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -20,6 +21,30 @@ import (
 // TestToggleDetailsSidebarShortcutShowsAndHides pins Ctrl+D's own basic
 // show/hide action, and that it's tracked outside activePage/
 // overlayStack — see newDetailsSidebarView's own doc comment on why.
+// loadDetailsWithPreview is loadDetailsTarget plus the preview that
+// normally arrives from the background (see startDetailsPreview).
+//
+// Tests can't wait for the real thing: it reports through
+// Application.QueueUpdateDraw, which blocks forever with no event loop
+// running to drain it. Calling the same compute function the goroutine
+// calls, then applying it the same way, exercises everything except the
+// scheduling.
+func loadDetailsWithPreview(t *testing.T, r *Root, path string) {
+	t.Helper()
+	r.loadDetailsTarget(path)
+	applyDetailsPreview(t, r)
+}
+
+// applyDetailsPreview brings in the preview for whatever the sidebar is
+// currently showing — for tests that reach loadDetailsTarget indirectly,
+// through showDetailsSidebar or a cursor move.
+func applyDetailsPreview(t *testing.T, r *Root) {
+	t.Helper()
+	image, pageCount := detailsPreviewFor(context.Background(), r.detailsTarget)
+	r.detailsImage, r.detailsPDFPageCount = image, pageCount
+	r.renderDetailsSidebar()
+}
+
 func TestToggleDetailsSidebarShortcutShowsAndHides(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -715,8 +740,8 @@ func TestDetailsSidebarShowsImagePreviewAndDimensionsForImageFile(t *testing.T) 
 	}
 	r.SetRect(0, 0, 100, 40)
 
-	r.loadDetailsTarget(path)
 	r.detailsSidebarVisible = true
+	loadDetailsWithPreview(t, r, path)
 
 	if r.detailsImage == nil {
 		t.Fatal("detailsImage should be set for a real PNG")
@@ -759,8 +784,8 @@ func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 40)
-	r.loadDetailsTarget(path)
 	r.detailsSidebarVisible = true
+	loadDetailsWithPreview(t, r, path)
 
 	before := r.detailsSidebar.GetText(true)
 	if !strings.Contains(before, "Ctrl+N") {
@@ -1360,7 +1385,7 @@ func TestDetailsSidebarShowsPDFPageCount(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 40)
-	r.loadDetailsTarget(path)
+	loadDetailsWithPreview(t, r, path)
 	r.detailsSidebarVisible = true
 
 	if r.detailsPDFPageCount != 1 {
@@ -1389,7 +1414,7 @@ func TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 40)
-	r.loadDetailsTarget(path)
+	loadDetailsWithPreview(t, r, path)
 	r.detailsSidebarVisible = true
 
 	if r.detailsImage == nil {
@@ -1437,6 +1462,7 @@ func TestClickingPreviewOpensLook(t *testing.T) {
 	r.SetRect(0, 0, 100, 40)
 	r.panel.focusRow(1) // off ".." onto photo.png, the only real entry
 	r.showDetailsSidebar()
+	applyDetailsPreview(t, r)
 
 	if r.detailsPreviewRowStart < 0 {
 		t.Fatal("setup: detailsPreviewRowStart should be set for an image target")
@@ -1480,7 +1506,7 @@ func TestDetailsImagePreviewHasNoExtraVerticalGap(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 90) // tall: a third (30 rows) is far more than a 400x10 image scaled into ~90 columns will ever need
-	r.loadDetailsTarget(path)
+	loadDetailsWithPreview(t, r, path)
 	r.detailsSidebarVisible = true
 
 	text := r.detailsSidebar.GetText(true)
