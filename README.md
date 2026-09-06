@@ -64,6 +64,32 @@ terminal.
   a "+" while only one tab is open. The layout is saved on exit and
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
+- Split view (`F5`): two of those tabs on screen at once, side by side
+  or stacked (`F6` flips it, or set `split_stacked` once and forget it).
+  With a single tab open, `F5` opens a second one on the same directory
+  — the usual starting point for copying between two places in one tree;
+  otherwise it pairs you with the tab you last split with. To choose the
+  other pane yourself, the tab list (`F4`) gives every row a `◫` button,
+  including its "+ New tab" row, which creates a tab and splits with it
+  in one step. `Tab`, or a click, moves between the panes, and the one
+  you are in keeps the keyboard, the context menu and every shortcut;
+  the highlighted row shows which that is. Switching tabs while split
+  replaces only the pane you're in — the panes never swap sides. The
+  split is saved and reopened alongside the tabs. See
+  [docs/user-guide.md](docs/user-guide.md#split-view) for the details.
+- A key prefix (`^_`), for everything the function keys reach — without
+  them. Press it and the button bar turns into a list of single-letter
+  commands (`s` split, `o` orientation, `t` tabs, `n` new tab, `w` close
+  tab, `1`–`0` jump to tab N, `r` rename, `m` mouse, `,` options,
+  `?` help); press one to run it. The prefix does nothing on its own, so
+  there is no timeout and no guessing — and the legend means you don't
+  have to memorize the tree to use it. Mostly for macOS, where F1–F6 are
+  media keys until you change a system setting; nothing is taken away,
+  every existing key still works. `^_` was picked because no terminal
+  multiplexer claims it — tmux takes `^B`, screen and byobu `^A`, dtach
+  `^\` — and a multiplexer always swallows its own prefix before the
+  application inside sees it. See
+  [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
 - A right-click context menu: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
@@ -116,6 +142,24 @@ terminal.
   original first. Never uses sed's own `-i`: GNU and BSD/macOS sed take
   incompatible arguments for it, so this always runs sed as a plain
   filter and writes the result back itself.
+- Batch rename (context menu): renames a whole selection through a fixed
+  pipeline of steps — Search & Replace (literal or regex), Case
+  (UPPER/lower/Title/Sentence), Trim (drop N characters off either end),
+  Numbering (a zero-padded counter as prefix or suffix), and Extension
+  (lower/upper/remove/replace) — with the steps listed down the left and
+  the selected one's own settings on the right. A step left alone does
+  nothing; there is no separate on/off switch to also remember. Search &
+  Replace and Case only ever touch the name, never the extension, and
+  Extension only ever touches the extension, so a case transform can't
+  quietly rewrite `.JPG` behind your back. The whole selection is
+  previewed live, old name beside new, updated on every keystroke rather
+  than behind a "Preview" button — unchanged rows dimmed, and any
+  collision (two files landing on the same new name, or a name already
+  taken on disk) shown in red with the reason, right where it would
+  happen. Nothing is written until Rename is confirmed, and "Undo last
+  rename" reverses the whole batch afterwards. See
+  [docs/user-guide.md](docs/user-guide.md#batch-rename) for the step
+  reference.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -167,7 +211,7 @@ terminal.
   `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong),
   and a clock.
 - Color schemes: JSON files under `colorschemes/` in either config tier
-  (see below), switchable live from the Settings overlay (`^X` or the
+  (see below), switchable live from the Options screen (`^O` or the
   bottom bar's own button) — no restart needed, and the pick is
   remembered for next time.
 - Search (`^F`, or the bottom bar's own button): by file name (glob, a
@@ -209,10 +253,12 @@ terminal.
 
 ## Status
 
-Actively developed. The single-panel core above is functional and
-tested, trash and Sed Replace included; a second panel and the rest of
-the settings layer beyond color schemes and the trash toggle are
-planned next — see
+Actively developed and usable day to day. Everything described above is
+built and tested: browsing, tabs, split view, the trash, Search, Look,
+Sed Replace, Batch rename, and a full Options screen covering every
+setting breakthrough recognizes. Progress bars for long-running file
+operations, archive handling, and a set of built-in networking/hardware
+tool windows are what's planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
@@ -256,15 +302,141 @@ for every field a scheme can set.
 
 ## Installing
 
-Download a release for your platform from the
-[Releases page](https://github.com/jagottsicher/breakthrough/releases) —
-a `.tar.gz` archive for Linux (x86_64, arm64), macOS (Intel, Apple
-Silicon), and FreeBSD (x86_64), or a `.deb`/`.rpm` package on Linux.
-Verify a download against the release's `checksums.txt` with
-`sha256sum -c`.
+Every release ships prebuilt binaries for all supported platforms on the
+[Releases page](https://github.com/jagottsicher/breakthrough/releases).
+No runtime dependencies: breakthrough is a single static Go binary built
+with `CGO_ENABLED=0`, so there is nothing to install alongside it and
+nothing to break on a libc upgrade.
 
-Or build it yourself — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
-full local setup.
+### Which build do I need?
+
+| Your system | Architecture | Download |
+|---|---|---|
+| Linux, ordinary PC/server | x86_64 / amd64 | `breakthrough_<version>_linux_amd64.*` |
+| Linux, Raspberry Pi 4/5 (64-bit), ARM servers, AWS Graviton | aarch64 / arm64 | `breakthrough_<version>_linux_arm64.*` |
+| macOS, Intel | x86_64 | `breakthrough_<version>_darwin_amd64.tar.gz` |
+| macOS, Apple Silicon (M1–M4) | arm64 | `breakthrough_<version>_darwin_arm64.tar.gz` |
+| FreeBSD | x86_64 / amd64 | `breakthrough_<version>_freebsd_amd64.tar.gz` |
+
+Not sure which one you're on? `uname -sm` answers both questions at
+once — `Linux x86_64` means linux/amd64, `Linux aarch64` means
+linux/arm64, `Darwin arm64` means Apple Silicon.
+
+32-bit builds (i386, armv6/armv7) are deliberately not published. If you
+need one, it cross-compiles from source in one command — see
+[Building from source](#building-from-source) below.
+
+### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
+
+```sh
+VERSION=0.14.0                     # or whatever the latest release is
+ARCH=$(dpkg --print-architecture)  # amd64 or arm64
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
+sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
+```
+
+`apt install ./file.deb` rather than `dpkg -i` so any dependency
+resolution is handled for you. Upgrade by installing a newer `.deb` the
+same way; remove with `sudo apt remove breakthrough`.
+
+### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
+
+```sh
+VERSION=0.14.0
+ARCH=$(uname -m)                   # x86_64 or aarch64
+case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
+sudo dnf install "./breakthrough_${VERSION}_linux_${PKG}.rpm"   # or: sudo zypper install ./...
+```
+
+Both packages also create `/etc/breakthrough/config` — fully documented,
+every setting listed and commented out — and `/etc/breakthrough/colorschemes/`,
+so a system administrator has a real starting point for machine-wide
+defaults (see [Color schemes](#color-schemes)). Your own edits to that
+file survive a package upgrade: it's registered as a conffile on Debian
+and `%config(noreplace)` on RPM.
+
+### Any Linux, macOS, or FreeBSD (`.tar.gz`)
+
+Works on any distribution, with or without root:
+
+```sh
+VERSION=0.14.0
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
+case "$(uname -m)" in
+  x86_64|amd64) ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+esac
+
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
+tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
+sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
+```
+
+Without root, drop it somewhere on your own `PATH` instead:
+
+```sh
+mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
+```
+
+On macOS, Gatekeeper quarantines anything downloaded with a browser. If
+you get "cannot be opened because the developer cannot be verified",
+clear the quarantine flag once:
+
+```sh
+xattr -d com.apple.quarantine /usr/local/bin/breakthrough
+```
+
+Downloading with `curl`, as above, avoids that entirely.
+
+### Verifying a download
+
+Every release includes a `checksums.txt` covering all its artifacts:
+
+```sh
+curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/checksums.txt"
+sha256sum --ignore-missing -c checksums.txt      # shasum -a 256 on macOS/FreeBSD
+```
+
+### Building from source
+
+Needs only a current Go toolchain — no C compiler, no system libraries:
+
+```sh
+git clone https://github.com/jagottsicher/breakthrough.git
+cd breakthrough
+go build ./cmd/breakthrough
+```
+
+Cross-compiling for another machine is a matter of two environment
+variables, which is also how to get an architecture the releases don't
+cover:
+
+```sh
+GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit Raspberry Pi
+GOOS=linux GOARCH=386        CGO_ENABLED=0 go build ./cmd/breakthrough   # 32-bit x86
+GOOS=openbsd GOARCH=amd64    CGO_ENABLED=0 go build ./cmd/breakthrough   # OpenBSD
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup,
+and [docs/installation.md](docs/installation.md) for terminal
+requirements, the files breakthrough creates on your system, and
+uninstall instructions.
+
+## Documentation
+
+- **[docs/user-guide.md](docs/user-guide.md)** — every feature in
+  detail, the complete settings reference, and a full keyboard map.
+  `F1` inside the application shows a condensed version of the same
+  thing, always matching the build you're running.
+- **[docs/installation.md](docs/installation.md)** — terminal
+  requirements, exactly which files land where, optional external
+  tools, system-wide rollout for administrators, upgrading,
+  uninstalling, and troubleshooting.
+- **[docs/whitepaper.md](docs/whitepaper.md)** — the concept and the
+  reasoning behind the project.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — local setup and the branch
+  workflow.
 
 ## Contributing
 

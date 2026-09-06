@@ -27,17 +27,13 @@ import (
 //
 // r.panel continues to mean "the panel the user is looking at" throughout
 // the rest of this package, so every existing call site keeps working
-// untouched; switching a tab repoints it (see switchToTab).
-
-// tabsHost is the Pages primitive holding one page per tab (see
-// Root.panelHost). Named as a constant prefix rather than built inline so
-// the page name and the lookup can't drift apart.
-const tabsPagedPrefix = "tab-"
-
-// tabPageName is the Pages key for tab i.
-func tabPageName(i int) string {
-	return fmt.Sprintf("%s%d", tabsPagedPrefix, i)
-}
+// untouched; switching a tab repoints it (see switchToTab). Split view
+// (see split.go) shows two of them at once without changing that: r.panel
+// is then the pane with keyboard focus.
+//
+// Which tabs are actually mounted for drawing is remountPanels' job (see
+// split.go) — nothing in this file adds or removes anything from
+// panelHost itself.
 
 // maxTabs caps how many tabs can be open at once.
 //
@@ -76,7 +72,6 @@ func (r *Root) newTab(path string) {
 	r.wirePanel(panel)
 
 	r.tabs = append(r.tabs, panel)
-	r.panelHost.AddPage(tabPageName(len(r.tabs)-1), panel, true, false)
 	r.switchToTab(len(r.tabs) - 1)
 }
 
@@ -112,19 +107,12 @@ func (r *Root) closeTab(i int) {
 		return
 	}
 
-	// Pages keys are positional (tab-0, tab-1, ...), so removing one from
-	// the middle would leave every later tab's key pointing at the wrong
-	// index. Rather than renaming pages around, every page is dropped and
-	// re-added from the new slice — there are at most maxTabs of them and
-	// this only runs on an explicit close, so the simplicity is worth
-	// more here than avoiding the rebuild.
-	for idx := range r.tabs {
-		r.panelHost.RemovePage(tabPageName(idx))
-	}
 	r.tabs = append(r.tabs[:i], r.tabs[i+1:]...)
-	for idx, p := range r.tabs {
-		r.panelHost.AddPage(tabPageName(idx), p, true, false)
-	}
+
+	// Every index above the closed one just shifted down, which the split
+	// panes hold copies of — fix them up (or end the split, if one of its
+	// own two tabs is what was closed) before anything reads them again.
+	r.adjustSplitForClosedTab(i)
 
 	// Land on the tab that took the closed one's place, or the new last
 	// one if it was at the end — the same "stay where you were" behaviour
@@ -162,12 +150,29 @@ func (r *Root) switchToTab(i int) {
 		r.panel.cancelEdit()
 	}
 
+	// In split view, switching tabs means one of two different things,
+	// and which one depends entirely on whether the target is already on
+	// screen. Moving to the tab in the other pane is just "focus over
+	// there" — both panes stay exactly where they are, because a layout
+	// that swapped sides every time focus crossed it would be unusable.
+	// Moving to any other tab replaces what the *focused* pane shows,
+	// leaving the other pane alone and leaving the focused pane in its
+	// own slot, so nothing jumps across the divider either way.
+	if r.splitActive {
+		if _, alreadyShowing := r.splitSlotOf(i); !alreadyShowing {
+			if slot, ok := r.splitSlotOf(r.activeTab); ok {
+				r.splitPanes[slot] = i
+			}
+		}
+	}
+
 	r.activeTab = i
 	r.panel = r.tabs[i]
-	r.panelHost.SwitchToPage(tabPageName(i))
+	r.remountPanels()
 
 	r.refreshTabStrips()
 	r.syncGlobalsMenuLabels()
+	r.syncSplitMenuLabels()
 	r.refreshStatusBar()
 	r.refreshDetailsSidebar()
 
@@ -177,15 +182,23 @@ func (r *Root) switchToTab(i int) {
 	r.app.SetFocus(r.panel.table)
 }
 
-// refreshTabStrips pushes the current tab count and active index into
-// every tab's own strip — not just the visible one.
+// refreshTabStrips pushes the current tab count and highlighted index
+// into every tab's own strip — not just the visible one.
 //
 // All of them, because a tab that isn't currently on screen still has to
 // be correct the instant it's switched to, and a strip that only updated
 // while visible would briefly show a stale count at exactly that moment.
+//
+// Each strip highlights its own tab's number rather than the globally
+// active one. With a single pane those are the same tab, so nothing
+// changes; in split view it's what lets each pane say which tab it is,
+// which is the useful fact when two of them are on screen at once. Which
+// of the two currently has keyboard focus is already said by the panel's
+// own row highlight (see Panel.setSelectionStyle), so the strip doesn't
+// need to answer that question too.
 func (r *Root) refreshTabStrips() {
-	for _, p := range r.tabs {
-		p.setTabs(len(r.tabs), r.activeTab)
+	for i, p := range r.tabs {
+		p.setTabs(len(r.tabs), i)
 	}
 }
 
@@ -227,10 +240,18 @@ func (r *Root) tabPaths() []string {
 // already on its way out, where there's no longer a UI to show an error
 // in, and a lost tab layout is not worth blocking a quit over.
 func (r *Root) saveTabs() {
-	_ = session.SaveTabs(session.TabsPath(), session.TabState{
+	state := session.TabState{
 		Paths:  r.tabPaths(),
 		Active: r.activeTab,
-	})
+	}
+	// Only recorded when it's actually valid right now — a split whose
+	// panes no longer name real tabs is not worth handing to the next
+	// run, which would only drop it again on load anyway.
+	if r.splitActive && r.splitPanesValid() {
+		state.Split = true
+		state.SplitPanes = []int{r.splitPanes[0], r.splitPanes[1]}
+	}
+	_ = session.SaveTabs(session.TabsPath(), state)
 }
 
 // RestoreSavedTabs reopens the tabs saved by the previous run (see
@@ -259,7 +280,13 @@ func (r *Root) RestoreSavedTabs() {
 	// The first saved tab replaces the one NewRoot opened, rather than
 	// being added alongside it — otherwise every restore would leave a
 	// stray extra tab at the front showing the working directory.
+	//
+	// savedToLive maps a saved tab's own index onto the index it actually
+	// ended up at, which are not the same thing whenever a stale path was
+	// skipped along the way — and the saved split refers to tabs by that
+	// saved index (see session.TabState).
 	restored := 0
+	savedToLive := map[int]int{}
 	for i, path := range state.Paths {
 		if restored >= maxTabs {
 			break
@@ -268,6 +295,7 @@ func (r *Root) RestoreSavedTabs() {
 			if err := r.tabs[0].navigate(path); err != nil {
 				continue // stale path — leave tab 0 where NewRoot put it
 			}
+			savedToLive[i] = 0
 			restored++
 			continue
 		}
@@ -280,7 +308,7 @@ func (r *Root) RestoreSavedTabs() {
 		}
 		r.wirePanel(panel)
 		r.tabs = append(r.tabs, panel)
-		r.panelHost.AddPage(tabPageName(len(r.tabs)-1), panel, true, false)
+		savedToLive[i] = len(r.tabs) - 1
 		restored++
 	}
 
@@ -290,11 +318,63 @@ func (r *Root) RestoreSavedTabs() {
 	// saved: skipped stale paths mean the saved index can now point past
 	// the end.
 	active := state.Active
-	if active < 0 || active >= len(r.tabs) {
+	if live, ok := savedToLive[active]; ok {
+		active = live
+	} else if active < 0 || active >= len(r.tabs) {
 		active = 0
 	}
 	r.activeTab = -1 // see closeTab: force a real switch
 	r.switchToTab(active)
+
+	r.restoreSavedSplit(state, savedToLive)
+}
+
+// restoreSavedSplit reopens the saved split layout, if there was one and
+// both of its panes actually came back.
+//
+// Runs after the tabs themselves are in place and the active one has
+// been switched to, so it can lean on enterSplit exactly as an
+// interactive split would — rather than assembling the same state by
+// hand here and risking the two paths drifting.
+//
+// Silently does nothing if either pane's tab was skipped as stale: half
+// a restored split is not a layout anyone asked for, and single-pane is
+// always a coherent thing to open in.
+func (r *Root) restoreSavedSplit(state session.TabState, savedToLive map[int]int) {
+	if !state.Split || len(state.SplitPanes) != splitPaneCount {
+		return
+	}
+	live := make([]int, 0, splitPaneCount)
+	for _, saved := range state.SplitPanes {
+		i, ok := savedToLive[saved]
+		if !ok {
+			return // that pane's own tab didn't survive the restore
+		}
+		live = append(live, i)
+	}
+	if live[0] == live[1] {
+		return
+	}
+
+	// The focused tab has to be one of the two panes (see splitPanes' own
+	// doc comment) — it normally already is, since the saved active tab
+	// was itself a pane, but a stale path can have moved the restore onto
+	// some other tab entirely.
+	if r.activeTab != live[0] && r.activeTab != live[1] {
+		r.switchToTab(live[0])
+	}
+
+	// enterSplit puts the focused tab in the first slot, which is only
+	// the saved arrangement if the focused one happens to be the saved
+	// first pane. Writing the pair directly afterwards restores the saved
+	// left/right (or top/bottom) order either way.
+	partner := live[1]
+	if r.activeTab == live[1] {
+		partner = live[0]
+	}
+	r.enterSplit(partner)
+	r.splitPanes = [2]int{live[0], live[1]}
+	r.remountPanels()
 }
 
 // --- Actions reachable from the UI -----------------------------------

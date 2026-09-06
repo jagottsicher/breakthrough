@@ -13,6 +13,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/replace"
@@ -190,14 +191,24 @@ type Root struct {
 	// package keeps meaning the right one without knowing tabs exist.
 	//
 	// tabs holds every open tab's own Panel in tab order, activeTab
-	// indexes it, and panelHost is the Pages primitive that shows exactly
-	// one of them at a time (see tabs.go for the whole design, including
-	// why each tab is a real Panel rather than a saved bundle of fields).
+	// indexes it, and panelHost is the Flex the currently visible panel(s)
+	// are mounted into (see tabs.go for the whole design, including why
+	// each tab is a real Panel rather than a saved bundle of fields).
 	// panel is always tabs[activeTab].
 	panel     *Panel
 	tabs      []*Panel
 	activeTab int
-	panelHost *tview.Pages
+	panelHost *tview.Flex
+
+	// splitActive/splitPanes back split view — two tabs on screen at once
+	// (see split.go). splitPanes holds the two tab indices in screen
+	// order (left/top first), and stays set after split view is turned
+	// off so turning it back on returns to the same pair; {-1, -1} means
+	// no pair has ever been chosen. activeTab is always one of the two
+	// while splitActive — it's the pane with keyboard focus, which is a
+	// different question from which pane is drawn first.
+	splitActive bool
+	splitPanes  [2]int
 
 	// The tab switcher overlay (see tabswitcher.go) — the same
 	// List/title-bar/Flex split every other overlay here uses, with
@@ -281,6 +292,38 @@ type Root struct {
 	sedPreviewProcessed  int
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
+
+	// The Batch Rename screen (see batchrename.go) — the same
+	// steps-list-on-the-left/settings-table-on-the-right shape the
+	// Options screen already establishes (batchRenameStepsList plays
+	// optionsCategories' own role, batchRenameFieldsTable plays
+	// optionsTable's), plus a live preview table and status line
+	// underneath, which Options has no equivalent of.
+	//
+	// batchRenameRules/batchRenameTargets/batchRenameStep are this
+	// open's own working state — reset fresh by openBatchRename every
+	// time, never remembered across opens (see its own doc comment).
+	// batchRenamePendingChanges is what the preview most recently
+	// computed (see renderBatchRenamePreview); batchRenameUndo is what
+	// confirmApplyBatchRename most recently actually applied, kept
+	// around only until undoLastBatchRename consumes it.
+	batchRenameLayout         *tview.Flex
+	batchRenameTitleBar       *tview.TextView
+	batchRenameHint           *tview.TextView
+	batchRenameStepsList      *tview.List
+	batchRenameFieldsTable    *tview.Table
+	batchRenamePreviewTable   *tview.Table
+	batchRenameStatus         *tview.TextView
+	batchRenameButtons        *tview.Flex
+	batchRenameApplyBtn       *tview.Button
+	batchRenameResetBtn       *tview.Button
+	batchRenameCancelBtn      *tview.Button
+	batchRenameInput          *tview.InputField
+	batchRenameStep           int
+	batchRenameRules          batchrename.Rules
+	batchRenameTargets        []string
+	batchRenamePendingChanges []batchrename.Change
+	batchRenameUndo           []batchrename.Change
 
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -626,7 +669,13 @@ type Root struct {
 	bashHint       *tview.TextView
 	buttonBar      *tview.TextView
 	buttonBarSpans []buttonBarSpan
-	statusBar      *tview.TextView
+
+	// prefixActive is true between Ctrl+_ and the verb key that follows
+	// it (see keyprefix.go). While it's set, the button bar shows the
+	// verb legend instead of the ordinary buttons, and every key is
+	// consumed as a verb rather than reaching its own shortcut.
+	prefixActive bool
+	statusBar    *tview.TextView
 
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
@@ -711,6 +760,12 @@ type Root struct {
 	hiddenToggleIdx      int
 	sizeFormatToggleIdx  int
 	mtimeFormatToggleIdx int
+
+	// splitToggleIdx/splitOrientationIdx are the same thing for the
+	// "Tabs" section's own two split-view items (see split.go and
+	// syncSplitMenuLabels).
+	splitToggleIdx      int
+	splitOrientationIdx int
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its table row *index* (0 = "..",
@@ -913,12 +968,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("chown", "", 0, r.openChown)
 	r.menu.AddItem("chmod", "", 0, r.openChmod)
 	r.menu.AddItem("sed", "", 0, r.openSedReplace)
-	// Placeholder — see placeholderMenuAction's own doc comment. Sits
-	// beside sed rather than up with plain Rename: this operates on the
-	// checkbox selection with a pattern, the same shape every other
+	// Sits beside sed rather than up with plain Rename: this operates on
+	// the checkbox selection with a pattern, the same shape every other
 	// entry in this section already has, not on a single targeted entry
-	// the way Rename does.
-	r.menu.AddItem("Mass rename", "", 0, r.placeholderMenuAction("Mass rename"))
+	// the way Rename does. See batchrename.go for the screen itself.
+	r.menu.AddItem("Batch rename", "", 0, r.openBatchRename)
+	// "Undo last rename" undoes whatever Batch Rename most recently
+	// actually applied — a plain informational notice (the same
+	// showError-reused channel placeholderMenuAction uses) if there's
+	// nothing to undo, rather than a disabled/hidden entry: this app has
+	// no concept of a disabled menu item.
+	r.menu.AddItem("Undo last rename", "", 0, r.undoLastBatchRename)
 	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
 	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
 	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
@@ -933,6 +993,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem("New tab", "", 0, r.newTabHere)
 	r.menu.AddItem("Close tab", "", 0, r.closeCurrentTab)
 	r.menu.AddItem("Switch tab...", "", 0, func() { r.openTabSwitcher(r.activeTab) })
+	// Split view's own two entries (see split.go). Both are relabelled in
+	// place to describe what selecting them will do next, the same
+	// convention the "Globals" toggles further down already follow —
+	// hence the computed indices, so syncSplitMenuLabels can find them
+	// again even if something is inserted above them later.
+	r.splitToggleIdx = r.menu.GetItemCount()
+	r.menu.AddItem(splitToggleLabel(r.splitActive), "", 0, r.toggleSplit)
+	r.splitOrientationIdx = r.menu.GetItemCount()
+	r.menu.AddItem(splitOrientationLabel(r.settings.SplitStacked), "", 0, r.toggleSplitStacked)
 	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
 	// Ping is this first toolWindow slice's own proof of concept (see
 	// toolwindow.go) — a placeholder entry point, not itself the planned
@@ -1049,6 +1118,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sedLayout = r.newSedLayout()
 	r.sedPreviewLayout = r.newSedPreviewLayout()
 
+	// The Batch Rename screen (see batchrename.go) — built once here,
+	// the same as the Options screen just below; only its contents are
+	// rebuilt per open (see openBatchRename).
+	r.newBatchRenameScreen()
+
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
 	// prompt/propertiesEditField already use.
@@ -1121,13 +1195,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// identity, not position, so it's unaffected by buttonBar sitting
 	// between it and statusBar.
 	// panelHost is what actually sits in the layout where the single
-	// panel used to: a Pages holding one page per tab, showing exactly
-	// one at a time (see tabs.go). With a single tab it behaves
-	// identically to the bare panel it replaced.
-	r.panelHost = tview.NewPages()
-	r.panelHost.AddPage(tabPageName(0), panel, true, true)
+	// panel used to: a Flex holding whichever tab panels are currently on
+	// screen — one of them normally, two side by side or stacked in split
+	// view (see tabs.go and split.go). Its contents are rebuilt by
+	// remountPanels on every tab switch or split change, rather than kept
+	// mounted and hidden.
+	r.panelHost = tview.NewFlex()
 	r.tabs = []*Panel{panel}
 	r.activeTab = 0
+	r.splitPanes = [2]int{-1, -1} // no pair chosen yet; see splitPanes' own doc comment
+	r.remountPanels()
 
 	r.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	r.mainLayout.AddItem(r.panelHost, 0, 1, true)
@@ -1146,6 +1223,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(confirmPage, r.confirmDialog, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	// resize=true: the Batch Rename screen deliberately fills the whole
+	// terminal too, the same reasoning the Options screen's own comment
+	// just below gives.
+	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
+	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
@@ -1259,7 +1341,44 @@ func (r *Root) wirePanel(panel *Panel) {
 	// Right-click context menu and drag-select both live on the panel
 	// itself, so each tab needs its own (only one SetMouseCapture slot
 	// exists per primitive — see Panel.editing's own doc comment).
-	panel.SetMouseCapture(r.captureMouse)
+	//
+	// Wrapped so the handler knows *which* panel it fired on, which
+	// matters as soon as two of them are on screen at once (see split.go):
+	// captureMouse itself works entirely in terms of r.panel, so a click
+	// in the pane that doesn't currently have focus would otherwise be
+	// interpreted against the other one — a right-click there would open
+	// a context menu about a row the user never clicked.
+	panel.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		return r.captureMouseOnPanel(panel, action, event)
+	})
+}
+
+// captureMouseOnPanel makes panel the active one before handing the
+// event to captureMouse, so every mouse interaction acts on the pane it
+// actually landed in.
+//
+// Only ever does anything in split view — with a single pane mounted,
+// the only panel that can receive a mouse event is already the active
+// one. Clicking into the other pane therefore both moves keyboard focus
+// there and makes it the tab every subsequent action applies to, which
+// is the same thing clicking a pane means in every two-pane file manager.
+func (r *Root) captureMouseOnPanel(panel *Panel, action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if panel != r.panel {
+		if i, ok := r.tabIndexOf(panel); ok {
+			r.switchToTab(i)
+		}
+	}
+	return r.captureMouse(action, event)
+}
+
+// tabIndexOf is which tab panel is, if it's one of the open ones.
+func (r *Root) tabIndexOf(panel *Panel) (int, bool) {
+	for i, p := range r.tabs {
+		if p == panel {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // SetVersionInfo lets cmd/breakthrough hand its own build-time
