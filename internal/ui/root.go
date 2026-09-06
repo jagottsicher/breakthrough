@@ -1002,6 +1002,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.AddItem(splitToggleLabel(r.splitActive), "", 0, r.toggleSplit)
 	r.splitOrientationIdx = r.menu.GetItemCount()
 	r.menu.AddItem(splitOrientationLabel(r.settings.SplitStacked), "", 0, r.toggleSplitStacked)
+	// Swapping the two panes over is a layout action like the two above,
+	// so it belongs beside them rather than behind the prefix alone —
+	// this menu is where someone who doesn't know a shortcut exists goes
+	// looking.
+	r.menu.AddItem("Swap panes", "", 0, r.swapPanesOrExplain)
 	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
 	// Ping is this first toolWindow slice's own proof of concept (see
 	// toolwindow.go) — a placeholder entry point, not itself the planned
@@ -1362,13 +1367,62 @@ func (r *Root) wirePanel(panel *Panel) {
 // one. Clicking into the other pane therefore both moves keyboard focus
 // there and makes it the tab every subsequent action applies to, which
 // is the same thing clicking a pane means in every two-pane file manager.
+//
+// Only on a deliberate press, though — see activatesPaneOnClick. This
+// originally switched on *any* mouse event, which meant the pointer
+// merely resting over the other pane was enough: a user who had last
+// clicked on the right, then selected something on the left, would have
+// the active pane yanked back to the right by the next stray movement
+// event, seconds later and with no apparent cause. A real report, and a
+// bug this package's own test had pinned in place rather than caught,
+// by exercising it with MouseMove.
 func (r *Root) captureMouseOnPanel(panel *Panel, action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if panel != r.panel {
-		if i, ok := r.tabIndexOf(panel); ok {
-			r.switchToTab(i)
+		// The position check is essential, not defensive: tview runs a
+		// box's mouse capture for *every* event, whether or not it
+		// landed inside that box (see Box.WrapMouseHandler, which calls
+		// the capture before the handler that does the InRect test). So
+		// in split view both panes see every event, and without this a
+		// single press inside one pane switched the active tab twice —
+		// once correctly, from the pane it landed in, and then straight
+		// back from the other one. That second switch is what broke
+		// right-drag selection in the inactive pane: the drag started,
+		// then the same event arrived again with the wrong pane active,
+		// found no row under the pointer there, and cancelled it. A real
+		// report, and invisible from the outside — the pane flipped and
+		// flipped back within one event.
+		if activatesPaneOnClick(action) && panel.InRect(event.Position()) {
+			if i, ok := r.tabIndexOf(panel); ok {
+				r.switchToTab(i)
+			}
+		}
+		if panel != r.panel {
+			// Still not the active pane, so this event is not ours to
+			// interpret: captureMouse works entirely in terms of
+			// r.panel, and running it from here would apply one event to
+			// the other pane's state twice.
+			return action, event
 		}
 	}
 	return r.captureMouse(action, event)
+}
+
+// activatesPaneOnClick reports whether a mouse action is deliberate
+// enough to move the active pane to whichever one it landed in.
+//
+// Button presses are; movement and the scroll wheel are not. Hovering
+// somewhere is not a decision, and scrolling an inactive pane to look at
+// it is a reason to leave the keyboard where it is, not to move it —
+// both would otherwise change what every subsequent keystroke acts on
+// without the user having asked for anything.
+func activatesPaneOnClick(action tview.MouseAction) bool {
+	switch action {
+	case tview.MouseLeftDown, tview.MouseLeftClick, tview.MouseLeftDoubleClick,
+		tview.MouseMiddleDown, tview.MouseMiddleClick, tview.MouseMiddleDoubleClick,
+		tview.MouseRightDown, tview.MouseRightClick, tview.MouseRightDoubleClick:
+		return true
+	}
+	return false
 }
 
 // tabIndexOf is which tab panel is, if it's one of the open ones.
