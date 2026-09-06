@@ -43,12 +43,12 @@ available the moment you press it:
 | `o` | Flip split orientation | `F6` |
 | `p` | Jump to the other pane | `Tab` |
 | `d` | Details sidebar | `Ctrl+D` |
-| `t` | Tab switcher | `F4`, `Ctrl+T` |
+| `t` | Tab switcher | `Ctrl+T` |
 | `n` | New tab | — |
 | `w` | Close tab | — |
 | `1`…`0` | Jump straight to tab 1–10 | `Ctrl`/`Alt`+digit |
-| `r` | Rename | `F2` |
-| `m` | Toggle mouse reporting | `F3` |
+| `r` | Rename | context menu, click-pause-click |
+| `m` | Toggle mouse reporting | `F12` |
 | `,` | Options | `Ctrl+O` |
 | `?` | Help | `F1` |
 
@@ -193,7 +193,7 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-Right-click anywhere in the listing. The menu is grouped: the entry
+`F2`, or right-click anywhere in the listing. The menu is grouped: the entry
 under the cursor first (Look, Rename, Edit, `tail -f`, Properties), then
 Selection, Commands, Delete, Tabs, Tools, and Globals.
 
@@ -491,13 +491,18 @@ Every key breakthrough recognizes, with its default:
 
 ### Anywhere
 
-| Key | Action |
-|---|---|
-| `F1` | Help |
-| `F3` | Toggle mouse reporting (gives your terminal's own selection back) |
-| `F4` | Tab switcher |
-| `F5` | Split view on/off |
-| `F6` | Flip split orientation |
+The `F1`–`F4` row follows Midnight Commander's own layout, so muscle
+memory carries over.
+
+| Key | Action | also on |
+|---|---|---|
+| `F1` | Help | `Ctrl+_ ?` |
+| `F2` | Context menu for the row under the cursor | right-click, `Ctrl+_` legend |
+| `F3` | Look at the selected file | `Ctrl+L` |
+| `F4` | Edit the selected file | `Ctrl+E` |
+| `F5` | Split view on/off | `Ctrl+_ s` |
+| `F6` | Flip split orientation | `Ctrl+_ o` |
+| `F12` | Toggle mouse reporting | `Ctrl+_ m` |
 | `Ctrl`+`_` | Key prefix — one letter reaches all of the above, without function keys (see [The key prefix](#the-key-prefix)) |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
@@ -509,9 +514,8 @@ Every key breakthrough recognizes, with its default:
 | `Enter` | Open a directory, or Look at a file |
 | `Space` | Select / deselect |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows |
-| `F2` | Rename |
-| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` |
-| `Ctrl`+`L` | Look |
+| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` (also `F4`) |
+| `Ctrl`+`L` | Look (also `F3`) |
 | `Ctrl`+`P` | Properties |
 | `Ctrl`+`D` | Details sidebar |
 | `Ctrl`+`K` | Compute hashes |

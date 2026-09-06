@@ -90,7 +90,15 @@ terminal.
   `^\` — and a multiplexer always swallows its own prefix before the
   application inside sees it. See
   [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
-- A right-click context menu: Properties (editable — name, permissions,
+- Midnight Commander's own F-key layout where it maps onto something
+  breakthrough has: `F1` help, `F2` the context menu, `F3` view, `F4`
+  edit. Where a feature also has a Ctrl binding the button bar names
+  both (`F3/^L Look`), so neither has to be guessed at. The mouse
+  toggle moved out to `F12`, deliberately away from that row — it has
+  to work from inside a dialog too, which is the one place the key
+  prefix stands down. `F5`/`F6` stay on split view for now; Copy and
+  Move with a destination dialog, MC's own F5/F6, aren't built yet.
+- A context menu on `F2` or right-click: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
   Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
