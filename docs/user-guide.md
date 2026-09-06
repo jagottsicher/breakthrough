@@ -42,6 +42,7 @@ available the moment you press it:
 | `s` | Split view on/off | `F5` |
 | `o` | Flip split orientation | `F6` |
 | `p` | Switch to the other pane | `Tab`, a click |
+| `x` | Swap the panes — left and right trade places | context menu |
 | `d` | Details sidebar | `Ctrl+D` |
 | `t` | Tab switcher | `Ctrl+T` |
 | `n` | New tab | — |
@@ -184,6 +185,7 @@ Two of your open tabs on screen at once, side by side or stacked.
 | `F6` | flip between side-by-side and stacked |
 | `Tab` | move to the other pane |
 | click | move to the pane you clicked |
+| `Ctrl+_ x` | swap the panes — left and right trade places |
 
 **Choosing the second pane.** `F5` on its own picks for you, in this
 order: the tab you last split with, then the next tab along, and — if
@@ -202,8 +204,12 @@ it. Its selected row carries the "focused" highlight (petrol); the other
 pane's is dimmed. Each pane's own number strip marks the tab it holds,
 so you can always see which two tabs you have up.
 
-**Layout rules.** The panes never swap sides: moving focus across the
-divider changes nothing about the layout. Switching to a different tab
+**Layout rules.** The panes never swap sides on their own: moving focus
+across the divider changes nothing about the layout, and `Ctrl+_ x` (or
+the context menu's "Swap panes") is the only thing that exchanges them.
+Swapping moves the pane you are in to the other side and leaves the
+keyboard with it, rather than handing focus over — moving between panes
+is its own action. Switching to a different tab
 while split replaces what the pane you are in shows and leaves the other
 alone. Closing either pane's own tab ends the split; closing an
 unrelated tab doesn't.

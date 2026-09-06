@@ -85,6 +85,9 @@ func prefixTree() []prefixGroup {
 			// the key *does*. Someone looking for a way to switch panes
 			// read straight past it — reported.
 			{'p', "Switch pane", func(r *Root) { r.switchPaneOrExplain() }},
+			// x for "exchange", the same letter vim binds Ctrl+W x to
+			// for exactly this — swapping two windows' positions.
+			{'x', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
 			{'d', "Details", func(r *Root) { r.toggleDetailsSidebar() }},
 		}},
 		{verbs: []prefixVerb{

@@ -384,6 +384,39 @@ func (r *Root) splitWithNewTab() {
 	r.enterSplit(created)
 }
 
+// swapPanes exchanges the two panes' positions on screen: what was on
+// the left is now on the right, and vice versa.
+//
+// Only splitPanes changes — activeTab is left alone, so the pane you
+// were working in stays the one with the keyboard and simply moves to
+// the other side. Swapping focus as well would make this two actions in
+// one and leave no way to ask for just this one; moving between panes
+// is already its own verb (see switchPaneOrExplain).
+//
+// This is the one operation the fixed screen order (see this file's own
+// doc comment) deliberately doesn't do on its own: panes never reorder
+// themselves as a side effect of anything, so the only way they change
+// sides is because someone asked.
+func (r *Root) swapPanes() bool {
+	if !r.splitActive || !r.splitPanesValid() {
+		return false
+	}
+	r.splitPanes[0], r.splitPanes[1] = r.splitPanes[1], r.splitPanes[0]
+	r.remountPanels()
+	r.refreshTabStrips()
+	return true
+}
+
+// swapPanesOrExplain is the prefix's own "Swap panes" verb — see
+// switchPaneOrExplain for why an inapplicable key says so rather than
+// doing nothing.
+func (r *Root) swapPanesOrExplain() {
+	if r.swapPanes() {
+		return
+	}
+	r.showError(fmt.Errorf("there are no panes to swap — press Ctrl+_ s (or F5) to split the window first"))
+}
+
 // switchPaneOrExplain is the prefix's own "Switch pane" verb: move to
 // the other pane, or say why there isn't one.
 //

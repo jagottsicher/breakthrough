@@ -158,6 +158,7 @@ var helpText = strings.TrimLeft(`
   s   Split view on/off        t   Tab switcher
   o   Flip split orientation   n   New tab
   p   Switch pane            w   Close tab
+  x   Swap panes (left/right trade places)
   d   Details sidebar          1-0 Jump straight to tab 1...10
 
   r   Rename        m   Toggle mouse reporting (also F12)
