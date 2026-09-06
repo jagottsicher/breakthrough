@@ -258,3 +258,30 @@ func TestPrefixVerbsAreUnique(t *testing.T) {
 		}
 	}
 }
+
+// TestPrefixRenameTargetsTheCursorRow is a regression test for a real
+// bug shipped in v0.14.0: the rename verb called openRename directly,
+// which reads r.target/r.targetRow — state only a right-click sets. On
+// a freshly started breakthrough those are the zero value, so ^_ r
+// aimed at row 0, the ".." entry, instead of the row under the cursor.
+//
+// Reverting the verb to openRename makes this fail: target comes back
+// as "" and targetRow as 0.
+func TestPrefixRenameTargetsTheCursorRow(t *testing.T) {
+	r := newPrefixRoot(t)
+	r.panel.focusRow(2) // off ".." and off the first entry, so a stale 0 is visibly wrong
+
+	row, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		t.Fatal("setup: no current row")
+	}
+
+	pressPrefixVerb(r, 'r')
+
+	if r.activePage != renamePage {
+		t.Fatalf("activePage = %q, want the rename field %q", r.activePage, renamePage)
+	}
+	if r.target != path || r.targetRow != row {
+		t.Errorf("target/targetRow = %q/%d, want the cursor's own %q/%d", r.target, r.targetRow, path, row)
+	}
+}
