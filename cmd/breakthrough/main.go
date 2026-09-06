@@ -230,7 +230,30 @@ func run() error {
 	// them installs a SetDoneFunc, so it was already a pure no-op in
 	// every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Prefix mode swallows the whole next keystroke as a verb (see
+		// internal/ui's keyprefix.go), so it has to be asked before the
+		// switch below rather than inside it: several verbs are letters
+		// that are themselves global shortcuts, and one keypress must
+		// never fire both.
+		if root.HandlePrefixKey(event) {
+			return nil
+		}
+
 		switch event.Key() {
+		case tcell.KeyCtrlUnderscore:
+			// Ctrl+_ opens the prefix — the second, function-key-free
+			// route to split view, tabs, rename, options and the rest
+			// (see Root.PrefixShortcut). Chosen over the remaining spare
+			// Ctrl letters because no terminal multiplexer claims it:
+			// tmux takes Ctrl+B, screen and byobu Ctrl+A, dtach and
+			// abduco Ctrl+\, and a multiplexer intercepts its own prefix
+			// before the application inside ever sees the key.
+			//
+			// Falls through while the command line has focus, the same
+			// as Ctrl+S/Ctrl+P/Ctrl+D below — PrefixShortcut applies
+			// that check itself.
+			root.PrefixShortcut()
+			return nil
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
 			return nil
@@ -421,6 +444,25 @@ func run() error {
 			// second such path for exactly that reason). Continues the
 			// F1/F2/F3 sequence for the same reason F3 did.
 			root.TabSwitcherShortcut()
+			return nil
+		case tcell.KeyF5:
+			// Split view on/off (see Root.ToggleSplitShortcut) —
+			// continuing the F1..F4 sequence for the same reason F4 did:
+			// a bare function key needs none of the enhanced keyboard
+			// protocols Ctrl+digit/Ctrl+Tab depend on, and every Ctrl
+			// letter left is either already bound here or a readline key
+			// the bash line genuinely needs.
+			root.ToggleSplitShortcut()
+			return nil
+		case tcell.KeyF6:
+			// Flips split view between side by side and stacked (see
+			// Root.SplitOrientationShortcut). Deliberately a key of its
+			// own rather than a third state of F5 above: which
+			// arrangement fits depends on the terminal, so it's a setting
+			// someone picks once — and folding it into the on/off toggle
+			// would mean cycling through a layout you don't want every
+			// time you close the split.
+			root.SplitOrientationShortcut()
 			return nil
 		case tcell.KeyRune:
 			// Ctrl+1..Ctrl+9/Ctrl+0 and Alt+1..Alt+9/Alt+0 both jump

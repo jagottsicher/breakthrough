@@ -41,6 +41,7 @@ const tabSwitcherPage = "tab-switcher"
 // Column indices within the switcher table.
 const (
 	tabSwitcherColLabel = iota
+	tabSwitcherColSplit
 	tabSwitcherColClose
 )
 
@@ -48,6 +49,17 @@ const (
 // panel's own title bar uses (see toolWindowCloseGlyph) so "close this"
 // looks identical wherever it appears.
 const tabSwitcherCloseGlyph = string(toolWindowCloseGlyph)
+
+// tabSwitcherSplitGlyph is the per-row "show this one beside the current
+// one" button (see split.go) — a square divided down the middle, which
+// says what it does without a word of label in a column this narrow.
+//
+// The switcher is where choosing a split partner belongs: it is already
+// the one place that lists every tab by its real directory, which is
+// exactly the question "which tab do I want beside this one" needs
+// answered. A separate chooser would have been a second list of the same
+// thing.
+const tabSwitcherSplitGlyph = "◫"
 
 // tabSwitcherMaxPathWidth caps how much of a long path a row shows before
 // it's shortened from the left (see shortenPathLeft). Chosen so the
@@ -77,17 +89,28 @@ func (r *Root) newTabSwitcher() *tview.Table {
 // label switches to that tab, the close button closes it, and the
 // trailing row opens a new one.
 func (r *Root) activateTabSwitcherCell(row, column int) {
-	// The row past the real tabs is "New tab" — see openTabSwitcher.
+	// The row past the real tabs is "New tab" — see openTabSwitcher. Its
+	// own split cell creates the tab *and* puts it in a second pane,
+	// which is the single most common way to want a split: two views of
+	// the same tree, one to work from and one to work into.
 	if row < 0 || row >= len(r.tabs) {
 		r.hideOverlay()
+		if column == tabSwitcherColSplit {
+			r.splitWithNewTab()
+			return
+		}
 		r.newTabHere()
 		return
 	}
-	if column == tabSwitcherColClose {
+	switch column {
+	case tabSwitcherColClose:
 		r.closeTabFromSwitcher(row)
-		return
+	case tabSwitcherColSplit:
+		r.hideOverlay()
+		r.splitWithTab(row)
+	default:
+		r.commitTabSwitcher(row)
 	}
-	r.commitTabSwitcher(row)
 }
 
 // clickTabSwitcherCell is one cell's own mouse action: the same thing
@@ -202,6 +225,16 @@ func (r *Root) openTabSwitcher(selected int) {
 				SetSelectable(true).
 				SetClickedFunc(r.clickTabSwitcherCell(row, tabSwitcherColLabel)))
 
+		// Every row gets a split button, the current one included: asking
+		// to split the tab you're on is answered with a fresh pane on the
+		// same directory (see splitWithTab), which is a perfectly
+		// reasonable thing to want from this list.
+		r.tabSwitcher.SetCell(i, tabSwitcherColSplit,
+			tview.NewTableCell(" "+tabSwitcherSplitGlyph+" ").
+				SetTextColor(r.theme.Text).
+				SetSelectable(true).
+				SetClickedFunc(r.clickTabSwitcherCell(row, tabSwitcherColSplit)))
+
 		// No close button on the first tab: one tab always stays open
 		// (see closeTab), so offering a control that would only ever
 		// refuse is worse than not offering one. A non-selectable blank
@@ -235,6 +268,13 @@ func (r *Root) openTabSwitcher(selected int) {
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
 			SetClickedFunc(r.clickTabSwitcherCell(newRow, tabSwitcherColLabel)))
+	// Its split cell means "new tab, and put it beside this one" — see
+	// activateTabSwitcherCell.
+	r.tabSwitcher.SetCell(newRow, tabSwitcherColSplit,
+		tview.NewTableCell(" "+tabSwitcherSplitGlyph+" ").
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickTabSwitcherCell(newRow, tabSwitcherColSplit)))
 	r.tabSwitcher.SetCell(newRow, tabSwitcherColClose,
 		tview.NewTableCell(" ").SetSelectable(false))
 

@@ -36,6 +36,10 @@ var helpText = strings.TrimLeft(`
                   override gesture (often Shift-drag) without needing
                   this, but not everyone knows it
   F4              Open the tab switcher — see "Tabs" below
+  F5              Split view on/off — see "Split view" below
+  F6              Flip split view between side-by-side and stacked
+  Ctrl+_          Key prefix — see "The key prefix" below; reaches
+                  everything the function keys do, without them
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
@@ -82,11 +86,13 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
                   Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Mass rename*, Move to Trash,
-                  Remove, Go to Trash, Restore from Trash, Empty Trash,
-                  New tab, Close tab, Switch tab..., Ping (test), grep*,
-                  zgrep*, du*, df*, and three toggles: hidden files, size
-                  format, modified-time format — *planned, not built yet)
+                  Paste, chown, chmod, sed, Batch rename, Undo last
+                  rename, Move to Trash, Remove, Go to Trash, Restore
+                  from Trash, Empty Trash, New tab, Close tab, Switch
+                  tab..., Split view, Split above/below, Ping (test),
+                  grep*, zgrep*, du*, df*, and three toggles: hidden
+                  files, size format, modified-time format — *planned,
+                  not built yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -128,6 +134,101 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]The key prefix (Ctrl+_)[::-]
+
+  Press Ctrl+_ and the button bar turns into a list of single-letter
+  commands; press one of them to run it. Nothing happens on the prefix
+  alone, so there is no waiting and no timeout — take as long as you
+  like before choosing.
+
+  s   Split view on/off        t   Tab switcher
+  o   Flip split orientation   n   New tab
+  p   Jump to the other pane   w   Close tab
+  d   Details sidebar          1-0 Jump straight to tab 1...10
+
+  r   Rename        m   Toggle mouse reporting
+  ,   Options       ?   This help
+
+  Escape leaves without running anything, as does any key that isn't in
+  the list. Pressing Ctrl+_ a second time also cancels.
+
+  This exists so none of it needs a function key: on a Mac, F1-F6 are
+  media keys unless you change a system setting, which makes them a
+  poor way to reach a feature. Everything here is also still on its own
+  key (F5, F2, Ctrl+O ...) — the prefix is a second route, not a
+  replacement.
+
+  Ctrl+_ specifically because no terminal multiplexer claims it: tmux
+  uses Ctrl+B, screen and byobu Ctrl+A, dtach Ctrl+\ — and whichever
+  of those you run breakthrough inside would swallow its own prefix
+  before this application ever saw the key.
+
+  The bar keeps its ordinary buttons while the command line has focus,
+  where Ctrl+_ is left alone for the shell.
+
+[::b]Split view (F5)[::-]
+
+  Two of your open tabs on screen at once, instead of one at a time.
+
+  F5                Split / unsplit — the button bar's own "F5 Split"
+                    does the same
+  F6                Flip between side by side and above/below
+  Tab               Move between the two panes; clicking a pane does the
+                    same
+
+  The pane you are in keeps the keyboard, the context menu, and every
+  shortcut — the other one just sits there until you move to it, and the
+  highlighted row shows you which is which at a glance. Each pane's own
+  number strip marks the tab it holds.
+
+  With only one tab open, F5 opens a second one on the same directory,
+  which is the usual starting point for copying between two places in
+  one tree. Otherwise it pairs you with the tab you last split with, or
+  the next one along.
+
+  To pick the other pane yourself, open the tab list (F4) and use a
+  row's "◫" button — on a real tab to show that one beside the current
+  one, or on the "+ New tab" row to make a fresh tab and split with it
+  in one go.
+
+  Switching tabs while split (Ctrl+1...Ctrl+0, or the list) replaces
+  what the pane you are in shows; the other pane stays put, and neither
+  ever swaps sides. Closing either pane's own tab ends the split.
+
+  Whether panes sit side by side or stacked is a setting
+  ("split_stacked", also in Options → Behavior), so it survives a
+  restart — as does the split itself, along with the tabs.
+
+[::b]Batch rename (context menu's "Batch rename")[::-]
+
+  Steps down the left, that step's own settings on the right, a live
+  preview of every selected file underneath — updated on every change,
+  no separate "Preview" button to press first.
+
+  Left / Right      Move between the steps and the settings
+  Up / Down         Move between steps, or between one step's settings
+  Enter / Space     Change the selected setting — toggles a yes/no
+                    directly, cycles a choice, or opens a field for
+                    text/a number (Enter commits it, Escape discards)
+  Tab / Shift+Tab   Move between the steps, the settings, the preview
+                    and the buttons underneath them
+  Escape            Close without renaming anything
+
+  The steps always run in this order: Search & Replace, Case, Trim,
+  Numbering, Extension — a step left at its default setting does
+  nothing, there's no separate on/off switch to also set. Search &
+  Replace and Case only ever touch the name, never the extension;
+  Extension only ever touches the extension.
+
+  The preview shows every selected file, changed or not: an unchanged
+  name is dimmed, a conflict (would collide with another renamed file,
+  or with something already on disk) is shown in red with why, right
+  where it's about to happen — nothing is written until "Rename" is
+  pressed and confirmed. "Reset all steps" clears the whole pipeline
+  without closing the screen; "Undo last rename" (context menu, right
+  below "Batch rename") reverses whatever the last confirmed rename
+  actually did.
 
 [::b]Tabs[::-]
 

@@ -40,6 +40,8 @@ const (
 	buttonActionSed
 	buttonActionDetails
 	buttonActionTabSwitcher
+	buttonActionToggleSplit
+	buttonActionPrefix
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -163,6 +165,13 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		// reporting's place), so a button for it would be unreachable in
 		// exactly the situation it's for. F4 has no such problem.
 		{"F4 Tabs", buttonActionTabSwitcher},
+		{splitButtonLabel(r.splitActive), buttonActionToggleSplit},
+		// The prefix's own entry, so the feature is discoverable at all
+		// — the whole point of it is reaching things without the
+		// function keys, which nobody looks for unless something says
+		// it exists. Clicking it opens the verb legend exactly as the
+		// key does (see keyprefix.go).
+		{"^_ More", buttonActionPrefix},
 		{"^E Edit", buttonActionEdit},
 		{"^L Look", buttonActionLook},
 		{"^P Properties", buttonActionProperties},
@@ -500,6 +509,12 @@ func (r *Root) runButtonBarAction(action buttonBarAction) {
 		r.openSedReplace()
 	case buttonActionDetails:
 		r.toggleDetailsSidebar()
+	case buttonActionPrefix:
+		r.startPrefix()
+	case buttonActionToggleSplit:
+		// Direct, for the same reason buttonActionTabSwitcher just below
+		// is — a click is always deliberate.
+		r.toggleSplit()
 	case buttonActionTabSwitcher:
 		// Direct, not TabSwitcherShortcut: a click is always deliberate
 		// (see this func's own doc comment), so the same

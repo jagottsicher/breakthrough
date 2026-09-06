@@ -172,8 +172,9 @@ func TestCloseTabRefusesTheLastOne(t *testing.T) {
 }
 
 // TestCloseTabKeepsTheRemainingOnesInOrder pins that closing from the
-// middle renumbers cleanly — the Pages keys are positional, so this is
-// exactly where an off-by-one would strand a panel on the wrong page.
+// middle renumbers cleanly — every index above the closed one shifts
+// down, so this is exactly where an off-by-one would leave the wrong
+// panel on screen.
 func TestCloseTabKeepsTheRemainingOnesInOrder(t *testing.T) {
 	r, dir, other := newTabbedRoot(t)
 	r.newTab(other)
@@ -188,10 +189,9 @@ func TestCloseTabKeepsTheRemainingOnesInOrder(t *testing.T) {
 	if r.tabs[0] != first || r.tabs[1] != third {
 		t.Error("the surviving tabs are not in their original relative order")
 	}
-	// The visible page must be the active tab's own, not a stale key.
-	name, _ := r.panelHost.GetFrontPage()
-	if want := tabPageName(r.activeTab); name != want {
-		t.Errorf("front page = %q, want %q", name, want)
+	// The mounted panel must be the active tab's own, not a stale one.
+	if got := mountedPanels(r); len(got) != 1 || got[0] != r.tabs[r.activeTab] {
+		t.Errorf("mounted panels = %v, want just the active tab's own", got)
 	}
 	if r.panel != r.tabs[r.activeTab] {
 		t.Error("r.panel is not the active tab after a close")
@@ -275,6 +275,13 @@ func TestNewTabInheritsLiveGlobalToggles(t *testing.T) {
 // TestTabStripsStayInSyncAcrossEveryTab pins that a background tab's own
 // strip is already correct before it's switched to — otherwise it would
 // visibly flicker to the right value at exactly the wrong moment.
+//
+// "Correct" here means each strip highlights its own tab's number, not
+// the globally active one (see refreshTabStrips' own doc comment for
+// why: split view puts two of these on screen at once, and each has to
+// be able to say which tab it is). With one pane visible the two are the
+// same answer anyway, since the only strip on screen belongs to the
+// active tab.
 func TestTabStripsStayInSyncAcrossEveryTab(t *testing.T) {
 	r, dir, other := newTabbedRoot(t)
 	r.newTab(other)
@@ -284,9 +291,14 @@ func TestTabStripsStayInSyncAcrossEveryTab(t *testing.T) {
 		if p.tabCount != 3 {
 			t.Errorf("tab %d's strip shows %d tabs, want 3", i+1, p.tabCount)
 		}
-		if p.tabActive != r.activeTab {
-			t.Errorf("tab %d's strip marks %d active, want %d", i+1, p.tabActive, r.activeTab)
+		if p.tabActive != i {
+			t.Errorf("tab %d's strip marks %d active, want its own index %d", i+1, p.tabActive, i)
 		}
+	}
+	// The one actually on screen is still the active tab's own, so what
+	// the user sees highlighted is unchanged by the rule above.
+	if r.panel.tabActive != r.activeTab {
+		t.Errorf("visible strip marks %d active, want the active tab %d", r.panel.tabActive, r.activeTab)
 	}
 }
 
