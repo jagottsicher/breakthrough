@@ -541,7 +541,7 @@ func (r *Root) openProperties() {
 		return
 	}
 
-	x, y, _, _ := r.menu.GetRect()
+	x, y := r.propertiesAnchor()
 	r.resizeProperties(x, y)
 
 	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
@@ -695,6 +695,39 @@ func (r *Root) renderProperties() {
 // both visible for as long as Properties itself is — leaving either out
 // of the reserved height would leave it with nothing of its own to sit
 // on, overlapping propertiesText's own first/last line instead.
+// propertiesAnchor is where the Properties window opens: over the row it
+// is actually about.
+//
+// It used to read r.menu.GetRect() — the context menu's own rectangle,
+// on the reasoning that Properties is usually reached from there. That
+// was wrong in a way nobody noticed for a long time: nothing ever calls
+// SetRect on r.menu. Only menuLayout, the Flex wrapping it, is
+// positioned (see showMenu); the inner list's rectangle is assigned by
+// tview during layout, so GetRect returns (0,0,0,0) until the menu has
+// been drawn at least once, and a stale leftover afterwards.
+//
+// The visible result was a Properties window whose y was always the same
+// and always too high — clampToPanel pushed the zero up against the
+// panel's own top edge, over the header — and whose x was wherever
+// clamping happened to put it, which in split view meant over the active
+// pane regardless of which pane the file was in. A real report; also
+// present with a single pane, where landing at the top-left merely
+// looked deliberate.
+//
+// Anchoring on the target row instead is both correct and simpler: it is
+// the same nameCellRect openRename already uses to put the rename field
+// over the name being edited, so the two now agree about where an
+// entry's own controls belong. Falls back to the panel's top-left for a
+// row that has no rectangle yet (nothing drawn, e.g. in a test), which
+// clampToPanel then keeps on screen anyway.
+func (r *Root) propertiesAnchor() (x, y int) {
+	if x, y, _, ok := r.panel.nameCellRect(r.targetRow); ok {
+		return x, y
+	}
+	px, py, _, _ := r.panel.GetInnerRect()
+	return px, py
+}
+
 func (r *Root) resizeProperties(x, y int) {
 	width, height := textSize(r.propertiesText.GetText(true))
 	height += 2 // reserved title bar row (top) + button row (bottom)
