@@ -458,6 +458,7 @@ func (r *Root) refreshDetailsIfShowing(oldTarget, newTarget string) {
 func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
+	r.cancelDetailsPreview()
 	r.detailsDirSize = nil
 	r.detailsDirSizeMeasured = ""
 	r.detailsMetadataState = ""
@@ -473,24 +474,15 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.detailsImage = nil
 	r.detailsPDFPageCount = 0
 	if path != "" {
+		// Only the stat block synchronously: one syscall, and it is what
+		// the sidebar shows first anyway, so it should be on screen
+		// before the cursor has finished moving. Everything expensive —
+		// decoding an image, parsing a PDF, running pdftoppm — happens
+		// in the background instead (see startDetailsPreview).
 		r.detailsStat, r.detailsStatErr = fsops.Stat(path)
-		if r.detailsStatErr == nil && !isDirish(r.detailsStat) {
-			if result, err := viewer.Load(path, viewer.DefaultPreviewLimit); err == nil {
-				switch result.Kind {
-				case viewer.KindImage:
-					r.detailsImage = &result
-				case viewer.KindPDF:
-					if count, err := viewer.PDFPageCount(path); err == nil {
-						r.detailsPDFPageCount = count
-					}
-					if page, err := viewer.LoadPDFPage(path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
-						r.detailsImage = &page
-					}
-				}
-			}
-		}
 	}
 	r.renderDetailsSidebar()
+	r.startDetailsPreview(path)
 
 	// A new target always starts showing from its own top — not
 	// wherever the previous one happened to be scrolled to (see
@@ -1006,6 +998,96 @@ func (r *Root) cancelDetailsHashComputation() {
 		r.detailsHashCancel = nil
 	}
 	r.detailsHashInProgress = false
+}
+
+// detailsPreviewDebounce is how long the cursor has to rest on an entry
+// before its preview is even attempted.
+//
+// Scrolling through a directory with the arrow keys held down should
+// cost nothing: every row passed through cancels the one before it, so
+// only the row actually stopped on does any work. Short enough that
+// stopping deliberately still feels immediate.
+const detailsPreviewDebounce = 120 * time.Millisecond
+
+// cancelDetailsPreview stops the preview load for whatever target the
+// cursor has moved off.
+func (r *Root) cancelDetailsPreview() {
+	if r.detailsPreviewCancel != nil {
+		r.detailsPreviewCancel()
+		r.detailsPreviewCancel = nil
+	}
+}
+
+// startDetailsPreview loads path's image or PDF preview in the
+// background and shows it when it's ready, if the cursor is still there.
+//
+// This used to run inline in loadDetailsTarget, which meant every single
+// cursor movement decoded an image or — for a PDF — parsed the file and
+// ran pdftoppm as a subprocess, synchronously, on the UI goroutine.
+// Holding an arrow key down through a directory of PDFs therefore queued
+// one subprocess per row with no way to keep up, and the whole
+// application stopped responding. Reported as "scroll quickly through
+// the panes with Details open and eventually everything hangs", which is
+// exactly what it was.
+//
+// Same shape the sidebar's own hash and directory-size computations
+// already use (see computeDetailsHashes): a cancellable context, safeGo,
+// and a result applied through QueueUpdateDraw — with the addition of a
+// debounce, because unlike those two this is triggered by mere cursor
+// movement rather than by a deliberate keypress.
+func (r *Root) startDetailsPreview(path string) {
+	if path == "" || r.detailsStatErr != nil || isDirish(r.detailsStat) {
+		return // nothing previewable — see loadDetailsTarget
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.detailsPreviewCancel = cancel
+
+	r.safeGo("Details preview", func() { r.cancelDetailsPreview() }, func() {
+		select {
+		case <-ctx.Done():
+			return // the cursor moved on before this even started
+		case <-time.After(detailsPreviewDebounce):
+		}
+
+		result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
+		if err != nil || ctx.Err() != nil {
+			return
+		}
+
+		var image *viewer.Result
+		pageCount := 0
+		switch result.Kind {
+		case viewer.KindImage:
+			image = &result
+		case viewer.KindPDF:
+			if count, err := viewer.PDFPageCount(path); err == nil {
+				pageCount = count
+			}
+			if ctx.Err() != nil {
+				return // pdftoppm below is the expensive one; don't start it if we're already stale
+			}
+			if page, err := viewer.LoadPDFPage(path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
+				image = &page
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		r.app.QueueUpdateDraw(func() {
+			// Checked again on the UI goroutine, against the target
+			// itself rather than only the context: between this being
+			// queued and it running, the cursor can have moved and
+			// loadDetailsTarget can have reset these fields.
+			if ctx.Err() != nil || r.detailsTarget != path {
+				return
+			}
+			r.detailsImage = image
+			r.detailsPDFPageCount = pageCount
+			r.renderDetailsSidebar()
+		})
+	})
 }
 
 // dirSize is fsops.DirSize, indirected through a package var the same
