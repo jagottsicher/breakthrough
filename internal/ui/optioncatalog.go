@@ -208,6 +208,17 @@ func optionCategories() []optionCategory {
 						r.persistSetting("restore_tabs", strconv.FormatBool(b))
 					},
 				),
+				boolOption("split_stacked", "Split view stacked",
+					"How split view (F5) divides the window between its two panes.\n\n"+
+						"Off puts them side by side, which suits a wide terminal and keeps every "+
+						"row of both listings visible. On stacks them above each other, which "+
+						"keeps the full column width — worth it for long filenames, or on a "+
+						"terminal too narrow to halve.\n\n"+
+						"F6 flips this too, without coming here.",
+					false,
+					func(r *Root) bool { return r.settings.SplitStacked },
+					func(r *Root, b bool) { r.setSplitStacked(b) },
+				),
 			},
 		},
 		{
@@ -310,6 +321,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.Itoa(s.TrashQuotaPercent), true
 	case "restore_tabs":
 		return strconv.FormatBool(s.RestoreTabs), true
+	case "split_stacked":
+		return strconv.FormatBool(s.SplitStacked), true
 	}
 	return "", false
 }

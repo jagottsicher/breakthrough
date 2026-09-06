@@ -103,6 +103,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "split_stacked",
+			Default:     strconv.FormatBool(d.SplitStacked),
+			Kind:        KindBool,
+			Summary:     "Split view stacks its two panes above each other instead of side by side.",
+			Implemented: true,
+		},
+		{
 			Key:         "pager",
 			Default:     d.Pager,
 			Kind:        KindEnum,
