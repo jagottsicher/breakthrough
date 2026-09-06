@@ -2453,3 +2453,97 @@ func TestPermBitKeyboardShortcuts(t *testing.T) {
 		t.Errorf("stagedMode = %o, want 0400 after Space toggles it on", r.stagedMode)
 	}
 }
+
+// drawRoot gives the whole UI a real screen and draws it once, so every
+// widget below has a genuine rectangle. Several positioning questions
+// can only be asked after that: an undrawn tview primitive reports
+// whatever rectangle it was last assigned, or none at all.
+func drawRoot(t *testing.T, r *Root, width, height int) {
+	t.Helper()
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	r.SetRect(0, 0, width, height)
+	r.Draw(screen)
+}
+
+// TestPropertiesOpensOnTheRowItIsAbout is a regression test for a real
+// report: the Properties window always appeared at the same, too-high
+// position, over the panel's own header — and in split view over
+// whichever pane happened to be active rather than the one holding the
+// file.
+//
+// The cause was that openProperties anchored on r.menu.GetRect(), and
+// nothing ever calls SetRect on r.menu: only menuLayout, the Flex around
+// it, is positioned. So the anchor was (0,0) until the context menu had
+// been drawn at least once, and stale afterwards, with clampToPanel
+// turning the zero into "the top of the panel".
+//
+// Restoring that anchor makes this fail: y comes back as the panel's own
+// first row instead of the target row's.
+func TestPropertiesOpensOnTheRowItIsAbout(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+
+	// A row well down the listing, so "anchored on the row" and
+	// "anchored at the top" are far apart and can't be confused.
+	targetRow := 3
+	r.panel.focusRow(targetRow)
+	r.propertiesCurrentEntry()
+
+	if r.activePage != propertiesPage {
+		t.Fatalf("activePage = %q, want Properties open", r.activePage)
+	}
+
+	wantX, wantY, _, ok := r.panel.nameCellRect(targetRow)
+	if !ok {
+		t.Fatal("the target row has no rectangle even after drawing")
+	}
+	gotX, gotY, _, _ := r.properties.GetRect()
+
+	panelX, panelY, _, _ := r.panel.GetInnerRect()
+	if gotY == panelY && wantY != panelY {
+		t.Errorf("Properties opened at the panel's own top row (y=%d) instead of the target row's (y=%d) — the old bug", gotY, wantY)
+	}
+	if gotY != wantY {
+		t.Errorf("Properties y = %d, want the target row's own %d", gotY, wantY)
+	}
+	// x is checked as a range, not an exact match: clampToPanel pulls the
+	// window left when it would otherwise overflow the panel, and how
+	// wide it is depends on the content — owner and group names differ
+	// between machines, which is exactly how this first failed, on macOS
+	// only. The regression this test exists for was y, which is exact
+	// above.
+	if gotX > wantX || gotX < panelX {
+		t.Errorf("Properties x = %d, want between the panel's own %d and the target row's %d", gotX, panelX, wantX)
+	}
+}
+
+// TestPropertiesAnchorIgnoresTheContextMenu pins the specific mistake
+// rather than only its symptom: the anchor must not come from a widget
+// that is never positioned.
+func TestPropertiesAnchorIgnoresTheContextMenu(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	r.panel.focusRow(3)
+	r.target, r.targetRow = filepath.Join(dir, "apple.txt"), 3
+
+	// Move the context menu somewhere absurd. The anchor must not follow.
+	r.menu.SetRect(99, 99, 10, 10)
+
+	x, y := r.propertiesAnchor()
+	if x == 99 || y == 99 {
+		t.Errorf("anchor = (%d, %d) — it followed the context menu", x, y)
+	}
+}
