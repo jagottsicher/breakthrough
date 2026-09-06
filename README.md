@@ -347,7 +347,7 @@ need one, it cross-compiles from source in one command — see
 ### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
 
 ```sh
-VERSION=0.16.0                     # or whatever the latest release is
+VERSION=0.16.1                     # or whatever the latest release is
 ARCH=$(dpkg --print-architecture)  # amd64 or arm64
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
 sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
@@ -360,7 +360,7 @@ same way; remove with `sudo apt remove breakthrough`.
 ### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
 
 ```sh
-VERSION=0.16.0
+VERSION=0.16.1
 ARCH=$(uname -m)                   # x86_64 or aarch64
 case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
@@ -379,7 +379,7 @@ and `%config(noreplace)` on RPM.
 Works on any distribution, with or without root:
 
 ```sh
-VERSION=0.16.0
+VERSION=0.16.1
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;
