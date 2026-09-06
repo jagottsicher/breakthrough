@@ -1,6 +1,7 @@
 package viewer
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"os"
@@ -134,8 +135,21 @@ const (
 // point there's genuinely nothing left to show either way, so the
 // clear message is the honest answer, not a missing fallback.
 func LoadPDFPage(path string, page int, mode PDFViewMode) (Result, error) {
+	return LoadPDFPageContext(context.Background(), path, page, mode)
+}
+
+// LoadPDFPageContext is LoadPDFPage with cancellation.
+//
+// Rasterizing runs pdftoppm as a subprocess, and cancelling a context
+// that only guards the *result* would leave that process running to
+// completion anyway — so a caller that abandons previews as the cursor
+// moves (see internal/ui's Details sidebar) would still accumulate one
+// pdftoppm per file it passed over, just invisibly. The context is
+// threaded all the way to exec.CommandContext so the process itself is
+// killed, which is what makes abandoning a preview actually free.
+func LoadPDFPageContext(ctx context.Context, path string, page int, mode PDFViewMode) (Result, error) {
 	if mode != PDFViewText {
-		img, format, err := rasterizePDFPage(path, page)
+		img, format, err := rasterizePDFPage(ctx, path, page)
 		if err == nil {
 			return Result{Kind: KindImage, Image: img, ImageFormat: format}, nil
 		}
@@ -168,7 +182,7 @@ func LoadPDFPage(path string, page int, mode PDFViewMode) (Result, error) {
 // encrypted PDF poppler itself can't open without a password, page
 // out of range, ...) — LoadPDFPage's own text-extraction fallback is
 // what actually handles either case, not this function.
-func rasterizePDFPage(path string, page int) (img image.Image, format string, err error) {
+func rasterizePDFPage(ctx context.Context, path string, page int) (img image.Image, format string, err error) {
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		return nil, "", err
 	}
@@ -181,7 +195,7 @@ func rasterizePDFPage(path string, page int) (img image.Image, format string, er
 
 	outPrefix := filepath.Join(tmpDir, "page")
 	p := strconv.Itoa(page)
-	cmd := exec.Command("pdftoppm", "-png", "-singlefile", "-f", p, "-l", p, path, outPrefix)
+	cmd := exec.CommandContext(ctx, "pdftoppm", "-png", "-singlefile", "-f", p, "-l", p, path, outPrefix)
 	if err := cmd.Run(); err != nil {
 		return nil, "", err
 	}
