@@ -11,7 +11,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestToggleMouseShortcutFlipsState pins F3's own action (see
+// TestToggleMouseShortcutFlipsState pins Ctrl+_'s own action (see
 // ToggleMouseShortcut) — a real user report that a mouse-aware terminal
 // app with no way to turn that off breaks the terminal's own native
 // text selection/copy, and no easy-to-remember way back.
@@ -27,7 +27,7 @@ func TestToggleMouseShortcutFlipsState(t *testing.T) {
 
 	r.ToggleMouseShortcut()
 	if r.mouseEnabled {
-		t.Error("first F3 should disable mouse reporting")
+		t.Error("the first press should disable mouse reporting")
 	}
 	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse off") {
 		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse off")
@@ -35,10 +35,35 @@ func TestToggleMouseShortcutFlipsState(t *testing.T) {
 
 	r.ToggleMouseShortcut()
 	if !r.mouseEnabled {
-		t.Error("a second F3 should re-enable mouse reporting")
+		t.Error("a second press should re-enable mouse reporting")
 	}
 	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse on") {
 		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse on")
+	}
+}
+
+// TestRequestQuitPreselectsCancel pins the user's own explicit request:
+// "q"/Ctrl+Q is easy to reach in the middle of ordinary browsing, so
+// the confirmation must not let a single Enter quit by itself — the
+// selection has to start on "Cancel", the same "safety default" every
+// other confirmation in this app already uses (see newConfirmDialog's
+// own comment on the Remove/Empty Trash dialog).
+func TestRequestQuitPreselectsCancel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.RequestQuit()
+
+	if r.activePage != quitConfirmPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, quitConfirmPage)
+	}
+	row := r.quitConfirm.GetCurrentItem()
+	label, _ := r.quitConfirm.GetItemText(row)
+	if label != "Cancel" {
+		t.Errorf("preselected item = %q, want %q", label, "Cancel")
 	}
 }
 
@@ -541,7 +566,7 @@ func TestRenameRowOpensRenameForGivenRow(t *testing.T) {
 
 // TestRenameRowNoopsForDotDot pins that the rename gesture can't be
 // used to rename ".." — the same exclusion CurrentRowPath already
-// applies for the keyboard path (F2/renameCurrentEntry).
+// applies for the keyboard path ("r"/renameCurrentEntry).
 func TestRenameRowNoopsForDotDot(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -557,7 +582,7 @@ func TestRenameRowNoopsForDotDot(t *testing.T) {
 }
 
 // TestFinishRenameRefreshesDetailsShowingSameFile pins the user's own
-// explicit request: committing a rename (F2, or the click-pause-click
+// explicit request: committing a rename ("r", or the click-pause-click
 // gesture) immediately updates Details too, if it's showing that same
 // file — following it to its own new path, the same fix
 // savePropertiesEdit already needed for a rename via Properties (see

@@ -452,9 +452,9 @@ func TestTabCycleShortcutsDoNothingWithASingleTab(t *testing.T) {
 	}
 }
 
-// TestTabSwitcherShortcutOpensOnTheCurrentTab pins F4 — the always-
-// available keyboard path (see TabSwitcherShortcut's own doc comment),
-// which unlike Ctrl+Tab doesn't preselect a neighbour.
+// TestTabSwitcherShortcutOpensOnTheCurrentTab pins "t"/Ctrl+T — the
+// always-available keyboard path (see TabSwitcherShortcut's own doc
+// comment), which unlike Ctrl+Tab doesn't preselect a neighbour.
 func TestTabSwitcherShortcutOpensOnTheCurrentTab(t *testing.T) {
 	r, dir, other := newTabbedRoot(t)
 	r.newTab(other)

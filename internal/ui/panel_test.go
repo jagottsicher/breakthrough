@@ -555,7 +555,7 @@ func TestFormatSizeCell(t *testing.T) {
 		want      string
 	}{
 		{2184, false, humanSize(2184)},
-		{2184, true, "2184"},
+		{2184, true, "2,184"},
 		{0, false, "0B"},
 	}
 	for _, tt := range tests {

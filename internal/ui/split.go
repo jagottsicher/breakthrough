@@ -243,15 +243,15 @@ func splitToggleLabel(active bool) string {
 }
 
 // splitButtonLabel is the button bar's own shorter version of the same
-// toggle (see buildButtonBar) — "F5 Split" / "F5 Unsplit", matching that
-// row's own terse vocabulary rather than the context menu's fuller
-// wording, exactly as the Hide/Unhide button already does beside the
-// menu's "Show/Hide hidden files".
+// toggle (see buildButtonBar) — "Split" / "Unsplit", matching that row's
+// own terse vocabulary rather than the context menu's fuller wording,
+// exactly as hideUnhideLabel already does beside the menu's "Show/Hide
+// hidden files".
 func splitButtonLabel(active bool) string {
 	if active {
-		return "F5 Unsplit"
+		return "Unsplit"
 	}
-	return "F5 Split"
+	return "Split"
 }
 
 // splitOrientationLabel is the same for the orientation entry: it names
@@ -278,16 +278,16 @@ func (r *Root) syncSplitMenuLabels() {
 
 // --- Actions reachable from the UI -----------------------------------
 
-// ToggleSplitShortcut is F5's own action (see cmd/breakthrough): show a
+// ToggleSplitShortcut guards toggleSplit the way every other global
+// shortcut in this package does (see acceptsGlobalShortcut) — show a
 // second pane, or go back to one.
 //
-// A plain function key rather than a Ctrl combination, deliberately:
-// every remaining Ctrl letter either already means something here or is
-// a real readline binding the bash line needs (see cmd/breakthrough's own
-// dispatch), and a bare F-key needs no enhanced keyboard protocol to be
-// reported — so this stays reachable on the older terminals that can't
-// report Ctrl+digit or Ctrl+Tab at all, the same reasoning F4 already
-// exists alongside Ctrl+T for.
+// Split view's own real keyboard path is the plain-letter layer's "s"
+// (see keymap.go), which calls toggleSplit directly and needs no such
+// guard (acceptsPlainKeyCommand already covers the same ground more
+// precisely) — so nothing in cmd/breakthrough currently calls this.
+// Kept as an exported building block, the same shape every shortcut
+// here already has, for whatever future caller wants the guarded form.
 func (r *Root) ToggleSplitShortcut() {
 	if !r.acceptsGlobalShortcut() {
 		return
@@ -310,8 +310,10 @@ func (r *Root) toggleSplit() {
 	r.enterSplit(partner)
 }
 
-// SplitOrientationShortcut is F6's own action: flip between side by side
-// and stacked.
+// SplitOrientationShortcut guards toggleSplitStacked the way
+// ToggleSplitShortcut guards toggleSplit — see its own doc comment on
+// why nothing currently calls this either (the real keyboard path is
+// the "z" chord's own "o" member, see keymap.go).
 //
 // Works whether or not split view is currently showing — setting the
 // orientation you want before turning the split on is a reasonable thing
@@ -391,7 +393,7 @@ func (r *Root) splitWithNewTab() {
 // were working in stays the one with the keyboard and simply moves to
 // the other side. Swapping focus as well would make this two actions in
 // one and leave no way to ask for just this one; moving between panes
-// is already its own verb (see switchPaneOrExplain).
+// is already Tab's own job (see CycleFocusShortcut).
 //
 // This is the one operation the fixed screen order (see this file's own
 // doc comment) deliberately doesn't do on its own: panes never reorder
@@ -407,44 +409,17 @@ func (r *Root) swapPanes() bool {
 	return true
 }
 
-// swapPanesOrExplain is the prefix's own "Swap panes" verb — see
-// switchPaneOrExplain for why an inapplicable key says so rather than
-// doing nothing.
-func (r *Root) swapPanesOrExplain() {
-	if r.swapPanes() {
-		return
-	}
-	r.showError(fmt.Errorf("there are no panes to swap — press Ctrl+_ s (or F5) to split the window first"))
-}
-
-// switchPaneOrExplain is the prefix's own "Switch pane" verb: move to
-// the other pane, or say why there isn't one.
+// swapPanesOrExplain is the "S" key's own action: swap the two panes, or
+// say why there's nothing to swap.
 //
 // Saying so matters more here than for most verbs. Split view is the
 // precondition, it is not obvious from a single pane that the key even
 // needs one, and a key that silently does nothing reads as broken
-// rather than as inapplicable — the same reason an unrecognized prefix
-// key names itself instead of failing quietly.
-func (r *Root) switchPaneOrExplain() {
-	if r.FocusOtherPane() {
+// rather than as inapplicable — the same reason an unrecognized chord
+// second key names itself instead of failing quietly (see resolveChord).
+func (r *Root) swapPanesOrExplain() {
+	if r.swapPanes() {
 		return
 	}
-	r.showError(fmt.Errorf("there is no other pane — press Ctrl+_ s (or F5) to split the window first"))
-}
-
-// FocusOtherPaneShortcut moves keyboard focus to the other pane, which
-// also makes it the active tab — everything else in this package acts on
-// whichever pane that is (see this file's own doc comment).
-//
-// Reached from Tab's own focus cycle (see focusCycleStops) rather than a
-// key of its own: the cycle already exists for exactly this question of
-// "where do the arrow keys go now", and the second pane belongs in it
-// alongside the Details sidebar and any open tool window.
-func (r *Root) FocusOtherPane() bool {
-	partner, ok := r.splitPartner()
-	if !ok {
-		return false
-	}
-	r.switchToTab(partner)
-	return true
+	r.showError(fmt.Errorf(`there are no panes to swap — press "s" to split the window first`))
 }
