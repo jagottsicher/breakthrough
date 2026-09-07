@@ -16,39 +16,25 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-// buttonBarAction identifies one clickable region in the button bar (see
-// buttonBarSpan/buildButtonBar) — the bottom bar's own equivalent of
-// headerSpan/propertySpan, the same hand-rolled span-tracking pattern
-// used everywhere else in this codebase for a line with several
-// distinct click targets, rather than tview's own region/Highlight
-// mechanism.
-type buttonBarAction int
-
-const (
-	buttonActionProperties buttonBarAction = iota
-	buttonActionEdit
-	buttonActionLook
-	buttonActionToggleHidden
-	buttonActionOptions
-	buttonActionSearch
-	buttonActionHelp
-	buttonActionTrash
-	buttonActionTrashbin
-	buttonActionRestore
-	buttonActionRemove
-	buttonActionSed
-	buttonActionDetails
-	buttonActionToggleSplit
-	buttonActionPrefix
-	buttonActionMenu
-)
-
 // buttonBarSpan is one clickable region within the button bar's text —
 // the same half-open [start,end) column-range idea as headerSpan, for a
 // single-line display so no row is needed.
+//
+// Runs the same closure a keypress would (see keymap.go's own
+// plainCommand.action/chordFamily), rather than switching on a separate,
+// hand-maintained action enum: the button bar is a view onto the same
+// registry the keyboard layer already reads, so a button and its key
+// can never drift apart from each other the way two independently
+// maintained lists eventually do. key identifies which registry entry a
+// span came from — 0 for one that isn't tied to a single plain key
+// (there is currently no such span, but the field costs nothing to keep
+// available) — for the rare caller that needs to recognize one
+// particular button rather than just click it (see
+// Root.captureOutsideClick's own Details carve-out).
 type buttonBarSpan struct {
 	startCol, endCol int
-	action           buttonBarAction
+	key              rune
+	run              func(r *Root)
 }
 
 // newBottomBar builds the three rows below the panel: bashConsole (see
@@ -119,106 +105,74 @@ func (r *Root) refreshButtonBar() {
 	r.buttonBar.SetText(text)
 }
 
-// buildButtonBar renders the button bar's text: the quick-action
-// buttons in nano's own "^X Label" style (instantly recognizable as
-// "Ctrl+X does this" without needing a separate legend) — Help, Rename,
-// Tabs, Edit, Look, Properties, Details, Find, Sed, toggle hidden files,
-// Options, Trash, Trashbin/Restore, Remove, in that fixed order.
+// buildButtonBar renders the button bar's text: the always-visible
+// legend for the keyboard layer's own "quick" subset (see
+// plainCommand.quick/chordFamily.quick in keymap.go) — every entry a
+// registry lookup away from the key that also runs it, so this can
+// never say something the keyboard itself no longer does. A chord
+// family renders as "prefix… name" (the same ellipsis
+// resolveChord/chordHintBar use for "there's more here"), marking it as
+// a cascade rather than a single keystroke.
 //
-// Two of these aren't fixed labels any more (see refreshButtonBar for
-// when this gets called again): the hidden-files toggle reads "Hide" or
-// "Unhide" depending on r.panel.showHidden — the same "label names the
-// action clicking it performs next" convention hiddenToggleLabel
-// already uses for the context menu's own equivalent, just with this
-// button's own shorter Hide/Unhide vocabulary instead of that item's
-// fuller "Show/Hide hidden files" text. And the Trashbin slot itself
-// swaps to Restore while r.inTrash() — browsing the trash and asking to
-// "go to trash" again does nothing useful, but Restore does; see
-// moveSelectionToTrash for Trash's own equivalent swap, which
-// disappears from this bar entirely in the same state rather than
-// swapping to anything, since there's nothing sensible to move an
-// already-trashed item to.
+// Two labels are computed rather than read straight from the registry,
+// since they name what pressing the key does *next*, which depends on
+// state buildButtonBar's own caller already knows to refresh on: hidden
+// files reads "Hide" or "Unhide" depending on r.panel.showHidden (see
+// hideUnhideLabel), and split reads "Split" or "Unsplit" depending on
+// r.splitActive (see splitButtonLabel) — refreshButtonBar re-renders
+// this whole bar whenever either one changes.
 func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	type buttonSpec struct {
-		label  string
-		action buttonBarAction
+		label string
+		key   rune
+		run   func(r *Root)
 	}
 
-	hideUnhideLabel := "^G Unhide"
-	if r.panel.showHidden {
-		hideUnhideLabel = "^G Hide"
+	// keyBG highlights the actual key to press within a cell's own label
+	// — one space either side of the letter, colored with the same
+	// ButtonBackground every real button in this app already uses (see
+	// styleButton) — the same treatment chordHintBar gives a chord's own
+	// second key, applied here to this row's own top-level keys too, per
+	// the user's own explicit request that both read the same way.
+	keyBG := colorTag(r.theme.ButtonBackground)
+	highlightKey := func(key rune) string {
+		return fmt.Sprintf("[:%s:] %c [-:-:-]", keyBG, key)
 	}
 
-	trashbinLabel, trashbinAction := "^B Trashbin", buttonActionTrashbin
-	inTrash := r.inTrash()
-	if inTrash {
-		trashbinLabel, trashbinAction = "^B Restore", buttonActionRestore
+	var buttons []buttonSpec
+	for _, c := range plainCommands() {
+		if !c.quick {
+			continue
+		}
+		label := c.short
+		switch c.key {
+		case '.':
+			label = hideUnhideLabel(r.panel.showHidden)
+		case 's':
+			label = splitButtonLabel(r.splitActive)
+		}
+		buttons = append(buttons, buttonSpec{
+			label: highlightKey(c.key) + " " + label,
+			key:   c.key,
+			run:   c.action,
+		})
 	}
-
-	// The F1-F6 row follows Midnight Commander's own layout, per the
-	// user's own explicit request: F1 Help, F2 menu, F3 view, F4 edit.
-	// Where a feature also has a Ctrl binding, both are named in the
-	// one label ("F3/^L Look") rather than given two entries — the row
-	// is already the widest thing on screen, and a user who knows one
-	// of the two doesn't need to be told twice.
-	//
-	// The mouse toggle has no button here at all: it exists for when
-	// clicking has already stopped working (native terminal selection
-	// took mouse reporting's place), so a button for it would be
-	// unreachable in exactly the situation it's for. It sits on F12 and
-	// on the prefix instead.
-	buttons := []buttonSpec{
-		{"F1 Help", buttonActionHelp},
-		{"F2 Menu", buttonActionMenu},
-		{"F3/^L Look", buttonActionLook},
-		{"F4/^E Edit", buttonActionEdit},
-		{splitButtonLabel(r.splitActive), buttonActionToggleSplit},
-		// The prefix's own entry, so the feature is discoverable at all
-		// — the whole point of it is reaching things without the
-		// function keys, which nobody looks for unless something says
-		// it exists. Clicking it opens the verb legend exactly as the
-		// key does (see keyprefix.go). It is also where Rename and the
-		// tab switcher now live, both displaced from the F-keys above.
-		{"^_ More", buttonActionPrefix},
-		{"^P Properties", buttonActionProperties},
-		{"^D Details", buttonActionDetails},
-		{"^F Find", buttonActionSearch},
-		{"^S Sed", buttonActionSed},
-		{hideUnhideLabel, buttonActionToggleHidden},
-		{"^O Options", buttonActionOptions},
+	for _, f := range chordFamilies() {
+		if !f.quick {
+			continue
+		}
+		family := f // capture per iteration, not the loop variable
+		buttons = append(buttons, buttonSpec{
+			label: highlightKey(family.prefix) + "…  " + family.name,
+			key:   family.prefix,
+			run:   func(r *Root) { r.startChord(family) },
+		})
 	}
-	if !inTrash {
-		// "Del", not "^T": Trash's own Ctrl-letter binding moved to the
-		// tab switcher (see cmd/breakthrough's own KeyCtrlT case) once
-		// Entf turned out to already cover Trash on its own — labeling
-		// this "^T" now would name a shortcut that no longer does this
-		// any more.
-		buttons = append(buttons, buttonSpec{"Del Trash", buttonActionTrash})
-	}
-	buttons = append(buttons,
-		buttonSpec{trashbinLabel, trashbinAction},
-		buttonSpec{"^R Remove", buttonActionRemove},
-	)
 
 	// " │ " (U+2502, the same box-drawing vertical bar buildStatusBar's
 	// own sep already uses one row below this) reads as a clearer
 	// separator between buttons than a plain double space, and keeps the
-	// two adjacent rows visually consistent with each other — a plain
-	// ASCII "|" here, tried first, read as an inconsistency once both
-	// were actually side by side. Per the user's own explicit request,
-	// which also asked for a narrower bare "│" (no surrounding spaces)
-	// once the row's own available width can't fit the wider version.
-	// Not done: buildButtonBar only ever runs again on specific state
-	// changes (toggling hidden files, entering/leaving the trash view —
-	// see refreshButtonBar's own callers), never on a bare terminal
-	// resize by itself, so a width check here would frequently judge
-	// against whatever rect r.buttonBar happened to have the *last* time
-	// some unrelated state change last rebuilt it — not the terminal's
-	// current real size — and silently keep the wrong separator until
-	// another such change happened to come along. Root.handleBeforeDraw
-	// already solves exactly this for Properties/Details (see its own
-	// doc comment); wiring buildButtonBar into it too, rather than
-	// guessing a width here, is the real follow-up.
+	// two adjacent rows visually consistent with each other.
 	const sep = " │ "
 
 	var b strings.Builder
@@ -239,15 +193,25 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		}
 		start := col
 		write(bt.label)
-		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, action: bt.action})
+		spans = append(spans, buttonBarSpan{startCol: start, endCol: col, key: bt.key, run: bt.run})
 	}
 
 	return b.String(), spans
 }
 
+// hideUnhideLabel is buildButtonBar's own computed label for the "."
+// entry — see that func's doc comment for why this one specifically
+// can't be a static field on the registry entry.
+func hideUnhideLabel(showHidden bool) string {
+	if showHidden {
+		return "Hide"
+	}
+	return "Unhide"
+}
+
 // buildStatusBar renders the status bar's text: the current user,
 // whether mouse reporting is currently on or off (see mouseStatusText/
-// Root.ToggleMouseShortcut — F3), disk and inode usage for the panel's
+// Root.ToggleMouseShortcut), disk and inode usage for the panel's
 // current directory (see fsops.FetchDiskUsage), the running kernel
 // release (see kernelVersionText), uptime and load average where
 // available (see uptimeText/loadAverageText — Linux only, gracefully
@@ -258,6 +222,20 @@ func (r *Root) buildStatusBar() string {
 	var b strings.Builder
 	write := func(s string) { b.WriteString(s) }
 	sep := func() { write(" │ ") }
+
+	// A pending chord's own countdown (see chordIndicatorText), leading
+	// rather than trailing: it needs to be seen immediately, and the
+	// segments after it (disk usage, uptime, load) are each already
+	// optional on their own platform, so anything placed after them
+	// would shift around depending on what happened to be available —
+	// exactly the instability a fixed leading position avoids. Still
+	// purely informational, same as every other segment here: it has no
+	// click target of its own, matching this bar's own long-standing
+	// "no buttons at all" rule.
+	if chord := r.chordIndicatorText(); chord != "" {
+		write(chord)
+		sep()
+	}
 
 	write(r.currentUser)
 	sep()
@@ -292,7 +270,7 @@ func (r *Root) buildStatusBar() string {
 // breakthrough instead of the terminal emulator, which breaks that
 // terminal's own native text selection/copy for anyone who doesn't
 // already know its own override gesture (Shift-drag, on most
-// xterm-derived emulators). F3 (see Root.ToggleMouseShortcut) is a
+// xterm-derived emulators). Ctrl+_ (see Root.ToggleMouseShortcut) is a
 // plain, memorable way to turn reporting off (and back on) without
 // needing to know that gesture at all — this is what lets the status
 // bar answer "is it currently on" at a glance, the same way the
@@ -450,18 +428,18 @@ func clockText() string {
 // buttonActionDetails carve-out, letting a Details click through while
 // Properties is open instead of treating it as a click outside the
 // overlay).
-func (r *Root) buttonBarActionAt(x, y int) (buttonBarAction, bool) {
+func (r *Root) buttonBarActionAt(x, y int) (buttonBarSpan, bool) {
 	if !r.buttonBar.InRect(x, y) {
-		return 0, false
+		return buttonBarSpan{}, false
 	}
 	rectX, _, _, _ := r.buttonBar.GetInnerRect()
 	col := x - rectX
 	for _, s := range r.buttonBarSpans {
 		if col >= s.startCol && col < s.endCol {
-			return s.action, true
+			return s, true
 		}
 	}
-	return 0, false
+	return buttonBarSpan{}, false
 }
 
 // captureButtonBarMouse routes a click on one of the button bar's
@@ -474,56 +452,15 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 	}
 
 	x, y := event.Position()
-	if bAction, ok := r.buttonBarActionAt(x, y); ok {
-		r.runButtonBarAction(bAction)
+	if span, ok := r.buttonBarActionAt(x, y); ok && span.run != nil {
+		// Called directly, unguarded, unlike the keyboard equivalent of
+		// most of these (see acceptsPlainKeyCommand): a click is always a
+		// deliberate, explicit action on whatever it landed on, with none
+		// of the "is something else currently typing" ambiguity a global
+		// keystroke has to rule out first.
+		span.run(r)
 	}
 	return tview.MouseConsumed, nil
-}
-
-// runButtonBarAction is what a button click runs. Called directly,
-// unguarded, unlike its keyboard-shortcut equivalent (see
-// acceptsGlobalShortcut): a click is always a deliberate, explicit
-// action on whatever it landed on, with none of the "is something else
-// currently typing" ambiguity a global keystroke has to rule out first.
-func (r *Root) runButtonBarAction(action buttonBarAction) {
-	switch action {
-	case buttonActionProperties:
-		r.propertiesCurrentEntry()
-	case buttonActionEdit:
-		r.editCurrentEntry()
-	case buttonActionLook:
-		r.lookCurrentEntry()
-	case buttonActionToggleHidden:
-		r.toggleHidden()
-	case buttonActionOptions:
-		r.openOptions()
-	case buttonActionSearch:
-		r.openSearch()
-	case buttonActionHelp:
-		r.openHelp()
-	case buttonActionTrash:
-		r.moveSelectionToTrash()
-	case buttonActionTrashbin:
-		r.openTrash()
-	case buttonActionRestore:
-		r.restoreSelectionFromTrash()
-	case buttonActionRemove:
-		r.openRemoveConfirm()
-	case buttonActionSed:
-		r.openSedReplace()
-	case buttonActionDetails:
-		r.toggleDetailsSidebar()
-	case buttonActionMenu:
-		r.MenuShortcut()
-	case buttonActionPrefix:
-		r.startPrefix()
-	case buttonActionToggleSplit:
-		// Direct, not the keyboard shortcut's own wrapper: a click is
-		// always deliberate (see this func's own doc comment), so the
-		// acceptsGlobalShortcut gate that keeps a key from firing while
-		// the bash line has focus doesn't apply.
-		r.toggleSplit()
-	}
 }
 
 // editCurrentEntry is the Edit button/Ctrl+E's actual action, also
@@ -542,7 +479,7 @@ func (r *Root) editCurrentEntry() {
 	r.runEditor(path, 0)
 }
 
-// renameCurrentEntry is the Rename button/F2's actual action — the
+// renameCurrentEntry is the "r" key's actual action — the
 // keyboard/status-bar equivalent of the context menu's "Rename" (see
 // Root.openRename), targeting whichever entry the table's cursor is
 // currently on instead of a right-clicked one.
@@ -573,21 +510,21 @@ func (r *Root) renameRow(row int) {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+L/F2/Ctrl+G/
-// Ctrl+O/Ctrl+F/Ctrl+R (see EditShortcut/LookShortcut/RenameShortcut/
-// ToggleHiddenShortcut/OptionsShortcut/SearchShortcut/PurgeShortcut,
-// wired up in cmd/breakthrough) should act right now: no overlay is
-// open, and the bash command line doesn't have keyboard focus.
+// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/
+// Ctrl+R (see EditShortcut/ToggleHiddenShortcut/OptionsShortcut/
+// SearchShortcut/PurgeShortcut, wired up in cmd/breakthrough) should act
+// right now: no overlay is open, and the bash command line doesn't have
+// keyboard focus.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these seven operate on "the currently
+// work from literally anywhere, these five operate on "the currently
 // selected file", the hidden-files display, or open an overlay of their
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
 // on top of whatever's already open. Critically, this also keeps them
 // out of the bash line's way: tview's TextArea already implements
 // several readline-style keybindings of its own (Ctrl+A/Home,
-// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these seven are captured
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these five are captured
 // globally, at the Application level (see cmd/breakthrough), they'd
 // reach and consume the keystroke before bashLine's own InputCapture or
 // TextArea's own default handling ever saw it, silently defeating both
@@ -634,13 +571,21 @@ func (r *Root) BashLineHasFocus() bool {
 	return r.bashLine.HasFocus()
 }
 
-// EditShortcut, RenameShortcut, ToggleHiddenShortcut, OptionsShortcut,
-// and SearchShortcut are Ctrl+E, F2, Ctrl+G, Ctrl+O, and Ctrl+F's
-// global actions (see cmd/breakthrough and acceptsGlobalShortcut for why
-// they check first rather than acting unconditionally). LookShortcut
-// (Ctrl+L) and PurgeShortcut (Ctrl+R, Remove) are the same shape,
-// defined alongside the rest of Look/Trash in viewer.go/trash.go instead
-// of here.
+// EditShortcut, ToggleHiddenShortcut, OptionsShortcut, and
+// SearchShortcut are Ctrl+E, Ctrl+G, Ctrl+O, and Ctrl+F's global actions
+// (see cmd/breakthrough and acceptsGlobalShortcut for why they check
+// first rather than acting unconditionally). LookShortcut (Ctrl+L) and
+// PurgeShortcut (Ctrl+R, Remove) are the same shape, defined alongside
+// the rest of Look/Trash in viewer.go/trash.go instead of here.
+//
+// RenameShortcut, right below, is the same shape too, but nothing in
+// cmd/breakthrough currently calls it — Rename's own real keyboard path
+// is the plain-letter layer's "r" (see plainCommands in keymap.go,
+// calling renameCurrentEntry right above), which needs no such guard of
+// its own (acceptsPlainKeyCommand already covers the same ground more
+// precisely). Kept rather than deleted as an exported building block,
+// the same shape every shortcut here already has, for whatever future
+// caller wants the guarded form.
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()

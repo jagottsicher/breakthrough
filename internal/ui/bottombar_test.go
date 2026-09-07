@@ -306,10 +306,42 @@ func requireCommand(t *testing.T, name string) {
 	}
 }
 
+// renderedTextAt draws r's own button bar to a real (simulated) screen
+// and reads back the plain runes actually shown in [startCol, endCol) —
+// the technically correct way to inspect rendered content now that a
+// cell's own label can carry color tags (see highlightKey in
+// buildButtonBar/chordHintBar): a tag consumes rune positions in the
+// raw string but zero columns on screen, so naively slicing []rune(text)
+// by column drifts out of alignment the moment any earlier cell
+// contains one — exactly what broke here the first time this test was
+// written against tagged output.
+func renderedTextAt(t *testing.T, r *Root, startCol, endCol int) string {
+	t.Helper()
+	width := tview.TaggedStringWidth(r.buttonBar.GetText(true)) + 10
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, 24)
+	r.buttonBar.SetRect(0, 0, width, 1)
+	r.buttonBar.Draw(screen)
+
+	rectX, _, _, _ := r.buttonBar.GetInnerRect()
+	var b strings.Builder
+	for col := startCol; col < endCol; col++ {
+		ch, _, _ := screen.Get(rectX+col, 0)
+		b.WriteString(ch)
+	}
+	return b.String()
+}
+
 // TestBuildButtonBarSpansLocateButtons pins that each button span in
 // buildButtonBar's output actually covers that button's own rendered
 // label, and nothing else — the click-routing tests below rely on this
-// being right.
+// being right. Only the plain-letter entries are checked here; the
+// chord-family cascade cells (keyed by their own prefix letter) have
+// their own separate test, TestBuildButtonBarShowsChordCascades.
 func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -317,62 +349,93 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	text, spans := r.buildButtonBar()
-	runes := []rune(text)
+	_, spans := r.buildButtonBar()
 
-	wantActions := map[buttonBarAction]string{
-		buttonActionHelp:         "F1 Help",
-		buttonActionMenu:         "F2 Menu",
-		buttonActionToggleSplit:  "F5 Split", // not split right now — see splitButtonLabel
-		buttonActionPrefix:       "^_ More",  // the key-prefix legend — see keyprefix.go
-		buttonActionEdit:         "F4/^E Edit",
-		buttonActionLook:         "F3/^L Look",
-		buttonActionProperties:   "^P Properties",
-		buttonActionDetails:      "^D Details",
-		buttonActionSearch:       "^F Find",
-		buttonActionSed:          "^S Sed",
-		buttonActionToggleHidden: "^G Hide", // ShowHidden defaults to true — see config.DefaultSettings
-		buttonActionOptions:      "^O Options",
-		buttonActionTrash:        "Del Trash",
-		buttonActionTrashbin:     "^B Trashbin", // not inside the trash — see TestButtonBarSwapsTrashbinForRestoreInsideTrash for that state
-		buttonActionRemove:       "^R Remove",
+	wantLabels := map[rune]string{
+		'?': " ?  Help",
+		'm': " m  Menu",
+		'l': " l  Look",
+		'i': " i  Props",
+		'I': " I  Details",
+		'c': " c  Copy",
+		'x': " x  Cut",
+		'v': " v  Paste",
+		'd': " d  Trash",
+		'.': " .  Hide", // ShowHidden defaults to true — see config.DefaultSettings
+		's': " s  Split",
+		't': " t  Tabs",
 	}
-	found := map[buttonBarAction]bool{}
+	found := map[rune]bool{}
 	for _, s := range spans {
-		want, ok := wantActions[s.action]
+		if s.key == 'g' || s.key == 'p' || s.key == 'z' {
+			continue // a chord-family cascade cell — see TestBuildButtonBarShowsChordCascades
+		}
+		want, ok := wantLabels[s.key]
 		if !ok {
-			t.Errorf("unexpected action %v in spans", s.action)
+			t.Errorf("unexpected key %q in spans", string(s.key))
 			continue
 		}
-		if s.endCol > len(runes) || s.startCol < 0 {
-			t.Fatalf("span %v out of bounds for text %q", s, text)
+		if got := renderedTextAt(t, r, s.startCol, s.endCol); got != want {
+			t.Errorf("span for key %q = %q, want %q", string(s.key), got, want)
 		}
-		if got := string(runes[s.startCol:s.endCol]); got != want {
-			t.Errorf("span for action %v = %q, want %q", s.action, got, want)
-		}
-		found[s.action] = true
+		found[s.key] = true
 	}
-	for action := range wantActions {
-		if !found[action] {
-			t.Errorf("no span found for action %v", action)
+	for key := range wantLabels {
+		if !found[key] {
+			t.Errorf("no span found for key %q", string(key))
 		}
 	}
 }
 
-// buttonLabelFor returns the label currently rendered for action, read
-// from the live r.buttonBarSpans/r.buttonBar (see buttonBarSpanFor
-// below) rather than calling buildButtonBar fresh — so this also pins
-// that refreshButtonBar actually pushed a rebuilt bar into both fields
-// after whatever state change the caller just made, not only that
-// buildButtonBar would compute the right thing in isolation. false if
-// action isn't showing at all right now.
-func buttonLabelFor(r *Root, action buttonBarAction) (label string, present bool) {
-	span, ok := buttonBarSpanFor(r, action)
+// TestBuildButtonBarShowsChordCascades pins that every quick chord
+// family (see chordFamily.quick) renders as "prefix… name" — the
+// ellipsis is what marks it as leading to more keys rather than acting
+// on its own, per the user's own explicit request that the bar show
+// both single keypresses and cascades. The reserved "y" family is
+// deliberately excluded (see chordFamilies' own doc comment): it has
+// nothing real behind it yet, so it stays out of the one row that's
+// always on screen.
+func TestBuildButtonBarShowsChordCascades(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	_, spans := r.buildButtonBar()
+
+	want := map[rune]string{'g': " g …  go", 'p': " p …  perms", 'z': " z …  display"}
+	for _, s := range spans {
+		if label, ok := want[s.key]; ok {
+			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
+				t.Errorf("chord cascade for %q = %q, want %q", string(s.key), got, label)
+			}
+			delete(want, s.key)
+		}
+	}
+	for key := range want {
+		t.Errorf("no chord cascade span found for %q", string(key))
+	}
+
+	if strings.Contains(r.buttonBar.GetText(true), "y…") {
+		t.Errorf("button bar should not advertise the reserved \"y\" chord")
+	}
+}
+
+// buttonLabelFor returns the label currently rendered for the entry
+// bound to key, read from the live r.buttonBarSpans/r.buttonBar (see
+// buttonBarSpanFor/renderedTextAt) rather than calling buildButtonBar
+// fresh — so this also pins that refreshButtonBar actually pushed a
+// rebuilt bar into both fields after whatever state change the caller
+// just made, not only that buildButtonBar would compute the right thing
+// in isolation. false if key isn't showing at all right now.
+func buttonLabelFor(t *testing.T, r *Root, key rune) (label string, present bool) {
+	t.Helper()
+	span, ok := buttonBarSpanFor(r, key)
 	if !ok {
 		return "", false
 	}
-	runes := []rune(r.buttonBar.GetText(true))
-	return string(runes[span.startCol:span.endCol]), true
+	return renderedTextAt(t, r, span.startCol, span.endCol), true
 }
 
 // TestButtonBarHideUnhideLabelTracksShowHidden pins the one button whose
@@ -389,45 +452,39 @@ func TestButtonBarHideUnhideLabelTracksShowHidden(t *testing.T) {
 	}
 
 	// ShowHidden defaults to true — see config.DefaultSettings.
-	if got, ok := buttonLabelFor(r, buttonActionToggleHidden); !ok || got != "^G Hide" {
-		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, "^G Hide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Hide" {
+		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, " .  Hide")
 	}
 
 	r.toggleHidden()
 
-	if got, ok := buttonLabelFor(r, buttonActionToggleHidden); !ok || got != "^G Unhide" {
-		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, "^G Unhide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Unhide" {
+		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, " .  Unhide")
 	}
 }
 
-// TestButtonBarSwapsTrashbinForRestoreInsideTrash pins the conditional-
-// visibility half of buildButtonBar (see its own doc comment and
-// Root.inTrash): once the panel is browsing the trash itself, Trashbin
-// disappears in favor of Restore in the same slot, and Trash disappears
-// entirely — there's nothing left to move an already-trashed item to
-// (see moveSelectionToTrash's own redirect for the shortcut/context-menu
-// side of that same rule).
-func TestButtonBarSwapsTrashbinForRestoreInsideTrash(t *testing.T) {
+// TestButtonBarStaysTheSameInsideTrash pins a deliberate simplification:
+// unlike the button bar this replaced, "d Trash"/"D Remove" no longer
+// relabel themselves while browsing the Trash — their own actions
+// already branch on Root.inTrash (see moveSelectionToTrash/plainCommand
+// 'D”s action in keymap.go), so the keys keep working correctly
+// either way; only the permanent legend's own text stays fixed, which
+// is what the help text and docs document instead of a bar that changes
+// shape underfoot.
+func TestButtonBarStaysTheSameInsideTrash(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 
-	if _, ok := buttonLabelFor(r, buttonActionTrashbin); !ok {
-		t.Fatal("setup: Trashbin should be showing before ever entering the trash")
-	}
-	if _, ok := buttonLabelFor(r, buttonActionTrash); !ok {
+	before, ok := buttonLabelFor(t, r, 'd')
+	if !ok {
 		t.Fatal("setup: Trash should be showing before ever entering the trash")
 	}
 
 	r.moveSelectionToTrash()
 	r.openTrash()
 
-	if _, ok := buttonLabelFor(r, buttonActionTrashbin); ok {
-		t.Error("Trashbin should disappear once inside the trash")
-	}
-	if _, ok := buttonLabelFor(r, buttonActionTrash); ok {
-		t.Error("Trash should disappear once inside the trash")
-	}
-	if label, ok := buttonLabelFor(r, buttonActionRestore); !ok || label != "^B Restore" {
-		t.Errorf("Restore = %q, present=%v, want %q showing in Trashbin's own slot", label, ok, "^B Restore")
+	after, ok := buttonLabelFor(t, r, 'd')
+	if !ok || after != before {
+		t.Errorf("label inside the trash = %q, present=%v, want unchanged %q", after, ok, before)
 	}
 }
 
@@ -451,7 +508,7 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	if !strings.Contains(text, r.currentUser) {
 		t.Errorf("status bar text should contain the current user %q, got:\n%s", r.currentUser, text)
 	}
-	for _, label := range []string{"^E Edit", "Del Trash", "^R Remove", "^P Properties"} {
+	for _, label := range []string{"c Copy", "d Trash", "i Props", "I Details"} {
 		if strings.Contains(text, label) {
 			t.Errorf("status bar text should no longer contain button label %q, got:\n%s", label, text)
 		}
@@ -484,35 +541,39 @@ func clickButtonBar(t *testing.T, r *Root, col int) {
 	r.captureButtonBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(rectX+col, 0, tcell.Button1, 0))
 }
 
-func TestCaptureButtonBarMouseEditClickRunsEditAction(t *testing.T) {
+// TestPlainKeyEditRunsEditAction is TestCaptureButtonBarMouseEditClickRunsEditAction's
+// own successor: "e" isn't one of the button bar's own quick entries any
+// more (see plainCommands' own quick field in keymap.go — Edit still
+// has Ctrl+E, so the row didn't need a third route as well), so this
+// exercises the same editCurrentEntry/runEditor path through the
+// keyboard dispatch instead of a button click.
+func TestPlainKeyEditRunsEditAction(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry, so this exercises editCurrentEntry for real
-
-	span, ok := buttonBarSpanFor(r, buttonActionEdit)
-	if !ok {
-		t.Fatal("no Edit span found")
-	}
+	r.app.SetFocus(r.panel.table)
 
 	// app.Suspend is a no-op here (no real screen behind r.app — see
 	// runEditor's own doc comment on why this codebase can't unit-test
-	// the actual editor invocation), so this only pins that the click
-	// reaches editCurrentEntry/runEditor and the panel reloads cleanly
+	// the actual editor invocation), so this only pins that "e" reaches
+	// editCurrentEntry/runEditor and the panel reloads cleanly
 	// afterwards, not that an editor actually ran.
-	clickButtonBar(t, r, span.startCol)
+	if !r.HandlePlainKey(runeEvent('e')) {
+		t.Fatal("'e' should have been consumed")
+	}
 
 	if r.activePage == errorPage {
-		t.Errorf("clicking Edit should not report an error here, got: %q", r.errorView.GetText(true))
+		t.Errorf("pressing 'e' should not report an error here, got: %q", r.errorView.GetText(true))
 	}
 }
 
-// TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "Del
-// Trash" button (see buildButtonBar/runButtonBarAction) to the same
-// moveSelectionToTrash a right-click menu's "Move to Trash" and Entf
-// already run — one action, three ways to reach it.
+// TestCaptureButtonBarMouseTrashClickMovesFileToTrash pins the "d
+// Trash" button (see buildButtonBar) to the same moveSelectionToTrash a
+// right-click menu's "Move to Trash" and Entf already run — one action,
+// three ways to reach it.
 func TestCaptureButtonBarMouseTrashClickMovesFileToTrash(t *testing.T) {
 	dir := fixtureDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
@@ -529,7 +590,7 @@ func TestCaptureButtonBarMouseTrashClickMovesFileToTrash(t *testing.T) {
 		t.Fatal("no current row to trash")
 	}
 
-	span, ok := buttonBarSpanFor(r, buttonActionTrash)
+	span, ok := buttonBarSpanFor(r, 'd')
 	if !ok {
 		t.Fatal("no Trash span found")
 	}
@@ -582,7 +643,7 @@ func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
 // the split itself.
 
 // TestCaptureButtonBarMouseMenuClickOpensTheContextMenu pins the part
-// of the F2/menu button that is easy to get wrong: several context-menu
+// of the "m" menu button that is easy to get wrong: several context-menu
 // entries read r.target/r.targetRow rather than the panel's own cursor,
 // so opening the menu by any route other than a right-click has to set
 // both, or the menu would act on whatever was last right-clicked.
@@ -599,7 +660,7 @@ func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
 		t.Fatal("setup: no current row")
 	}
 
-	span, ok := buttonBarSpanFor(r, buttonActionMenu)
+	span, ok := buttonBarSpanFor(r, 'm')
 	if !ok {
 		t.Fatal("no Menu span found")
 	}
@@ -621,7 +682,7 @@ func TestCaptureButtonBarMouseHiddenClickTogglesShowHidden(t *testing.T) {
 	}
 	before := r.panel.showHidden
 
-	span, ok := buttonBarSpanFor(r, buttonActionToggleHidden)
+	span, ok := buttonBarSpanFor(r, '.')
 	if !ok {
 		t.Fatal("no Hidden span found")
 	}
@@ -632,10 +693,11 @@ func TestCaptureButtonBarMouseHiddenClickTogglesShowHidden(t *testing.T) {
 	}
 }
 
-// buttonBarSpanFor returns the first span for action in r.buttonBarSpans.
-func buttonBarSpanFor(r *Root, action buttonBarAction) (buttonBarSpan, bool) {
+// buttonBarSpanFor returns the first span bound to key in
+// r.buttonBarSpans.
+func buttonBarSpanFor(r *Root, key rune) (buttonBarSpan, bool) {
 	for _, s := range r.buttonBarSpans {
-		if s.action == action {
+		if s.key == key {
 			return s, true
 		}
 	}

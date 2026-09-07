@@ -567,8 +567,8 @@ func (r *Root) propertiesCurrentEntry() {
 
 // PropertiesShortcut is Ctrl+P's global action — see cmd/breakthrough
 // and acceptsGlobalShortcut for why it checks its own precondition
-// first, the same as Ctrl+E/F2/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R. Unlike
-// those six, Ctrl+P also needs cmd/breakthrough's own dispatch-level
+// first, the same as Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R. Unlike those
+// five, Ctrl+P also needs cmd/breakthrough's own dispatch-level
 // AcceptsGlobalShortcut check before it's even called, since bashLine's
 // own captureBashLineKey binds Ctrl+P to command-history recall.
 func (r *Root) PropertiesShortcut() {

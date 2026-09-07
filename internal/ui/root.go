@@ -89,14 +89,14 @@ type Root struct {
 	// app.EnableMouse(true) call left the Application in — tview itself
 	// has no getter for this (see Application.EnableMouse's own private
 	// enableMouse field), so this is Root's own copy of the same state,
-	// flipped by ToggleMouseShortcut (F3). Enabling mouse reporting is
-	// what lets this app see clicks/drags at all, but it also means the
-	// terminal emulator hands every mouse event to breakthrough instead
-	// of handling it itself — per a real user report, that breaks a
-	// terminal's own native text selection/copy (e.g. to grab a
+	// flipped by ToggleMouseShortcut (Ctrl+_). Enabling mouse reporting
+	// is what lets this app see clicks/drags at all, but it also means
+	// the terminal emulator hands every mouse event to breakthrough
+	// instead of handling it itself — per a real user report, that
+	// breaks a terminal's own native text selection/copy (e.g. to grab a
 	// filename) for anyone who doesn't already know their terminal's own
 	// override gesture (Shift-drag, on most xterm-derived emulators).
-	// F3 is a plain, always-available escape hatch for exactly that,
+	// Ctrl+_ is a plain, always-available escape hatch for exactly that,
 	// independent of whichever gesture (if any) the current terminal
 	// happens to support.
 	mouseEnabled bool
@@ -677,12 +677,20 @@ type Root struct {
 	buttonBar      *tview.TextView
 	buttonBarSpans []buttonBarSpan
 
-	// prefixActive is true between Ctrl+_ and the verb key that follows
-	// it (see keyprefix.go). While it's set, the button bar shows the
-	// verb legend instead of the ordinary buttons, and every key is
-	// consumed as a verb rather than reaching its own shortcut.
-	prefixActive bool
-	statusBar    *tview.TextView
+	statusBar *tview.TextView
+
+	// pendingChord/chordDeadline/chordCancel back the plain-letter chord
+	// families (see keymap.go — g/p/z, "g" for go-to, "p" for
+	// permissions, "z" for display toggles): pendingChord is the prefix
+	// letter waiting for its second key (0 when none is), chordDeadline
+	// is when it auto-cancels, and chordCancel stops the ticker that
+	// animates the countdown in the status bar (see
+	// animateChordCountdown) once the chord resolves, is cancelled, or
+	// times out — the same context.CancelFunc-per-animation shape the
+	// Details sidebar's own hash/directory-size progress already uses.
+	pendingChord  rune
+	chordDeadline time.Time
+	chordCancel   context.CancelFunc
 
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
@@ -1630,8 +1638,8 @@ func (r *Root) closeAllOverlays() {
 //
 // The Details button specifically is a second, narrower exception,
 // checked before either of the above: a click on it reaches the button
-// bar's own handling (see buttonBarActionAt/runButtonBarAction)
-// completely untouched, toggling the Details sidebar alongside
+// bar's own handling (see buttonBarActionAt) completely untouched,
+// toggling the Details sidebar alongside
 // Properties rather than being swallowed as an "outside click" or
 // (while dirty) ignored outright — per the user's own explicit request
 // to open or close Details *while Properties stays open*, the same
@@ -1653,7 +1661,7 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	}
 
 	if r.activePage == propertiesPage && action == tview.MouseLeftClick {
-		if bAction, ok := r.buttonBarActionAt(x, y); ok && bAction == buttonActionDetails {
+		if span, ok := r.buttonBarActionAt(x, y); ok && span.key == 'I' {
 			return action, event
 		}
 	}
@@ -1843,14 +1851,14 @@ func (r *Root) RequestCancel() {
 	r.panel.cancelEdit()
 }
 
-// ToggleMouseShortcut is F3's own action — see cmd/breakthrough. Always
-// fires regardless of what's currently open or focused, the same
-// "reachable from literally anywhere" category F1/Ctrl+Q/Ctrl+C are in
-// (see HelpShortcut's own doc comment): the whole point is grabbing
-// text via the terminal's own native selection, which can be anywhere
-// on screen — a dialog, the bash line, a plain directory listing — so
-// gating this behind acceptsGlobalShortcut the way most other shortcuts
-// are would defeat it in exactly the cases it's most likely needed.
+// ToggleMouseShortcut is Ctrl+_'s own action — see cmd/breakthrough.
+// Always fires regardless of what's currently open or focused, the same
+// "reachable from literally anywhere" category Ctrl+Q/Ctrl+C are in:
+// the whole point is grabbing text via the terminal's own native
+// selection, which can be anywhere on screen — a dialog, the bash line,
+// a plain directory listing — so gating this behind
+// acceptsGlobalShortcut the way most other shortcuts are would defeat
+// it in exactly the cases it's most likely needed.
 //
 // See mouseEnabled's own doc comment on why this exists at all: mouse
 // reporting being on is what makes this app's own clicks/drags work,
@@ -2062,14 +2070,12 @@ func (r *Root) placeholderMenuAction(name string) func() {
 	}
 }
 
-// MenuShortcut is F2's own action: open the context menu for whichever
-// row the cursor is on, without a mouse.
+// MenuShortcut is the "m" key's own action: open the context menu for
+// whichever row the cursor is on, without a mouse.
 //
 // Until this existed the context menu was reachable by right-click and
 // nothing else — a real gap in an application whose own guardrail is
-// that every mouse gesture has a keyboard equivalent, and the reason
-// F2 landing here (Midnight Commander's own F2 is its user menu) fills
-// a hole rather than just moving one key onto another.
+// that every mouse gesture has a keyboard equivalent.
 //
 // Sets r.target/r.targetRow the same way the right-click path does (see
 // captureMouse's MouseRightClick case) — several menu entries read them
