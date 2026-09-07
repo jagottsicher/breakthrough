@@ -26,6 +26,54 @@ const helpMinWidth, helpMinHeight = 60, 20
 // tview.Escape isn't needed anywhere here since nothing below happens
 // to contain a literal "[".
 var helpText = strings.TrimLeft(`
+[::b]Primary keys — while browsing (recommended)[::-]
+
+  Plain letters, the same way ranger/nnn/lf/vifm work — no modifier key
+  to get wrong, no terminal-layout risk. Only active while the file
+  listing itself has keyboard focus: typing in the filter box, the path
+  editor, or the bash line is never affected by any of this, and
+  neither is any open dialog.
+
+  c   Copy              d   Move to Trash        i   Properties
+  x   Cut               D   Remove permanently    I   Details sidebar
+  v   Paste             u   Undo last rename
+  r   Rename            e   Edit                  l   Look
+  m   Context menu      f   Find                  /   Filter
+  n   New tab           w   Close tab             t   Tab switcher
+  s   Split view        S   Swap panes            .   Toggle hidden
+  a   Select all         *  Invert selection      +/- Select/deselect
+                                                       by pattern
+  B   Batch rename       E  Sed Replace           G   Go to last row
+  q   Quit                ? This help              :  Bash command line
+
+  A capital letter is the bigger sibling of its own lowercase one where
+  both exist: "d" is reversible (the Trash), "D" is not (asks first);
+  "s" splits the view, "S" swaps the two panes over. While browsing the
+  Trash itself, "r" restores and "D" empties it, instead of their
+  ordinary meaning — the same two letters, read differently in the one
+  place that makes sense.
+
+  Chords — a letter, then within a couple of seconds one more (see the
+  status bar's own countdown while one is pending, and the button bar
+  for what the second key can be):
+
+    g  go       gg top · gh home · gr / (root) · gb Trash
+    p  perms    pm chmod · po chown
+    z  display  zs size format · zt time format · zo split orientation
+    y  yank     yp/yn/ya full path/name/all selected — reserved, not
+                built yet (needs its own system-clipboard design first)
+
+  Escape cancels a pending chord; any other key that isn't one of its
+  own members cancels it too and says so. Letting it simply time out
+  (the status bar's own countdown reaching empty) cancels silently —
+  that's "changed my mind", not a mistake worth a message.
+
+  Nothing below this section was taken away — every Ctrl-letter and
+  function-key binding documented further down still works exactly as
+  it always has. The keys above are simply the newer, primary way to
+  reach the same things, chosen because a plain letter has no
+  layout/terminal/multiplexer risk that a modifier key can have.
+
 [::b]Global — work anywhere, even inside another dialog[::-]
 
   The F1-F4 row follows Midnight Commander's own layout.

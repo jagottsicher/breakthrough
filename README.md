@@ -87,18 +87,33 @@ terminal.
   replaces only the pane you're in — the panes never swap sides. The
   split is saved and reopened alongside the tabs. See
   [docs/user-guide.md](docs/user-guide.md#split-view) for the details.
-- A key prefix (`^_`), for everything the function keys reach — without
-  them. Press it and the button bar turns into a list of single-letter
-  commands (`s` split, `o` orientation, `t` tabs, `n` new tab, `w` close
-  tab, `1`–`0` jump to tab N, `r` rename, `m` mouse, `,` options,
-  `?` help); press one to run it. The prefix does nothing on its own, so
-  there is no timeout and no guessing — and the legend means you don't
-  have to memorize the tree to use it. Mostly for macOS, where F1–F6 are
-  media keys until you change a system setting; nothing is taken away,
-  every existing key still works. `^_` was picked because no terminal
-  multiplexer claims it — tmux takes `^B`, screen and byobu `^A`, dtach
-  `^\` — and a multiplexer always swallows its own prefix before the
-  application inside sees it. See
+- A primary keyboard layer of plain letters — `c`/`x`/`v` copy/cut/paste,
+  `d`/`D` Trash/remove permanently, `r` rename, `i`/`I` Properties/
+  Details, `s`/`S` split/swap panes, and more — active only while the
+  file listing itself has keyboard focus, never while typing in the
+  filter box, the path editor, or the command line. No modifier key
+  means no terminal/layout/multiplexer to trip over — the same approach
+  ranger, nnn, lf and vifm all settled on. Related, rarer actions sit
+  behind a chord (a letter, then one more within a couple of seconds,
+  with a countdown in the status bar): `g` to jump somewhere (`gg` top,
+  `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
+  `po` chown), `z` for display toggles (`zs` size format, `zt` time
+  format, `zo` split orientation). See
+  [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).
+- A key prefix (`^_`), a second, still fully working route to what the
+  layer above doesn't cover on its own — split view, tabs, and a
+  couple of others, originally built for everything the function keys
+  reach without them. Press it and the button bar turns into a list of
+  single-letter commands (`s` split, `o` orientation, `t` tabs, `n` new
+  tab, `w` close tab, `1`–`0` jump to tab N, `r` rename, `m` mouse,
+  `,` options, `?` help); press one to run it. The prefix does nothing
+  on its own, so there is no timeout and no guessing — and the legend
+  means you don't have to memorize the tree to use it. Mostly for
+  macOS, where F1–F6 are media keys until you change a system setting;
+  nothing is taken away, every existing key still works. `^_` was
+  picked because no terminal multiplexer claims it — tmux takes `^B`,
+  screen and byobu `^A`, dtach `^\` — and a multiplexer always
+  swallows its own prefix before the application inside sees it. See
   [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
 - Midnight Commander's own F-key layout where it maps onto something
   breakthrough has: `F1` help, `F2` the context menu, `F3` view, `F4`

@@ -259,6 +259,20 @@ func (r *Root) buildStatusBar() string {
 	write := func(s string) { b.WriteString(s) }
 	sep := func() { write(" │ ") }
 
+	// A pending chord's own countdown (see chordIndicatorText), leading
+	// rather than trailing: it needs to be seen immediately, and the
+	// segments after it (disk usage, uptime, load) are each already
+	// optional on their own platform, so anything placed after them
+	// would shift around depending on what happened to be available —
+	// exactly the instability a fixed leading position avoids. Still
+	// purely informational, same as every other segment here: it has no
+	// click target of its own, matching this bar's own long-standing
+	// "no buttons at all" rule.
+	if chord := r.chordIndicatorText(); chord != "" {
+		write(chord)
+		sep()
+	}
+
 	write(r.currentUser)
 	sep()
 	write(mouseStatusText(r.mouseEnabled))

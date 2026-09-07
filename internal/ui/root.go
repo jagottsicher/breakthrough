@@ -684,6 +684,26 @@ type Root struct {
 	prefixActive bool
 	statusBar    *tview.TextView
 
+	// pendingChord/chordDeadline/chordCancel back the plain-letter chord
+	// families (see keymap.go — g/p/z, "g" for go-to, "p" for
+	// permissions, "z" for display toggles): pendingChord is the prefix
+	// letter waiting for its second key (0 when none is), chordDeadline
+	// is when it auto-cancels, and chordCancel stops the ticker that
+	// animates the countdown in the status bar (see
+	// animateChordCountdown) once the chord resolves, is cancelled, or
+	// times out — the same context.CancelFunc-per-animation shape the
+	// Details sidebar's own hash/directory-size progress already uses.
+	//
+	// Separate from prefixActive/the Ctrl+_ system above on purpose:
+	// that prefix means nothing on its own, so there is nothing to
+	// disambiguate by waiting — these chords sit on plain letters that
+	// are typed while browsing, so a stray "g" left dangling has to
+	// expire on its own rather than wait forever for a second key that
+	// may never come.
+	pendingChord  rune
+	chordDeadline time.Time
+	chordCancel   context.CancelFunc
+
 	// bashLineCompletingPick is true only for the moment openCompletionPicker
 	// moves focus away from bashLine to the completion picker it opens —
 	// a deliberate, momentary transition, not the user leaving the

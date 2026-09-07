@@ -1944,6 +1944,22 @@ func (p *Panel) deselectAll() {
 	}
 }
 
+// invertSelection flips every row's own checked state — checked becomes
+// unchecked and vice versa. The plain-letter keyboard layer's own "*",
+// Midnight Commander's own convention for exactly this (its own "+"/"-"
+// select/deselect a whole pattern; "*" is the one that inverts what's
+// already there, and this app already borrows the first two for the
+// context menu's "Select +"/"Select -").
+//
+// Goes through toggleCheckbox rather than reading/writing p.selected
+// directly: that already skips ".." on its own (see its own doc
+// comment), so this doesn't need to re-derive checkability itself.
+func (p *Panel) invertSelection() {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		p.toggleCheckbox(row)
+	}
+}
+
 // selectByPattern sets checked on every row whose name matches pattern —
 // shell glob syntax, as filepath.Match understands it (the same
 // convention the header's path completion already uses). Backs the

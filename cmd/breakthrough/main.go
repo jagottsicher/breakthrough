@@ -270,6 +270,16 @@ func run() error {
 			return nil
 		}
 
+		// The primary keyboard layer (see internal/ui/keymap.go): plain
+		// letters, and the g/p/z chords built on top of them. Checked
+		// next, ahead of every Ctrl-letter/F-key case below, so a chord
+		// waiting on its second key intercepts it before anything else
+		// gets a chance to — see HandlePlainKey's own doc comment for
+		// why nothing may fall through while a chord is pending.
+		if root.HandlePlainKey(event) {
+			return nil
+		}
+
 		switch event.Key() {
 		case tcell.KeyCtrlUnderscore:
 			// Ctrl+_ opens the prefix — the second, function-key-free

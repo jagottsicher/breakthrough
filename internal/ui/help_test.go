@@ -287,3 +287,30 @@ func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 		}
 	}
 }
+
+// TestHelpTextMentionsThePrimaryKeyboardLayer guards the newer,
+// plain-letter layer (see keymap.go) the same way the legacy Ctrl/F-key
+// one above is guarded — every key the registry actually binds should
+// be findable in the help text, and every chord family/member too.
+// Hand-transcribed rather than generated from the registry (a real,
+// acknowledged gap — see keymap.go's own package doc on deriving the
+// help text mechanically in a follow-up), so this is exactly the kind
+// of drift a generated version would make structurally impossible.
+func TestHelpTextMentionsThePrimaryKeyboardLayer(t *testing.T) {
+	for _, c := range plainCommands() {
+		if !strings.ContainsRune(helpText, c.key) {
+			t.Errorf("helpText never mentions the plain key %q (%s)", string(c.key), c.label)
+		}
+	}
+	for _, f := range chordFamilies() {
+		if !strings.ContainsRune(helpText, f.prefix) {
+			t.Errorf("helpText never mentions the chord prefix %q (%s)", string(f.prefix), f.name)
+		}
+		for _, m := range f.members {
+			chord := string(f.prefix) + string(m.key)
+			if !strings.Contains(helpText, chord) {
+				t.Errorf("helpText never mentions the chord %q (%s)", chord, m.label)
+			}
+		}
+	}
+}

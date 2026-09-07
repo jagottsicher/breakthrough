@@ -7,6 +7,7 @@ material, always matching the version you are actually running.
 
 ## Contents
 
+- [The keyboard layer](#the-keyboard-layer)
 - [The key prefix](#the-key-prefix)
 - [Getting around](#getting-around)
 - [Selecting files](#selecting-files)
@@ -27,8 +28,65 @@ material, always matching the version you are actually running.
 
 ---
 
+## The keyboard layer
+
+breakthrough's primary way to reach every everyday action is a plain
+letter, typed while the file listing has keyboard focus — no modifier
+key, no terminal/layout/multiplexer risk, the same approach ranger,
+nnn, lf and vifm all settled on. It never fires while you're typing in
+the filter box, the path editor, or the command line, or with any
+dialog open.
+
+| Key | Action | Key | Action | Key | Action |
+|---|---|---|---|---|---|
+| `c` | Copy | `d` | Move to Trash | `i` | Properties |
+| `x` | Cut | `D` | Remove permanently | `I` | Details sidebar |
+| `v` | Paste | `u` | Undo last rename | `l` | Look |
+| `r` | Rename | `e` | Edit | `/` | Filter |
+| `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
+| `n` | New tab | `w` | Close tab | `t` | Tab switcher |
+| `s` | Split view on/off | `S` | Swap panes | `a` | Select all |
+| `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
+| `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
+| `?` | This help | `:` | Bash command line | | |
+
+A capital letter is the bigger sibling of its own lowercase one
+wherever both exist: `d` is reversible (the Trash), `D` asks first and
+isn't; `s` splits the view, `S` swaps the two panes over. Browsing the
+Trash itself flips two of these to their trash-specific meaning: `r`
+restores instead of renaming, `D` empties the whole Trash instead of
+removing one file.
+
+**Chords** cover the rarer, related actions — one letter, then within
+about two and a half seconds one more. The status bar shows a small
+countdown (`g▆`, shrinking) while one is pending, and the button bar
+becomes that chord's own legend:
+
+| Chord | Members |
+|---|---|
+| `g` — go | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
+| `p` — permissions | `pm` chmod · `po` chown |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation |
+| `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
+
+`Escape` cancels a pending chord, and so does any key that isn't one of
+its members — which says so, the same as an unrecognized prefix verb
+below. Letting it simply run out is treated as "changed my mind" and
+cancels without comment.
+
+**Nothing existing was removed.** Every Ctrl-letter and function-key
+binding described in the rest of this guide still works exactly as it
+always has — this layer sits alongside them as the newer, primary
+route to the same features, not a replacement for muscle memory
+already built on the old one.
+
+---
+
 ## The key prefix
 
+A second, still fully working route to the features above the plain
+keyboard layer doesn't cover on its own — split view, tabs, and a
+couple of others — kept for anyone whose muscle memory already has it:
 `Ctrl+_`, then one letter. The button bar becomes the list of what's
 available the moment you press it:
 
@@ -530,6 +588,14 @@ Every key breakthrough recognizes, with its default:
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 
 ## Keyboard reference
+
+### The keyboard layer (primary)
+
+The plain letters and `g`/`p`/`z` chords covered in
+[The keyboard layer](#the-keyboard-layer) above are the primary route
+to everyday actions — see that section for the full table. Everything
+below this point is still fully working, kept for muscle memory built
+on it before that layer existed.
 
 ### Anywhere
 
