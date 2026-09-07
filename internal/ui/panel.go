@@ -1489,7 +1489,7 @@ func (p *Panel) columnSeparator() *tview.TableCell {
 // entirely.
 func formatSizeCell(size int64, bytesMode bool) string {
 	if bytesMode {
-		return strconv.FormatInt(size, 10)
+		return groupThousands(size)
 	}
 	return humanSize(size)
 }

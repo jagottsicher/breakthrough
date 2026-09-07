@@ -62,14 +62,41 @@ func TestSizeWithBytes(t *testing.T) {
 	}{
 		{0, "0B"},       // below 1024: humanSize is already exact
 		{1023, "1023B"}, // below 1024: humanSize is already exact
-		{1024, "1.0K (1024 bytes)"},
-		{2184, "2.1K (2184 bytes)"},
-		{1024 * 1024, "1.0M (1048576 bytes)"},
+		{1024, "1.0K (1,024 bytes)"},
+		{2184, "2.1K (2,184 bytes)"},
+		{1024 * 1024, "1.0M (1,048,576 bytes)"},
 	}
 
 	for _, tt := range tests {
 		if got := sizeWithBytes(tt.size); got != tt.want {
 			t.Errorf("sizeWithBytes(%d) = %q, want %q", tt.size, got, tt.want)
+		}
+	}
+}
+
+// TestGroupThousands pins the digit-grouping itself, separately from
+// sizeWithBytes/formatSizeCell's own use of it — including the
+// boundary cases those two examples alone wouldn't catch: no separator
+// below four digits, and a negative value grouped the same way (size in
+// bytes is never actually negative, but the function makes no such
+// assumption, so neither should its own test).
+func TestGroupThousands(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{0, "0"},
+		{9, "9"},
+		{999, "999"},
+		{1000, "1,000"},
+		{2184, "2,184"},
+		{1048576, "1,048,576"},
+		{1000000000, "1,000,000,000"},
+		{-2184, "-2,184"},
+	}
+	for _, tt := range tests {
+		if got := groupThousands(tt.n); got != tt.want {
+			t.Errorf("groupThousands(%d) = %q, want %q", tt.n, got, tt.want)
 		}
 	}
 }

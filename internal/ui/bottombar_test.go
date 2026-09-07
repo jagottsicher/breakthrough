@@ -756,9 +756,9 @@ func TestToggleHiddenShortcutRespectsGuard(t *testing.T) {
 	}
 }
 
-// TestRenameShortcutTargetsCurrentRow pins F2's actual action
-// (Root.RenameShortcut): it targets whichever row the table's cursor is
-// on, the same as clicking the status bar's Rename button.
+// TestRenameShortcutTargetsCurrentRow pins RenameShortcut's actual
+// action: it targets whichever row the table's cursor is on, the same
+// as pressing "r" or clicking the status bar's Rename button.
 func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
