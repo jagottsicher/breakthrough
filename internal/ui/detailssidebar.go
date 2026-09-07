@@ -254,11 +254,11 @@ func (r *Root) hideDetailsSidebar() {
 	r.detailsSidebarVisible = false
 }
 
-// toggleDetailsSidebar is the Details button's own action (see
-// runButtonBarAction) — called directly and unguarded, the same "a
-// click is always deliberate" reasoning every other button click
-// already gets. ToggleDetailsSidebarShortcut (Ctrl+D) is this plus the
-// same acceptsGlobalShortcut precondition every other keyboard shortcut
+// toggleDetailsSidebar is the "I" key/Details button's own action —
+// called directly and unguarded from a click, the same "a click is
+// always deliberate" reasoning every other button click already gets.
+// ToggleDetailsSidebarShortcut (Ctrl+D) is this plus the same
+// acceptsGlobalShortcut precondition every other keyboard shortcut
 // checks — see its own doc comment for why that one specifically can't
 // skip it the way this can.
 func (r *Root) toggleDetailsSidebar() {
