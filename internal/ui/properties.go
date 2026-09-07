@@ -1885,7 +1885,7 @@ func humanSize(size int64) string {
 }
 
 // sizeWithBytes renders size as its human-readable form (see humanSize)
-// followed by the exact byte count, e.g. "2.1K (2184 bytes)" — the
+// followed by the exact byte count, e.g. "2.1K (2,184 bytes)" — the
 // shorthand's rounding hides the kind of precision that matters when
 // comparing two similarly-sized files. Below 1024 bytes, humanSize is
 // already exact (e.g. "512B"), so there's nothing to add.
@@ -1894,7 +1894,34 @@ func sizeWithBytes(size int64) string {
 	if size < 1024 {
 		return human
 	}
-	return fmt.Sprintf("%s (%d bytes)", human, size)
+	return fmt.Sprintf("%s (%s bytes)", human, groupThousands(size))
+}
+
+// groupThousands renders n with a comma every three digits from the
+// right (123456789 -> "123,456,789") — per the user's own explicit
+// request for the exact-byte-count Size column (see formatSizeCell's
+// own bytesMode branch): an ungrouped nine-digit number takes a moment
+// to parse at a glance, and every terminal renders a plain comma
+// identically, unlike a locale-dependent separator.
+func groupThousands(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	neg := strings.HasPrefix(s, "-")
+	if neg {
+		s = s[1:]
+	}
+
+	var b strings.Builder
+	for i, d := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(d)
+	}
+
+	if neg {
+		return "-" + b.String()
+	}
+	return b.String()
 }
 
 // textSize returns the width (the longest line, plus 1-char left/right
