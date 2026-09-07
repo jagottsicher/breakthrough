@@ -67,19 +67,19 @@ terminal.
   through `^0` (or `Alt+1`...`Alt+0` — bound to the same tabs, for
   terminals that can't report one or the other) jump straight to a tab,
   `^Tab`/`^Shift+Tab` step through a switcher showing every tab's full
-  path. F4/`^T` (or the button bar's own "F4 Tabs") opens the same
-  switcher without moving, and works everywhere the others might not. A
+  path. `t`/`^T` opens the same switcher without moving, and works
+  everywhere the others might not. A
   compact numbered strip sits beside the filter — numbers rather than paths, so
   the header row's width stays put as you navigate — and shrinks to just
   a "+" while only one tab is open. The layout is saved on exit and
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
-- Split view (`F5`): two of those tabs on screen at once, side by side
-  or stacked (`F6` flips it, or set `split_stacked` once and forget it).
-  With a single tab open, `F5` opens a second one on the same directory
-  — the usual starting point for copying between two places in one tree;
-  otherwise it pairs you with the tab you last split with. To choose the
-  other pane yourself, the tab list (`F4`) gives every row a `◫` button,
+- Split view (`s`): two of those tabs on screen at once, side by side
+  or stacked (`z` then `o` flips it, or set `split_stacked` once and
+  forget it). With a single tab open, `s` opens a second one on the same
+  directory — the usual starting point for copying between two places in
+  one tree; otherwise it pairs you with the tab you last split with. To
+  choose the other pane yourself, the tab list (`t`) gives every row a `◫` button,
   including its "+ New tab" row, which creates a tab and splits with it
   in one step. `Tab`, or a click, moves between the panes, and the one
   you are in keeps the keyboard, the context menu and every shortcut;
@@ -87,43 +87,44 @@ terminal.
   replaces only the pane you're in — the panes never swap sides. The
   split is saved and reopened alongside the tabs. See
   [docs/user-guide.md](docs/user-guide.md#split-view) for the details.
-- A key prefix (`^_`), for everything the function keys reach — without
-  them. Press it and the button bar turns into a list of single-letter
-  commands (`s` split, `o` orientation, `t` tabs, `n` new tab, `w` close
-  tab, `1`–`0` jump to tab N, `r` rename, `m` mouse, `,` options,
-  `?` help); press one to run it. The prefix does nothing on its own, so
-  there is no timeout and no guessing — and the legend means you don't
-  have to memorize the tree to use it. Mostly for macOS, where F1–F6 are
-  media keys until you change a system setting; nothing is taken away,
-  every existing key still works. `^_` was picked because no terminal
-  multiplexer claims it — tmux takes `^B`, screen and byobu `^A`, dtach
-  `^\` — and a multiplexer always swallows its own prefix before the
-  application inside sees it. See
-  [docs/user-guide.md](docs/user-guide.md#the-key-prefix).
-- Midnight Commander's own F-key layout where it maps onto something
-  breakthrough has: `F1` help, `F2` the context menu, `F3` view, `F4`
-  edit. Where a feature also has a Ctrl binding the button bar names
-  both (`F3/^L Look`), so neither has to be guessed at. The mouse
-  toggle moved out to `F12`, deliberately away from that row — it has
-  to work from inside a dialog too, which is the one place the key
-  prefix stands down. `F5`/`F6` stay on split view for now; Copy and
-  Move with a destination dialog, MC's own F5/F6, aren't built yet.
-- A context menu on `F2` or right-click: Properties (editable — name, permissions,
+- A primary keyboard layer of plain letters — `c`/`x`/`v` copy/cut/paste,
+  `d`/`D` Trash/remove permanently, `r` rename, `i`/`I` Properties/
+  Details, `s`/`S` split/swap panes, and more — active only while the
+  file listing itself has keyboard focus, never while typing in the
+  filter box, the path editor, or the command line. No modifier key
+  means no terminal/layout/multiplexer to trip over — the same approach
+  ranger, nnn, lf and vifm all settled on. Related, rarer actions sit
+  behind a chord (a letter, then one more within about four seconds,
+  with a countdown in the status bar and a clickable legend in the
+  button bar): `g` to jump somewhere (`gg` top,
+  `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
+  `po` chown), `z` for display toggles (`zs` size format, `zt` time
+  format, `zo` split orientation). See
+  [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).
+- No function keys anywhere in the application — every one of them is
+  free for your terminal or window manager to use however it likes.
+  `^_` still exists, but as a single, narrow, always-available toggle
+  for mouse reporting on/off (grabbing your terminal's own native text
+  selection back when you need it, even with a dialog open) rather than
+  a whole prefix tree — picked because no terminal multiplexer claims
+  it (tmux takes `^B`, screen and byobu `^A`, dtach `^\`).
+- A context menu on `m` or right-click: Properties (editable — name, permissions,
   click a bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
   Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
   glob-pattern Select +/-), Copy/Cut/Paste, chmod, chown, Sed Replace,
   and the trash actions below.
-- Move to Trash / Remove: Entf moves the current selection to
+- Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `^R`, Ctrl+Entf (best-effort —
-  terminal-dependent; `^R` is always the reliable one), or the context
-  menu's "Remove" permanently deletes instead (a file like `rm`, a
-  directory recursively like `rm -rf`, empty or not), always behind a
-  confirmation dialog with Cancel preselected — a single stray keypress
-  can never confirm it by itself. "Go to Trash" (`^B`, or "Trashbin" in
-  the button bar) jumps straight into it without needing to know its
-  path; "Restore from Trash" and "Empty Trash" (same confirmation) round
+  that's the reversible action by design. `D`, `^R`, Ctrl+Entf
+  (best-effort — terminal-dependent; `D`/`^R` are always the reliable
+  ones), or the context menu's "Remove" permanently deletes instead (a
+  file like `rm`, a directory recursively like `rm -rf`, empty or not),
+  always behind a confirmation dialog with Cancel preselected — a single
+  stray keypress can never confirm it by itself. "Go to Trash" (the `g`
+  chord's own `gb`, or `^B`) jumps straight into it without needing to
+  know its path; "Restore from Trash" (`r`, while browsing it) and
+  "Empty Trash" (`D`, same confirmation) round
   it out. Persistent by default — lives under
   `~/.local/share/breakthrough/trash`, so it's still there tomorrow, even
   across a login session boundary — or session-scoped via
@@ -138,7 +139,7 @@ terminal.
   didn't already bring the trash back under that share of the
   filesystem it lives on); either one is `0` to disable it. Anything
   actually removed this way is reported once, on the next start.
-  Browsing the trash itself ("Go to Trash"/Trashbin) shows each item's
+  Browsing the trash itself ("Go to Trash") shows each item's
   own original path in place of its real on-disk name (a collision-
   avoidance hash you'd otherwise have to squint past — two files
   trashed from the very same location, more than once, still stay
@@ -146,7 +147,7 @@ terminal.
   time" instead — both, like the Modified column always has, respecting
   the Options overlay's timestamp-vs-formatted toggle and the column's
   own sort.
-- Sed Replace (`^S`, or the context menu): runs a real `sed(1)`
+- Sed Replace (`E`/`^S`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
   `-E`, Case-insensitive, and Replace-all-per-line toggles) builds the
@@ -201,25 +202,31 @@ terminal.
   Commander's own command line handles every command — no attempt to
   guess which programs need one and which don't. Its own output stays on
   screen until you press Escape to return, so it doesn't just flash by.
-- A middle row of nano-style quick-action buttons, always visible right
-  below the command line, in a fixed order: Help (`F1`), Rename (`F2` —
-  the same key most GUI file managers use for it), Edit (`^E`, opens
-  `$VISUAL`/`$EDITOR`, or
-  [`select-editor(1)`](https://manpages.debian.org/testing/sensible-utils/select-editor.1.en.html)'s
-  own pick if set, on the selected file), Look (`^L`, see below),
-  Properties (`^P`), Search (`^F`, see below), Sed Replace (`^S`),
-  toggle hidden files (`^G` — labeled Hide or Unhide, whichever it would
-  do next, not whichever state you're currently in), Options (`^O`),
-  Move to Trash (Entf), Trashbin (`^B`, jumps straight into your own
-  trash without needing to know its path), and Remove (`^R`). Two of
-  these change with where you are: Trash disappears and Trashbin turns
-  into Restore while you're actually browsing the trash itself — moving
-  something already in the trash to the trash again doesn't mean
-  anything, so Entf there does a Remove instead, with the exact
-  same confirmation any other Remove has. Each button is also reachable
-  from the context menu, and each still works the same way whichever
-  panel or field currently has focus, except while the command line
-  itself is expanded and needs those same keys for its own editing.
+- A middle row, always visible right below the command line, showing a
+  curated subset of the keyboard layer's own letters as a quick legend —
+  each key set off in its own petrol background, one space either side,
+  so the letter-to-action mapping reads at a glance: Copy (`c`), Cut
+  (`x`), Paste (`v`), Move to Trash (`d`), toggle hidden files (`.` —
+  labeled Hide or Unhide, whichever it would do next, not whichever
+  state you're currently in), Properties (`i`), Details sidebar (`I`),
+  context menu (`m`), Split view (`s`), the tab switcher (`t`), Look
+  (`l`), and Help (`?`), plus the three chord families marked with an
+  ellipsis to show they lead to more keys (`g…` go, `p…` permissions,
+  `z…` display toggles) — every member of an open chord's own legend is
+  clickable too, the same highlighted-key treatment, so pointing at one
+  works as well as typing its second letter. A few of these change
+  meaning while actually browsing the
+  trash itself: `d` asks to remove permanently instead of moving
+  something already-trashed to the trash again, `r` (not shown in this
+  row, but still fully live) restores instead of renaming, and `D`
+  empties the whole trash instead of removing just the selection — the
+  button labels themselves stay put either way, since a bar that changed
+  shape underfoot would be its own kind of confusing. Every entry here
+  is also reachable from the context menu
+  and fully documented (including everything that doesn't fit this one
+  row) in the in-app help (`?`), and each still works the same way
+  whichever panel or field currently has focus, except while the command
+  line itself is expanded and needs those same keys for its own editing.
   Hidden-files/size-format/mtime-format toggles are remembered across
   restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
@@ -445,7 +452,7 @@ uninstall instructions.
 
 - **[docs/user-guide.md](docs/user-guide.md)** — every feature in
   detail, the complete settings reference, and a full keyboard map.
-  `F1` inside the application shows a condensed version of the same
+  `?` inside the application shows a condensed version of the same
   thing, always matching the build you're running.
 - **[docs/installation.md](docs/installation.md)** — terminal
   requirements, exactly which files land where, optional external

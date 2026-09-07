@@ -209,12 +209,12 @@ func optionCategories() []optionCategory {
 					},
 				),
 				boolOption("split_stacked", "Split view stacked",
-					"How split view (F5) divides the window between its two panes.\n\n"+
+					"How split view (\"s\") divides the window between its two panes.\n\n"+
 						"Off puts them side by side, which suits a wide terminal and keeps every "+
 						"row of both listings visible. On stacks them above each other, which "+
 						"keeps the full column width — worth it for long filenames, or on a "+
 						"terminal too narrow to halve.\n\n"+
-						"F6 flips this too, without coming here.",
+						"\"z\" then \"o\" flips this too, without coming here.",
 					false,
 					func(r *Root) bool { return r.settings.SplitStacked },
 					func(r *Root, b bool) { r.setSplitStacked(b) },

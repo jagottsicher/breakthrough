@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestHelpShortcutOpensHelp pins F1's own basic action.
+// TestHelpShortcutOpensHelp pins openHelp's own basic action.
 func TestHelpShortcutOpensHelp(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -16,7 +17,7 @@ func TestHelpShortcutOpensHelp(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.HelpShortcut()
+	r.openHelp()
 
 	if r.activePage != helpPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, helpPage)
@@ -24,8 +25,9 @@ func TestHelpShortcutOpensHelp(t *testing.T) {
 }
 
 // TestHelpShortcutFloatsOverProperties pins the user's own explicit
-// design (see openHelp's own doc comment): F1 while another dialog is
-// already open pushes Help on top of it rather than replacing it —
+// design (see openHelp's own doc comment): opening Help while another
+// dialog is already open pushes Help on top of it rather than replacing
+// it —
 // closing Help returns to that dialog, still open, exactly the same
 // "floats on top rather than replacing" behavior
 // openOwnerGroupPicker already has over Properties.
@@ -41,7 +43,7 @@ func TestHelpShortcutFloatsOverProperties(t *testing.T) {
 		t.Fatalf("setup: activePage = %q, want %q", r.activePage, propertiesPage)
 	}
 
-	r.HelpShortcut()
+	r.openHelp()
 	if r.activePage != helpPage {
 		t.Fatalf("activePage = %q, want %q (Help on top of Properties)", r.activePage, helpPage)
 	}
@@ -52,21 +54,21 @@ func TestHelpShortcutFloatsOverProperties(t *testing.T) {
 	}
 }
 
-// TestHelpShortcutIsNoopWhenAlreadyOpen pins that a second F1 while
-// Help is already the front overlay doesn't push a duplicate copy of
-// it on top of itself.
+// TestHelpShortcutIsNoopWhenAlreadyOpen pins that opening Help a second
+// time while it's already the front overlay doesn't push a duplicate
+// copy of it on top of itself.
 func TestHelpShortcutIsNoopWhenAlreadyOpen(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.HelpShortcut()
+	r.openHelp()
 	if r.activePage != helpPage {
 		t.Fatalf("setup: activePage = %q, want %q", r.activePage, helpPage)
 	}
 
-	r.HelpShortcut() // second press
+	r.openHelp() // second press
 
 	if r.activePage != helpPage {
 		t.Errorf("activePage = %q, want still %q", r.activePage, helpPage)
@@ -75,7 +77,7 @@ func TestHelpShortcutIsNoopWhenAlreadyOpen(t *testing.T) {
 	// not another copy of Help underneath.
 	r.hideOverlay()
 	if r.activePage != "" {
-		t.Errorf("activePage after one hideOverlay = %q, want closed (\"\") — a second F1 must not have pushed a duplicate layer", r.activePage)
+		t.Errorf("activePage after one hideOverlay = %q, want closed (\"\") — opening Help a second time must not have pushed a duplicate layer", r.activePage)
 	}
 }
 
@@ -89,7 +91,7 @@ func TestHelpTitleBarClosesOnCloseButtonClick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.HelpShortcut()
+	r.openHelp()
 	if r.activePage != helpPage {
 		t.Fatalf("setup: activePage = %q, want %q", r.activePage, helpPage)
 	}
@@ -116,7 +118,7 @@ func TestHelpTitleBarClickElsewhereDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.HelpShortcut()
+	r.openHelp()
 
 	x, y, _, _ := r.helpTitleBar.GetRect()
 	captured, _ := r.captureHelpTitleBarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x+1, y, tcell.ButtonNone, 0))
@@ -143,7 +145,7 @@ func TestHelpTitleBarActiveColorTracksTopmostOverlay(t *testing.T) {
 	}
 	r.target = dir + "/apple.txt"
 	r.openProperties()
-	r.HelpShortcut()
+	r.openHelp()
 
 	if got, want := r.helpTitleBar.GetBackgroundColor(), r.theme.FocusedBackground; got != want {
 		t.Errorf("helpTitleBar background while Help is topmost = %v, want FocusedBackground %v", got, want)
@@ -218,7 +220,7 @@ func TestHelpShowsAboutSectionWithVersionInfo(t *testing.T) {
 	}
 	r.SetVersionInfo("v1.2.3", "abc1234", "2026-09-05", "goreleaser")
 
-	r.HelpShortcut()
+	r.openHelp()
 
 	got := r.helpView.GetText(true)
 	for _, want := range []string{"About", "v1.2.3", "abc1234", "2026-09-05", "goreleaser"} {
@@ -267,23 +269,72 @@ func TestHelpTextNeverMentionsAI(t *testing.T) {
 	}
 }
 
+// TestHelpTextNeverMentionsFunctionKeys pins the removal itself: no
+// function key does anything in this app any more (see
+// cmd/breakthrough's own dispatch), so none should be documented as if
+// it still did — a regression test for exactly the state this file was
+// in right after the F1-F12 dispatch cases were deleted but before the
+// prose describing them was rewritten to match.
+func TestHelpTextNeverMentionsFunctionKeys(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	got := r.fullHelpText()
+	for n := 1; n <= 12; n++ {
+		bad := fmt.Sprintf("F%d", n)
+		if strings.Contains(got, bad) {
+			t.Errorf("help text mentions %q — no function key does anything in this app any more", bad)
+		}
+	}
+}
+
 // TestHelpTextMentionsEveryRealShortcut pins that the help content
 // itself actually names the keybindings this app has — a stale or
 // incomplete reference would be worse than none at all.
 func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 	want := []string{
-		"F1", "Ctrl+Q", "Ctrl+C",
-		"Ctrl+E", "Ctrl+L", "F2", "Ctrl+G", "Ctrl+F", "Ctrl+O",
+		"Ctrl+_", "Ctrl+Q", "Ctrl+C",
+		"Ctrl+E", "Ctrl+L", "Ctrl+G", "Ctrl+F", "Ctrl+O",
 		"Ctrl+P", "Ctrl+D", "Ctrl+K", "Ctrl+N", "Ctrl+U", "Ctrl+S", "Ctrl+B", "Ctrl+T", "Ctrl+R", "Delete",
 		"Enter", "Space", "Right-click",
 		"Tab", "Escape",
 		"PageUp", "PageDown", // Look's own PDF page-turn
-		"Alt+arrow",                                                              // tool windows' own move gesture
-		"F4", "Ctrl+1", "Ctrl+0", "Alt+1", "Alt+0", "Ctrl+Tab", "Ctrl+Shift+Tab", // panel tabs
+		"Alt+arrow",                                                        // tool windows' own move gesture
+		"Ctrl+1", "Ctrl+0", "Alt+1", "Alt+0", "Ctrl+Tab", "Ctrl+Shift+Tab", // panel tabs
 	}
 	for _, s := range want {
 		if !strings.Contains(helpText, s) {
 			t.Errorf("helpText is missing %q", s)
+		}
+	}
+}
+
+// TestHelpTextMentionsThePrimaryKeyboardLayer guards the newer,
+// plain-letter layer (see keymap.go) the same way the legacy Ctrl/F-key
+// one above is guarded — every key the registry actually binds should
+// be findable in the help text, and every chord family/member too.
+// Hand-transcribed rather than generated from the registry (a real,
+// acknowledged gap — see keymap.go's own package doc on deriving the
+// help text mechanically in a follow-up), so this is exactly the kind
+// of drift a generated version would make structurally impossible.
+func TestHelpTextMentionsThePrimaryKeyboardLayer(t *testing.T) {
+	for _, c := range plainCommands() {
+		if !strings.ContainsRune(helpText, c.key) {
+			t.Errorf("helpText never mentions the plain key %q (%s)", string(c.key), c.label)
+		}
+	}
+	for _, f := range chordFamilies() {
+		if !strings.ContainsRune(helpText, f.prefix) {
+			t.Errorf("helpText never mentions the chord prefix %q (%s)", string(f.prefix), f.name)
+		}
+		for _, m := range f.members {
+			chord := string(f.prefix) + string(m.key)
+			if !strings.Contains(helpText, chord) {
+				t.Errorf("helpText never mentions the chord %q (%s)", chord, m.label)
+			}
 		}
 	}
 }
