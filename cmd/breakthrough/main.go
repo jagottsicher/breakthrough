@@ -167,41 +167,27 @@ func run() error {
 	// "toggle hidden files" instead. Ctrl+O, previously left unclaimed,
 	// is Options (Ctrl+X used to be, before the dialog itself was
 	// renamed from Settings to Options and the shortcut moved to match).
-	// Rename moved off Ctrl+R to F2 (see below) once Remove needed a
-	// letter matching its own name and Ctrl+R was the only one left.
+	// Rename itself lives on the plain-letter layer's own "r" now (see
+	// internal/ui/keymap.go), not a Ctrl combination at all — freeing
+	// Ctrl+R for Remove, which needed a letter matching its own name and
+	// Ctrl+R was the only one left.
 	//
-	// F1 (Help) sits alongside Ctrl+Q/Ctrl+C, not the six above: it
-	// works from literally anywhere, including in the middle of typing
-	// a bash command or editing a field in another dialog, the same
-	// "always fires" reasoning as those two — see Root.HelpShortcut's
-	// own doc comment. F1, not a Ctrl combination, both sidesteps ever
-	// needing a free letter (every obvious one is already claimed) and
-	// matches the one keybinding this app's own stated inspiration,
-	// Midnight Commander, uses for exactly the same purpose. F2 (Rename)
-	// sits with the six Ctrl-letter actions instead, not with F1: it
-	// still checks its own precondition the same way they do, unlike F1
-	//
-	// F3 (toggle mouse reporting, see Root.ToggleMouseShortcut's own doc
-	// comment for why this exists at all) sits with F1/Ctrl+Q/Ctrl+C too,
-	// for the same "always fires" reason — the whole point is grabbing
-	// text via the terminal's own native selection, which needs to work
-	// no matter what else is currently open. Every Ctrl-letter is
-	// genuinely unavailable by this point (each one is either already
-	// claimed above, natively bound by tview's own TextArea — verified
-	// directly against its source the same way every claim in this
-	// comment block is — or dead at the terminal protocol level, like
-	// Ctrl+H/I/M/J: byte-identical to Backspace/Tab/Enter/breakthrough's
-	// own bash-line "insert newline", respectively), so this continues
-	// the same F-key sequence F1/F2 already started rather than reaching
-	// for an increasingly obscure modifier combination a terminal might
-	// not even deliver reliably (Alt+key relies on a terminal actually
-	// sending the ESC-prefixed Meta sequence, which isn't universal).
-	// — an F-key rather than Ctrl+R purely because Ctrl+R was needed
-	// elsewhere, not because Rename should now work from anywhere.
-	// F2/Rename is the near-universal convention across GUI file
-	// managers (Windows Explorer, Nautilus, Dolphin) and several
-	// terminal ones, so it was the natural key to free Ctrl+R with,
-	// rather than picking an arbitrary unclaimed letter instead.
+	// Ctrl+_ (toggle mouse reporting, see Root.ToggleMouseShortcut's own
+	// doc comment for why this exists at all) sits with Ctrl+Q/Ctrl+C,
+	// not the six above: it has to fire unconditionally, since the whole
+	// point is grabbing text via the terminal's own native selection,
+	// which needs to work no matter what else is currently open — a
+	// dialog, the bash line, a plain directory listing. No function key
+	// reaches for this any more (see internal/ui/keymap.go's own package
+	// doc for why the plain-letter layer replaced every one of them),
+	// and every Ctrl-letter is genuinely unavailable by this point (each
+	// one is either already claimed above, natively bound by tview's own
+	// TextArea — verified directly against its source the same way every
+	// claim in this comment block is — or dead at the terminal protocol
+	// level, like Ctrl+H/I/M/J: byte-identical to Backspace/Tab/Enter/
+	// breakthrough's own bash-line "insert newline", respectively) — see
+	// Ctrl+_'s own case below for why that one specifically is still the
+	// right choice regardless.
 	//
 	// Ctrl+D (the Details sidebar, see internal/ui/detailssidebar.go)
 	// falls through to bashLine's own handling instead of always
@@ -261,29 +247,34 @@ func run() error {
 	// them installs a SetDoneFunc, so it was already a pure no-op in
 	// every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Prefix mode swallows the whole next keystroke as a verb (see
-		// internal/ui's keyprefix.go), so it has to be asked before the
-		// switch below rather than inside it: several verbs are letters
-		// that are themselves global shortcuts, and one keypress must
-		// never fire both.
-		if root.HandlePrefixKey(event) {
+		// The primary keyboard layer (see internal/ui/keymap.go): plain
+		// letters, and the g/p/z chords built on top of them. Checked
+		// next, ahead of every Ctrl-letter/F-key case below, so a chord
+		// waiting on its second key intercepts it before anything else
+		// gets a chance to — see HandlePlainKey's own doc comment for
+		// why nothing may fall through while a chord is pending.
+		if root.HandlePlainKey(event) {
 			return nil
 		}
 
 		switch event.Key() {
 		case tcell.KeyCtrlUnderscore:
-			// Ctrl+_ opens the prefix — the second, function-key-free
-			// route to split view, tabs, rename, options and the rest
-			// (see Root.PrefixShortcut). Chosen over the remaining spare
-			// Ctrl letters because no terminal multiplexer claims it:
-			// tmux takes Ctrl+B, screen and byobu Ctrl+A, dtach and
-			// abduco Ctrl+\, and a multiplexer intercepts its own prefix
-			// before the application inside ever sees the key.
+			// Toggles mouse reporting on/off — the one shortcut that has
+			// to work completely unconditionally, from literally
+			// anywhere, including with a dialog open or the command line
+			// focused: the whole point of it is getting the terminal's
+			// own native text selection back, and what needs selecting
+			// may well be inside that dialog or that command line.
+			// Nothing else in this dispatch is that unconditional (see
+			// Root.ToggleMouseShortcut).
 			//
-			// Falls through while the command line has focus, the same
-			// as Ctrl+S/Ctrl+P/Ctrl+D below — PrefixShortcut applies
-			// that check itself.
-			root.PrefixShortcut()
+			// Ctrl+_ specifically because it's already known to reach
+			// every keyboard/terminal combination this app targets, and
+			// no terminal multiplexer claims it — tmux takes Ctrl+B,
+			// screen and byobu Ctrl+A, dtach and abduco Ctrl+\, and a
+			// multiplexer always intercepts its own prefix before the
+			// application inside ever sees the key.
+			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
@@ -308,43 +299,6 @@ func run() error {
 			return nil
 		case tcell.KeyCtrlF:
 			root.SearchShortcut()
-			return nil
-		case tcell.KeyF1:
-			root.HelpShortcut()
-			return nil
-		case tcell.KeyF2:
-			// Midnight Commander's own F2 is its user menu — a
-			// configurable macro list breakthrough has no equivalent of.
-			// Its nearest counterpart here is the context menu, and
-			// putting it on F2 closes a real gap rather than only moving
-			// a key: until now that menu opened on right-click and
-			// nothing else, in an application whose own rule is that
-			// every mouse gesture has a keyboard equivalent.
-			root.MenuShortcut()
-			return nil
-		case tcell.KeyF3:
-			// View, as in Midnight Commander. Ctrl+L still does the same
-			// (the button bar names both).
-			root.LookShortcut()
-			return nil
-		case tcell.KeyF4:
-			// Edit, as in Midnight Commander. Ctrl+E still does the same.
-			root.EditShortcut()
-			return nil
-		case tcell.KeyF12:
-			// Mouse reporting, displaced from F3 by the Midnight
-			// Commander layout above.
-			//
-			// A function key rather than the prefix alone, deliberately:
-			// this one has to work from *anywhere*, including inside a
-			// dialog (see Root.ToggleMouseShortcut), because the whole
-			// point of it is getting the terminal's own text selection
-			// back — and what you want to select may well be in a
-			// dialog. The prefix stands down while an overlay is open,
-			// so Ctrl+_ m alone would have quietly lost that. Far from
-			// the F1-F6 row so it collides with no Midnight Commander
-			// binding.
-			root.ToggleMouseShortcut()
 			return nil
 		case tcell.KeyCtrlT:
 			// A second keyboard path to the tab switcher, alongside F4
@@ -494,25 +448,6 @@ func run() error {
 				return nil
 			}
 			return event
-		case tcell.KeyF5:
-			// Split view on/off (see Root.ToggleSplitShortcut) —
-			// continuing the F1..F4 sequence for the same reason F4 did:
-			// a bare function key needs none of the enhanced keyboard
-			// protocols Ctrl+digit/Ctrl+Tab depend on, and every Ctrl
-			// letter left is either already bound here or a readline key
-			// the bash line genuinely needs.
-			root.ToggleSplitShortcut()
-			return nil
-		case tcell.KeyF6:
-			// Flips split view between side by side and stacked (see
-			// Root.SplitOrientationShortcut). Deliberately a key of its
-			// own rather than a third state of F5 above: which
-			// arrangement fits depends on the terminal, so it's a setting
-			// someone picks once — and folding it into the on/off toggle
-			// would mean cycling through a layout you don't want every
-			// time you close the split.
-			root.SplitOrientationShortcut()
-			return nil
 		case tcell.KeyRune:
 			// Ctrl+1..Ctrl+9/Ctrl+0 and Alt+1..Alt+9/Alt+0 both jump
 			// straight to a tab by its own number, with …+0 meaning the
