@@ -1815,9 +1815,13 @@ func (r *Root) handleBeforeDraw(screen tcell.Screen) bool {
 }
 
 // RequestQuit shows a confirmation overlay instead of quitting right
-// away — Ctrl+Q (see cmd/breakthrough) is easy to hit by accident, so the
-// application only actually stops once the user picks "Quit breakthrough"
-// from this overlay (or presses Enter, since it's the default selection).
+// away — "q"/Ctrl+Q (see keymap.go/cmd/breakthrough) is easy to hit by
+// accident, so the application only actually stops once the user
+// explicitly moves the selection to "Quit breakthrough" and picks it —
+// pressing Enter without moving first, or Escape, always cancels
+// instead. The same "Cancel preselected" default every other
+// confirmation in this app already uses (see newConfirmDialog's own
+// comment) — a stray keypress can never quit by itself.
 func (r *Root) RequestQuit() {
 	// Ctrl+Q is a global key capture, so it can arrive while the header
 	// is mid-edit. Without this the edit field would stay on screen after
@@ -1832,7 +1836,7 @@ func (r *Root) RequestQuit() {
 	y := (screenHeight - height) / 2
 
 	r.quitConfirm.SetRect(x, y, width, height)
-	r.quitConfirm.SetCurrentItem(0)
+	r.quitConfirm.SetCurrentItem(1) // "Cancel" — see newConfirmDialog's own comment
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
 }
 
