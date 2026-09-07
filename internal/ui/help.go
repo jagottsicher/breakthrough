@@ -26,10 +26,10 @@ const helpMinWidth, helpMinHeight = 60, 20
 // tview.Escape isn't needed anywhere here since nothing below happens
 // to contain a literal "[".
 var helpText = strings.TrimLeft(`
-[::b]Primary keys — while browsing (recommended)[::-]
+[::b]Keyboard — plain letters, while browsing[::-]
 
-  Plain letters, the same way ranger/nnn/lf/vifm work — no modifier key
-  to get wrong, no terminal-layout risk. Only active while the file
+  No modifier key to get wrong, no terminal-layout risk — the same
+  approach ranger/nnn/lf/vifm all use. Only active while the file
   listing itself has keyboard focus: typing in the filter box, the path
   editor, or the bash line is never affected by any of this, and
   neither is any open dialog.
@@ -53,9 +53,9 @@ var helpText = strings.TrimLeft(`
   ordinary meaning — the same two letters, read differently in the one
   place that makes sense.
 
-  Chords — a letter, then within a couple of seconds one more (see the
-  status bar's own countdown while one is pending, and the button bar
-  for what the second key can be):
+  Chords — a letter, then within about four seconds one more (see the
+  status bar's own shrinking countdown while one is pending, and the
+  button bar for what the second key can be):
 
     g  go       gg top · gh home · gr / (root) · gb Trash
     p  perms    pm chmod · po chown
@@ -68,54 +68,33 @@ var helpText = strings.TrimLeft(`
   (the status bar's own countdown reaching empty) cancels silently —
   that's "changed my mind", not a mistake worth a message.
 
-  Nothing below this section was taken away — every Ctrl-letter and
-  function-key binding documented further down still works exactly as
-  it always has. The keys above are simply the newer, primary way to
-  reach the same things, chosen because a plain letter has no
-  layout/terminal/multiplexer risk that a modifier key can have.
+  A handful of Ctrl-letter shortcuts, documented section by section
+  below, reach a few things this layer doesn't (Quit, Cancel, Options,
+  the mouse-reporting toggle, ...) — everything else has exactly one
+  keyboard path, the plain letter above.
 
 [::b]Global — work anywhere, even inside another dialog[::-]
 
-  The F1-F4 row follows Midnight Commander's own layout.
-
-  F1              This help
-  F2              Context menu for the row under the cursor — the same
-                  menu a right-click opens (Midnight Commander's own F2
-                  is its user menu; this is the nearest thing here)
-  F3              Look at the selected file — same as Ctrl+L
-  F4              Edit the selected file — same as Ctrl+E
-  F5              Split view on/off — see "Split view" below
-  F6              Flip split view between side-by-side and stacked
-  F12             Toggle mouse reporting on/off (see the status bar's
+  Ctrl+_          Toggle mouse reporting on/off (see the status bar's
                   own "Mouse on/off") — off gives your terminal's own
                   native text selection/copy back, e.g. to grab a
                   filename; most terminals also support their own
                   override gesture (often Shift-drag) without needing
-                  this, but not everyone knows it. Out on F12, away
-                  from the Midnight Commander row, because it has to
-                  work from inside a dialog too — which is exactly
-                  where the key prefix stands down
-  Ctrl+_          Key prefix — see "The key prefix" below; reaches
-                  everything the function keys do, without them
+                  this, but not everyone knows it
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
-  Rename moved off F2 to the prefix (Ctrl+_ r), the context menu, and
-  the click-pause-click gesture; the tab switcher is on Ctrl+T and
-  Ctrl+_ t.
-
 [::b]File panel[::-]
 
-  Ctrl+E          Edit the selected file — F4 does the same
-  Ctrl+L          Look at the selected file (read-only) — F3 does the
-                  same
-  Ctrl+G          Toggle hidden files — the button bar's own label
-                  flips between Hide/Unhide to match
-  Ctrl+F          Find
+  Ctrl+E          Edit the selected file — same as "e"
+  Ctrl+L          Look at the selected file (read-only) — same as "l"
+  Ctrl+G          Toggle hidden files — same as "."; the button bar's
+                  own label flips between Hide/Unhide to match
+  Ctrl+F          Find — same as "f"
   Ctrl+O          Options — see "Options screen" below
-  Ctrl+P          Properties
-  Ctrl+D          Toggle the Details sidebar — a read-only, live-
-                  updating panel of file info (stat fields; for an
+  Ctrl+P          Properties — same as "i"
+  Ctrl+D          Toggle the Details sidebar — same as "I". A read-only,
+                  live-updating panel of file info (stat fields; for an
                   image or PDF, a preview with its own click zone/
                   Ctrl+L for fullscreen; hashes, or for a directory, its
                   total size) for whichever entry is currently selected.
@@ -132,13 +111,16 @@ var helpText = strings.TrimLeft(`
                   Details sidebar, for whichever directory is currently
                   selected — on demand, since it can take a real,
                   visible amount of time on a large tree
-  Ctrl+S          Sed Replace on the selected file(s)
-  Ctrl+B          Go to Trash — browse it directly
-  Delete          Move the selection to Trash (reversible); already
-                  inside the trash itself, does a Remove instead —
-                  nowhere left to move an already-trashed item to
+  Ctrl+S          Sed Replace on the selected file(s) — same as "E"
+  Ctrl+T          Tab switcher — same as "t"
+  Ctrl+B          Go to Trash — browse it directly; same as "gb"
+  Delete          Move the selection to Trash (reversible) — same as
+                  "d"; already inside the trash itself, does a Remove
+                  instead — nowhere left to move an already-trashed
+                  item to
   Ctrl+R          Remove — permanently delete the selection (asks
-                  first); Ctrl+Delete does the same, best-effort
+                  first) — same as "D"; Ctrl+Delete does the same,
+                  best-effort
   Enter           Open the selected directory, or try Look on a file —
                   double-clicking a name does the same either way
   Space           Select/deselect the selected file
@@ -179,7 +161,7 @@ var helpText = strings.TrimLeft(`
   Enter             Change the selected setting — toggles a yes/no
                     directly, opens a list for a choice, or a field for
                     a number (Enter commits it, Escape discards)
-  ? or F1           Explain the selected setting in a small window
+  ?                 Explain the selected setting in a small window
   Escape            Close the Options screen
 
   There is no save button: every change takes effect and is written to
@@ -196,46 +178,14 @@ var helpText = strings.TrimLeft(`
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
 
-[::b]The key prefix (Ctrl+_)[::-]
-
-  Press Ctrl+_ and the button bar turns into a list of single-letter
-  commands; press one of them to run it. Nothing happens on the prefix
-  alone, so there is no waiting and no timeout — take as long as you
-  like before choosing.
-
-  s   Split view on/off        t   Tab switcher
-  o   Flip split orientation   n   New tab
-  p   Switch pane            w   Close tab
-  x   Swap panes (left/right trade places)
-  d   Details sidebar          1-0 Jump straight to tab 1...10
-
-  r   Rename        m   Toggle mouse reporting (also F12)
-  ,   Options       ?   This help
-
-  Escape leaves without running anything, as does any key that isn't in
-  the list. Pressing Ctrl+_ a second time also cancels.
-
-  This exists so none of it needs a function key: on a Mac, F1-F6 are
-  media keys unless you change a system setting, which makes them a
-  poor way to reach a feature. Everything here is also still on its own
-  key (F5, F2, Ctrl+O ...) — the prefix is a second route, not a
-  replacement.
-
-  Ctrl+_ specifically because no terminal multiplexer claims it: tmux
-  uses Ctrl+B, screen and byobu Ctrl+A, dtach Ctrl+\ — and whichever
-  of those you run breakthrough inside would swallow its own prefix
-  before this application ever saw the key.
-
-  The bar keeps its ordinary buttons while the command line has focus,
-  where Ctrl+_ is left alone for the shell.
-
-[::b]Split view (F5)[::-]
+[::b]Split view ("s")[::-]
 
   Two of your open tabs on screen at once, instead of one at a time.
 
-  F5                Split / unsplit — the button bar's own "F5 Split"
+  s                 Split / unsplit — the button bar's own "s Split"
                     does the same
-  F6                Flip between side by side and above/below
+  z then o          Flip between side by side and above/below (the "z"
+                    chord's own display-toggle family)
   Tab               Move between the two panes; clicking a pane does the
                     same
 
@@ -244,12 +194,12 @@ var helpText = strings.TrimLeft(`
   highlighted row shows you which is which at a glance. Each pane's own
   number strip marks the tab it holds.
 
-  With only one tab open, F5 opens a second one on the same directory,
+  With only one tab open, "s" opens a second one on the same directory,
   which is the usual starting point for copying between two places in
   one tree. Otherwise it pairs you with the tab you last split with, or
   the next one along.
 
-  To pick the other pane yourself, open the tab list (F4) and use a
+  To pick the other pane yourself, open the tab list ("t") and use a
   row's "◫" button — on a real tab to show that one beside the current
   one, or on the "+ New tab" row to make a fresh tab and split with it
   in one go.
@@ -303,7 +253,7 @@ var helpText = strings.TrimLeft(`
   Alt+1 ... Alt+0    either modifier, whichever your terminal reports
   Ctrl+Tab           Open the switcher on the next tab; press again to
   Ctrl+Shift+Tab     keep moving, Enter to go there, Escape to stay put
-  F4 / Ctrl+T        Open the switcher on the current tab; press again
+  t / Ctrl+T         Open the switcher on the current tab; press again
                      to walk to the next one
 
   In the switcher: Up/Down picks a tab, Enter or Space goes to it,
@@ -325,9 +275,9 @@ var helpText = strings.TrimLeft(`
   Ctrl+1...Ctrl+0, Alt+1...Alt+0, and Ctrl+Tab/Ctrl+Shift+Tab each
   depend on the terminal actually reporting that key combination —
   most modern terminals report at least one of Ctrl or Alt, some older
-  ones report neither, in which case nothing happens. F4/Ctrl+T, the
-  button bar's own "F4 Tabs", the strip, and the context menu all work
-  regardless of what your terminal can report.
+  ones report neither, in which case nothing happens. "t", Ctrl+T, the
+  strip, and the context menu all work regardless of what your terminal
+  can report.
 
   The open tabs are saved when you quit and reopened next time. Starting
   breakthrough with an explicit directory ("breakthrough /some/path")
@@ -351,7 +301,7 @@ var helpText = strings.TrimLeft(`
   Ctrl+K (see the file panel's own entry above) computes hashes here
   too — click the hash hint works as well.
 
-[::b]Look (Ctrl+L, or Enter/double-click a file)[::-]
+[::b]Look ("l"/Ctrl+L, or Enter/double-click a file)[::-]
 
   Escape            Close
   PageUp / PageDown  On a PDF: turn a page instead of scrolling (a
@@ -374,7 +324,7 @@ var helpText = strings.TrimLeft(`
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
 
-[::b]Search dialog (Ctrl+F)[::-]
+[::b]Search dialog ("f"/Ctrl+F)[::-]
 
   Tab / Shift+Tab   Move between fields
   Enter             Commit a field and stay — except in Filename,
@@ -569,6 +519,13 @@ func (r *Root) captureHelpTitleBarMouse(action tview.MouseAction, event *tcell.E
 // NewRoot), not helpView directly, so the title bar always occupies
 // the same rect helpView itself used to.
 func (r *Root) openHelp() {
+	// A no-op while Help is already the front overlay, rather than
+	// pushing a second copy of it on top of itself — every caller gets
+	// this for free rather than each having to guard it separately (see
+	// "?"'s own action in keymap.go, currently the only one).
+	if r.activePage == helpPage {
+		return
+	}
 	r.helpView.SetText(r.fullHelpText())
 	width, height := r.helpSize()
 	x, y := r.centeredOnScreen(width, height)
@@ -623,18 +580,4 @@ func (r *Root) helpSize() (width, height int) {
 		height = helpMinHeight
 	}
 	return width, height
-}
-
-// HelpShortcut is F1's own action — see cmd/breakthrough. Unlike
-// Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+P/Ctrl+R (see acceptsGlobalShortcut)
-// or F2, F1 works from literally anywhere, the same as Ctrl+Q/Ctrl+C:
-// getting help in the middle of something else is exactly the point,
-// not a case to guard against. Re-pressing F1 while Help is already the
-// front overlay is a no-op rather than pushing a second copy of it on
-// top of itself.
-func (r *Root) HelpShortcut() {
-	if r.activePage == helpPage {
-		return
-	}
-	r.openHelp()
 }

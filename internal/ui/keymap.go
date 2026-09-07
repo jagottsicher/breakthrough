@@ -8,25 +8,23 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // The plain-letter keyboard layer: breakthrough's primary keyboard
-// interface, alongside (not replacing) every existing Ctrl/F-key
-// shortcut.
+// interface for everything the file panel does.
 //
-// Why this exists at all: Ctrl+_ (the previous prefix key) turned out
-// not to work on every keyboard layout — Ctrl+punctuation depends on
-// what a terminal decodes Ctrl+Shift+that-key's-unshifted-form to,
-// which varies by layout and terminal in a way plain characters never
-// do. Looking for a better single Ctrl combination misses the actual
-// finding: the panel consumes exactly one bare key today (Space,
-// selection) — tview.Table's own h/j/k/l/g/G vim bindings aside — so the
-// entire letter alphabet was sitting unused in the one input layer that
-// has zero portability risk: a plain character always arrives as
-// exactly what was typed, on every terminal, every layout, every
-// platform, with no multiplexer (tmux/screen/byobu) or window manager
-// ever intercepting it first. Modern terminal file managers (ranger,
-// nnn, lf, vifm) all reach the same conclusion.
+// A plain character always arrives as exactly what was typed, on every
+// terminal, every layout, every platform, with no multiplexer
+// (tmux/screen/byobu) or window manager ever intercepting it first —
+// unlike a Ctrl combination (Ctrl+punctuation in particular depends on
+// what a terminal decodes it to, which varies by layout) or a function
+// key (unavailable or remapped to something else on plenty of
+// keyboards, macOS's own media-key row among them). Modern terminal
+// file managers (ranger, nnn, lf, vifm) all reach the same conclusion.
+// A small number of Ctrl-letter bindings remain, for actions this layer
+// itself can't cover — see cmd/breakthrough's own dispatch — but every
+// function key is gone.
 //
 // Only fires while the panel's own table has real keyboard focus (see
 // acceptsPlainKeyCommand) — never while typing in the filter box, the
@@ -41,23 +39,22 @@ import (
 //     exists (d moves to the trash, D deletes for good; s splits the
 //     view, S swaps the two panes) rather than an unrelated action
 //     parked on a free key — so which is punctual and which is
-//     consequential can be guessed rather than memorized.
+//     consequential can be guessed rather than memorized. The button
+//     bar always shows a curated subset of these (see
+//     plainCommand.quick/buildButtonBar).
 //   - Chords (chordFamilies) for related groups of weekly-or-rarer
 //     actions: "g" for jumping somewhere (gg top, gh home, gr /, gb
 //     trash), "p" for permissions (pm chmod, po chown), "z" for display
 //     toggles (zs size format, zt time format, zo split orientation).
 //     Each is a plain letter followed, within chordTimeout, by one more
-//     — see resolveChord.
+//     — see resolveChord. The button bar marks each family with an
+//     ellipsis ("g… go") to show it leads to more rather than acting on
+//     its own.
 //   - Everything rarer still (the planned Toolbox, the notification
 //     log, archive handling, ...) is meant to live behind its own
 //     full-screen entry point instead of costing a keyboard slot at
 //     all, the same way Options and Batch Rename already do — a screen
 //     can hold an unbounded number of features; a keymap cannot.
-//
-// Nothing existing is removed. Every Ctrl-letter and function-key
-// binding in cmd/breakthrough's own dispatch keeps working exactly as
-// it did — this is a second, primary layer added alongside it, not a
-// replacement, so muscle memory built on the old bindings still works.
 
 // acceptsPlainKeyCommand reports whether a bare letter should be read as
 // a command right now.
@@ -77,6 +74,20 @@ type plainCommand struct {
 	key    rune
 	label  string
 	action func(r *Root)
+
+	// quick marks this command for the button bar's own always-visible
+	// legend (see buildButtonBar) — a curated subset, not everything:
+	// one line only has room for what a sysadmin reaches for constantly,
+	// and every entry is still fully documented in the help text
+	// regardless of this flag.
+	quick bool
+
+	// short is the button bar's own label for a quick command — label
+	// itself is often too long for a one-line bar with a dozen-plus
+	// entries on it ("Remove permanently (Empty Trash, while browsing
+	// the Trash)" would eat the whole row on its own). Unused, and left
+	// empty, on every command that isn't quick.
+	short string
 }
 
 // plainCommands is the whole single-letter layer, in one place —
@@ -92,50 +103,57 @@ type plainCommand struct {
 func plainCommands() []plainCommand {
 	return []plainCommand{
 		// --- Ebene 1: everyday verbs -----------------------------------
-		{'c', "Copy", func(r *Root) { r.copyCurrentSelection() }},
-		{'x', "Cut", func(r *Root) { r.cutCurrentSelection() }},
-		{'v', "Paste", func(r *Root) { r.pasteClipboard() }},
-		{'d', "Move to Trash", func(r *Root) { r.moveSelectionToTrash() }},
-		{'r', "Rename (Restore, while browsing the Trash)", func(r *Root) {
+		{key: 'c', label: "Copy", quick: true, short: "Copy", action: func(r *Root) { r.copyCurrentSelection() }},
+		{key: 'x', label: "Cut", quick: true, short: "Cut", action: func(r *Root) { r.cutCurrentSelection() }},
+		{key: 'v', label: "Paste", quick: true, short: "Paste", action: func(r *Root) { r.pasteClipboard() }},
+		{key: 'd', label: "Move to Trash", quick: true, short: "Trash", action: func(r *Root) { r.moveSelectionToTrash() }},
+		{key: 'r', label: "Rename (Restore, while browsing the Trash)", action: func(r *Root) {
 			if r.inTrash() {
 				r.restoreSelectionFromTrash()
 				return
 			}
 			r.renameCurrentEntry()
 		}},
-		{'e', "Edit", func(r *Root) { r.editCurrentEntry() }},
-		{'f', "Find", func(r *Root) { r.openSearch() }},
-		{'/', "Filter", func(r *Root) { r.app.SetFocus(r.panel.filterField) }},
-		{'.', "Toggle hidden files", func(r *Root) { r.toggleHidden() }},
-		{'i', "Properties", func(r *Root) { r.propertiesCurrentEntry() }},
-		{'m', "Context menu", func(r *Root) { r.MenuShortcut() }},
-		{'s', "Split view on/off", func(r *Root) { r.toggleSplit() }},
-		{'t', "Tab switcher", func(r *Root) { r.openTabSwitcher(r.activeTab) }},
-		{'n', "New tab", func(r *Root) { r.newTabHere() }},
-		{'w', "Close tab", func(r *Root) { r.closeCurrentTab() }},
-		{'q', "Quit", func(r *Root) { r.RequestQuit() }},
-		{'a', "Select all", func(r *Root) { r.panel.selectAll() }},
-		{'u', "Undo last rename (Batch Rename's own undo — the only kind there is yet)", func(r *Root) { r.undoLastBatchRename() }},
-		{'l', "Look", func(r *Root) { r.lookCurrentEntry() }},
-		{'?', "Help", func(r *Root) { r.openHelp() }},
-		{':', "Bash command line", func(r *Root) { r.app.SetFocus(r.bashLine) }},
+		{key: 'e', label: "Edit", action: func(r *Root) { r.editCurrentEntry() }},
+		{key: 'f', label: "Find", action: func(r *Root) { r.openSearch() }},
+		{key: '/', label: "Filter", action: func(r *Root) { r.app.SetFocus(r.panel.filterField) }},
+		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
+		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
+		{key: 'm', label: "Context menu", quick: true, short: "Menu", action: func(r *Root) { r.MenuShortcut() }},
+		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
+		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
+		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
+		{key: 'w', label: "Close tab", action: func(r *Root) { r.closeCurrentTab() }},
+		{key: 'q', label: "Quit", action: func(r *Root) { r.RequestQuit() }},
+		{key: 'a', label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
+		{key: 'u', label: "Undo last rename (Batch Rename's own undo — the only kind there is yet)", action: func(r *Root) { r.undoLastBatchRename() }},
+		{key: 'l', label: "Look", quick: true, short: "Look", action: func(r *Root) { r.lookCurrentEntry() }},
+		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
+		{key: ':', label: "Bash command line", action: func(r *Root) { r.app.SetFocus(r.bashLine) }},
 
 		// --- Ebene 2: the bigger sibling of the letter above -----------
-		{'D', "Remove permanently (Empty Trash, while browsing the Trash)", func(r *Root) {
+		{key: 'D', label: "Remove permanently (Empty Trash, while browsing the Trash)", action: func(r *Root) {
 			if r.inTrash() {
 				r.openEmptyTrashConfirm()
 				return
 			}
 			r.openRemoveConfirm()
 		}},
-		{'I', "Details sidebar", func(r *Root) { r.toggleDetailsSidebar() }},
-		{'E', "Sed Replace", func(r *Root) { r.openSedReplace() }},
-		{'S', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
-		{'B', "Batch rename", func(r *Root) { r.openBatchRename() }},
-		{'G', "Go to the last row", func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
-		{'+', "Select by pattern", func(r *Root) { r.openSelectPlus() }},
-		{'-', "Deselect by pattern", func(r *Root) { r.openSelectMinus() }},
-		{'*', "Invert selection", func(r *Root) { r.panel.invertSelection() }},
+		// quick despite the narrower row this leaves: the button bar is
+		// the only always-present, clickable route to toggling Details
+		// *while Properties is open with unsaved changes* — every other
+		// button-bar click is swallowed in that state (see
+		// captureOutsideClick's own carve-out, keyed on 'I' specifically),
+		// so dropping this from the permanent legend would quietly cost a
+		// deliberately-built mouse gesture, not just a documented one.
+		{key: 'I', label: "Details sidebar", quick: true, short: "Details", action: func(r *Root) { r.toggleDetailsSidebar() }},
+		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
+		{key: 'S', label: "Swap panes", action: func(r *Root) { r.swapPanesOrExplain() }},
+		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
+		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
+		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
+		{key: '-', label: "Deselect by pattern", action: func(r *Root) { r.openSelectMinus() }},
+		{key: '*', label: "Invert selection", action: func(r *Root) { r.panel.invertSelection() }},
 	}
 }
 
@@ -188,6 +206,14 @@ type chordFamily struct {
 	prefix  rune
 	name    string
 	members []chordMember
+
+	// quick marks this family for the button bar's own always-visible
+	// legend (see buildButtonBar/plainCommand's own quick field) — false
+	// for "y", whose members are all still reserved placeholders (see
+	// chordFamilies' own doc comment); advertising it in the one bar
+	// that's always on screen would be advertising a feature that isn't
+	// there yet.
+	quick bool
 }
 
 // chordFamilies is every chord, in the fixed order the hint bar shows
@@ -203,17 +229,17 @@ type chordFamily struct {
 // looks like an oversight; a key that explains itself does not.
 func chordFamilies() []chordFamily {
 	return []chordFamily{
-		{prefix: 'g', name: "go", members: []chordMember{
+		{prefix: 'g', name: "go", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
 			{'r', "Root /", func(r *Root) { r.showError(r.panel.navigate("/")) }},
 			{'b', "Trash", func(r *Root) { r.openTrash() }},
 		}},
-		{prefix: 'p', name: "permissions", members: []chordMember{
+		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
 			{'o', "chown", func(r *Root) { r.openChown() }},
 		}},
-		{prefix: 'z', name: "display", members: []chordMember{
+		{prefix: 'z', name: "display", quick: true, members: []chordMember{
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
 			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
@@ -263,12 +289,15 @@ func userHomeDir() string {
 
 // chordTimeout is how long a chord's second key stays live for.
 //
-// Long enough that reaching for it doesn't feel rushed, short enough
-// that an abandoned chord (the user got distracted, or simply changed
-// their mind) doesn't sit waiting indefinitely for a keystroke that
-// might arrive minutes later and mean something completely different by
+// Long enough to actually read the button bar's own legend first — a
+// family like "g" lists four members with a label each, and the first
+// value tried here (2.5s) turned out too short to read that before
+// choosing, never mind reach for the key — short enough that an
+// abandoned chord (the user got distracted, or simply changed their
+// mind) doesn't sit waiting indefinitely for a keystroke that might
+// arrive minutes later and mean something completely different by
 // then.
-const chordTimeout = 2500 * time.Millisecond
+const chordTimeout = 4 * time.Second
 
 // chordTickInterval is how often the status bar's own countdown
 // indicator (see chordIndicatorText) is repainted while a chord is
@@ -279,8 +308,7 @@ const chordTimeout = 2500 * time.Millisecond
 const chordTickInterval = 150 * time.Millisecond
 
 // HandlePlainKey is offered every key before cmd/breakthrough's own
-// switch sees it (the same position Root.HandlePrefixKey already has
-// for the legacy Ctrl+_ system) — reports whether it consumed the key.
+// switch sees it — reports whether it consumed the key.
 //
 // Two entirely different jobs depending on state: if a chord is
 // currently waiting on its second key, every key that arrives resolves
@@ -318,10 +346,8 @@ func (r *Root) HandlePlainKey(event *tcell.EventKey) bool {
 }
 
 // startChord puts the application into chord mode: the button bar
-// becomes family's own legend (see chordHintBar, the same "swap the
-// button row for a legend" shape the Ctrl+_ prefix's own
-// showPrefixHint already established) and the status bar starts
-// counting the timeout down.
+// becomes family's own legend (see chordHintBar) and the status bar
+// starts counting the timeout down.
 func (r *Root) startChord(family chordFamily) {
 	r.pendingChord = family.prefix
 	r.chordDeadline = time.Now().Add(chordTimeout)
@@ -329,8 +355,9 @@ func (r *Root) startChord(family chordFamily) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r.chordCancel = cancel
 
-	r.buttonBarSpans = nil
-	r.buttonBar.SetText(chordHintBar(family))
+	text, spans := r.chordHintBar(family)
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
 	r.refreshStatusBar()
 
 	// safeGo, the same as every other background animation in this
@@ -473,11 +500,53 @@ func (r *Root) chordIndicatorText() string {
 
 // chordHintBar renders the button bar's own legend for one chord family
 // — what "?" cannot show here since the button row, not the help
-// overlay, is what's on screen the moment a chord starts.
-func chordHintBar(family chordFamily) string {
-	cells := make([]string, 0, len(family.members))
-	for _, m := range family.members {
-		cells = append(cells, fmt.Sprintf("%c %s", m.key, m.label))
+// overlay, is what's on screen the moment a chord starts — and, per the
+// user's own explicit request, makes every member (and "Esc cancel")
+// clickable with the mouse too, exactly like the ordinary button bar
+// (see buildButtonBar/captureButtonBarMouse, which reads whichever
+// spans are currently in r.buttonBarSpans without caring whether they
+// came from here or there).
+//
+// Each member's own resolving key is set off with a space on either
+// side, colored with the same ButtonBackground every real button in
+// this app already uses (see styleButton) — a visual echo of "this is
+// the key you press", making the letter-to-action mapping easier to
+// scan than plain text alongside a label would be.
+func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarSpan) {
+	var b strings.Builder
+	col := 0
+	write := func(s string) {
+		b.WriteString(s)
+		col += tview.TaggedStringWidth(s)
 	}
-	return fmt.Sprintf(" %c…  %s  │  Esc cancel", family.prefix, strings.Join(cells, "   "))
+
+	write(fmt.Sprintf("%c…  ", family.prefix))
+
+	keyBG := colorTag(r.theme.ButtonBackground)
+	for i, m := range family.members {
+		if i > 0 {
+			write("   ")
+		}
+		start := col
+		write(fmt.Sprintf("[:%s:] %c [-:-:-] %s", keyBG, m.key, m.label))
+		member := m // per-iteration copy; Go 1.22+ already gives range vars
+		// this, but explicit here since the closure outlives the loop
+		spans = append(spans, buttonBarSpan{
+			startCol: start, endCol: col, key: member.key,
+			run: func(r *Root) {
+				r.cancelChord() // same "clear state before running" order resolveChord uses
+				member.action(r)
+			},
+		})
+	}
+
+	write("  │  ")
+	escStart := col
+	write("Esc cancel")
+	spans = append(spans, buttonBarSpan{
+		startCol: escStart, endCol: col,
+		run: func(r *Root) { r.cancelChord() },
+	})
+
+	return b.String(), spans
 }

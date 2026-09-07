@@ -2033,7 +2033,7 @@ func TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen(t *testi
 	r.buttonBar.SetRect(0, 38, width, 1)
 	r.buttonBar.Draw(screen)
 
-	span, ok := buttonBarSpanFor(r, buttonActionDetails)
+	span, ok := buttonBarSpanFor(r, 'I')
 	if !ok {
 		t.Fatal("no Details span found in the button bar")
 	}

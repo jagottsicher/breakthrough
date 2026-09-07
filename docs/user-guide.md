@@ -2,13 +2,12 @@
 
 A reference for everything breakthrough can do. The
 [README](../README.md) is the overview; this is the detail behind it.
-`F1` inside the application shows a condensed version of the same
+`?` inside the application shows a condensed version of the same
 material, always matching the version you are actually running.
 
 ## Contents
 
 - [The keyboard layer](#the-keyboard-layer)
-- [The key prefix](#the-key-prefix)
 - [Getting around](#getting-around)
 - [Selecting files](#selecting-files)
 - [Tabs](#tabs)
@@ -58,9 +57,9 @@ restores instead of renaming, `D` empties the whole Trash instead of
 removing one file.
 
 **Chords** cover the rarer, related actions — one letter, then within
-about two and a half seconds one more. The status bar shows a small
-countdown (`g▆`, shrinking) while one is pending, and the button bar
-becomes that chord's own legend:
+about four seconds one more. The status bar shows a small countdown
+(`g▆`, shrinking) while one is pending, and the button bar becomes that
+chord's own legend:
 
 | Chord | Members |
 |---|---|
@@ -70,79 +69,27 @@ becomes that chord's own legend:
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
-its members — which says so, the same as an unrecognized prefix verb
-below. Letting it simply run out is treated as "changed my mind" and
-cancels without comment.
+its members — which says so, the same as an unrecognized second key
+would. Letting it simply run out is treated as "changed my mind" and
+cancels without comment. Every member in that legend is also clickable
+with the mouse, the same as an ordinary button — no need to type the
+second letter if you'd rather point at it.
 
-**Nothing existing was removed.** Every Ctrl-letter and function-key
-binding described in the rest of this guide still works exactly as it
-always has — this layer sits alongside them as the newer, primary
-route to the same features, not a replacement for muscle memory
-already built on the old one.
+**The button bar** below the command line always shows a curated subset
+of these keys as a quick legend — Copy/Cut/Paste, Move to Trash,
+Properties, Details, the context menu, Split, the tab switcher, Look,
+Help, and the three chord families — with the actual key to press set
+off by its own background color, one space either side, so the
+letter-to-action mapping is easy to scan at a glance. Every other key
+still works exactly the same whether or not it's shown there; `?`
+documents all of them.
 
----
-
-## The key prefix
-
-A second, still fully working route to the features above the plain
-keyboard layer doesn't cover on its own — split view, tabs, and a
-couple of others — kept for anyone whose muscle memory already has it:
-`Ctrl+_`, then one letter. The button bar becomes the list of what's
-available the moment you press it:
-
-```
- ^_  s Split  o Orient  p otherPane  d Details │ t Tabs  n New tab
-     w Close tab │ r Rename  m Mouse  , Options  ? Help │ 1-0 Tab N │ Esc cancel
-```
-
-| Verb | Action | also on |
-|---|---|---|
-| `s` | Split view on/off | `F5` |
-| `o` | Flip split orientation | `F6` |
-| `p` | Switch to the other pane | `Tab`, a click |
-| `x` | Swap the panes — left and right trade places | context menu |
-| `d` | Details sidebar | `Ctrl+D` |
-| `t` | Tab switcher | `Ctrl+T` |
-| `n` | New tab | — |
-| `w` | Close tab | — |
-| `1`…`0` | Jump straight to tab 1–10 | `Ctrl`/`Alt`+digit |
-| `r` | Rename | context menu, click-pause-click |
-| `m` | Toggle mouse reporting | `F12` |
-| `,` | Options | `Ctrl+O` |
-| `?` | Help | `F1` |
-
-**Why it exists.** On a MacBook, `F1`–`F6` are media keys unless you
-change a system setting, so a feature reachable only by function key is
-a feature a Mac user can't reach. Every entry above is also still on its
-own key — the prefix is a second route, never a replacement.
-
-It also fixes a smaller problem: `Ctrl`+digit needs an enhanced keyboard
-protocol that several terminals don't implement, so jumping to a tab by
-number silently does nothing there. `Ctrl+_ 1` works everywhere.
-
-**Why `Ctrl+_`.** The single-key namespace is genuinely full: four
-`Ctrl`+letter combinations are structurally unavailable in a terminal
-(`Ctrl+I` is Tab, `Ctrl+M` is Enter, `Ctrl+H` is Backspace, `Ctrl+[` is
-Escape — identical bytes, indistinguishable), most of the rest are
-bound, and the remainder are readline keys the command line needs. More
-importantly, no terminal multiplexer claims `Ctrl+_`: tmux takes
-`Ctrl+B`, screen and byobu `Ctrl+A`, dtach and abduco `Ctrl+\`. A
-multiplexer intercepts its own prefix before the application inside ever
-sees the key, so any of those would have been dead weight for anyone
-working inside one.
-
-**How it behaves.**
-
-- The prefix does **nothing on its own**, which is what makes a timeout
-  unnecessary — there's no "did they mean the prefix, or the start of a
-  chord" to resolve by waiting. Take as long as you like.
-- `Escape` cancels, so does pressing `Ctrl+_` again, and so does any key
-  that isn't a verb (which says so rather than failing silently).
-- Every key is consumed while the prefix is waiting, so one keypress can
-  never both pick a verb and trigger its own shortcut.
-- While the command line has focus, `Ctrl+_` is left alone for the
-  shell — the same as every other global shortcut there.
-- Clicking `^_ More` in the button bar opens the same legend.
+**No function keys anywhere in the application.** Every F-key is free
+for your terminal or window manager to use however it likes. A handful
+of Ctrl-letter shortcuts remain, documented section by section below,
+for the few things this layer doesn't reach on its own (Quit, Cancel,
+Options, the mouse-reporting toggle, ...) — everything else has exactly
+one keyboard path, the plain letter above.
 
 ---
 
@@ -218,7 +165,7 @@ back leaves all of it exactly as it was.
 | `Ctrl`+`1`…`Ctrl`+`0` | jump to tab 1–10 |
 | `Alt`+`1`…`Alt`+`0` | the same tabs, for terminals that can't report `Ctrl`+digit |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | step through the switcher |
-| `F4` or `Ctrl`+`T` | open the switcher on the current tab; press again to walk down it |
+| `t` or `Ctrl`+`T` | open the switcher on the current tab; press again to walk down it |
 
 The switcher lists every tab's full directory — the numbered strip
 beside the filter box deliberately shows numbers only, so the header
@@ -239,20 +186,20 @@ Two of your open tabs on screen at once, side by side or stacked.
 
 | Key | Action |
 |---|---|
-| `F5` | split / unsplit |
-| `F6` | flip between side-by-side and stacked |
+| `s` | split / unsplit |
+| `z` then `o` | flip between side-by-side and stacked |
 | `Tab` | move to the other pane |
 | click | move to the pane you clicked |
-| `Ctrl+_ x` | swap the panes — left and right trade places |
+| `S` | swap the panes — left and right trade places |
 
-**Choosing the second pane.** `F5` on its own picks for you, in this
+**Choosing the second pane.** `s` on its own picks for you, in this
 order: the tab you last split with, then the next tab along, and — if
 only one tab is open — a brand-new tab on the same directory. That last
 case is the useful default: one keypress gives you the same directory in
 two panes, which is where copying between two places in one tree
 usually starts.
 
-To choose deliberately, open the tab list (`F4`) and use a row's `◫`
+To choose deliberately, open the tab list (`t`) and use a row's `◫`
 button: on a real tab to show that one beside the current one, or on the
 `+ New tab` row to create a tab and split with it in one step.
 
@@ -263,7 +210,7 @@ pane's is dimmed. Each pane's own number strip marks the tab it holds,
 so you can always see which two tabs you have up.
 
 **Layout rules.** The panes never swap sides on their own: moving focus
-across the divider changes nothing about the layout, and `Ctrl+_ x` (or
+across the divider changes nothing about the layout, and `S` (or
 the context menu's "Swap panes") is the only thing that exchanges them.
 Swapping moves the pane you are in to the other side and leaves the
 keyboard with it, rather than handing focus over — moving between panes
@@ -273,8 +220,8 @@ alone. Closing either pane's own tab ends the split; closing an
 unrelated tab doesn't.
 
 Whether panes sit side by side or stacked is the `split_stacked`
-setting, so it survives a restart — `F6` and the Options screen both
-write to it. Which one works better depends on your terminal: side by
+setting, so it survives a restart — `z` then `o` and the Options screen
+both write to it. Which one works better depends on your terminal: side by
 side keeps every row of both listings visible, stacking keeps the full
 column width for long filenames.
 
@@ -284,7 +231,7 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-`F2`, or right-click anywhere in the listing. The menu is grouped: the entry
+`m`, or right-click anywhere in the listing. The menu is grouped: the entry
 under the cursor first (Look, Rename, Edit, `tail -f`, Properties), then
 Selection, Commands, Delete, Tabs, Tools, and Globals.
 
@@ -527,7 +474,7 @@ settings on the right, action buttons underneath.
 | `←` / `→` | move between the two panes |
 | `↑` / `↓` | move within one |
 | `Enter` / `Space` | change the selected setting |
-| `?` or `F1` | explain the selected setting in its own window |
+| `?` | explain the selected setting in its own window |
 | `Tab` / `Shift`+`Tab` | cycle categories → settings → buttons |
 | `Escape` | close |
 
@@ -599,45 +546,38 @@ on it before that layer existed.
 
 ### Anywhere
 
-The `F1`–`F4` row follows Midnight Commander's own layout, so muscle
-memory carries over.
-
-| Key | Action | also on |
-|---|---|---|
-| `F1` | Help | `Ctrl+_ ?` |
-| `F2` | Context menu for the row under the cursor | right-click, `Ctrl+_` legend |
-| `F3` | Look at the selected file | `Ctrl+L` |
-| `F4` | Edit the selected file | `Ctrl+E` |
-| `F5` | Split view on/off | `Ctrl+_ s` |
-| `F6` | Flip split orientation | `Ctrl+_ o` |
-| `F12` | Toggle mouse reporting | `Ctrl+_ m` |
-| `Ctrl`+`_` | Key prefix — one letter reaches all of the above, without function keys (see [The key prefix](#the-key-prefix)) |
+| Key | Action |
+|---|---|
+| `Ctrl`+`_` | Toggle mouse reporting on/off — the one shortcut that has to work completely unconditionally, even with a dialog open or the command line focused |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
 
 ### File panel
 
-| Key | Action |
-|---|---|
-| `Enter` | Open a directory, or Look at a file |
-| `Space` | Select / deselect |
-| `Tab` | Cycle focus: panes, Details sidebar, tool windows |
-| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` (also `F4`) |
-| `Ctrl`+`L` | Look (also `F3`) |
-| `Ctrl`+`P` | Properties |
-| `Ctrl`+`D` | Details sidebar |
-| `Ctrl`+`K` | Compute hashes |
-| `Ctrl`+`U` | Directory size (`du -hs`) |
-| `Ctrl`+`F` | Search |
-| `Ctrl`+`S` | Sed Replace |
-| `Ctrl`+`G` | Toggle hidden files |
-| `Ctrl`+`O` | Options |
-| `Ctrl`+`B` | Go to Trash |
-| `Delete` | Move to Trash |
-| `Ctrl`+`R` | Remove permanently (asks first) |
-| `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab |
-| `Ctrl`+`T` | Tab switcher (second path, alongside `F4`) |
-| `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs |
+Every row below also has a plain-letter equivalent — see
+[The keyboard layer](#the-keyboard-layer) above for the full table.
+
+| Key | Action | also on |
+|---|---|---|
+| `Enter` | Open a directory, or Look at a file | |
+| `Space` | Select / deselect | |
+| `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
+| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` | `e` |
+| `Ctrl`+`L` | Look | `l` |
+| `Ctrl`+`P` | Properties | `i` |
+| `Ctrl`+`D` | Details sidebar | `I` |
+| `Ctrl`+`K` | Compute hashes | |
+| `Ctrl`+`U` | Directory size (`du -hs`) | |
+| `Ctrl`+`F` | Search | `f` |
+| `Ctrl`+`S` | Sed Replace | `E` |
+| `Ctrl`+`G` | Toggle hidden files | `.` |
+| `Ctrl`+`O` | Options | |
+| `Ctrl`+`B` | Go to Trash | the `g` chord's own `gb` |
+| `Delete` | Move to Trash | `d` |
+| `Ctrl`+`R` | Remove permanently (asks first) | `D` |
+| `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
+| `Ctrl`+`T` | Tab switcher | `t` |
+| `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
 
 Click, pause, click again on an already-selected name renames it. The
 pause is deliberately generous — about a second — so an unhurried second

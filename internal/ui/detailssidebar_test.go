@@ -409,11 +409,11 @@ func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
 	}
 }
 
-// TestCaptureButtonBarMouseDetailsClickTogglesSidebar pins the "^D
-// Details" button (see buildButtonBar/runButtonBarAction) to the same
-// toggleDetailsSidebar Ctrl+D already runs — one action, two ways to
-// reach it, and unlike Ctrl+D, unguarded (see toggleDetailsSidebar's own
-// doc comment on why a click doesn't need acceptsGlobalShortcut).
+// TestCaptureButtonBarMouseDetailsClickTogglesSidebar pins the "I
+// Details" button (see buildButtonBar) to the same toggleDetailsSidebar
+// Ctrl+D already runs — one action, two ways to reach it, and unlike
+// Ctrl+D, unguarded (see toggleDetailsSidebar's own doc comment on why a
+// click doesn't need acceptsGlobalShortcut).
 func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -422,7 +422,7 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	}
 	r.SetRect(0, 0, 100, 40)
 
-	span, ok := buttonBarSpanFor(r, buttonActionDetails)
+	span, ok := buttonBarSpanFor(r, 'I')
 	if !ok {
 		t.Fatal("no Details span found")
 	}

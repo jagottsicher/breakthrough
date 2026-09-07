@@ -2197,7 +2197,7 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 // CurrentRowPath is RowAt's keyboard equivalent: the row and absolute
 // path of whichever entry the table's own cursor (arrow-key navigation)
 // currently sits on, rather than one under a screen position. Used by
-// Root's keyboard-triggered actions (Ctrl+E Edit, F2 Rename, Ctrl+P
+// Root's keyboard-triggered actions (Ctrl+E Edit, "r" Rename, Ctrl+P
 // Properties) that have no right-clicked position to work from. ok is
 // false for the ".." row (not a file operation target, matching RowAt)
 // or an empty table.

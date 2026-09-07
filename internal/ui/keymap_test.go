@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,5 +341,74 @@ func TestChordIndicatorEmptiesOutAfterItsOwnDeadline(t *testing.T) {
 
 	if got := root.chordIndicatorText(); got != "" {
 		t.Errorf("indicator = %q, want empty once the deadline has passed", got)
+	}
+}
+
+// TestChordLegendMemberIsClickable pins the user's own explicit request:
+// once a chord is showing its own legend in the button bar, each member
+// is clickable with the mouse, the same as an ordinary button — not just
+// reachable by typing the second letter.
+func TestChordLegendMemberIsClickable(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.HandlePlainKey(runeEvent('z')) // the "display" family
+
+	span, ok := buttonBarSpanFor(root, 's') // "zs" — size format
+	if !ok {
+		t.Fatal("no span found for the 's' member of the 'z' chord")
+	}
+	before := root.settings.SizeBytes
+
+	clickButtonBar(t, root, span.startCol)
+
+	if root.settings.SizeBytes == before {
+		t.Error("clicking the 's' member should have toggled the size format, the same as typing 'zs'")
+	}
+	if root.pendingChord != 0 {
+		t.Error("the chord should be cleared after a member is clicked")
+	}
+}
+
+// TestChordLegendEscCancelIsClickable pins the legend's own "Esc cancel"
+// text as a click target too: clicking it cancels the chord without
+// running any member, the same as pressing Escape.
+func TestChordLegendEscCancelIsClickable(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.HandlePlainKey(runeEvent('z'))
+	before := root.settings.SizeBytes
+
+	text := root.buttonBar.GetText(true)
+	col := strings.Index(text, "Esc cancel")
+	if col < 0 {
+		t.Fatal("legend text has no \"Esc cancel\"")
+	}
+	clickButtonBar(t, root, len([]rune(text[:col])))
+
+	if root.pendingChord != 0 {
+		t.Error("clicking \"Esc cancel\" should have cleared the pending chord")
+	}
+	if root.settings.SizeBytes != before {
+		t.Error("clicking \"Esc cancel\" must not run any member's action")
+	}
+}
+
+// TestChordLegendHighlightsTheMemberKey pins the visual cue itself: each
+// member's own resolving key is set off with the same ButtonBackground
+// color every real button in this app already uses, one space on either
+// side — per the user's own explicit request to make the letter-to-
+// action mapping easier to scan at a glance.
+func TestChordLegendHighlightsTheMemberKey(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	text, _ := root.chordHintBar(chordFamily{
+		prefix: 'z',
+		name:   "display",
+		members: []chordMember{
+			{key: 's', label: "Size format"},
+		},
+	})
+
+	want := fmt.Sprintf("[:%s:] s [-:-:-] Size format", colorTag(root.theme.ButtonBackground))
+	if !strings.Contains(text, want) {
+		t.Errorf("legend text = %q, want it to contain %q", text, want)
 	}
 }

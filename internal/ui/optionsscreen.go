@@ -63,8 +63,8 @@ const (
 )
 
 // optionsInfoGlyph marks the per-setting info button at the end of each
-// row. Clicking it, or pressing "?" or F1 with the row selected, opens
-// that setting's own explanation (see showOptionInfo).
+// row. Clicking it, or pressing "?" with the row selected, opens that
+// setting's own explanation (see showOptionInfo).
 const optionsInfoGlyph = "[?]"
 
 // Column widths for the settings table. Fixed rather than
@@ -705,12 +705,10 @@ func (r *Root) optionsInfoSize(text string) (width, height int) {
 	return contentWidth + padding, lines + 2 // +2 for the top/bottom padding rows
 }
 
-// captureOptionsTableKey adds the settings table's own two extra keys:
-// "?" and F1 open the selected setting's explanation.
-//
-// Both, because "?" is the conventional "explain this" key in a list
-// like this while F1 is what this app already means by help everywhere
-// else — and neither costs anything the table itself was using.
+// captureOptionsTableKey adds the settings table's own extra key: "?"
+// opens the selected setting's explanation — the conventional
+// "explain this" key in a list like this, and costs nothing the table
+// itself was using.
 func (r *Root) captureOptionsTableKey(event *tcell.EventKey) *tcell.EventKey {
 	row, _ := r.optionsTable.GetSelection()
 
@@ -724,7 +722,7 @@ func (r *Root) captureOptionsTableKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	if event.Key() != tcell.KeyF1 && event.Rune() != '?' {
+	if event.Rune() != '?' {
 		return event
 	}
 	if opt, ok := r.optionAtRow(row); ok {
