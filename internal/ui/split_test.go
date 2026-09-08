@@ -332,16 +332,25 @@ func TestSplitMenuLabelsDescribeTheNextAction(t *testing.T) {
 	}
 }
 
+// TestSplitMenuLabelsFollowTheState pins that the "Tabs & Split"
+// submenu's own split-toggle entry is rebuilt fresh from live state
+// every time it's drilled into (see contextmenu.go's own
+// renderContextMenu) — no fixed index to relabel in place any more.
 func TestSplitMenuLabelsFollowTheState(t *testing.T) {
 	r, _, _ := newSplitRoot(t)
 
 	r.toggleSplit()
-	if main, _ := r.menu.GetItemText(r.splitToggleIdx); main != "Close split view" {
-		t.Errorf("menu label = %q, want it to offer closing the split", main)
+	r.showMenu(0, 0)
+	selectMenuItem(t, r, menuGroupGlyph+"Tabs & Split")
+	if menuItemIndex(r, "Close split view") < 0 {
+		t.Error(`submenu should offer "Close split view" while split is active`)
 	}
+
 	r.toggleSplit()
-	if main, _ := r.menu.GetItemText(r.splitToggleIdx); main != "Split view" {
-		t.Errorf("menu label = %q, want it to offer opening the split", main)
+	r.showMenu(0, 0)
+	selectMenuItem(t, r, menuGroupGlyph+"Tabs & Split")
+	if menuItemIndex(r, "Split view") < 0 {
+		t.Error(`submenu should offer "Split view" once split is inactive again`)
 	}
 }
 

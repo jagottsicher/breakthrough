@@ -18,8 +18,9 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-// TestToggleDetailsSidebarShortcutShowsAndHides pins Ctrl+D's own basic
-// show/hide action, and that it's tracked outside activePage/
+// TestToggleDetailsSidebarShortcutShowsAndHides pins
+// ToggleDetailsSidebarShortcut's own basic show/hide action, and that
+// it's tracked outside activePage/
 // overlayStack — see newDetailsSidebarView's own doc comment on why.
 // loadDetailsWithPreview is loadDetailsTarget plus the preview that
 // normally arrives from the background (see startDetailsPreview).
@@ -262,8 +263,8 @@ func TestDetailsSidebarBackgroundReflectsFocusState(t *testing.T) {
 
 // TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen mirrors
 // TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen (see trash_test.go) for
-// Ctrl+D: like every other guarded shortcut, it must not act while some
-// other overlay is already open.
+// ToggleDetailsSidebarShortcut: like every other guarded shortcut, it
+// must not act while some other overlay is already open.
 func TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -283,8 +284,9 @@ func TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 // TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen pins the
 // user's own explicit request: unlike every other overlay (see
 // TestToggleDetailsSidebarShortcutNoOpsWhileAnOverlayIsOpen just above),
-// Properties specifically must NOT block Ctrl+D — Details should open
-// and close alongside it, not require closing Properties first.
+// Properties specifically must NOT block ToggleDetailsSidebarShortcut —
+// Details should open and close alongside it, not require closing
+// Properties first.
 func TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -297,7 +299,7 @@ func TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen(t *testing.T) {
 
 	r.ToggleDetailsSidebarShortcut()
 	if !r.detailsSidebarVisible {
-		t.Error("Ctrl+D should show the Details sidebar while Properties is open")
+		t.Error("ToggleDetailsSidebarShortcut should show the Details sidebar while Properties is open")
 	}
 	if r.activePage != propertiesPage {
 		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
@@ -305,7 +307,7 @@ func TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen(t *testing.T) {
 
 	r.ToggleDetailsSidebarShortcut()
 	if r.detailsSidebarVisible {
-		t.Error("a second Ctrl+D should hide the Details sidebar again")
+		t.Error("a second ToggleDetailsSidebarShortcut should hide the Details sidebar again")
 	}
 	if r.activePage != propertiesPage {
 		t.Errorf("activePage = %q, want Properties to still be open", r.activePage)
@@ -411,9 +413,9 @@ func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
 
 // TestCaptureButtonBarMouseDetailsClickTogglesSidebar pins the "I
 // Details" button (see buildButtonBar) to the same toggleDetailsSidebar
-// Ctrl+D already runs — one action, two ways to reach it, and unlike
-// Ctrl+D, unguarded (see toggleDetailsSidebar's own doc comment on why a
-// click doesn't need acceptsGlobalShortcut).
+// the "I" key itself runs — one action, two ways to reach it, and
+// unguarded (see toggleDetailsSidebar's own doc comment on why a click
+// doesn't need the same gating the keyboard path does).
 func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -439,9 +441,9 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 }
 
 // TestDetailsExpandButtonShowsSidebar pins the user's own explicit
-// request for a mouse alternative to Ctrl+D: the header row's own "<"
-// button (see Panel.detailsExpandBtn/onExpandDetails) shows the
-// sidebar, the same as clicking the button bar's own Details button —
+// request for a mouse alternative to "I"/the Details button: the header
+// row's own "<" button (see Panel.detailsExpandBtn/onExpandDetails) shows
+// the sidebar, the same as clicking the button bar's own Details button —
 // but only ever that one direction (expand), unlike the button bar's
 // own toggle.
 func TestDetailsExpandButtonShowsSidebar(t *testing.T) {
@@ -688,8 +690,8 @@ func TestDetailsSidebarSkipsHashSectionForDirectory(t *testing.T) {
 
 // TestDetailsSidebarShowsDirSizeHintForDirectory is the other half of the
 // test just above: what actually takes the hash section's place for a
-// directory — an idle "press Ctrl+U or click" hint until triggered, the
-// same shape the hash section itself has before Ctrl+K.
+// directory — an idle "press k or click" hint until triggered, the
+// same shape the hash section itself has before "h".
 func TestDetailsSidebarShowsDirSizeHintForDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -701,8 +703,8 @@ func TestDetailsSidebarShowsDirSizeHintForDirectory(t *testing.T) {
 	r.detailsSidebarVisible = true
 
 	text := r.detailsSidebar.GetText(true)
-	if !strings.Contains(text, "Ctrl+U") || !strings.Contains(text, "du -hs") {
-		t.Errorf("a directory's Details sidebar should hint at Ctrl+U/du -hs, got:\n%s", text)
+	if !strings.Contains(text, "Press k or click here") || !strings.Contains(text, "du -hs") {
+		t.Errorf(`a directory's Details sidebar should hint at "Press k...du -hs", got:%s`, "\n"+text)
 	}
 	if r.detailsDirSizeRowStart < 0 {
 		t.Errorf("detailsDirSizeRowStart = %d, want >= 0 for a directory", r.detailsDirSizeRowStart)
@@ -784,12 +786,19 @@ func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.SetRect(0, 0, 100, 40)
+	// Cursor on photo.png too, not just detailsTarget — FetchMetadataShortcut
+	// now calls ensureDetailsSidebarShowing first (see its own doc
+	// comment), which re-syncs Details to the panel's own live cursor if
+	// the two ever disagree; leaving the cursor on ".." here would have
+	// that resync silently discard this test's own loadDetailsWithPreview
+	// setup before FetchMetadataShortcut ever ran.
+	r.panel.focusRow(1)
 	r.detailsSidebarVisible = true
 	loadDetailsWithPreview(t, r, path)
 
 	before := r.detailsSidebar.GetText(true)
-	if !strings.Contains(before, "Ctrl+N") {
-		t.Errorf("before fetching, the sidebar should show the Ctrl+N hint, got:\n%s", before)
+	if !strings.Contains(before, "M: load metadata") {
+		t.Errorf("before fetching, the sidebar should show the metadata hint, got:\n%s", before)
 	}
 
 	r.FetchMetadataShortcut()
@@ -823,7 +832,7 @@ func TestFetchMetadataShortcutNoOpsForNonImageTarget(t *testing.T) {
 }
 
 // TestComputeHashesShortcutTargetsPropertiesWhenOpen pins the user's own
-// explicit request for when both overlays are open at once: Ctrl+K acts
+// explicit request for when both overlays are open at once: "h" acts
 // on Properties (which holds real keyboard focus, being modal), not on
 // a Details sidebar sitting unfocused behind it.
 func TestComputeHashesShortcutTargetsPropertiesWhenOpen(t *testing.T) {
@@ -848,7 +857,7 @@ func TestComputeHashesShortcutTargetsPropertiesWhenOpen(t *testing.T) {
 	<-started
 
 	if !r.hashInProgress {
-		t.Error("hashInProgress should be true — Ctrl+K should target the open Properties overlay")
+		t.Error("hashInProgress should be true — \"h\" should target the open Properties overlay")
 	}
 	if r.detailsHashInProgress {
 		t.Error("detailsHashInProgress should stay false while Properties is the one holding focus")
@@ -856,7 +865,7 @@ func TestComputeHashesShortcutTargetsPropertiesWhenOpen(t *testing.T) {
 }
 
 // TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen pins the
-// other half: with Properties not open, Ctrl+K acts on Details instead.
+// other half: with Properties not open, "h" acts on Details instead.
 func TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen(t *testing.T) {
 	// A plain temp dir with a single file, not fixtureDir: fixtureDir
 	// also has an "app-data" subdirectory that happens to sort before
@@ -884,7 +893,7 @@ func TestComputeHashesShortcutTargetsDetailsWhenPropertiesNotOpen(t *testing.T) 
 	<-started
 
 	if !r.detailsHashInProgress {
-		t.Error("detailsHashInProgress should be true — Ctrl+K should target Details when Properties isn't open")
+		t.Error("detailsHashInProgress should be true — \"h\" should target Details when Properties isn't open")
 	}
 	if r.hashInProgress {
 		t.Error("hashInProgress (Properties') should stay false — Properties was never opened")
@@ -963,7 +972,7 @@ func TestPropagateHashResultIgnoresUnrelatedTarget(t *testing.T) {
 // TestOpenPropertiesAdoptsExistingDetailsHash pins the "adopt on open"
 // half of the user's own explicit request: opening Properties on a file
 // Details already has a computed hash for shows that result right away
-// — no fresh "press Ctrl+K" hint, no redundant recomputation.
+// — no fresh "press h" hint, no redundant recomputation.
 func TestOpenPropertiesAdoptsExistingDetailsHash(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
@@ -1094,7 +1103,7 @@ func TestSavePropertiesEditIgnoresDetailsShowingADifferentFile(t *testing.T) {
 // TestClickingDetailsHashZoneDefersToOpenProperties pins the fix for
 // the inconsistency the user's own report surfaced: the click zone used
 // to call computeDetailsHashes directly, bypassing the "Properties wins
-// while it's open" rule Ctrl+K already followed (see
+// while it's open" rule "h" already followed (see
 // ComputeHashesShortcut) — a click was a second way around it that
 // pressing the key wasn't.
 func TestClickingDetailsHashZoneDefersToOpenProperties(t *testing.T) {
@@ -1240,7 +1249,7 @@ func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
 	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
 
 	before := r.detailsSidebar.GetText(true)
-	if !strings.Contains(before, "Ctrl+U") {
+	if !strings.Contains(before, "Press k or click here") {
 		t.Errorf("before computing a size, the sidebar should show the hint, got:\n%s", before)
 	}
 
@@ -1257,7 +1266,7 @@ func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
 	if !strings.Contains(after, "Size (du -hs): 5.0M") {
 		t.Errorf("detailsSidebar after computing a size should show \"Size (du -hs): 5.0M\", got:\n%s", after)
 	}
-	if strings.Contains(after, "Ctrl+U") {
+	if strings.Contains(after, "Press k or click here") {
 		t.Errorf("detailsSidebar after computing a size should no longer show the hint, got:\n%s", after)
 	}
 }
@@ -1321,7 +1330,7 @@ func TestHideDetailsSidebarCancelsInProgressDirSizeComputation(t *testing.T) {
 }
 
 // TestDetailsDirSizeClickZoneTriggersComputation pins the mouse path:
-// clicking the hint row starts the same computation Ctrl+U does.
+// clicking the hint row starts the same computation "k" does.
 func TestDetailsDirSizeClickZoneTriggersComputation(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -1351,10 +1360,53 @@ func TestDetailsDirSizeClickZoneTriggersComputation(t *testing.T) {
 	}
 }
 
-// TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible pins Ctrl+U's own
-// precondition: nothing to compute a size for if Details isn't even
-// showing.
-func TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible(t *testing.T) {
+// TestComputeDirSizeShortcutOpensDetailsWhenNotVisible pins the "k" key's
+// own new "global" reach — per the user's own explicit request, this no
+// longer requires Details to already be open (see
+// ensureDetailsSidebarShowing): selecting a directory from plain
+// browsing and pressing k now opens Details and starts computing there
+// in one step, rather than being a no-op until Details happened to
+// already be showing.
+//
+// Uses isolateDirSize (see its own doc comment, and
+// TestComputeDetailsDirSizeShowsAnimationImmediately for the established
+// idiom) rather than a bare mock plus a "was I called" flag: that flag
+// would be written from dirSize's own goroutine while this test reads
+// it on the main goroutine with no synchronization between the two — a
+// real, go-test-race-caught data race, not a hypothetical one.
+// detailsDirSizeInProgress is different: computeDetailsDirSize sets it
+// synchronously, on this same goroutine, before ever spawning one.
+func TestComputeDirSizeShortcutOpensDetailsWhenNotVisible(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // app-data/ — directories sort first, see fixtureDir
+	if r.detailsSidebarVisible {
+		t.Fatal("setup: Details should start closed")
+	}
+	started := isolateDirSize(t)
+	t.Cleanup(r.cancelDetailsDirSizeComputation)
+
+	r.ComputeDirSizeShortcut()
+	<-started // wait for dirSize's one-time read (see isolateDirSize) before this test can safely end
+
+	if !r.detailsSidebarVisible {
+		t.Error("ComputeDirSizeShortcut should have opened Details")
+	}
+	if !r.detailsDirSizeInProgress {
+		t.Error("ComputeDirSizeShortcut should have started computing the size for the selected directory")
+	}
+}
+
+// TestComputeDirSizeShortcutNoOpsForANonDirectoryTarget pins the other
+// half: opening Details this way for whatever the cursor happens to be
+// on (here, the ".." row, with nothing meaningfully selected) must not
+// then go on to compute anything — computeDetailsDirSize's own
+// isDirish/empty-target guard is what actually prevents it, unchanged
+// by ensureDetailsSidebarShowing.
+func TestComputeDirSizeShortcutNoOpsForANonDirectoryTarget(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1368,7 +1420,7 @@ func TestComputeDirSizeShortcutNoOpsWhenDetailsNotVisible(t *testing.T) {
 	r.ComputeDirSizeShortcut()
 
 	if called {
-		t.Error("ComputeDirSizeShortcut ran dirSize while Details isn't visible")
+		t.Error("ComputeDirSizeShortcut ran dirSize for \"..\", which has nothing meaningfully selected")
 	}
 }
 
@@ -1437,7 +1489,7 @@ func TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable(t *testing.T) {
 
 // TestClickingPreviewOpensLook pins the user's own explicit request: a
 // click on the preview section (image or rasterized PDF page alike)
-// opens the same fullscreen view Ctrl+L/the Look button already does —
+// opens the same fullscreen view "l"/the Look button already does —
 // tested here against an image target, which needs no external tool
 // dependency; the PDF case reuses the exact same click-zone/dispatch
 // code (see captureDetailsSidebarMouse), not a separate path.

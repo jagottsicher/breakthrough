@@ -310,18 +310,9 @@ func TestMenuSelectAllTargetsTheActiveTab(t *testing.T) {
 	r, _, other := newTabbedRoot(t)
 	r.newTab(other)
 
-	idx := -1
-	for i := 0; i < r.menu.GetItemCount(); i++ {
-		if main, _ := r.menu.GetItemText(i); main == "Select all" {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		t.Fatal(`no "Select all" item in the context menu`)
-	}
-	r.menu.SetCurrentItem(idx)
-	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	r.showMenu(0, 0)
+	selectMenuItem(t, r, menuGroupGlyph+"Selection")
+	selectMenuItem(t, r, "Select all")
 
 	if len(r.tabs[1].selected) == 0 {
 		t.Error("Select all did nothing to the active (second) tab")

@@ -110,6 +110,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "mouse_enabled",
+			Default:     strconv.FormatBool(d.MouseEnabled),
+			Kind:        KindBool,
+			Summary:     "Whether mouse reporting is on at startup (clicks/drags work, but the terminal's own native text selection doesn't).",
+			Implemented: true,
+		},
+		{
 			Key:         "pager",
 			Default:     d.Pager,
 			Kind:        KindEnum,

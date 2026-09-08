@@ -368,26 +368,27 @@ func TestChordLegendMemberIsClickable(t *testing.T) {
 	}
 }
 
-// TestChordLegendEscCancelIsClickable pins the legend's own "Esc cancel"
-// text as a click target too: clicking it cancels the chord without
-// running any member, the same as pressing Escape.
+// TestChordLegendEscCancelIsClickable pins the legend's own "Esccancel"
+// text (see chordHintBar's own doc comment on why there's no space
+// between the two) as a click target too: clicking it cancels the chord
+// without running any member, the same as pressing Escape.
 func TestChordLegendEscCancelIsClickable(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.HandlePlainKey(runeEvent('z'))
 	before := root.settings.SizeBytes
 
 	text := root.buttonBar.GetText(true)
-	col := strings.Index(text, "Esc cancel")
+	col := strings.Index(text, "Esccancel")
 	if col < 0 {
-		t.Fatal("legend text has no \"Esc cancel\"")
+		t.Fatal("legend text has no \"Esccancel\"")
 	}
 	clickButtonBar(t, root, len([]rune(text[:col])))
 
 	if root.pendingChord != 0 {
-		t.Error("clicking \"Esc cancel\" should have cleared the pending chord")
+		t.Error("clicking \"Esccancel\" should have cleared the pending chord")
 	}
 	if root.settings.SizeBytes != before {
-		t.Error("clicking \"Esc cancel\" must not run any member's action")
+		t.Error("clicking \"Esccancel\" must not run any member's action")
 	}
 }
 
@@ -407,7 +408,7 @@ func TestChordLegendHighlightsTheMemberKey(t *testing.T) {
 		},
 	})
 
-	want := fmt.Sprintf("[:%s:] s [-:-:-] Size format", colorTag(root.theme.ButtonBackground))
+	want := fmt.Sprintf("[:%s:] s [-:-:-]Size format", colorTag(root.theme.ButtonBackground))
 	if !strings.Contains(text, want) {
 		t.Errorf("legend text = %q, want it to contain %q", text, want)
 	}

@@ -113,7 +113,7 @@ func (r *Root) viewerSize() (width, height int) {
 	return width, height
 }
 
-// openLook is the Look button/context-menu entry/Ctrl+L's actual action
+// openLook is the Look button/context-menu entry/"l" key's actual action
 // — read-only, unlike Edit (see runEditor): it never lets the file be
 // modified, and (in its default "builtin" path — see
 // config.Settings.Pager) works without $VISUAL/$EDITOR being set to
@@ -133,7 +133,7 @@ func (r *Root) openLook() {
 }
 
 // lookCurrentEntry is openLook under the name the context menu's own
-// "Look" item and the status bar's ^L button call it by — kept as a
+// "Look" item and the status bar's Look button call it by — kept as a
 // distinct, addressable method for the same reason editCurrentEntry is:
 // a right-click already moves the table's cursor to the clicked row
 // before the menu opens, so openLook's own CurrentRowPath read targets
@@ -221,7 +221,17 @@ func (r *Root) showBuiltinLook(path string) {
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.viewerView.SetRect(x, y, width, height)
 
-	r.showOverlay(viewerPage, r.viewerView)
+	// pushOverlay, not showOverlay: per the user's own explicit request,
+	// "l" now also works while Properties is open (see the "l" key's own
+	// alsoOverProperties flag in keymap.go and acceptsPropertiesAwareKey),
+	// and Properties may have unsaved edits in progress — showOverlay's
+	// own closeAllOverlays would have discarded it outright the same way
+	// it always has for every other overlay, exactly the silent data loss
+	// this app's own confirmation dialogs elsewhere go out of their way to
+	// prevent. Stacking on top instead (the same shape openHelp already
+	// uses over anything) leaves Properties intact underneath; Escape
+	// returns to it exactly as it was.
+	r.pushOverlay(viewerPage, r.viewerView, nil)
 }
 
 // showUnsupportedLook decides how to report content Load read but
@@ -396,9 +406,15 @@ func (r *Root) setPDFViewMode(mode viewer.PDFViewMode) {
 	r.renderPDFPageContent(width-2, height)
 }
 
-// LookShortcut is Ctrl+L's global action — see cmd/breakthrough and
-// acceptsGlobalShortcut for why it checks its own precondition first,
-// the same as Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R.
+// LookShortcut used to be Ctrl+L's global action — nothing in
+// cmd/breakthrough calls it any more. Look's own real keyboard path is
+// the plain-letter layer's "l" (see plainCommands in keymap.go, calling
+// lookCurrentEntry), which needs no such guard of its own
+// (acceptsPlainKeyCommand already covers the same ground more precisely,
+// and the "l" key's own alsoOverProperties flag additionally reaches it
+// while Properties is open — see acceptsPropertiesAwareKey). Kept rather than
+// deleted as an exported building block, the same shape bottombar.go's
+// RenameShortcut/EditShortcut/etc. already have for exactly this reason.
 func (r *Root) LookShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openLook()

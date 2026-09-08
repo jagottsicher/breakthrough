@@ -167,7 +167,7 @@ func optionCategories() []optionCategory {
 				},
 				boolOption("show_hidden", "Show hidden files",
 					"Whether dotfiles and dot-directories appear in the listing.\n\n"+
-						"The same thing Ctrl+G and the button bar's own Hide/Unhide toggle do.",
+						"The same thing \".\" and the button bar's own Hide/Unhide toggle do.",
 					false,
 					func(r *Root) bool { return r.panel.showHidden },
 					func(r *Root, b bool) { r.setShowHidden(b) },
@@ -219,6 +219,18 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.settings.SplitStacked },
 					func(r *Root, b bool) { r.setSplitStacked(b) },
 				),
+				boolOption("mouse_enabled", "Mouse reporting",
+					"Whether clicks and drags work in breakthrough at all.\n\n"+
+						"On (the default) lets you click, drag, and scroll — but it also hands "+
+						"every mouse event to breakthrough instead of your terminal emulator, "+
+						"which breaks that terminal's own native text selection/copy (e.g. to "+
+						"grab a filename) unless you already know its own override gesture "+
+						"(Shift-drag, on most xterm-derived emulators).\n\n"+
+						"\"o\" then \"m\" flips this too, without coming here.",
+					false,
+					func(r *Root) bool { return r.mouseEnabled },
+					func(r *Root, b bool) { r.setMouseEnabled(b) },
+				),
 			},
 		},
 		{
@@ -227,7 +239,7 @@ func optionCategories() []optionCategory {
 				{
 					key:   "pager",
 					label: "Pager for Look",
-					help: "Which viewer \"Look\" (Ctrl+L) opens a file in.\n\n" +
+					help: "Which viewer \"Look\" (\"l\") opens a file in.\n\n" +
 						"\"Built-in\" uses breakthrough's own viewer, which needs nothing installed " +
 						"and can also show images and PDF pages.\n\n" +
 						"\"External\" hands the file to bat, less, $PAGER or more — whichever is " +
@@ -323,6 +335,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.RestoreTabs), true
 	case "split_stacked":
 		return strconv.FormatBool(s.SplitStacked), true
+	case "mouse_enabled":
+		return strconv.FormatBool(s.MouseEnabled), true
 	}
 	return "", false
 }
