@@ -72,7 +72,7 @@ chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
+| `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |

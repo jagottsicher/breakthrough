@@ -407,7 +407,7 @@ func TestChordLegendHighlightsTheMemberKey(t *testing.T) {
 		},
 	})
 
-	want := fmt.Sprintf("[:%s:] s [-:-:-] Size format", colorTag(root.theme.ButtonBackground))
+	want := fmt.Sprintf("[:%s:] s [-:-:-]Size format", colorTag(root.theme.ButtonBackground))
 	if !strings.Contains(text, want) {
 		t.Errorf("legend text = %q, want it to contain %q", text, want)
 	}

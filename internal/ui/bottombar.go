@@ -133,7 +133,11 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	// ButtonBackground every real button in this app already uses (see
 	// styleButton) — the same treatment chordHintBar gives a chord's own
 	// second key, applied here to this row's own top-level keys too, per
-	// the user's own explicit request that both read the same way.
+	// the user's own explicit request that both read the same way. The
+	// label immediately follows highlightKey's own trailing space with
+	// no space of its own added — per the user's own later explicit
+	// request to close the gap between key and label to exactly one
+	// space, not two, while keeping the highlight itself untouched.
 	keyBG := colorTag(r.theme.ButtonBackground)
 	highlightKey := func(key rune) string {
 		return fmt.Sprintf("[:%s:] %c [-:-:-]", keyBG, key)
@@ -152,7 +156,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 			label = splitButtonLabel(r.splitActive)
 		}
 		buttons = append(buttons, buttonSpec{
-			label: highlightKey(c.key) + " " + label,
+			label: highlightKey(c.key) + label,
 			key:   c.key,
 			run:   c.action,
 		})

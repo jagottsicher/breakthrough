@@ -352,18 +352,18 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	_, spans := r.buildButtonBar()
 
 	wantLabels := map[rune]string{
-		'?': " ?  Help",
-		'm': " m  Menu",
-		'l': " l  Look",
-		'i': " i  Props",
-		'I': " I  Details",
-		'c': " c  Copy",
-		'x': " x  Cut",
-		'v': " v  Paste",
-		'd': " d  Trash",
-		'.': " .  Hide", // ShowHidden defaults to true — see config.DefaultSettings
-		's': " s  Split",
-		't': " t  Tabs",
+		'?': " ? Help",
+		'm': " m Menu",
+		'l': " l Look",
+		'i': " i Props",
+		'I': " I Details",
+		'c': " c Copy",
+		'x': " x Cut",
+		'v': " v Paste",
+		'd': " d Trash",
+		'.': " . Hide", // ShowHidden defaults to true — see config.DefaultSettings
+		's': " s Split",
+		't': " t Tabs",
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
@@ -404,7 +404,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g …  go", 'p': " p …  perms", 'z': " z …  display"}
+	want := map[rune]string{'g': " g …  go to", 'p': " p …  perms", 'z': " z …  display"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
@@ -452,14 +452,14 @@ func TestButtonBarHideUnhideLabelTracksShowHidden(t *testing.T) {
 	}
 
 	// ShowHidden defaults to true — see config.DefaultSettings.
-	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Hide" {
-		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, " .  Hide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " . Hide" {
+		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, " . Hide")
 	}
 
 	r.toggleHidden()
 
-	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Unhide" {
-		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, " .  Unhide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " . Unhide" {
+		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, " . Unhide")
 	}
 }
 

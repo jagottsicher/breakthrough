@@ -248,7 +248,7 @@ type chordFamily struct {
 // oversight; a key that explains itself does not.
 func chordFamilies() []chordFamily {
 	return []chordFamily{
-		{prefix: 'g', name: "go", quick: true, members: []chordMember{
+		{prefix: 'g', name: "go to", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
 			{'r', "Root /", func(r *Root) { r.showError(r.panel.navigate("/")) }},
@@ -559,7 +559,16 @@ func (r *Root) chordIndicatorText() string {
 // side, colored with the same ButtonBackground every real button in
 // this app already uses (see styleButton) — a visual echo of "this is
 // the key you press", making the letter-to-action mapping easier to
-// scan than plain text alongside a label would be.
+// scan than plain text alongside a label would be. The label itself
+// follows directly after that trailing space with no space of its own
+// — the same "exactly one space between key and label" rule
+// buildButtonBar's own highlightKey follows, per the user's own
+// explicit request that both read the same way. "Esc cancel" gets the
+// identical highlight-then-label treatment on "Esc" itself, per the
+// user's own explicit follow-up request — not just single letters:
+// "Esc" (and "Del" wherever a legend like this one names it) is still
+// "the key you press" in exactly the same sense a single letter is,
+// three characters or not.
 func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarSpan) {
 	var b strings.Builder
 	col := 0
@@ -576,7 +585,7 @@ func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarS
 			write("   ")
 		}
 		start := col
-		write(fmt.Sprintf("[:%s:] %c [-:-:-] %s", keyBG, m.key, m.label))
+		write(fmt.Sprintf("[:%s:] %c [-:-:-]%s", keyBG, m.key, m.label))
 		member := m // per-iteration copy; Go 1.22+ already gives range vars
 		// this, but explicit here since the closure outlives the loop
 		spans = append(spans, buttonBarSpan{
@@ -590,7 +599,7 @@ func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarS
 
 	write("  │  ")
 	escStart := col
-	write("Esc cancel")
+	write(fmt.Sprintf("[:%s:] Esc [-:-:-]cancel", keyBG))
 	spans = append(spans, buttonBarSpan{
 		startCol: escStart, endCol: col,
 		run: func(r *Root) { r.cancelChord() },
