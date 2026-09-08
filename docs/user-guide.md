@@ -44,17 +44,25 @@ dialog open.
 | `r` | Rename | `e` | Edit | `/` | Filter |
 | `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
-| `s` | Split view on/off | `S` | Swap panes | `a` | Select all |
+| `s` | Split view on/off | | | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
+| `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
 | `?` | This help | `:` | Bash command line | | |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
-isn't; `s` splits the view, `S` swaps the two panes over. Browsing the
-Trash itself flips two of these to their trash-specific meaning: `r`
-restores instead of renaming, `D` empties the whole Trash instead of
-removing one file.
+isn't. Browsing the Trash itself flips two of these to their
+trash-specific meaning: `r` restores instead of renaming, `D` empties
+the whole Trash instead of removing one file.
+
+`h`/`k`/`M` target whichever of Properties/Details is relevant right
+now (Properties first if both are open on the same file), opening the
+Details sidebar first if neither is — see [The Details
+sidebar](#the-details-sidebar). They, along with `l` and `I`, are also
+the one handful of plain letters that keep working while Properties
+itself is open, rather than being blocked the way every other plain
+letter correctly is once an overlay has focus.
 
 **Chords** cover the rarer, related actions — one letter, then within
 about four seconds one more. The status bar shows a small countdown
@@ -63,9 +71,9 @@ chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
+| `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `z` — display | `zs` size format · `zt` time format · `zo` split orientation |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -146,8 +154,9 @@ recognized archive, dim gray for a dotfile.
 ## Selecting files
 
 `Space` checks or unchecks the row under the cursor. Right-drag over
-several rows toggles all of them. The context menu adds Select all,
-Deselect all, and glob-pattern Select +/− for things like `*.log`.
+several rows toggles all of them. The context menu's own "▸ Selection"
+submenu adds Select all, Deselect all, and glob-pattern Select +/− for
+things like `*.log`.
 
 Every bulk action — Copy, Cut, Move to Trash, Remove, Sed Replace, Batch
 rename — acts on the checked selection if there is one, and otherwise on
@@ -210,8 +219,9 @@ pane's is dimmed. Each pane's own number strip marks the tab it holds,
 so you can always see which two tabs you have up.
 
 **Layout rules.** The panes never swap sides on their own: moving focus
-across the divider changes nothing about the layout, and `S` (or
-the context menu's "Swap panes") is the only thing that exchanges them.
+across the divider changes nothing about the layout, and the `z` chord's
+own `zw` (or the context menu's "Swap panes") is the only thing that
+exchanges them.
 Swapping moves the pane you are in to the other side and leaves the
 keyboard with it, rather than handing focus over — moving between panes
 is its own action. Switching to a different tab
@@ -231,12 +241,65 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-`m`, or right-click anywhere in the listing. The menu is grouped: the entry
-under the cursor first (Look, Rename, Edit, `tail -f`, Properties), then
-Selection, Commands, Delete, Tabs, Tools, and Globals.
+`m`, or right-click anywhere in the listing.
 
-Everything in it is also reachable from the keyboard or the button bar —
-the menu is a discovery aid, never the only path to a feature.
+Only what actually applies right now is shown — not a fixed list of
+everything the menu can ever do. On a plain file, that's:
+
+```
+Look
+Edit
+Rename
+Copy
+Cut
+Move to Trash
+Properties
+▸ More actions
+▸ Selection
+▸ Tabs & Split
+```
+
+A few of these come and go on their own: **Edit** (and, one level into
+"More actions", **tail -f**) drop out entirely for a directory — neither
+means anything there. **Paste** only appears once Copy or Cut has
+actually put something in the clipboard. Inside "Tabs & Split",
+**Split orientation** and **Swap panes** only show up once a split is
+actually active — there's nothing to orient or swap before that.
+
+**While browsing the Trash itself**, the whole menu is replaced by a
+much shorter one — almost nothing about the ordinary list still applies
+to something already trashed:
+
+```
+Restore from Trash
+Empty Trash
+Properties
+```
+
+**Submenus** (marked with `▸`) replace the current list with just that
+group's own entries, led by a `◂ Back` row — the same "drill in, one
+level at a time" shape a settings app on a phone already uses, chosen
+over a flyout beside the menu since it needs no horizontal room a
+narrow terminal might not have. `Escape` backs out one level at a time
+(a second press closes the menu once you're back at the top); Left
+arrow does the same, alongside clicking or selecting `◂ Back` itself.
+The menu's own title bar names where you are — "Menu" at the top,
+"Menu › Selection" one level in.
+
+- **▸ More actions** — `tail -f` (files only), `chown`, `chmod`, `sed`,
+  Batch rename, Undo last rename, Remove (the permanent, asks-first
+  sibling of Move to Trash above).
+- **▸ Selection** — Select all, Deselect all, Select +, Select -
+  (checkbox-based, the same these already reach on their own keys).
+- **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
+  Split orientation, Swap panes.
+
+Everything in the menu is also reachable from the keyboard or the
+button bar — the menu is a discovery aid, never the only path to a
+feature. The hidden-files/size-format/time-format toggles that used to
+live at the bottom of this menu are Options-screen and keyboard-only
+now (`.` and the `z` chord) — they're a view setting for the whole
+panel, not an action on whatever the menu was opened for.
 
 ## Batch rename
 
@@ -303,7 +366,7 @@ directory), so there is no partial-move case to recover from.
 
 ## Sed Replace
 
-`Ctrl`+`S`, or the context menu's "sed". Runs a real `sed(1)`
+`E`, or the context menu's "sed". Runs a real `sed(1)`
 substitution against the selected file(s) — contents, not names.
 
 Fill in Find and Replace with, and set any of the four toggles (Regex,
@@ -323,7 +386,7 @@ writes the result back itself, atomically.
 
 ## Search
 
-`Ctrl`+`F`, or the button bar. Two modes:
+`f`. Two modes:
 
 - **By name** — glob, plain keyword, or regex, via `find`, or `locate`
   where its index is available.
@@ -340,7 +403,7 @@ can keep navigating from there without backing out first.
 
 ## Look and Tail -f
 
-`Ctrl`+`L`, `Enter` on a file, a double-click, or the context menu.
+`l`, `Enter` on a file, a double-click, or the context menu.
 Read-only, full-screen.
 
 - **Text, source, configs, diffs, logs** get syntax coloring for around
@@ -370,16 +433,26 @@ through the real `tail -f`.
 
 ## The Details sidebar
 
-`Ctrl`+`D`, or the `<` button after the filter box. A live, read-only
+`I`, or the `<` button after the filter box. A live, read-only
 panel on the right that follows the cursor.
 
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
 
-- `Ctrl`+`K` — SHA-256, SHA-1, MD5, SHA-512 and BLAKE2b-512.
-- `Ctrl`+`U` — a directory's total size via `du -hs`. On a symlink or
+- `h` — SHA-256, SHA-1, MD5, SHA-512 and BLAKE2b-512.
+- `k` — a directory's total size via `du -hs`. On a symlink or
   mount point it resolves the whole link chain first and reports the
   target's real size, naming what it actually measured.
+- `M` — an image's metadata (EXIF and the like) — not implemented yet;
+  pressing it shows a placeholder rather than doing nothing.
+
+Each of `h`/`k`/`M` opens the sidebar first if it isn't already showing,
+so "select something, press the key" works straight from plain
+browsing. All three, along with `l` (Look) and `I` itself, also keep
+working while Properties is open on the same file, rather than needing
+it closed first — pressing `h` there fills in Properties' own hash
+section instead of Details', so it never fills in a window you can't
+see.
 
 Images and PDFs get an inline preview with its own click zone for
 fullscreen. Previews load in the background and only once the cursor has
@@ -391,11 +464,9 @@ it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the s
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
 
-With Properties open on the same file, `Ctrl`+`K` fills in both.
-
 ## Properties
 
-`Ctrl`+`P`, or the context menu. Editable: name, permission bits
+`i`, or the context menu. Editable: name, permission bits
 (click a bit, press `r`/`w`/`x`, or type the octal value directly),
 owner and group through a scrollable picker of every local user and
 group, and the modified date and time.
@@ -409,11 +480,11 @@ one, `Escape` cancels.
 directory, without a confirmation, because it is the reversible action
 by design.
 
-`Ctrl`+`R` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
+`D` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
 instead, always behind a confirmation with Cancel preselected, so a
 stray `Enter` can never trigger it.
 
-`Ctrl`+`B` browses the trash directly. While you're in it, `Delete`
+The `g` chord's own `gb` browses the trash directly. While you're in it, `Delete`
 means Remove — there is nowhere left to move an already-trashed item to
 — and the button bar swaps Trashbin for Restore.
 
@@ -466,8 +537,10 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Options and configuration
 
-`Ctrl`+`O`, or the button bar. Categories down the left, that category's
-settings on the right, action buttons underneath.
+The `o` chord's own `oo` (`o` then `o` again — see [The keyboard
+layer](#the-keyboard-layer)), or the button bar's own `o…` cascade
+followed by `o`. Categories down the left, that category's settings on
+the right, action buttons underneath.
 
 | Key | Action |
 |---|---|
@@ -528,6 +601,7 @@ Every key breakthrough recognizes, with its default:
 | `mtime_unix` | `false` | Time column as a Unix timestamp instead of a formatted date |
 | `restore_tabs` | `true` | Reopen the tabs (and split) that were open on last exit |
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
+| `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
@@ -548,35 +622,28 @@ on it before that layer existed.
 
 | Key | Action |
 |---|---|
-| `Ctrl`+`_` | Toggle mouse reporting on/off — the one shortcut that has to work completely unconditionally, even with a dialog open or the command line focused |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
 
 ### File panel
 
-Every row below also has a plain-letter equivalent — see
-[The keyboard layer](#the-keyboard-layer) above for the full table.
+Almost everything that used to live here as its own Ctrl-letter binding
+now has exactly one keyboard path — the plain letter or chord on [The
+keyboard layer](#the-keyboard-layer) above (Options and mouse reporting
+most recently, via the `o` chord's own `oo`/`om`) — with no Ctrl
+equivalent left at all. What remains below reaches something the plain
+letter genuinely can't (`Ctrl`+`T` while the tab switcher itself is
+already open; `Ctrl`+`Delete` regardless of terminal support).
 
 | Key | Action | also on |
 |---|---|---|
 | `Enter` | Open a directory, or Look at a file | |
 | `Space` | Select / deselect | |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
-| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` | `e` |
-| `Ctrl`+`L` | Look | `l` |
-| `Ctrl`+`P` | Properties | `i` |
-| `Ctrl`+`D` | Details sidebar | `I` |
-| `Ctrl`+`K` | Compute hashes | |
-| `Ctrl`+`U` | Directory size (`du -hs`) | |
-| `Ctrl`+`F` | Search | `f` |
-| `Ctrl`+`S` | Sed Replace | `E` |
-| `Ctrl`+`G` | Toggle hidden files | `.` |
-| `Ctrl`+`O` | Options | |
-| `Ctrl`+`B` | Go to Trash | the `g` chord's own `gb` |
 | `Delete` | Move to Trash | `d` |
-| `Ctrl`+`R` | Remove permanently (asks first) | `D` |
+| `Ctrl`+`Delete` | Remove permanently (asks first), best-effort depending on terminal | `D` (always reliable) |
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
-| `Ctrl`+`T` | Tab switcher | `t` |
+| `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
 
 Click, pause, click again on an already-selected name renames it. The

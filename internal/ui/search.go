@@ -847,7 +847,7 @@ func (r *Root) openSearchTreePicker() {
 // Content/Start-at reset to blank/the panel's current directory only
 // when this opens *fresh* — the panel isn't already showing search
 // results (see Panel.searchMode) — the far more common case; reopening
-// it to refine an already-running or already-finished search (Ctrl+F
+// it to refine an already-running or already-finished search ("f"
 // again, or Escape — see backToSearchForm, this func's only other
 // caller) leaves everything exactly as it was left instead, per the
 // user's own explicit request that this not reinitialize. Engine/Mode/
