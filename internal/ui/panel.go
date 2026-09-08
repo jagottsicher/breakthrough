@@ -128,7 +128,7 @@ type Panel struct {
 	// detailsExpandBtn sits right after filterField in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
-	// alternative to Ctrl+D: filterField itself gave up 3 columns
+	// alternative to "I"/the Details button: filterField itself gave up 3 columns
 	// (headerFilterWidth) to make room for this button's own 3-column
 	// slot ("space, <, space" — tview.Button centers its own label
 	// within whatever width it's given, so a plain "<" label already
@@ -2197,7 +2197,7 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 // CurrentRowPath is RowAt's keyboard equivalent: the row and absolute
 // path of whichever entry the table's own cursor (arrow-key navigation)
 // currently sits on, rather than one under a screen position. Used by
-// Root's keyboard-triggered actions (Ctrl+E Edit, "r" Rename, Ctrl+P
+// Root's keyboard-triggered actions ("e" Edit, "r" Rename, "i"
 // Properties) that have no right-clicked position to work from. ok is
 // false for the ".." row (not a file operation target, matching RowAt)
 // or an empty table.
@@ -2516,10 +2516,14 @@ func (p *Panel) previousPath() (string, bool) {
 // them, none before the first one either, and exactly one before the
 // path starts — per the user's own explicit request, "^ ~ < >" read as
 // more spread out than five single-purpose buttons need to be. Start's
-// own glyph is "∎" (U+220E), not "^": this
-// app's own button bar already writes Ctrl-shortcuts as "^E", "^L" and
-// so on, so a bare "^" here risked reading as one of those instead of a
-// button in its own right — "∎" carries no such collision. "^" itself
+// own glyph is "∎" (U+220E), not "^": at the time this glyph was chosen,
+// this app's own button bar wrote Ctrl-shortcuts as "^E", "^L" and so
+// on, so a bare "^" here risked reading as one of those instead of a
+// button in its own right — "∎" carries no such collision. The button
+// bar has since moved to highlighting a plain letter within each label
+// instead (see buildButtonBar's own highlightKey), but "∎" remains the
+// right call regardless: a bare "^" would still misread as up/caret
+// shorthand rather than a button of its own. "^" itself
 // isn't reused for Up either, despite visually suggesting "upward": ↑
 // says that unambiguously and isn't asked to also serve as a
 // stand-in for whatever Start used to mean.

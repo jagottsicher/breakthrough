@@ -138,6 +138,26 @@ func TestLoadParsesGlobalsBooleans(t *testing.T) {
 	}
 }
 
+func TestDefaultSettingsMouseIsEnabled(t *testing.T) {
+	if !DefaultSettings().MouseEnabled {
+		t.Error("DefaultSettings().MouseEnabled = false, want true")
+	}
+}
+
+func TestLoadParsesMouseEnabledKey(t *testing.T) {
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "user")
+	writeFile(t, userPath, "mouse_enabled = false\n")
+
+	s, warnings := Load(filepath.Join(dir, "system"), userPath)
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want none", warnings)
+	}
+	if s.MouseEnabled {
+		t.Error("MouseEnabled = true, want false")
+	}
+}
+
 func TestLoadParsesPagerKey(t *testing.T) {
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "user")

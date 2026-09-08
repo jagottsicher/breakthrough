@@ -136,7 +136,6 @@ func (r *Root) enterSplit(partner int) {
 	r.splitActive = true
 	r.remountPanels()
 	r.refreshTabStrips()
-	r.syncSplitMenuLabels()
 	r.refreshButtonBar()
 	r.app.SetFocus(r.panel.table)
 }
@@ -155,7 +154,6 @@ func (r *Root) exitSplit() {
 	r.splitActive = false
 	r.remountPanels()
 	r.refreshTabStrips()
-	r.syncSplitMenuLabels()
 	r.refreshButtonBar()
 	r.app.SetFocus(r.panel.table)
 }
@@ -233,8 +231,8 @@ func (r *Root) adjustSplitForClosedTab(closed int) {
 
 // splitToggleLabel renders the context menu's split entry as the action
 // selecting it performs next, not the current state — the same
-// convention hiddenToggleLabel already established for the "Globals"
-// toggles (see its own doc comment).
+// convention hideUnhideLabel already established for the button bar's
+// own hidden-files entry.
 func splitToggleLabel(active bool) string {
 	if active {
 		return "Close split view"
@@ -262,18 +260,6 @@ func splitOrientationLabel(stacked bool) string {
 		return "Split side by side"
 	}
 	return "Split above/below"
-}
-
-// syncSplitMenuLabels re-renders both split entries from the current
-// state — called wherever either can change (see setSplitStacked,
-// enterSplit/exitSplit, and switchToTab, which can end a split by
-// implication).
-func (r *Root) syncSplitMenuLabels() {
-	if r.menu == nil {
-		return
-	}
-	r.menu.SetItemText(r.splitToggleIdx, splitToggleLabel(r.splitActive), "")
-	r.menu.SetItemText(r.splitOrientationIdx, splitOrientationLabel(r.settings.SplitStacked), "")
 }
 
 // --- Actions reachable from the UI -----------------------------------
@@ -346,7 +332,6 @@ func (r *Root) setSplitStacked(stacked bool) {
 	if r.splitActive {
 		r.remountPanels()
 	}
-	r.syncSplitMenuLabels()
 }
 
 // splitWithTab is the tab switcher's own "split with this one" action
@@ -409,8 +394,10 @@ func (r *Root) swapPanes() bool {
 	return true
 }
 
-// swapPanesOrExplain is the "S" key's own action: swap the two panes, or
-// say why there's nothing to swap.
+// swapPanesOrExplain is the "zw" chord's own action (see chordFamilies
+// in keymap.go — "z" for display, since swapping panes is a display
+// arrangement the same way split orientation is): swap the two panes,
+// or say why there's nothing to swap.
 //
 // Saying so matters more here than for most verbs. Split view is the
 // precondition, it is not obvious from a single pane that the key even

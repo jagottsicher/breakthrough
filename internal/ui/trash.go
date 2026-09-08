@@ -98,8 +98,9 @@ func (r *Root) moveSelectionToTrash() {
 	r.reloadPanel(firstErr)
 }
 
-// openTrash is the context menu's "Go to Trash", and (through
-// TrashbinShortcut) Ctrl+B's action: navigates the panel straight to
+// openTrash is the context menu's "Go to Trash", and (through the "gb"
+// chord — see chordFamilies in keymap.go) the keyboard's action:
+// navigates the panel straight to
 // the current trash's files/ subdirectory (see fsops.FilesDir) — the
 // one place browsing/Restore actually works (see
 // restoreSelectionFromTrash) — without the user needing to know or type
@@ -120,11 +121,11 @@ func (r *Root) openTrash() {
 	}
 }
 
-// openRemoveConfirm is the context menu's "Remove", and (through
-// PurgeShortcut) Ctrl+R/Ctrl+Entf's action: always asks first (Cancel
-// preselected — see newPurgeConfirm), wording the message concretely for
-// one file, one directory (with its real item count), or several targets
-// at once.
+// openRemoveConfirm is the context menu's "Remove", the plain-letter
+// layer's "D" (see keymap.go), and (through PurgeShortcut) Ctrl+Entf's
+// action: always asks first (Cancel preselected — see newPurgeConfirm),
+// wording the message concretely for one file, one directory (with its
+// real item count), or several targets at once.
 func (r *Root) openRemoveConfirm() {
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
@@ -242,18 +243,19 @@ func (r *Root) openEmptyTrashConfirm() {
 	})
 }
 
-// TrashShortcut and PurgeShortcut are Entf and Ctrl+R/Ctrl+Entf's global
-// actions (see cmd/breakthrough and acceptsGlobalShortcut). Entf
-// deliberately triggers the safe action (Trash), not Purge, matching
-// both the physical key's own label and the near-universal file-manager
-// convention (Windows/macOS/GNOME/Total Commander: the bare Delete key is
-// always the reversible one, a modifier is required for the permanent
-// variant). Ctrl+Delete for Purge is best-effort — see cmd/breakthrough's
-// own comment on tcell's modifier-detection caveat; Ctrl+R is the
-// reliable path regardless. Unlike Entf, Ctrl+R needs no fallthrough
-// guard at the cmd/breakthrough dispatch level: nothing in bashLine
-// binds it, so it joins Edit/Look/Rename/etc.'s "always consumed, no-op
-// internally if the precondition fails" group instead.
+// TrashShortcut and PurgeShortcut are Entf and Ctrl+Entf's global
+// actions (see cmd/breakthrough's own KeyDelete case and
+// AcceptsGlobalShortcut). Entf deliberately triggers the safe action
+// (Trash), not Purge, matching both the physical key's own label and the
+// near-universal file-manager convention (Windows/macOS/GNOME/Total
+// Commander: the bare Delete key is always the reversible one, a
+// modifier is required for the permanent variant). Ctrl+Delete for Purge
+// is best-effort — see cmd/breakthrough's own comment on tcell's
+// modifier-detection caveat; the plain-letter layer's "D" (see
+// openRemoveConfirm/keymap.go) is the reliable path regardless, and
+// needs no fallthrough guard of its own at the cmd/breakthrough dispatch
+// level the way Entf/Ctrl+Entf do — acceptsPlainKeyCommand already
+// covers the same ground more precisely.
 //
 // Trash no longer has a Ctrl-letter binding of its own at all — Entf
 // already covered it on its own, matching the physical key's own label,
@@ -273,14 +275,15 @@ func (r *Root) PurgeShortcut() {
 	}
 }
 
-// TrashbinShortcut is Ctrl+B's global action (see cmd/breakthrough and
-// acceptsGlobalShortcut) — "B" for "Bin", the one Ctrl-letter mnemonic
-// for Go to Trash that was actually still free. Needs the same
-// dispatch-level AcceptsGlobalShortcut check Ctrl+P/T/S do rather than
-// joining TrashShortcut/PurgeShortcut's "always consumed" group above:
-// tview's TextArea already binds Ctrl+B to its own PgUp-style movement
-// (see acceptsGlobalShortcut's own doc comment), so bashLine needs to
-// keep seeing it while it has focus.
+// TrashbinShortcut used to be Ctrl+B's global action ("B" for "Bin") —
+// nothing in cmd/breakthrough calls it any more. Go to Trash's own real
+// keyboard path is the "gb" chord (go » Trash — see chordFamilies in
+// keymap.go, calling openTrash right above), which needs no guard of its
+// own the way this one does (chords are already gated the same way
+// every plain key is, via acceptsPlainKeyCommand, and never reach
+// bashLine in the first place). Kept rather than deleted as an exported
+// building block, the same shape bottombar.go's RenameShortcut/
+// EditShortcut/etc. already have for exactly this reason.
 func (r *Root) TrashbinShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.openTrash()
