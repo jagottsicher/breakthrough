@@ -682,6 +682,13 @@ func (r *Root) nextToolWindowPosition() (x, y int) {
 // entry point, not the planned feature itself — see openToolCommand's
 // own doc comment and feature_ideas.txt for the real Toolbox this is a
 // first step towards.
+//
+// Has no context-menu entry any more (see contextmenu.go's own package
+// doc on the slimmer, context-sensitive menu that replaced the one
+// forty-row list this used to live in) — kept, and still exercised
+// directly by its own test, as the working demonstration of the
+// underlying toolWindow mechanism until the real Toolbox gives it a
+// real entry point.
 func (r *Root) openPingTestWindow() {
 	r.openPrompt("Ping host:", "", func(host string) {
 		if host == "" {

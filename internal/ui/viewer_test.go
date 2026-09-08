@@ -14,8 +14,10 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestLookShortcutOpensBuiltinViewer pins Ctrl+L's default action: the
-// built-in Look overlay opens over whichever entry the table's cursor is
+// TestLookShortcutOpensBuiltinViewer pins LookShortcut's own default
+// action (see its doc comment on why it's kept despite no longer being
+// wired to Ctrl+L): the built-in Look overlay opens over whichever entry
+// the table's cursor is
 // currently on, without needing $VISUAL/$EDITOR or any external tool at
 // all (config.Settings.Pager defaults to "builtin" — see
 // config.DefaultSettings).
