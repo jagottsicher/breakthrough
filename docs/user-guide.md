@@ -515,6 +515,31 @@ so on, never a conflict, which always has a decision — is collected
 rather than stopping the whole Paste at the first one, and reported
 together once every item has a final outcome.
 
+### What's on the clipboard right now
+
+Two indicators, both live for as long as there's actually something to
+Paste:
+
+- **Every row the clipboard holds** gets a full-row background tint —
+  not just its checkbox, the whole row — so it stays visible while
+  scrolling past it or browsing elsewhere. Cut gets a lighter shade
+  than Copy (`clipboard_cut_background`/`clipboard_copy_background` in
+  the active color scheme): Cut is the more consequential of the two,
+  since the original disappears once Paste actually succeeds, so it
+  reads as the slightly stronger cue. A directory that's also on the
+  clipboard shows this tint across its whole row instead of its usual
+  gold name highlight — the two would otherwise compete for the same
+  characters, so the clipboard tint wins outright rather than the two
+  blending. This applies across every open tab currently showing that
+  row, not only the tab Copy/Cut was pressed in, since the clipboard
+  itself is shared by the whole application, not scoped to one tab.
+- **The status bar** names what's held — "Copy: 3 files, 1 dir" or
+  "Cut: 2 files" (a zero count is dropped rather than shown as "0
+  dirs") — right after the chord countdown's own leading spot, ahead
+  of the username. Disappears the moment the clipboard is empty again,
+  the same "just show one less segment" shape as the disk-usage/
+  uptime/load segments further along the same line.
+
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a

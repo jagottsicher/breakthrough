@@ -260,6 +260,20 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
+	// The clipboard's own contents, if anything — right after the chord
+	// indicator and before the username, the same leading, fixed
+	// position and the same reasoning: it needs to be seen without
+	// hunting for it, and everything after the username is each already
+	// optional on its own platform, so a fixed spot ahead of all of that
+	// is the one place adding or removing this segment never shifts
+	// something else around. Empty (no leading text, no separator) once
+	// the clipboard itself is empty again, the same "just show one less
+	// segment" shape as disk usage/uptime/load above.
+	if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
+		write(clip)
+		sep()
+	}
+
 	write(r.currentUser)
 	sep()
 	write(mouseStatusText(r.mouseEnabled))
@@ -285,6 +299,48 @@ func (r *Root) buildStatusBar() string {
 	write(clockText())
 
 	return b.String()
+}
+
+// clipboardIndicatorText renders buildStatusBar's own clipboard segment
+// — "" once dirs and files are both 0 (nothing on the clipboard, the
+// overwhelmingly common case), otherwise "Copy: N files, M dirs" or
+// "Cut: N files, M dirs" (whichever of dirs/files is 0 dropped
+// entirely, rather than shown as "0 dirs" — noise, not information).
+// "Copy"/"Cut" name the pending operation itself, not "Copying"/
+// "Cutting": nothing is actually in flight yet at this point — Paste
+// hasn't been pressed — and this same text keeps showing, unchanged,
+// for as long as the clipboard holds these paths, including through a
+// Copy+Paste that leaves them there for a possible second Paste
+// elsewhere. See config.Theme.ClipboardCopyBackground/
+// ClipboardCutBackground for this same information's other half — the
+// row highlighting a real file's own line gets while it's held.
+func clipboardIndicatorText(cut bool, dirs, files int) string {
+	if dirs == 0 && files == 0 {
+		return ""
+	}
+	verb := "Copy"
+	if cut {
+		verb = "Cut"
+	}
+	var parts []string
+	if files > 0 {
+		parts = append(parts, pluralCount(files, "file", "files"))
+	}
+	if dirs > 0 {
+		parts = append(parts, pluralCount(dirs, "dir", "dirs"))
+	}
+	return fmt.Sprintf("%s: %s", verb, strings.Join(parts, ", "))
+}
+
+// pluralCount renders n paired with singular or plural, whichever n
+// itself calls for ("1 file", "2 files") — used wherever this bar
+// counts something instead of just naming it, starting with
+// clipboardIndicatorText above.
+func pluralCount(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
 }
 
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"

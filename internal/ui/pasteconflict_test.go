@@ -162,6 +162,44 @@ func TestApplyPasteOneResultClearsClipboardAfterCut(t *testing.T) {
 	}
 }
 
+// TestApplyPasteOneResultClearsClipboardHighlightAndCountsAfterCut goes
+// through the real cutToClipboard path (unlike
+// TestApplyPasteOneResultClearsClipboardAfterCut above, which pokes
+// r.clipboard directly) so clipboardDirs/Files and the panel's own row
+// tint are actually primed — then pins that a clean Cut+Paste clears
+// all three together (see finishPasteJob's own setClipboard(nil,
+// false) call), not just r.clipboard itself.
+func TestApplyPasteOneResultClearsClipboardHighlightAndCountsAfterCut(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	src := filepath.Join(dir, "banana.txt")
+	r.panel.toggleCheckbox(4) // banana.txt
+	r.cutToClipboard()
+	if r.clipboardFiles != 1 {
+		t.Fatalf("setup: clipboardFiles = %d, want 1", r.clipboardFiles)
+	}
+	row, ok := rowForPath(r.panel, src)
+	if !ok {
+		t.Fatal("setup: banana.txt row not found")
+	}
+	if _, tinted := cellBackground(r.panel.table.GetCell(row, colName)); !tinted {
+		t.Fatal("setup: banana.txt should be tinted before Paste completes")
+	}
+
+	job := newPasteTestJob(r, true, dir, 1)
+	r.applyPasteOneResult(job, src, filepath.Join(dir, "moved.txt"), nil)
+
+	if r.clipboardDirs != 0 || r.clipboardFiles != 0 {
+		t.Errorf("clipboardDirs/Files = %d/%d, want 0/0 once the clean cut-paste lands", r.clipboardDirs, r.clipboardFiles)
+	}
+	if _, tinted := cellBackground(r.panel.table.GetCell(row, colName)); tinted {
+		t.Error("banana.txt's own row (now stale — the file itself moved) is still tinted after the clean cut-paste")
+	}
+}
+
 // TestApplyPasteOneResultKeepsClipboardOnError mirrors the above for the
 // failure path: a stray second Paste after a real error should still
 // have something to retry.

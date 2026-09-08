@@ -376,6 +376,12 @@ var helpText = strings.TrimLeft(`
   answered queues behind it instead of opening a second dialog on top,
   shown as "(N more waiting)" right in this one's own message.
 
+  Whatever's currently on the clipboard shows two ways: every row it
+  holds gets a full-row grey tint (a lighter shade for Cut than Copy),
+  across every open tab showing that row, not just the one Copy/Cut
+  was pressed in; and the status bar names it — "Copy: 3 files, 1
+  dir" — right after the chord countdown's own spot.
+
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 
   Tab / Shift+Tab   Move between fields or buttons

@@ -769,6 +769,18 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
+	// clipboardDirs/clipboardFiles tally how many of clipboard's own
+	// paths are directories vs plain files (see clipboardCounts) — for
+	// the status bar's own "Copy: N files, M dirs" indicator (see
+	// bottombar.go). Computed once, when Copy/Cut captures the
+	// clipboard, not recomputed on every status bar refresh: a Stat per
+	// path once a second (the clock's own refresh cadence — see
+	// StartClock) for however long something sits on the clipboard
+	// would be wasted work for a value that only actually changes at
+	// Copy/Cut/Paste time.
+	clipboardDirs  int
+	clipboardFiles int
+
 	// pasteJob is the currently-running Paste, if any — see startPaste's
 	// own doc comment in pasteconflict.go for the whole async, resumable
 	// shape. nil whenever nothing is pasting right now.
@@ -1291,6 +1303,14 @@ func (r *Root) wirePanel(panel *Panel) {
 	panel.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		return r.captureMouseOnPanel(panel, action, event)
 	})
+
+	// A freshly created tab (NewRoot's own first one, "New tab", or a
+	// restored session) starts showing whatever's already on the
+	// clipboard, the same as every other open tab — see
+	// syncClipboardHighlight's own doc comment for why this is
+	// Root-level, shared state rather than something a tab could ever
+	// start blank on.
+	panel.setClipboard(r.clipboard, r.clipboardCut)
 }
 
 // captureMouseOnPanel makes panel the active one before handing the
@@ -2268,15 +2288,68 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
 func (r *Root) copyToClipboard() {
-	r.clipboard = r.clipboardTargets()
-	r.clipboardCut = false
+	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
 // the targets (removing them from here) instead of copying them.
 func (r *Root) cutToClipboard() {
-	r.clipboard = r.clipboardTargets()
-	r.clipboardCut = true
+	r.setClipboard(r.clipboardTargets(), true)
+}
+
+// setClipboard is copyToClipboard/cutToClipboard's own shared body,
+// also used by finishPasteJob (pasteconflict.go) to clear the
+// clipboard once a clean Cut+Paste has fully landed — every place
+// clipboard/clipboardCut actually change goes through here, so the
+// dependent state (clipboardDirs/clipboardFiles, every open tab's own
+// row highlighting, the status bar's own indicator) can never drift
+// out of sync with them by only being updated from some of the call
+// sites.
+func (r *Root) setClipboard(paths []string, cut bool) {
+	r.clipboard = paths
+	r.clipboardCut = cut
+	r.clipboardDirs, r.clipboardFiles = clipboardCounts(paths)
+	r.syncClipboardHighlight()
+	r.refreshStatusBar()
+}
+
+// syncClipboardHighlight pushes the clipboard's current contents to
+// every open tab's own Panel (see forEachTab), not just whichever one
+// triggered the change — the clipboard is one Root-level value shared
+// by every tab, so a file copied while browsing tab 1 must still show
+// as clipboard-held if the same directory happens to be open in tab 2
+// as well. Repaints rows already on screen in place (see
+// Panel.setClipboard); nothing on disk changed, so there's nothing to
+// reload.
+func (r *Root) syncClipboardHighlight() {
+	r.forEachTab(func(p *Panel) {
+		p.setClipboard(r.clipboard, r.clipboardCut)
+	})
+}
+
+// clipboardCounts tallies how many of paths are directories vs plain
+// files, following symlinks the same way Properties' own hash button
+// already does (see isDirish) — so a directory symlink counts as a
+// dir here too, not as a file. A path Stat fails for (deleted out from
+// under the selection between checking it and Copy/Cut capturing it)
+// is silently left out of both counts rather than reported as an
+// error: this feeds a purely informational status bar segment, not a
+// place this app's own "no silent errors" guardrail needs to reach —
+// the paste itself, when it actually runs, is where a genuinely
+// missing source file gets reported (see pasteconflict.go).
+func clipboardCounts(paths []string) (dirs, files int) {
+	for _, path := range paths {
+		info, err := fsops.Stat(path)
+		if err != nil {
+			continue
+		}
+		if isDirish(info) {
+			dirs++
+		} else {
+			files++
+		}
+	}
+	return dirs, files
 }
 
 // pasteClipboard is "Paste": copies or moves (per clipboardCut)

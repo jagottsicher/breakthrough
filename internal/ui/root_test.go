@@ -319,6 +319,60 @@ func TestClipboardTargetsPrefersSelectionOverTarget(t *testing.T) {
 	}
 }
 
+// TestCopyToClipboardCountsFilesAndDirs pins clipboardCounts' own
+// classification, exercised through the real Copy path — a directory
+// symlink among the targets would count as a dir here too (see
+// isDirish), the same as everywhere else in this app already treats
+// one, though fixtureDir itself has no symlink to cover that with.
+func TestCopyToClipboardCountsFilesAndDirs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.panel.toggleCheckbox(1) // app-data (dir)
+	r.panel.toggleCheckbox(2) // apple.txt (file)
+	r.panel.toggleCheckbox(3) // apricot.txt (file)
+	r.copyToClipboard()
+
+	if r.clipboardDirs != 1 || r.clipboardFiles != 2 {
+		t.Errorf("clipboardDirs/Files = %d/%d, want 1/2", r.clipboardDirs, r.clipboardFiles)
+	}
+}
+
+// TestCopyToClipboardSyncsHighlightAcrossOpenTabs pins
+// syncClipboardHighlight's own point: the clipboard is one Root-level
+// value shared by every tab, so Copy from tab 1 must also tint the
+// same path's row in tab 2, without switching to it first.
+func TestCopyToClipboardSyncsHighlightAcrossOpenTabs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.newTab(dir) // a second tab on the very same directory
+	if len(r.tabs) != 2 {
+		t.Fatalf("setup: want 2 tabs, got %d", len(r.tabs))
+	}
+	firstTab, secondTab := r.tabs[0], r.tabs[1]
+
+	r.switchToTab(0)
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+
+	held := filepath.Join(dir, "apple.txt")
+	for name, p := range map[string]*Panel{"first (triggering) tab": firstTab, "second tab": secondTab} {
+		row, ok := rowForPath(p, held)
+		if !ok {
+			t.Fatalf("%s: apple.txt row not found", name)
+		}
+		if _, tinted := cellBackground(p.table.GetCell(row, colName)); !tinted {
+			t.Errorf("%s: apple.txt not tinted after Copy on the other tab", name)
+		}
+	}
+}
+
 // Chmod's own dialog (openChmod) is tested in chmoddialog_test.go now —
 // it no longer goes through r.prompt/finishPrompt at all (see
 // chmoddialog.go's own doc comment on why it was rebuilt into a full

@@ -268,7 +268,12 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	r.pasteJob = nil
 
 	if job.cut && len(job.errors) == 0 {
-		r.clipboard = nil // moved away cleanly; nothing left to paste again
+		// Moved away cleanly; nothing left to paste again — goes through
+		// setClipboard (not a bare "r.clipboard = nil"), the same as
+		// Copy/Cut themselves, so every open tab's own row highlighting
+		// and the status bar's own indicator clear along with it instead
+		// of drifting stale.
+		r.setClipboard(nil, false)
 	}
 
 	// Only reload if the panel actually happens to be showing destDir

@@ -515,6 +515,64 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	}
 }
 
+// TestClipboardIndicatorText pins clipboardIndicatorText's own shape:
+// empty once nothing is held, "Copy"/"Cut" naming the pending
+// operation rather than a progressive "Copying"/"Cutting" (nothing is
+// actually in flight until Paste runs), a zero count dropped entirely
+// rather than shown as "0 dirs", and singular/plural picked correctly
+// either way.
+func TestClipboardIndicatorText(t *testing.T) {
+	tests := []struct {
+		cut         bool
+		dirs, files int
+		want        string
+	}{
+		{false, 0, 0, ""},
+		{false, 0, 1, "Copy: 1 file"},
+		{false, 0, 3, "Copy: 3 files"},
+		{false, 1, 0, "Copy: 1 dir"},
+		{false, 2, 0, "Copy: 2 dirs"},
+		{false, 1, 1, "Copy: 1 file, 1 dir"},
+		{false, 2, 3, "Copy: 3 files, 2 dirs"},
+		{true, 0, 1, "Cut: 1 file"},
+		{true, 2, 3, "Cut: 3 files, 2 dirs"},
+	}
+	for _, tt := range tests {
+		if got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files); got != tt.want {
+			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want %q", tt.cut, tt.dirs, tt.files, got, tt.want)
+		}
+	}
+}
+
+// TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser pins
+// where the user's own explicit request placed this segment: between
+// the chord indicator's own leading slot and the username, not
+// trailing after everything else where an already-optional segment
+// (disk usage, uptime, load) could end up shifting it around.
+func TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	before := r.buildStatusBar()
+	if strings.Contains(before, "Copy:") {
+		t.Fatalf("status bar already mentions Copy before anything was copied: %q", before)
+	}
+
+	r.panel.toggleCheckbox(2) // apple.txt — see fixtureDir
+	r.copyToClipboard()
+
+	got := r.buildStatusBar()
+	wantSeg := "Copy: 1 file"
+	userIdx := strings.Index(got, r.currentUser)
+	segIdx := strings.Index(got, wantSeg)
+	if segIdx == -1 || userIdx == -1 || segIdx >= userIdx {
+		t.Errorf("status bar = %q, want %q to appear before the username %q", got, wantSeg, r.currentUser)
+	}
+}
+
 // clickButtonBar simulates a real left-click on the button bar at the
 // given column, the same way capturePropertiesMouse's own tests draw a
 // real screen first so InRect/GetInnerRect have real layout to resolve

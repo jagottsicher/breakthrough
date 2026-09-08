@@ -142,7 +142,14 @@ terminal.
   waiting)" right in the dialog's own message — rather than stacking a
   second dialog on top. Any real failure (permission, a full disk, ...)
   is collected rather than stopping at the first one, and reported once
-  the whole Paste is done.
+  the whole Paste is done. Whatever's currently on the clipboard shows
+  two ways: every row it holds gets a full-row grey tint (a lighter
+  shade for Cut than Copy, since Cut is the one where the original
+  actually disappears), across every open tab showing that row, not
+  just the one Copy/Cut was pressed in; and the status bar names it —
+  "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
+  chord countdown's own spot, for as long as there's something to
+  Paste.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
