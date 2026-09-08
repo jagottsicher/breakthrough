@@ -252,7 +252,16 @@ func chordFamilies() []chordFamily {
 		{prefix: 'g', name: "go to", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
-			{'r', "Root /", func(r *Root) { r.showError(r.panel.navigate("/")) }},
+			// "/ (root)", not "Root /": a label ending in "/" sat right
+			// against the single-space separator before the next member
+			// (see chordHintBar), reading as if the "/" were part of that
+			// separator rather than this label's own content — the user's
+			// own explicit report. Leading "/" instead doesn't have that
+			// problem: it's preceded by "r"'s own highlight box, never by
+			// a bare separator space, so there's nothing for it to be
+			// mistaken for. Matches the help text's own existing phrasing
+			// ("gr / (root)" — see help.go).
+			{'r', "/ (root)", func(r *Root) { r.showError(r.panel.navigate("/")) }},
 			{'b', "Trash", func(r *Root) { r.openTrash() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
