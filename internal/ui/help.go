@@ -36,15 +36,24 @@ var helpText = strings.TrimLeft(`
 
   c   Copy              d   Move to Trash        i   Properties
   x   Cut               D   Remove permanently    I   Details sidebar
-  v   Paste             u   Undo last rename
-  r   Rename            e   Edit                  l   Look
-  m   Context menu      f   Find                  /   Filter
-  n   New tab           w   Close tab             t   Tab switcher
-  s   Split view        S   Swap panes            .   Toggle hidden
-  a   Select all         *  Invert selection      +/- Select/deselect
+  v   Paste             u   Undo last rename       h  Compute hashes
+  r   Rename            e   Edit                   k  Directory size
+  m   Context menu      f   Find                   M  Image metadata
+  n   New tab           w   Close tab             l   Look
+  s   Split view        S   Swap panes            t   Tab switcher
+  a   Select all         *  Invert selection      .   Toggle hidden
+                                                   +/- Select/deselect
                                                        by pattern
   B   Batch rename       E  Sed Replace           G   Go to last row
   q   Quit                ? This help              :  Bash command line
+
+  h/k/M target whichever of Properties/Details is relevant (Properties
+  first if both are open on the same file), opening the Details sidebar
+  first if neither is — "select something, press the key" works from
+  plain browsing, not only once one of the two is already open. h, k,
+  M, l, and I all also work while Properties specifically is open, on
+  top of their usual reach, so Look, Details, and the tool trio stay
+  reachable without first closing it.
 
   A capital letter is the bigger sibling of its own lowercase one where
   both exist: "d" is reversible (the Trash), "D" is not (asks first);
@@ -86,41 +95,18 @@ var helpText = strings.TrimLeft(`
 
 [::b]File panel[::-]
 
-  Ctrl+E          Edit the selected file — same as "e"
-  Ctrl+L          Look at the selected file (read-only) — same as "l"
-  Ctrl+G          Toggle hidden files — same as "."; the button bar's
-                  own label flips between Hide/Unhide to match
-  Ctrl+F          Find — same as "f"
-  Ctrl+O          Options — see "Options screen" below
-  Ctrl+P          Properties — same as "i"
-  Ctrl+D          Toggle the Details sidebar — same as "I". A read-only,
-                  live-updating panel of file info (stat fields; for an
-                  image or PDF, a preview with its own click zone/
-                  Ctrl+L for fullscreen; hashes, or for a directory, its
-                  total size) for whichever entry is currently selected.
-                  The "<" button right after the filter box expands it
-                  the same way; once open, the ">" button in its own
-                  top-right corner collapses it again
-  Ctrl+K          Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512)
-                  for Properties if that's open, otherwise the Details
-                  sidebar; shown in both at once if both are open on
-                  the same file, however it was triggered
-  Ctrl+N          Load an image's metadata in the Details sidebar
-                  (EXIF etc. — not implemented yet)
-  Ctrl+U          Compute a directory's total size (du -hs) in the
-                  Details sidebar, for whichever directory is currently
-                  selected — on demand, since it can take a real,
-                  visible amount of time on a large tree
-  Ctrl+S          Sed Replace on the selected file(s) — same as "E"
-  Ctrl+T          Tab switcher — same as "t"
-  Ctrl+B          Go to Trash — browse it directly; same as "gb"
+  Ctrl+O          Options — see "Options screen" below. Still Ctrl-only:
+                  no plain-letter home yet
+  Ctrl+T          Tab switcher — same as "t", plus one thing "t" alone
+                  can't: pressing it again while the switcher is already
+                  open walks to the next tab
   Delete          Move the selection to Trash (reversible) — same as
                   "d"; already inside the trash itself, does a Remove
                   instead — nowhere left to move an already-trashed
                   item to
-  Ctrl+R          Remove — permanently delete the selection (asks
-                  first) — same as "D"; Ctrl+Delete does the same,
-                  best-effort
+  Ctrl+Delete     Remove — permanently delete the selection (asks
+                  first), best-effort depending on your terminal — same
+                  as "D" regardless, which always works
   Enter           Open the selected directory, or try Look on a file —
                   double-clicking a name does the same either way
   Space           Select/deselect the selected file
@@ -136,6 +122,24 @@ var helpText = strings.TrimLeft(`
                   grep*, zgrep*, du*, df*, and three toggles: hidden
                   files, size format, modified-time format — *planned,
                   not built yet)
+
+[::b]Details sidebar ("I")[::-]
+
+  A read-only, live-updating panel of file info (stat fields; for an
+  image or PDF, a preview with its own click zone/"l" for fullscreen;
+  hashes, or for a directory, its total size) for whichever entry is
+  currently selected. The "<" button right after the filter box expands
+  it the same way "I" does; once open, the ">" button in its own
+  top-right corner collapses it again.
+
+  h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
+      Properties if that's open, otherwise the Details sidebar; shown in
+      both at once if both are open on the same file, however it was
+      triggered
+  k   Compute a directory's total size (du -hs), for whichever
+      directory is currently selected — on demand, since it can take a
+      real, visible amount of time on a large tree
+  M   Load an image's metadata (EXIF etc. — not implemented yet)
 
   Click a path segment in the header to jump straight there; click
   the path itself to type a new one (Tab completes it, Enter goes);
@@ -298,10 +302,10 @@ var helpText = strings.TrimLeft(`
   rather than replacing the whole thing — type just the digits you
   mean to change, leave the rest as they were.
 
-  Ctrl+K (see the file panel's own entry above) computes hashes here
-  too — click the hash hint works as well.
+  "h" (see the Details sidebar's own entry above) computes hashes here
+  too — clicking the hash hint works as well.
 
-[::b]Look ("l"/Ctrl+L, or Enter/double-click a file)[::-]
+[::b]Look ("l", or Enter/double-click a file)[::-]
 
   Escape            Close
   PageUp / PageDown  On a PDF: turn a page instead of scrolling (a
@@ -324,7 +328,7 @@ var helpText = strings.TrimLeft(`
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
 
-[::b]Search dialog ("f"/Ctrl+F)[::-]
+[::b]Search dialog ("f")[::-]
 
   Tab / Shift+Tab   Move between fields
   Enter             Commit a field and stay — except in Filename,

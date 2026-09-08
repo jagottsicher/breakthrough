@@ -47,6 +47,7 @@ dialog open.
 | `s` | Split view on/off | `S` | Swap panes | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
+| `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
 | `?` | This help | `:` | Bash command line | | |
 
 A capital letter is the bigger sibling of its own lowercase one
@@ -55,6 +56,14 @@ isn't; `s` splits the view, `S` swaps the two panes over. Browsing the
 Trash itself flips two of these to their trash-specific meaning: `r`
 restores instead of renaming, `D` empties the whole Trash instead of
 removing one file.
+
+`h`/`k`/`M` target whichever of Properties/Details is relevant right
+now (Properties first if both are open on the same file), opening the
+Details sidebar first if neither is — see [The Details
+sidebar](#the-details-sidebar). They, along with `l` and `I`, are also
+the one handful of plain letters that keep working while Properties
+itself is open, rather than being blocked the way every other plain
+letter correctly is once an overlay has focus.
 
 **Chords** cover the rarer, related actions — one letter, then within
 about four seconds one more. The status bar shows a small countdown
@@ -424,16 +433,26 @@ through the real `tail -f`.
 
 ## The Details sidebar
 
-`Ctrl`+`D`, or the `<` button after the filter box. A live, read-only
+`I`, or the `<` button after the filter box. A live, read-only
 panel on the right that follows the cursor.
 
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
 
-- `Ctrl`+`K` — SHA-256, SHA-1, MD5, SHA-512 and BLAKE2b-512.
-- `Ctrl`+`U` — a directory's total size via `du -hs`. On a symlink or
+- `h` — SHA-256, SHA-1, MD5, SHA-512 and BLAKE2b-512.
+- `k` — a directory's total size via `du -hs`. On a symlink or
   mount point it resolves the whole link chain first and reports the
   target's real size, naming what it actually measured.
+- `M` — an image's metadata (EXIF and the like) — not implemented yet;
+  pressing it shows a placeholder rather than doing nothing.
+
+Each of `h`/`k`/`M` opens the sidebar first if it isn't already showing,
+so "select something, press the key" works straight from plain
+browsing. All three, along with `l` (Look) and `I` itself, also keep
+working while Properties is open on the same file, rather than needing
+it closed first — pressing `h` there fills in Properties' own hash
+section instead of Details', so it never fills in a window you can't
+see.
 
 Images and PDFs get an inline preview with its own click zone for
 fullscreen. Previews load in the background and only once the cursor has
@@ -445,11 +464,9 @@ it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the s
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
 
-With Properties open on the same file, `Ctrl`+`K` fills in both.
-
 ## Properties
 
-`Ctrl`+`P`, or the context menu. Editable: name, permission bits
+`i`, or the context menu. Editable: name, permission bits
 (click a bit, press `r`/`w`/`x`, or type the octal value directly),
 owner and group through a scrollable picker of every local user and
 group, and the modified date and time.
@@ -463,11 +480,11 @@ one, `Escape` cancels.
 directory, without a confirmation, because it is the reversible action
 by design.
 
-`Ctrl`+`R` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
+`D` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
 instead, always behind a confirmation with Cancel preselected, so a
 stray `Enter` can never trigger it.
 
-`Ctrl`+`B` browses the trash directly. While you're in it, `Delete`
+The `g` chord's own `gb` browses the trash directly. While you're in it, `Delete`
 means Remove — there is nowhere left to move an already-trashed item to
 — and the button bar swaps Trashbin for Restore.
 
@@ -608,29 +625,24 @@ on it before that layer existed.
 
 ### File panel
 
-Every row below also has a plain-letter equivalent — see
-[The keyboard layer](#the-keyboard-layer) above for the full table.
+Almost everything that used to live here as its own Ctrl-letter binding
+now has exactly one keyboard path — the plain letter on [The keyboard
+layer](#the-keyboard-layer) above — with no Ctrl equivalent left at all.
+What remains below either has no plain-letter home yet (`Ctrl`+`O`), or
+reaches something the plain letter genuinely can't (`Ctrl`+`T` while the
+tab switcher itself is already open; `Ctrl`+`Delete` regardless of
+terminal support).
 
 | Key | Action | also on |
 |---|---|---|
 | `Enter` | Open a directory, or Look at a file | |
 | `Space` | Select / deselect | |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
-| `Ctrl`+`E` | Edit in `$VISUAL`/`$EDITOR` | `e` |
-| `Ctrl`+`L` | Look | `l` |
-| `Ctrl`+`P` | Properties | `i` |
-| `Ctrl`+`D` | Details sidebar | `I` |
-| `Ctrl`+`K` | Compute hashes | |
-| `Ctrl`+`U` | Directory size (`du -hs`) | |
-| `Ctrl`+`F` | Search | `f` |
-| `Ctrl`+`S` | Sed Replace | `E` |
-| `Ctrl`+`G` | Toggle hidden files | `.` |
 | `Ctrl`+`O` | Options | |
-| `Ctrl`+`B` | Go to Trash | the `g` chord's own `gb` |
 | `Delete` | Move to Trash | `d` |
-| `Ctrl`+`R` | Remove permanently (asks first) | `D` |
+| `Ctrl`+`Delete` | Remove permanently (asks first), best-effort depending on terminal | `D` (always reliable) |
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
-| `Ctrl`+`T` | Tab switcher | `t` |
+| `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
 
 Click, pause, click again on an already-selected name renames it. The

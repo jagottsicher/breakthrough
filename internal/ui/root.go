@@ -334,7 +334,7 @@ type Root struct {
 	helpTitleBar *tview.TextView
 	helpLayout   *tview.Flex
 
-	// detailsSidebar is the right-hand Details layer toggled by Ctrl+D
+	// detailsSidebar is the right-hand Details layer toggled by "I"
 	// — see detailssidebar.go. detailsSidebarVisible tracks whether it's
 	// currently shown; unlike every overlay above it, it's deliberately
 	// not modal (see newDetailsSidebarView's own doc comment), so it
@@ -1534,11 +1534,11 @@ func (r *Root) closeAllOverlays() {
 // Properties rather than being swallowed as an "outside click" or
 // (while dirty) ignored outright — per the user's own explicit request
 // to open or close Details *while Properties stays open*, the same
-// "also works while Properties is open" carve-out
-// ToggleDetailsSidebarShortcut's own doc comment already makes for
-// Ctrl+D. The two already coexist independently of this (see
-// ComputeHashesShortcut's own doc comment); this is only what let the
-// click reach that existing mechanism in the first place. Scoped to
+// "also works while Properties is open" carve-out the "I" key's own
+// alsoOverProperties flag gives the keyboard path (see keymap.go). The
+// two already coexist independently of this (see ComputeHashesShortcut's
+// own doc comment); this is only what let the click reach that existing
+// mechanism in the first place. Scoped to
 // Properties and to Details alone — every other overlay, and every
 // other button-bar click, still gets the ordinary handling below.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
@@ -2210,8 +2210,8 @@ func (r *Root) clipboardTargets() []string {
 // cursor is currently on — the same fallback shape clipboardTargets
 // uses for Copy/Cut, but read directly from the panel's cursor instead
 // of r.target, so it also works for the keyboard-shortcut path (Entf,
-// Ctrl+R/Ctrl+Delete, Ctrl+S — see cmd/breakthrough), which never goes
-// through a right-click that would have set r.target at all.
+// "D"/Ctrl+Delete, "E" — see keymap.go/cmd/breakthrough), which never
+// goes through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
 	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
 		return paths

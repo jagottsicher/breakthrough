@@ -88,6 +88,16 @@ type plainCommand struct {
 	// the Trash)" would eat the whole row on its own). Unused, and left
 	// empty, on every command that isn't quick.
 	short string
+
+	// alsoOverProperties marks a command that must keep working even
+	// while Properties specifically is open (see
+	// acceptsPropertiesAwareKey) — Look, the Details toggle, and the
+	// Properties/Details-aware tool trio (hashes, directory size,
+	// metadata) all act on "whichever of Properties/Details currently
+	// applies", so Properties being the topmost overlay is one of the
+	// states they need, not a reason to stand down the way every other
+	// plain letter correctly does.
+	alsoOverProperties bool
 }
 
 // plainCommands is the whole single-letter layer, in one place —
@@ -127,7 +137,7 @@ func plainCommands() []plainCommand {
 		{key: 'q', label: "Quit", action: func(r *Root) { r.RequestQuit() }},
 		{key: 'a', label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
 		{key: 'u', label: "Undo last rename (Batch Rename's own undo — the only kind there is yet)", action: func(r *Root) { r.undoLastBatchRename() }},
-		{key: 'l', label: "Look", quick: true, short: "Look", action: func(r *Root) { r.lookCurrentEntry() }},
+		{key: 'l', label: "Look", quick: true, short: "Look", alsoOverProperties: true, action: func(r *Root) { r.lookCurrentEntry() }},
 		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
 		{key: ':', label: "Bash command line", action: func(r *Root) { r.app.SetFocus(r.bashLine) }},
 
@@ -146,7 +156,17 @@ func plainCommands() []plainCommand {
 		// captureOutsideClick's own carve-out, keyed on 'I' specifically),
 		// so dropping this from the permanent legend would quietly cost a
 		// deliberately-built mouse gesture, not just a documented one.
-		{key: 'I', label: "Details sidebar", quick: true, short: "Details", action: func(r *Root) { r.toggleDetailsSidebar() }},
+		{key: 'I', label: "Details sidebar", quick: true, short: "Details", alsoOverProperties: true, action: func(r *Root) { r.toggleDetailsSidebar() }},
+		// The three Properties/Details-aware tools: each already targets
+		// "whichever of Properties/Details currently applies" on its own
+		// (see ComputeHashesShortcut/ComputeDirSizeShortcut/
+		// FetchMetadataShortcut's own doc comments), and now also opens
+		// Details itself first if neither is open yet — so "select
+		// something, press the key" works from plain browsing too, not
+		// only once one of the two windows already happens to be open.
+		{key: 'h', label: "Compute hashes (Properties/Details, whichever applies)", alsoOverProperties: true, action: func(r *Root) { r.ComputeHashesShortcut() }},
+		{key: 'k', label: "Compute directory size, recursively (Details)", alsoOverProperties: true, action: func(r *Root) { r.ComputeDirSizeShortcut() }},
+		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
 		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'S', label: "Swap panes", action: func(r *Root) { r.swapPanesOrExplain() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
@@ -328,11 +348,22 @@ func (r *Root) HandlePlainKey(event *tcell.EventKey) bool {
 	if event.Key() != tcell.KeyRune || event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) != 0 {
 		return false
 	}
+
+	key := event.Rune()
+
+	// Checked before the ordinary gate below, not as a fallback after
+	// it fails: a command marked alsoOverProperties is meant to fire in
+	// either state, and acceptsPropertiesAwareKey's own first branch is
+	// exactly acceptsPlainKeyCommand again, so nothing is skipped by
+	// checking this one first.
+	if cmd, ok := plainCommandFor(key); ok && cmd.alsoOverProperties && r.acceptsPropertiesAwareKey() {
+		cmd.action(r)
+		return true
+	}
+
 	if !r.acceptsPlainKeyCommand() {
 		return false
 	}
-
-	key := event.Rune()
 	if family, ok := chordFamilyFor(key); ok {
 		r.startChord(family)
 		return true
@@ -342,6 +373,24 @@ func (r *Root) HandlePlainKey(event *tcell.EventKey) bool {
 		return true
 	}
 	return false
+}
+
+// acceptsPropertiesAwareKey reports whether a plainCommand marked
+// alsoOverProperties should act right now: the ordinary
+// acceptsPlainKeyCommand rule (a command marked this way still needs to
+// fire from plain browsing too, not only from inside Properties), or,
+// in addition, while Properties specifically is open and its own
+// text-editing field doesn't currently have real keyboard focus —
+// typing "h" into the Name field must insert a letter, not launch hash
+// computation. The same "Properties is exactly one of the states this
+// needs to keep working in" reasoning ComputeHashesShortcut and
+// ToggleDetailsSidebarShortcut's own doc comments already established
+// for Ctrl+K/Ctrl+D, before either had a plain-letter home.
+func (r *Root) acceptsPropertiesAwareKey() bool {
+	if r.acceptsPlainKeyCommand() {
+		return true
+	}
+	return r.activePage == propertiesPage && !r.propertiesEditField.HasFocus()
 }
 
 // startChord puts the application into chord mode: the button bar

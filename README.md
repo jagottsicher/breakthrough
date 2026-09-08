@@ -127,13 +127,13 @@ terminal.
   Properties, since almost nothing else still applies there.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `D`, `^R`, Ctrl+Entf
-  (best-effort — terminal-dependent; `D`/`^R` are always the reliable
-  ones), or the context menu's "Remove" permanently deletes instead (a
-  file like `rm`, a directory recursively like `rm -rf`, empty or not),
-  always behind a confirmation dialog with Cancel preselected — a single
-  stray keypress can never confirm it by itself. "Go to Trash" (the `g`
-  chord's own `gb`, or `^B`) jumps straight into it without needing to
+  that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
+  terminal-dependent; `D` is always the reliable one), or the context
+  menu's "Remove" permanently deletes instead (a file like `rm`, a
+  directory recursively like `rm -rf`, empty or not), always behind a
+  confirmation dialog with Cancel preselected — a single stray keypress
+  can never confirm it by itself. "Go to Trash" (the `g` chord's own
+  `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
   "Empty Trash" (`D`, same confirmation) round
   it out. Persistent by default — lives under

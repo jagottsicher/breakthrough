@@ -167,7 +167,7 @@ func optionCategories() []optionCategory {
 				},
 				boolOption("show_hidden", "Show hidden files",
 					"Whether dotfiles and dot-directories appear in the listing.\n\n"+
-						"The same thing Ctrl+G and the button bar's own Hide/Unhide toggle do.",
+						"The same thing \".\" and the button bar's own Hide/Unhide toggle do.",
 					false,
 					func(r *Root) bool { return r.panel.showHidden },
 					func(r *Root, b bool) { r.setShowHidden(b) },
@@ -227,7 +227,7 @@ func optionCategories() []optionCategory {
 				{
 					key:   "pager",
 					label: "Pager for Look",
-					help: "Which viewer \"Look\" (Ctrl+L) opens a file in.\n\n" +
+					help: "Which viewer \"Look\" (\"l\") opens a file in.\n\n" +
 						"\"Built-in\" uses breakthrough's own viewer, which needs nothing installed " +
 						"and can also show images and PDF pages.\n\n" +
 						"\"External\" hands the file to bat, less, $PAGER or more — whichever is " +

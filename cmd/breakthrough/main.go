@@ -156,78 +156,35 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Ctrl+E/Ctrl+L/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R (Edit/Look/toggle hidden
-	// files/Options/Search/Remove — see the bottom bar's own buttons)
-	// check their own preconditions before acting (see
-	// Root.acceptsGlobalShortcut) rather than always firing the way
-	// Ctrl+Q/Ctrl+C do: unlike those two, they'd otherwise step on the
-	// bash line's own typing. Ctrl+H is deliberately not one of them —
-	// it's indistinguishable from Backspace at the terminal protocol
-	// level (both send the same 0x08 byte), so Ctrl+G was used for
-	// "toggle hidden files" instead. Ctrl+O, previously left unclaimed,
-	// is Options (Ctrl+X used to be, before the dialog itself was
-	// renamed from Settings to Options and the shortcut moved to match).
-	// Rename itself lives on the plain-letter layer's own "r" now (see
-	// internal/ui/keymap.go), not a Ctrl combination at all — freeing
-	// Ctrl+R for Remove, which needed a letter matching its own name and
-	// Ctrl+R was the only one left.
+	// Almost every other Ctrl-letter binding this app once had has since
+	// been retired, each once its own action gained a plain-letter home
+	// on the primary keyboard layer (see internal/ui/keymap.go's own
+	// package doc) that covers the exact same ground — including, for
+	// Look/Details/hashes/directory-size/metadata, the same "also works
+	// while Properties is open" reach those five once needed a dedicated
+	// Ctrl combination for at all (see plainCommand.alsoOverProperties
+	// and acceptsPropertiesAwareKey in keymap.go). Two exceptions remain
+	// here, each for a reason a plain letter can't (yet) replace:
 	//
-	// Ctrl+_ (toggle mouse reporting, see Root.ToggleMouseShortcut's own
-	// doc comment for why this exists at all) sits with Ctrl+Q/Ctrl+C,
-	// not the six above: it has to fire unconditionally, since the whole
-	// point is grabbing text via the terminal's own native selection,
-	// which needs to work no matter what else is currently open — a
-	// dialog, the bash line, a plain directory listing. No function key
-	// reaches for this any more (see internal/ui/keymap.go's own package
-	// doc for why the plain-letter layer replaced every one of them),
-	// and every Ctrl-letter is genuinely unavailable by this point (each
-	// one is either already claimed above, natively bound by tview's own
-	// TextArea — verified directly against its source the same way every
-	// claim in this comment block is — or dead at the terminal protocol
-	// level, like Ctrl+H/I/M/J: byte-identical to Backspace/Tab/Enter/
-	// breakthrough's own bash-line "insert newline", respectively) — see
-	// Ctrl+_'s own case below for why that one specifically is still the
-	// right choice regardless.
-	//
-	// Ctrl+D (the Details sidebar, see internal/ui/detailssidebar.go)
-	// falls through to bashLine's own handling instead of always
-	// consuming the event, the same as Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B below:
-	// tview's own TextArea binds Ctrl+D to "delete forward" (verified
-	// directly against tview's own source, the same way every claim in
-	// this comment block is - see also the Ctrl+H note above for why
-	// guessing instead has already gone wrong once), the same key the
-	// physical Delete key already sends. Chosen over the alphabet's other
-	// options (A/D/K/U/W/Y all have some real, native TextArea binding of
-	// their own; H/I/M collide with Backspace/Tab/Enter at the terminal
-	// protocol level; V/X/Z are earmarked for planned Paste/Cut/Undo
-	// features instead) for its "Details" mnemonic and because losing
-	// delete-forward specifically, while bashLine has focus, is the
-	// least disruptive of the available real trade-offs - it's also the
-	// one native binding this app already has its own guarded equivalent
-	// for, on the physical Delete key itself, right below.
-	//
-	// Unlike those four, though, Ctrl+D is checked here via
-	// BashLineHasFocus alone, not the full AcceptsGlobalShortcut - it
-	// needs to keep working while Properties specifically is open too,
-	// per the user's own explicit request to open or close Details
-	// *alongside* Properties (see ToggleDetailsSidebarShortcut's own doc
-	// comment), not just while plainly browsing. This is the same shape
-	// Ctrl+K (compute hashes) and Ctrl+N (fetch metadata), both for the
-	// Details sidebar, already have for the same reason - Ctrl+H (the
-	// obvious mnemonic for "hash", matching Properties' own bare 'h')
-	// and Ctrl+M (the obvious one for "metadata") were both considered
-	// and rejected: Ctrl+H is the Backspace collision already noted
-	// above, and Ctrl+M is the same kind of collision with Enter (both
-	// send byte 0x0D) - no mnemonic survives that. Ctrl+K/Ctrl+N were
-	// picked from what's left as the two with the least real cost:
-	// TextArea's own Ctrl+K deletes to end of line, a real but
-	// infrequently-reached-for edit; Ctrl+N is only breakthrough's own
-	// bash-history-forward alias for Down (see the bash line's own help
-	// text) - Down itself is untouched. All three - Ctrl+D, Ctrl+K,
-	// Ctrl+N - need to keep working while Properties is open, not just
-	// while plainly browsing (see Root.ComputeHashesShortcut's own doc
-	// comment for why), which the full AcceptsGlobalShortcut Ctrl+T/
-	// Ctrl+P/Ctrl+S/Ctrl+B below still use would otherwise block.
+	//   - Ctrl+_ (toggle mouse reporting, see Root.ToggleMouseShortcut's
+	//     own doc comment) has to fire completely unconditionally — the
+	//     whole point is grabbing text via the terminal's own native
+	//     selection, which needs to work no matter what else is
+	//     currently open, including while typing in the bash line or a
+	//     text field a plain letter must never steal a keystroke from.
+	//     Kept on Ctrl+_ specifically because it's already known to
+	//     reach every keyboard/terminal combination this app targets,
+	//     and no terminal multiplexer claims it — tmux takes Ctrl+B,
+	//     screen and byobu Ctrl+A, dtach and abduco Ctrl+\.
+	//   - Ctrl+T (tab switcher) stays alongside "t" for one capability
+	//     "t" alone can't have: pressing it again while the switcher
+	//     itself is the open overlay walks to the next tab, which needs
+	//     to keep working precisely in the one state (an overlay
+	//     already open) every plain letter is correctly blocked in — see
+	//     its own case below.
+	//   - Ctrl+O (Options) has no plain-letter equivalent yet at all —
+	//     not a case of "kept for extra reach" like the two above, just
+	//     not migrated yet.
 	//
 	// Tab cycles focus among the panel, the Details sidebar (if it's
 	// showing) and every currently open tool window (see
@@ -238,14 +195,12 @@ func run() error {
 	// here has no room left to represent it - Tab itself already
 	// occupies the one byte (0x09) Ctrl+I would also use, so a real
 	// Ctrl+Tab keypress arrives as plain Tab, indistinguishable, on most
-	// terminals (the same class of problem as Ctrl+H/Ctrl+M above, just
-	// with no extended-protocol fallback tcell's decoder even attempts
-	// here) - and separately, most terminal emulators intercept Ctrl+Tab
-	// themselves for their own tab-switching before it would ever reach
-	// an application at all. Plain Tab is safe here specifically because
-	// it's genuinely unclaimed while any of those has focus: none of
-	// them installs a SetDoneFunc, so it was already a pure no-op in
-	// every state this repurposes it for.
+	// terminals - and separately, most terminal emulators intercept
+	// Ctrl+Tab themselves for their own tab-switching before it would
+	// ever reach an application at all. Plain Tab is safe here
+	// specifically because it's genuinely unclaimed while any of those
+	// has focus: none of them installs a SetDoneFunc, so it was already
+	// a pure no-op in every state this repurposes it for.
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// The primary keyboard layer (see internal/ui/keymap.go): plain
 		// letters, and the g/p/z chords built on top of them. Checked
@@ -282,45 +237,27 @@ func run() error {
 		case tcell.KeyCtrlC:
 			root.RequestCancel()
 			return nil
-		case tcell.KeyCtrlE:
-			root.EditShortcut()
-			return nil
-		case tcell.KeyCtrlL:
-			root.LookShortcut()
-			return nil
-		case tcell.KeyCtrlR:
-			root.PurgeShortcut()
-			return nil
-		case tcell.KeyCtrlG:
-			root.ToggleHiddenShortcut()
-			return nil
 		case tcell.KeyCtrlO:
 			root.OptionsShortcut()
 			return nil
-		case tcell.KeyCtrlF:
-			root.SearchShortcut()
-			return nil
 		case tcell.KeyCtrlT:
-			// A second keyboard path to the tab switcher, alongside F4
-			// (see Root.TabSwitcherShortcut) — per the user's own
-			// explicit request for a Ctrl combo too, since F-keys aren't
-			// available on every terminal/window-manager combination
-			// either. Not Trash's own key any more: Trash already had a
-			// second, more conventional trigger of its own (the physical
-			// Delete key, matching every mainstream file manager's
-			// convention — see TrashShortcut's own doc comment), which
-			// made Ctrl+T the one genuinely spare binding to repurpose
-			// rather than reaching for a letter that would cost bashLine
-			// a real, working readline feature for nothing already
-			// covered elsewhere.
+			// A second keyboard path to the tab switcher, alongside "t"
+			// (see Root.TabSwitcherShortcut) — kept for the one thing
+			// "t" alone can't do: press it again while the switcher
+			// itself is already the open overlay to walk to the next
+			// tab, rather than being blocked outright the way every
+			// plain letter correctly is once any overlay is open (see
+			// acceptsPlainKeyCommand). Ctrl+T's own gating below is
+			// narrower than that on purpose, precisely to keep this one
+			// case working.
 			//
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
-			// rather than always consuming the key the way the seven
-			// furthest above do.
+			// rather than always consuming the key the way Ctrl+_/Ctrl+Q/
+			// Ctrl+C/Ctrl+O above do.
 			//
 			// Checked via BashLineHasFocus alone, not the full
-			// AcceptsGlobalShortcut those others use: that also refuses
+			// AcceptsGlobalShortcut those four use: that also refuses
 			// whenever *any* overlay is open, and the tab switcher is
 			// one — so pressing Ctrl+T again to walk to the next tab
 			// (see Root.TabSwitcherShortcut) never reached it and did
@@ -333,84 +270,6 @@ func run() error {
 				return event
 			}
 			root.TabSwitcherShortcut()
-			return nil
-		case tcell.KeyCtrlS:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+T just above - readline-style Ctrl+S is "forward
-			// incremental search" in many shells' own line editing, even
-			// though bashLine itself doesn't implement that.
-			if !root.AcceptsGlobalShortcut() {
-				return event
-			}
-			root.SedReplaceShortcut()
-			return nil
-		case tcell.KeyCtrlP:
-			// bashLine's own captureBashLineKey binds Ctrl+P to command-
-			// history recall - falling through here (not consuming the
-			// event) while it has focus is what keeps that working; see
-			// Root.AcceptsGlobalShortcut's own doc comment for why this one
-			// specifically can't just always return nil the way the seven
-			// above do.
-			if !root.AcceptsGlobalShortcut() {
-				return event
-			}
-			root.PropertiesShortcut()
-			return nil
-		case tcell.KeyCtrlD:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+T/Ctrl+P/Ctrl+S/Ctrl+B above - tview's own TextArea
-			// binds Ctrl+D to "delete forward" (see the doc comment above
-			// this switch), a real, working feature that would otherwise
-			// be silently swallowed while typing a command. Checked
-			// directly here, not via the full AcceptsGlobalShortcut those
-			// four still use below - like Ctrl+K/Ctrl+N just below, this
-			// also needs to keep working while Properties specifically is
-			// open (see ToggleDetailsSidebarShortcut's own doc comment),
-			// which the fuller check would otherwise block there too.
-			if root.BashLineHasFocus() {
-				return event
-			}
-			root.ToggleDetailsSidebarShortcut()
-			return nil
-		case tcell.KeyCtrlK:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+D just above - tview's own TextArea binds Ctrl+K to
-			// "delete to end of line" (see the doc comment above this
-			// switch).
-			if root.BashLineHasFocus() {
-				return event
-			}
-			root.ComputeHashesShortcut()
-			return nil
-		case tcell.KeyCtrlN:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+K just above - it's breakthrough's own bash-history-
-			// forward alias (see the doc comment above this switch), not a
-			// native TextArea binding, but still a real, working one.
-			if root.BashLineHasFocus() {
-				return event
-			}
-			root.FetchMetadataShortcut()
-			return nil
-		case tcell.KeyCtrlU:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+D/Ctrl+K above - tview's own TextArea binds Ctrl+U
-			// to "delete the current line" (verified directly against its
-			// source, the same as every claim in this comment block).
-			// Chosen for the Details sidebar's own directory-size section
-			// (see Root.ComputeDirSizeShortcut, internal/ui/
-			// detailssidebar.go) for its "du" mnemonic — one of the few
-			// letters left with any real native TextArea binding still
-			// worth naming precisely rather than reaching for one of the
-			// three already earmarked for Paste/Cut/Undo. Needs to keep
-			// working while Properties specifically is open too, the same
-			// as Ctrl+D/Ctrl+K/Ctrl+N, so it's checked via
-			// BashLineHasFocus alone rather than the full
-			// AcceptsGlobalShortcut.
-			if root.BashLineHasFocus() {
-				return event
-			}
-			root.ComputeDirSizeShortcut()
 			return nil
 		case tcell.KeyTab:
 			// Ctrl+Tab steps through the panel tabs (see
@@ -494,16 +353,6 @@ func run() error {
 				return nil
 			}
 			return event
-		case tcell.KeyCtrlB:
-			// Falls through while bashLine has focus for the same reason
-			// as Ctrl+S/Ctrl+P above - readline-style Ctrl+B is
-			// "backward-char", and tview's TextArea binds it to its own
-			// PgUp-style movement.
-			if !root.AcceptsGlobalShortcut() {
-				return event
-			}
-			root.TrashbinShortcut()
-			return nil
 		case tcell.KeyDelete:
 			// Entf triggers the safe action (Trash), matching both the
 			// physical key's own label and the near-universal
@@ -511,13 +360,16 @@ func run() error {
 			// comment for the full reasoning. Ctrl+Delete for Remove is
 			// best-effort: tcell's own EventKey.Modifiers doc notes "it
 			// will not always be possible" to detect a modifier together
-			// with a non-alphanumeric key across every terminal —
-			// Ctrl+R above is the reliable path to Remove regardless of
-			// what this resolves to on any given terminal.
+			// with a non-alphanumeric key across every terminal — the
+			// plain-letter layer's "D" (see openRemoveConfirm/keymap.go)
+			// is the reliable path to Remove regardless of what this
+			// resolves to on any given terminal.
 			//
-			// Falls through un-consumed while bashLine has focus, the same
-			// as Ctrl+S/Ctrl+P above - otherwise this would eat a plain
-			// forward-delete keystroke while typing a command.
+			// Falls through un-consumed while bashLine has focus — Entf
+			// is tview's own TextArea binding for "delete forward" (the
+			// same as the physical Delete key), and losing that while
+			// typing a command would be a real, working feature silently
+			// broken.
 			if !root.AcceptsGlobalShortcut() {
 				return event
 			}

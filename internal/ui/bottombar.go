@@ -463,7 +463,7 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 	return tview.MouseConsumed, nil
 }
 
-// editCurrentEntry is the Edit button/Ctrl+E's actual action, also
+// editCurrentEntry is the Edit button/'e' key's actual action, also
 // reused directly as the context menu's own "Edit" item (see NewRoot):
 // a right-click already moves the table's cursor to the clicked row
 // before the menu opens (see captureMouse's MouseRightClick case), so
@@ -510,73 +510,79 @@ func (r *Root) renameRow(row int) {
 	r.openRename()
 }
 
-// acceptsGlobalShortcut reports whether Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/
-// Ctrl+R (see EditShortcut/ToggleHiddenShortcut/OptionsShortcut/
-// SearchShortcut/PurgeShortcut, wired up in cmd/breakthrough) should act
-// right now: no overlay is open, and the bash command line doesn't have
-// keyboard focus.
+// acceptsGlobalShortcut reports whether one of this group's Shortcut
+// methods (EditShortcut/ToggleHiddenShortcut/OptionsShortcut/
+// SearchShortcut/PurgeShortcut) should act right now: no overlay is
+// open, and the bash command line doesn't have keyboard focus. Of the
+// five, only OptionsShortcut (Ctrl+O) and PurgeShortcut (Ctrl+Delete —
+// see its own doc comment) are still wired up in cmd/breakthrough
+// today; Edit, ToggleHidden, and Search moved to plain letters on the
+// primary keyboard layer instead ('e'/'.'/'f' — see keymap.go), which
+// need no guard of their own (acceptsPlainKeyCommand already covers the
+// same ground more precisely — see RenameShortcut's own doc comment for
+// another Shortcut method in exactly that boat already). Their own
+// Shortcut wrappers are kept anyway, not deleted, as the same
+// exported-building-block shape RenameShortcut already established.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
-// work from literally anywhere, these five operate on "the currently
-// selected file", the hidden-files display, or open an overlay of their
+// work from literally anywhere, this group operates on "the currently
+// selected file", the hidden-files display, or opens an overlay of its
 // own — actions that only make sense while the panel itself is what's
 // focused, or (Options, Search) that would otherwise layer confusingly
 // on top of whatever's already open. Critically, this also keeps them
 // out of the bash line's way: tview's TextArea already implements
 // several readline-style keybindings of its own (Ctrl+A/Home,
-// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — since these five are captured
-// globally, at the Application level (see cmd/breakthrough), they'd
-// reach and consume the keystroke before bashLine's own InputCapture or
-// TextArea's own default handling ever saw it, silently defeating both
-// that and the muscle memory this line is explicitly meant to feel like
-// bash — hence checking this first and no-op'ing instead.
+// Ctrl+E/End, Ctrl+B/PgUp, Ctrl+F/PgDn) — a global, Application-level
+// capture (see cmd/breakthrough) would otherwise reach and consume the
+// keystroke before bashLine's own InputCapture or TextArea's own
+// default handling ever saw it, silently defeating both that and the
+// muscle memory this line is explicitly meant to feel like bash — hence
+// checking this first and no-op'ing instead.
 func (r *Root) acceptsGlobalShortcut() bool {
 	return r.activePage == "" && !r.bashLine.HasFocus()
 }
 
 // AcceptsGlobalShortcut is acceptsGlobalShortcut, exported for
-// cmd/breakthrough: Ctrl+P (see PropertiesShortcut), Entf (see
-// TrashShortcut in trash.go), Ctrl+T (see TabSwitcherShortcut in
-// tabs.go), Ctrl+B (see TrashbinShortcut), and Ctrl+S (see
-// SedReplaceShortcut) need to decide, before even calling their
-// own Shortcut method, whether to consume the key at all — unlike the
-// seven above, which always return
-// nil regardless (an accepted, minor imperfection for keys TextArea
-// might bind natively), each of these collides with a real, explicit
-// feature of this same codebase: bashLine's own captureBashLineKey
-// binds Ctrl+P to command-history recall, for instance. Consuming one
-// of them unconditionally at the Application level would silently break
-// that native behavior every time the bash line has focus, not just
-// fail to fire the intended action — so cmd/breakthrough falls through
-// to bashLine's own handling (returns the event, not nil) whenever this
-// reports false, rather than swallowing it either way.
+// cmd/breakthrough: Entf/Ctrl+Delete (see TrashShortcut/PurgeShortcut in
+// trash.go) and Ctrl+T (see TabSwitcherShortcut in tabs.go) need to
+// decide, before even calling their own Shortcut method, whether to
+// consume the key at all — unlike Ctrl+_/Ctrl+Q/Ctrl+C/Ctrl+O above,
+// which always return nil regardless (an accepted, minor imperfection
+// for keys TextArea might bind natively), each of these collides with a
+// real, explicit feature of this same codebase: bashLine's own
+// captureBashLineKey binds Ctrl+P to command-history recall, for
+// instance, one reason Properties moved off Ctrl+P entirely onto the
+// plain-letter layer's own 'i' instead of joining this group. Consuming
+// one of them unconditionally at the Application level would silently
+// break that native behavior every time the bash line has focus, not
+// just fail to fire the intended action — so cmd/breakthrough falls
+// through to bashLine's own handling (returns the event, not nil)
+// whenever this reports false, rather than swallowing it either way.
 func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
 }
 
 // BashLineHasFocus is acceptsGlobalShortcut's own bashLine.HasFocus()
-// half, exported on its own for cmd/breakthrough: Ctrl+K
-// (ComputeHashesShortcut) and Ctrl+N (FetchMetadataShortcut) both bind
-// keys tview's own TextArea gives a real, native meaning (delete-to-
-// end-of-line, history-recall-adjacent movement — see the doc comment
-// above), so like every AcceptsGlobalShortcut-gated shortcut, they must
-// fall through instead of consuming the key while bashLine has focus.
-// Unlike those, though, they deliberately do NOT also require
-// activePage == "" — both need to keep firing while Properties
-// specifically is open (that's exactly the case ComputeHashesShortcut
-// itself has to tell apart — see its own doc comment), which
-// AcceptsGlobalShortcut's coarser, combined check would otherwise block
-// outright.
+// half, exported on its own for cmd/breakthrough's Ctrl+T case: unlike
+// every AcceptsGlobalShortcut-gated shortcut above, walking to the next
+// tab while the switcher itself is already the open overlay (see
+// TabSwitcherShortcut's own doc comment) must NOT also require
+// activePage == "" — the switcher being open is exactly the state it
+// needs to keep working in, which AcceptsGlobalShortcut's coarser,
+// combined check would otherwise block outright. Still needs to fall
+// through instead of consuming the key while bashLine has focus, same
+// as everything else in this file, which is the one piece of
+// acceptsGlobalShortcut this still needs on its own.
 func (r *Root) BashLineHasFocus() bool {
 	return r.bashLine.HasFocus()
 }
 
 // EditShortcut, ToggleHiddenShortcut, OptionsShortcut, and
-// SearchShortcut are Ctrl+E, Ctrl+G, Ctrl+O, and Ctrl+F's global actions
-// (see cmd/breakthrough and acceptsGlobalShortcut for why they check
-// first rather than acting unconditionally). LookShortcut (Ctrl+L) and
-// PurgeShortcut (Ctrl+R, Remove) are the same shape, defined alongside
-// the rest of Look/Trash in viewer.go/trash.go instead of here.
+// SearchShortcut are acceptsGlobalShortcut's own remaining group (see
+// its doc comment for which of the four cmd/breakthrough still actually
+// calls today). LookShortcut and PurgeShortcut (Remove) are the same
+// shape, defined alongside the rest of Look/Trash in viewer.go/trash.go
+// instead of here.
 //
 // RenameShortcut, right below, is the same shape too, but nothing in
 // cmd/breakthrough currently calls it — Rename's own real keyboard path

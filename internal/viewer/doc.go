@@ -1,7 +1,7 @@
 // Package viewer implements the read-only, "just show me what's in this
 // file" backend behind breakthrough's Look feature (see internal/ui —
-// LookShortcut/openLook, the Look context-menu entry, and the ^L button in
-// the bottom bar). Look is deliberately separate from Edit
+// openLook, the Look context-menu entry, and the "l" key/bottom-bar
+// button). Look is deliberately separate from Edit
 // (internal/ui.runEditor): it never modifies the file, and it works even
 // when $VISUAL/$EDITOR isn't set to anything at all.
 //

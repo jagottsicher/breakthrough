@@ -80,7 +80,7 @@ func TestMouseStatusText(t *testing.T) {
 
 // TestContextMenuEditRunsEditCurrentEntry pins the "Edit" menu item (see
 // contextMenuTree): it's wired to editCurrentEntry, the same action the
-// bottom bar's own Edit button/Ctrl+E already runs — see
+// bottom bar's own Edit button/"e" key already runs — see
 // editCurrentEntry's own doc comment for why reading
 // Panel.CurrentRowPath there already targets whichever row the context
 // menu was opened for, without this item needing r.target itself.

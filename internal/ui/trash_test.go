@@ -338,9 +338,9 @@ func TestTrashShortcutsNoOpWhileAnOverlayIsOpen(t *testing.T) {
 // TestMoveSelectionToTrashInsideTrashRedirectsToRemove pins
 // moveSelectionToTrash's own redirect (see its doc comment): a second
 // "Move to Trash" on something already in the trash has nowhere left to
-// go, so it opens the same Remove confirmation Ctrl+R/the context
-// menu's own "Remove" would, Cancel preselected the same as any other
-// Remove — not a silent no-op, and not an unconfirmed delete either.
+// go, so it opens the same Remove confirmation "D"/the context menu's
+// own "Remove" would, Cancel preselected the same as any other Remove —
+// not a silent no-op, and not an unconfirmed delete either.
 func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 	r.moveSelectionToTrash()
@@ -368,8 +368,9 @@ func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
 	}
 }
 
-// TestTrashbinShortcutOpensTrash pins Ctrl+B's own action
-// (Root.TrashbinShortcut): the same navigation openTrash itself does.
+// TestTrashbinShortcutOpensTrash pins TrashbinShortcut's own guarded
+// action (see its doc comment on why it's kept despite no longer being
+// wired to Ctrl+B): the same navigation openTrash itself does.
 func TestTrashbinShortcutOpensTrash(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.moveSelectionToTrash()
@@ -386,7 +387,7 @@ func TestTrashbinShortcutOpensTrash(t *testing.T) {
 }
 
 // TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen mirrors
-// TestTrashShortcutsNoOpWhileAnOverlayIsOpen above for Ctrl+B.
+// TestTrashShortcutsNoOpWhileAnOverlayIsOpen above for TrashbinShortcut.
 func TestTrashbinShortcutNoOpsWhileAnOverlayIsOpen(t *testing.T) {
 	r, dir, _ := newTestRootWithFile(t)
 
