@@ -136,6 +136,22 @@ type Theme struct {
 	// executable keeps that color instead, since those all say something
 	// more specific and more worth noticing than "this is a dotfile".
 	EntryHidden string `json:"entry_hidden"`
+
+	// WarningText and CriticalText are this app's own "stopper colors" —
+	// deliberately jarring against the rest of a scheme, for the rare
+	// moment something needs to grab attention rather than blend in. Per
+	// the user's own explicit request, formalized into the theme rather
+	// than staying a hardcoded tcell.ColorOrange/tcell.ColorRed the way
+	// they used to be (see diskUsageWarnColor in internal/ui/
+	// bottombar.go, their first and — so far — only use: the status
+	// bar's own disk/inode usage percentage, orange at 80% or more,
+	// red at 90% or more) — a scheme that already leans orange or red
+	// elsewhere would otherwise have no way to still make this one
+	// specific thing stand out. Foreground-only, the same as
+	// Text/PlaceholderText, since both are drawn as plain colored text
+	// rather than a colored background field.
+	WarningText  string `json:"warning_text"`
+	CriticalText string `json:"critical_text"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -160,6 +176,9 @@ type ResolvedTheme struct {
 	EntryUnreadable tcell.Color
 	EntryArchive    tcell.Color
 	EntryHidden     tcell.Color
+
+	WarningText  tcell.Color
+	CriticalText tcell.Color
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -188,6 +207,9 @@ func DefaultTheme() Theme {
 		EntryUnreadable: "#ad0000",
 		EntryArchive:    "fuchsia",
 		EntryHidden:     "dimgray",
+
+		WarningText:  "orange",
+		CriticalText: "red",
 	}
 }
 
@@ -227,6 +249,9 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntryUnreadable: resolve(t.EntryUnreadable, def.EntryUnreadable),
 		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
 		EntryHidden:     resolve(t.EntryHidden, def.EntryHidden),
+
+		WarningText:  resolve(t.WarningText, def.WarningText),
+		CriticalText: resolve(t.CriticalText, def.CriticalText),
 	}
 }
 

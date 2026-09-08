@@ -199,29 +199,31 @@ func TestClockTextFormat(t *testing.T) {
 // diskUsageWarnColor below) built on top of fsops.DiskUsage.
 
 func TestDiskUsageWarnColor(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
 	tests := []struct {
 		percent int
 		want    tcell.Color
 	}{
 		{0, tcell.ColorDefault},
 		{79, tcell.ColorDefault},
-		{80, tcell.ColorOrange},
-		{89, tcell.ColorOrange},
-		{90, tcell.ColorRed},
-		{100, tcell.ColorRed},
+		{80, theme.WarningText},
+		{89, theme.WarningText},
+		{90, theme.CriticalText},
+		{100, theme.CriticalText},
 	}
 	for _, tt := range tests {
-		if got := diskUsageWarnColor(tt.percent); got != tt.want {
+		if got := diskUsageWarnColor(tt.percent, theme); got != tt.want {
 			t.Errorf("diskUsageWarnColor(%d) = %v, want %v", tt.percent, got, tt.want)
 		}
 	}
 }
 
 func TestFormatUsagePercentColorsAboveThresholds(t *testing.T) {
-	if got := formatUsagePercent(50); got != "50%" {
+	theme := config.DefaultTheme().Resolve()
+	if got := formatUsagePercent(50, theme); got != "50%" {
 		t.Errorf("formatUsagePercent(50) = %q, want plain %q (no warning)", got, "50%")
 	}
-	got := formatUsagePercent(95)
+	got := formatUsagePercent(95, theme)
 	if !strings.Contains(got, "95%") || !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "[-]") {
 		t.Errorf("formatUsagePercent(95) = %q, want a color-tagged \"95%%\"", got)
 	}
@@ -247,10 +249,11 @@ func TestHumanCount(t *testing.T) {
 
 func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
 	u := fsops.DiskUsage{UsedBytes: 1024, AvailBytes: 2048, UsedInodes: 10, AvailInodes: 20, UsePercent: 50, InodePercent: 50}
-	if got := diskUsageText(u); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+	theme := config.DefaultTheme().Resolve()
+	if got := diskUsageText(u, theme); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
 		t.Errorf("diskUsageText(%+v) = %q, want it labeled with \"Disk\"/\"used\"/\"free\"", u, got)
 	}
-	if got := inodeUsageText(u); !strings.HasPrefix(got, "Inodes ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
+	if got := inodeUsageText(u, theme); !strings.HasPrefix(got, "Inodes ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
 		t.Errorf("inodeUsageText(%+v) = %q, want it labeled with \"Inodes\"/\"used\"/\"free\"", u, got)
 	}
 }
