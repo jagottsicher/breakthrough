@@ -146,8 +146,9 @@ recognized archive, dim gray for a dotfile.
 ## Selecting files
 
 `Space` checks or unchecks the row under the cursor. Right-drag over
-several rows toggles all of them. The context menu adds Select all,
-Deselect all, and glob-pattern Select +/− for things like `*.log`.
+several rows toggles all of them. The context menu's own "▸ Selection"
+submenu adds Select all, Deselect all, and glob-pattern Select +/− for
+things like `*.log`.
 
 Every bulk action — Copy, Cut, Move to Trash, Remove, Sed Replace, Batch
 rename — acts on the checked selection if there is one, and otherwise on
@@ -231,12 +232,65 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-`m`, or right-click anywhere in the listing. The menu is grouped: the entry
-under the cursor first (Look, Rename, Edit, `tail -f`, Properties), then
-Selection, Commands, Delete, Tabs, Tools, and Globals.
+`m`, or right-click anywhere in the listing.
 
-Everything in it is also reachable from the keyboard or the button bar —
-the menu is a discovery aid, never the only path to a feature.
+Only what actually applies right now is shown — not a fixed list of
+everything the menu can ever do. On a plain file, that's:
+
+```
+Look
+Edit
+Rename
+Copy
+Cut
+Move to Trash
+Properties
+▸ More actions
+▸ Selection
+▸ Tabs & Split
+```
+
+A few of these come and go on their own: **Edit** (and, one level into
+"More actions", **tail -f**) drop out entirely for a directory — neither
+means anything there. **Paste** only appears once Copy or Cut has
+actually put something in the clipboard. Inside "Tabs & Split",
+**Split orientation** and **Swap panes** only show up once a split is
+actually active — there's nothing to orient or swap before that.
+
+**While browsing the Trash itself**, the whole menu is replaced by a
+much shorter one — almost nothing about the ordinary list still applies
+to something already trashed:
+
+```
+Restore from Trash
+Empty Trash
+Properties
+```
+
+**Submenus** (marked with `▸`) replace the current list with just that
+group's own entries, led by a `◂ Back` row — the same "drill in, one
+level at a time" shape a settings app on a phone already uses, chosen
+over a flyout beside the menu since it needs no horizontal room a
+narrow terminal might not have. `Escape` backs out one level at a time
+(a second press closes the menu once you're back at the top); Left
+arrow does the same, alongside clicking or selecting `◂ Back` itself.
+The menu's own title bar names where you are — "Menu" at the top,
+"Menu › Selection" one level in.
+
+- **▸ More actions** — `tail -f` (files only), `chown`, `chmod`, `sed`,
+  Batch rename, Undo last rename, Remove (the permanent, asks-first
+  sibling of Move to Trash above).
+- **▸ Selection** — Select all, Deselect all, Select +, Select -
+  (checkbox-based, the same these already reach on their own keys).
+- **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
+  Split orientation, Swap panes.
+
+Everything in the menu is also reachable from the keyboard or the
+button bar — the menu is a discovery aid, never the only path to a
+feature. The hidden-files/size-format/time-format toggles that used to
+live at the bottom of this menu are Options-screen and keyboard-only
+now (`.` and the `z` chord) — they're a view setting for the whole
+panel, not an action on whatever the menu was opened for.
 
 ## Batch rename
 

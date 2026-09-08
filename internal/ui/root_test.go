@@ -78,51 +78,8 @@ func TestMouseStatusText(t *testing.T) {
 	}
 }
 
-// TestContextMenuStructure pins the menu's grouping: Look/Rename/Edit/
-// tail -f/Properties, then a "Selection" section, a "Commands" section,
-// a "Delete" section, and a "Globals" section, in that order — the shape
-// Root.NewRoot builds it in.
-func TestContextMenuStructure(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	want := []string{
-		"Look", "Rename", "Edit", "tail -f", "Properties",
-		menuSectionLabel("Selection"),
-		"Select all", "Deselect all", "Select +", "Select -",
-		menuSectionLabel("Commands"),
-		"Copy", "Cut", "Paste", "chown", "chmod", "sed",
-		"Batch rename", "Undo last rename", // see batchrename.go
-		menuSectionLabel("Delete"),
-		"Move to Trash", "Remove", "Go to Trash", "Restore from Trash", "Empty Trash",
-		menuSectionLabel("Tabs"),
-		"New tab", "Close tab", "Switch tab...",
-		"Split view", "Split above/below", // relabelled per state — see splitToggleLabel
-		"Swap panes",
-		menuSectionLabel("Tools"),
-		"Ping (test)",   // placeholder entry point for the first toolWindow slice — see toolwindow.go
-		"grep", "zgrep", // also placeholders — see placeholderMenuAction
-		"du", "df", // also placeholders — see placeholderMenuAction
-		menuSectionLabel("Globals"),
-		"Hide hidden files",      // dotfiles are shown by default now
-		"Show size in bytes",     // human-readable is the default
-		"Show time as timestamp", // formatted is the default
-	}
-	if got := r.menu.GetItemCount(); got != len(want) {
-		t.Fatalf("menu has %d items, want %d", got, len(want))
-	}
-	for i, wantText := range want {
-		if main, _ := r.menu.GetItemText(i); main != wantText {
-			t.Errorf("item %d = %q, want %q", i, main, wantText)
-		}
-	}
-}
-
-// TestContextMenuEditRunsEditCurrentEntry pins the new "Edit" menu item
-// (see NewRoot): it's wired to editCurrentEntry, the same action the
+// TestContextMenuEditRunsEditCurrentEntry pins the "Edit" menu item (see
+// contextMenuTree): it's wired to editCurrentEntry, the same action the
 // bottom bar's own Edit button/Ctrl+E already runs — see
 // editCurrentEntry's own doc comment for why reading
 // Panel.CurrentRowPath there already targets whichever row the context
@@ -137,71 +94,15 @@ func TestContextMenuEditRunsEditCurrentEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
+	r.panel.focusRow(2) // off ".." onto apple.txt (row 1 is app-data/ — directories sort first, see fixtureDir)
 	r.target = filepath.Join(dir, "apple.txt")
+	r.targetRow = 2
 	r.showMenu(0, 0) // open the context menu the way a real right-click would
 
-	editIdx := -1
-	for i := 0; i < r.menu.GetItemCount(); i++ {
-		if main, _ := r.menu.GetItemText(i); main == "Edit" {
-			editIdx = i
-			break
-		}
-	}
-	if editIdx < 0 {
-		t.Fatal(`no "Edit" item found in the context menu`)
-	}
-
-	r.menu.SetCurrentItem(editIdx)
-	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	selectMenuItem(t, r, "Edit")
 
 	if r.activePage == errorPage {
 		t.Errorf("selecting Edit should not report an error here, got: %q", r.errorView.GetText(true))
-	}
-}
-
-// TestContextMenuPlaceholderItemsShowANotImplementedNotice pins
-// placeholderMenuAction's own behavior for the reminder-only menu
-// entries (grep, zgrep, du, df — see NewRoot's own comments on each)
-// added ahead of the real features they stand in for: selecting one shows
-// a plain notice rather than doing nothing at all, so it reads as "not
-// built yet" instead of a dead, possibly-broken button.
-func TestContextMenuPlaceholderItemsShowANotImplementedNotice(t *testing.T) {
-	dir := fixtureDir(t)
-	for _, label := range []string{"grep", "zgrep", "du", "df"} {
-		t.Run(label, func(t *testing.T) {
-			r, err := NewRoot(tview.NewApplication(), dir)
-			if err != nil {
-				t.Fatalf("NewRoot: %v", err)
-			}
-			r.showMenu(0, 0)
-
-			idx := -1
-			for i := 0; i < r.menu.GetItemCount(); i++ {
-				if main, _ := r.menu.GetItemText(i); main == label {
-					idx = i
-					break
-				}
-			}
-			if idx < 0 {
-				t.Fatalf("no %q item found in the context menu", label)
-			}
-
-			r.menu.SetCurrentItem(idx)
-			r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
-
-			if r.activePage != errorPage {
-				t.Fatalf("activePage = %q, want %q (the placeholder notice)", r.activePage, errorPage)
-			}
-			// The error view wraps long lines, so the notice's own text
-			// can arrive with newlines mid-word — collapse whitespace
-			// before checking, the actual wrapping isn't what this test
-			// is about.
-			got := strings.Join(strings.Fields(r.errorView.GetText(true)), " ")
-			if !strings.Contains(got, label) || !strings.Contains(got, "not implemented yet") {
-				t.Errorf("notice = %q, want it to name %q and say \"not implemented yet\"", got, label)
-			}
-		})
 	}
 }
 
@@ -252,10 +153,11 @@ func TestUpdateOverlayTitleBarColorsTracksActiveOverlay(t *testing.T) {
 	}
 }
 
-// TestToggleHiddenViaMenu drives the actual menu action, and pins that
-// the item's own label flips to describe the next click, not the current
-// state.
-func TestToggleHiddenViaMenu(t *testing.T) {
+// TestToggleHidden pins the "." key's own action — no menu label to
+// check any more (see contextmenu.go's own package doc on why the
+// "Globals" toggles were dropped from the menu entirely), just the
+// state flip and its effect on the listing.
+func TestToggleHidden(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".hidden"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -265,20 +167,14 @@ func TestToggleHiddenViaMenu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-
-	// Dotfiles are shown by default, so the item starts out offering to
-	// hide them.
-	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Hide hidden files" {
-		t.Fatalf("setup: hidden-toggle label = %q, want %q", main, "Hide hidden files")
+	if !r.panel.showHidden {
+		t.Fatal("setup: dotfiles should be shown by default")
 	}
 
 	r.toggleHidden()
 
 	if r.panel.showHidden {
 		t.Error("showHidden should be false after toggling once")
-	}
-	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Show hidden files" {
-		t.Errorf("hidden-toggle label = %q, want %q", main, "Show hidden files")
 	}
 	for row := 0; row < r.panel.table.GetRowCount(); row++ {
 		if ref, ok := r.panel.rowRef(row); ok && ref.name == ".hidden" {
@@ -290,32 +186,24 @@ func TestToggleHiddenViaMenu(t *testing.T) {
 	if !r.panel.showHidden {
 		t.Error("showHidden should be true again after toggling twice")
 	}
-	if main, _ := r.menu.GetItemText(r.hiddenToggleIdx); main != "Hide hidden files" {
-		t.Errorf("hidden-toggle label = %q, want %q", main, "Hide hidden files")
-	}
 }
 
-// TestToggleSizeBytesViaMenu mirrors TestToggleHiddenViaMenu for the
-// Size-format toggle: drives the actual menu action, checks the label
-// flips and the rendered column changes.
-func TestToggleSizeBytesViaMenu(t *testing.T) {
+// TestToggleSizeBytes mirrors TestToggleHidden for the Size-format
+// toggle (the "z" chord's own "s" member).
+func TestToggleSizeBytes(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-
-	if main, _ := r.menu.GetItemText(r.sizeFormatToggleIdx); main != "Show size in bytes" {
-		t.Fatalf("setup: size-format label = %q, want %q", main, "Show size in bytes")
+	if r.panel.sizeBytes {
+		t.Fatal("setup: human-readable should be the default")
 	}
 
 	r.toggleSizeBytes()
 
 	if !r.panel.sizeBytes {
 		t.Error("sizeBytes should be true after toggling once")
-	}
-	if main, _ := r.menu.GetItemText(r.sizeFormatToggleIdx); main != "Show size (human-readable)" {
-		t.Errorf("size-format label = %q, want %q", main, "Show size (human-readable)")
 	}
 
 	r.toggleSizeBytes()
@@ -324,26 +212,22 @@ func TestToggleSizeBytesViaMenu(t *testing.T) {
 	}
 }
 
-// TestToggleMtimeUnixViaMenu mirrors TestToggleHiddenViaMenu for the
-// Modified-format toggle.
-func TestToggleMtimeUnixViaMenu(t *testing.T) {
+// TestToggleMtimeUnix mirrors TestToggleHidden for the Modified-format
+// toggle (the "z" chord's own "t" member).
+func TestToggleMtimeUnix(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show time as timestamp" {
-		t.Fatalf("setup: mtime-format label = %q, want %q", main, "Show time as timestamp")
+	if r.panel.mtimeUnix {
+		t.Fatal("setup: formatted should be the default")
 	}
 
 	r.toggleMtimeUnix()
 
 	if !r.panel.mtimeUnix {
 		t.Error("mtimeUnix should be true after toggling once")
-	}
-	if main, _ := r.menu.GetItemText(r.mtimeFormatToggleIdx); main != "Show time formatted" {
-		t.Errorf("mtime-format label = %q, want %q", main, "Show time formatted")
 	}
 
 	r.toggleMtimeUnix()

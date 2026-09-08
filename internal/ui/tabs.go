@@ -171,8 +171,6 @@ func (r *Root) switchToTab(i int) {
 	r.remountPanels()
 
 	r.refreshTabStrips()
-	r.syncGlobalsMenuLabels()
-	r.syncSplitMenuLabels()
 	r.refreshStatusBar()
 	r.refreshDetailsSidebar()
 

@@ -223,10 +223,9 @@ type chordFamily struct {
 // copying a path or name to the *system* clipboard needs its own design
 // (X11/Wayland/OSC-52-over-SSH all differ) that doesn't exist yet — see
 // the project's own longer-term notes on this. Each member reports that
-// plainly, the same way placeholderMenuAction already does for a
-// context-menu entry ahead of its real feature, rather than silently
-// doing nothing or not appearing in the hint bar at all — an absent key
-// looks like an oversight; a key that explains itself does not.
+// plainly (see reservedYankMember) rather than silently doing nothing or
+// not appearing in the hint bar at all — an absent key looks like an
+// oversight; a key that explains itself does not.
 func chordFamilies() []chordFamily {
 	return []chordFamily{
 		{prefix: 'g', name: "go", quick: true, members: []chordMember{

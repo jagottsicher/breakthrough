@@ -108,12 +108,23 @@ terminal.
   selection back when you need it, even with a dialog open) rather than
   a whole prefix tree — picked because no terminal multiplexer claims
   it (tmux takes `^B`, screen and byobu `^A`, dtach `^\`).
-- A context menu on `m` or right-click: Properties (editable — name, permissions,
-  click a bit or type the octal value directly, owner and group via a
-  scrollable picker of every local user/group, modified date and time),
-  Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
-  glob-pattern Select +/-), Copy/Cut/Paste, chmod, chown, Sed Replace,
-  and the trash actions below.
+- A context menu on `m` or right-click, showing only what actually
+  applies right now rather than a fixed list of everything it can ever
+  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Paste
+  (Paste only once the clipboard has something in it), Move to Trash,
+  Properties (editable — name, permissions, click a bit or type the
+  octal value directly, owner and group via a scrollable picker of
+  every local user/group, modified date and time), plus three `▸`
+  submenus that replace the list in place when chosen (Windows
+  Explorer's own cascading-menu idea, without needing room to open
+  beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
+  Batch rename, Undo last rename, Remove), "Selection" (Select
+  all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
+  close tab, Switch tab..., Split on/off, orientation and Swap panes —
+  the last two only once a split actually exists). `◂ Back`, `Escape`,
+  or Left arrow step back out one level at a time. Browsing the Trash
+  itself replaces the whole menu with just Restore/Empty Trash/
+  Properties, since almost nothing else still applies there.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, `^R`, Ctrl+Entf

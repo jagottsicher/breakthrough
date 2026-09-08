@@ -68,13 +68,11 @@ type overlayFrame struct {
 // it has unsaved edits in progress, which blocks that instead (see
 // propertiesDirty).
 //
-// The context menu is grouped into three parts: Properties/Rename, a
-// "Selection" section (Select all/Deselect all/Select +/Select -,
-// operating on the checkbox column), and a "Commands" section
-// (Copy/Cut/Paste/chown/chmod). See menuSectionLabel for how the section
-// dividers are drawn, and docs/whitepaper.md for the dialog-based
-// Copy-to/Move-to planned as a possible later addition alongside the
-// clipboard-style Copy/Cut/Paste built here.
+// The context menu itself (its registry, rendering, and drill-down
+// submenu navigation) lives in contextmenu.go — see that file's own
+// package doc for the full shape. docs/whitepaper.md has the
+// dialog-based Copy-to/Move-to planned as a possible later addition
+// alongside the clipboard-style Copy/Cut/Paste built here.
 //
 // Properties (see properties.go) is also where Name, Permissions, and
 // Modified can be edited in place — Owner/Group are still read-only,
@@ -765,22 +763,16 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
-	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are the
-	// "Globals" section's three toggle items' indices in r.menu, set once
-	// in NewRoot — needed so toggleHidden/toggleSizeBytes/toggleMtimeUnix
-	// and showMenu can relabel their own item in place (see
-	// hiddenToggleLabel/sizeFormatToggleLabel/mtimeFormatToggleLabel) to
-	// describe what clicking it will do next, rather than a static label
-	// that stops matching reality after the first click.
-	hiddenToggleIdx      int
-	sizeFormatToggleIdx  int
-	mtimeFormatToggleIdx int
-
-	// splitToggleIdx/splitOrientationIdx are the same thing for the
-	// "Tabs" section's own two split-view items (see split.go and
-	// syncSplitMenuLabels).
-	splitToggleIdx      int
-	splitOrientationIdx int
+	// menuInSubmenu is nil while the context menu shows its own top-level
+	// entries (see contextMenuTree in contextmenu.go), or points at
+	// whichever entry's own submenu is currently drilled into — the menu
+	// is rebuilt fresh from this (and every other bit of live state a
+	// visible/dynamicLabel func reads) on every render
+	// (renderContextMenu), rather than individual items being mutated in
+	// place by index the way an earlier version of this menu worked. Reset
+	// to nil whenever the menu closes, so the next open always starts back
+	// at the top.
+	menuInSubmenu *menuEntry
 
 	// target is the absolute path the context menu / rename prompt is
 	// currently acting on. targetRow is its table row *index* (0 = "..",
@@ -954,109 +946,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu = tview.NewList().ShowSecondaryText(false)
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
-	// Look first and default-selected (see showMenu's own
-	// SetCurrentItem(0)), per the user's own explicit request — the
-	// same read-only, no-side-effects action Enter on a plain file now
-	// tries too (see Panel.activateRow), so it's also this menu's own
-	// most-likely-wanted default.
-	r.menu.AddItem("Look", "", 0, r.lookCurrentEntry)
-	r.menu.AddItem("Rename", "", 0, r.openRename)
-	r.menu.AddItem("Edit", "", 0, r.editCurrentEntry)
-	r.menu.AddItem("tail -f", "", 0, r.tailCurrentEntry) // lowercase, per the user's own explicit request — it's a command name, not a title
-	r.menu.AddItem("Properties", "", 0, r.openProperties)
-	r.menu.AddItem(menuSectionLabel("Selection"), "", 0, nil)
-	// Closures over r.panel, not r.panel.selectAll/deselectAll directly:
-	// a bound method value captures the receiver at the moment it's
-	// taken, which here is the first tab's panel, forever. Every other
-	// entry in this menu already goes through an r.* method that reads
-	// r.panel live — these two were the only ones reaching past it, and
-	// would have kept operating on tab 1 no matter which tab was on
-	// screen (see switchToTab, which repoints r.panel).
-	r.menu.AddItem("Select all", "", 0, func() { r.panel.selectAll() })
-	r.menu.AddItem("Deselect all", "", 0, func() { r.panel.deselectAll() })
-	r.menu.AddItem("Select +", "", 0, r.openSelectPlus)
-	r.menu.AddItem("Select -", "", 0, r.openSelectMinus)
-	r.menu.AddItem(menuSectionLabel("Commands"), "", 0, nil)
-	r.menu.AddItem("Copy", "", 0, r.copyToClipboard)
-	r.menu.AddItem("Cut", "", 0, r.cutToClipboard)
-	r.menu.AddItem("Paste", "", 0, r.pasteClipboard)
-	r.menu.AddItem("chown", "", 0, r.openChown)
-	r.menu.AddItem("chmod", "", 0, r.openChmod)
-	r.menu.AddItem("sed", "", 0, r.openSedReplace)
-	// Sits beside sed rather than up with plain Rename: this operates on
-	// the checkbox selection with a pattern, the same shape every other
-	// entry in this section already has, not on a single targeted entry
-	// the way Rename does. See batchrename.go for the screen itself.
-	r.menu.AddItem("Batch rename", "", 0, r.openBatchRename)
-	// "Undo last rename" undoes whatever Batch Rename most recently
-	// actually applied — a plain informational notice (the same
-	// showError-reused channel placeholderMenuAction uses) if there's
-	// nothing to undo, rather than a disabled/hidden entry: this app has
-	// no concept of a disabled menu item.
-	r.menu.AddItem("Undo last rename", "", 0, r.undoLastBatchRename)
-	r.menu.AddItem(menuSectionLabel("Delete"), "", 0, nil)
-	r.menu.AddItem("Move to Trash", "", 0, r.moveSelectionToTrash)
-	r.menu.AddItem("Remove", "", 0, r.openRemoveConfirm)
-	r.menu.AddItem("Go to Trash", "", 0, r.openTrash)
-	r.menu.AddItem("Restore from Trash", "", 0, r.restoreSelectionFromTrash)
-	r.menu.AddItem("Empty Trash", "", 0, r.openEmptyTrashConfirm)
-	r.menu.AddItem(menuSectionLabel("Tabs"), "", 0, nil)
-	// The menu path to the same three things the tab strip, Ctrl+Tab and
-	// Ctrl+1..Ctrl+0 reach — this app is menu-driven by design, and the
-	// strip's own "+"/click affordances are small targets that a user
-	// who hasn't found them yet has no reason to suspect exist.
-	r.menu.AddItem("New tab", "", 0, r.newTabHere)
-	r.menu.AddItem("Close tab", "", 0, r.closeCurrentTab)
-	r.menu.AddItem("Switch tab...", "", 0, func() { r.openTabSwitcher(r.activeTab) })
-	// Split view's own two entries (see split.go). Both are relabelled in
-	// place to describe what selecting them will do next, the same
-	// convention the "Globals" toggles further down already follow —
-	// hence the computed indices, so syncSplitMenuLabels can find them
-	// again even if something is inserted above them later.
-	r.splitToggleIdx = r.menu.GetItemCount()
-	r.menu.AddItem(splitToggleLabel(r.splitActive), "", 0, r.toggleSplit)
-	r.splitOrientationIdx = r.menu.GetItemCount()
-	r.menu.AddItem(splitOrientationLabel(r.settings.SplitStacked), "", 0, r.toggleSplitStacked)
-	// Swapping the two panes over is a layout action like the two above,
-	// so it belongs beside them rather than behind the prefix alone —
-	// this menu is where someone who doesn't know a shortcut exists goes
-	// looking.
-	r.menu.AddItem("Swap panes", "", 0, r.swapPanesOrExplain)
-	r.menu.AddItem(menuSectionLabel("Tools"), "", 0, nil)
-	// Ping is this first toolWindow slice's own proof of concept (see
-	// toolwindow.go) — a placeholder entry point, not itself the planned
-	// feature: the real Toolbox (networking/hardware tool departments,
-	// see feature_ideas.txt) replaces this one entry with a whole
-	// submenu once it exists.
-	r.menu.AddItem("Ping (test)", "", 0, r.openPingTestWindow)
-	// grep/zgrep: also placeholders (see placeholderMenuAction), added
-	// alongside Ping rather than under a new section of their own —
-	// they're the same kind of thing, a real command-line tool this menu
-	// will eventually wrap in a toolWindow the way Ping already
-	// demonstrates, just not wired up to actually run one yet.
-	r.menu.AddItem("grep", "", 0, r.placeholderMenuAction("grep"))
-	r.menu.AddItem("zgrep", "", 0, r.placeholderMenuAction("zgrep"))
-	// du/df: also placeholders, deliberately distinct from the real,
-	// already-built `du -hs` single-value hint in the Details sidebar
-	// (see computeDetailsDirSize) — per the user's own explicit request,
-	// these stand for a fuller, interactive command-output view (a whole
-	// toolWindow, the way Ping's own eventual real version will be),
-	// not a duplicate entry point to that same single number.
-	r.menu.AddItem("du", "", 0, r.placeholderMenuAction("du"))
-	r.menu.AddItem("df", "", 0, r.placeholderMenuAction("df"))
-	r.menu.AddItem(menuSectionLabel("Globals"), "", 0, nil)
-	// hiddenToggleIdx/sizeFormatToggleIdx/mtimeFormatToggleIdx are
-	// computed rather than hardcoded literals, so they keep pointing at
-	// the right row if another item is ever added above them — see
-	// toggleHidden/toggleSizeBytes/toggleMtimeUnix and showMenu, which
-	// all need them to relabel their own item in place.
-	r.hiddenToggleIdx = r.menu.GetItemCount()
-	r.menu.AddItem(hiddenToggleLabel(r.panel.showHidden), "", 0, r.toggleHidden)
-	r.sizeFormatToggleIdx = r.menu.GetItemCount()
-	r.menu.AddItem(sizeFormatToggleLabel(r.panel.sizeBytes), "", 0, r.toggleSizeBytes)
-	r.mtimeFormatToggleIdx = r.menu.GetItemCount()
-	r.menu.AddItem(mtimeFormatToggleLabel(r.panel.mtimeUnix), "", 0, r.toggleMtimeUnix)
-	r.menu.SetDoneFunc(r.closeMenu) // Escape
+	r.menu.SetInputCapture(r.captureContextMenuKey)
+	r.menu.SetDoneFunc(r.closeMenuOrGoBack) // Escape
 
 	// A one-row "Menu" title bar above it, the same shape every other
 	// panel's now has (toolWindow, Details, Properties — see
@@ -2048,32 +1939,6 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 	}
 }
 
-// menuSectionLabel renders a non-actionable divider row's text for the
-// context menu — dim style tags (tview's own "[fg:bg:flags]" syntax,
-// enabled by default for List item text) rather than a real, clickable
-// item, so it reads as a section label. Paired with a nil selected func
-// in the AddItem call that uses it (see NewRoot), which makes Enter/click
-// on the row a no-op. Arrow-key navigation still stops on it for a
-// moment, since tview.List has no "disabled item" concept to skip it with
-// — a small, accepted quirk rather than hand-rolling navigation logic for
-// what's cosmetic.
-func menuSectionLabel(name string) string {
-	return fmt.Sprintf("[::d]── %s ──[::-]", name)
-}
-
-// placeholderMenuAction is a context-menu item's action while the
-// feature behind it isn't built yet — a reminder that the entry exists
-// and is planned, not a dead button someone might mistake for a bug the
-// next time they click it by accident. Reuses the error overlay for a
-// plain informational notice the same way pruneTrashAtStartup's own
-// "trash was cleaned up" message already does — there's no separate,
-// dedicated info channel in this app yet.
-func (r *Root) placeholderMenuAction(name string) func() {
-	return func() {
-		r.showError(fmt.Errorf("%s: not implemented yet — this menu entry is a placeholder for a planned feature", name))
-	}
-}
-
 // MenuShortcut is the "m" key's own action: open the context menu for
 // whichever row the cursor is on, without a mouse.
 //
@@ -2121,30 +1986,19 @@ func (r *Root) menuAnchorForCurrentRow() (x, y int) {
 // inner rect so it doesn't get drawn partly off-screen, and reveals it as
 // an overlay on top of the still-visible panel.
 func (r *Root) showMenu(x, y int) {
-	// Defensive re-sync rather than trusting each toggle method's own
-	// relabel to always have run last: cheap, and keeps this correct even
-	// if something else ever changes the underlying Panel field directly.
-	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
-	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
-	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
-
-	width, height := listSize(r.menu)
-	height++ // reserved title bar row (see menuLayout)
-	x, y, width, height = r.clampToPanel(x, y, width, height)
-
-	r.menuLayout.SetRect(x, y, width, height)
+	r.menuInSubmenu = nil // always start back at the top level
+	r.renderContextMenu()
+	r.resizeContextMenu(x, y)
 	r.menu.SetCurrentItem(0)
 	r.showOverlay(contextMenuPage, r.menu)
 }
 
-// toggleHidden is the context menu's "Globals" hidden-files toggle: flips
-// whether dotfile entries are shown (see Panel.showHidden), reloads the
-// current directory so the change takes effect immediately, and relabels
-// the menu item itself to describe what clicking it will do next time.
-// Applied to every open tab, not just the visible one (see forEachTab):
-// this is a "Globals" toggle by name and by intent, and tabs that
-// silently disagreed with it until the next time they were switched to
-// would be a confusing kind of wrong.
+// toggleHidden is the "." key's own action: flips whether dotfile
+// entries are shown (see Panel.showHidden) and reloads the current
+// directory so the change takes effect immediately. Applied to every
+// open tab, not just the visible one (see forEachTab): this is a view
+// setting by intent, and tabs that silently disagreed with it until the
+// next time they were switched to would be a confusing kind of wrong.
 func (r *Root) toggleHidden() {
 	r.setShowHidden(!r.panel.showHidden)
 }
@@ -2152,36 +2006,23 @@ func (r *Root) toggleHidden() {
 // setShowHidden is toggleHidden's own body with the target value passed
 // in rather than derived by flipping — split out so the Options screen
 // (see optionsscreen.go) can set a specific value through exactly the
-// same path the context menu's own toggle uses, instead of reproducing
-// the "apply to every tab, relabel the menu, persist" sequence a second
-// time and risking the two drifting apart.
+// same path the keyboard toggle uses, instead of reproducing the "apply
+// to every tab, persist" sequence a second time and risking the two
+// drifting apart.
 func (r *Root) setShowHidden(show bool) {
 	r.forEachTab(func(p *Panel) {
 		p.showHidden = show
 		r.showError(p.load(p.path))
 	})
-	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(show), "")
 	r.settings.ShowHidden = show
 	r.persistSetting("show_hidden", strconv.FormatBool(show))
 }
 
-// hiddenToggleLabel renders the hidden-files toggle's label as the
-// action clicking it performs next, not its current state — e.g. it
-// reads "Show hidden files" while they're hidden, the same convention
-// most file managers use for a toggle like this.
-func hiddenToggleLabel(showHidden bool) string {
-	if showHidden {
-		return "Hide hidden files"
-	}
-	return "Show hidden files"
-}
-
-// toggleSizeBytes is the "Globals" section's Size-format toggle: flips
-// whether the list's Size column shows exact bytes or humanSize's
-// shorthand (see Panel.sizeBytes/formatSizeCell), reloads the current
-// directory so the change takes effect immediately, and relabels the
-// menu item itself — the same pattern toggleHidden already uses, see its
-// own doc comment for why (dirty labels, dirty defensive re-sync).
+// toggleSizeBytes is the "z" chord's own "s" member: flips whether the
+// list's Size column shows exact bytes or humanSize's shorthand (see
+// Panel.sizeBytes/formatSizeCell) and reloads the current directory so
+// the change takes effect immediately — the same pattern toggleHidden
+// already uses, see its own doc comment for why.
 func (r *Root) toggleSizeBytes() {
 	r.setSizeBytes(!r.panel.sizeBytes)
 }
@@ -2193,23 +2034,14 @@ func (r *Root) setSizeBytes(bytes bool) {
 		p.sizeBytes = bytes
 		r.showError(p.load(p.path))
 	})
-	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(bytes), "")
 	r.settings.SizeBytes = bytes
 	r.persistSetting("size_bytes", strconv.FormatBool(bytes))
 }
 
-// sizeFormatToggleLabel is sizeBytes's own toggleHidden-style label.
-func sizeFormatToggleLabel(sizeBytes bool) string {
-	if sizeBytes {
-		return "Show size (human-readable)"
-	}
-	return "Show size in bytes"
-}
-
-// toggleMtimeUnix is the "Globals" section's Modified-format toggle:
-// flips whether the list's Modified column shows a Unix timestamp or the
-// formatted "YYYY-MM-DD HH:MM:SS" (see Panel.mtimeUnix/
-// formatModTimeCell) — otherwise a copy of toggleSizeBytes.
+// toggleMtimeUnix is the "z" chord's own "t" member: flips whether the
+// list's Modified column shows a Unix timestamp or the formatted
+// "YYYY-MM-DD HH:MM:SS" (see Panel.mtimeUnix/formatModTimeCell) —
+// otherwise a copy of toggleSizeBytes.
 func (r *Root) toggleMtimeUnix() {
 	r.setMtimeUnix(!r.panel.mtimeUnix)
 }
@@ -2221,50 +2053,15 @@ func (r *Root) setMtimeUnix(unix bool) {
 		p.mtimeUnix = unix
 		r.showError(p.load(p.path))
 	})
-	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(unix), "")
 	r.settings.MtimeUnix = unix
 	r.persistSetting("mtime_unix", strconv.FormatBool(unix))
-}
-
-// syncGlobalsMenuLabels re-renders the context menu's three "Globals"
-// toggle labels from the active panel's own current state.
-//
-// Needed because those labels describe what clicking them will do next
-// (see hiddenToggleLabel), which is derived from the active panel — and
-// switchToTab changes which panel that is. In practice every tab agrees
-// on all three (see toggleHidden and friends, which apply to all of
-// them), so this is a defensive re-sync rather than a fix for a
-// divergence anything currently causes: a tab restored from a saved
-// layout, or one opened while a toggle was mid-flight, is exactly the
-// kind of case where "in practice" quietly stops holding.
-func (r *Root) syncGlobalsMenuLabels() {
-	if r.menu == nil || r.panel == nil {
-		return
-	}
-	r.menu.SetItemText(r.hiddenToggleIdx, hiddenToggleLabel(r.panel.showHidden), "")
-	r.menu.SetItemText(r.sizeFormatToggleIdx, sizeFormatToggleLabel(r.panel.sizeBytes), "")
-	r.menu.SetItemText(r.mtimeFormatToggleIdx, mtimeFormatToggleLabel(r.panel.mtimeUnix), "")
-}
-
-// mtimeFormatToggleLabel is mtimeUnix's own toggleHidden-style label.
-// Worded as "time", not "mtime": this same column, and this same
-// toggle, now applies to a trashed item's own deletion time while
-// browsing the trash (see Panel.onDescribeRows/buildColumnHeader), not
-// only a real directory's modification time — "mtime" specifically
-// would be wrong there.
-func mtimeFormatToggleLabel(mtimeUnix bool) string {
-	if mtimeUnix {
-		return "Show time formatted"
-	}
-	return "Show time as timestamp"
 }
 
 // listSize returns a no-border, no-secondary-text List's width — the
 // widest item's rendered text plus 1-char left/right padding (see the
 // SetBorderPadding calls in NewRoot) — and its height, one row per item.
-// tview.TaggedStringWidth, not a plain rune count, since section-header
-// items (see menuSectionLabel) carry style tags that aren't part of what
-// actually gets drawn.
+// tview.TaggedStringWidth, not a plain rune count, in case an item's own
+// text ever carries style tags (it costs nothing when none do).
 func listSize(l *tview.List) (width, height int) {
 	for i := 0; i < l.GetItemCount(); i++ {
 		main, _ := l.GetItemText(i)
@@ -2275,8 +2072,13 @@ func listSize(l *tview.List) (width, height int) {
 	return width + 2, l.GetItemCount() // +2: 1-char padding on each side
 }
 
-// closeMenu hides the context menu without taking any action (Escape).
+// closeMenu hides the context menu without taking any action (Escape at
+// the top level — see closeMenuOrGoBack for one level into a submenu).
+// Resets menuInSubmenu defensively, the same as showMenu's own explicit
+// reset on open, so the field never lingers in a stale state between
+// closes.
 func (r *Root) closeMenu() {
+	r.menuInSubmenu = nil
 	r.hideOverlay()
 }
 
