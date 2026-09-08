@@ -74,7 +74,7 @@ chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -114,6 +114,14 @@ Back and Forward treat a trip into search results or the trash exactly
 like a real directory, and returning to one restores the cursor row you
 left it on. A search's results come back as they were, rather than being
 re-run.
+
+`⭯`, right before the path itself, is Reload — the `z` chord's own `r`
+member (`zr`) does the same from the keyboard. Re-reads the current
+directory straight from disk, for anything this app has no other way
+to notice on its own: another process changing files underneath it, a
+network/mounted filesystem's own content changing, and so on. While
+search results are showing, this exits back to the plain directory
+listing rather than re-running the search.
 
 ### Column widths
 

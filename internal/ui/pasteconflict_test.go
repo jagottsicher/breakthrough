@@ -139,6 +139,50 @@ func newPasteTestJob(r *Root, cut bool, destDir string, total int) *pasteJob {
 	return job
 }
 
+// TestFinishPasteJobReloadsEveryOpenTabShowingDestDir pins the user's
+// own explicit request for an auto-reload of the destination once a
+// paste completes: not just r.panel, but every open tab currently
+// showing destDir (see finishPasteJob's own doc comment) — a directory
+// open in two tabs at once must show the freshly pasted file in both,
+// while a third tab showing something else entirely is left alone.
+func TestFinishPasteJobReloadsEveryOpenTabShowingDestDir(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	otherDir := t.TempDir()
+
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.newTab(destDir) // a second tab on the very same destination
+	r.newTab(otherDir)
+	if len(r.tabs) != 3 {
+		t.Fatalf("setup: want 3 tabs, got %d", len(r.tabs))
+	}
+	tabA, tabB, tabC := r.tabs[0], r.tabs[1], r.tabs[2]
+
+	// Lands in destDir only after tabA/tabB already loaded it — the
+	// same "not there yet at load time" gap a real background copy
+	// leaves for finishPasteJob's own reload to close.
+	src := filepath.Join(srcDir, "apple.txt")
+	newFile := filepath.Join(destDir, "apple.txt")
+	if err := os.WriteFile(newFile, []byte("pasted"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	r.applyPasteOneResult(job, src, newFile, nil)
+
+	for name, p := range map[string]*Panel{"tab A": tabA, "tab B": tabB} {
+		if _, ok := rowForPath(p, newFile); !ok {
+			t.Errorf("%s (showing destDir): apple.txt not visible after paste — not reloaded", name)
+		}
+	}
+	if _, ok := rowForPath(tabC, newFile); ok {
+		t.Error("tab C (a different directory) should never show destDir's own file")
+	}
+}
+
 // TestApplyPasteOneResultClearsClipboardAfterCut pins Cut+Paste's own
 // clipboard-clearing — logic that only ever runs inside
 // applyPasteOneResult (via pasteItemDone/finishPasteJob), so it's

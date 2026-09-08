@@ -373,6 +373,35 @@ func TestCopyToClipboardSyncsHighlightAcrossOpenTabs(t *testing.T) {
 	}
 }
 
+// TestReloadCurrentTabReReadsFromDisk pins the "z" chord's own "r"
+// member ("Reload"): a file that shows up after the active tab already
+// loaded its directory is visible once reloadCurrentTab runs — the
+// header row's own "⭯" button does the same thing via
+// Panel.runHeaderAction directly (see
+// TestRunHeaderActionReloadReReadsFromDisk); this is Root's own
+// keyboard-reachable path to it.
+func TestReloadCurrentTabReReadsFromDisk(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	newFile := filepath.Join(dir, "just-landed.txt")
+	if err := os.WriteFile(newFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rowForPath(r.panel, newFile); ok {
+		t.Fatal("setup: just-landed.txt shouldn't be visible before reload runs")
+	}
+
+	r.reloadCurrentTab()
+
+	if _, ok := rowForPath(r.panel, newFile); !ok {
+		t.Error("just-landed.txt still not visible after reloadCurrentTab")
+	}
+}
+
 // Chmod's own dialog (openChmod) is tested in chmoddialog_test.go now —
 // it no longer goes through r.prompt/finishPrompt at all (see
 // chmoddialog.go's own doc comment on why it was rebuilt into a full

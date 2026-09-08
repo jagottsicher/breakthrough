@@ -258,9 +258,10 @@ func (r *Root) pasteItemDone(job *pasteJob) {
 // failure collected along the way, not just the first the way the old
 // synchronous pasteInto did (per the user's own explicit request — see
 // feature_ideas.txt's own note on this being step one, before any real
-// notification channel exists to send them to instead), reloads the
-// panel if it's showing the destination, and clears the clipboard once
-// a clean (no errors) Cut has fully landed.
+// notification channel exists to send them to instead), reloads every
+// open tab showing the destination (per the user's own explicit
+// request for an auto-reload there), and clears the clipboard once a
+// clean (no errors) Cut has fully landed.
 func (r *Root) finishPasteJob(job *pasteJob) {
 	if r.pasteJob != job {
 		return // already superseded/cancelled — see cancelPasteJob
@@ -276,16 +277,22 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 		r.setClipboard(nil, false)
 	}
 
-	// Only reload if the panel actually happens to be showing destDir
-	// right now — pasting into a search result's own directory,
-	// elsewhere, shouldn't force-navigate or otherwise disturb whatever
-	// the panel currently has on screen (see pasteClipboard's own doc
-	// comment).
-	if r.panel.path == job.destDir {
-		if err := r.panel.load(r.panel.path); err != nil {
+	// Every open tab currently showing destDir, not just r.panel — the
+	// same directory can be open in more than one tab (see
+	// syncClipboardHighlight's own doc comment for the same "one
+	// Root-level event, every matching tab needs to know" reasoning).
+	// A tab showing something else — a search result's own directory,
+	// elsewhere, or a different path entirely — is left exactly as it
+	// was; pasting shouldn't force-navigate or otherwise disturb it
+	// (see pasteClipboard's own doc comment).
+	r.forEachTab(func(p *Panel) {
+		if p.path != job.destDir {
+			return
+		}
+		if err := p.load(p.path); err != nil {
 			job.errors = append(job.errors, err)
 		}
-	}
+	})
 
 	if len(job.errors) > 0 {
 		r.showError(pasteSummaryError(job))

@@ -20,7 +20,7 @@ import (
 func TestBuildHeaderSpans(t *testing.T) {
 	text, spans := buildHeaderSpans("/a/bb/c")
 
-	wantText := "∎~<>↑ /a/bb/c"
+	wantText := "∎~<>↑⭯ /a/bb/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
@@ -31,10 +31,11 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 2, end: 3, action: actionBack},
 		{start: 3, end: 4, action: actionForward},
 		{start: 4, end: 5, action: actionUp},
-		{start: 6, end: 7, action: actionNavigate, target: "/"},
-		{start: 7, end: 8, action: actionNavigate, target: "/a"},
-		{start: 9, end: 11, action: actionNavigate, target: "/a/bb"},
-		{start: 12, end: 13, action: actionNavigate, target: "/a/bb/c"},
+		{start: 5, end: 6, action: actionReload},
+		{start: 7, end: 8, action: actionNavigate, target: "/"},
+		{start: 8, end: 9, action: actionNavigate, target: "/a"},
+		{start: 10, end: 12, action: actionNavigate, target: "/a/bb"},
+		{start: 13, end: 14, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -74,7 +75,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 // TestHeaderButtonPrefixMatchesBuildHeaderSpans pins headerButtonPrefix
 // (headerEdit's own SetLabel — see NewPanel/openEdit) in sync with what
 // buildHeaderSpans actually renders before the path itself starts —
-// the two can't share a single construction (the five buttons there
+// the two can't share a single construction (the six buttons there
 // each need their own click span), so this is what would catch either
 // one drifting from the other instead.
 func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
@@ -87,17 +88,17 @@ func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	text, spans := buildHeaderSpans("/")
 
-	wantText := "∎~<>↑ /"
+	wantText := "∎~<>↑⭯ /"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
 
-	// 5 buttons + the root span.
-	if len(spans) != 6 {
-		t.Fatalf("got %d spans, want 6: %+v", len(spans), spans)
+	// 6 buttons + the root span.
+	if len(spans) != 7 {
+		t.Fatalf("got %d spans, want 7: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 6, end: 7, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 7, end: 8, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -111,7 +112,7 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	text, spans := buildHeaderSpans("/文档/c")
 
-	wantText := "∎~<>↑ /文档/c"
+	wantText := "∎~<>↑⭯ /文档/c"
 	if text != wantText {
 		t.Fatalf("text = %q, want %q", text, wantText)
 	}
@@ -122,9 +123,10 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 		{start: 2, end: 3, action: actionBack},
 		{start: 3, end: 4, action: actionForward},
 		{start: 4, end: 5, action: actionUp},
-		{start: 6, end: 7, action: actionNavigate, target: "/"},
-		{start: 7, end: 11, action: actionNavigate, target: "/文档"},
-		{start: 12, end: 13, action: actionNavigate, target: "/文档/c"},
+		{start: 5, end: 6, action: actionReload},
+		{start: 7, end: 8, action: actionNavigate, target: "/"},
+		{start: 8, end: 12, action: actionNavigate, target: "/文档"},
+		{start: 13, end: 14, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -2335,10 +2337,60 @@ func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.
 	}
 }
 
+// TestRunHeaderActionReloadReReadsFromDisk pins the Reload button's
+// whole point: a file that appears after the panel already loaded its
+// directory (another process, a mounted filesystem, ...) shows up once
+// Reload runs, without navigating anywhere.
+func TestRunHeaderActionReloadReReadsFromDisk(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	newFile := filepath.Join(dir, "just-landed.txt")
+	if err := os.WriteFile(newFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rowForPath(p, newFile); ok {
+		t.Fatal("setup: just-landed.txt shouldn't be visible before Reload runs")
+	}
+
+	p.runHeaderAction(headerSpan{action: actionReload})
+
+	if _, ok := rowForPath(p, newFile); !ok {
+		t.Error("just-landed.txt still not visible after Reload")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q after Reload, want it unchanged (%q)", p.path, dir)
+	}
+}
+
+// TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode mirrors
+// TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode for
+// Reload specifically: it goes through Panel.load the same as any
+// other header action, which always exits search mode (see load's own
+// doc comment) — Reload doesn't re-run the search itself.
+func TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.setSearchStatus("Done — 0 found")
+
+	p.runHeaderAction(headerSpan{action: actionReload})
+
+	if p.searchMode {
+		t.Error("searchMode still true after Reload")
+	}
+}
+
 // TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
 // real user report that switching the header into edit mode reset the
 // editable path's own start column to 0 instead of lining up with
-// where p.header was already showing it, right after the "∎~<>↑ "
+// where p.header was already showing it, right after the "∎~<>↑⭯ "
 // buttons. headerEdit's own label (see NewPanel) is what reserves that
 // same width now — there's nothing further for openEdit itself to do
 // per call, so this only needs checking once, right after construction.

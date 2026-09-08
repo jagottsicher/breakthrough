@@ -33,7 +33,12 @@ terminal.
   history covers a trip into search results or the trash exactly the
   same as a real directory, and Back/Forward into any of them restores
   the cursor row it was left on, a search's own results included, shown
-  again exactly as they were rather than a live re-run — sortable
+  again exactly as they were rather than a live re-run — plus Reload
+  (`⭯`, right before the path itself), re-reading the current directory
+  straight from disk for anything this app has no other way to notice
+  on its own: another process changing files underneath it, a
+  network/mounted filesystem's own content changing, and so on —
+  sortable
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.

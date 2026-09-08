@@ -68,7 +68,7 @@ var helpText = strings.TrimLeft(`
     g  go to    gg top · gh home · gr / (root) · gb Trash
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes
+                zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)

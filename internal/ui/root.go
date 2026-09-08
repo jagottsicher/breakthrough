@@ -2065,6 +2065,25 @@ func (r *Root) toggleHidden() {
 	r.setShowHidden(!r.panel.showHidden)
 }
 
+// reloadCurrentTab is the "z" chord's own "r" member ("Reload") — the
+// active tab only (per the user's own explicit request), not every
+// open one the way setShowHidden's own global toggle applies to (see
+// its own doc comment): re-reading a directory from disk is a one-off
+// action on whatever's currently in front of you, not a persistent
+// view setting every tab should agree on. Re-reads r.panel.path
+// straight from disk (see Panel.load), discarding whatever the
+// listing already had cached in memory — for anything this app has no
+// other way to notice on its own (another process changing files
+// underneath it, a network/mounted filesystem's own content changing,
+// ...). While search results are showing, this exits search mode back
+// to the plain directory listing rather than re-running the search —
+// Panel.load always does that (it sets searchMode = false
+// unconditionally), the same behavior setShowHidden/toggleHidden
+// already have too, not something new here.
+func (r *Root) reloadCurrentTab() {
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // setShowHidden is toggleHidden's own body with the target value passed
 // in rather than derived by flipping — split out so the Options screen
 // (see optionsscreen.go) can set a specific value through exactly the

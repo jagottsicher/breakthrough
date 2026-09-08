@@ -414,6 +414,7 @@ const (
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
 	actionUp                           // go up one level (the parent directory)
+	actionReload                       // re-read the current directory from disk
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -2625,10 +2626,11 @@ func (p *Panel) previousPath() (string, bool) {
 // drift the spans after it out of alignment with what's actually drawn
 // on screen.
 //
-// The five button glyphs are packed together with no space between
+// The six button glyphs are packed together with no space between
 // them, none before the first one either, and exactly one before the
 // path starts — per the user's own explicit request, "^ ~ < >" read as
-// more spread out than five single-purpose buttons need to be. Start's
+// more spread out than five single-purpose buttons need to be (a rule
+// that carried over unchanged when Reload became the sixth). Start's
 // own glyph is "∎" (U+220E), not "^": at the time this glyph was chosen,
 // this app's own button bar wrote Ctrl-shortcuts as "^E", "^L" and so
 // on, so a bare "^" here risked reading as one of those instead of a
@@ -2645,16 +2647,23 @@ func (p *Panel) previousPath() (string, bool) {
 // (e.g. on a "/" separator, or in empty space after the path) is handled
 // by captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-// headerButtonPrefix is exactly what buildHeaderSpans' own five
+// headerButtonPrefix is exactly what buildHeaderSpans' own six
 // buttons plus their trailing space render as, just below — reused by
 // headerEdit's own SetLabel (see NewPanel) so the path being edited
 // starts at the exact same column the displayed one already does,
 // rather than resetting to column 0 the moment editing starts, per the
 // user's own explicit report. A single shared string constant, not a
-// derivation from buildHeaderSpans' own output, since the five buttons
+// derivation from buildHeaderSpans' own output, since the six buttons
 // there each need their own click span — kept in sync instead by
 // TestHeaderButtonPrefixMatchesBuildHeaderSpans.
-const headerButtonPrefix = "∎~<>↑ "
+//
+// "⭯" (U+2B6F) is Reload — the user's own explicit choice of glyph,
+// added at the end rather than interrupting the original five: this
+// app has no other way to notice a file changing underneath it (another
+// process, a network/mounted filesystem, ...), so re-reading the
+// current directory from disk on demand needs a click target of its
+// own, the same reasoning the other five buttons here already follow.
+const headerButtonPrefix = "∎~<>↑⭯ "
 
 func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	var b strings.Builder
@@ -2671,6 +2680,7 @@ func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
 	button("<", actionBack)
 	button(">", actionForward)
 	button("↑", actionUp)
+	button("⭯", actionReload)
 	b.WriteString(" ")
 	col++
 
@@ -2771,6 +2781,20 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// home). Mirrors the ".." row's own identical parent-or-self
 		// check in load, just without needing a visible row for it.
 		p.reportError(p.navigate(filepath.Dir(p.path)))
+	case actionReload:
+		// Straight to load, not navigate: navigate exists to move
+		// somewhere and record that move in history (see its own doc
+		// comment) — reloading the same directory in place is neither,
+		// so it skips navigate's own snapshotCurrentEntry/
+		// pushHistoryEntry bookkeeping entirely rather than going
+		// through it just to have pushHistoryEntry's own same-path check
+		// (see its own doc comment) turn it into a no-op regardless.
+		// Clicking this while search results are showing exits back to
+		// the plain directory listing rather than re-running the search
+		// — load always does that (see its own doc comment), the same
+		// behavior the "z" chord's own Reload member and
+		// setShowHidden/toggleHidden already have too.
+		p.reportError(p.load(p.path))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
@@ -2781,7 +2805,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
 // and moves keyboard focus there. headerEdit's own label (see NewPanel)
-// already reserves the "∎~<>↑ " prefix's own width, so the path text
+// already reserves the "∎~<>↑⭯ " prefix's own width, so the path text
 // itself lines up with wherever p.header was just showing it — nothing
 // further to do here for that.
 func (p *Panel) openEdit() {
