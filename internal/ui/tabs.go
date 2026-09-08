@@ -96,14 +96,14 @@ func (r *Root) tabSettings() config.Settings {
 // Closing the last remaining tab is refused outright rather than quietly
 // quitting the application or leaving an empty window: "close" and "quit"
 // being the same gesture under some conditions is a classic way to lose
-// work by accident, and Ctrl+Q already exists (with its own confirmation)
-// for actually leaving.
+// work by accident, and "q"/Ctrl+Q already exist (with their own
+// confirmation) for actually leaving.
 func (r *Root) closeTab(i int) {
 	if i < 0 || i >= len(r.tabs) {
 		return
 	}
 	if len(r.tabs) == 1 {
-		r.showError(fmt.Errorf("this is the last tab — use Ctrl+Q to quit breakthrough"))
+		r.showError(fmt.Errorf(`this is the last tab — press "q" to quit breakthrough`))
 		return
 	}
 

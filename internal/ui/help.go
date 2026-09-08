@@ -40,7 +40,7 @@ var helpText = strings.TrimLeft(`
   r   Rename            e   Edit                   k  Directory size
   m   Context menu      f   Find                   M  Image metadata
   n   New tab           w   Close tab             l   Look
-  s   Split view        S   Swap panes            t   Tab switcher
+  s   Split view                                  t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
                                                    +/- Select/deselect
                                                        by pattern
@@ -56,11 +56,10 @@ var helpText = strings.TrimLeft(`
   reachable without first closing it.
 
   A capital letter is the bigger sibling of its own lowercase one where
-  both exist: "d" is reversible (the Trash), "D" is not (asks first);
-  "s" splits the view, "S" swaps the two panes over. While browsing the
-  Trash itself, "r" restores and "D" empties it, instead of their
-  ordinary meaning — the same two letters, read differently in the one
-  place that makes sense.
+  both exist: "d" is reversible (the Trash), "D" is not (asks first).
+  While browsing the Trash itself, "r" restores and "D" empties it,
+  instead of their ordinary meaning — the same two letters, read
+  differently in the one place that makes sense.
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
@@ -68,7 +67,9 @@ var helpText = strings.TrimLeft(`
 
     g  go to    gg top · gh home · gr / (root) · gb Trash
     p  perms    pm chmod · po chown
-    z  display  zs size format · zt time format · zo split orientation
+    z  display  zs size format · zt time format · zo split orientation ·
+                zw swap panes
+    o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
 
@@ -77,26 +78,23 @@ var helpText = strings.TrimLeft(`
   (the status bar's own countdown reaching empty) cancels silently —
   that's "changed my mind", not a mistake worth a message.
 
-  A handful of Ctrl-letter shortcuts, documented section by section
-  below, reach a few things this layer doesn't (Quit, Cancel, Options,
-  the mouse-reporting toggle, ...) — everything else has exactly one
-  keyboard path, the plain letter above.
+  Only two Ctrl-letter shortcuts remain, documented section by section
+  below, for the one thing this layer genuinely can't do on its own
+  (Quit, Cancel — see "Global" right below) — everything else, Options
+  and the mouse-reporting toggle included, has exactly one keyboard
+  path, the plain letter/chord above. Unlike its own former Ctrl-letter
+  binding, "om" toggling mouse reporting only works while plainly
+  browsing, not with a dialog open or the bash line focused — a
+  deliberate trade-off, since a plain letter never safely can fire
+  unconditionally the way a Ctrl combination could.
 
 [::b]Global — work anywhere, even inside another dialog[::-]
 
-  Ctrl+_          Toggle mouse reporting on/off (see the status bar's
-                  own "Mouse on/off") — off gives your terminal's own
-                  native text selection/copy back, e.g. to grab a
-                  filename; most terminals also support their own
-                  override gesture (often Shift-drag) without needing
-                  this, but not everyone knows it
   Ctrl+Q          Quit (asks first)
   Ctrl+C          Cancel/back out of whatever's open — never quits
 
 [::b]File panel[::-]
 
-  Ctrl+O          Options — see "Options screen" below. Still Ctrl-only:
-                  no plain-letter home yet
   Ctrl+T          Tab switcher — same as "t", plus one thing "t" alone
                   can't: pressing it again while the switcher is already
                   open walks to the next tab
@@ -155,7 +153,7 @@ var helpText = strings.TrimLeft(`
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
 
-[::b]Options screen (Ctrl+O)[::-]
+[::b]Options screen ("oo")[::-]
 
   Categories down the left, that category's settings on the right.
 

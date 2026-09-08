@@ -156,35 +156,30 @@ func run() error {
 	// without asking first. Ctrl+C deliberately does not quit at all —
 	// it backs out of whatever is open, like Escape.
 	//
-	// Almost every other Ctrl-letter binding this app once had has since
-	// been retired, each once its own action gained a plain-letter home
-	// on the primary keyboard layer (see internal/ui/keymap.go's own
-	// package doc) that covers the exact same ground — including, for
-	// Look/Details/hashes/directory-size/metadata, the same "also works
-	// while Properties is open" reach those five once needed a dedicated
-	// Ctrl combination for at all (see plainCommand.alsoOverProperties
-	// and acceptsPropertiesAwareKey in keymap.go). Two exceptions remain
-	// here, each for a reason a plain letter can't (yet) replace:
+	// Every other Ctrl-letter binding this app once had has since been
+	// retired, each once its own action gained a plain-letter or chord
+	// home on the primary keyboard layer (see internal/ui/keymap.go's
+	// own package doc) that covers the exact same ground — including,
+	// for Look/Details/hashes/directory-size/metadata, the same "also
+	// works while Properties is open" reach those five once needed a
+	// dedicated Ctrl combination for at all (see
+	// plainCommand.alsoOverProperties and acceptsPropertiesAwareKey in
+	// keymap.go). Options (formerly Ctrl+O) and mouse reporting
+	// (formerly Ctrl+_, which fired completely unconditionally — even
+	// with a dialog open or the command line focused, since a plain
+	// letter never safely can) moved to the "o" chord (oo/om) despite
+	// that trade-off, per the user's own explicit, deliberate choice: no
+	// Ctrl-letter binding is worth keeping just for that one edge case.
 	//
-	//   - Ctrl+_ (toggle mouse reporting, see Root.ToggleMouseShortcut's
-	//     own doc comment) has to fire completely unconditionally — the
-	//     whole point is grabbing text via the terminal's own native
-	//     selection, which needs to work no matter what else is
-	//     currently open, including while typing in the bash line or a
-	//     text field a plain letter must never steal a keystroke from.
-	//     Kept on Ctrl+_ specifically because it's already known to
-	//     reach every keyboard/terminal combination this app targets,
-	//     and no terminal multiplexer claims it — tmux takes Ctrl+B,
-	//     screen and byobu Ctrl+A, dtach and abduco Ctrl+\.
+	// One exception remains here, for a reason a plain letter genuinely
+	// can't replace:
+	//
 	//   - Ctrl+T (tab switcher) stays alongside "t" for one capability
 	//     "t" alone can't have: pressing it again while the switcher
 	//     itself is the open overlay walks to the next tab, which needs
 	//     to keep working precisely in the one state (an overlay
 	//     already open) every plain letter is correctly blocked in — see
 	//     its own case below.
-	//   - Ctrl+O (Options) has no plain-letter equivalent yet at all —
-	//     not a case of "kept for extra reach" like the two above, just
-	//     not migrated yet.
 	//
 	// Tab cycles focus among the panel, the Details sidebar (if it's
 	// showing) and every currently open tool window (see
@@ -213,32 +208,11 @@ func run() error {
 		}
 
 		switch event.Key() {
-		case tcell.KeyCtrlUnderscore:
-			// Toggles mouse reporting on/off — the one shortcut that has
-			// to work completely unconditionally, from literally
-			// anywhere, including with a dialog open or the command line
-			// focused: the whole point of it is getting the terminal's
-			// own native text selection back, and what needs selecting
-			// may well be inside that dialog or that command line.
-			// Nothing else in this dispatch is that unconditional (see
-			// Root.ToggleMouseShortcut).
-			//
-			// Ctrl+_ specifically because it's already known to reach
-			// every keyboard/terminal combination this app targets, and
-			// no terminal multiplexer claims it — tmux takes Ctrl+B,
-			// screen and byobu Ctrl+A, dtach and abduco Ctrl+\, and a
-			// multiplexer always intercepts its own prefix before the
-			// application inside ever sees the key.
-			root.ToggleMouseShortcut()
-			return nil
 		case tcell.KeyCtrlQ:
 			root.RequestQuit()
 			return nil
 		case tcell.KeyCtrlC:
 			root.RequestCancel()
-			return nil
-		case tcell.KeyCtrlO:
-			root.OptionsShortcut()
 			return nil
 		case tcell.KeyCtrlT:
 			// A second keyboard path to the tab switcher, alongside "t"
@@ -253,19 +227,18 @@ func run() error {
 			//
 			// Falls through to bashLine's own default handling (readline-
 			// style Ctrl+T is "transpose characters") while it has focus,
-			// rather than always consuming the key the way Ctrl+_/Ctrl+Q/
-			// Ctrl+C/Ctrl+O above do.
+			// rather than always consuming the key the way Ctrl+Q/Ctrl+C
+			// above do.
 			//
 			// Checked via BashLineHasFocus alone, not the full
-			// AcceptsGlobalShortcut those four use: that also refuses
-			// whenever *any* overlay is open, and the tab switcher is
-			// one — so pressing Ctrl+T again to walk to the next tab
-			// (see Root.TabSwitcherShortcut) never reached it and did
-			// nothing at all. A real bug, and one the unit tests missed
-			// entirely by calling the shortcut method directly rather
-			// than through this dispatch. TabSwitcherShortcut applies
-			// the remaining guard itself, so every other overlay still
-			// blocks it.
+			// AcceptsGlobalShortcut: that also refuses whenever *any*
+			// overlay is open, and the tab switcher is one — so pressing
+			// Ctrl+T again to walk to the next tab (see
+			// Root.TabSwitcherShortcut) never reached it and did nothing
+			// at all. A real bug, and one the unit tests missed entirely
+			// by calling the shortcut method directly rather than through
+			// this dispatch. TabSwitcherShortcut applies the remaining
+			// guard itself, so every other overlay still blocks it.
 			if root.BashLineHasFocus() {
 				return event
 			}

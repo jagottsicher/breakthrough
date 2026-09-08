@@ -22,9 +22,10 @@ import (
 // key (unavailable or remapped to something else on plenty of
 // keyboards, macOS's own media-key row among them). Modern terminal
 // file managers (ranger, nnn, lf, vifm) all reach the same conclusion.
-// A small number of Ctrl-letter bindings remain, for actions this layer
-// itself can't cover — see cmd/breakthrough's own dispatch — but every
-// function key is gone.
+// A tiny handful of Ctrl-letter bindings remain, for actions this layer
+// itself genuinely can't cover — see cmd/breakthrough's own dispatch —
+// but every function key is gone, and so is every Ctrl-letter binding
+// this layer's own plain letters and chords can reach instead.
 //
 // Only fires while the panel's own table has real keyboard focus (see
 // acceptsPlainKeyCommand) — never while typing in the filter box, the
@@ -36,20 +37,21 @@ import (
 //   - Single letters (plainCommands) for the everyday verbs: copy, cut,
 //     paste, rename, edit, and so on. A capital letter is deliberately
 //     the "bigger sibling" of its own lowercase counterpart wherever one
-//     exists (d moves to the trash, D deletes for good; s splits the
-//     view, S swaps the two panes) rather than an unrelated action
-//     parked on a free key — so which is punctual and which is
-//     consequential can be guessed rather than memorized. The button
-//     bar always shows a curated subset of these (see
+//     exists (d moves to the trash, D deletes for good) rather than an
+//     unrelated action parked on a free key — so which is punctual and
+//     which is consequential can be guessed rather than memorized. The
+//     button bar always shows a curated subset of these (see
 //     plainCommand.quick/buildButtonBar).
 //   - Chords (chordFamilies) for related groups of weekly-or-rarer
 //     actions: "g" for jumping somewhere (gg top, gh home, gr /, gb
 //     trash), "p" for permissions (pm chmod, po chown), "z" for display
-//     toggles (zs size format, zt time format, zo split orientation).
-//     Each is a plain letter followed, within chordTimeout, by one more
-//     — see resolveChord. The button bar marks each family with an
-//     ellipsis ("g… go") to show it leads to more rather than acting on
-//     its own.
+//     toggles (zs size format, zt time format, zo split orientation, zw
+//     swap panes), "o" for Options (oo the screen itself, om mouse
+//     reporting — the one Options-adjacent setting worth a direct
+//     toggle without opening the screen at all). Each is a plain letter
+//     followed, within chordTimeout, by one more — see resolveChord. The
+//     button bar marks each family with an ellipsis ("g… go to") to show
+//     it leads to more rather than acting on its own.
 //   - Everything rarer still (the planned Toolbox, the notification
 //     log, archive handling, ...) is meant to live behind its own
 //     full-screen entry point instead of costing a keyboard slot at
@@ -168,7 +170,6 @@ func plainCommands() []plainCommand {
 		{key: 'k', label: "Compute directory size, recursively (Details)", alsoOverProperties: true, action: func(r *Root) { r.ComputeDirSizeShortcut() }},
 		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
 		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
-		{key: 'S', label: "Swap panes", action: func(r *Root) { r.swapPanesOrExplain() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
@@ -262,11 +263,22 @@ func chordFamilies() []chordFamily {
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
 			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
+			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
 		}},
 		{prefix: 'y', name: "yank (reserved — no system clipboard yet)", members: []chordMember{
 			{'p', "Copy full path", reservedYankMember("Copy full path")},
 			{'n', "Copy name", reservedYankMember("Copy name")},
 			{'a', "Copy all selected paths", reservedYankMember("Copy all selected paths")},
+		}},
+		// "oo" doubles the prefix for "the family's own main destination",
+		// the same shape "gg" (go to » top) already established — opening
+		// the Options screen itself. "om" is the one Options-adjacent
+		// setting worth a direct toggle without opening the screen at all
+		// (see toggleMouseReporting's own doc comment on why "z" —
+		// display — wasn't the right fit for it either).
+		{prefix: 'o', name: "options", quick: true, members: []chordMember{
+			{'o', "Options screen", func(r *Root) { r.openOptions() }},
+			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
 	}
 }
@@ -563,12 +575,29 @@ func (r *Root) chordIndicatorText() string {
 // follows directly after that trailing space with no space of its own
 // — the same "exactly one space between key and label" rule
 // buildButtonBar's own highlightKey follows, per the user's own
-// explicit request that both read the same way. "Esc cancel" gets the
-// identical highlight-then-label treatment on "Esc" itself, per the
-// user's own explicit follow-up request — not just single letters:
-// "Esc" (and "Del" wherever a legend like this one names it) is still
-// "the key you press" in exactly the same sense a single letter is,
-// three characters or not.
+// explicit request that both read the same way.
+//
+// "Esc cancel" gets the same highlight-then-label idea on "Esc" itself,
+// per the user's own explicit follow-up requests — not just single
+// letters: "Esc" is still "the key you press" in exactly the same sense
+// a single letter is, three characters or not. Unlike the members
+// above, though, "Esc" carries no padding space of its own at all
+// (colored background directly against "Esc", then straight into
+// "cancel" with nothing between them) — the user's own explicit,
+// separate request to drop even that: the color alone is enough to set
+// "Esc" apart from "cancel" without also needing a space to do it.
+//
+// A single plain space separates the prefix's own "…" from the first
+// member, and one member from the next — per the user's own explicit
+// clarification, deliberately its own separator, not the same thing as
+// each member's own leading highlight space (which the user considers
+// part of that member's own highlight, not inter-member spacing at
+// all), the same "one space after, always" rule buildButtonBar's own
+// quick legend follows. "Esccancel" gets the heavier " │ " (matching
+// buildButtonBar's own blockSep) instead of that plain space, marking it
+// as behaving differently from an ordinary member: it cancels the whole
+// chord rather than resolving it, the same distinction blockSep draws
+// around a chord-family cascade cell on the row above this one.
 func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarSpan) {
 	var b strings.Builder
 	col := 0
@@ -577,12 +606,12 @@ func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarS
 		col += tview.TaggedStringWidth(s)
 	}
 
-	write(fmt.Sprintf("%c…  ", family.prefix))
+	write(fmt.Sprintf("%c… ", family.prefix))
 
 	keyBG := colorTag(r.theme.ButtonBackground)
 	for i, m := range family.members {
 		if i > 0 {
-			write("   ")
+			write(" ")
 		}
 		start := col
 		write(fmt.Sprintf("[:%s:] %c [-:-:-]%s", keyBG, m.key, m.label))
@@ -597,9 +626,9 @@ func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarS
 		})
 	}
 
-	write("  │  ")
+	write(" │ ")
 	escStart := col
-	write(fmt.Sprintf("[:%s:] Esc [-:-:-]cancel", keyBG))
+	write(fmt.Sprintf("[:%s:]Esc[-:-:-]cancel", keyBG))
 	spans = append(spans, buttonBarSpan{
 		startCol: escStart, endCol: col,
 		run: func(r *Root) { r.cancelChord() },

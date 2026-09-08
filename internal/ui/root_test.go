@@ -9,36 +9,93 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
-// TestToggleMouseShortcutFlipsState pins Ctrl+_'s own action (see
-// ToggleMouseShortcut) — a real user report that a mouse-aware terminal
-// app with no way to turn that off breaks the terminal's own native
-// text selection/copy, and no easy-to-remember way back.
-func TestToggleMouseShortcutFlipsState(t *testing.T) {
+// TestToggleMouseReportingFlipsState pins the "om" chord's own action
+// (see toggleMouseReporting) — a real user report that a mouse-aware
+// terminal app with no way to turn that off breaks the terminal's own
+// native text selection/copy, and no easy-to-remember way back.
+func TestToggleMouseReportingFlipsState(t *testing.T) {
+	isolateUserConfigFile(t)
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	if !r.mouseEnabled {
-		t.Fatal("setup: mouse should start enabled, matching cmd/breakthrough's own initial EnableMouse(true)")
+		t.Fatal("setup: mouse should start enabled, matching config.DefaultSettings")
 	}
 
-	r.ToggleMouseShortcut()
+	r.toggleMouseReporting()
 	if r.mouseEnabled {
 		t.Error("the first press should disable mouse reporting")
 	}
 	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse off") {
 		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse off")
 	}
+	if r.settings.MouseEnabled {
+		t.Error("the flip should have updated the stored setting too")
+	}
 
-	r.ToggleMouseShortcut()
+	r.toggleMouseReporting()
 	if !r.mouseEnabled {
 		t.Error("a second press should re-enable mouse reporting")
 	}
 	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse on") {
 		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse on")
+	}
+}
+
+// TestMouseEnabledSurvivesIntoTheConfigFile mirrors
+// TestSplitOrientationSurvivesIntoTheConfigFile (see split_test.go) for
+// mouse_enabled — per the user's own explicit request that this survive
+// a restart rather than always starting back at "on".
+func TestMouseEnabledSurvivesIntoTheConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := isolateUserConfigFile(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.toggleMouseReporting()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading the config back: %v", err)
+	}
+	if got := string(data); !strings.Contains(got, "mouse_enabled = false") {
+		t.Errorf("config = %q, want it to record mouse_enabled", got)
+	}
+}
+
+// TestNewRootAppliesMouseEnabledFromSettings pins the other half: a
+// loaded settings.MouseEnabled = false (see loadInitialSettings) is
+// honored from the moment NewRoot returns, both in Root's own
+// bookkeeping (mouseEnabled mirrors it — see its own doc comment) and in
+// the real Application state cmd/breakthrough's own initial
+// EnableMouse(true) would otherwise leave in force. isolateInitialSettings,
+// not isolateUserConfigFile: loadInitialSettings reads via
+// config.UserConfigFile directly, a separate override point from
+// userConfigFilePath (see loadInitialSettings' own doc comment) — a
+// config file written at the latter would never actually be read here.
+func TestNewRootAppliesMouseEnabledFromSettings(t *testing.T) {
+	settings := config.DefaultSettings()
+	settings.MouseEnabled = false
+	isolateInitialSettings(t, settings, config.LoadColorSchemes("", ""))
+
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if r.mouseEnabled {
+		t.Error("mouseEnabled should be false, matching the loaded settings")
+	}
+	if got := r.buildStatusBar(); !strings.Contains(got, "Mouse off") {
+		t.Errorf("status bar = %q, want it to contain %q", got, "Mouse off")
 	}
 }
 

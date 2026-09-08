@@ -44,7 +44,7 @@ dialog open.
 | `r` | Rename | `e` | Edit | `/` | Filter |
 | `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
-| `s` | Split view on/off | `S` | Swap panes | `a` | Select all |
+| `s` | Split view on/off | | | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
@@ -52,10 +52,9 @@ dialog open.
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
-isn't; `s` splits the view, `S` swaps the two panes over. Browsing the
-Trash itself flips two of these to their trash-specific meaning: `r`
-restores instead of renaming, `D` empties the whole Trash instead of
-removing one file.
+isn't. Browsing the Trash itself flips two of these to their
+trash-specific meaning: `r` restores instead of renaming, `D` empties
+the whole Trash instead of removing one file.
 
 `h`/`k`/`M` target whichever of Properties/Details is relevant right
 now (Properties first if both are open on the same file), opening the
@@ -74,7 +73,7 @@ chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `z` — display | `zs` size format · `zt` time format · `zo` split orientation |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -220,8 +219,9 @@ pane's is dimmed. Each pane's own number strip marks the tab it holds,
 so you can always see which two tabs you have up.
 
 **Layout rules.** The panes never swap sides on their own: moving focus
-across the divider changes nothing about the layout, and `S` (or
-the context menu's "Swap panes") is the only thing that exchanges them.
+across the divider changes nothing about the layout, and the `z` chord's
+own `zw` (or the context menu's "Swap panes") is the only thing that
+exchanges them.
 Swapping moves the pane you are in to the other side and leaves the
 keyboard with it, rather than handing focus over — moving between panes
 is its own action. Switching to a different tab
@@ -366,7 +366,7 @@ directory), so there is no partial-move case to recover from.
 
 ## Sed Replace
 
-`Ctrl`+`S`, or the context menu's "sed". Runs a real `sed(1)`
+`E`, or the context menu's "sed". Runs a real `sed(1)`
 substitution against the selected file(s) — contents, not names.
 
 Fill in Find and Replace with, and set any of the four toggles (Regex,
@@ -386,7 +386,7 @@ writes the result back itself, atomically.
 
 ## Search
 
-`Ctrl`+`F`, or the button bar. Two modes:
+`f`. Two modes:
 
 - **By name** — glob, plain keyword, or regex, via `find`, or `locate`
   where its index is available.
@@ -403,7 +403,7 @@ can keep navigating from there without backing out first.
 
 ## Look and Tail -f
 
-`Ctrl`+`L`, `Enter` on a file, a double-click, or the context menu.
+`l`, `Enter` on a file, a double-click, or the context menu.
 Read-only, full-screen.
 
 - **Text, source, configs, diffs, logs** get syntax coloring for around
@@ -537,8 +537,10 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Options and configuration
 
-`Ctrl`+`O`, or the button bar. Categories down the left, that category's
-settings on the right, action buttons underneath.
+The `o` chord's own `oo` (`o` then `o` again — see [The keyboard
+layer](#the-keyboard-layer)), or the button bar's own `o…` cascade
+followed by `o`. Categories down the left, that category's settings on
+the right, action buttons underneath.
 
 | Key | Action |
 |---|---|
@@ -599,6 +601,7 @@ Every key breakthrough recognizes, with its default:
 | `mtime_unix` | `false` | Time column as a Unix timestamp instead of a formatted date |
 | `restore_tabs` | `true` | Reopen the tabs (and split) that were open on last exit |
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
+| `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
@@ -619,26 +622,24 @@ on it before that layer existed.
 
 | Key | Action |
 |---|---|
-| `Ctrl`+`_` | Toggle mouse reporting on/off — the one shortcut that has to work completely unconditionally, even with a dialog open or the command line focused |
 | `Ctrl`+`Q` | Quit (asks first) |
 | `Ctrl`+`C` | Back out of whatever is open — never quits |
 
 ### File panel
 
 Almost everything that used to live here as its own Ctrl-letter binding
-now has exactly one keyboard path — the plain letter on [The keyboard
-layer](#the-keyboard-layer) above — with no Ctrl equivalent left at all.
-What remains below either has no plain-letter home yet (`Ctrl`+`O`), or
-reaches something the plain letter genuinely can't (`Ctrl`+`T` while the
-tab switcher itself is already open; `Ctrl`+`Delete` regardless of
-terminal support).
+now has exactly one keyboard path — the plain letter or chord on [The
+keyboard layer](#the-keyboard-layer) above (Options and mouse reporting
+most recently, via the `o` chord's own `oo`/`om`) — with no Ctrl
+equivalent left at all. What remains below reaches something the plain
+letter genuinely can't (`Ctrl`+`T` while the tab switcher itself is
+already open; `Ctrl`+`Delete` regardless of terminal support).
 
 | Key | Action | also on |
 |---|---|---|
 | `Enter` | Open a directory, or Look at a file | |
 | `Space` | Select / deselect | |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
-| `Ctrl`+`O` | Options | |
 | `Delete` | Move to Trash | `d` |
 | `Ctrl`+`Delete` | Remove permanently (asks first), best-effort depending on terminal | `D` (always reliable) |
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |

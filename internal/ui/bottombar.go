@@ -126,6 +126,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		label string
 		key   rune
 		run   func(r *Root)
+		chord bool // a chord-family cascade cell, not a plain command — see the block separator below
 	}
 
 	// keyBG highlights the actual key to press within a cell's own label
@@ -167,17 +168,31 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		}
 		family := f // capture per iteration, not the loop variable
 		buttons = append(buttons, buttonSpec{
-			label: highlightKey(family.prefix) + "…  " + family.name,
+			label: highlightKey(family.prefix) + "… " + family.name,
 			key:   family.prefix,
 			run:   func(r *Root) { r.startChord(family) },
+			chord: true,
 		})
 	}
 
-	// " │ " (U+2502, the same box-drawing vertical bar buildStatusBar's
-	// own sep already uses one row below this) reads as a clearer
-	// separator between buttons than a plain double space, and keeps the
-	// two adjacent rows visually consistent with each other.
-	const sep = " │ "
+	// A single plain space between two ordinary buttons — per the user's
+	// own explicit clarification, this is deliberately its own separator,
+	// not the same thing as highlightKey's own leading space (which the
+	// user considers part of that next button's own highlight, not
+	// inter-button spacing at all): each button gets one space after it,
+	// full stop, regardless of what the next button's own label happens
+	// to start with. " │ " (U+2502, the same box-drawing vertical bar
+	// buildStatusBar's own sep already uses one row below this) replaces
+	// that plain space for one specific transition: right before the
+	// chord-family cascades (g/p/z/o — always last, appended as their own
+	// block just above) start, setting that whole block apart from the
+	// plain commands before it — unlike an ordinary button, one of these
+	// doesn't run its own action directly, it starts a whole second
+	// keystroke instead, and the heavier separator marks that "this group
+	// behaves differently" the same way chordHintBar's own trailing
+	// " │ " sets "Esccancel" apart from its members below.
+	const sep = " "
+	const blockSep = " │ "
 
 	var b strings.Builder
 	col := 0
@@ -193,7 +208,11 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	}
 	for i, bt := range buttons {
 		if i > 0 {
-			write(sep)
+			if bt.chord && !buttons[i-1].chord {
+				write(blockSep)
+			} else {
+				write(sep)
+			}
 		}
 		start := col
 		write(bt.label)
@@ -215,7 +234,7 @@ func hideUnhideLabel(showHidden bool) string {
 
 // buildStatusBar renders the status bar's text: the current user,
 // whether mouse reporting is currently on or off (see mouseStatusText/
-// Root.ToggleMouseShortcut), disk and inode usage for the panel's
+// toggleMouseReporting), disk and inode usage for the panel's
 // current directory (see fsops.FetchDiskUsage), the running kernel
 // release (see kernelVersionText), uptime and load average where
 // available (see uptimeText/loadAverageText — Linux only, gracefully
@@ -274,8 +293,8 @@ func (r *Root) buildStatusBar() string {
 // breakthrough instead of the terminal emulator, which breaks that
 // terminal's own native text selection/copy for anyone who doesn't
 // already know its own override gesture (Shift-drag, on most
-// xterm-derived emulators). Ctrl+_ (see Root.ToggleMouseShortcut) is a
-// plain, memorable way to turn reporting off (and back on) without
+// xterm-derived emulators). The "om" chord (see toggleMouseReporting)
+// is a plain, memorable way to turn reporting off (and back on) without
 // needing to know that gesture at all — this is what lets the status
 // bar answer "is it currently on" at a glance, the same way the
 // Hide/Unhide button already names what its own next click will do
@@ -518,14 +537,14 @@ func (r *Root) renameRow(row int) {
 // methods (EditShortcut/ToggleHiddenShortcut/OptionsShortcut/
 // SearchShortcut/PurgeShortcut) should act right now: no overlay is
 // open, and the bash command line doesn't have keyboard focus. Of the
-// five, only OptionsShortcut (Ctrl+O) and PurgeShortcut (Ctrl+Delete —
-// see its own doc comment) are still wired up in cmd/breakthrough
-// today; Edit, ToggleHidden, and Search moved to plain letters on the
-// primary keyboard layer instead ('e'/'.'/'f' — see keymap.go), which
-// need no guard of their own (acceptsPlainKeyCommand already covers the
-// same ground more precisely — see RenameShortcut's own doc comment for
-// another Shortcut method in exactly that boat already). Their own
-// Shortcut wrappers are kept anyway, not deleted, as the same
+// five, only PurgeShortcut (Ctrl+Delete — see its own doc comment) is
+// still wired up in cmd/breakthrough today; Edit, ToggleHidden, Search,
+// and (most recently) Options all moved to the primary keyboard layer
+// instead ('e'/'.'/'f', and the "o" chord's own "oo" — see keymap.go),
+// which need no guard of their own (acceptsPlainKeyCommand already
+// covers the same ground more precisely — see RenameShortcut's own doc
+// comment for another Shortcut method in exactly that boat already).
+// Their own Shortcut wrappers are kept anyway, not deleted, as the same
 // exported-building-block shape RenameShortcut already established.
 //
 // Unlike RequestQuit/RequestCancel (Ctrl+Q/Ctrl+C), which are meant to
@@ -550,18 +569,17 @@ func (r *Root) acceptsGlobalShortcut() bool {
 // cmd/breakthrough: Entf/Ctrl+Delete (see TrashShortcut/PurgeShortcut in
 // trash.go) and Ctrl+T (see TabSwitcherShortcut in tabs.go) need to
 // decide, before even calling their own Shortcut method, whether to
-// consume the key at all — unlike Ctrl+_/Ctrl+Q/Ctrl+C/Ctrl+O above,
-// which always return nil regardless (an accepted, minor imperfection
-// for keys TextArea might bind natively), each of these collides with a
-// real, explicit feature of this same codebase: bashLine's own
-// captureBashLineKey binds Ctrl+P to command-history recall, for
-// instance, one reason Properties moved off Ctrl+P entirely onto the
-// plain-letter layer's own 'i' instead of joining this group. Consuming
-// one of them unconditionally at the Application level would silently
-// break that native behavior every time the bash line has focus, not
-// just fail to fire the intended action — so cmd/breakthrough falls
-// through to bashLine's own handling (returns the event, not nil)
-// whenever this reports false, rather than swallowing it either way.
+// consume the key at all — unlike Ctrl+Q/Ctrl+C, which always return nil
+// regardless, each of these collides with a real, explicit feature of
+// this same codebase: bashLine's own captureBashLineKey binds Ctrl+P to
+// command-history recall, for instance, one reason Properties moved off
+// Ctrl+P entirely onto the plain-letter layer's own 'i' instead of
+// joining this group. Consuming one of them unconditionally at the
+// Application level would silently break that native behavior every
+// time the bash line has focus, not just fail to fire the intended
+// action — so cmd/breakthrough falls through to bashLine's own handling
+// (returns the event, not nil) whenever this reports false, rather than
+// swallowing it either way.
 func (r *Root) AcceptsGlobalShortcut() bool {
 	return r.acceptsGlobalShortcut()
 }
@@ -581,21 +599,17 @@ func (r *Root) BashLineHasFocus() bool {
 	return r.bashLine.HasFocus()
 }
 
-// EditShortcut, ToggleHiddenShortcut, OptionsShortcut, and
-// SearchShortcut are acceptsGlobalShortcut's own remaining group (see
-// its doc comment for which of the four cmd/breakthrough still actually
-// calls today). LookShortcut and PurgeShortcut (Remove) are the same
-// shape, defined alongside the rest of Look/Trash in viewer.go/trash.go
-// instead of here.
-//
-// RenameShortcut, right below, is the same shape too, but nothing in
-// cmd/breakthrough currently calls it — Rename's own real keyboard path
-// is the plain-letter layer's "r" (see plainCommands in keymap.go,
-// calling renameCurrentEntry right above), which needs no such guard of
-// its own (acceptsPlainKeyCommand already covers the same ground more
-// precisely). Kept rather than deleted as an exported building block,
-// the same shape every shortcut here already has, for whatever future
-// caller wants the guarded form.
+// EditShortcut, ToggleHiddenShortcut, OptionsShortcut, RenameShortcut,
+// and SearchShortcut are acceptsGlobalShortcut's own remaining group —
+// none of which cmd/breakthrough calls any more (see acceptsGlobalShortcut's
+// own doc comment on where each one's real keyboard path lives instead).
+// Kept rather than deleted as exported building blocks regardless, the
+// shape RenameShortcut — the first to end up in this position — already
+// established, for whatever future caller wants the guarded form.
+// LookShortcut and PurgeShortcut (Remove) are the same shape, defined
+// alongside the rest of Look/Trash in viewer.go/trash.go instead of
+// here (PurgeShortcut is the one exception still actually wired up —
+// see its own doc comment).
 func (r *Root) EditShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.editCurrentEntry()

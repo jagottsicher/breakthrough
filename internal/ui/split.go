@@ -394,8 +394,10 @@ func (r *Root) swapPanes() bool {
 	return true
 }
 
-// swapPanesOrExplain is the "S" key's own action: swap the two panes, or
-// say why there's nothing to swap.
+// swapPanesOrExplain is the "zw" chord's own action (see chordFamilies
+// in keymap.go — "z" for display, since swapping panes is a display
+// arrangement the same way split orientation is): swap the two panes,
+// or say why there's nothing to swap.
 //
 // Saying so matters more here than for most verbs. Split view is the
 // precondition, it is not obvious from a single pane that the key even

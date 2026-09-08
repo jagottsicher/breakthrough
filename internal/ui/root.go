@@ -83,20 +83,21 @@ type Root struct {
 
 	app *tview.Application
 
-	// mouseEnabled mirrors whatever cmd/breakthrough's own initial
-	// app.EnableMouse(true) call left the Application in — tview itself
-	// has no getter for this (see Application.EnableMouse's own private
-	// enableMouse field), so this is Root's own copy of the same state,
-	// flipped by ToggleMouseShortcut (Ctrl+_). Enabling mouse reporting
-	// is what lets this app see clicks/drags at all, but it also means
-	// the terminal emulator hands every mouse event to breakthrough
-	// instead of handling it itself — per a real user report, that
-	// breaks a terminal's own native text selection/copy (e.g. to grab a
-	// filename) for anyone who doesn't already know their terminal's own
-	// override gesture (Shift-drag, on most xterm-derived emulators).
-	// Ctrl+_ is a plain, always-available escape hatch for exactly that,
-	// independent of whichever gesture (if any) the current terminal
-	// happens to support.
+	// mouseEnabled mirrors whatever the last app.EnableMouse call (see
+	// NewRoot/setMouseEnabled) left the Application in — tview itself has
+	// no getter for this (see Application.EnableMouse's own private
+	// enableMouse field), so this is Root's own copy of the same state.
+	// Enabling mouse reporting is what lets this app see clicks/drags at
+	// all, but it also means the terminal emulator hands every mouse
+	// event to breakthrough instead of handling it itself — per a real
+	// user report, that breaks a terminal's own native text
+	// selection/copy (e.g. to grab a filename) for anyone who doesn't
+	// already know their terminal's own override gesture (Shift-drag, on
+	// most xterm-derived emulators). The "om" chord (see keymap.go) is a
+	// plain, always-reachable toggle for exactly that, independent of
+	// whichever gesture (if any) the current terminal happens to
+	// support, and — per the user's own explicit request — a persisted
+	// setting (mouse_enabled), not just a live one: see setMouseEnabled.
 	mouseEnabled bool
 
 	// appVersion/appCommit/appBuildDate/appBuiltBy are the Help
@@ -918,7 +919,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r := &Root{
 		Pages:          tview.NewPages(),
 		app:            app,
-		mouseEnabled:   true, // matches cmd/breakthrough's own initial app.EnableMouse(true)
+		mouseEnabled:   settings.MouseEnabled,
 		panel:          panel,
 		settings:       settings,
 		colorSchemes:   colorSchemes,
@@ -1158,6 +1159,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	r.applyTheme(theme)  // paints every widget constructed above in one place — see applyTheme's own doc comment
 	r.refreshStatusBar() // initial sync — see the onLoad comment above
+
+	// cmd/breakthrough's own app.EnableMouse(true) call happens before
+	// settings are even loaded, so this overrides it the moment they are
+	// — mouseEnabled itself is already set from settings.MouseEnabled
+	// above, this just brings the real Application state (which tview
+	// gives no getter for — see mouseEnabled's own doc comment) into
+	// agreement with it for the mouse_enabled = false case.
+	app.EnableMouse(settings.MouseEnabled)
 
 	// Both of these can have something to say, and both go through the
 	// same showError overlay — collected into one notice rather than
@@ -1746,14 +1755,14 @@ func (r *Root) RequestCancel() {
 	r.panel.cancelEdit()
 }
 
-// ToggleMouseShortcut is Ctrl+_'s own action — see cmd/breakthrough.
-// Always fires regardless of what's currently open or focused, the same
-// "reachable from literally anywhere" category Ctrl+Q/Ctrl+C are in:
-// the whole point is grabbing text via the terminal's own native
-// selection, which can be anywhere on screen — a dialog, the bash line,
-// a plain directory listing — so gating this behind
-// acceptsGlobalShortcut the way most other shortcuts are would defeat
-// it in exactly the cases it's most likely needed.
+// toggleMouseReporting is the "om" chord's own action (see chordFamilies
+// in keymap.go — "o" for Options, since this is the one setting worth a
+// quick toggle without opening the screen itself, the same way "zo"
+// reaches split orientation directly). Unlike its own predecessor
+// (Ctrl+_, retired per the user's own explicit request despite firing
+// truly unconditionally, dialog or no dialog — a plain letter never can:
+// see acceptsPlainKeyCommand), this only works while plainly browsing,
+// the same as every other chord.
 //
 // See mouseEnabled's own doc comment on why this exists at all: mouse
 // reporting being on is what makes this app's own clicks/drags work,
@@ -1764,9 +1773,22 @@ func (r *Root) RequestCancel() {
 // out that doesn't depend on it. refreshStatusBar repaints the "Mouse
 // on/off" segment (see buildStatusBar) immediately, rather than waiting
 // for StartClock's own once-a-second tick to eventually catch up.
-func (r *Root) ToggleMouseShortcut() {
-	r.mouseEnabled = !r.mouseEnabled
-	r.app.EnableMouse(r.mouseEnabled)
+func (r *Root) toggleMouseReporting() {
+	r.setMouseEnabled(!r.mouseEnabled)
+}
+
+// setMouseEnabled is toggleMouseReporting's own body with the target
+// value passed in rather than derived by flipping — the same split
+// setShowHidden's own doc comment explains, so the Options screen can
+// set a specific value through exactly the same path the keyboard
+// toggle uses. Persists to config (mouse_enabled) in addition to
+// applying it live, per the user's own explicit request that this
+// survive a restart rather than always starting back at "on".
+func (r *Root) setMouseEnabled(enabled bool) {
+	r.mouseEnabled = enabled
+	r.app.EnableMouse(enabled)
+	r.settings.MouseEnabled = enabled
+	r.persistSetting("mouse_enabled", strconv.FormatBool(enabled))
 	r.refreshStatusBar()
 }
 
