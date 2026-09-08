@@ -380,7 +380,12 @@ var helpText = strings.TrimLeft(`
   holds gets a full-row grey tint (a lighter shade for Cut than Copy),
   across every open tab showing that row, not just the one Copy/Cut
   was pressed in; and the status bar names it — "Copy: 3 files, 1
-  dir" — right after the chord countdown's own spot.
+  dir" — right after the chord countdown's own spot. Once Paste
+  actually starts, that same spot shows its own live progress instead
+  — a spinner, how many items are done, a block-bar, and the real
+  file currently being written. A same-filesystem move is instant
+  regardless of size, so it usually finishes before this ever shows
+  anything at all — expected, not a missed update.
 
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 

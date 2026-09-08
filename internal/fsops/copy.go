@@ -22,7 +22,19 @@ import (
 // files as it goes. That single "force" decision, made once by the
 // caller, is treated as covering everything nested under src — Copy
 // doesn't ask again per file.
-func Copy(src, dst string, force bool) error {
+//
+// If onFile is non-nil, it's called with a real file or symlink's own
+// path just before that one starts being copied — for a directory, once
+// per entry found underneath it, recursively, in os.ReadDir's own order;
+// for a single file or symlink, once for src itself. Never called for a
+// directory itself (MkdirAll is instant — there's nothing to report
+// progress on), only for the actual file/symlink work, so a caller can
+// show which file a paste currently has open. Same "cheap, synchronous,
+// no rate-limiting done here" contract Hash's own onProgress already
+// follows (see its own doc comment) — a caller wanting to sample this on
+// its own schedule instead (see animatePasteProgress in internal/ui) is
+// free to.
+func Copy(src, dst string, force bool, onFile func(path string)) error {
 	fi, err := os.Lstat(src)
 	if err != nil {
 		return err
@@ -36,11 +48,11 @@ func Copy(src, dst string, force bool) error {
 
 	switch {
 	case fi.Mode()&os.ModeSymlink != 0:
-		return copySymlink(src, dst)
+		return copySymlink(src, dst, onFile)
 	case fi.IsDir():
-		return copyDir(src, dst, fi.Mode(), force)
+		return copyDir(src, dst, fi.Mode(), force, onFile)
 	default:
-		return copyFile(src, dst, fi.Mode(), force)
+		return copyFile(src, dst, fi.Mode(), force, onFile)
 	}
 }
 
@@ -60,7 +72,10 @@ func refuseExisting(dst string) error {
 // already exists (only reached with force=true — the caller already
 // checked otherwise), it's removed first so the copy starts clean rather
 // than potentially leaving stale bytes behind a shorter new file.
-func copyFile(src, dst string, mode os.FileMode, force bool) error {
+func copyFile(src, dst string, mode os.FileMode, force bool, onFile func(path string)) error {
+	if onFile != nil {
+		onFile(src)
+	}
 	if force {
 		if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -92,7 +107,7 @@ func copyFile(src, dst string, mode os.FileMode, force bool) error {
 // copyDir recursively copies a directory's contents into dst, creating
 // dst itself (or reusing it, if force allowed proceeding with an existing
 // one — see Copy's doc comment on merge semantics).
-func copyDir(src, dst string, mode os.FileMode, force bool) error {
+func copyDir(src, dst string, mode os.FileMode, force bool, onFile func(path string)) error {
 	if err := os.MkdirAll(dst, mode.Perm()); err != nil {
 		return err
 	}
@@ -119,11 +134,11 @@ func copyDir(src, dst string, mode os.FileMode, force bool) error {
 
 		switch {
 		case fi.Mode()&os.ModeSymlink != 0:
-			err = copySymlink(childSrc, childDst)
+			err = copySymlink(childSrc, childDst, onFile)
 		case fi.IsDir():
-			err = copyDir(childSrc, childDst, fi.Mode(), force)
+			err = copyDir(childSrc, childDst, fi.Mode(), force, onFile)
 		default:
-			err = copyFile(childSrc, childDst, fi.Mode(), force)
+			err = copyFile(childSrc, childDst, fi.Mode(), force, onFile)
 		}
 		if err != nil {
 			return err
@@ -136,7 +151,10 @@ func copyDir(src, dst string, mode os.FileMode, force bool) error {
 // copySymlink recreates src's link (whatever it points at, even if that
 // target doesn't exist or lives outside src's own tree) at dst, rather
 // than copying the file it points to.
-func copySymlink(src, dst string) error {
+func copySymlink(src, dst string, onFile func(path string)) error {
+	if onFile != nil {
+		onFile(src)
+	}
 	target, err := os.Readlink(src)
 	if err != nil {
 		return err

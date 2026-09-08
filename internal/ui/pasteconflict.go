@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -69,6 +72,44 @@ type pasteJob struct {
 	// no conflict is still pending or on screen (current/pending below).
 	remaining int
 
+	// ioMu serializes every pasteOne call's own real fsCopy/fsMove work
+	// across however many goroutines this job spawns (still one per
+	// item — see pasteWalk/resolveConflictAsync — not a bounded worker
+	// pool): only one file actually copies/moves at a time, held for the
+	// I/O itself only, released again before that same call's own
+	// QueueUpdateDraw hand-off (which always blocks its caller until an
+	// Application.Run() loop actually services it — verified directly
+	// against tview's own application.go, not assumed — so holding this
+	// through it would let one item's stuck hand-off (there's no such
+	// loop in most of this package's own tests) starve every other
+	// item's turn at the lock forever). This is what makes "which file
+	// is this Paste working on right now" (see currentFile) a single,
+	// well-defined answer instead of however many concurrent copies used
+	// to race over it, and bounds a very large paste to one file's worth
+	// of actual disk I/O in flight at a time — accepting, as a
+	// deliberate trade-off, that a huge paste still starts one goroutine
+	// per item up front, all but one of them just waiting on this lock;
+	// a real bounded worker pool would be the next step if that count
+	// ever became the actual bottleneck rather than the disk itself.
+	ioMu sync.Mutex
+
+	// currentFile is pasteOne's own "on it right now" — the absolute
+	// path fsCopy/fsMove most recently reported via onFile, read by
+	// animatePasteProgress's own ticker to render the status bar's
+	// progress segment (see pasteProgressText). A plain atomic, not
+	// funneled through QueueUpdateDraw: written directly from whichever
+	// goroutine currently holds ioMu, the same "cheap, synchronous,
+	// sampled on the reader's own schedule" contract Properties' own
+	// hashBytesRead already follows, for the same reason (see
+	// fsops.Hash's onProgress doc comment).
+	currentFile atomic.Pointer[string]
+
+	// animFrame advances once per animatePasteProgress tick — purely
+	// decorative (see hashAnimationFrames, reused here for the same
+	// visual language), a "still alive" cue for a single very large file
+	// where currentFile/remaining might otherwise sit unchanged a while.
+	animFrame int
+
 	pending []pasteConflict // discovered, not yet shown or resolved
 	current *pasteConflict  // the one currently in r.pasteConflictDialog, if any
 
@@ -98,9 +139,10 @@ func (r *Root) startPaste(items []string, cut bool, destDir string) {
 	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: len(items), remaining: len(items)}
 	r.pasteJob = job
 
-	r.safeGo("paste", func() { r.pasteJob = nil }, func() {
-		r.pasteWalk(job, items)
-	})
+	onPanic := func() { r.pasteJob = nil }
+	r.safeGo("paste", onPanic, func() { r.pasteWalk(job, items) })
+	r.safeGo("paste progress animation", onPanic, func() { r.animatePasteProgress(job) })
+	r.refreshStatusBar() // show the progress segment immediately, not just once the first tick lands
 }
 
 // cancelPasteJob stops whatever paste is currently running, if any — a
@@ -135,14 +177,19 @@ func (r *Root) cancelPasteJob() {
 // own hand-off, defeating the entire point of any of this running in
 // the background at all. This loop itself, then, only ever does a fast
 // os.Lstat per item and immediately moves on — never anything that
-// could itself block waiting on the UI thread.
+// could itself block waiting on the UI thread. The real disk I/O each
+// of those goroutines eventually does is still serialized to one at a
+// time (see pasteJob.ioMu's own doc comment) — this loop just starts
+// them all without waiting for that turn.
 //
 // A real, accepted trade-off from spawning one goroutine per item
 // rather than working through them one at a time: a very large paste
 // (many hundreds of files at once) starts that many goroutines
-// concurrently instead of bounding how many run at once. Fine for the
-// sizes this app's own target use actually pastes at once; a worker
-// pool would be the next step if that ever stops being true.
+// concurrently — mostly just waiting on ioMu, not actually touching the
+// disk at once, but still that many live goroutines — instead of
+// bounding how many exist at all. Fine for the sizes this app's own
+// target use actually pastes at once; a real bounded worker pool would
+// be the next step if that ever stopped being true.
 func (r *Root) pasteWalk(job *pasteJob, items []string) {
 	for _, src := range items {
 		if job.ctx.Err() != nil {
@@ -171,6 +218,35 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 	}
 }
 
+// animatePasteProgress advances job.animFrame and redraws the status
+// bar every hashAnimationInterval until job.ctx is done — mirrors
+// Properties' own animateHashProgress (same interval, same idea: keep a
+// "something is happening" cue moving smoothly regardless of how bursty
+// the actual I/O is, decoupled from it on its own goroutine), reusing
+// hashAnimationFrames' own glyph set for visual consistency with every
+// other "in progress" indicator this app already shows.
+func (r *Root) animatePasteProgress(job *pasteJob) {
+	ticker := time.NewTicker(hashAnimationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if job.ctx.Err() != nil {
+				return
+			}
+			r.app.QueueUpdateDraw(func() {
+				if job.ctx.Err() != nil {
+					return
+				}
+				job.animFrame++
+				r.refreshStatusBar()
+			})
+		case <-job.ctx.Done():
+			return
+		}
+	}
+}
+
 // reportPasteOutcome runs fn on the UI thread via QueueUpdateDraw, from
 // its own freshly-spawned goroutine rather than inline — see
 // pasteWalk's own doc comment on why calling QueueUpdateDraw directly
@@ -193,16 +269,30 @@ func (r *Root) reportPasteOutcome(job *pasteJob, fn func()) {
 // Checks job.ctx.Err() before touching the filesystem at all: a
 // conflict resolved just as (or after) the job itself was cancelled —
 // superseded by a newer Paste — shouldn't still write anything.
+//
+// job.ioMu (see its own doc comment) is held for the real fsCopy/fsMove
+// call only — acquired right before, released again right after,
+// deliberately before the QueueUpdateDraw hand-off below, which always
+// blocks its own caller until serviced and must never hold up whichever
+// other goroutine is waiting its own turn at the lock. onFile stores
+// each real file/symlink fsCopy/fsMove is about to touch into
+// job.currentFile as it goes (see its own doc comment) — a plain atomic
+// write, not routed through QueueUpdateDraw itself: animatePasteProgress
+// samples it on its own schedule, the same "no rate-limiting done at
+// the source" contract fsops.Hash's own onProgress already follows.
 func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool) {
 	if job.ctx.Err() != nil {
 		return
 	}
+	onFile := func(path string) { job.currentFile.Store(&path) }
+	job.ioMu.Lock()
 	var err error
 	if job.cut {
-		err = fsMove(src, dst, force)
+		err = fsMove(src, dst, force, onFile)
 	} else {
-		err = fsCopy(src, dst, force)
+		err = fsCopy(src, dst, force, onFile)
 	}
+	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })
 }
 
@@ -267,6 +357,13 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 		return // already superseded/cancelled — see cancelPasteJob
 	}
 	r.pasteJob = nil
+	// Stops pasteWorker/animatePasteProgress (both select on job.ctx.Done()
+	// — see their own doc comments): there's nothing left in job.work by
+	// this point (every item already has a final outcome, or this
+	// wouldn't have run at all — see pasteItemDone), so both goroutines
+	// would otherwise sit blocked forever, doing nothing, until the
+	// process exits.
+	job.cancel()
 
 	if job.cut && len(job.errors) == 0 {
 		// Moved away cleanly; nothing left to paste again — goes through
@@ -347,7 +444,11 @@ func (r *Root) pasteConflictFound(job *pasteJob, c pasteConflict) {
 // any) always happens in its own freshly-spawned goroutine, never on
 // this one: this runs on the UI thread (a dialog button's own callback,
 // or pasteConflictFound above finding forAll already set), which must
-// never block on file I/O itself.
+// never block on file I/O itself. pasteOne itself still serializes the
+// actual fsCopy/fsMove call against every other item's own goroutine
+// (see job.ioMu's own doc comment) — this just starts it without
+// waiting for that turn, the same as pasteWalk's own non-conflicting
+// items already do.
 func (r *Root) resolveConflictAsync(job *pasteJob, c pasteConflict, resolution conflictResolution) {
 	switch resolution {
 	case resolveSkip:

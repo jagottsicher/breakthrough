@@ -260,18 +260,33 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
-	// The clipboard's own contents, if anything — right after the chord
-	// indicator and before the username, the same leading, fixed
-	// position and the same reasoning: it needs to be seen without
-	// hunting for it, and everything after the username is each already
-	// optional on its own platform, so a fixed spot ahead of all of that
-	// is the one place adding or removing this segment never shifts
-	// something else around. Empty (no leading text, no separator) once
-	// the clipboard itself is empty again, the same "just show one less
-	// segment" shape as disk usage/uptime/load above.
-	if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
-		write(clip)
+	// A running Paste's own progress takes this same leading spot instead
+	// of the clipboard indicator below while one is actually in flight —
+	// "what's copying right now" is more specific and more time-sensitive
+	// than "what's staged to paste", so it wins for however long there's
+	// something to say. Reverts to the clipboard indicator the moment
+	// r.pasteJob clears (see finishPasteJob), the same instant the two
+	// would otherwise have said contradictory things (a Cut's own
+	// clipboard normally empties out right as its Paste finishes).
+	switch {
+	case r.pasteJob != nil:
+		write(pasteProgressText(r.pasteJob))
 		sep()
+	default:
+		// The clipboard's own contents, if anything — right after the
+		// chord indicator and before the username, the same leading,
+		// fixed position and the same reasoning: it needs to be seen
+		// without hunting for it, and everything after the username is
+		// each already optional on its own platform, so a fixed spot
+		// ahead of all of that is the one place adding or removing this
+		// segment never shifts something else around. Empty (no leading
+		// text, no separator) once the clipboard itself is empty again,
+		// the same "just show one less segment" shape as disk usage/
+		// uptime/load below.
+		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
+			write(clip)
+			sep()
+		}
 	}
 
 	write(r.currentUser)
@@ -341,6 +356,72 @@ func pluralCount(n int, singular, plural string) string {
 		return fmt.Sprintf("%d %s", n, singular)
 	}
 	return fmt.Sprintf("%d %s", n, plural)
+}
+
+// pasteProgressBarWidth is how many block characters wide
+// pasteProgressText's own bar is — narrow enough to leave room for the
+// segments after it (username, disk usage, uptime, ...), wide enough to
+// actually read as a bar rather than a handful of ambiguous pixels.
+const pasteProgressBarWidth = 10
+
+// pasteProgressText renders buildStatusBar's own "a Paste is running"
+// segment, replacing the clipboard indicator for as long as job is
+// non-nil (see buildStatusBar's own doc comment on why one wins over
+// the other): a spinner (reusing hashAnimationFrames — the same visual
+// language as every other "in progress" indicator this app already
+// has, driven by animatePasteProgress's own ticker), "Copying"/"Moving"
+// naming which of the two this actually is, how many of the clipboard's
+// own top-level items have a final outcome so far, a block-character
+// bar for the same fraction, and the real file fsCopy/fsMove most
+// recently reported touching (see pasteJob.currentFile) — its bare
+// name, not the full path: the path is wherever the paste's own
+// destination already says it's going, and a long one would crowd out
+// every segment after it.
+//
+// The count/bar is per top-level clipboard item, not per file: a
+// directory only advances it once, when the whole thing finishes, no
+// matter how many files it contains — currentFile is what actually
+// moves during that stretch, updating per real file underneath it even
+// while the bar itself sits still. Precise, granular byte- or
+// file-level progress would need summing every file's size (or count)
+// under every selected directory before a single byte moves — real
+// cost paid up front for every Paste, not just large ones — so this
+// starts at the cheaper, already-available item-level figure instead;
+// worth revisiting if that granularity turns out to matter in practice
+// (see feature_ideas.txt).
+func pasteProgressText(job *pasteJob) string {
+	verb := "Copying"
+	if job.cut {
+		verb = "Moving"
+	}
+	done := job.total - job.remaining
+	if done < 0 {
+		done = 0
+	}
+	spinner := hashAnimationFrames[job.animFrame%len(hashAnimationFrames)]
+	bar := progressBar(done, job.total, pasteProgressBarWidth)
+
+	name := ""
+	if current := job.currentFile.Load(); current != nil && *current != "" {
+		name = " " + filepath.Base(*current)
+	}
+	return fmt.Sprintf("%s %s %d/%d %s%s", spinner, verb, done, job.total, bar, name)
+}
+
+// progressBar renders a done-of-total fraction as a fixed-width bar of
+// filled ("█") and empty ("░") block characters, bracketed — total <= 0
+// renders as entirely empty rather than dividing by zero, and done is
+// clamped to total so a fraction that briefly exceeds 1 (shouldn't
+// happen, but cheap to guard) can never overfill it.
+func progressBar(done, total, width int) string {
+	if total <= 0 {
+		return "[" + strings.Repeat("░", width) + "]"
+	}
+	if done > total {
+		done = total
+	}
+	filled := done * width / total
+	return "[" + strings.Repeat("█", filled) + strings.Repeat("░", width-filled) + "]"
 }
 
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"

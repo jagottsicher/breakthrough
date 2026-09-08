@@ -154,7 +154,15 @@ terminal.
   just the one Copy/Cut was pressed in; and the status bar names it —
   "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
   chord countdown's own spot, for as long as there's something to
-  Paste.
+  Paste. Once a Paste actually starts, that same spot switches to its
+  own live progress instead — a spinner, "Copying"/"Moving" and how
+  many of the selection's own top-level items are done, a block-bar for
+  the same fraction, and whichever real file is being written right
+  now (its bare name, e.g. inside a large directory this Paste is still
+  working through). A same-filesystem move is atomic regardless of
+  size, so a Cut within one filesystem usually finishes too fast for
+  this to show anything at all — expected, not a bug: there's nothing
+  to report progress on.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

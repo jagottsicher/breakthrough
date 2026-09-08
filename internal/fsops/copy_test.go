@@ -3,6 +3,7 @@ package fsops
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func TestCopyFile(t *testing.T) {
 	}
 
 	dst := filepath.Join(dir, "dst.txt")
-	if err := Copy(src, dst, false); err != nil {
+	if err := Copy(src, dst, false, nil); err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
 
@@ -44,7 +45,7 @@ func TestCopyRefusesExistingDestByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Copy(src, dst, false); err == nil {
+	if err := Copy(src, dst, false, nil); err == nil {
 		t.Fatal("Copy should refuse to overwrite an existing dst without force")
 	}
 
@@ -68,7 +69,7 @@ func TestCopyForceOverwritesExistingDest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Copy(src, dst, true); err != nil {
+	if err := Copy(src, dst, true, nil); err != nil {
 		t.Fatalf("Copy with force: %v", err)
 	}
 
@@ -95,7 +96,7 @@ func TestCopyDirRecursive(t *testing.T) {
 	}
 
 	dst := filepath.Join(dir, "dst")
-	if err := Copy(src, dst, false); err != nil {
+	if err := Copy(src, dst, false, nil); err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
 
@@ -104,6 +105,43 @@ func TestCopyDirRecursive(t *testing.T) {
 	}
 	if got, err := os.ReadFile(filepath.Join(dst, "sub", "b.txt")); err != nil || string(got) != "b" {
 		t.Errorf("dst/sub/b.txt = %q, %v, want %q, nil", got, err, "b")
+	}
+}
+
+// TestCopyReportsEveryFileViaOnFile pins onFile's own documented
+// contract: called once per real file or symlink actually copied,
+// recursively for a directory, never for a directory itself (MkdirAll
+// is instant — nothing to report progress on).
+func TestCopyReportsEveryFileViaOnFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "sub", "b.txt"), []byte("b"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	var reported []string
+	dst := filepath.Join(dir, "dst")
+	if err := Copy(src, dst, false, func(path string) { reported = append(reported, path) }); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	want := []string{filepath.Join(src, "a.txt"), filepath.Join(src, "sub", "b.txt")}
+	if len(reported) != len(want) {
+		t.Fatalf("onFile reported %v, want %v", reported, want)
+	}
+	sort.Strings(reported)
+	sort.Strings(want)
+	for i := range want {
+		if reported[i] != want[i] {
+			t.Errorf("onFile reported %v, want %v", reported, want)
+			break
+		}
 	}
 }
 
@@ -119,7 +157,7 @@ func TestCopySymlinkRecreatesLinkNotTarget(t *testing.T) {
 	}
 
 	dst := filepath.Join(dir, "link-copy.txt")
-	if err := Copy(link, dst, false); err != nil {
+	if err := Copy(link, dst, false, nil); err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
 

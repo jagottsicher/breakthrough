@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,13 +28,13 @@ func isolatePasteIO(t *testing.T) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{}, 64)
 	origCopy, origMove := fsCopy, fsMove
-	fsCopy = func(src, dst string, force bool) error {
-		err := origCopy(src, dst, force)
+	fsCopy = func(src, dst string, force bool, onFile func(string)) error {
+		err := origCopy(src, dst, force, onFile)
 		done <- struct{}{}
 		return err
 	}
-	fsMove = func(src, dst string, force bool) error {
-		err := origMove(src, dst, force)
+	fsMove = func(src, dst string, force bool, onFile func(string)) error {
+		err := origMove(src, dst, force, onFile)
 		done <- struct{}{}
 		return err
 	}
@@ -787,6 +788,52 @@ func TestAdvancePasteConflictsShowsNextQueuedConflict(t *testing.T) {
 	if len(job.pending) != 0 {
 		t.Errorf("pending = %d, want 0 once the only queued conflict is now showing", len(job.pending))
 	}
+}
+
+// TestPasteSummaryError pins pasteSummaryError's own two shapes: a
+// TestPasteOneSerializesRealIOAcrossConcurrentItems pins job.ioMu's own
+// whole point: however many goroutines pasteWalk/resolveConflictAsync
+// start at once, only one of them is ever actually inside fsCopy/fsMove
+// at a time — the property that makes currentFile a well-defined single
+// answer instead of however many concurrent copies used to race over
+// it. Fires several pasteOne calls concurrently against a fake fsCopy
+// that fails the test the moment it finds itself entered while another
+// call is still inside it, with a short sleep in the middle to give a
+// real race an actual window to land in if the lock isn't doing its
+// job. Signals its own "done" channel from inside the fake fsCopy, not
+// by waiting for pasteOne itself to return — pasteOne's own
+// QueueUpdateDraw hand-off at the end blocks forever without a live
+// Application.Run() loop (see isolatePasteIO's own doc comment for the
+// same reasoning), so every one of these goroutines is left stuck
+// there once its own I/O is done, exactly as isolatePasteIO's own
+// callers already tolerate elsewhere in this file.
+func TestPasteOneSerializesRealIOAcrossConcurrentItems(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 5)
+
+	origCopy := fsCopy
+	t.Cleanup(func() { fsCopy = origCopy })
+	var inFlight atomic.Int32
+	done := make(chan struct{}, 5)
+	fsCopy = func(src, dst string, force bool, onFile func(string)) error {
+		if inFlight.Add(1) != 1 {
+			t.Errorf("fsCopy entered while another call was already inside it — job.ioMu isn't serializing real I/O")
+		}
+		time.Sleep(5 * time.Millisecond) // a real window for a race to actually land in
+		inFlight.Add(-1)
+		done <- struct{}{}
+		return nil
+	}
+
+	for i := 0; i < 5; i++ {
+		i := i
+		go r.pasteOne(job, filepath.Join(dir, fmt.Sprintf("item-%d.txt", i)), filepath.Join(dir, fmt.Sprintf("out-%d.txt", i)), false)
+	}
+	waitPasteIO(t, done, 5)
 }
 
 // TestPasteSummaryError pins pasteSummaryError's own two shapes: a

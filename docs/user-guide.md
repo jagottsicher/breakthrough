@@ -548,6 +548,43 @@ Paste:
   the same "just show one less segment" shape as the disk-usage/
   uptime/load segments further along the same line.
 
+### Watching a Paste while it runs
+
+The moment a Paste actually starts, that same status bar spot switches
+from the clipboard indicator to its own live progress instead, for
+example:
+
+```
+● Copying 2/5 [████░░░░░░] holiday-photo.jpg
+```
+
+- A spinner (cycling dots, the same one Properties' own hash
+  computation already uses) — a "still working" cue even during a
+  single very large file, where the rest of this line might otherwise
+  sit still for a while.
+- "Copying"/"Moving", naming which of the two this is.
+- How many of the selection's own top-level items have a final outcome
+  so far, out of the total — a directory only advances this once, when
+  the whole thing finishes, not per file inside it.
+- A block-character bar for that same fraction.
+- The real file currently being written — its bare name, not the full
+  path, so a long one doesn't crowd out everything after it. Inside a
+  large directory, this keeps changing file by file even while the
+  count/bar above sit still waiting for that one directory to finish.
+
+Only one file actually copies or moves at a time, in whatever order
+each one happens to start, regardless of how large the selection is —
+so this line's own "current file" is always a single, unambiguous
+answer, and a very large Paste never launches more than one real disk
+operation at once.
+
+A same-filesystem move is atomic regardless of size — `mv` on the same
+disk doesn't copy bytes at all, it just relinks a name — so cutting and
+pasting within one filesystem usually finishes before this ever has a
+chance to show anything at all. That's correct, not a missed update:
+there is no meaningful "progress" to report for an operation that's
+already done by the time it started.
+
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a

@@ -515,6 +515,58 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	}
 }
 
+// TestProgressBar pins progressBar's own fixed-width, bracketed shape —
+// 0%, mid-way, 100%, and the total<=0 edge case (rendered entirely
+// empty rather than dividing by zero).
+func TestProgressBar(t *testing.T) {
+	tests := []struct {
+		done, total, width int
+		want               string
+	}{
+		{0, 5, 10, "[░░░░░░░░░░]"},
+		{5, 5, 10, "[██████████]"},
+		{2, 5, 10, "[████░░░░░░]"},
+		{0, 0, 4, "[░░░░]"},
+	}
+	for _, tt := range tests {
+		if got := progressBar(tt.done, tt.total, tt.width); got != tt.want {
+			t.Errorf("progressBar(%d, %d, %d) = %q, want %q", tt.done, tt.total, tt.width, got, tt.want)
+		}
+	}
+}
+
+// TestPasteProgressText pins pasteProgressText's own shape: the verb
+// naming Copy vs. Cut ("Copying"/"Moving"), the N/total count derived
+// from total-remaining, the bar, and the current file's bare name (not
+// its full path) appended when one is set — or nothing at all appended
+// when it isn't (job.currentFile never stored to yet, e.g. right after
+// startPaste before the first file's own onFile call has landed).
+func TestPasteProgressText(t *testing.T) {
+	job := &pasteJob{total: 5, remaining: 3}
+	got := pasteProgressText(job)
+	if !strings.Contains(got, "Copying 2/5") {
+		t.Errorf("pasteProgressText = %q, want it to contain %q", got, "Copying 2/5")
+	}
+	if strings.Contains(got, "/") == false {
+		t.Errorf("pasteProgressText = %q, want a progress bar in it", got)
+	}
+
+	job.cut = true
+	if got := pasteProgressText(job); !strings.Contains(got, "Moving 2/5") {
+		t.Errorf("pasteProgressText (cut) = %q, want it to contain %q", got, "Moving 2/5")
+	}
+
+	current := "/some/deep/path/apple.txt"
+	job.currentFile.Store(&current)
+	got = pasteProgressText(job)
+	if !strings.HasSuffix(got, "apple.txt") {
+		t.Errorf("pasteProgressText with a current file = %q, want it to end with the bare name %q, not the full path", got, "apple.txt")
+	}
+	if strings.Contains(got, "/some/deep/path") {
+		t.Errorf("pasteProgressText = %q, want only the bare file name, not its full path", got)
+	}
+}
+
 // TestClipboardIndicatorText pins clipboardIndicatorText's own shape:
 // empty once nothing is held, "Copy"/"Cut" naming the pending
 // operation rather than a progressive "Copying"/"Cutting" (nothing is
@@ -570,6 +622,33 @@ func TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser(t *testing.T) 
 	segIdx := strings.Index(got, wantSeg)
 	if segIdx == -1 || userIdx == -1 || segIdx >= userIdx {
 		t.Errorf("status bar = %q, want %q to appear before the username %q", got, wantSeg, r.currentUser)
+	}
+}
+
+// TestBuildStatusBarPrefersPasteProgressOverClipboardIndicator pins
+// buildStatusBar's own precedence rule: a running Paste's progress
+// takes the clipboard indicator's own leading slot for as long as
+// r.pasteJob is non-nil, since "what's copying right now" is more
+// specific and more time-sensitive than "what's staged to paste" — even
+// though both would technically apply here (a Copy's own clipboard
+// stays populated through its own Paste, on purpose, in case of a
+// second one elsewhere).
+func TestBuildStatusBarPrefersPasteProgressOverClipboardIndicator(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+	r.pasteJob = &pasteJob{total: 3, remaining: 1}
+
+	got := r.buildStatusBar()
+	if strings.Contains(got, "Copy: 1 file") {
+		t.Errorf("status bar = %q, should not show the clipboard indicator while a paste is running", got)
+	}
+	if !strings.Contains(got, "Copying 2/3") {
+		t.Errorf("status bar = %q, want it to show the running paste's own progress instead", got)
 	}
 }
 
