@@ -19,6 +19,7 @@ material, always matching the version you are actually running.
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
 - [Properties](#properties)
+- [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
 - [The command line](#the-command-line)
 - [Options and configuration](#options-and-configuration)
@@ -473,6 +474,46 @@ group, and the modified date and time.
 
 `Tab` moves between fields, `Enter` or `Space` activates the focused
 one, `Escape` cancels.
+
+## Copy, Cut and Paste
+
+`c`/`x` copy or cut the current selection — the whole selection, not
+just the file under the cursor — onto an internal clipboard; `v` pastes
+it into whatever directory the panel is showing. The context menu
+offers all three too, with Paste only appearing once the clipboard
+actually has something in it.
+
+Paste runs in the background rather than one file at a time in a
+blocking loop. A file that copies or moves cleanly just lands at its
+destination with no interruption. One that already exists there opens
+a small dialog instead, without stopping anything else in the same
+Paste:
+
+| Option | Effect |
+| --- | --- |
+| Overwrite | Replace this one file; the next conflict (if any) gets its own dialog |
+| Overwrite all | Same, and apply it to every conflict the rest of this Paste runs into |
+| Skip | Leave the existing file untouched; the next conflict gets its own dialog |
+| Skip all | Same, for every conflict the rest of this Paste runs into |
+| Overwrite all if source is newer | Overwrite only where the copied file's modified time is newer than the existing one; skip the rest — applies to every remaining conflict |
+| Overwrite all if source is not empty | Overwrite only where the copied file actually has content, so a zero-byte source never replaces something real; skip the rest — applies to every remaining conflict |
+
+`Up`/`Down` move between the options, `Enter`/`Space` applies the
+highlighted one, `Escape` is the same as the preselected "Skip" — a
+stray keypress can never overwrite anything by accident.
+
+Everything that doesn't conflict keeps copying or moving in the
+background while this dialog is open. If Paste runs into a second
+conflict before the first is answered, it doesn't stack a second
+dialog on top — it queues behind the one already showing, reflected
+right in that dialog's own message as "(N more waiting)", and gets
+its own dialog (or resolves automatically, if an "all" option was
+already chosen) once the current one is answered.
+
+Any real failure along the way — a permission error, a full disk, and
+so on, never a conflict, which always has a decision — is collected
+rather than stopping the whole Paste at the first one, and reported
+together once every item has a final outcome.
 
 ## Trash, Remove and Restore
 

@@ -345,6 +345,37 @@ var helpText = strings.TrimLeft(`
   edit the path directly) to keep browsing normally, the same as
   clicking a result already does, without needing to pick one first.
 
+[::b]Paste conflicts ("v", when a destination already exists)[::-]
+
+  Up / Down         Move between the options
+  Enter / Space     Apply the highlighted option
+  Escape            Skip — same as the preselected default
+
+  Overwrite               Replace this one file, decide the next
+                          conflict separately
+  Overwrite all           Same, and apply it to every conflict this
+                          Paste still runs into, with no further
+                          asking
+  Skip                    Leave the existing file untouched, decide
+                          the next conflict separately
+  Skip all               Same, for every conflict this Paste still
+                          runs into
+  Overwrite all if source is newer      Overwrite only where the
+                          copied file's own modified time is newer
+                          than what's already there; skip the rest —
+                          applies to every conflict, like the other
+                          "all" options
+  Overwrite all if source is not empty  Overwrite only where the
+                          copied file actually has content; skip a
+                          zero-byte source instead of replacing
+                          something real with nothing — also applies
+                          to every conflict
+
+  Everything else in the Paste keeps copying/moving in the background
+  while this dialog is open — a conflict found before this one is
+  answered queues behind it instead of opening a second dialog on top,
+  shown as "(N more waiting)" right in this one's own message.
+
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 
   Tab / Shift+Tab   Move between fields or buttons

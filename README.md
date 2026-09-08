@@ -130,6 +130,19 @@ terminal.
   or Left arrow step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there.
+- Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
+  current selection, not just one file. Paste runs in the background —
+  a file that already exists at the destination opens a small dialog
+  (Overwrite, Skip, an "all" variant of each for the rest of this
+  Paste, or apply "only if the source is newer"/"only if the source
+  isn't empty" to every conflict it still runs into) without blocking
+  anything else in the same Paste: whatever doesn't conflict keeps
+  copying/moving while that dialog is up, and a second conflict found
+  before the first is answered queues behind it — shown as "(N more
+  waiting)" right in the dialog's own message — rather than stacking a
+  second dialog on top. Any real failure (permission, a full disk, ...)
+  is collected rather than stopping at the first one, and reported once
+  the whole Paste is done.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

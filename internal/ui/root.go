@@ -30,6 +30,11 @@ const (
 	confirmPage     = "confirm"
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
+	// pasteConflictPage's own dialog is built in pasteconflict.go
+	// (newPasteConflictDialog), not here — kept in this block anyway,
+	// like every other page name, so cmd/breakthrough and tests never
+	// have to guess which file actually owns one.
+	pasteConflictPage = "paste-conflict"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -764,6 +769,15 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
+	// pasteJob is the currently-running Paste, if any — see startPaste's
+	// own doc comment in pasteconflict.go for the whole async, resumable
+	// shape. nil whenever nothing is pasting right now.
+	pasteJob *pasteJob
+	// pasteConflictDialog is the one dialog every paste conflict shares
+	// (see newPasteConflictDialog) — built once here, the same as
+	// confirmDialog.
+	pasteConflictDialog *tview.List
+
 	// menuInSubmenu is nil while the context menu shows its own top-level
 	// entries (see contextMenuTree in contextmenu.go), or points at
 	// whichever entry's own submenu is currently drilled into — the menu
@@ -1019,6 +1033,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// default focus (see newPurgeConfirm's own comment).
 	r.confirmDialog = r.newConfirmDialog()
 
+	// The Paste conflict dialog (see pasteconflict.go) — one shared List
+	// again, this time with several distinct answers rather than a
+	// single confirm/cancel pair.
+	r.pasteConflictDialog = r.newPasteConflictDialog()
+
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
 	// on every open (see resetSedForm), but sedLayout (which stacks all
@@ -1133,6 +1152,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(confirmPage, r.confirmDialog, false, false)
+	r.AddPage(pasteConflictPage, r.pasteConflictDialog, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
@@ -2285,60 +2305,11 @@ func (r *Root) pasteClipboard() {
 // to an explicit destination directory — pasteClipboard itself is the
 // only caller, picking a search result's own directory instead of
 // r.panel.path while search results are showing (see its own doc
-// comment). A no-op if nothing was ever copied/cut.
-//
-// Each target that would collide with an existing entry in dir is
-// skipped with an error — asking "overwrite?" once per colliding file
-// in a multi-file paste isn't built yet (a known simplification;
-// fsops.Copy/Move's force parameter is where that would hook in).
-// Only the first error is reported, to avoid stacking one error
-// overlay per failed file; the rest of the paste still runs to
-// completion rather than stopping at the first collision.
+// comment). A thin wrapper around startPaste (see pasteconflict.go for
+// the full async, conflict-resolving shape); a no-op if nothing was
+// ever copied/cut, same as before.
 func (r *Root) pasteInto(dir string) {
-	if len(r.clipboard) == 0 {
-		return
-	}
-
-	var firstErr error
-	for _, src := range r.clipboard {
-		dst := filepath.Join(dir, filepath.Base(src))
-		var err error
-		if r.clipboardCut {
-			err = fsops.Move(src, dst, false)
-		} else {
-			err = fsops.Copy(src, dst, false)
-		}
-		if err != nil && firstErr == nil {
-			firstErr = err
-		}
-		// Only for a successful Move, not Copy: src is untouched by a
-		// copy (still exactly what Details would already be showing, if
-		// anything), and dst is a brand new path a copy could never
-		// already have been the target of. A move, like a rename,
-		// genuinely relocates the same real entry — Details needs to
-		// keep following it under its new path.
-		if err == nil && r.clipboardCut {
-			r.refreshDetailsIfShowing(src, dst)
-		}
-	}
-
-	if r.clipboardCut && firstErr == nil {
-		r.clipboard = nil // moved away cleanly; nothing left to paste again
-	}
-
-	// Only reload if the panel actually happens to be showing dir right
-	// now — pasting into a search result's own directory, elsewhere,
-	// shouldn't force-navigate or otherwise disturb whatever the panel
-	// currently has on screen.
-	if r.panel.path == dir {
-		if err := r.panel.load(r.panel.path); err != nil {
-			firstErr = err // the reload failing is more urgent to report than a copy conflict
-		}
-	}
-
-	if firstErr != nil {
-		r.showError(firstErr)
-	}
+	r.startPaste(r.clipboard, r.clipboardCut, dir)
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker

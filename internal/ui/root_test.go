@@ -293,134 +293,10 @@ func TestToggleMtimeUnix(t *testing.T) {
 	}
 }
 
-// TestCopyToClipboardThenPasteLeavesSourceInPlace exercises Copy/Paste
-// end to end: capture a target via clipboardTargets, navigate elsewhere,
-// paste — the source must survive since Copy, unlike Cut, never removes
-// it.
-func TestCopyToClipboardThenPasteLeavesSourceInPlace(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	r.target = filepath.Join(srcDir, "apple.txt")
-	r.copyToClipboard()
-
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
-	}
-	r.pasteClipboard()
-
-	if _, err := os.Stat(filepath.Join(dstDir, "apple.txt")); err != nil {
-		t.Errorf("pasted file missing in dst: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(srcDir, "apple.txt")); err != nil {
-		t.Errorf("Copy should leave the source file in place: %v", err)
-	}
-}
-
-// TestCutToClipboardThenPasteRemovesSource is Copy's counterpart for Cut:
-// the source must be gone afterwards, and the clipboard cleared so a
-// stray second Paste doesn't try to move something that's already moved.
-func TestCutToClipboardThenPasteRemovesSource(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	r.target = filepath.Join(srcDir, "banana.txt")
-	r.cutToClipboard()
-
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
-	}
-	r.pasteClipboard()
-
-	if _, err := os.Stat(filepath.Join(dstDir, "banana.txt")); err != nil {
-		t.Errorf("pasted file missing in dst: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(srcDir, "banana.txt")); !os.IsNotExist(err) {
-		t.Errorf("Cut should remove the source file, stat err = %v", err)
-	}
-	if len(r.clipboard) != 0 {
-		t.Errorf("clipboard should be cleared after a successful cut-paste, got %v", r.clipboard)
-	}
-}
-
-// TestPasteMoveRefreshesDetailsShowingSameFile pins the user's own
-// explicit request extended to Cut+Paste: a moved file is the same real
-// entry under a new path, exactly like a rename — Details needs to keep
-// following it (see refreshDetailsIfShowing's own doc comment and
-// pasteInto's own "only for a successful Move, not Copy" scoping). The
-// panel deliberately never navigates away here (pasteInto can target
-// any directory directly, not just wherever the panel currently is —
-// see its own doc comment): moving away would already reset Details on
-// its own via the ordinary SetSelectionChangedFunc path, which isn't
-// what this is pinning.
-func TestPasteMoveRefreshesDetailsShowingSameFile(t *testing.T) {
-	dir := fixtureDir(t)
-	otherDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.SetRect(0, 0, 100, 40)
-
-	src := filepath.Join(dir, "banana.txt")
-	r.target = src
-	r.cutToClipboard()
-
-	r.panel.focusRow(4) // banana.txt — the panel itself stays in dir throughout
-	r.showDetailsSidebar()
-	if r.detailsTarget != src {
-		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
-	}
-
-	r.pasteInto(otherDir)
-
-	want := filepath.Join(otherDir, "banana.txt")
-	if r.detailsTarget != want {
-		t.Errorf("detailsTarget after Cut+Paste = %q, want %q", r.detailsTarget, want)
-	}
-}
-
-// TestPasteCopyDoesNotDisturbDetails is the copy-side counterpart: the
-// source is untouched by a copy, so Details showing it must not be
-// redirected anywhere — unlike Move, there's no "same entry, new path"
-// to follow.
-func TestPasteCopyDoesNotDisturbDetails(t *testing.T) {
-	dir := fixtureDir(t)
-	otherDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.SetRect(0, 0, 100, 40)
-
-	src := filepath.Join(dir, "banana.txt")
-	r.target = src
-	r.copyToClipboard()
-
-	r.panel.focusRow(4) // banana.txt
-	r.showDetailsSidebar()
-	if r.detailsTarget != src {
-		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
-	}
-
-	r.pasteInto(otherDir)
-
-	if r.detailsTarget != src {
-		t.Errorf("detailsTarget after Copy+Paste = %q, want unchanged %q", r.detailsTarget, src)
-	}
-}
+// Copy/Cut/Paste's own round-trip tests (on-disk effect, clipboard
+// clearing, Details refresh, and the whole paste-conflict-resolution
+// feature) live in pasteconflict_test.go now, alongside the async
+// engine (pasteconflict.go) they exercise.
 
 // TestClipboardTargetsPrefersSelectionOverTarget pins clipboardTargets'
 // rule: the checkbox selection wins over the right-clicked target when
@@ -440,38 +316,6 @@ func TestClipboardTargetsPrefersSelectionOverTarget(t *testing.T) {
 	got := r.clipboardTargets()
 	if len(got) != 2 {
 		t.Fatalf("clipboardTargets() = %v, want the 2 checked entries", got)
-	}
-}
-
-// TestPasteConflictReportsErrorAndLeavesDestUntouched pins Paste's
-// collision handling: an existing dst entry is refused (see fsops.Copy's
-// force parameter), reported through the error overlay, and left as it
-// was.
-func TestPasteConflictReportsErrorAndLeavesDestUntouched(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dstDir, "apple.txt"), []byte("existing"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.target = filepath.Join(srcDir, "apple.txt")
-	r.copyToClipboard()
-
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
-	}
-	r.pasteClipboard()
-
-	if r.activePage != errorPage {
-		t.Error("pasting onto an existing file should open the error overlay")
-	}
-	got, err := os.ReadFile(filepath.Join(dstDir, "apple.txt"))
-	if err != nil || string(got) != "existing" {
-		t.Errorf("existing dst file should be untouched, got %q, %v", got, err)
 	}
 }
 
