@@ -99,30 +99,46 @@ terminal.
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
-  format, `zo` split orientation). See
+  format, `zo` split orientation, `zw` swap panes), `o` for Options
+  (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
+  toggles without opening the screen at all). See
   [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).
-- No function keys anywhere in the application — every one of them is
-  free for your terminal or window manager to use however it likes.
-  `^_` still exists, but as a single, narrow, always-available toggle
-  for mouse reporting on/off (grabbing your terminal's own native text
-  selection back when you need it, even with a dialog open) rather than
-  a whole prefix tree — picked because no terminal multiplexer claims
-  it (tmux takes `^B`, screen and byobu `^A`, dtach `^\`).
-- A context menu on `m` or right-click: Properties (editable — name, permissions,
-  click a bit or type the octal value directly, owner and group via a
-  scrollable picker of every local user/group, modified date and time),
-  Edit, Look, Tail -f, Rename, checkbox-based multi-selection (including
-  glob-pattern Select +/-), Copy/Cut/Paste, chmod, chown, Sed Replace,
-  and the trash actions below.
+- No function keys anywhere in the application, and — as of the latest
+  round — no Ctrl-letter bindings either, apart from the two things a
+  plain letter genuinely cannot do (quit/cancel from literally anywhere,
+  even mid-edit) and one narrow extra reach for the tab switcher
+  (`^T` alongside `t`, for walking to the next tab while the switcher
+  itself is already open). Mouse reporting's own former `^_` — a
+  single, narrow toggle that fired even with a dialog open or a text
+  field focused, since a Ctrl combination safely can where a plain
+  letter never can — was deliberately retired anyway in favor of `om`
+  above, a considered trade-off rather than an oversight.
+- A context menu on `m` or right-click, showing only what actually
+  applies right now rather than a fixed list of everything it can ever
+  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Paste
+  (Paste only once the clipboard has something in it), Move to Trash,
+  Properties (editable — name, permissions, click a bit or type the
+  octal value directly, owner and group via a scrollable picker of
+  every local user/group, modified date and time), plus three `▸`
+  submenus that replace the list in place when chosen (Windows
+  Explorer's own cascading-menu idea, without needing room to open
+  beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
+  Batch rename, Undo last rename, Remove), "Selection" (Select
+  all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
+  close tab, Switch tab..., Split on/off, orientation and Swap panes —
+  the last two only once a split actually exists). `◂ Back`, `Escape`,
+  or Left arrow step back out one level at a time. Browsing the Trash
+  itself replaces the whole menu with just Restore/Empty Trash/
+  Properties, since almost nothing else still applies there.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `D`, `^R`, Ctrl+Entf
-  (best-effort — terminal-dependent; `D`/`^R` are always the reliable
-  ones), or the context menu's "Remove" permanently deletes instead (a
-  file like `rm`, a directory recursively like `rm -rf`, empty or not),
-  always behind a confirmation dialog with Cancel preselected — a single
-  stray keypress can never confirm it by itself. "Go to Trash" (the `g`
-  chord's own `gb`, or `^B`) jumps straight into it without needing to
+  that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
+  terminal-dependent; `D` is always the reliable one), or the context
+  menu's "Remove" permanently deletes instead (a file like `rm`, a
+  directory recursively like `rm -rf`, empty or not), always behind a
+  confirmation dialog with Cancel preselected — a single stray keypress
+  can never confirm it by itself. "Go to Trash" (the `g` chord's own
+  `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
   "Empty Trash" (`D`, same confirmation) round
   it out. Persistent by default — lives under
@@ -147,7 +163,7 @@ terminal.
   time" instead — both, like the Modified column always has, respecting
   the Options overlay's timestamp-vs-formatted toggle and the column's
   own sort.
-- Sed Replace (`E`/`^S`, or the context menu): runs a real `sed(1)`
+- Sed Replace (`E`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
   `-E`, Case-insensitive, and Replace-all-per-line toggles) builds the
@@ -236,10 +252,10 @@ terminal.
   `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong),
   and a clock.
 - Color schemes: JSON files under `colorschemes/` in either config tier
-  (see below), switchable live from the Options screen (`^O` or the
-  bottom bar's own button) — no restart needed, and the pick is
-  remembered for next time.
-- Search (`^F`, or the bottom bar's own button): by file name (glob, a
+  (see below), switchable live from the Options screen (the `o` chord's
+  own `oo`) — no restart needed, and the pick is remembered for next
+  time.
+- Search (`f`): by file name (glob, a
   plain keyword, or regex — via `find`, or `locate` where its own index
   is available) or by file content (`grep`, and — where installed —
   `zgrep`/`zipgrep` for gzip/zip contents), scoped to any directory,
@@ -251,7 +267,7 @@ terminal.
   own scope — right alongside the status line, so you can keep
   browsing normally without first jumping to a specific hit or backing
   all the way out with Escape.
-- Look (`^L`, the bottom bar's own button, or the context menu): a
+- Look (`l`, the bottom bar's own button, or the context menu): a
   read-only, full-screen preview of the selected file's content.
   Plain text, source code, config files, diffs/patches, and logs get
   built-in syntax coloring (~200 languages, no external dependency —
@@ -295,9 +311,9 @@ further ones from `colorschemes/*.json` in either config tier —
 `/etc/breakthrough/colorschemes/` for system-wide schemes,
 `~/.config/breakthrough/colorschemes/` (or `$XDG_CONFIG_HOME/breakthrough/colorschemes/`
 if set) for your own; a user file with the same name replaces a system
-one. Switch between whatever's found via the Options screen (`^O`, or
-its button in the bottom bar) — the pick applies immediately and is
-saved to your own `~/.config/breakthrough/config`.
+one. Switch between whatever's found via the Options screen (the `o`
+chord's own `oo`) — the pick applies immediately and is saved to your
+own `~/.config/breakthrough/config`.
 
 The `.deb`/`.rpm` packages (see [Installing](#installing)) create
 `/etc/breakthrough/config` and `/etc/breakthrough/colorschemes/` for

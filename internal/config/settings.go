@@ -122,6 +122,17 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     wide terminal has room for two full listings beside each other, a
 //     short-but-wide one over SSH often doesn't have the rows to spare
 //     for stacking, and neither answer is right for everyone.
+//   - mouse_enabled: whether tview's own mouse reporting is on at
+//     startup (see internal/ui's Root.mouseEnabled/app.EnableMouse) —
+//     true by default. Enabling it is what lets clicks/drags work at
+//     all, but it also hands every mouse event to breakthrough instead
+//     of the terminal emulator, which breaks that terminal's own native
+//     text selection/copy for anyone who doesn't already know its own
+//     override gesture (Shift-drag, on most xterm-derived emulators).
+//     A stored preference, not just a live toggle, per the user's own
+//     explicit request: someone who works this way every session
+//     shouldn't have to re-disable it by hand every time they start
+//     breakthrough.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -134,6 +145,7 @@ type Settings struct {
 	TrashQuotaPercent int
 	RestoreTabs       bool
 	SplitStacked      bool
+	MouseEnabled      bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -154,6 +166,7 @@ func DefaultSettings() Settings {
 		TrashQuotaPercent: 10,
 		RestoreTabs:       true,
 		SplitStacked:      false,
+		MouseEnabled:      true,
 	}
 }
 
@@ -202,6 +215,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.RestoreTabs)
 	case "split_stacked":
 		return parseBool(&s.SplitStacked)
+	case "mouse_enabled":
+		return parseBool(&s.MouseEnabled)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

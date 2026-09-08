@@ -352,22 +352,22 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	_, spans := r.buildButtonBar()
 
 	wantLabels := map[rune]string{
-		'?': " ?  Help",
-		'm': " m  Menu",
-		'l': " l  Look",
-		'i': " i  Props",
-		'I': " I  Details",
-		'c': " c  Copy",
-		'x': " x  Cut",
-		'v': " v  Paste",
-		'd': " d  Trash",
-		'.': " .  Hide", // ShowHidden defaults to true — see config.DefaultSettings
-		's': " s  Split",
-		't': " t  Tabs",
+		'?': " ? Help",
+		'm': " m Menu",
+		'l': " l Look",
+		'i': " i Props",
+		'I': " I Details",
+		'c': " c Copy",
+		'x': " x Cut",
+		'v': " v Paste",
+		'd': " d Trash",
+		'.': " . Hide", // ShowHidden defaults to true — see config.DefaultSettings
+		's': " s Split",
+		't': " t Tabs",
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
-		if s.key == 'g' || s.key == 'p' || s.key == 'z' {
+		if s.key == 'g' || s.key == 'p' || s.key == 'z' || s.key == 'o' {
 			continue // a chord-family cascade cell — see TestBuildButtonBarShowsChordCascades
 		}
 		want, ok := wantLabels[s.key]
@@ -404,7 +404,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g …  go", 'p': " p …  perms", 'z': " z …  display"}
+	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'z': " z … display", 'o': " o … options"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
@@ -452,14 +452,14 @@ func TestButtonBarHideUnhideLabelTracksShowHidden(t *testing.T) {
 	}
 
 	// ShowHidden defaults to true — see config.DefaultSettings.
-	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Hide" {
-		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, " .  Hide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " . Hide" {
+		t.Errorf("label while shown = %q, present=%v, want %q", got, ok, " . Hide")
 	}
 
 	r.toggleHidden()
 
-	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " .  Unhide" {
-		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, " .  Unhide")
+	if got, ok := buttonLabelFor(t, r, '.'); !ok || got != " . Unhide" {
+		t.Errorf("label while hidden = %q, present=%v, want %q", got, ok, " . Unhide")
 	}
 }
 
@@ -543,8 +543,7 @@ func clickButtonBar(t *testing.T, r *Root, col int) {
 
 // TestPlainKeyEditRunsEditAction is TestCaptureButtonBarMouseEditClickRunsEditAction's
 // own successor: "e" isn't one of the button bar's own quick entries any
-// more (see plainCommands' own quick field in keymap.go — Edit still
-// has Ctrl+E, so the row didn't need a third route as well), so this
+// more (see plainCommands' own quick field in keymap.go), so this
 // exercises the same editCurrentEntry/runEditor path through the
 // keyboard dispatch instead of a button click.
 func TestPlainKeyEditRunsEditAction(t *testing.T) {
@@ -732,9 +731,9 @@ func TestAcceptsGlobalShortcutGuards(t *testing.T) {
 	}
 }
 
-// TestToggleHiddenShortcutRespectsGuard pins that Ctrl+G's actual action
-// (Root.ToggleHiddenShortcut) is a real no-op — not just individually
-// harmless — while the guard says no: showHidden must stay untouched.
+// TestToggleHiddenShortcutRespectsGuard pins that ToggleHiddenShortcut's
+// own guarded action is a real no-op — not just individually harmless —
+// while the guard says no: showHidden must stay untouched.
 func TestToggleHiddenShortcutRespectsGuard(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -782,10 +781,12 @@ func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
 	}
 }
 
-// TestPropertiesShortcutTargetsCurrentRow pins Ctrl+P's actual action
-// (Root.PropertiesShortcut): it targets whichever row the table's
-// cursor is on, the same as clicking the button bar's Properties button
-// or opening Properties from the context menu after a right-click.
+// TestPropertiesShortcutTargetsCurrentRow pins PropertiesShortcut's own
+// guarded action (see its doc comment on why it's kept despite no longer
+// being wired to Ctrl+P): it targets whichever row the table's cursor is
+// on, the same as pressing "i", clicking the button bar's Properties
+// button, or opening Properties from the context menu after a
+// right-click.
 func TestPropertiesShortcutTargetsCurrentRow(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -809,10 +810,10 @@ func TestPropertiesShortcutTargetsCurrentRow(t *testing.T) {
 	}
 }
 
-// TestPropertiesShortcutRespectsGuard pins that Ctrl+P's actual action
-// (Root.PropertiesShortcut) stays closed — not just individually
-// harmless — while the guard says no, the same as ToggleHiddenShortcut
-// (see TestToggleHiddenShortcutRespectsGuard).
+// TestPropertiesShortcutRespectsGuard pins that PropertiesShortcut's own
+// guarded action stays closed — not just individually harmless — while
+// the guard says no, the same as ToggleHiddenShortcut (see
+// TestToggleHiddenShortcutRespectsGuard).
 func TestPropertiesShortcutRespectsGuard(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)

@@ -293,12 +293,18 @@ func TestHelpTextNeverMentionsFunctionKeys(t *testing.T) {
 
 // TestHelpTextMentionsEveryRealShortcut pins that the help content
 // itself actually names the keybindings this app has — a stale or
-// incomplete reference would be worse than none at all.
+// incomplete reference would be worse than none at all. Only three
+// Ctrl-letter bindings remain real (see cmd/breakthrough's own package
+// doc comment): everything else that used to be here moved to the
+// primary keyboard layer (see TestHelpTextMentionsThePrimaryKeyboardLayer
+// just below) once each had a plain-letter or chord home covering the
+// exact same ground, "also works while Properties is open" reach
+// included — Options and mouse reporting (the "o" chord's own "oo"/"om")
+// most recently.
 func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 	want := []string{
-		"Ctrl+_", "Ctrl+Q", "Ctrl+C",
-		"Ctrl+E", "Ctrl+L", "Ctrl+G", "Ctrl+F", "Ctrl+O",
-		"Ctrl+P", "Ctrl+D", "Ctrl+K", "Ctrl+N", "Ctrl+U", "Ctrl+S", "Ctrl+B", "Ctrl+T", "Ctrl+R", "Delete",
+		"Ctrl+Q", "Ctrl+C",
+		"Ctrl+T", "Ctrl+Delete", "Delete",
 		"Enter", "Space", "Right-click",
 		"Tab", "Escape",
 		"PageUp", "PageDown", // Look's own PDF page-turn
@@ -308,6 +314,35 @@ func TestHelpTextMentionsEveryRealShortcut(t *testing.T) {
 	for _, s := range want {
 		if !strings.Contains(helpText, s) {
 			t.Errorf("helpText is missing %q", s)
+		}
+	}
+}
+
+// TestHelpTextNeverMentionsRetiredCtrlBindings mirrors
+// TestHelpTextNeverMentionsFunctionKeys for the round of Ctrl-letter
+// bindings retired once each gained a plain-letter or chord home
+// covering the same ground (see cmd/breakthrough's own package doc
+// comment) — a regression test for exactly the state this file was in
+// right after the dispatch cases were deleted but before the prose
+// describing them was rewritten to match. Checked as a trailing-
+// space/word-boundary pattern, not the bare "Ctrl+X", wherever the bare
+// form is still a legitimate substring here for an unrelated reason:
+// "Ctrl+D" hides inside "Ctrl+Delete" (Remove), "Ctrl+S" inside
+// "Ctrl+Shift+Tab", and Ctrl+N is skipped entirely — the bash line's own
+// history recall really is bound to Ctrl+P/Ctrl+N (see the "Bash line"
+// section) in a shape ("Ctrl+P/Ctrl+N always recall") no fixed pattern
+// here can tell apart from a retired "Ctrl+N " metadata binding. Ctrl+O
+// and Ctrl+_ (Options, mouse reporting — retired to the "o" chord's own
+// "oo"/"om") are safe as bare substrings: neither collides with
+// anything else remaining here.
+func TestHelpTextNeverMentionsRetiredCtrlBindings(t *testing.T) {
+	for _, bad := range []string{
+		"Ctrl+E", "Ctrl+L", "Ctrl+G", "Ctrl+F",
+		"Ctrl+D ", "Ctrl+K", "Ctrl+U", "Ctrl+S ", "Ctrl+B", "Ctrl+R",
+		"Ctrl+O", "Ctrl+_",
+	} {
+		if strings.Contains(helpText, bad) {
+			t.Errorf("helpText mentions %q — that binding was retired in favor of a plain letter", bad)
 		}
 	}
 }

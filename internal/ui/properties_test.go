@@ -334,7 +334,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	r.openProperties()
 
 	before := r.propertiesText.GetText(true)
-	if !strings.Contains(before, "Press Ctrl+K or click here") {
+	if !strings.Contains(before, "Press h or click here") {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
@@ -396,7 +396,7 @@ func TestHashLinesNeverProducesAWideLine(t *testing.T) {
 		Blake2: "021ced8799296ceca557832ab941a50b4a11f83478cf141f51f933f653ab9fbcc05a037cddbed06e309bf334942c4e58cdf1a46e237911ccd7fcf9787cbc7fd0",
 	}
 	const safeWidth = 78 // comfortably under even a narrow (80-column) real terminal
-	for _, line := range strings.Split(hashLines(hashes, "Press Ctrl+K or click here to compute", propertiesHashFieldWidth), "\n") {
+	for _, line := range strings.Split(hashLines(hashes, "Press h or click here to compute", propertiesHashFieldWidth), "\n") {
 		if w := len([]rune(line)); w > safeWidth {
 			t.Errorf("hashLines produced a %d-column line, want at most %d — a line this wide can silently wrap at render time and push later content off the bottom of the overlay: %q", w, safeWidth, line)
 		}
@@ -465,7 +465,7 @@ func TestComputeHashesSkipsDirectories(t *testing.T) {
 	r.openProperties()
 
 	text := r.propertiesText.GetText(true)
-	if strings.Contains(text, "Press Ctrl+K or click here") {
+	if strings.Contains(text, "Press h or click here") {
 		t.Errorf("a directory's Properties should not offer to compute a hash, got:\n%s", text)
 	}
 
@@ -671,17 +671,21 @@ func TestOpenPropertiesCancelsStaleHashComputation(t *testing.T) {
 	}
 }
 
-// TestPropertiesHPressNoLongerTriggersHash pins the removal of the bare
-// 'h' keyboard shortcut — per the user's own explicit request, once
-// Ctrl+K existed globally and covered the same action without the
-// "typing h into Name/Owner/Group no longer works" trade-off bare 'h'
-// used to carry (see hashesMouseCapture's own doc comment): pressing h
-// now does nothing hash-related, and can be typed as a literal
-// character again, including into an auto-opened inline editor (see
-// isAutoEditField), which used to be the harder of the two cases to get
-// right when 'h' still needed its own dedicated, shared-ancestor
-// keyboard capture.
-func TestPropertiesHPressNoLongerTriggersHash(t *testing.T) {
+// TestPropertiesEditFieldHPressDoesNotTriggerHash pins that typing "h"
+// into an actively-focused inline editor (see isAutoEditField) still
+// inserts a literal character rather than starting a hash computation —
+// unaffected by which key, if any, computes hashes at the global
+// dispatch layer (Ctrl+K once did; the plain-letter layer's "h" does
+// now — see ComputeHashesShortcut/acceptsPropertiesAwareKey in
+// keymap.go), since a global Application-level capture always runs
+// before an event ever reaches a focused primitive's own InputHandler
+// (called directly here, simulating exactly that final delivery step —
+// see hashesMouseCapture's own doc comment on the history of why this
+// widget-level path exists to be pinned in the first place).
+// TestHandlePlainKeyHDoesNotFireWhileEditFieldFocused, right below,
+// pins the same thing one layer further up — at HandlePlainKey/
+// acceptsPropertiesAwareKey itself, not this widget-level fallback.
+func TestPropertiesEditFieldHPressDoesNotTriggerHash(t *testing.T) {
 	dir := fixtureDir(t)
 	path := filepath.Join(dir, "banana.txt")
 
@@ -701,10 +705,43 @@ func TestPropertiesHPressNoLongerTriggersHash(t *testing.T) {
 	r.properties.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone), func(tview.Primitive) {})
 
 	if r.hashInProgress {
-		t.Error("pressing h should no longer start computing the hash — that's Ctrl+K's job now")
+		t.Error("pressing h while the inline editor has real focus should not start computing the hash")
 	}
 	if got, want := r.propertiesEditField.GetText(), nameBefore+"h"; got != want {
-		t.Errorf("the inline editor's own text = %q, want %q — h should be typed into it like any other character now", got, want)
+		t.Errorf("the inline editor's own text = %q, want %q — h should be typed into it like any other character", got, want)
+	}
+}
+
+// TestHandlePlainKeyHDoesNotFireWhileEditFieldFocused pins
+// acceptsPropertiesAwareKey's own guard (see keymap.go) at the actual
+// layer it operates on: HandlePlainKey, not TestPropertiesEditFieldHPressDoesNotTriggerHash's
+// widget-level fallback above. Without this check, typing "h" (or
+// "k"/"M"/"l"/"I" — every alsoOverProperties command) into the Name
+// field would launch a hash computation instead of inserting a letter,
+// exactly the regression the user's own original bare-'h' design (later
+// replaced by Ctrl+K, later still reclaimed by "h" again — see
+// hashesMouseCapture's own doc comment) went through this same trouble
+// to avoid in the first place.
+func TestHandlePlainKeyHDoesNotFireWhileEditFieldFocused(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.setPropertiesFocus(0) // auto-opens the inline editor, pre-filled — see the sibling test above
+	if !r.propertiesEditField.HasFocus() {
+		t.Fatal("setup: expected the inline editor to have opened and taken focus")
+	}
+
+	if r.HandlePlainKey(runeEvent('h')) {
+		t.Error("HandlePlainKey should not consume 'h' while the inline editor has real focus")
+	}
+	if r.hashInProgress {
+		t.Error("'h' should not have started computing the hash while the inline editor has real focus")
 	}
 }
 
@@ -2030,8 +2067,8 @@ func TestCaptureOutsideClickBlockedWhilePropertiesDirty(t *testing.T) {
 
 // TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen
 // pins the user's own explicit request's other half (see
-// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen for Ctrl+D):
-// a click on the Details button must reach the button bar's own
+// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen for the
+// keyboard path): a click on the Details button must reach the button bar's own
 // handling untouched, even while Properties is dirty — the one case
 // that would otherwise swallow every other outside click outright (see
 // TestCaptureOutsideClickBlockedWhilePropertiesDirty just above).
