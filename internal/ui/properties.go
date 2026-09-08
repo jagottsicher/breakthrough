@@ -429,11 +429,16 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	// what makes a hash-section click keep working no matter which of
 	// the three currently has focus. The keyboard half of this used to
 	// be a bare 'h', installed here the same way for the same reason —
-	// removed once Ctrl+K existed and covered it better: a global
-	// Application-level shortcut (see cmd/breakthrough) already runs
-	// before any of this widget-level focus routing even comes into it,
-	// so it never needed a "shared ancestor" trick to keep working
-	// regardless of which sub-widget had focus, unlike 'h' once did.
+	// removed once Ctrl+K took over instead: a global Application-level
+	// shortcut (see cmd/breakthrough) already runs before any of this
+	// widget-level focus routing even comes into it, so it never needed
+	// a "shared ancestor" trick to keep working regardless of which
+	// sub-widget had focus, unlike 'h' once did. Ctrl+K has since been
+	// retired in its own turn, its ground fully reclaimed by a plain 'h'
+	// again (see ComputeHashesShortcut and plainCommand.alsoOverProperties
+	// in keymap.go) — but that same "it's a global Application-level
+	// shortcut" reasoning still holds, so this mouse-only capture never
+	// needed reviving alongside it.
 	pages.SetMouseCapture(r.hashesMouseCapture)
 
 	return pages
@@ -547,7 +552,7 @@ func (r *Root) openProperties() {
 	r.showOverlayWithRestore(propertiesPage, r.properties, r.restoreProperties)
 }
 
-// propertiesCurrentEntry is the Properties button/Ctrl+P's actual
+// propertiesCurrentEntry is the Properties button/'i' key's actual
 // action — the keyboard/status-bar equivalent of the context menu's
 // "Properties" (see openProperties above), targeting whichever entry
 // the table's cursor is currently on instead of a right-clicked one.
@@ -565,12 +570,17 @@ func (r *Root) propertiesCurrentEntry() {
 	r.openProperties()
 }
 
-// PropertiesShortcut is Ctrl+P's global action — see cmd/breakthrough
-// and acceptsGlobalShortcut for why it checks its own precondition
-// first, the same as Ctrl+E/Ctrl+G/Ctrl+O/Ctrl+F/Ctrl+R. Unlike those
-// five, Ctrl+P also needs cmd/breakthrough's own dispatch-level
-// AcceptsGlobalShortcut check before it's even called, since bashLine's
-// own captureBashLineKey binds Ctrl+P to command-history recall.
+// PropertiesShortcut used to be Ctrl+P's global action — nothing in
+// cmd/breakthrough calls it any more. Properties' own real keyboard path
+// is the plain-letter layer's 'i' (see plainCommands in keymap.go,
+// calling propertiesCurrentEntry right above), which needs no such guard
+// of its own (acceptsPlainKeyCommand already covers the same ground more
+// precisely, and without colliding with bashLine's own captureBashLineKey,
+// which binds Ctrl+P to command-history recall — exactly the collision
+// this method's own acceptsGlobalShortcut check exists to avoid). Kept
+// rather than deleted as an exported building block, the same shape
+// bottombar.go's RenameShortcut/EditShortcut/etc. already have for
+// exactly this reason.
 func (r *Root) PropertiesShortcut() {
 	if r.acceptsGlobalShortcut() {
 		r.propertiesCurrentEntry()
@@ -593,8 +603,8 @@ func (r *Root) loadPropertiesTarget() error {
 	// this exact file (see detailsHashesFor's own doc comment) — nil
 	// otherwise, same as always. Per the user's own explicit request:
 	// opening Properties on a file Details already hashed shouldn't
-	// show a fresh "press Ctrl+K" hint (or need recomputing) just
-	// because Properties itself is only now opening on it.
+	// show a fresh "press h" hint (or need recomputing) just because
+	// Properties itself is only now opening on it.
 	r.propertiesHashes = r.detailsHashesFor(r.propertiesTarget)
 	r.propertiesDirty = false
 	r.propertiesFocusIndex = -1 // nothing focused yet — see setPropertiesFocus
@@ -677,7 +687,7 @@ func (r *Root) renderProperties() {
 		case r.hashInProgress:
 			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
 		default:
-			text += "\n\n" + hashLines(r.propertiesHashes, "Press Ctrl+K or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
+			text += "\n\n" + hashLines(r.propertiesHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
 		}
 	}
 
@@ -1548,7 +1558,8 @@ func (r *Root) cancelHashComputation() {
 // The keyboard equivalent of this used to be a bare 'h', handled the
 // same way, right below this function — see newPropertiesView's own
 // doc comment on why Ctrl+K replaced it outright instead of needing the
-// same "shared ancestor" treatment.
+// same "shared ancestor" treatment, and on 'h' since reclaiming that
+// same ground back from Ctrl+K in its own turn (see ComputeHashesShortcut).
 func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
 		return action, event
@@ -1796,11 +1807,10 @@ const propertiesHashFieldWidth = 77
 // wideInfoField's fixed 64-character halves unconditionally, and each
 // one wrapped again inside Details' own much narrower box. hint is
 // theirs to supply too, even though both currently say the same thing
-// (Ctrl+K, since that now triggers this in Properties as well — see
-// hashesMouseCapture's own doc comment on the bare 'h' it replaced) —
-// keeping it a parameter rather than folding the wording in here still
-// means neither caller has to change if that ever stops being true for
-// one of them.
+// ('h', which triggers this in either window — see
+// ComputeHashesShortcut's own doc comment) — keeping it a parameter
+// rather than folding the wording in here still means neither caller
+// has to change if that ever stops being true for one of them.
 func hashLines(hashes *fsops.Hashes, hint string, width int) string {
 	if hashes == nil {
 		return hint

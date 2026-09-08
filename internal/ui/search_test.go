@@ -1155,7 +1155,7 @@ func TestRunSearchClosesFormAndShowsResultsInPanel(t *testing.T) {
 	}
 }
 
-// TestBackToSearchFormReopensWithoutTouchingPanel pins Escape/Ctrl+F
+// TestBackToSearchFormReopensWithoutTouchingPanel pins Escape/"f"
 // while search results are showing: the form reopens (see openSearch's
 // own searchMode-aware reset) without discarding or otherwise
 // disturbing whatever the panel currently has on screen (see
@@ -1379,7 +1379,7 @@ func TestRunSearchCancelsPreviousSearch(t *testing.T) {
 }
 
 // TestSearchShortcutRespectsGuard mirrors
-// TestOptionsShortcutRespectsGuard for Ctrl+F.
+// TestOptionsShortcutRespectsGuard for SearchShortcut.
 func TestSearchShortcutRespectsGuard(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)

@@ -119,8 +119,8 @@ func (r *Root) renderDetailsTitleBar(width int) {
 
 // captureDetailsTitleBarMouse collapses the sidebar when the click
 // lands exactly on its own ">" button (see renderDetailsTitleBar) — the
-// user's own explicit request for a mouse counterpart to Ctrl+D,
-// mirroring the header row's own "<" expand button (see
+// user's own explicit request for a mouse counterpart to "I"/the
+// Details button, mirroring the header row's own "<" expand button (see
 // Panel.onExpandDetails) in the other direction. hideDetailsSidebar
 // directly, not the toggle, the same one-directional reasoning
 // onExpandDetails's own doc comment gives. Every other click on the
@@ -203,6 +203,25 @@ func (r *Root) showDetailsSidebar() {
 	r.loadDetailsTarget(path)
 }
 
+// ensureDetailsSidebarShowing shows Details if it isn't already open —
+// the "make sure it's there" half of "select something, press h/k/M"
+// (see ComputeHashesShortcut/ComputeDirSizeShortcut/
+// FetchMetadataShortcut), each of which needs Details open to have
+// anywhere to put its own result. Deliberately not just
+// showDetailsSidebar unconditionally: that always calls
+// loadDetailsTarget, which cancels and discards any hash/directory-size
+// computation already in flight or finished — exactly wrong here, where
+// Details being already open and already showing the right file is the
+// common case (refreshDetailsSidebar's own "same target, do nothing"
+// check is what actually makes this safe to call every time).
+func (r *Root) ensureDetailsSidebarShowing() {
+	if r.detailsSidebarVisible {
+		r.refreshDetailsSidebar()
+		return
+	}
+	r.showDetailsSidebar()
+}
+
 // preserveFocusAcross runs f (some combination of ShowPage/HidePage/
 // SendToFront), then restores whatever keyboard focus was in place right
 // before it ran — the fix for a real bug: tview's own Pages.ShowPage/
@@ -257,10 +276,11 @@ func (r *Root) hideDetailsSidebar() {
 // toggleDetailsSidebar is the "I" key/Details button's own action —
 // called directly and unguarded from a click, the same "a click is
 // always deliberate" reasoning every other button click already gets.
-// ToggleDetailsSidebarShortcut (Ctrl+D) is this plus the same
-// acceptsGlobalShortcut precondition every other keyboard shortcut
-// checks — see its own doc comment for why that one specifically can't
-// skip it the way this can.
+// 'I' itself reaches this the same "also works while Properties is
+// open" way Look and the hashes/directory-size/metadata trio do (see
+// plainCommand.alsoOverProperties and acceptsPropertiesAwareKey in
+// keymap.go) — the exact carve-out ToggleDetailsSidebarShortcut, right
+// below, once needed its own bespoke gating logic for.
 func (r *Root) toggleDetailsSidebar() {
 	if r.detailsSidebarVisible {
 		r.hideDetailsSidebar()
@@ -269,25 +289,14 @@ func (r *Root) toggleDetailsSidebar() {
 	}
 }
 
-// ToggleDetailsSidebarShortcut is Ctrl+D's own action — see
-// cmd/breakthrough, which falls through to bashLine's own handling
-// (returns the event, not nil) whenever this reports it wouldn't have
-// fired anyway, the same as Ctrl+T/Ctrl+S/Ctrl+P/Ctrl+B: tview's own
-// TextArea binds Ctrl+D to "delete forward" (the same as the physical
-// Delete key), and losing that while typing a command would be a real,
-// working feature silently broken, not just an unlikely readline
-// convention no one would ever actually hit.
-//
-// Unlike those four, this doesn't gate on the full acceptsGlobalShortcut
-// (which requires no overlay open at all) — it also fires while
-// Properties specifically is open, per the user's own explicit request
-// to be able to open or close Details *alongside* Properties, the same
-// "also works while Properties is open" carve-out Ctrl+K/Ctrl+N's own
-// doc comment already documents for the same reason (see
-// ComputeHashesShortcut). Every other overlay (Search, Help, Options,
-// Sed, a picker, ...) still blocks it, same as before — only Properties
-// gets this exception. See captureOutsideClick's own matching carve-out
-// for the Details button's click, the other half of the same request.
+// ToggleDetailsSidebarShortcut used to be Ctrl+D's own action — nothing
+// in cmd/breakthrough calls it any more; 'I' now reaches
+// toggleDetailsSidebar directly (see its own doc comment), gated by
+// acceptsPropertiesAwareKey instead of the bespoke logic below. Kept
+// rather than deleted as an exported building block, the same shape
+// bottombar.go's RenameShortcut/EditShortcut/etc. already have for
+// exactly this reason — its own gating is preserved as-is below, since
+// it's still exactly correct, just no longer reachable from a keypress.
 func (r *Root) ToggleDetailsSidebarShortcut() {
 	if r.bashLine.HasFocus() {
 		return
@@ -517,30 +526,30 @@ func (r *Root) detailsImageBoxSize() (width, height int) {
 }
 
 // detailsFullscreenHint is the preview section's own click-zone hint
-// (image or rasterized PDF page alike) — reuses Ctrl+L, this app's own
-// existing "Look" shortcut, rather than inventing a second one: Look
-// already opens fullscreen for exactly these two Kinds (see
-// showBuiltinLook), and it already works from here unmodified (it
-// reads the panel's own current selection itself, the same as this
-// sidebar's own target — see openLook), so nothing new was needed
-// beyond a click zone routing to it and a line saying so.
+// (image or rasterized PDF page alike) — reuses "l", this app's own
+// existing "Look" key, rather than inventing a second one: Look already
+// opens fullscreen for exactly these two Kinds (see showBuiltinLook),
+// and it already works from here unmodified (it reads the panel's own
+// current selection itself, the same as this sidebar's own target — see
+// openLook), so nothing new was needed beyond a click zone routing to
+// it and a line saying so.
 //
-// Deliberately short (18 characters) rather than spelling out "or click
-// here" the way the hash/metadata hints do: a real, observed bug once
-// found the longer wording wrapped at this sidebar's own minimum width
-// (see detailsSidebarMinWidth), silently mis-numbering every row after
-// it — the exact same class of bug already fixed once for hashes and
-// once for Modified. This one's own click-zone is also the whole
-// preview image itself (see renderDetailsSidebar/
-// captureDetailsSidebarMouse), a much bigger and more discoverable
-// target than the text alone, so losing the explicit "click here"
-// wording costs less here than it would in the other two hints.
-const detailsFullscreenHint = "Ctrl+L: fullscreen"
+// Deliberately short rather than spelling out "or click here" the way
+// the hash/metadata hints do: a real, observed bug once found a longer
+// wording wrapped at this sidebar's own minimum width (see
+// detailsSidebarMinWidth), silently mis-numbering every row after it —
+// the exact same class of bug already fixed once for hashes and once
+// for Modified. This one's own click-zone is also the whole preview
+// image itself (see renderDetailsSidebar/captureDetailsSidebarMouse), a
+// much bigger and more discoverable target than the text alone, so
+// losing the explicit "click here" wording costs less here than it
+// would in the other two hints.
+const detailsFullscreenHint = "l: fullscreen"
 
 // detailsMetadataHint is the metadata section's own placeholder, shown
 // until fetchDetailsMetadata actually runs for the current target — the
 // same "hint until triggered" shape hashLines already uses for hashes,
-// just naming Ctrl+N instead of Ctrl+K.
+// just naming "M" instead of "h".
 //
 // Deliberately short, for the same reason detailsFullscreenHint is (see
 // its own doc comment): unlike the hash hint, which sits last with
@@ -550,7 +559,7 @@ const detailsFullscreenHint = "Ctrl+L: fullscreen"
 // at the sidebar's own minimum width, silently pushing both of those
 // down by a row this function's own click-zone bookkeeping never knew
 // to account for.
-const detailsMetadataHint = "Ctrl+N: load metadata"
+const detailsMetadataHint = "M: load metadata"
 
 // detailsMetadataStubMessage is what fetchDetailsMetadata currently
 // shows once triggered — see its own doc comment on why that's a stub
@@ -560,7 +569,7 @@ const detailsMetadataHint = "Ctrl+N: load metadata"
 // mis-numbering everything after it if it wrapped.
 const detailsMetadataStubMessage = "(not implemented yet)"
 
-// fetchDetailsMetadata is Ctrl+N/the metadata hint's click zone's own
+// fetchDetailsMetadata is "M"/the metadata hint's click zone's own
 // action — currently a stub: real EXIF/format-specific metadata
 // extraction is deliberate follow-up work, once a metadata library has
 // actually been picked, not something this pass builds. What already
@@ -575,14 +584,14 @@ func (r *Root) fetchDetailsMetadata() {
 	r.renderDetailsSidebar()
 }
 
-// FetchMetadataShortcut is Ctrl+N's own action — see cmd/breakthrough.
-// Properties has no metadata section of its own to defer to (unlike
-// hashes — see ComputeHashesShortcut), so this only ever targets
-// Details.
+// FetchMetadataShortcut is the "M" key's own action. Properties has no
+// metadata section of its own to defer to (unlike hashes — see
+// ComputeHashesShortcut), so this only ever targets Details — opening
+// it first (see ensureDetailsSidebarShowing) if it isn't already shown,
+// so "select an image, press M" works from plain browsing too.
 func (r *Root) FetchMetadataShortcut() {
-	if r.detailsSidebarVisible {
-		r.fetchDetailsMetadata()
-	}
+	r.ensureDetailsSidebarShowing()
+	r.fetchDetailsMetadata()
 }
 
 // infoFieldDateTime is wideInfoField's own shape (label on line one,
@@ -804,7 +813,7 @@ func (r *Root) renderDetailsSidebar() {
 			// 64-character halves here too, and each one wrapped again
 			// inside this sidebar's own much narrower box.
 			_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-			hashText = hashLines(r.detailsHashes, "Press Ctrl+K or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", innerWidth)
+			hashText = hashLines(r.detailsHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", innerWidth)
 		}
 		r.detailsHashRowStart, _ = writeSection(hashText)
 
@@ -838,7 +847,7 @@ func (r *Root) renderDetailsSidebar() {
 			// (a real, observed bug once the label got this long).
 			sizeText = fmt.Sprintf("Size (du -hs): %s", humanSize(*r.detailsDirSize))
 		default:
-			sizeText = "Press Ctrl+U or click here to compute this directory's total size (du -hs)"
+			sizeText = "Press k or click here to compute this directory's total size (du -hs)"
 		}
 		r.detailsDirSizeRowStart, _ = writeSection(sizeText)
 	}
@@ -846,7 +855,7 @@ func (r *Root) renderDetailsSidebar() {
 	r.detailsSidebar.SetText(b.String())
 }
 
-// computeDetailsHashes is Ctrl+K/the hash section's own click zone's
+// computeDetailsHashes is "h"/the hash section's own click zone's
 // action while Details (not Properties) is the relevant target — see
 // ComputeHashesShortcut's own doc comment on how that's decided.
 // Mirrors Properties' own computeHashes exactly (see its doc comment
@@ -938,8 +947,8 @@ func (r *Root) propagateHashResult(target string, hashes fsops.Hashes) {
 // currently showing target, or nil — propagateHashResult's own
 // "adopt on open" counterpart, checked by loadPropertiesTarget: opening
 // Properties on a file Details already hashed shows that result right
-// away instead of a fresh "press Ctrl+K" hint, per the user's own
-// explicit request. Unlike propagateHashResult, this only ever needs
+// away instead of a fresh "press h" hint, per the user's own explicit
+// request. Unlike propagateHashResult, this only ever needs
 // one direction here — loadPropertiesTarget is the one doing the
 // asking, so there's no symmetric "does Properties already have it"
 // question to also answer in the same call (see propertiesHashesFor for
@@ -1120,7 +1129,7 @@ func (r *Root) startDetailsPreview(path string) {
 // call.
 var dirSize = fsops.DirSize
 
-// computeDetailsDirSize is Ctrl+U/the directory-size section's own click
+// computeDetailsDirSize is "k"/the directory-size section's own click
 // zone's action — mirrors computeDetailsHashes's own shape (background
 // goroutine, animated progress, cancelable — see its doc comment for the
 // full reasoning on all three), but for fsops.DirSize instead of a
@@ -1226,35 +1235,42 @@ func (r *Root) cancelDetailsDirSizeComputation() {
 	r.detailsDirSizeInProgress = false
 }
 
-// ComputeDirSizeShortcut is Ctrl+U's own action — see cmd/breakthrough.
-// Details-only: directories have no equivalent section in Properties to
-// target instead (see computeDetailsDirSize's own doc comment), so
-// unlike ComputeHashesShortcut just below, there's no Properties-vs-
-// Details dispatch to make here — a no-op whenever Details itself isn't
-// even showing.
+// ComputeDirSizeShortcut is the "k" key's own action. Details-only:
+// directories have no equivalent section in Properties to target
+// instead (see computeDetailsDirSize's own doc comment), so unlike
+// ComputeHashesShortcut just below, there's no Properties-vs-Details
+// dispatch to make here — opens Details first (see
+// ensureDetailsSidebarShowing) if it isn't already shown, so "select a
+// directory, press k" works from plain browsing too.
 func (r *Root) ComputeDirSizeShortcut() {
-	if r.detailsSidebarVisible {
-		r.computeDetailsDirSize()
-	}
+	r.ensureDetailsSidebarShowing()
+	r.computeDetailsDirSize()
 }
 
-// ComputeHashesShortcut is Ctrl+K's own action — see cmd/breakthrough.
-// Also Properties' *only* way to trigger this now (see
-// hashesMouseCapture's own doc comment on why the bare 'h' it used to
-// have besides its own click zone is gone). Targets whichever of
-// Properties/Details is actually the relevant one right now, decided by
-// real keyboard focus: Properties, being modal, always holds it while
-// open, so Ctrl+K then reuses its own existing computeHashes instead of
-// reaching past it to a Details sidebar sitting, unfocused, behind it —
-// per the user's own explicit request for what should happen when both
-// are open at once. Otherwise, if Details is currently shown, targets
-// its own hash section (see computeDetailsHashes) instead. A no-op if
-// neither applies.
+// ComputeHashesShortcut is the "h" key's own action — also Properties'
+// own hash section's *only* keyboard route now (see hashesMouseCapture's
+// own doc comment on why the bare 'h' it briefly had before Ctrl+K
+// existed is what this same letter now genuinely replaces, rather than
+// bringing back the old widget-level focus-routing complexity that
+// displaced it). Targets whichever of Properties/Details is actually the
+// relevant one right now: Properties, being modal, always holds
+// activePage while open, so this reuses its own existing computeHashes
+// instead of reaching past it to a Details sidebar sitting, unfocused,
+// behind it — per the user's own explicit request for what should
+// happen when both are open at once. Otherwise, if Details is already
+// shown, targets its own hash section (see computeDetailsHashes)
+// instead. Failing both, opens Details first (see
+// ensureDetailsSidebarShowing) so "select something, press h" works
+// from plain browsing too, not only once one of the two already happens
+// to be open.
 func (r *Root) ComputeHashesShortcut() {
 	switch {
 	case r.activePage == propertiesPage:
 		r.computeHashes()
 	case r.detailsSidebarVisible:
+		r.computeDetailsHashes()
+	default:
+		r.ensureDetailsSidebarShowing()
 		r.computeDetailsHashes()
 	}
 }
@@ -1303,7 +1319,7 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 			r.fetchDetailsMetadata()
 			return tview.MouseConsumed, nil
 		case r.detailsHashRowStart >= 0 && row >= r.detailsHashRowStart:
-			// Through the same dispatcher Ctrl+K uses, not
+			// Through the same dispatcher "h" uses, not
 			// computeDetailsHashes directly — so a click here defers to
 			// Properties too when that's the one currently open (see
 			// ComputeHashesShortcut's own doc comment), the same as
