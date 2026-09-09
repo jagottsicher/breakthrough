@@ -27,15 +27,27 @@ var (
 
 // conflictResolution is one way to handle a single paste conflict — the
 // destination already has something at the path a clipboard item would
-// otherwise land on. Only resolveOverwrite/resolveSkip make sense as a
-// one-off, single-conflict answer; the other two are conditional rules,
-// meant to be picked once and then applied to every conflict a paste
-// runs into, not asked about individually (see conflictResolutionLabel
-// and chooseConflictResolution's own "forAll" parameter).
+// otherwise land on. Only resolveOverwrite/resolveMerge/resolveSkip
+// make sense as a one-off, single-conflict answer; the other two are
+// conditional rules, meant to be picked once and then applied to every
+// conflict a paste runs into, not asked about individually (see
+// chooseConflictResolution's own "forAll" parameter).
+//
+// resolveOverwrite and resolveMerge differ only for a directory
+// conflict — see fsops.OverwriteMode's own doc comment for the two
+// choices in full; for a plain file conflict, fsops.Copy/Move ignore
+// the distinction entirely, and either resolves the same way. Both
+// still get their own dialog options (see newPasteConflictDialog)
+// rather than folding one into the other, or hiding whichever doesn't
+// apply: knowing in advance whether a given conflict is a file or a
+// directory would need this dialog to rebuild its own item list per
+// conflict, and the label alone ("... into existing folder") already
+// says plainly enough when Merge's own choice actually matters.
 type conflictResolution int
 
 const (
 	resolveOverwrite conflictResolution = iota
+	resolveMerge
 	resolveSkip
 	resolveOverwriteIfNewer
 	resolveOverwriteIfSourceNotEmpty
@@ -198,6 +210,23 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 		src := src
 		dst := filepath.Join(job.destDir, filepath.Base(src))
 
+		// Checked before anything else, including the conflict scan just
+		// below: pasting a file back into the very directory it's already
+		// in, or a directory into one of its own subdirectories, must
+		// never even reach fsCopy/fsMove, let alone a conflict dialog that
+		// would offer "Overwrite" as if this were an ordinary collision —
+		// choosing it here would destroy the only copy there ever was (a
+		// real bug found and fixed at fsops.Copy/Move's own level too, see
+		// fsops.Overlaps' own doc comment for the full reasoning); this is
+		// what makes the item never start at all instead, reported as a
+		// genuine error like any other real failure.
+		if fsops.Overlaps(src, dst) {
+			r.reportPasteOutcome(job, func() {
+				r.recordPasteError(job, fmt.Errorf("%s: source and destination are the same, or one is inside the other", filepath.Base(src)))
+			})
+			continue
+		}
+
 		dstInfo, err := os.Lstat(dst)
 		switch {
 		case err == nil:
@@ -210,7 +239,10 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 			r.reportPasteOutcome(job, func() { r.pasteConflictFound(job, conflict) })
 		case os.IsNotExist(err):
 			r.safeGo("paste", func() { r.pasteItemDone(job) }, func() {
-				r.pasteOne(job, src, dst, false)
+				// force is false — no conflict here at all — so mode is
+				// never actually consulted; ReplaceEntirely is just the
+				// harmless, arbitrary placeholder for that.
+				r.pasteOne(job, src, dst, false, fsops.ReplaceEntirely)
 			})
 		default:
 			r.reportPasteOutcome(job, func() { r.recordPasteError(job, err) })
@@ -280,7 +312,13 @@ func (r *Root) reportPasteOutcome(job *pasteJob, fn func()) {
 // write, not routed through QueueUpdateDraw itself: animatePasteProgress
 // samples it on its own schedule, the same "no rate-limiting done at
 // the source" contract fsops.Hash's own onProgress already follows.
-func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool) {
+//
+// mode is fsops.OverwriteMode — meaningless (see its own doc comment)
+// unless force is true and the conflict turns out to be a directory,
+// which is exactly why pasteWalk's own non-conflict call site can pass
+// either value without it mattering at all: force is false there, so
+// mode is never even consulted.
+func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.OverwriteMode) {
 	if job.ctx.Err() != nil {
 		return
 	}
@@ -288,9 +326,9 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool) {
 	job.ioMu.Lock()
 	var err error
 	if job.cut {
-		err = fsMove(src, dst, force, onFile)
+		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile})
 	} else {
-		err = fsCopy(src, dst, force, onFile)
+		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, OnFile: onFile})
 	}
 	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })
@@ -450,10 +488,13 @@ func (r *Root) pasteConflictFound(job *pasteJob, c pasteConflict) {
 // waiting for that turn, the same as pasteWalk's own non-conflicting
 // items already do.
 func (r *Root) resolveConflictAsync(job *pasteJob, c pasteConflict, resolution conflictResolution) {
+	mode := fsops.ReplaceEntirely
 	switch resolution {
 	case resolveSkip:
 		r.pasteItemDone(job)
 		return
+	case resolveMerge:
+		mode = fsops.MergeInto
 	case resolveOverwriteIfNewer:
 		if !c.srcInfo.ModTime().After(c.dstInfo.ModTime()) {
 			r.pasteItemDone(job)
@@ -466,7 +507,7 @@ func (r *Root) resolveConflictAsync(job *pasteJob, c pasteConflict, resolution c
 		}
 	}
 	r.safeGo("paste (conflict)", func() { r.pasteItemDone(job) }, func() {
-		r.pasteOne(job, c.src, c.dst, true)
+		r.pasteOne(job, c.src, c.dst, true, mode)
 	})
 }
 
@@ -519,6 +560,8 @@ const (
 	pasteConflictMessageItem = iota
 	pasteConflictOverwriteItem
 	pasteConflictOverwriteAllItem
+	pasteConflictMergeItem
+	pasteConflictMergeAllItem
 	pasteConflictSkipItem
 	pasteConflictSkipAllItem
 	pasteConflictIfNewerItem
@@ -543,6 +586,16 @@ func (r *Root) renderPasteConflictDialog(job *pasteJob) {
 // Modal, the same reasoning every other dialog in this app already
 // follows (keyboard navigation, a clickable legend, consistent with
 // everything else here).
+//
+// "Overwrite"/"Overwrite all" mean fsops.ReplaceEntirely (see its own
+// doc comment) — for a directory conflict, the destination ends up
+// *exactly* the source's own tree afterward, nothing left over from
+// whatever was already there; "Merge into existing folder"/"Merge all
+// into existing folders" are the explicit alternative, keeping
+// whatever the source doesn't also have. Both pairs are always shown,
+// even though the distinction is only real for a directory conflict —
+// see conflictResolution's own doc comment on why this doesn't rebuild
+// the item list per conflict to hide whichever doesn't apply.
 func (r *Root) newPasteConflictDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
@@ -550,6 +603,8 @@ func (r *Root) newPasteConflictDialog() *tview.List {
 	l.AddItem("", "", 0, nil) // pasteConflictMessageItem — set fresh by renderPasteConflictDialog before every show
 	l.AddItem("Overwrite", "", 0, func() { r.chooseConflictResolution(resolveOverwrite, false) })
 	l.AddItem("Overwrite all", "", 0, func() { r.chooseConflictResolution(resolveOverwrite, true) })
+	l.AddItem("Merge into existing folder", "", 0, func() { r.chooseConflictResolution(resolveMerge, false) })
+	l.AddItem("Merge all into existing folders", "", 0, func() { r.chooseConflictResolution(resolveMerge, true) })
 	l.AddItem("Skip", "", 0, func() { r.chooseConflictResolution(resolveSkip, false) })
 	l.AddItem("Skip all", "", 0, func() { r.chooseConflictResolution(resolveSkip, true) })
 	l.AddItem("Overwrite all if source is newer", "", 0, func() { r.chooseConflictResolution(resolveOverwriteIfNewer, true) })

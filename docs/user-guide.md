@@ -491,6 +491,12 @@ it into whatever directory the panel is showing. The context menu
 offers all three too, with Paste only appearing once the clipboard
 actually has something in it.
 
+Pasting into the very directory a file is already in, or a directory
+into one of its own subdirectories, is refused outright rather than
+started at all — the first would destroy the only copy of the file
+there ever was, the second would recurse into itself without any
+bound.
+
 Paste runs in the background rather than one file at a time in a
 blocking loop. A file that copies or moves cleanly just lands at its
 destination with no interruption. One that already exists there opens
@@ -499,12 +505,24 @@ Paste:
 
 | Option | Effect |
 | --- | --- |
-| Overwrite | Replace this one file; the next conflict (if any) gets its own dialog |
+| Overwrite | Replace this one entry; the next conflict (if any) gets its own dialog |
 | Overwrite all | Same, and apply it to every conflict the rest of this Paste runs into |
-| Skip | Leave the existing file untouched; the next conflict gets its own dialog |
+| Merge into existing folder | For a directory conflict specifically: copy the source's own files over it, keeping whatever's already there that the source doesn't have; the next conflict gets its own dialog |
+| Merge all into existing folders | Same, for every conflict the rest of this Paste runs into |
+| Skip | Leave the existing entry untouched; the next conflict gets its own dialog |
 | Skip all | Same, for every conflict the rest of this Paste runs into |
 | Overwrite all if source is newer | Overwrite only where the copied file's modified time is newer than the existing one; skip the rest — applies to every remaining conflict |
 | Overwrite all if source is not empty | Overwrite only where the copied file actually has content, so a zero-byte source never replaces something real; skip the rest — applies to every remaining conflict |
+
+For a plain file conflict, Overwrite and Merge behave identically —
+there's nothing to merge, only a whole file's content to replace
+either way. The distinction is real for a directory: **Overwrite makes
+the destination identical to the source**, removing anything already
+there that the source doesn't have, while **Merge keeps it**. Replacing
+a compromised directory from a known-clean copy (a WordPress install's
+own core files, say) needs Overwrite specifically — a merge would
+leave anything an attacker planted there, that the clean source never
+had to begin with, completely untouched.
 
 `Up`/`Down` move between the options, `Enter`/`Space` applies the
 highlighted one, `Escape` is the same as the preselected "Skip" — a
@@ -517,6 +535,15 @@ dialog on top — it queues behind the one already showing, reflected
 right in that dialog's own message as "(N more waiting)", and gets
 its own dialog (or resolves automatically, if an "all" option was
 already chosen) once the current one is answered.
+
+`Ctrl+C` stops a running Paste outright, whether or not its own
+conflict dialog happens to be open at the time. Whatever's already
+mid-write finishes normally — on disk, exactly where it was already
+headed — rather than being interrupted mid-write; anything not yet
+started simply never starts. A *different* dialog (Properties, say)
+happening to be open while a Paste merely continues in the background
+is unaffected — `Ctrl+C` there closes that dialog as it always has,
+since it's what you're actually looking at.
 
 Any real failure along the way — a permission error, a full disk, and
 so on, never a conflict, which always has a decision — is collected
@@ -776,3 +803,30 @@ with a timestamped header per session, and tracebacks are set to `all`
 so every goroutine is captured. Recovered panics are additionally shown
 in the error overlay and logged to `crash.log` in the same directory,
 with or without this flag.
+
+### Terminal recovery over a dropped connection
+
+breakthrough responds to SIGHUP, SIGTERM and SIGINT by restoring the
+terminal (exiting the alternate screen buffer, turning off mouse
+reporting) before the process actually exits — the same reason
+vim/htop/less and most other full-screen terminal programs install a
+handler like this. A dropped SSH connection delivers exactly one of
+these (SIGHUP — literally "hang up") once the session tears down, and
+without a handler, an unhandled signal terminates a Go process
+immediately, skipping every bit of cleanup: whichever raw modes were
+on stay on at the terminal emulator itself, showing up afterward as
+garbled output and mouse movements arriving as stray character
+sequences.
+
+This can only help, not guarantee a fix in every case: a connection
+that's already fully, physically severed leaves no channel left to
+send a reset sequence over, so nothing running remotely can undo that
+after the fact. For that situation — or simply to keep breakthrough
+(and whatever it's running in its own embedded shell) alive across a
+dropped connection at all, rather than relying on a signal handler to
+merely leave a clean terminal behind — running it inside a remote
+`tmux` or `screen` session is the robust fix: the session keeps
+running, completely undisturbed, independent of any one SSH
+connection to it, and reattaching afterward needs no recovery of any
+kind because the new connection's own terminal was never touched by
+breakthrough in the first place.

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // isolatePasteIO overrides fsCopy/fsMove for the duration of t, still
@@ -28,13 +30,13 @@ func isolatePasteIO(t *testing.T) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{}, 64)
 	origCopy, origMove := fsCopy, fsMove
-	fsCopy = func(src, dst string, force bool, onFile func(string)) error {
-		err := origCopy(src, dst, force, onFile)
+	fsCopy = func(src, dst string, opts fsops.CopyOptions) error {
+		err := origCopy(src, dst, opts)
 		done <- struct{}{}
 		return err
 	}
-	fsMove = func(src, dst string, force bool, onFile func(string)) error {
-		err := origMove(src, dst, force, onFile)
+	fsMove = func(src, dst string, opts fsops.MoveOptions) error {
+		err := origMove(src, dst, opts)
 		done <- struct{}{}
 		return err
 	}
@@ -55,6 +57,41 @@ func waitPasteIO(t *testing.T, done <-chan struct{}, n int) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("timed out waiting for paste I/O call %d of %d", i+1, n)
 		}
+	}
+}
+
+// TestPasteWalkNeverAttemptsWhenDestinationOverlapsSource pins the
+// user's own explicit request: pasting into the very directory the
+// selection is already in must never even attempt the real copy/move at
+// all — not "flagged as a conflict, where choosing Overwrite would have
+// been real data loss" (see fsops.Overlaps' own doc comment), rejected
+// outright before fsCopy/fsMove is ever called. Uses isolatePasteIO
+// purely to observe whether a real I/O call happens at all — waiting
+// for it to *not* happen within a generous window, rather than for it
+// to happen (see waitPasteIO), so this doesn't depend on
+// recordPasteError's own downstream QueueUpdateDraw hop, which never
+// fires here either.
+func TestPasteWalkNeverAttemptsWhenDestinationOverlapsSource(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	// destDir == dir: pasting these two right back into the very
+	// directory they're already in — every item here overlaps its own
+	// destination.
+	items := []string{filepath.Join(dir, "apple.txt"), filepath.Join(dir, "banana.txt")}
+	job := newPasteTestJob(r, false, dir, len(items))
+
+	done := isolatePasteIO(t)
+	r.pasteWalk(job, items)
+
+	select {
+	case <-done:
+		t.Fatal("fsCopy was called — pasting into the same directory the selection is already in must never attempt a real copy")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: no I/O call ever happened for either item.
 	}
 }
 
@@ -440,6 +477,88 @@ func TestChooseConflictResolutionOverwriteRunsRealCopy(t *testing.T) {
 	}
 }
 
+// setUpPasteDirConflict mirrors setUpPasteConflict for a *directory*
+// conflict specifically — the one case Overwrite and Merge actually
+// differ (see conflictResolution's own doc comment): src has "shared"
+// with its own content, dst already has "shared" with different
+// content plus "extra", which src doesn't have at all.
+func setUpPasteDirConflict(t *testing.T) (r *Root, job *pasteJob, src, dst string) {
+	t.Helper()
+	srcParent := t.TempDir()
+	dstParent := t.TempDir()
+	src = filepath.Join(srcParent, "somedir")
+	dst = filepath.Join(dstParent, "somedir")
+
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "shared"), []byte("clean"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "shared"), []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "extra"), []byte("not from source"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	var err error
+	r, err = NewRoot(tview.NewApplication(), srcParent)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	job = newPasteTestJob(r, false, dstParent, 1)
+	r.pasteConflictFound(job, newPasteTestConflict(t, src, dst))
+	if job.current == nil {
+		t.Fatal("setup: conflict should be showing")
+	}
+	return r, job, src, dst
+}
+
+// TestChooseConflictResolutionOverwriteReplacesDirectoryEntirely pins
+// the user's own explicit expectation: "Overwrite" on a directory
+// conflict must mean fsops.ReplaceEntirely — the destination ends up
+// identical to the source, "extra" (dst's own file src doesn't have at
+// all) gone — not the old, merge-only behavior that left it sitting
+// there untouched.
+func TestChooseConflictResolutionOverwriteReplacesDirectoryEntirely(t *testing.T) {
+	r, _, _, dst := setUpPasteDirConflict(t)
+
+	done := isolatePasteIO(t)
+	r.chooseConflictResolution(resolveOverwrite, false)
+	waitPasteIO(t, done, 1)
+
+	if got, err := os.ReadFile(filepath.Join(dst, "shared")); err != nil || string(got) != "clean" {
+		t.Errorf("dst/shared = %q, %v, want %q", got, err, "clean")
+	}
+	if _, err := os.Stat(filepath.Join(dst, "extra")); !os.IsNotExist(err) {
+		t.Errorf("dst/extra should be gone after Overwrite, stat err = %v", err)
+	}
+}
+
+// TestChooseConflictResolutionMergeKeepsExtraDestFiles pins the
+// explicit alternative: "Merge into existing folder" keeps whatever the
+// source doesn't have.
+func TestChooseConflictResolutionMergeKeepsExtraDestFiles(t *testing.T) {
+	r, _, _, dst := setUpPasteDirConflict(t)
+
+	done := isolatePasteIO(t)
+	r.chooseConflictResolution(resolveMerge, false)
+	waitPasteIO(t, done, 1)
+
+	if got, err := os.ReadFile(filepath.Join(dst, "shared")); err != nil || string(got) != "clean" {
+		t.Errorf("dst/shared = %q, %v, want %q", got, err, "clean")
+	}
+	if got, err := os.ReadFile(filepath.Join(dst, "extra")); err != nil || string(got) != "not from source" {
+		t.Errorf("dst/extra = %q, %v, want it left untouched by Merge", got, err)
+	}
+}
+
 // TestChooseConflictResolutionSkipLeavesDestUntouched pins "Skip": no
 // I/O at all, the existing dst content survives, and the item's own
 // outcome is still recorded as final (job.remaining reaches 0).
@@ -819,7 +938,7 @@ func TestPasteOneSerializesRealIOAcrossConcurrentItems(t *testing.T) {
 	t.Cleanup(func() { fsCopy = origCopy })
 	var inFlight atomic.Int32
 	done := make(chan struct{}, 5)
-	fsCopy = func(src, dst string, force bool, onFile func(string)) error {
+	fsCopy = func(src, dst string, opts fsops.CopyOptions) error {
 		if inFlight.Add(1) != 1 {
 			t.Errorf("fsCopy entered while another call was already inside it — job.ioMu isn't serializing real I/O")
 		}
@@ -831,7 +950,7 @@ func TestPasteOneSerializesRealIOAcrossConcurrentItems(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		i := i
-		go r.pasteOne(job, filepath.Join(dir, fmt.Sprintf("item-%d.txt", i)), filepath.Join(dir, fmt.Sprintf("out-%d.txt", i)), false)
+		go r.pasteOne(job, filepath.Join(dir, fmt.Sprintf("item-%d.txt", i)), filepath.Join(dir, fmt.Sprintf("out-%d.txt", i)), false, fsops.ReplaceEntirely)
 	}
 	waitPasteIO(t, done, 5)
 }
@@ -873,5 +992,89 @@ func TestCancelPasteJobClosesOpenDialog(t *testing.T) {
 	}
 	if job.ctx.Err() == nil {
 		t.Error("the cancelled job's own context should now report an error")
+	}
+}
+
+// TestRequestCancelStopsARunningPaste pins the user's own explicit
+// report: a Paste, once started, previously had no way to be
+// interrupted at all — Ctrl+C (RequestCancel) now stops it the same way
+// starting a second Paste already could (see cancelPasteJob), the
+// moment there's no overlay open to route to instead.
+func TestRequestCancelStopsARunningPaste(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 3)
+
+	r.RequestCancel()
+
+	if r.pasteJob != nil {
+		t.Error("r.pasteJob should be cleared after RequestCancel")
+	}
+	if job.ctx.Err() == nil {
+		t.Error("the cancelled job's own context should now report an error")
+	}
+}
+
+// TestRequestCancelFromConflictDialogCancelsWholeJob pins the sharper
+// edge of the same report: Ctrl+C while the paste-conflict dialog
+// itself is open must cancel the *whole* job, not just close that one
+// dialog the way an unrelated overlay's own hideOverlay would — closing
+// only the dialog would leave job.current pointing at a conflict
+// nothing could ever resolve again (its own three buttons are the only
+// path to chooseConflictResolution), silently stranding the job
+// forever instead of either finishing or actually being cancelled.
+func TestRequestCancelFromConflictDialogCancelsWholeJob(t *testing.T) {
+	r, job, _, _ := setUpPasteConflict(t, "")
+	if r.activePage != pasteConflictPage {
+		t.Fatal("setup: the conflict dialog should be open")
+	}
+
+	r.RequestCancel()
+
+	if r.activePage == pasteConflictPage {
+		t.Error("the dialog should have closed")
+	}
+	if r.pasteJob != nil {
+		t.Error("r.pasteJob should be cleared, not just the dialog closed")
+	}
+	if job.ctx.Err() == nil {
+		t.Error("the whole job should be cancelled, not just its dialog dismissed")
+	}
+}
+
+// TestRequestCancelLeavesBackgroundPasteRunningForAnUnrelatedOverlay
+// pins the other half: Ctrl+C while some *other* overlay is open
+// (Properties, say) closes that overlay as it always has — a paste
+// merely continuing in the background is not what the user is looking
+// at or asking to stop, unlike the conflict dialog above, which is
+// itself about the paste.
+func TestRequestCancelLeavesBackgroundPasteRunningForAnUnrelatedOverlay(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	job := newPasteTestJob(r, false, dir, 3)
+
+	r.panel.focusRow(2) // off ".." — see fixtureDir
+	r.propertiesCurrentEntry()
+	if r.activePage != propertiesPage {
+		t.Fatal("setup: Properties should be open")
+	}
+
+	r.RequestCancel()
+
+	if r.activePage == propertiesPage {
+		t.Error("Properties should have closed")
+	}
+	if r.pasteJob == nil {
+		t.Error("the background paste should still be running — Ctrl+C here was about Properties, not it")
+	}
+	if job.ctx.Err() != nil {
+		t.Error("the background job's own context should be untouched")
 	}
 }

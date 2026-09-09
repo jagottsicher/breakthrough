@@ -136,18 +136,30 @@ terminal.
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
-  current selection, not just one file. Paste runs in the background —
-  a file that already exists at the destination opens a small dialog
-  (Overwrite, Skip, an "all" variant of each for the rest of this
-  Paste, or apply "only if the source is newer"/"only if the source
-  isn't empty" to every conflict it still runs into) without blocking
-  anything else in the same Paste: whatever doesn't conflict keeps
-  copying/moving while that dialog is up, and a second conflict found
-  before the first is answered queues behind it — shown as "(N more
-  waiting)" right in the dialog's own message — rather than stacking a
-  second dialog on top. Any real failure (permission, a full disk, ...)
-  is collected rather than stopping at the first one, and reported once
-  the whole Paste is done. Whatever's currently on the clipboard shows
+  current selection, not just one file. Pasting into the very directory
+  a file is already in, or a directory into one of its own
+  subdirectories, is refused outright rather than started at all — the
+  first would have destroyed the only copy there ever was, the second
+  would recurse into itself without any bound. Paste runs in the
+  background — a file that already exists at the destination opens a
+  small dialog (Overwrite, Skip, "Merge into existing folder", an "all"
+  variant of each for the rest of this Paste, or apply "only if the
+  source is newer"/"only if the source isn't empty" to every conflict
+  it still runs into) without blocking anything else in the same
+  Paste: whatever doesn't conflict keeps copying/moving while that
+  dialog is up, and a second conflict found before the first is
+  answered queues behind it — shown as "(N more waiting)" right in the
+  dialog's own message — rather than stacking a second dialog on top.
+  Overwriting a directory replaces it entirely (nothing left over from
+  whatever was there before — the right choice when "overwrite" needs
+  to mean "make this identical to the source", not "patch it"); Merge
+  is the explicit alternative, keeping whatever the source doesn't
+  also have. Ctrl+C stops a running Paste outright — whatever's already
+  mid-write finishes normally, on disk, right where it was headed;
+  nothing still queued starts at all. Any real failure (permission, a
+  full disk, ...) is collected rather than stopping at the first one,
+  and reported once the whole Paste is done. Whatever's currently on
+  the clipboard shows
   two ways: every row it holds gets a full-row grey tint (a lighter
   shade for Cut than Copy, since Cut is the one where the original
   actually disappears), across every open tab showing that row, not

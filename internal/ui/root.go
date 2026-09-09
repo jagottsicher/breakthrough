@@ -1786,10 +1786,38 @@ func (r *Root) RequestQuit() {
 // while the path header is being edited — Ctrl+C is the keyboard way out
 // of that, where otherwise only a mouse click would do.
 //
+// A running Paste takes priority over both of those, per the user's own
+// explicit report that one, once started, could never be interrupted at
+// all: the paste-conflict dialog specifically (see pasteConflictPage)
+// cancels the whole job outright rather than just closing the dialog
+// the way any other overlay's own hideOverlay would — closing only the
+// dialog would leave job.current pointing at a conflict nothing can
+// ever resolve again (its own three buttons are the only path to
+// chooseConflictResolution), silently stranding the job forever,
+// finished neither cleanly nor by this cancel. A *different* overlay
+// happening to be open while a paste merely continues in the background
+// (Properties, say) is left alone here — Ctrl+C in that case is about
+// whatever the user is actually looking at, not a paste they may not
+// even be thinking about; the plain "no overlay open, paste still
+// running" case below is what actually answers the original report.
+// cancelPasteJob's own doc comment covers what happens to whatever was
+// already mid-flight: it finishes, on disk, exactly where it already
+// was headed, rather than being interrupted mid-write.
+//
 // It never quits: stopping breakthrough is Ctrl+Q plus a confirmation.
 func (r *Root) RequestCancel() {
+	if r.activePage == pasteConflictPage {
+		r.cancelPasteJob()
+		r.refreshStatusBar() // the progress segment should vanish immediately, not wait for the next tick
+		return
+	}
 	if r.activePage != "" {
 		r.hideOverlay()
+		return
+	}
+	if r.pasteJob != nil {
+		r.cancelPasteJob()
+		r.refreshStatusBar()
 		return
 	}
 	r.panel.cancelEdit()

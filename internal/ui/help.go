@@ -351,12 +351,20 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Apply the highlighted option
   Escape            Skip — same as the preselected default
 
-  Overwrite               Replace this one file, decide the next
+  Overwrite               Replace this one entry entirely (a
+                          directory ends up identical to the source —
+                          nothing extra left over), decide the next
                           conflict separately
   Overwrite all           Same, and apply it to every conflict this
                           Paste still runs into, with no further
                           asking
-  Skip                    Leave the existing file untouched, decide
+  Merge into existing folder      Directory conflicts only: copy the
+                          source's files over it, keeping whatever's
+                          already there the source doesn't have —
+                          identical to Overwrite for a plain file
+  Merge all into existing folders Same, for every conflict this
+                          Paste still runs into
+  Skip                    Leave the existing entry untouched, decide
                           the next conflict separately
   Skip all               Same, for every conflict this Paste still
                           runs into
@@ -375,6 +383,11 @@ var helpText = strings.TrimLeft(`
   while this dialog is open — a conflict found before this one is
   answered queues behind it instead of opening a second dialog on top,
   shown as "(N more waiting)" right in this one's own message.
+
+  Ctrl+C stops the whole Paste outright, dialog open or not — whatever
+  was already mid-write finishes normally where it was headed, nothing
+  still queued starts. A different overlay merely open while a Paste
+  continues in the background is unaffected.
 
   Whatever's currently on the clipboard shows two ways: every row it
   holds gets a full-row grey tint (a lighter shade for Cut than Copy),
