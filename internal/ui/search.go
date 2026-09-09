@@ -22,7 +22,7 @@ const searchPage = "search"
 // page of this same overlay (see runSearch/Panel.showSearchResults),
 // per the user's own request.
 const (
-	searchFormWidth, searchFormHeight = 84, 19
+	searchFormWidth, searchFormHeight = 84, 20
 )
 
 // searchEngineOption pairs one Engine choice's own label with the
@@ -320,7 +320,34 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchFieldsPages.AddPage("fields", fields, true, true)
 	r.searchFieldsPages.AddPage("editfield", r.searchEditField, false, false)
 
+	// A one-row "Search" title bar, the same shape Properties' own (see
+	// newPropertiesView) already has — per the user's own explicit
+	// request that every pane/overlay/dialog in this app get one, the
+	// owner/group picker excepted. Positioned as its own absolutely-
+	// positioned page within pages (see resizeSearchPages), the same
+	// split; SetBorderPadding(1, 0, 0, 0) shrinks the resize=true "form"
+	// page's own inner rect from the top to leave room for it.
+	r.searchTitleBar = newPlainTitleBar("Search")
+
 	pages := tview.NewPages()
+	pages.SetBorderPadding(1, 0, 0, 0)
+	// "titlebar" registered *before* "form", deliberately — order matters
+	// here in a way it doesn't for Properties/chmod's own identical-
+	// looking title-bar page: openSearch shows this via a plain
+	// showOverlay (no restore callback), which falls through to
+	// Application.SetFocus(r.searchPages) directly, and tview.Pages.Focus
+	// (verified directly against its own pages.go, not assumed) delegates
+	// real keyboard focus to whichever *visible* page was added *last* —
+	// not necessarily the main content one. Properties/chmod never hit
+	// this at all (both pass a non-nil restore to showOverlayWithRestore,
+	// which sets focus explicitly instead of ever calling Pages.Focus's
+	// own default) — this dialog is the one place that default actually
+	// runs, so it's the one place this ordering is load-bearing: "form"
+	// must be the last visible page added, or real focus silently lands
+	// on the title bar instead of the search fields — a real regression,
+	// caught live by TestEscapeClosesSearchRegardlessOfFocus failing
+	// before this ordering was fixed.
+	pages.AddPage("titlebar", r.searchTitleBar, false, true)
 	pages.AddPage("form", r.searchFieldsPages, true, true)
 	return pages
 }
@@ -883,6 +910,7 @@ func (r *Root) resizeSearchPages() {
 	x, y := r.centeredOnScreen(searchFormWidth, searchFormHeight)
 	x, y, w, h := r.clampToPanel(x, y, searchFormWidth, searchFormHeight)
 	r.searchPages.SetRect(x, y, w, h)
+	r.searchTitleBar.SetRect(x, y, w, 1)
 }
 
 // showSearchError shows msg as the panel's own (otherwise empty)

@@ -228,9 +228,17 @@ type Root struct {
 	menuLayout   *tview.Flex
 	rename       *tview.InputField
 	prompt       *tview.InputField
-	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
+	picker       *tview.List // owner/group picker — see openOwnerGroupPicker; the one dialog in this app deliberately left without a title bar, per the user's own explicit exception
 	errorView    *tview.TextView
-	quitConfirm  *tview.List
+
+	// quitConfirm is the real focus target (see RequestQuit); its own
+	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
+	// are what's actually registered on Pages/positioned instead — the
+	// same widget/layout split menu/menuTitleBar/menuLayout already
+	// established just above.
+	quitConfirm         *tview.List
+	quitConfirmTitleBar *tview.TextView
+	quitConfirmLayout   *tview.Flex
 
 	// confirmDialog backs every confirmation in this app — Remove,
 	// Empty Trash, and the Options screen's own two resets — as one
@@ -238,9 +246,13 @@ type Root struct {
 	// newConfirmDialog/openConfirm in trash.go for why). Same pattern
 	// r.picker/r.prompt already use. pendingConfirm is the action
 	// acceptConfirm runs once the user actually confirms, set by
-	// whichever caller opened the dialog.
-	confirmDialog  *tview.List
-	pendingConfirm func()
+	// whichever caller opened the dialog. confirmDialogTitleBar/
+	// confirmDialogLayout are its own "Confirm" title bar and the Flex
+	// stacking the two, the same menuTitleBar/menuLayout split.
+	confirmDialog         *tview.List
+	confirmDialogTitleBar *tview.TextView
+	confirmDialogLayout   *tview.Flex
+	pendingConfirm        func()
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -265,6 +277,16 @@ type Root struct {
 	sedFlags         map[string]bool
 	sedFlagsList     *tview.List
 	sedActions       *tview.List
+	// sedTitleBar/sedContentLayout are the "Sed Replace" title bar and
+	// the Flex it's stacked above (see newSedContentLayout for what that
+	// one already was on its own) — sedLayout, the outer wrapper of the
+	// two, is what sedReplacePage actually shows/positions instead (the
+	// same widget/layout split menu/menuTitleBar/menuLayout already
+	// established — focus still cascades all the way down to sedForm via
+	// tview.Flex.Focus's own delegate chain, verified directly against
+	// tview's own flex.go/application.go, not assumed).
+	sedTitleBar      *tview.TextView
+	sedContentLayout *tview.Flex
 	sedLayout        *tview.Flex
 	sedTargets       []string
 
@@ -284,6 +306,7 @@ type Root struct {
 	sedPreviewStatus     *tview.TextView
 	sedPreviewTable      *tview.Table
 	sedPreviewActions    *tview.List
+	sedPreviewTitleBar   *tview.TextView // " Sed Preview " — see newSedPreviewLayout, the same wrapping sedTitleBar/sedLayout already establish for the dialog it returns to
 	sedPreviewLayout     *tview.Flex
 	sedPendingChanges    []replace.FileChange
 	sedPreviewCancel     context.CancelFunc
@@ -536,6 +559,7 @@ type Root struct {
 	// otherwise — the exact opposite scoping of searchIncludeArchives).
 	searchPages             *tview.Pages
 	searchFieldsPages       *tview.Pages
+	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page propertiesTitleBar/chmodTitleBar already are
 	searchTop               *tview.TextView
 	searchLeft              *tview.TextView
 	searchRight             *tview.TextView
@@ -626,6 +650,7 @@ type Root struct {
 	chmodEditField  *tview.InputField
 	chmodEditTarget chmodField
 	chmodButtons    *tview.Flex
+	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page propertiesTitleBar already is
 	chmodCancelBtn  *tview.Button
 	chmodApplyBtn   *tview.Button
 	chmodSpans      []chmodSpan
@@ -1013,11 +1038,19 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
 	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
 	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
+	r.quitConfirmTitleBar = newPlainTitleBar("Quit")
+	r.quitConfirmLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.quitConfirmTitleBar, 1, 0, false).
+		AddItem(r.quitConfirm, 0, 1, true)
 
 	// The Remove/Empty-Trash confirmation (see trash.go) — same "one
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
 	r.confirmDialog = r.newConfirmDialog()
+	r.confirmDialogTitleBar = newPlainTitleBar("Confirm")
+	r.confirmDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.confirmDialogTitleBar, 1, 0, false).
+		AddItem(r.confirmDialog, 0, 1, true)
 
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
@@ -1131,8 +1164,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(propertiesPage, r.properties, false, false)
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
-	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
-	r.AddPage(confirmPage, r.confirmDialog, false, false)
+	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
+	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
@@ -1730,11 +1763,29 @@ func (r *Root) RequestQuit() {
 	r.panel.cancelEdit()
 
 	width, height := listSize(r.quitConfirm)
+	height++ // reserved title bar row (see quitConfirmLayout)
 
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 
+	r.quitConfirmLayout.SetRect(x, y, width, height)
+	// r.quitConfirm's own rect is also set here, to the same full
+	// (title-bar-row included) area rather than left at whatever it last
+	// was — captureOutsideClick's own "did this click land on the open
+	// overlay" check reads r.activeWidget.GetRect() directly, and
+	// r.activeWidget stays r.quitConfirm (the real focus target — see
+	// showOverlay just below), not quitConfirmLayout. Flex.Draw() would
+	// eventually correct this to the exact, one-row-shorter sub-rect on
+	// the very next real redraw, but a click arriving before that first
+	// redraw would otherwise see whatever tview.NewBox's own uninitialized
+	// default (0, 0, 15, 10) happens to be — which overlaps the panel
+	// itself — and be let straight through as if it had landed on the
+	// dialog, a real, live-tested regression this fixes: caught by
+	// TestQuitConfirmBlocksRightDragSelection, which drives the drag
+	// straight through captureOutsideClick without ever forcing a second
+	// Draw() in between, exactly the gap a real terminal's own draw loop
+	// closes so fast it would otherwise never be noticed.
 	r.quitConfirm.SetRect(x, y, width, height)
 	r.quitConfirm.SetCurrentItem(1) // "Cancel" — see newConfirmDialog's own comment
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
@@ -1874,6 +1925,29 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 			r.dragMoved = false
 			r.dragging = true
 			r.panel.focusRow(row) // move the highlight to the press row right away, not just on release
+			// focusRow above only moves the table's own row cursor
+			// (Table.Select) — it says nothing about real Application-level
+			// keyboard focus, which is what acceptsPlainKeyCommand's own
+			// r.panel.table.HasFocus() check actually reads. A plain
+			// left-click gets that for free from tview's own
+			// Table.MouseHandler (MouseLeftDown calls setFocus(t)
+			// internally), but this whole right-button gesture is handled
+			// here instead, in a plain MouseCapture that never receives
+			// tview's own setFocus callback at all (see this func's own
+			// doc comment) — so without this, drag-selecting rows with the
+			// right button while focus happened to be elsewhere beforehand
+			// (the filter field, the bash line, another pane, ...) left the
+			// rows visibly toggled but every plain-letter shortcut
+			// (c/x/v/d/...) still locked out right afterward, since the
+			// table itself never actually became the keyboard focus target
+			// — a real, user-reported gap. Set unconditionally here, before
+			// the click-vs-drag distinction is even known: a genuine drag
+			// needs exactly this; a plain right-click's own
+			// MouseRightClick case goes on to open the context menu right
+			// after, which immediately claims focus for itself (see
+			// pushOverlay), so this is harmlessly redundant for that path
+			// rather than wrong.
+			r.app.SetFocus(r.panel.table)
 		} else {
 			r.dragging = false
 		}
@@ -2092,6 +2166,26 @@ func listSize(l *tview.List) (width, height int) {
 		}
 	}
 	return width + 2, l.GetItemCount() // +2: 1-char padding on each side
+}
+
+// newPlainTitleBar builds one overlay's fixed, one-row " Name " caption
+// — the exact three lines menuTitleBar/tabSwitcherTitleBar/
+// helpTitleBar/detailsTitleBar/etc. each already build ad hoc, factored
+// out here once a further few dialogs (quitConfirm, confirmDialog) need
+// the identical shape, per the user's own explicit request that every
+// pane/overlay/dialog in this app get one of these — the owner/group
+// picker (r.picker) is the one deliberate exception, left exactly as
+// plain as it always was. Callers still wrap the result in their own
+// Flex/Pages the same way the existing ones do (see menuLayout,
+// confirmDialogLayout, quitConfirmLayout) — this only builds the bar
+// itself, not the stacking around it, since a Pages-based dialog
+// (Properties, chmod) and a List-based one (Menu, confirmDialog) need
+// different wrappers around the same bar.
+func newPlainTitleBar(text string) *tview.TextView {
+	bar := tview.NewTextView()
+	bar.SetWrap(false)
+	bar.SetText(" " + text + " ")
+	return bar
 }
 
 // closeMenu hides the context menu without taking any action (Escape at

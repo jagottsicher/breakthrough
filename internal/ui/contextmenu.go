@@ -285,4 +285,15 @@ func (r *Root) resizeContextMenu(x, y int) {
 	height++ // reserved title bar row (see menuLayout)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.menuLayout.SetRect(x, y, width, height)
+	// r.menu's own rect is also set, to the same full area — a real,
+	// live-confirmed gap otherwise (see
+	// TestContextMenuBlocksRightDragSelection): captureOutsideClick's
+	// own "did this click land on the open overlay" check reads
+	// r.activeWidget.GetRect() directly, and r.activeWidget stays r.menu
+	// (the real focus target — see showMenu), not menuLayout. Left
+	// unset, r.menu's rect would stay at whatever tview.NewBox's own
+	// uninitialized default (0, 0, 15, 10) happens to be — which
+	// overlaps the panel itself — letting a click meant for the panel
+	// underneath be treated as if it had landed on the menu instead.
+	r.menu.SetRect(x, y, width, height)
 }
