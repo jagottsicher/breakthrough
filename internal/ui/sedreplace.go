@@ -43,11 +43,12 @@ func (r *Root) openSedReplace() {
 	r.sedTargets = targets
 	r.resetSedForm()
 
-	// height fits sedLayout's three stacked widgets (sedForm's four
-	// fields, sedFlagsList's five toggles, sedActions' two buttons, plus
-	// spacing) — checked against a real render, not guessed; a shorter
-	// value silently clipped the bottom rows.
-	width, height := 78, 17
+	// height fits sedTitleBar's own row plus sedContentLayout's three
+	// stacked widgets (sedForm's four fields, sedFlagsList's five
+	// toggles, sedActions' two buttons, plus spacing) — checked against a
+	// real render, not guessed; a shorter value silently clipped the
+	// bottom rows.
+	width, height := 78, 18
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -182,16 +183,33 @@ func (r *Root) newSedActions() *tview.List {
 	return l
 }
 
-// newSedLayout stacks sedForm (Target/Find/Replace/advanced script),
-// sedFlagsList (the five toggles), and sedActions (Preview/Cancel) into
-// the single widget sedReplacePage actually shows — see newSedForm's own
-// doc comment for why the flags live in a separate List rather than as
-// Form checkboxes. Initial focus goes to sedForm: typing Find/Replace
-// immediately, without an extra click first, is the common case:
-// reaching the flags or the buttons instead is one click away, the same
-// as moving between any two of this app's other independent widgets
-// (e.g. panel and bashLine) already is.
+// newSedLayout wraps sedTitleBar (" Sed Replace ", per the user's own
+// explicit request that every pane/overlay/dialog in this app get one)
+// above sedContentLayout — the same widget/layout split
+// menu/menuTitleBar/menuLayout already established. Focus still
+// cascades all the way down to sedForm regardless of this extra
+// nesting level: tview.Flex.Focus delegates to whichever item was added
+// with focus=true, and Application.SetFocus's own callback recursively
+// re-invokes itself with that delegate, so a Flex-of-a-Flex resolves
+// exactly like a single flat one would (verified directly against
+// tview's own flex.go/application.go, not assumed).
 func (r *Root) newSedLayout() *tview.Flex {
+	r.sedTitleBar = newPlainTitleBar("Sed Replace")
+	r.sedContentLayout = r.newSedContentLayout()
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.sedTitleBar, 1, 0, false).
+		AddItem(r.sedContentLayout, 0, 1, true)
+}
+
+// newSedContentLayout stacks sedForm (Target/Find/Replace/advanced
+// script), sedFlagsList (the five toggles), and sedActions
+// (Preview/Cancel) — see newSedForm's own doc comment for why the flags
+// live in a separate List rather than as Form checkboxes. Initial focus
+// goes to sedForm: typing Find/Replace immediately, without an extra
+// click first, is the common case: reaching the flags or the buttons
+// instead is one click away, the same as moving between any two of this
+// app's other independent widgets (e.g. panel and bashLine) already is.
+func (r *Root) newSedContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
 	layout.AddItem(r.sedForm, 8, 0, true)
 	layout.AddItem(r.sedFlagsList, 5, 0, false)
@@ -505,11 +523,16 @@ func (r *Root) newSedPreviewLayout() *tview.Flex {
 	r.sedPreviewActions.AddItem("Cancel", "", 0, r.closeSedPreview)
 	r.sedPreviewActions.SetDoneFunc(r.backToSedForm) // Esc back to Sed, like the search results' own Esc
 
-	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	layout.AddItem(r.sedPreviewStatus, 1, 0, false)
-	layout.AddItem(r.sedPreviewTable, 0, 1, false)
-	layout.AddItem(r.sedPreviewActions, 3, 0, true)
-	return layout
+	r.sedPreviewTitleBar = newPlainTitleBar("Sed Preview")
+
+	content := tview.NewFlex().SetDirection(tview.FlexRow)
+	content.AddItem(r.sedPreviewStatus, 1, 0, false)
+	content.AddItem(r.sedPreviewTable, 0, 1, false)
+	content.AddItem(r.sedPreviewActions, 3, 0, true)
+
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.sedPreviewTitleBar, 1, 0, false).
+		AddItem(content, 0, 1, true)
 }
 
 // backToSedForm is Preview's own "Back" (and Escape — see

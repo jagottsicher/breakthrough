@@ -511,10 +511,11 @@ func chmodTargetsSummary(targets []string) string {
 // row.
 func (r *Root) resizeChmodDialog(x, y int) {
 	width, height := textSize(r.chmodText.GetText(true))
-	height++ // reserved button row
+	height += 2 // reserved title bar row (top) + button row (bottom)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 
 	r.chmodPages.SetRect(x, y, width, height)
+	r.chmodTitleBar.SetRect(x, y, width, 1)
 	r.chmodButtons.SetRect(x, y+height-1, width, 1)
 }
 
@@ -575,10 +576,24 @@ func (r *Root) newChmodDialog() *tview.Pages {
 
 	r.chmodButtons = r.newChmodButtons()
 
+	// A one-row "Permissions" title bar, the same shape Properties' own
+	// (see newPropertiesView) already has — per the user's own explicit
+	// request that every pane/overlay/dialog in this app get one, the
+	// owner/group picker excepted. Positioned like chmodButtons below —
+	// an absolutely-positioned page of its own within pages (see
+	// resizeChmodDialog) — rather than left to resize=true the way
+	// chmodText is: reserving its own row is what
+	// pages.SetBorderPadding(1, 0, 0, 0) just below actually does, by
+	// shrinking chmodText's own resize=true inner rect to leave room for
+	// it.
+	r.chmodTitleBar = newPlainTitleBar("Permissions")
+
 	pages := tview.NewPages()
+	pages.SetBorderPadding(1, 0, 0, 0)
 	pages.AddPage("text", r.chmodText, true, true)
 	pages.AddPage("editfield", r.chmodEditField, false, false)
 	pages.AddPage("buttons", r.chmodButtons, false, true)
+	pages.AddPage("titlebar", r.chmodTitleBar, false, true)
 	return pages
 }
 
@@ -989,7 +1004,7 @@ func (r *Root) openChmod() {
 
 	r.renderChmodDialog()
 	width, height := textSize(r.chmodText.GetText(true))
-	height++ // reserved button row
+	height += 2 // reserved title bar row (top) + button row (bottom) — see resizeChmodDialog's own matching math
 	x, y := r.centeredOnScreen(width, height)
 	r.resizeChmodDialog(x, y)
 
