@@ -603,6 +603,37 @@ func TestRightDragMovesFocusToEndRow(t *testing.T) {
 	}
 }
 
+// TestRightDragGrantsRealKeyboardFocus pins a real, user-reported gap:
+// focusRow (called throughout captureMouse's right-button cases) only
+// ever moves the table's own row cursor (Table.Select) — it says nothing
+// about real Application-level keyboard focus, which is what
+// acceptsPlainKeyCommand's own r.panel.table.HasFocus() check actually
+// reads. Before this test's own fix, drag-selecting rows with the right
+// button while real focus happened to be elsewhere beforehand (the bash
+// line here, standing in for the filter field/another pane/anything
+// else) left every row visibly toggled but every plain-letter shortcut
+// (c/x/v/d/...) still locked out right afterward, since the table itself
+// never actually became the keyboard focus target.
+func TestRightDragGrantsRealKeyboardFocus(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	root.app.SetFocus(root.bashLine) // real focus starts elsewhere entirely
+	if root.panel.table.HasFocus() {
+		t.Fatal("setup: the table should not have real focus yet")
+	}
+
+	dragRight(t, root, 1, 3)
+
+	if !root.panel.table.HasFocus() {
+		t.Error("a right-drag should give the table real keyboard focus, not just move its row cursor")
+	}
+	if !root.acceptsPlainKeyCommand() {
+		t.Error("right after a right-drag, a plain-letter shortcut like 'c'/'x'/'d' should be accepted")
+	}
+}
+
 // manyEntriesDir returns a directory with n plain files — enough that a
 // row index computed from a screen position well past a shrunk panel's
 // own bottom edge (see TestRightClickUnderExpandedConsoleDoesNotOpenMenu)
@@ -720,5 +751,41 @@ func TestQuitConfirmBlocksRightDragSelection(t *testing.T) {
 	}
 	if root.activePage != quitConfirmPage {
 		t.Errorf("activePage = %q after the drag, want still %q (a drag produces no click to close it on)", root.activePage, quitConfirmPage)
+	}
+}
+
+// TestContextMenuBlocksRightDragSelection is TestQuitConfirmBlocksRightDragSelection's
+// own sibling for the context menu — the same latent gap, found by
+// checking the same "click outside the open overlay" mechanism for
+// every other List+title-bar-Flex dialog in this app: resizeContextMenu
+// only ever sets menuLayout's own rect, never r.menu's — and r.menu,
+// not menuLayout, is what showMenu passes to showOverlay as
+// r.activeWidget, which is exactly what captureOutsideClick's own
+// bounds check reads. Confirmed live before fixing it (this test failed
+// the same way TestQuitConfirmBlocksRightDragSelection did) rather than
+// assumed from reading the code alone.
+func TestContextMenuBlocksRightDragSelection(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	root.showMenu(50, 2) // well clear of the rows this test drags over
+	if root.activePage != contextMenuPage {
+		t.Fatalf("setup: activePage = %q, want %q", root.activePage, contextMenuPage)
+	}
+
+	dragRight(t, root, 1, 3)
+
+	for row := 1; row <= 3; row++ {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if root.panel.selected[ref.path] {
+			t.Errorf("row %d (%s) got selected by a drag while the context menu was open", row, ref.name)
+		}
+	}
+	if root.activePage != contextMenuPage {
+		t.Errorf("activePage = %q after the drag, want still %q", root.activePage, contextMenuPage)
 	}
 }

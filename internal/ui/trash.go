@@ -339,10 +339,17 @@ func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	r.confirmDialog.SetItemText(2, confirmLabel, "")
 
 	width, height := listSize(r.confirmDialog)
+	height++ // reserved title bar row (see confirmDialogLayout)
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 
+	r.confirmDialogLayout.SetRect(x, y, width, height)
+	// r.confirmDialog's own rect is also set, to the same full area —
+	// see RequestQuit's own comment on why captureOutsideClick's bounds
+	// check (which reads r.activeWidget.GetRect(), and r.activeWidget
+	// stays r.confirmDialog, the real focus target) needs this even
+	// though confirmDialogLayout is what's actually drawn/positioned.
 	r.confirmDialog.SetRect(x, y, width, height)
 	r.confirmDialog.SetCurrentItem(1) // "Cancel" - see newConfirmDialog's own comment
 	// Layered on top of whatever asked, rather than replacing it:

@@ -124,6 +124,26 @@ func TestRequestQuitPreselectsCancel(t *testing.T) {
 	}
 }
 
+// TestRequestQuitHasATitleBar pins the same fix
+// TestOpenRemoveConfirmHasATitleBar does for its own dialog: quitConfirm
+// used to be a bare List with no heading either.
+func TestRequestQuitHasATitleBar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.RequestQuit()
+
+	if got, want := r.quitConfirmTitleBar.GetText(true), " Quit "; got != want {
+		t.Errorf("quitConfirmTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.quitConfirmLayout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("quitConfirmLayout rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
 // TestMouseStatusText pins the exact wording buildStatusBar's own
 // "Mouse on/off" segment uses.
 func TestMouseStatusText(t *testing.T) {

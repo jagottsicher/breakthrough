@@ -172,6 +172,23 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	}
 }
 
+// TestOpenRemoveConfirmHasATitleBar pins the fix for a real, user-reported
+// gap: the Remove/Empty-Trash confirmation used to be a bare List with
+// no heading at all, unlike every other dialog in this app (Properties,
+// Menu, Options, ...) — see confirmDialogTitleBar's own doc comment.
+func TestOpenRemoveConfirmHasATitleBar(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+
+	r.openRemoveConfirm()
+
+	if got, want := r.confirmDialogTitleBar.GetText(true), " Confirm "; got != want {
+		t.Errorf("confirmDialogTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.confirmDialogLayout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("confirmDialogLayout rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
 // resolvePurgeConfirmByCurrentFocus resolves the currently open
 // purgeConfirm exactly the way pressing Enter on the table's current
 // selection would: it does not force a particular outcome, unlike
