@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -3080,5 +3081,77 @@ func TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults(t *testing.T) {
 
 	if called {
 		t.Error("onExitSearchResults ran for a content match, want it left alone (search mode still showing)")
+	}
+}
+
+// TestColumnHeaderNameWidthMatchesDataRows pins a real, user-reported
+// bug: columnHeader (the column-label row) and the data table are two
+// separate tview.Table widgets, and each independently computed its own
+// Name column's width via tview's own Expansion/leftover-distribution
+// mechanism (verified directly against tview's own table.go, not
+// assumed) — which measurably doesn't always agree between two separate
+// tables sharing the same inputs, even though the two are supposed to
+// converge on the same final width. Confirmed live against a real
+// directory (/home/jens/Pictures, not theoretical) before being fixed
+// by padRight-padding every Name cell in both tables to the exact same
+// externally-computed width (p.layout.name) instead — see padRight/
+// setRowCells/buildColumnHeader for the full reasoning.
+//
+// The reliable trigger, isolated by trial against the real directory:
+// a symlink row specifically — its own suffix (" -> " plus the target
+// path, both often long) is what actually makes the two tables'
+// independent width computations diverge; a long plain name or
+// directory (just a trailing "/" suffix) on its own was tried first and
+// did not reproduce it, nor did scrolling the widest name off-screen by
+// itself. One symlink among plain files, with no scrolling needed at
+// all, is the minimal case that does. Checked under both size formats
+// per the user's own report that this isn't bytes-format-specific,
+// despite that being the format the original report happened to notice
+// it in.
+func TestColumnHeaderNameWidthMatchesDataRows(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("f%02d.txt", i)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	realDir := filepath.Join(dir, "some-real-directory")
+	if err := os.Mkdir(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkName := "a-symlink-with-a-somewhat-long-name-pointing-elsewhere"
+	if err := os.Symlink(realDir, filepath.Join(dir, symlinkName)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bytesMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sizeBytes=%v", bytesMode), func(t *testing.T) {
+			root, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			root.panel.sizeBytes = bytesMode
+
+			screen := tcell.NewSimulationScreen("")
+			if err := screen.Init(); err != nil {
+				t.Fatalf("screen.Init: %v", err)
+			}
+			defer screen.Fini()
+			screen.SetSize(100, 30)
+			root.SetRect(0, 0, 100, 30)
+			root.Draw(screen)
+			root.Draw(screen)
+
+			_, _, headerWidth := root.panel.columnHeader.GetCell(0, colName).GetLastPosition()
+			if headerWidth == 0 {
+				t.Fatal("setup: columnHeader's own Name cell has no position — was it actually drawn?")
+			}
+			for row := 1; row < root.panel.table.GetRowCount(); row++ {
+				if _, _, w := root.panel.table.GetCell(row, colName).GetLastPosition(); w != headerWidth {
+					t.Errorf("row %d Name column width = %d, want %d (columnHeader's own)", row, w, headerWidth)
+				}
+			}
+		})
 	}
 }

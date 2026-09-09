@@ -1693,10 +1693,18 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		label = nameHighlightTags(label, p.theme.DirectoryBackground)
 	}
 	label += tview.Escape(suffix)
+	if width := p.layout.name; width > 0 {
+		// Pads out to the column's own full width — see padRight's own
+		// doc comment for why this, rather than SetExpansion, is what
+		// keeps this table's Name column in step with columnHeader's.
+		// Guarded on a real (post-first-draw) width, the same guard
+		// nameColumnWidth's own huge fallback exists for: padding to
+		// that placeholder would try to build a gigabyte-long string.
+		label = padRight(label, width)
+	}
 
 	nameCell := tview.NewTableCell(label).SetTextColor(color)
 	nameCell.SetReference(ref)
-	nameCell.SetExpansion(1) // consume the rest of the row's width
 	nameCell.SetClickedFunc(func() bool {
 		return p.handleNameClick(row)
 	})
@@ -1937,15 +1945,21 @@ func suppressButtonFocusSteal(btn *tview.Button) {
 // active key, or reversing direction if it was. The active column's
 // label gets sortArrow's suffix.
 //
-// This table's columns only end up matching table's own widths by
-// construction, not any explicit synchronization: colCheckbox/colType/
-// colModifier are always exactly 1 character wide in both tables (their
-// content is always exactly that long), and colSize/colModified are
-// always formatted to a fixed width (see formatSizeCell/
-// formatModTimeCell) regardless of value or format — since
-// tview.Table sizes each column to its widest cell, two separate tables
-// with the same per-column content-width characteristics size
-// identically without needing to coordinate.
+// This table's columns only end up matching table's own widths because
+// every cell in both tables is explicitly padded to the exact same
+// externally-computed width, not because the two tables' widths happen
+// to agree on their own: colCheckbox/colType/colModifier are always
+// exactly 1 character wide in both tables (their content is always
+// exactly that long), colSize/colModified are always padded to
+// p.layout.size/mod (see formatSizeCell/formatModTimeCell and padLeft),
+// and colName is always padded to p.layout.name (see padRight, and
+// setRowCells' identical treatment for the data table's own Name
+// cells) — deliberately not left to tview.Table's own per-table
+// Expansion/leftover-distribution math, which turned out not to
+// reliably agree between two *separate* Table widgets even when their
+// own inputs (p.layout) were identical (a real, user-reported bug —
+// see padRight's own doc comment for the full reasoning and how it was
+// confirmed live, not assumed).
 func (p *Panel) buildColumnHeader() {
 	p.columnHeader.Clear()
 
@@ -1962,8 +1976,15 @@ func (p *Panel) buildColumnHeader() {
 	if p.sortKey == sortByName {
 		nameLabel += sortArrow(p.sortDescending)
 	}
+	if width := p.layout.name; width > 0 {
+		// See padRight's own doc comment: padding to the exact same
+		// externally-computed width setRowCells pads every data row's
+		// own Name cell to is what keeps this header's Name column from
+		// drifting a column off from the data table's, rather than
+		// leaving it to SetExpansion's own per-table leftover math.
+		nameLabel = padRight(nameLabel, width)
+	}
 	nameCell := tview.NewTableCell(nameLabel).SetTextColor(p.theme.Text)
-	nameCell.SetExpansion(1)
 	nameCell.SetClickedFunc(func() bool {
 		p.setSortKey(sortByName)
 		return false
