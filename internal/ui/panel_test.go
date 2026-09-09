@@ -1458,10 +1458,13 @@ func TestSetClipboardTintsHeldRowAcrossWholeRow(t *testing.T) {
 	}
 }
 
-// TestSetClipboardCutUsesTheLighterShade pins the other half of the
-// same request: Cut gets ClipboardCutBackground, a different (lighter,
-// per the user's own explicit request) shade than Copy's.
-func TestSetClipboardCutUsesTheLighterShade(t *testing.T) {
+// TestSetClipboardCutUsesItsOwnDistinctColor pins the other half of the
+// same request: Cut gets ClipboardCutBackground, a genuinely different
+// color than Copy's own — a slightly pinkish-tinted gray rather than
+// just a lighter shade of the same neutral gray, per the user's own
+// explicit request (see ClipboardCutBackground's own doc comment in
+// internal/config/theme.go for the full reasoning).
+func TestSetClipboardCutUsesItsOwnDistinctColor(t *testing.T) {
 	dir := t.TempDir()
 	held := filepath.Join(dir, "held.txt")
 	if err := os.WriteFile(held, nil, 0o644); err != nil {
