@@ -65,7 +65,8 @@ var helpText = strings.TrimLeft(`
   status bar's own shrinking countdown while one is pending, and the
   button bar for what the second key can be):
 
-    g  go to    gg top · gh home · gr / (root) · gb Trash
+    g  go to    gg top · gh home · gp back · gn forward · gu up ·
+                gr / (root) · gb Trash
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
