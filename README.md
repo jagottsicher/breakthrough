@@ -63,9 +63,18 @@ terminal.
   both the identifying start and the extension survive. This matters most
   in split view, where each pane is half as wide: before, Size collapsed
   to `…` and Modified disappeared off the right edge entirely.
-- A live filter, right in the top row: type to narrow the listing on
-  every keystroke, with a Glob/Regex toggle for how the pattern is
-  interpreted.
+- A live filter, tucked behind a compact "Y" button in the top row (an
+  "Nx" count appears right before it once one or more are actually
+  narrowing the listing): click it to open a small dropdown with the
+  glob/regex filter (type to narrow the listing on every keystroke,
+  with a Glob/Regex toggle for how the pattern is interpreted, and its
+  own checkbox to switch it off without losing what's typed), plus a
+  size filter and a modified-time filter — combinable, on/off for now
+  while their own comparison/range options are still being built out.
+- The five nav buttons (Start/Home/Back/Forward/Up) at the very start
+  of the path bar are real, highlighted buttons now — a plain
+  background-colored square either side of each glyph, with its own
+  separator column between one button and the next.
 - Tabs: several directories open at once in one window, each keeping its
   own history, filter, sort order, selection and cursor position, so
   switching away and back leaves everything exactly as it was. `^1`

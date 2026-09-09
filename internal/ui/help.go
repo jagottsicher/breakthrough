@@ -126,9 +126,9 @@ var helpText = strings.TrimLeft(`
   A read-only, live-updating panel of file info (stat fields; for an
   image or PDF, a preview with its own click zone/"l" for fullscreen;
   hashes, or for a directory, its total size) for whichever entry is
-  currently selected. The "<" button right after the filter box expands
-  it the same way "I" does; once open, the ">" button in its own
-  top-right corner collapses it again.
+  currently selected. The "<" button at the far end of the path bar
+  (right after the tab strip) expands it the same way "I" does; once
+  open, the ">" button in its own top-right corner collapses it again.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
@@ -139,14 +139,21 @@ var helpText = strings.TrimLeft(`
       real, visible amount of time on a large tree
   M   Load an image's metadata (EXIF etc. — not implemented yet)
 
-  Click a path segment in the header to jump straight there; click
-  the path itself to type a new one (Tab completes it, Enter goes);
-  click a column heading to sort by it; type into the filter box to
-  narrow the list live (its own button switches between a plain glob
-  and a regular expression).
+  Click a path segment in the header to jump straight there; click the
+  path itself to type a new one (Tab completes it, Enter goes); click
+  a column heading to sort by it; click the "Y" button near the right
+  edge of the path bar (an "Nx" count appears before it once one or
+  more are actually narrowing the listing) to open the filter dropdown
+  — the glob/regex filter (type to narrow the list live, its own
+  button switches between a plain glob and a regular expression, and
+  its own checkbox switches it off without clearing what's typed),
+  plus a size filter and a modified-time filter, on/off for now, all
+  three combinable. Navigating to a different directory resets all
+  three.
 
-  While plainly browsing (not editing the path, not in the filter box)
-  and the Details sidebar is shown, Tab moves keyboard focus into it —
+  While plainly browsing (not editing the path, not in the filter
+  dropdown) and the Details sidebar is shown, Tab moves keyboard focus
+  into it —
   its own scrolling (arrow keys, PageUp/PageDown, Home/End, mouse
   wheel) then works once its content is longer than it has room for —
   and Tab again moves focus back to the panel. A click anywhere in the
@@ -265,7 +272,7 @@ var helpText = strings.TrimLeft(`
   to the row above. The first tab has no "✕" — one tab always stays
   open.
 
-  The numbered strip after the filter box shows the open tabs; the
+  The numbered strip after the filter button shows the open tabs; the
   highlighted number is the one you're on. Click a number to switch,
   click "+" for a new tab, click anywhere else in the strip to open the
   switcher — which lists every tab's full directory, since the numbers
