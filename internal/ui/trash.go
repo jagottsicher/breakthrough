@@ -311,9 +311,11 @@ func (r *Root) newConfirmDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetBorderPadding(0, 0, 1, 1)
-	// Both index 0 (the question) and index 2 (the confirming answer)
-	// are set fresh by openConfirm before every show.
-	l.AddItem("", "", 0, nil)
+	// The question itself lives in confirmDialogTitleBar, not as a list
+	// item — per the user's own explicit request that the question BE
+	// the header rather than sit under a generic "Confirm" caption. Only
+	// index 1 (the confirming answer) is still set fresh by openConfirm
+	// before every show.
 	l.AddItem("Cancel", "", 0, r.cancelConfirm)
 	l.AddItem("", "", 0, r.acceptConfirm)
 	l.SetDoneFunc(r.cancelConfirm) // Escape
@@ -329,16 +331,29 @@ func (r *Root) newConfirmDialog() *tview.List {
 // Empty Trash (see openPurgeConfirm just below, which is only a fixed
 // wording for this) and the Options screen's own two resets.
 //
+// message becomes confirmDialogTitleBar's own text — the question IS
+// the header, not a generic "Confirm" caption above a separate question
+// line (per the user's own explicit request: "braucht nicht Confirm im
+// header stehen, sondern einfach die Frage ist die Headerzeile").
+//
 // confirmLabel is the action itself, phrased as an answer ("Yes, delete
 // permanently", "Yes, reset"), not a bare "OK" — at the moment of
 // deciding, the button should say what it will do rather than make the
 // reader remember the question above it.
 func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	r.pendingConfirm = action
-	r.confirmDialog.SetItemText(0, message, "")
-	r.confirmDialog.SetItemText(2, confirmLabel, "")
+	r.confirmDialogTitleBar.SetText(" " + message + " ")
+	r.confirmDialog.SetItemText(1, confirmLabel, "")
 
+	// Width has to cover whichever of the header (the question, which
+	// can run long — "Reset all N settings, in every category, to their
+	// defaults?") or the list itself (Cancel/confirmLabel) is wider; the
+	// header no longer being a list item means listSize alone can no
+	// longer see it.
 	width, height := listSize(r.confirmDialog)
+	if headerWidth := tview.TaggedStringWidth(r.confirmDialogTitleBar.GetText(false)); headerWidth > width {
+		width = headerWidth
+	}
 	height++ // reserved title bar row (see confirmDialogLayout)
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x := (screenWidth - width) / 2
@@ -351,7 +366,7 @@ func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	// stays r.confirmDialog, the real focus target) needs this even
 	// though confirmDialogLayout is what's actually drawn/positioned.
 	r.confirmDialog.SetRect(x, y, width, height)
-	r.confirmDialog.SetCurrentItem(1) // "Cancel" - see newConfirmDialog's own comment
+	r.confirmDialog.SetCurrentItem(0) // "Cancel" - see newConfirmDialog's own comment
 	// Layered on top of whatever asked, rather than replacing it:
 	// answering a question is not a reason to close the thing that
 	// raised it. The Options screen in particular has to still be there

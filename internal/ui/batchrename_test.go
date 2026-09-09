@@ -223,7 +223,7 @@ func TestConfirmApplyBatchRenameRenamesAndReloadsThePanel(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirmation dialog %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(2)
+	r.confirmDialog.SetCurrentItem(1)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if _, err := os.Stat(filepath.Join(dir, "pear.txt")); err != nil {
@@ -252,7 +252,7 @@ func TestUndoLastBatchRenameReversesTheLastApply(t *testing.T) {
 	r.batchRenameRules.Find = "apple"
 	r.batchRenameRules.Replace = "pear"
 	r.confirmApplyBatchRename()
-	r.confirmDialog.SetCurrentItem(2)
+	r.confirmDialog.SetCurrentItem(1)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	r.undoLastBatchRename()
