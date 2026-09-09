@@ -79,6 +79,26 @@ type Theme struct {
 	// /home/jens/Pictures" shows it only on "pictures".
 	DirectoryBackground string `json:"directory_background"`
 
+	// ClipboardCopyBackground/ClipboardCutBackground tint every cell of
+	// a row whose absolute path is currently held on the clipboard (see
+	// Root.clipboard/clipboardCut in internal/ui) — a full-row
+	// background, not just the checkbox glyph a checked selection
+	// already changes, so "this is staged for Copy/Cut" stays visible
+	// without having to scan the checkbox column specifically. Two
+	// shades, not one, per the user's own explicit request: Cut gets
+	// the lighter of the two — the more consequential of the two
+	// operations (the original disappears once Paste actually succeeds)
+	// reads as the slightly stronger highlight. Both a neutral grey
+	// rather than a hue already meaningful elsewhere in this theme
+	// (DirectoryBackground's gold, EntryError's red, ...), so the tint
+	// reads as "administrative state" rather than another file-type or
+	// severity signal — and, being a full-cell background rather than
+	// DirectoryBackground's own narrow inline-tag highlight, a
+	// clipboard-held directory shows this tint across its whole row
+	// instead of the two competing for the same pixels.
+	ClipboardCopyBackground string `json:"clipboard_copy_background"`
+	ClipboardCutBackground  string `json:"clipboard_cut_background"`
+
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
 	Text string `json:"text"`
@@ -148,6 +168,9 @@ type ResolvedTheme struct {
 	ErrorBackground     tcell.Color
 	DirectoryBackground tcell.Color
 
+	ClipboardCopyBackground tcell.Color
+	ClipboardCutBackground  tcell.Color
+
 	Text               tcell.Color
 	EditableBackground tcell.Color
 	PlaceholderText    tcell.Color
@@ -175,6 +198,9 @@ func DefaultTheme() Theme {
 		FocusedBackground:   "darkcyan",
 		ErrorBackground:     "darkred",
 		DirectoryBackground: "darkgoldenrod",
+
+		ClipboardCopyBackground: "dimgray",
+		ClipboardCutBackground:  "gray",
 
 		Text:               "white",
 		EditableBackground: "slategray",
@@ -214,6 +240,9 @@ func (t Theme) Resolve() ResolvedTheme {
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
+
+		ClipboardCopyBackground: resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground),
+		ClipboardCutBackground:  resolve(t.ClipboardCutBackground, def.ClipboardCutBackground),
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),

@@ -375,7 +375,15 @@ func TestContextMenuCopyPasteRoundTrip(t *testing.T) {
 		t.Fatalf("navigate: %v", err)
 	}
 	openMenuOnRow(t, r, 0) // ".." — Paste doesn't need a real file target
+
+	// Paste runs through startPaste's own async engine now (see
+	// pasteconflict.go) — isolatePasteIO/waitPasteIO give this a
+	// deterministic way to wait for its background goroutine to have
+	// actually done the real copy before checking for it, rather than
+	// racing a background goroutine that may not even have started yet.
+	done := isolatePasteIO(t)
 	selectMenuItem(t, r, "Paste")
+	waitPasteIO(t, done, 1)
 
 	if _, err := os.Stat(filepath.Join(dst, "apple.txt")); err != nil {
 		t.Errorf("apple.txt should have been pasted into %s: %v", dst, err)
