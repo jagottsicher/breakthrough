@@ -675,6 +675,20 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// wires the click.
 	p.filterMenuBtn = tview.NewTextView().SetDynamicColors(true)
 	p.filterMenuBtn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		// Checked first, before anything else — a real, user-reported
+		// regression otherwise: tview.Flex.MouseHandler (verified
+		// directly against its own flex.go, not assumed) never checks a
+		// child's own rect itself before calling its MouseHandler; it
+		// simply calls every item in headerRow, in order, until one
+		// consumes the event. filterMenuBtn sits before tabStrip and
+		// detailsExpandBtn there, so without this check it swallowed
+		// every click meant for either of them too, regardless of where
+		// it actually landed — every other mouse capture in this
+		// package already guards this way (see captureHeaderMouse/
+		// captureTabStripMouse), this one just missed it originally.
+		if !p.filterMenuBtn.InRect(event.Position()) {
+			return action, event
+		}
 		if action == tview.MouseLeftClick && p.onOpenFilterMenu != nil {
 			p.onOpenFilterMenu()
 		}
@@ -766,6 +780,15 @@ func (p *Panel) paintStaticChrome() {
 
 	p.header.SetTextColor(p.theme.Text)
 	p.header.SetBackgroundColor(p.theme.AccentBackground)
+
+	// filterMenuBtn's own "Nx" prefix (and the padding filling out
+	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)
+	// carries no color tag of its own, unlike its own trailing " Y "
+	// button — without an explicit background here it fell back to
+	// tview's own uninitialized default (plain black), a real,
+	// user-reported mismatch against the rest of the header row right
+	// beside it.
+	p.filterMenuBtn.SetBackgroundColor(p.theme.AccentBackground)
 
 	// FocusedBackground, not AccentBackground: like propertiesEditField/
 	// chmodEditField/searchEditField, headerEdit only ever exists on

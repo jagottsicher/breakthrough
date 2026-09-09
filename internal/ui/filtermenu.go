@@ -74,6 +74,14 @@ func (r *Root) renderFilterMenu() {
 	renderGlobCheckbox := func() { globCheckbox.SetText(checkboxText(panel.filterGlobActive)) }
 	renderGlobCheckbox()
 	globCheckbox.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		// Checked first — see Panel.filterMenuBtn's own identical guard
+		// for the full reasoning (a real, user-reported regression
+		// without it): globRow calls globCheckbox before
+		// filterRegexBtn/filterField, in that order, regardless of
+		// which one a click actually landed on.
+		if !globCheckbox.InRect(event.Position()) {
+			return action, event
+		}
 		if action == tview.MouseLeftClick {
 			panel.filterGlobActive = !panel.filterGlobActive
 			renderGlobCheckbox()
@@ -125,6 +133,16 @@ func (r *Root) newFilterMenuToggleRow(active *bool, label string, panel *Panel) 
 	render := func() { row.SetText(checkboxText(*active) + " " + label) }
 	render()
 	row.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		// Checked first — see Panel.filterMenuBtn's own identical guard
+		// for the full reasoning (a real, user-reported regression
+		// without it): filterMenuLayout calls every top-level row in
+		// order regardless of which one a click actually landed on, so
+		// this row's own capture must decline whatever isn't actually
+		// its own, or it swallows clicks meant for whichever row comes
+		// after it (mtimeRow, when this is sizeRow).
+		if !row.InRect(event.Position()) {
+			return action, event
+		}
 		if action == tview.MouseLeftClick {
 			*active = !*active
 			render()

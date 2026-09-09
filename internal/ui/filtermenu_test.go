@@ -50,6 +50,92 @@ func click(p tview.Primitive) {
 	handler(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.Button1, 0), func(tview.Primitive) {})
 }
 
+// TestClickingDetailsExpandBtnDoesNotOpenFilterMenu pins a real,
+// user-reported regression: tview.Flex.MouseHandler (verified directly
+// against its own flex.go, not assumed) never checks a child's own
+// rect before calling its MouseHandler — it calls every item in
+// headerRow, in registration order, until one consumes the event.
+// filterMenuBtn sits before tabStrip and detailsExpandBtn there, so
+// without its own explicit InRect guard it swallowed every click meant
+// for either of them, anywhere in the header row, regardless of where
+// it actually landed. Drives this through the real dispatch chain
+// (root.MouseHandler, not calling a closure directly), the only way to
+// actually exercise the bug this pins.
+func TestClickingDetailsExpandBtnDoesNotOpenFilterMenu(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	expandCalled := false
+	root.panel.onExpandDetails = func() { expandCalled = true }
+
+	x, y, w, h := root.panel.detailsExpandBtn.GetRect()
+	if w == 0 || h == 0 {
+		t.Fatal("setup: detailsExpandBtn has no rect — was the panel actually drawn?")
+	}
+	cx, cy := x+w/2, y+h/2
+
+	handler := root.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(cx, cy, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if root.activePage == filterMenuPage {
+		t.Error("clicking detailsExpandBtn should not open the filter menu")
+	}
+	if !expandCalled {
+		t.Error("clicking detailsExpandBtn should still call onExpandDetails")
+	}
+}
+
+// TestClickingMtimeRowDoesNotToggleSizeRow pins the same class of bug
+// one level deeper: filterMenuLayout calls every top-level row (title
+// bar, glob row, size row, modified-time row) in order too, so
+// sizeRow's own capture must also decline a click that isn't actually
+// its own, or it swallows clicks meant for mtimeRow, which comes right
+// after it.
+func TestClickingMtimeRowDoesNotToggleSizeRow(t *testing.T) {
+	dir := fixtureDir(t)
+	root, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+	root.SetRect(0, 0, 80, 24)
+	root.Draw(screen)
+
+	root.openFilterMenu()
+	// Flex.SetRect alone (all openFilterMenu itself does) never cascades
+	// to a child's own rect — only Draw does (verified directly against
+	// tview's own flex.go, not assumed) — a second real draw pass is
+	// what actually positions mtimeRow/sizeRow themselves, three levels
+	// down inside filterMenuLayout.
+	root.Draw(screen)
+
+	mtimeRow, ok := filterMenuRow(t, root, 3).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 3 is not a *tview.TextView")
+	}
+	x, y, w, h := mtimeRow.GetRect()
+	if w == 0 || h == 0 {
+		t.Fatal("setup: mtimeRow has no rect — was the menu actually drawn?")
+	}
+	cx, cy := x+w/2, y+h/2
+
+	handler := root.MouseHandler()
+	handler(tview.MouseLeftClick, tcell.NewEventMouse(cx, cy, tcell.Button1, 0), func(tview.Primitive) {})
+
+	if root.panel.filterSizeActive {
+		t.Error("clicking the modified-time row should not toggle filterSizeActive")
+	}
+	if !root.panel.filterMtimeActive {
+		t.Error("clicking the modified-time row should toggle filterMtimeActive")
+	}
+}
+
 // TestOpenFilterMenuShowsAllThreeRows pins openFilterMenu's own basic
 // contract: activePage switches to filterMenuPage, and the layout ends
 // up with a title bar plus all three rows (glob/regex, size,
