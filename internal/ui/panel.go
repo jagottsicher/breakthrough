@@ -613,6 +613,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.columnHeader.SetBorders(false)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
+	p.columnHeader.SetMouseCapture(p.captureColumnHeaderMouse)
 
 	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
@@ -726,6 +727,13 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 			p.onExpandDetails()
 		}
 	})
+	// The Details sidebar is deliberately non-modal (the panel stays
+	// focused/usable alongside it — see its own doc comment), so a click
+	// on the button that opens it must not itself steal real keyboard
+	// focus away from whichever of panel/sidebar actually had it —
+	// suppressButtonFocusSteal's own doc comment has the full reasoning
+	// (a real, user-reported regression without it).
+	suppressButtonFocusSteal(p.detailsExpandBtn)
 
 	// Not SetFocusFunc/SetBlurFunc, unlike every other focus-dependent
 	// widget in this file — verified directly against tview's own
@@ -1864,6 +1872,59 @@ func sortArrow(descending bool) string {
 		return " ↓"
 	}
 	return " ↑"
+}
+
+// captureColumnHeaderMouse suppresses tview.Table's own default
+// MouseLeftDown handling for columnHeader — a real, user-reported
+// regression otherwise: tview.Table.MouseHandler (verified directly
+// against its own table.go, not assumed) unconditionally calls
+// setFocus(t) on MouseLeftDown before anything else runs, regardless of
+// which cell (if any) is actually clicked. columnHeader is a bare
+// non-navigable label row (SetSelectable(false, false) — see its own
+// construction), never meant to hold real keyboard focus, so every
+// click on it — Name/Size/Modified to sort, or the header's own
+// select-all checkbox — silently stole focus away from the table
+// underneath, leaving c/x/v/d and every other plain-key shortcut dead
+// until something else happened to refocus the table again.
+//
+// MouseLeftClick itself is deliberately passed through unchanged rather
+// than replaced: tview.Table.MouseHandler's own MouseLeftClick case
+// only runs each cell's own Clicked callback (setSortKey/
+// toggleSelectAllViaHeader, wired in buildColumnHeader below) — it
+// never calls setFocus itself (again verified directly against table.go)
+// — so letting it fall through still fires the intended action without
+// ever touching focus, the exact same InRect-then-"only click passes"
+// shape captureTabStripMouse already uses for the same reason.
+func (p *Panel) captureColumnHeaderMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if !p.columnHeader.InRect(event.Position()) {
+		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
+// suppressButtonFocusSteal wraps btn's own SetMouseCapture so a click
+// on it never grants real keyboard focus to btn itself — tview's own
+// Button.MouseHandler (verified directly against its own button.go)
+// unconditionally calls setFocus(b) on MouseLeftDown, before Selected
+// ever runs. The same InRect-then-suppress-non-click shape
+// captureColumnHeaderMouse/captureButtonBarMouse already use to close
+// the same class of bug for those: MouseLeftClick is passed through
+// unchanged (Button.MouseHandler's own MouseLeftClick case only calls
+// Selected, never setFocus — verified the same way), so the button's
+// own action still fires normally.
+func suppressButtonFocusSteal(btn *tview.Button) {
+	btn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if !btn.InRect(event.Position()) {
+			return action, event
+		}
+		if action != tview.MouseLeftClick {
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	})
 }
 
 // buildColumnHeader (re)builds columnHeader's one row: the checkbox
