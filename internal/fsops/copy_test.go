@@ -440,3 +440,41 @@ func TestCopyFollowSymlinksRefusesWhenTargetOverlapsDestination(t *testing.T) {
 		t.Errorf("dst should never have been created, stat err = %v", err)
 	}
 }
+
+// TestCopyFollowSymlinksRefusesWhenTargetOverlapsDestinationThroughADifferentAlias
+// pins resolveExistingAncestor's own reason for existing: dst run
+// through EvalSymlinks-following-src's own resolved path only actually
+// catches an overlap if dst is normalized through symlinks the same
+// way — otherwise the identical directory on disk can look like two
+// unrelated paths purely because one route to it happens to pass
+// through a symlink and the other doesn't. Built portably (no reliance
+// on any particular OS's own temp-directory layout) by constructing
+// exactly that shape by hand: "alias" is a symlink to "actual", and dst
+// is expressed through "alias" while the followed link resolves fully
+// to "actual" — the same class of mismatch a failing macOS CI run
+// caught for real, where /tmp itself sits behind /var -> /private/var.
+func TestCopyFollowSymlinksRefusesWhenTargetOverlapsDestinationThroughADifferentAlias(t *testing.T) {
+	base := t.TempDir()
+	actual := filepath.Join(base, "actual")
+	if err := os.MkdirAll(filepath.Join(actual, "real"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "alias")
+	if err := os.Symlink(actual, alias); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(filepath.Join(alias, "real"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expressed through the alias, not through actual — the same
+	// directory on disk under a differently-spelled path.
+	dst := filepath.Join(alias, "real", "sub")
+	if err := Copy(link, dst, CopyOptions{FollowSymlinks: true}); err == nil {
+		t.Fatal("Copy should refuse — dst is the resolved target's own subdirectory, just spelled through a different alias")
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Errorf("dst should never have been created, stat err = %v", err)
+	}
+}

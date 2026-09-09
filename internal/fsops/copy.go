@@ -189,6 +189,31 @@ func Overlaps(src, dst string) bool {
 	return !strings.HasPrefix(rel, "..")
 }
 
+// resolveExistingAncestor returns path with every symlink resolved for
+// as much of it as actually exists on disk right now, leaving any
+// trailing components that don't exist yet untouched.
+// filepath.EvalSymlinks itself only ever succeeds against a path that
+// exists in full, which is exactly why it's not enough on its own here
+// — a destination is typically a path that doesn't exist yet. Walks up
+// one component at a time until EvalSymlinks succeeds on some ancestor,
+// resolves that ancestor, then rejoins the not-yet-existing tail
+// unchanged. If EvalSymlinks fails on an ancestor for a reason other
+// than "doesn't exist yet" (a permission error, say), this simply falls
+// back to the literal path from that point up — the same accuracy this
+// check had before it existed at all, not a regression, and whatever
+// caused that failure will surface again on its own once the real
+// filesystem operation reaches it.
+func resolveExistingAncestor(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return path // reached the root without resolving anything
+	}
+	return filepath.Join(resolveExistingAncestor(parent), filepath.Base(path))
+}
+
 // copyFile copies one regular file's content and permission bits. If dst
 // already exists (only reached with opts.Force — the caller already
 // checked otherwise), it's removed first so the copy starts clean rather
@@ -316,7 +341,18 @@ func copySymlink(src, dst string, opts CopyOptions) error {
 	// checked against dst by Copy's own entry point, but resolved is a
 	// different path that check never saw — a symlink whose own target
 	// lives inside dst's own tree only actually overlaps once followed.
-	if Overlaps(resolved, dst) {
+	//
+	// dst is run through resolveExistingAncestor first rather than
+	// compared as-is: resolved just had every symlink in it resolved by
+	// EvalSymlinks, dst almost never has (it typically doesn't even
+	// exist yet — that's the point of copying something there). On a
+	// system where the working directory itself sits behind a symlink
+	// (macOS's /var -> /private/var, confirmed live via a failing CI
+	// run on exactly this test, not assumed), comparing a fully-resolved
+	// resolved against an unresolved dst would miss a real overlap
+	// purely because the two strings disagree on a prefix that is
+	// actually the same directory on disk.
+	if Overlaps(resolved, resolveExistingAncestor(dst)) {
 		return fmt.Errorf("fsops: %s (via %s) and %s are the same, or one is inside the other — refusing to copy", resolved, src, dst)
 	}
 
