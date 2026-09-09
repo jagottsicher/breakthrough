@@ -85,6 +85,14 @@ const (
 // Never truncates: a value longer than its column pushes the ones after
 // it rather than being silently cut off, which is the better failure for
 // a settings screen where the value is the point.
+//
+// Also reused by setRowCells/buildColumnHeader (panel.go) for the file
+// listing's own Name column, for a very different reason than either of
+// those two: it's what keeps columnHeader's own Name cell and the data
+// table's own Name cells the exact same rendered width, rather than
+// leaving that to tview.Table's own per-table Expansion/leftover-
+// distribution math — see their own call sites' doc comments for the
+// real, user-reported bug this closes.
 func padRight(s string, width int) string {
 	if pad := width - tview.TaggedStringWidth(s); pad > 0 {
 		return s + strings.Repeat(" ", pad)
