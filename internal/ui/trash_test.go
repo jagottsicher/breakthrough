@@ -112,7 +112,7 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 	}
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently"
 	r.acceptConfirm()
 
 	if r.detailsTarget != "" {
@@ -157,8 +157,8 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
-		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
+		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
 	}
 
 	// Enter without ever moving focus - must cancel, never delete.
@@ -175,13 +175,16 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 // TestOpenRemoveConfirmHasATitleBar pins the fix for a real, user-reported
 // gap: the Remove/Empty-Trash confirmation used to be a bare List with
 // no heading at all, unlike every other dialog in this app (Properties,
-// Menu, Options, ...) — see confirmDialogTitleBar's own doc comment.
+// Menu, Options, ...) — see confirmDialogTitleBar's own doc comment. The
+// title bar now carries the actual question rather than a generic
+// "Confirm" caption — a later, separately user-requested change (see
+// openConfirm's own doc comment).
 func TestOpenRemoveConfirmHasATitleBar(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
 
-	if got, want := r.confirmDialogTitleBar.GetText(true), " Confirm "; got != want {
+	if got, want := r.confirmDialogTitleBar.GetText(true), " Permanently delete \"a.txt\"? "; got != want {
 		t.Errorf("confirmDialogTitleBar text = %q, want %q", got, want)
 	}
 	if _, _, w, h := r.confirmDialogLayout.GetRect(); w <= 0 || h <= 0 {
@@ -196,9 +199,9 @@ func TestOpenRemoveConfirmHasATitleBar(t *testing.T) {
 func (r *Root) resolvePurgeConfirmByCurrentFocus(t *testing.T) {
 	t.Helper()
 	switch r.confirmDialog.GetCurrentItem() {
-	case 1:
+	case 0:
 		r.cancelConfirm()
-	case 2:
+	case 1:
 		r.acceptConfirm()
 	default:
 		t.Fatalf("unexpected purgeConfirm focus %d", r.confirmDialog.GetCurrentItem())
@@ -209,7 +212,7 @@ func TestOpenRemoveConfirmConfirmedDeletesPermanently(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(2) // deliberately move to "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(1) // deliberately move to "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	if _, err := os.Lstat(file); !os.IsNotExist(err) {
@@ -328,7 +331,7 @@ func TestOpenEmptyTrashConfirmRemovesEverything(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	trashDir, err := r.trashDir()
@@ -369,8 +372,8 @@ func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
-		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
+		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
 	}
 
 	// Cancel must still actually cancel — nothing removed by this redirect alone.
