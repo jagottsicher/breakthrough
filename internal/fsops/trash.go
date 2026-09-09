@@ -111,7 +111,7 @@ func MoveToTrash(src, trashDir string) error {
 	}
 	slug := id + "_" + base
 
-	if err := Move(src, target, false); err != nil {
+	if err := Move(src, target, MoveOptions{}); err != nil { // zero value: Force false, mode never consulted
 		return err
 	}
 
@@ -215,7 +215,7 @@ func ListTrash(trashDir string) ([]TrashItem, error) {
 // back to a real filesystem path is realistically a cross-device move as
 // often as not.
 func RestoreFromTrash(item TrashItem, trashDir string) error {
-	if err := Move(item.Path(trashDir), item.OriginalPath, false); err != nil {
+	if err := Move(item.Path(trashDir), item.OriginalPath, MoveOptions{}); err != nil { // zero value: Force false, mode never consulted
 		return err
 	}
 	// If removing the sidecar fails, ListTrash's own self-healing (the

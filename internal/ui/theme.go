@@ -190,6 +190,17 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.confirmDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
 	r.confirmDialogTitleBar.SetTextColor(theme.Text)
 
+	// styleList(r.pasteConflictDialog, ...) and the title bar's own
+	// coloring were both simply missing before — unlike every other List
+	// in this app, this one was never themed at all. FocusedBackground,
+	// fixed rather than active/inactive-dependent: this dialog is a
+	// single-layer, always-modal overlay nothing else ever stacks on top
+	// of, the same reasoning quitConfirm/confirmDialog's own (still
+	// title-bar-less on this branch) styling already follows.
+	styleList(r.pasteConflictDialog, theme)
+	r.pasteConflictDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.pasteConflictDialogTitleBar.SetTextColor(theme.Text)
+
 	styleList(r.picker, theme)
 
 	r.errorView.SetTextColor(theme.Text)

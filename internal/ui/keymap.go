@@ -273,6 +273,7 @@ func chordFamilies() []chordFamily {
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
 			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
 			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
+			{'r', "Reload", func(r *Root) { r.reloadCurrentTab() }},
 		}},
 		{prefix: 'y', name: "yank (reserved — no system clipboard yet)", members: []chordMember{
 			{'p', "Copy full path", reservedYankMember("Copy full path")},
