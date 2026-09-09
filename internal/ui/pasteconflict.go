@@ -634,7 +634,19 @@ func (r *Root) refreshPasteConflictDialog(job *pasteJob) {
 // both need the exact same listSize/centeredOnScreen/SetRect sequence.
 func (r *Root) resizePasteConflictDialog() {
 	width, height := listSize(r.pasteConflictDialog)
+	height++ // reserved title bar row (see pasteConflictDialogLayout)
 	x, y := r.centeredOnScreen(width, height)
+	r.pasteConflictDialogLayout.SetRect(x, y, width, height)
+	// r.pasteConflictDialog's own rect is also set, to the same full
+	// area — captureOutsideClick's own "did this click land on the open
+	// overlay" check reads r.activeWidget.GetRect() directly, and
+	// r.activeWidget stays r.pasteConflictDialog (the real focus target
+	// — see showPasteConflictDialog), not pasteConflictDialogLayout. Left
+	// unset, its rect would stay at whatever tview.NewBox's own
+	// uninitialized default (0, 0, 15, 10) happens to be — which
+	// overlaps the panel itself — the exact same live-confirmed gap
+	// confirmDialog/quitConfirm/the context menu all had (see their own
+	// doc comments).
 	r.pasteConflictDialog.SetRect(x, y, width, height)
 }
 

@@ -424,6 +424,55 @@ func TestPasteConflictOpensDialogInsteadOfErroring(t *testing.T) {
 	if err != nil || string(got) != "existing" {
 		t.Errorf("existing dst file should be untouched until a decision is made, got %q, %v", got, err)
 	}
+	if wantTitle := " Paste conflict "; r.pasteConflictDialogTitleBar.GetText(true) != wantTitle {
+		t.Errorf("pasteConflictDialogTitleBar text = %q, want %q", r.pasteConflictDialogTitleBar.GetText(true), wantTitle)
+	}
+}
+
+// TestPasteConflictDialogBlocksRightDragSelection is the paste-conflict
+// dialog's own sibling of TestQuitConfirmBlocksRightDragSelection (see
+// its own doc comment for the full reasoning): setting only
+// pasteConflictDialogLayout's own rect, not r.pasteConflictDialog's
+// (the real focus target — see showPasteConflictDialog), would leave
+// the latter stale at tview.NewBox's own uninitialized default
+// (0, 0, 15, 10), which overlaps the panel — letting a right-drag over
+// it slip through captureOutsideClick's own bounds check as if it had
+// landed on the dialog instead. resizePasteConflictDialog sets both,
+// same as confirmDialog/quitConfirm/the context menu now do; this pins
+// that it actually works for this dialog specifically, not just
+// theirs.
+func TestPasteConflictDialogBlocksRightDragSelection(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	dstDir := t.TempDir()
+	dst := filepath.Join(dstDir, "apple.txt")
+	if err := os.WriteFile(dst, []byte("existing"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "apple.txt")
+
+	job := newPasteTestJob(root, false, dstDir, 1)
+	root.pasteConflictFound(job, newPasteTestConflict(t, src, dst))
+	if root.activePage != pasteConflictPage {
+		t.Fatalf("setup: activePage = %q, want %q", root.activePage, pasteConflictPage)
+	}
+
+	dragRight(t, root, 1, 3)
+
+	for row := 1; row <= 3; row++ {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if root.panel.selected[ref.path] {
+			t.Errorf("row %d (%s) got selected by a drag while the paste-conflict dialog was open", row, ref.name)
+		}
+	}
+	if root.activePage != pasteConflictPage {
+		t.Errorf("activePage = %q after the drag, want still %q", root.activePage, pasteConflictPage)
+	}
 }
 
 // setUpPasteConflict is the shared setup every resolution test below

@@ -787,8 +787,15 @@ type Root struct {
 	pasteJob *pasteJob
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
-	// confirmDialog.
-	pasteConflictDialog *tview.List
+	// confirmDialog. pasteConflictDialogTitleBar/pasteConflictDialogLayout
+	// are its own "Paste conflict" title bar and the Flex stacking the
+	// two, the same widget/layout split menu/menuTitleBar/menuLayout
+	// already established — pasteConflictDialogLayout, not
+	// pasteConflictDialog itself, is what's actually registered on
+	// Pages/positioned (see resizePasteConflictDialog).
+	pasteConflictDialog         *tview.List
+	pasteConflictDialogTitleBar *tview.TextView
+	pasteConflictDialogLayout   *tview.Flex
 
 	// menuInSubmenu is nil while the context menu shows its own top-level
 	// entries (see contextMenuTree in contextmenu.go), or points at
@@ -1049,6 +1056,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// again, this time with several distinct answers rather than a
 	// single confirm/cancel pair.
 	r.pasteConflictDialog = r.newPasteConflictDialog()
+	r.pasteConflictDialogTitleBar = newPlainTitleBar("Paste conflict")
+	r.pasteConflictDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.pasteConflictDialogTitleBar, 1, 0, false).
+		AddItem(r.pasteConflictDialog, 0, 1, true)
 
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
@@ -1164,7 +1175,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
 	r.AddPage(confirmPage, r.confirmDialog, false, false)
-	r.AddPage(pasteConflictPage, r.pasteConflictDialog, false, false)
+	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
@@ -2179,6 +2190,23 @@ func listSize(l *tview.List) (width, height int) {
 		}
 	}
 	return width + 2, l.GetItemCount() // +2: 1-char padding on each side
+}
+
+// newPlainTitleBar builds one overlay's fixed, one-row " Name " caption
+// — the exact three lines menuTitleBar/tabSwitcherTitleBar/
+// helpTitleBar/detailsTitleBar/etc. each already build ad hoc, factored
+// out here for the paste-conflict dialog's own new title bar, per the
+// user's own explicit request that every pane/overlay/dialog in this
+// app get one — the owner/group picker (r.picker) is the one deliberate
+// exception, left exactly as plain as it always was. Callers still wrap
+// the result in their own Flex/Pages the same way the existing ones do
+// (see menuLayout, pasteConflictDialogLayout) — this only builds the
+// bar itself, not the stacking around it.
+func newPlainTitleBar(text string) *tview.TextView {
+	bar := tview.NewTextView()
+	bar.SetWrap(false)
+	bar.SetText(" " + text + " ")
+	return bar
 }
 
 // closeMenu hides the context menu without taking any action (Escape at
