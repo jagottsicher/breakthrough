@@ -605,11 +605,14 @@ Paste:
 
 - **Every row the clipboard holds** gets a full-row background tint —
   not just its checkbox, the whole row — so it stays visible while
-  scrolling past it or browsing elsewhere. Cut gets a lighter shade
-  than Copy (`clipboard_cut_background`/`clipboard_copy_background` in
-  the active color scheme): Cut is the more consequential of the two,
-  since the original disappears once Paste actually succeeds, so it
-  reads as the slightly stronger cue. A directory that's also on the
+  scrolling past it or browsing elsewhere. Cut gets a distinct,
+  slightly pinkish-tinted gray rather than just a lighter shade of
+  Copy's own neutral gray (`clipboard_cut_background`/
+  `clipboard_copy_background` in the active color scheme): Cut is the
+  more consequential of the two operations, since the original
+  disappears once Paste actually succeeds, so it's worth being able to
+  tell the two apart at a glance rather than needing a brightness
+  comparison. A directory that's also on the
   clipboard shows this tint across its whole row instead of its usual
   gold name highlight — the two would otherwise compete for the same
   characters, so the clipboard tint wins outright rather than the two
