@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestMoveRefusesWhenDestinationIsSourceItself pins the same Overlaps
@@ -239,5 +240,110 @@ func TestMoveReplaceEntirelyNonEmptyDirectoryWipesFirst(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dst, "extra.txt")); !os.IsNotExist(err) {
 		t.Errorf("dst/extra.txt should be gone after ReplaceEntirely, stat err = %v", err)
+	}
+}
+
+// TestMoveLeavesSourceIntactWhenTheCopyFallbackFailsPartway pins the
+// user's own explicit safety requirement: if a file is skipped or
+// cannot be moved for any reason, the source's own folder structure
+// must stay intact — including whatever else in it was *not* the cause
+// of the failure. Verified here through Move's own Copy-based fallback
+// (a merge-mode conflict, the same trigger
+// TestMoveMergeIntoNonEmptyDirectoryFallsBackToCopy already uses, since
+// EXDEV itself needs a genuine second filesystem to simulate) rather
+// than the fast os.Rename path, which is atomic and has no partial
+// state to leave behind in the first place.
+//
+// b.txt is made unreadable so copyDir's own fail-fast walk (see its own
+// doc comment: it returns on the very first error rather than skipping
+// past it) stops there — os.ReadDir returns entries in name order, so
+// a.txt is always attempted, and copied successfully, first. Move must
+// then still report the failure without ever calling os.RemoveAll(src)
+// at all: not just b.txt, but a.txt too (already safely copied to dst
+// by that point) must still be exactly where it started.
+func TestMoveLeavesSourceIntactWhenTheCopyFallbackFailsPartway(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission checks never fail, this test doesn't apply")
+	}
+
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "b.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(src, "b.txt"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(src, "b.txt"), 0o644) }) // so t.TempDir's own cleanup can remove it afterward
+
+	// A conflicting, non-empty dst forces the MergeInto fallback rather
+	// than the fast os.Rename path.
+	dst := filepath.Join(base, "dst")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "already-there.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Move(src, dst, MoveOptions{Force: true, Mode: MergeInto})
+	if err == nil {
+		t.Fatal("Move should have failed once copying b.txt hit a permission error")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(src, "a.txt")); statErr != nil {
+		t.Errorf("src/a.txt should still exist after a failed Move (it was already safely copied to dst), stat err = %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(src, "b.txt")); statErr != nil {
+		t.Errorf("src/b.txt should still exist after a failed Move, stat err = %v", statErr)
+	}
+}
+
+// TestMoveMergeFallbackPreservesModTime pins the user's own explicit
+// request end to end through Move itself, not just Copy directly:
+// dates (and, by the same mechanism, permissions and best-effort
+// ownership — see preserveMetadata's own doc comment in copy.go) must
+// survive a move that has to fall back to its Copy-based path, exactly
+// as the fast os.Rename path already preserves them for free by being
+// the same inode throughout.
+func TestMoveMergeFallbackPreservesModTime(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	srcFile := filepath.Join(src, "a.txt")
+	if err := os.WriteFile(srcFile, []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2018, 4, 4, 4, 4, 4, 0, time.UTC)
+	if err := os.Chtimes(srcFile, want, want); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "already-there.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Move(src, dst, MoveOptions{Force: true, Mode: MergeInto}); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	fi, err := os.Stat(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatalf("Stat(dst/a.txt): %v", err)
+	}
+	if !fi.ModTime().Equal(want) {
+		t.Errorf("dst/a.txt ModTime = %v, want %v (preserved through Move's own Copy-based fallback)", fi.ModTime(), want)
 	}
 }

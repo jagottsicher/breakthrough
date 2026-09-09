@@ -85,17 +85,23 @@ type Theme struct {
 	// background, not just the checkbox glyph a checked selection
 	// already changes, so "this is staged for Copy/Cut" stays visible
 	// without having to scan the checkbox column specifically. Two
-	// shades, not one, per the user's own explicit request: Cut gets
-	// the lighter of the two — the more consequential of the two
-	// operations (the original disappears once Paste actually succeeds)
-	// reads as the slightly stronger highlight. Both a neutral grey
-	// rather than a hue already meaningful elsewhere in this theme
-	// (DirectoryBackground's gold, EntryError's red, ...), so the tint
-	// reads as "administrative state" rather than another file-type or
-	// severity signal — and, being a full-cell background rather than
-	// DirectoryBackground's own narrow inline-tag highlight, a
-	// clipboard-held directory shows this tint across its whole row
-	// instead of the two competing for the same pixels.
+	// visibly different colors, not two shades of the same one, per the
+	// user's own explicit request: Cut is the more consequential of the
+	// two operations (the original disappears once Paste actually
+	// succeeds, rather than staying put the way Copy leaves it), and a
+	// plain gray/dimgray pairing read as "the same thing, just lighter"
+	// rather than as two genuinely different states worth telling apart
+	// at a glance — a slightly pinkish-tinted gray for Cut keeps it
+	// close enough to Copy's own neutral grey to still read as the same
+	// *family* of highlight ("administrative state", not another
+	// file-type or severity signal — DirectoryBackground's gold,
+	// EntryError's red, and so on stay meaningfully distinct from both),
+	// while still being immediately distinguishable from it as its own
+	// color rather than requiring a side-by-side brightness comparison.
+	// Being a full-cell background rather than DirectoryBackground's own
+	// narrow inline-tag highlight, a clipboard-held directory shows this
+	// tint across its whole row instead of the two competing for the
+	// same pixels.
 	ClipboardCopyBackground string `json:"clipboard_copy_background"`
 	ClipboardCutBackground  string `json:"clipboard_cut_background"`
 
@@ -200,7 +206,7 @@ func DefaultTheme() Theme {
 		DirectoryBackground: "darkgoldenrod",
 
 		ClipboardCopyBackground: "dimgray",
-		ClipboardCutBackground:  "gray",
+		ClipboardCutBackground:  "#a08a8a", // a slightly pinkish-tinted gray — see this field's own doc comment for why Cut gets a genuinely different color rather than just a lighter shade of Copy's
 
 		Text:               "white",
 		EditableBackground: "slategray",
