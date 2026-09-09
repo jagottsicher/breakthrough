@@ -28,7 +28,7 @@ func entryNames(entries []fsops.Entry) []string {
 
 func TestFilterByTextEmptyIsNoop(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "", false)
+	got := filterByText(entries, "", false, true)
 	if len(got) != 2 {
 		t.Errorf("filterByText with empty filterText = %v, want all entries kept", entryNames(got))
 	}
@@ -37,18 +37,18 @@ func TestFilterByTextEmptyIsNoop(t *testing.T) {
 func TestFilterByTextGlobMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "*.txt", false)
+	got := filterByText(entries, "*.txt", false, true)
 	if len(got) != 3 {
 		t.Errorf("filterByText(*.txt) = %v, want all 3 kept", entryNames(got))
 	}
 
-	got = filterByText(entries, "ap*", false)
+	got = filterByText(entries, "ap*", false, true)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(ap*) = %v, want %v", entryNames(got), want)
 	}
 
-	got = filterByText(entries, "banana.txt", false)
+	got = filterByText(entries, "banana.txt", false, true)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(banana.txt) (exact, no wildcard) = %v, want just banana.txt", entryNames(got))
 	}
@@ -56,15 +56,27 @@ func TestFilterByTextGlobMode(t *testing.T) {
 	// No wildcard, not an exact name either: filepath.Match anchors the
 	// whole name, the same as Select+/- already relies on — "an"
 	// (contained in "banana.txt") should not match it.
-	got = filterByText(entries, "an", false)
+	got = filterByText(entries, "an", false, true)
 	if len(got) != 0 {
 		t.Errorf("filterByText(an) = %v, want none — glob mode is anchored, not substring", entryNames(got))
 	}
 }
 
+// TestFilterByTextInactiveIsNoopEvenWithText pins the filter-menu's own
+// "disable without clearing" checkbox (see Panel.filterGlobActive's own
+// doc comment): active false is a no-op regardless of how real a
+// pattern filterText holds, the same as if it were empty.
+func TestFilterByTextInactiveIsNoopEvenWithText(t *testing.T) {
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
+	got := filterByText(entries, "ap*", false, false)
+	if len(got) != len(entries) {
+		t.Errorf("filterByText with active=false = %v, want every entry kept despite a real pattern", entryNames(got))
+	}
+}
+
 func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "[", false) // unterminated character class
+	got := filterByText(entries, "[", false, true) // unterminated character class
 	if len(got) != len(entries) {
 		t.Errorf("filterByText([) = %v, want every entry kept (malformed pattern treated as no filter yet)", entryNames(got))
 	}
@@ -73,7 +85,7 @@ func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 func TestFilterByTextRegexMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "^ap", true)
+	got := filterByText(entries, "^ap", true, true)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(^ap, regex) = %v, want %v", entryNames(got), want)
@@ -81,7 +93,7 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 	// Unlike glob mode, regexp.MatchString is unanchored by default —
 	// substring matching is exactly what a bare regex like "an" does.
-	got = filterByText(entries, "an", true)
+	got = filterByText(entries, "an", true, true)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(an, regex) = %v, want just banana.txt", entryNames(got))
 	}
@@ -89,7 +101,7 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 func TestFilterByTextRegexInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "(unclosed", true)
+	got := filterByText(entries, "(unclosed", true, true)
 	if len(got) != len(entries) {
 		t.Errorf("filterByText((unclosed, regex) = %v, want every entry kept (invalid regex treated as no filter yet)", entryNames(got))
 	}

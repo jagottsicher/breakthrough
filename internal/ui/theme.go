@@ -448,6 +448,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
 	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
 
+	// AccentBackground, the same as tabSwitcherTitleBar just above, not
+	// the FocusedBackground every centered, always-modal dialog's own
+	// title bar (confirmDialog/chmod/Sed Replace/Search, ...) uses: this
+	// is a small dropdown anchored under a header button, closer in
+	// spirit to the tab switcher than to a full dialog.
+	r.filterMenuTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.filterMenuTitleBar.SetTextColor(theme.Text)
+
 	// Every tab, not just the visible one: a color scheme is as global as
 	// a setting gets, and a background tab still holding the old palette
 	// would repaint jarringly the moment it was switched to. See
