@@ -812,12 +812,15 @@ type Root struct {
 	pasteJob *pasteJob
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
-	// confirmDialog. pasteConflictDialogTitleBar/pasteConflictDialogLayout
-	// are its own "Paste conflict" title bar and the Flex stacking the
-	// two, the same widget/layout split menu/menuTitleBar/menuLayout
-	// already established — pasteConflictDialogLayout, not
-	// pasteConflictDialog itself, is what's actually registered on
-	// Pages/positioned (see resizePasteConflictDialog).
+	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
+	// itself (set fresh by renderPasteConflictDialog before every show,
+	// the same "the question is the header" treatment confirmDialog got
+	// — per the user's own explicit request that this apply to both);
+	// pasteConflictDialogLayout stacks the two, the same widget/layout
+	// split menu/menuTitleBar/menuLayout already established —
+	// pasteConflictDialogLayout, not pasteConflictDialog itself, is what's
+	// actually registered on Pages/positioned (see
+	// resizePasteConflictDialog).
 	pasteConflictDialog         *tview.List
 	pasteConflictDialogTitleBar *tview.TextView
 	pasteConflictDialogLayout   *tview.Flex
@@ -1089,7 +1092,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// again, this time with several distinct answers rather than a
 	// single confirm/cancel pair.
 	r.pasteConflictDialog = r.newPasteConflictDialog()
-	r.pasteConflictDialogTitleBar = newPlainTitleBar("Paste conflict")
+	// Built empty — its real text is a per-conflict message set fresh by
+	// renderPasteConflictDialog before the dialog is ever shown, per the
+	// user's own explicit request that the question itself be the header
+	// rather than a generic caption above it.
+	r.pasteConflictDialogTitleBar = newPlainTitleBar("")
 	r.pasteConflictDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.pasteConflictDialogTitleBar, 1, 0, false).
 		AddItem(r.pasteConflictDialog, 0, 1, true)
