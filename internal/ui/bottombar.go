@@ -737,9 +737,27 @@ func (r *Root) buttonBarActionAt(x, y int) (buttonBarSpan, bool) {
 // buttons (see buildButtonBar/buttonBarSpan) to its action. A click
 // elsewhere on the row (the gaps between buttons, or empty space) just
 // does nothing.
+//
+// InRect is checked before the action-type gate, not folded into the
+// same condition — a real, user-reported regression otherwise:
+// combining them (as this used to) let a MouseLeftDown that landed
+// inside buttonBar's own rect fall through to its default TextView
+// MouseHandler unsuppressed (verified directly against tview's own
+// textview.go — its MouseLeftDown case unconditionally calls setFocus),
+// stealing real keyboard focus onto the button bar itself and leaving
+// c/x/v/d and every other plain-key shortcut dead afterward, exactly
+// the same class of bug captureColumnHeaderMouse's own doc comment
+// describes. Checking InRect first and unconditionally suppressing
+// anything that isn't MouseLeftClick — the same shape
+// captureHeaderMouse/captureTabStripMouse already use — closes it: a
+// button bar click is never anything more than a one-shot trigger, so
+// there is nothing for it to hold focus for afterward.
 func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.buttonBar.InRect(event.Position()) {
+	if !r.buttonBar.InRect(event.Position()) {
 		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
 	}
 
 	x, y := event.Position()
