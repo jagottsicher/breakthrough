@@ -19,6 +19,7 @@ material, always matching the version you are actually running.
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
 - [Properties](#properties)
+- [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
 - [The command line](#the-command-line)
 - [Options and configuration](#options-and-configuration)
@@ -73,7 +74,7 @@ chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -117,6 +118,14 @@ one exception: Back/Forward there restores the exact cursor row you
 left it on, since a frozen result list isn't something to reset to the
 top of the way a real, re-listable directory is — and the results
 themselves come back as they were, rather than being re-run.
+
+`⭯`, right before the path itself, is Reload — the `z` chord's own `r`
+member (`zr`) does the same from the keyboard. Re-reads the current
+directory straight from disk, for anything this app has no other way
+to notice on its own: another process changing files underneath it, a
+network/mounted filesystem's own content changing, and so on. While
+search results are showing, this exits back to the plain directory
+listing rather than re-running the search.
 
 ### Column widths
 
@@ -478,6 +487,156 @@ group, and the modified date and time.
 `Tab` moves between fields, `Enter` or `Space` activates the focused
 one, `Escape` cancels.
 
+## Copy, Cut and Paste
+
+`c`/`x` copy or cut the current selection — the whole selection, not
+just the file under the cursor — onto an internal clipboard; `v` pastes
+it into whatever directory the panel is showing. The context menu
+offers all three too, with Paste only appearing once the clipboard
+actually has something in it.
+
+Pasting into the very directory a file is already in, or a directory
+into one of its own subdirectories, is refused outright rather than
+started at all — the first would destroy the only copy of the file
+there ever was, the second would recurse into itself without any
+bound.
+
+Paste runs in the background rather than one file at a time in a
+blocking loop. A file that copies or moves cleanly just lands at its
+destination with no interruption. One that already exists there opens
+a small dialog instead, without stopping anything else in the same
+Paste:
+
+| Option | Effect |
+| --- | --- |
+| Overwrite | Replace this one entry; the next conflict (if any) gets its own dialog |
+| Overwrite all | Same, and apply it to every conflict the rest of this Paste runs into |
+| Merge into existing folder | For a directory conflict specifically: copy the source's own files over it, keeping whatever's already there that the source doesn't have; the next conflict gets its own dialog |
+| Merge all into existing folders | Same, for every conflict the rest of this Paste runs into |
+| Skip | Leave the existing entry untouched; the next conflict gets its own dialog |
+| Skip all | Same, for every conflict the rest of this Paste runs into |
+| Overwrite all if source is newer | Overwrite only where the copied file's modified time is newer than the existing one; skip the rest — applies to every remaining conflict |
+| Overwrite all if source is not empty | Overwrite only where the copied file actually has content, so a zero-byte source never replaces something real; skip the rest — applies to every remaining conflict |
+
+For a plain file conflict, Overwrite and Merge behave identically —
+there's nothing to merge, only a whole file's content to replace
+either way. The distinction is real for a directory: **Overwrite makes
+the destination identical to the source**, removing anything already
+there that the source doesn't have, while **Merge keeps it**. Replacing
+a compromised directory from a known-clean copy (a WordPress install's
+own core files, say) needs Overwrite specifically — a merge would
+leave anything an attacker planted there, that the clean source never
+had to begin with, completely untouched.
+
+`Up`/`Down` move between the options, `Enter`/`Space` applies the
+highlighted one, `Escape` is the same as the preselected "Skip" — a
+stray keypress can never overwrite anything by accident.
+
+Everything that doesn't conflict keeps copying or moving in the
+background while this dialog is open. If Paste runs into a second
+conflict before the first is answered, it doesn't stack a second
+dialog on top — it queues behind the one already showing, reflected
+right in that dialog's own message as "(N more waiting)", and gets
+its own dialog (or resolves automatically, if an "all" option was
+already chosen) once the current one is answered.
+
+`Ctrl+C` stops a running Paste outright, whether or not its own
+conflict dialog happens to be open at the time. Whatever's already
+mid-write finishes normally — on disk, exactly where it was already
+headed — rather than being interrupted mid-write; anything not yet
+started simply never starts. A *different* dialog (Properties, say)
+happening to be open while a Paste merely continues in the background
+is unaffected — `Ctrl+C` there closes that dialog as it always has,
+since it's what you're actually looking at.
+
+Any real failure along the way — a permission error, a full disk, and
+so on, never a conflict, which always has a decision — is collected
+rather than stopping the whole Paste at the first one, and reported
+together once every item has a final outcome.
+
+### What's on the clipboard right now
+
+Two indicators, both live for as long as there's actually something to
+Paste:
+
+- **Every row the clipboard holds** gets a full-row background tint —
+  not just its checkbox, the whole row — so it stays visible while
+  scrolling past it or browsing elsewhere. Cut gets a lighter shade
+  than Copy (`clipboard_cut_background`/`clipboard_copy_background` in
+  the active color scheme): Cut is the more consequential of the two,
+  since the original disappears once Paste actually succeeds, so it
+  reads as the slightly stronger cue. A directory that's also on the
+  clipboard shows this tint across its whole row instead of its usual
+  gold name highlight — the two would otherwise compete for the same
+  characters, so the clipboard tint wins outright rather than the two
+  blending. This applies across every open tab currently showing that
+  row, not only the tab Copy/Cut was pressed in, since the clipboard
+  itself is shared by the whole application, not scoped to one tab.
+- **The status bar** names what's held — "Copy: 3 files, 1 dir" or
+  "Cut: 2 files" (a zero count is dropped rather than shown as "0
+  dirs") — right after the chord countdown's own leading spot, ahead
+  of the username. Disappears the moment the clipboard is empty again,
+  the same "just show one less segment" shape as the disk-usage/
+  uptime/load segments further along the same line.
+
+### Watching a Paste while it runs
+
+The moment a Paste actually starts, that same status bar spot switches
+from the clipboard indicator to its own live progress instead, for
+example:
+
+```
+● Copying 2/5 ▅ ▀▀▀▀▀▄▄▄▄▄ ~14s left holiday-photo.jpg
+```
+
+- A spinner (cycling dots, the same one Properties' own hash
+  computation already uses) — a "still working" cue even during a
+  single very large file, where the rest of this line might otherwise
+  sit still for a while.
+- "Copying"/"Moving", naming which of the two this is.
+- How many of the selection's own top-level items have a final outcome
+  so far, out of the total — a directory only advances this once, when
+  the whole thing finishes, not per file inside it.
+- A single character showing what percentage of the *entire
+  selection's own byte size* has copied so far, filling up from a thin
+  sliver to a solid block — the same glyph style the chord countdown
+  uses to drain, just running the other way. This (and the estimated
+  time below) only appears once a one-time background scan of the
+  whole selection has measured its total size — started the moment
+  Paste is pressed, running alongside the copy itself rather than
+  delaying it, so a very large selection still starts copying
+  immediately even though this one character and the estimate after
+  the bar take a moment longer to show up.
+- A two-row progress bar packed into a single line of half-block
+  characters: the *top* half of each character is the same item-count
+  fraction the count above already shows; the *bottom* half is the
+  file currently being written's own byte progress. Both halves fill
+  left to right independently, so a bar can show (for example) its top
+  half half-full while its bottom half is already nearly done with the
+  one file currently in flight.
+- An estimated remaining duration, once the background scan above has
+  a total to measure against and at least some progress to extrapolate
+  from — based on the average throughput since the Paste started, so
+  it settles down after the first moment rather than jumping around.
+- The real file currently being written — its bare name, not the full
+  path, so a long one doesn't crowd out everything after it. Inside a
+  large directory, this keeps changing file by file even while the
+  count/top bar above sit still waiting for that one directory to
+  finish.
+
+Only one file actually copies or moves at a time, in whatever order
+each one happens to start, regardless of how large the selection is —
+so this line's own "current file" is always a single, unambiguous
+answer, and a very large Paste never launches more than one real disk
+operation at once.
+
+A same-filesystem move is atomic regardless of size — `mv` on the same
+disk doesn't copy bytes at all, it just relinks a name — so cutting and
+pasting within one filesystem usually finishes before this ever has a
+chance to show anything at all. That's correct, not a missed update:
+there is no meaningful "progress" to report for an operation that's
+already done by the time it started.
+
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a
@@ -669,3 +828,30 @@ with a timestamped header per session, and tracebacks are set to `all`
 so every goroutine is captured. Recovered panics are additionally shown
 in the error overlay and logged to `crash.log` in the same directory,
 with or without this flag.
+
+### Terminal recovery over a dropped connection
+
+breakthrough responds to SIGHUP, SIGTERM and SIGINT by restoring the
+terminal (exiting the alternate screen buffer, turning off mouse
+reporting) before the process actually exits — the same reason
+vim/htop/less and most other full-screen terminal programs install a
+handler like this. A dropped SSH connection delivers exactly one of
+these (SIGHUP — literally "hang up") once the session tears down, and
+without a handler, an unhandled signal terminates a Go process
+immediately, skipping every bit of cleanup: whichever raw modes were
+on stay on at the terminal emulator itself, showing up afterward as
+garbled output and mouse movements arriving as stray character
+sequences.
+
+This can only help, not guarantee a fix in every case: a connection
+that's already fully, physically severed leaves no channel left to
+send a reset sequence over, so nothing running remotely can undo that
+after the fact. For that situation — or simply to keep breakthrough
+(and whatever it's running in its own embedded shell) alive across a
+dropped connection at all, rather than relying on a signal handler to
+merely leave a clean terminal behind — running it inside a remote
+`tmux` or `screen` session is the robust fix: the session keeps
+running, completely undisturbed, independent of any one SSH
+connection to it, and reattaching afterward needs no recovery of any
+kind because the new connection's own terminal was never touched by
+breakthrough in the first place.
