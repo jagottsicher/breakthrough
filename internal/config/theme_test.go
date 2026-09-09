@@ -11,17 +11,19 @@ import (
 func TestDefaultThemeResolvesAllFieldsToValidColors(t *testing.T) {
 	resolved := DefaultTheme().Resolve()
 	fields := map[string]tcell.Color{
-		"PanelBackground":    resolved.PanelBackground,
-		"ButtonBackground":   resolved.ButtonBackground,
-		"AccentBackground":   resolved.AccentBackground,
-		"FocusedBackground":  resolved.FocusedBackground,
-		"ErrorBackground":    resolved.ErrorBackground,
-		"Text":               resolved.Text,
-		"EditableBackground": resolved.EditableBackground,
-		"PlaceholderText":    resolved.PlaceholderText,
-		"EntryNormal":        resolved.EntryNormal,
-		"EntryExecutable":    resolved.EntryExecutable,
-		"EntryError":         resolved.EntryError,
+		"PanelBackground":         resolved.PanelBackground,
+		"ButtonBackground":        resolved.ButtonBackground,
+		"AccentBackground":        resolved.AccentBackground,
+		"FocusedBackground":       resolved.FocusedBackground,
+		"ErrorBackground":         resolved.ErrorBackground,
+		"ClipboardCopyBackground": resolved.ClipboardCopyBackground,
+		"ClipboardCutBackground":  resolved.ClipboardCutBackground,
+		"Text":                    resolved.Text,
+		"EditableBackground":      resolved.EditableBackground,
+		"PlaceholderText":         resolved.PlaceholderText,
+		"EntryNormal":             resolved.EntryNormal,
+		"EntryExecutable":         resolved.EntryExecutable,
+		"EntryError":              resolved.EntryError,
 	}
 	for name, c := range fields {
 		if c == tcell.ColorDefault {

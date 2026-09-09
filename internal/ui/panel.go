@@ -163,7 +163,7 @@ type Panel struct {
 	// the dropdown (see onOpenFilterMenu/Root.openFilterMenu) that now
 	// holds everything filterField/filterRegexBtn/the two not-yet-built
 	// size/modified-time filters need — freeing most of the header row
-	// back to the path itself, which is the entire point: the five nav
+	// back to the path itself, which is the entire point: the six nav
 	// buttons just to its left grew considerably wider becoming real
 	// buttons (see buildHeaderSpans), and this is what pays for that
 	// space back.
@@ -226,6 +226,18 @@ type Panel struct {
 	// the directory currently on screen, not carried across navigation,
 	// matching how most file managers treat it.
 	selected map[string]bool
+
+	// clipboardPaths/clipboardCut mirror the app-wide clipboard's own
+	// state (see Root.clipboard/clipboardCut) — pushed down explicitly
+	// by setClipboard rather than read from Root directly, since Panel
+	// has no reference to Root (see onExpandDetails's own doc comment
+	// for why) and the clipboard itself is one Root-level value shared
+	// by every open tab, not something each Panel owns. Unlike
+	// selected above, survives a load(): the clipboard isn't scoped to
+	// whatever directory happens to be on screen, so navigating away
+	// and back must still show the same rows highlighted.
+	clipboardPaths map[string]bool
+	clipboardCut   bool
 
 	// headerSpans locates each clickable region in the header's display
 	// text (see buildHeaderSpans), rebuilt on every load().
@@ -447,6 +459,7 @@ const (
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
 	actionUp                           // go up one level (the parent directory)
+	actionReload                       // re-read the current directory from disk
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -603,7 +616,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
-	p.header.SetDynamicColors(true) // the five nav buttons' own ButtonBackground padding is a color tag — see buildHeaderSpans
+	p.header.SetDynamicColors(true) // the six nav buttons' own ButtonBackground padding is a color tag — see buildHeaderSpans
 	p.header.SetMouseCapture(p.captureHeaderMouse)
 
 	p.headerEdit = tview.NewInputField()
@@ -1548,6 +1561,89 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	p.table.SetCell(row, colModifier, modCell)
 
 	p.setRowCells(row, ref)
+	p.paintFixedRowCells(row, ref)
+}
+
+// rowBackground is what addRow/setRowCells/paintFixedRowCells tint
+// ref's own row with: a shade from ClipboardCopyBackground/
+// ClipboardCutBackground if ref.path is currently held on the
+// clipboard (see setClipboard), ok false otherwise — meaning "leave
+// this cell exactly as its own zero-value construction already has
+// it", not "paint it PanelBackground": a cell nothing has ever called
+// SetBackgroundColor on stays Transparent (tview's own term), showing
+// through to whatever the table's own background already is, and
+// explicitly repainting that same color on every single cell of every
+// ordinary row would risk it drifting from the table's own actual
+// background under some future tview change instead of a single
+// source of truth. Checked by absolute path, not selection state:
+// unrelated to the checkbox column (see checkboxText) — a file can be
+// checked without being on the clipboard, and vice versa (Copy/Cut
+// capture the checked selection as a snapshot, which the checkboxes
+// are then free to change independently of it). ".." (checkable
+// false) never tints even if its own path happens to match — it isn't
+// a real clipboard target, and rowRef.path for it is the parent
+// directory, not something Copy/Cut could ever have captured.
+func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
+	if !ref.checkable || !p.clipboardPaths[ref.path] {
+		return 0, false
+	}
+	if p.clipboardCut {
+		return p.theme.ClipboardCutBackground, true
+	}
+	return p.theme.ClipboardCopyBackground, true
+}
+
+// paintFixedRowCells applies rowBackground's own verdict to the three
+// cells addRow builds directly (checkbox, type, modifier) — colName/
+// colSize/colModified are setRowCells' own responsibility, since it
+// rebuilds those from scratch every time it runs anyway (see its own
+// doc comment) and a freshly constructed cell is already untinted by
+// default. These three, unlike those, are only ever built once by
+// addRow itself — setClipboard's own repaint (a clipboard change,
+// nothing on disk) mutates them in place here rather than recreating
+// them, which would also throw away the checkbox's own click handler.
+// SetTransparency(true) is the untint path, not SetBackgroundColor(
+// PanelBackground): it puts a previously tinted cell back into the
+// exact same "never touched" state a fresh one starts in, rather than
+// hardcoding a value that could drift from the table's own actual
+// background (see rowBackground's own doc comment).
+func (p *Panel) paintFixedRowCells(row int, ref rowRef) {
+	bg, tinted := p.rowBackground(ref)
+	for _, col := range [...]int{colCheckbox, colType, colModifier} {
+		cell := p.table.GetCell(row, col)
+		if cell == nil {
+			continue
+		}
+		if tinted {
+			cell.SetBackgroundColor(bg)
+		} else {
+			cell.SetTransparency(true)
+		}
+	}
+}
+
+// setClipboard applies the app-wide clipboard's current contents (see
+// Root.clipboard/clipboardCut and Root.syncClipboardHighlight, which
+// calls this for every open tab, not just whichever one triggered the
+// change) to this panel's own row highlighting. Repaints whatever rows
+// are already on screen in place — nothing on disk changed, so there's
+// nothing to reload — and stores paths/cut so any row addRow builds
+// afterward (a fresh load(), not just a repaint) picks up the current
+// state too.
+func (p *Panel) setClipboard(paths []string, cut bool) {
+	m := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		m[path] = true
+	}
+	p.clipboardPaths = m
+	p.clipboardCut = cut
+
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			p.setRowCells(row, ref)
+			p.paintFixedRowCells(row, ref)
+		}
+	}
 }
 
 // setRowCells fills the three width-dependent cells of one row — Name,
@@ -1558,6 +1654,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 // or touching the filesystem.
 func (p *Panel) setRowCells(row int, ref rowRef) {
 	color := p.entryColor(ref)
+	bg, tinted := p.rowBackground(ref)
 
 	// The suffix travels separately from the name so shortenNameLabel
 	// can protect it: a trailing "/" or " -> target" says what kind of
@@ -1595,6 +1692,15 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 	nameCell.SetClickedFunc(func() bool {
 		return p.handleNameClick(row)
 	})
+	if tinted {
+		// Supersedes the inline DirectoryBackground tag above rather than
+		// layering with it: SetBackgroundColor repaints this cell's whole
+		// rectangle, tag-highlighted name text included, not just the
+		// blank padding around it — deliberate, so a clipboard-held
+		// directory's row still reads as one consistent color instead of
+		// two different backgrounds fighting for the same few characters.
+		nameCell.SetBackgroundColor(bg)
+	}
 	p.table.SetCell(row, colName, nameCell)
 
 	// ".." (checkable false) has no real Entry behind it, so ref.size/
@@ -1605,12 +1711,20 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	p.table.SetCell(row, colSizeSep, p.columnSeparator())
-	p.table.SetCell(row, colSize,
-		tview.NewTableCell(padLeft(sizeText, p.layout.size)).SetTextColor(p.theme.Text))
-	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
-	p.table.SetCell(row, colModified,
-		tview.NewTableCell(padLeft(mtimeText, p.layout.mod)).SetTextColor(p.theme.Text))
+	sizeSepCell := p.columnSeparator()
+	sizeCell := tview.NewTableCell(padLeft(sizeText, p.layout.size)).SetTextColor(p.theme.Text)
+	modSepCell := p.columnSeparator()
+	modCell := tview.NewTableCell(padLeft(mtimeText, p.layout.mod)).SetTextColor(p.theme.Text)
+	if tinted {
+		sizeSepCell.SetBackgroundColor(bg)
+		sizeCell.SetBackgroundColor(bg)
+		modSepCell.SetBackgroundColor(bg)
+		modCell.SetBackgroundColor(bg)
+	}
+	p.table.SetCell(row, colSizeSep, sizeSepCell)
+	p.table.SetCell(row, colSize, sizeCell)
+	p.table.SetCell(row, colModifiedSep, modSepCell)
+	p.table.SetCell(row, colModified, modCell)
 }
 
 // nameColumnWidth is how much room a row's name has. Falls back to a
@@ -2677,12 +2791,12 @@ func (p *Panel) previousPath() (string, bool) {
 	return prev.path, true
 }
 
-// headerButtons is the fixed definition of the five nav buttons shown at
-// the start of the header row — Start/Home/Back/Forward/Up — as one
-// shared slice so buildHeaderSpans (the colored, clickable rendering)
-// and headerButtonPrefix (headerEdit's own plain-text label — see its
-// own doc comment) can never drift out of column-alignment with each
-// other, verified by TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+// headerButtons is the fixed definition of the six nav buttons shown at
+// the start of the header row — Start/Home/Back/Forward/Up/Reload — as
+// one shared slice so buildHeaderSpans (the colored, clickable
+// rendering) and headerButtonPrefix (headerEdit's own plain-text label
+// — see its own doc comment) can never drift out of column-alignment
+// with each other, verified by TestHeaderButtonPrefixMatchesBuildHeaderSpans.
 // Start's own glyph is "∎" (U+220E), not "^": at the time this glyph
 // was chosen, this app's own button bar wrote Ctrl-shortcuts as "^E",
 // "^L" and so on, so a bare "^" here risked reading as one of those
@@ -2693,7 +2807,13 @@ func (p *Panel) previousPath() (string, bool) {
 // up/caret shorthand rather than a button of its own. "^" itself isn't
 // reused for Up either, despite visually suggesting "upward": ↑ says
 // that unambiguously and isn't asked to also serve as a stand-in for
-// whatever Start used to mean.
+// whatever Start used to mean. "⭯" (U+2B6F) is Reload — the user's own
+// explicit choice of glyph, added at the end rather than interrupting
+// the original five: this app has no other way to notice a file
+// changing underneath it (another process, a network/mounted
+// filesystem, ...), so re-reading the current directory from disk on
+// demand needs a click target of its own, the same reasoning the other
+// six buttons here already follow.
 var headerButtons = []struct {
 	glyph  string
 	action headerAction
@@ -2703,6 +2823,7 @@ var headerButtons = []struct {
 	{"<", actionBack},
 	{">", actionForward},
 	{"↑", actionUp},
+	{"⭯", actionReload},
 }
 
 // headerButtonSeparator is the plain, normal-background column between
@@ -2712,7 +2833,7 @@ var headerButtons = []struct {
 // gap between two distinct buttons rather than part of either one.
 const headerButtonSeparator = " "
 
-// headerButtonPrefix is the plain-text form of the five nav buttons
+// headerButtonPrefix is the plain-text form of the six nav buttons
 // plus their separators — see buildHeaderSpans for the colored,
 // clickable version actually drawn in the header. Reused by
 // headerEdit's own SetLabel (see NewPanel) so the path being edited
@@ -2732,12 +2853,12 @@ var headerButtonPrefix = func() string {
 	return b.String()
 }()
 
-// buildHeaderSpans renders the header's display text — the five
+// buildHeaderSpans renders the header's display text — the six
 // headerButtons, each padded into its own three-column "button" (one
 // character of theme.ButtonBackground either side of the glyph, the
 // same highlightKey convention the bottom button bar already uses for
 // its own keys — see buildButtonBar — just without a trailing label,
-// since each of these five buttons *is* its own label already), then
+// since each of these six buttons *is* its own label already), then
 // the path, with one clickable span per path component (the leading
 // "/" plus each name in between), e.g. clicking "b" in "/a/b/c/d" jumps
 // to "/a/b". Column offsets are measured via tview.TaggedStringWidth,
@@ -2869,6 +2990,20 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// home). Mirrors the ".." row's own identical parent-or-self
 		// check in load, just without needing a visible row for it.
 		p.reportError(p.navigate(filepath.Dir(p.path)))
+	case actionReload:
+		// Straight to load, not navigate: navigate exists to move
+		// somewhere and record that move in history (see its own doc
+		// comment) — reloading the same directory in place is neither,
+		// so it skips navigate's own snapshotCurrentEntry/
+		// pushHistoryEntry bookkeeping entirely rather than going
+		// through it just to have pushHistoryEntry's own same-path check
+		// (see its own doc comment) turn it into a no-op regardless.
+		// Clicking this while search results are showing exits back to
+		// the plain directory listing rather than re-running the search
+		// — load always does that (see its own doc comment), the same
+		// behavior the "z" chord's own Reload member and
+		// setShowHidden/toggleHidden already have too.
+		p.reportError(p.load(p.path))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
@@ -2879,7 +3014,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
 // and moves keyboard focus there. headerEdit's own label (see NewPanel)
-// already reserves the "∎~<>↑ " prefix's own width, so the path text
+// already reserves the "∎~<>↑⭯ " prefix's own width, so the path text
 // itself lines up with wherever p.header was just showing it — nothing
 // further to do here for that.
 func (p *Panel) openEdit() {

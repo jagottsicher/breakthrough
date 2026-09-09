@@ -33,7 +33,12 @@ terminal.
   history covers a trip into search results or the trash exactly the
   same as a real directory, and Back/Forward into any of them restores
   the cursor row it was left on, a search's own results included, shown
-  again exactly as they were rather than a live re-run — sortable
+  again exactly as they were rather than a live re-run — plus Reload
+  (`⭯`, right before the path itself), re-reading the current directory
+  straight from disk for anything this app has no other way to notice
+  on its own: another process changing files underneath it, a
+  network/mounted filesystem's own content changing, and so on —
+  sortable
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.
@@ -139,6 +144,54 @@ terminal.
   or Left arrow step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there.
+- Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
+  current selection, not just one file. Pasting into the very directory
+  a file is already in, or a directory into one of its own
+  subdirectories, is refused outright rather than started at all — the
+  first would have destroyed the only copy there ever was, the second
+  would recurse into itself without any bound. Paste runs in the
+  background — a file that already exists at the destination opens a
+  small dialog (Overwrite, Skip, "Merge into existing folder", an "all"
+  variant of each for the rest of this Paste, or apply "only if the
+  source is newer"/"only if the source isn't empty" to every conflict
+  it still runs into) without blocking anything else in the same
+  Paste: whatever doesn't conflict keeps copying/moving while that
+  dialog is up, and a second conflict found before the first is
+  answered queues behind it — shown as "(N more waiting)" right in the
+  dialog's own message — rather than stacking a second dialog on top.
+  Overwriting a directory replaces it entirely (nothing left over from
+  whatever was there before — the right choice when "overwrite" needs
+  to mean "make this identical to the source", not "patch it"); Merge
+  is the explicit alternative, keeping whatever the source doesn't
+  also have. Ctrl+C stops a running Paste outright — whatever's already
+  mid-write finishes normally, on disk, right where it was headed;
+  nothing still queued starts at all. Any real failure (permission, a
+  full disk, ...) is collected rather than stopping at the first one,
+  and reported once the whole Paste is done. Whatever's currently on
+  the clipboard shows
+  two ways: every row it holds gets a full-row grey tint (a lighter
+  shade for Cut than Copy, since Cut is the one where the original
+  actually disappears), across every open tab showing that row, not
+  just the one Copy/Cut was pressed in; and the status bar names it —
+  "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
+  chord countdown's own spot, for as long as there's something to
+  Paste. Once a Paste actually starts, that same spot switches to its
+  own live progress instead — a spinner, "Copying"/"Moving" and how
+  many of the selection's own top-level items are done, and a two-row
+  progress bar packed into one line of half-block characters (the top
+  half is that same item-count fraction, the bottom half is the file
+  currently being written's own byte progress), plus whichever real
+  file is being written right now (its bare name, e.g. inside a large
+  directory this Paste is still working through). A one-time background
+  scan of the whole selection's byte size (started alongside the Paste
+  itself, never blocking it) adds two more things once it's done: a
+  single character before the bar showing what percentage of the total
+  bytes has copied so far (the same shrinking/filling block style the
+  chord countdown uses), and an estimated remaining duration after the
+  bar. A same-filesystem move is atomic regardless of size, so a Cut
+  within one filesystem usually finishes too fast for any of this to
+  show anything at all — expected, not a bug: there's nothing to report
+  progress on.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

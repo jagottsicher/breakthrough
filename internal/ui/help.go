@@ -68,7 +68,7 @@ var helpText = strings.TrimLeft(`
     g  go to    gg top · gh home · gr / (root) · gb Trash
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes
+                zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
@@ -351,6 +351,67 @@ var helpText = strings.TrimLeft(`
   breadcrumb next to the status line — click a button or segment (or
   edit the path directly) to keep browsing normally, the same as
   clicking a result already does, without needing to pick one first.
+
+[::b]Paste conflicts ("v", when a destination already exists)[::-]
+
+  Up / Down         Move between the options
+  Enter / Space     Apply the highlighted option
+  Escape            Skip — same as the preselected default
+
+  Overwrite               Replace this one entry entirely (a
+                          directory ends up identical to the source —
+                          nothing extra left over), decide the next
+                          conflict separately
+  Overwrite all           Same, and apply it to every conflict this
+                          Paste still runs into, with no further
+                          asking
+  Merge into existing folder      Directory conflicts only: copy the
+                          source's files over it, keeping whatever's
+                          already there the source doesn't have —
+                          identical to Overwrite for a plain file
+  Merge all into existing folders Same, for every conflict this
+                          Paste still runs into
+  Skip                    Leave the existing entry untouched, decide
+                          the next conflict separately
+  Skip all               Same, for every conflict this Paste still
+                          runs into
+  Overwrite all if source is newer      Overwrite only where the
+                          copied file's own modified time is newer
+                          than what's already there; skip the rest —
+                          applies to every conflict, like the other
+                          "all" options
+  Overwrite all if source is not empty  Overwrite only where the
+                          copied file actually has content; skip a
+                          zero-byte source instead of replacing
+                          something real with nothing — also applies
+                          to every conflict
+
+  Everything else in the Paste keeps copying/moving in the background
+  while this dialog is open — a conflict found before this one is
+  answered queues behind it instead of opening a second dialog on top,
+  shown as "(N more waiting)" right in this one's own message.
+
+  Ctrl+C stops the whole Paste outright, dialog open or not — whatever
+  was already mid-write finishes normally where it was headed, nothing
+  still queued starts. A different overlay merely open while a Paste
+  continues in the background is unaffected.
+
+  Whatever's currently on the clipboard shows two ways: every row it
+  holds gets a full-row grey tint (a lighter shade for Cut than Copy),
+  across every open tab showing that row, not just the one Copy/Cut
+  was pressed in; and the status bar names it — "Copy: 3 files, 1
+  dir" — right after the chord countdown's own spot. Once Paste
+  actually starts, that same spot shows its own live progress instead
+  — a spinner, how many items are done, a two-row bar packed into one
+  line of half-block characters (top half: item count, bottom half:
+  the current file's own byte progress), and the real file currently
+  being written. Once a background scan of the whole selection's size
+  finishes (started the moment Paste was pressed, never delaying it),
+  a leading character also fills in showing overall byte progress, and
+  an estimated remaining duration appears after the bar. A
+  same-filesystem move is instant regardless of size, so it usually
+  finishes before any of this ever shows anything at all — expected,
+  not a missed update.
 
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 
