@@ -125,13 +125,36 @@ func (r *Root) renderDetailsTitleBar(width int) {
 // directly, not the toggle, the same one-directional reasoning
 // onExpandDetails's own doc comment gives. Every other click on the
 // title bar is otherwise inert, same as Help's own.
+//
+// InRect is checked before the action-type gate, not after — a real,
+// user-reported regression otherwise: letting a MouseLeftDown that
+// landed inside the title bar's own rect fall through unsuppressed (as
+// this used to, checking only the action type first) let tview's
+// default TextView.MouseHandler steal real keyboard focus onto the
+// title bar itself before hideDetailsSidebar's own hadFocus check ever
+// runs — corrupting that very check: hadFocus reads
+// r.detailsSidebar.HasFocus(), a *different* widget than the title bar,
+// so a sidebar that genuinely had focus a moment before this click
+// would already read false by the time hideDetailsSidebar ran,
+// skipping the focus restore it was about to need. The same
+// InRect-then-suppress-non-click shape captureColumnHeaderMouse/
+// captureButtonBarMouse already use closes it here too.
 func (r *Root) captureDetailsTitleBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick {
+	if !r.detailsTitleBar.InRect(event.Position()) {
 		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
 	}
 	x, y := event.Position()
 	rectX, rectY, width, _ := r.detailsTitleBar.GetRect()
 	if y != rectY || x != rectX+toolWindowCloseButtonCol(0, width) {
+		// A "miss" — every other click on the title bar is inert, same
+		// as Help's own (see this func's own doc comment) — passed
+		// through rather than consumed, same as before this fix:
+		// TextView's own default MouseLeftClick handling has nothing to
+		// do here regardless (no region tags on this bar), so there is
+		// nothing this would let slip through by mistake.
 		return action, event
 	}
 	r.hideDetailsSidebar()
