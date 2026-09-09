@@ -222,6 +222,19 @@ type Root struct {
 	tabSwitcherTitleBar *tview.TextView
 	tabSwitcherLayout   *tview.Flex
 
+	// The filter-menu overlay (see filtermenu.go) — opened from
+	// whichever panel's own filterMenuBtn was clicked (see
+	// Panel.onOpenFilterMenu), rebuilt fresh against r.panel on every
+	// open (see renderFilterMenu) rather than built once, since the
+	// glob/regex row embeds that specific panel's own real
+	// filterField/filterRegexBtn, and which panel is "active" can
+	// change between one open and the next. filterMenuLayout is both
+	// the real focus target and what Pages actually shows — unlike
+	// menu/tabSwitcher, there's no separate inner List needing its own
+	// distinct rect here (see openFilterMenu's own doc comment).
+	filterMenuTitleBar *tview.TextView
+	filterMenuLayout   *tview.Flex
+
 	// menu is the context menu's own List — the real focus target
 	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
 	// title bar and the Flex stacking the two, which is what's actually
@@ -251,9 +264,12 @@ type Root struct {
 	// newConfirmDialog/openConfirm in trash.go for why). Same pattern
 	// r.picker/r.prompt already use. pendingConfirm is the action
 	// acceptConfirm runs once the user actually confirms, set by
-	// whichever caller opened the dialog. confirmDialogTitleBar/
-	// confirmDialogLayout are its own "Confirm" title bar and the Flex
-	// stacking the two, the same menuTitleBar/menuLayout split.
+	// whichever caller opened the dialog. confirmDialogTitleBar IS the
+	// question being asked (set fresh by openConfirm before every show,
+	// per the user's own explicit request — a generic "Confirm" caption
+	// above a separate question line was one line of chrome too many);
+	// confirmDialogLayout stacks the two, the same menuTitleBar/
+	// menuLayout split.
 	confirmDialog         *tview.List
 	confirmDialogTitleBar *tview.TextView
 	confirmDialogLayout   *tview.Flex
@@ -812,12 +828,15 @@ type Root struct {
 	pasteJob *pasteJob
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
-	// confirmDialog. pasteConflictDialogTitleBar/pasteConflictDialogLayout
-	// are its own "Paste conflict" title bar and the Flex stacking the
-	// two, the same widget/layout split menu/menuTitleBar/menuLayout
-	// already established — pasteConflictDialogLayout, not
-	// pasteConflictDialog itself, is what's actually registered on
-	// Pages/positioned (see resizePasteConflictDialog).
+	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
+	// itself (set fresh by renderPasteConflictDialog before every show,
+	// the same "the question is the header" treatment confirmDialog got
+	// — per the user's own explicit request that this apply to both);
+	// pasteConflictDialogLayout stacks the two, the same widget/layout
+	// split menu/menuTitleBar/menuLayout already established —
+	// pasteConflictDialogLayout, not pasteConflictDialog itself, is what's
+	// actually registered on Pages/positioned (see
+	// resizePasteConflictDialog).
 	pasteConflictDialog         *tview.List
 	pasteConflictDialogTitleBar *tview.TextView
 	pasteConflictDialogLayout   *tview.Flex
@@ -1080,7 +1099,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
 	r.confirmDialog = r.newConfirmDialog()
-	r.confirmDialogTitleBar = newPlainTitleBar("Confirm")
+	// Built empty — unlike quitConfirmTitleBar's fixed "Quit", this
+	// dialog's own question changes with every caller, so there is
+	// nothing meaningful to show before the first openConfirm sets its
+	// real text.
+	r.confirmDialogTitleBar = newPlainTitleBar("")
 	r.confirmDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
@@ -1089,7 +1112,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// again, this time with several distinct answers rather than a
 	// single confirm/cancel pair.
 	r.pasteConflictDialog = r.newPasteConflictDialog()
-	r.pasteConflictDialogTitleBar = newPlainTitleBar("Paste conflict")
+	// Built empty — its real text is a per-conflict message set fresh by
+	// renderPasteConflictDialog before the dialog is ever shown, per the
+	// user's own explicit request that the question itself be the header
+	// rather than a generic caption above it.
+	r.pasteConflictDialogTitleBar = newPlainTitleBar("")
 	r.pasteConflictDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.pasteConflictDialogTitleBar, 1, 0, false).
 		AddItem(r.pasteConflictDialog, 0, 1, true)
@@ -1156,6 +1183,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.tabSwitcherLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.tabSwitcherTitleBar, 1, 0, false).
 		AddItem(r.tabSwitcher, 0, 1, true)
+
+	// The filter-menu overlay (see filtermenu.go) — built with an empty
+	// body here; renderFilterMenu fills it in fresh on every open
+	// against whichever panel is active then, the same "rebuilt every
+	// time" reasoning tabSwitcher's own comment above gives, just
+	// against a Panel instead of the tab list.
+	r.filterMenuTitleBar = newPlainTitleBar("Filters")
+	r.filterMenuLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.filterMenuTitleBar, 1, 0, false)
 
 	// The Details sidebar (see detailssidebar.go): its own content is a
 	// single static TextView, same shape as Help/the Look pager above,
@@ -1229,6 +1265,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(viewerPage, r.viewerView, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
+	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
@@ -1321,6 +1358,15 @@ func (r *Root) wirePanel(panel *Panel) {
 	// separate, fixed-direction mouse controls rather than one shared
 	// toggle.
 	panel.onExpandDetails = r.showDetailsSidebar
+
+	// The header row's own "Nx Y" button opens the filter-menu dropdown
+	// (see Panel.onOpenFilterMenu/filterMenuBtn's own doc comments and
+	// Root.openFilterMenu) — always against whichever panel is active
+	// at the moment it's actually clicked (r.panel, read fresh inside
+	// the closure), not the one it happened to be wired from, the same
+	// "closure captures r, not this specific panel" shape
+	// onOpenTabSwitcher above already uses.
+	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
 
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
