@@ -270,7 +270,7 @@ func (r *Root) buildStatusBar() string {
 	// clipboard normally empties out right as its Paste finishes).
 	switch {
 	case r.pasteJob != nil:
-		write(pasteProgressText(r.pasteJob))
+		write(pasteProgressText(r.pasteJob, len(r.pasteQueue)))
 		sep()
 	default:
 		// The clipboard's own contents, if anything — right after the
@@ -510,7 +510,13 @@ func formatETA(d time.Duration) string {
 // contains — currentFile (and the bar's own bottom half) is what
 // actually moves during that stretch, updating per real file
 // underneath it even while the top half sits still.
-func pasteProgressText(job *pasteJob) string {
+//
+// queued is len(r.pasteQueue) at render time — a trailing "(+N
+// queued)" once a further Paste is waiting behind this one (see
+// startPaste/advancePasteQueue), omitted entirely at zero rather than
+// shown as "(+0 queued)": the whole point is to say something is
+// waiting, not to always report a count that's usually zero.
+func pasteProgressText(job *pasteJob, queued int) string {
 	verb := "Copying"
 	if job.cut {
 		verb = "Moving"
@@ -551,6 +557,10 @@ func pasteProgressText(job *pasteJob) string {
 	if current := job.currentFile.Load(); current != nil && *current != "" {
 		b.WriteByte(' ')
 		b.WriteString(filepath.Base(*current))
+	}
+
+	if queued > 0 {
+		fmt.Fprintf(&b, " (+%d queued)", queued)
 	}
 	return b.String()
 }

@@ -577,11 +577,18 @@ right in that dialog's own message as "(N more waiting)", and gets
 its own dialog (or resolves automatically, if an "all" option was
 already chosen) once the current one is answered.
 
+Starting a further Paste while one is already running doesn't run it
+alongside the first, and doesn't replace it either — it queues behind
+it, shown as "(+N queued)" right in the status bar's own progress line,
+and starts automatically, in the order each was asked for, the moment
+the one ahead of it finishes.
+
 `Ctrl+C` stops a running Paste outright, whether or not its own
 conflict dialog happens to be open at the time. Whatever's already
 mid-write finishes normally — on disk, exactly where it was already
 headed — rather than being interrupted mid-write; anything not yet
-started simply never starts. A *different* dialog (Properties, say)
+started simply never starts, including a whole further Paste still
+queued behind this one. A *different* dialog (Properties, say)
 happening to be open while a Paste merely continues in the background
 is unaffected — `Ctrl+C` there closes that dialog as it always has,
 since it's what you're actually looking at.

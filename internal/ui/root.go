@@ -826,6 +826,12 @@ type Root struct {
 	// own doc comment in pasteconflict.go for the whole async, resumable
 	// shape. nil whenever nothing is pasting right now.
 	pasteJob *pasteJob
+	// pasteQueue holds every further Paste asked for while one was
+	// already running — see startPaste/advancePasteQueue's own doc
+	// comments. Processed strictly in order, one at a time, the same as
+	// pasteJob itself only ever running one job at a time; empty
+	// whenever nothing is waiting.
+	pasteQueue []queuedPaste
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message

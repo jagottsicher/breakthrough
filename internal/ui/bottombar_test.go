@@ -631,7 +631,7 @@ func TestFormatETA(t *testing.T) {
 // startPaste before the first file's own onFile call has landed).
 func TestPasteProgressText(t *testing.T) {
 	job := &pasteJob{total: 5, remaining: 3}
-	got := pasteProgressText(job)
+	got := pasteProgressText(job, 0)
 	if !strings.Contains(got, "Copying 2/5") {
 		t.Errorf("pasteProgressText = %q, want it to contain %q", got, "Copying 2/5")
 	}
@@ -640,13 +640,13 @@ func TestPasteProgressText(t *testing.T) {
 	}
 
 	job.cut = true
-	if got := pasteProgressText(job); !strings.Contains(got, "Moving 2/5") {
+	if got := pasteProgressText(job, 0); !strings.Contains(got, "Moving 2/5") {
 		t.Errorf("pasteProgressText (cut) = %q, want it to contain %q", got, "Moving 2/5")
 	}
 
 	current := "/some/deep/path/apple.txt"
 	job.currentFile.Store(&current)
-	got = pasteProgressText(job)
+	got = pasteProgressText(job, 0)
 	if !strings.HasSuffix(got, "apple.txt") {
 		t.Errorf("pasteProgressText with a current file = %q, want it to end with the bare name %q, not the full path", got, "apple.txt")
 	}
@@ -662,7 +662,7 @@ func TestPasteProgressText(t *testing.T) {
 // do those segments appear (see TestPasteProgressTextShowsByteProgressOnceScanned).
 func TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes(t *testing.T) {
 	job := &pasteJob{total: 2, remaining: 1}
-	got := pasteProgressText(job)
+	got := pasteProgressText(job, 0)
 	for _, glyph := range chordCountdownBlocks {
 		if strings.ContainsRune(got, glyph) {
 			t.Errorf("pasteProgressText with no byte total yet = %q, should not contain a byte-percentage column glyph %q", got, string(glyph))
@@ -684,7 +684,7 @@ func TestPasteProgressTextShowsByteProgressOnceScanned(t *testing.T) {
 	job.currentFileSize.Store(20)
 	job.currentFileBytes.Store(10) // 50 of 100 bytes done overall
 
-	got := pasteProgressText(job)
+	got := pasteProgressText(job, 0)
 	if !strings.ContainsRune(got, '▁') && !strings.ContainsRune(got, '▄') && !strings.ContainsRune(got, '█') {
 		t.Errorf("pasteProgressText with a known byte total = %q, want a byte-percentage column glyph", got)
 	}
@@ -693,6 +693,22 @@ func TestPasteProgressTextShowsByteProgressOnceScanned(t *testing.T) {
 	}
 	if !strings.Contains(got, "left") {
 		t.Errorf("pasteProgressText with real progress and elapsed time = %q, want an ETA", got)
+	}
+}
+
+// TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero pins the
+// "(+N queued)" suffix startPaste's own queue (see r.pasteQueue/
+// advancePasteQueue) needs a visible sign of: present, naming the exact
+// count, once something is waiting behind the job currently shown;
+// completely absent — not "(+0 queued)" — once nothing is.
+func TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero(t *testing.T) {
+	job := &pasteJob{total: 5, remaining: 3}
+
+	if got := pasteProgressText(job, 0); strings.Contains(got, "queued") {
+		t.Errorf("pasteProgressText with an empty queue = %q, should not mention queueing at all", got)
+	}
+	if got := pasteProgressText(job, 2); !strings.Contains(got, "(+2 queued)") {
+		t.Errorf("pasteProgressText with 2 queued = %q, want it to contain %q", got, "(+2 queued)")
 	}
 }
 

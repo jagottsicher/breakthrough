@@ -163,12 +163,17 @@ terminal.
   whatever was there before — the right choice when "overwrite" needs
   to mean "make this identical to the source", not "patch it"); Merge
   is the explicit alternative, keeping whatever the source doesn't
-  also have. Ctrl+C stops a running Paste outright — whatever's already
-  mid-write finishes normally, on disk, right where it was headed;
-  nothing still queued starts at all. Any real failure (permission, a
-  full disk, ...) is collected rather than stopping at the first one,
-  and reported once the whole Paste is done. Whatever's currently on
-  the clipboard shows
+  also have. Starting a further Paste while one is already running
+  queues it rather than running it alongside the first or replacing
+  it outright — shown as "(+N queued)" right in the status bar's own
+  progress line — and it starts automatically the moment the one ahead
+  of it finishes, in the order each was asked for. Ctrl+C stops a
+  running Paste outright — whatever's already mid-write finishes
+  normally, on disk, right where it was headed; nothing still queued,
+  whether a pending conflict or a whole further Paste behind this one,
+  starts at all. Any real failure (permission, a full disk, ...) is
+  collected rather than stopping at the first one, and reported once
+  the whole Paste is done. Whatever's currently on the clipboard shows
   two ways: every row it holds gets a full-row grey tint (a lighter
   shade for Cut than Copy, since Cut is the one where the original
   actually disappears), across every open tab showing that row, not
