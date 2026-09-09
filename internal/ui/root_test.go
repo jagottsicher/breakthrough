@@ -144,6 +144,65 @@ func TestRequestQuitHasATitleBar(t *testing.T) {
 	}
 }
 
+// TestRequestQuitWhilePastingAsksToCancelTheCopyInstead pins the user's
+// own explicit report: quitting must not be possible at all while a
+// Paste is still running, out from under a copy already mid-write to
+// disk — RequestQuit must not even open the ordinary quitConfirm in
+// this state, since accepting it would tear the app (and the running
+// copy) down immediately with no way back.
+func TestRequestQuitWhilePastingAsksToCancelTheCopyInstead(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 1)
+
+	r.RequestQuit()
+
+	if r.activePage == quitConfirmPage {
+		t.Fatal("RequestQuit opened the ordinary quit prompt while a paste is still running")
+	}
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q (the shared confirm dialog)", r.activePage, confirmPage)
+	}
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Errorf("preselected item = %d, want 1 (Cancel) — a stray Enter must never cancel the copy and quit", got)
+	}
+	if r.pasteJob == nil {
+		t.Error("merely asking should not have cancelled the running paste")
+	}
+}
+
+// TestConfirmingQuitWhilePastingCancelsTheJobThenQuits pins the other
+// half: actually accepting the question TestRequestQuitWhilePastingAsksToCancelTheCopyInstead
+// opens must cancel the running paste (see cancelPasteJob's own doc
+// comment: whatever file is already mid-write finishes exactly where it
+// was headed, nothing is left half-written) before quitting — not quit
+// first and leave the job dangling, and not quit without ever touching
+// it either.
+func TestConfirmingQuitWhilePastingCancelsTheJobThenQuits(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 1)
+
+	r.RequestQuit()
+	r.confirmDialog.SetCurrentItem(2) // "Yes, cancel and quit"
+	r.acceptConfirm()
+
+	if r.pasteJob != nil {
+		t.Error("confirming should have cancelled the running paste job")
+	}
+	// confirmQuit itself calls Application.Stop, which is a safe no-op
+	// here (no screen was ever set — see tview's own application.go) —
+	// nothing further to observe about the quit half beyond it not
+	// panicking, which a failing t.Fatalf above would already have
+	// caught if reached in a broken state.
+}
+
 // TestMouseStatusText pins the exact wording buildStatusBar's own
 // "Mouse on/off" segment uses.
 func TestMouseStatusText(t *testing.T) {

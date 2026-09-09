@@ -1813,6 +1813,15 @@ func (r *Root) RequestQuit() {
 	// hideOverlay hands focus to the panel's table rather than back to it.
 	r.panel.cancelEdit()
 
+	// A running Paste takes priority over the ordinary quit prompt, per
+	// the user's own explicit report: quitting must never simply tear
+	// the app down out from under a copy already mid-write to disk (see
+	// confirmQuitWhilePasting's own doc comment for the full reasoning).
+	if r.pasteJob != nil {
+		r.confirmQuitWhilePasting()
+		return
+	}
+
 	width, height := listSize(r.quitConfirm)
 	height++ // reserved title bar row (see quitConfirmLayout)
 
@@ -1840,6 +1849,33 @@ func (r *Root) RequestQuit() {
 	r.quitConfirm.SetRect(x, y, width, height)
 	r.quitConfirm.SetCurrentItem(1) // "Cancel" — see newConfirmDialog's own comment
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
+}
+
+// confirmQuitWhilePasting is RequestQuit's own branch for while a Paste
+// is still running — per the user's own explicit report, it must not be
+// possible to simply quit out from under a copy in progress at all;
+// there has to at least be a way to end the copy first and then
+// breakthrough. Asks a different question than the ordinary quit prompt
+// (quitConfirm itself, hardcoded to "Quit breakthrough"/"Cancel"), so
+// this reuses the generic confirmDialog (openConfirm) instead, the same
+// one Remove/Empty Trash/the Options resets already share — Cancel
+// leaves the copy running exactly as before (nothing quits), the one
+// confirming answer cancels the job outright (see cancelPasteJob's own
+// doc comment: whatever file is already mid-write finishes on disk
+// first, nothing is left half-written) and only then actually quits.
+func (r *Root) confirmQuitWhilePasting() {
+	verb := "copy"
+	if r.pasteJob.cut {
+		verb = "move"
+	}
+	r.openConfirm(
+		fmt.Sprintf("A %s is still running. Cancel it and quit breakthrough?", verb),
+		"Yes, cancel and quit",
+		func() {
+			r.cancelPasteJob()
+			r.confirmQuit()
+		},
+	)
 }
 
 // RequestCancel is the Ctrl+Q sibling for Ctrl+C (see cmd/breakthrough):
