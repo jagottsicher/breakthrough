@@ -168,13 +168,21 @@ terminal.
   chord countdown's own spot, for as long as there's something to
   Paste. Once a Paste actually starts, that same spot switches to its
   own live progress instead — a spinner, "Copying"/"Moving" and how
-  many of the selection's own top-level items are done, a block-bar for
-  the same fraction, and whichever real file is being written right
-  now (its bare name, e.g. inside a large directory this Paste is still
-  working through). A same-filesystem move is atomic regardless of
-  size, so a Cut within one filesystem usually finishes too fast for
-  this to show anything at all — expected, not a bug: there's nothing
-  to report progress on.
+  many of the selection's own top-level items are done, and a two-row
+  progress bar packed into one line of half-block characters (the top
+  half is that same item-count fraction, the bottom half is the file
+  currently being written's own byte progress), plus whichever real
+  file is being written right now (its bare name, e.g. inside a large
+  directory this Paste is still working through). A one-time background
+  scan of the whole selection's byte size (started alongside the Paste
+  itself, never blocking it) adds two more things once it's done: a
+  single character before the bar showing what percentage of the total
+  bytes has copied so far (the same shrinking/filling block style the
+  chord countdown uses), and an estimated remaining duration after the
+  bar. A same-filesystem move is atomic regardless of size, so a Cut
+  within one filesystem usually finishes too fast for any of this to
+  show anything at all — expected, not a bug: there's nothing to report
+  progress on.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

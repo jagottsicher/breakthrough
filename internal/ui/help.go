@@ -395,10 +395,16 @@ var helpText = strings.TrimLeft(`
   was pressed in; and the status bar names it — "Copy: 3 files, 1
   dir" — right after the chord countdown's own spot. Once Paste
   actually starts, that same spot shows its own live progress instead
-  — a spinner, how many items are done, a block-bar, and the real
-  file currently being written. A same-filesystem move is instant
-  regardless of size, so it usually finishes before this ever shows
-  anything at all — expected, not a missed update.
+  — a spinner, how many items are done, a two-row bar packed into one
+  line of half-block characters (top half: item count, bottom half:
+  the current file's own byte progress), and the real file currently
+  being written. Once a background scan of the whole selection's size
+  finishes (started the moment Paste was pressed, never delaying it),
+  a leading character also fills in showing overall byte progress, and
+  an estimated remaining duration appears after the bar. A
+  same-filesystem move is instant regardless of size, so it usually
+  finishes before any of this ever shows anything at all — expected,
+  not a missed update.
 
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 

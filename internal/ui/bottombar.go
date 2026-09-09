@@ -358,11 +358,133 @@ func pluralCount(n int, singular, plural string) string {
 	return fmt.Sprintf("%d %s", n, plural)
 }
 
-// pasteProgressBarWidth is how many block characters wide
-// pasteProgressText's own bar is — narrow enough to leave room for the
-// segments after it (username, disk usage, uptime, ...), wide enough to
-// actually read as a bar rather than a handful of ambiguous pixels.
+// pasteProgressBarWidth is how many characters wide pasteProgressText's
+// own dual bar (see pasteDualBar) is — narrow enough to leave room for
+// the segments after it (username, disk usage, uptime, ...), wide
+// enough to actually read as a bar rather than a handful of ambiguous
+// pixels.
 const pasteProgressBarWidth = 10
+
+// pasteDualBarLit/pasteDualBarDim are the two colors pasteDualBar fills
+// each half-block character with — this bar's own fixed look,
+// deliberately not part of the theme system config.Theme's other
+// colors go through: a status-bar progress indicator, like the chord
+// countdown's own block glyphs (see chordCountdownBlocks) or the
+// spinner (see hashAnimationFrames), has never been a themed element
+// in this app.
+const (
+	pasteDualBarLit = "green"
+	pasteDualBarDim = "gray"
+)
+
+// pasteDualBar renders a width-wide row of upper-half-block characters
+// (▀), each one's own foreground painting that column's top half and
+// background painting its bottom half — a real terminal rendering
+// behavior of that specific glyph, not a tview trick, which is what
+// lets a single row of characters carry two independent fractions at
+// once, per the user's own explicit request: topFrac (the same
+// item-level "how much of the clipboard has a final outcome" fraction
+// the old single bar showed) above, fileFrac (the file currently being
+// streamed's own byte progress) below. Both clamped to [0,1] first — a
+// fraction exceeding 1 (shouldn't happen, but cheap to guard, the same
+// reasoning the old bar's own done>total clamp already followed) would
+// otherwise overfill past width. Ends with a reset tag so whatever
+// pasteProgressText appends after it (the ETA, the current file's own
+// name) isn't left drawn in this bar's own last column's colors.
+func pasteDualBar(topFrac, fileFrac float64, width int) string {
+	topLit := int(clampFrac(topFrac) * float64(width))
+	fileLit := int(clampFrac(fileFrac) * float64(width))
+
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		fg, bg := pasteDualBarDim, pasteDualBarDim
+		if i < topLit {
+			fg = pasteDualBarLit
+		}
+		if i < fileLit {
+			bg = pasteDualBarLit
+		}
+		fmt.Fprintf(&b, "[%s:%s]▀", fg, bg)
+	}
+	b.WriteString("[-:-]")
+	return b.String()
+}
+
+// clampFrac clamps f to [0,1] — shared by every fraction this file
+// turns into a glyph or a bar column, so a value that briefly strays
+// outside that range (a size read mid-write growing past what an
+// earlier stat reported, say) can never overfill or index out of
+// bounds anywhere that happens.
+func clampFrac(f float64) float64 {
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// pasteBytesColumn renders bytesDone/bytesTotal as a single character
+// from chordCountdownBlocks' own eight-level glyph set — the same "one
+// lone character stands in for a fraction, no color needed" idea the
+// chord countdown (see chordIndicatorText) already uses, per the
+// user's own explicit request to style this the same way, just filling
+// upward (0% is the thinnest sliver, 100% is a full block) instead of
+// that one's own draining-downward direction, since this represents
+// progress accumulating rather than time running out. Callers check
+// bytesTotal > 0 themselves before calling this at all (see
+// pasteProgressText and pasteJob.bytesTotal's own doc comment on what
+// <= 0 means), so this only ever has to handle an already-known,
+// positive total.
+func pasteBytesColumn(bytesDone, bytesTotal int64) string {
+	frac := clampFrac(float64(bytesDone) / float64(bytesTotal))
+	idx := int(frac * float64(len(chordCountdownBlocks)-1))
+	return string(chordCountdownBlocks[len(chordCountdownBlocks)-1-idx])
+}
+
+// pasteETA estimates a paste job's own remaining time from the average
+// throughput observed since it started (bytesDone/elapsed) rather than
+// an instantaneous rate sampled between two ticks — inherently
+// smoother, since the denominator only ever grows, and needs no state
+// of its own beyond the job's own start time (see pasteJob.startedAt),
+// already recorded for exactly this. ok is false whenever an estimate
+// wouldn't mean anything yet — no time has passed, nothing has copied
+// yet, or the total is already reached — so the caller
+// (pasteProgressText) simply omits the segment rather than showing a
+// division-by-zero result or a stale "0s left" once the job is already
+// wrapping up.
+func pasteETA(startedAt time.Time, bytesDone, bytesTotal int64) (string, bool) {
+	elapsed := time.Since(startedAt)
+	if bytesDone <= 0 || elapsed <= 0 || bytesTotal <= bytesDone {
+		return "", false
+	}
+	rate := float64(bytesDone) / elapsed.Seconds()
+	remainingSeconds := float64(bytesTotal-bytesDone) / rate
+	return formatETA(time.Duration(remainingSeconds * float64(time.Second))), true
+}
+
+// formatETA renders d as a compact "~Ns"/"~Mm Ns"/"~Hh Mm" — never more
+// than two units, rounded to the nearest whole second. Prefixed with
+// "~" throughout: this is always an extrapolation from an average
+// rate observed so far, never a guarantee.
+func formatETA(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	totalSeconds := int(d.Round(time.Second).Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds / 60) % 60
+	seconds := totalSeconds % 60
+	switch {
+	case hours > 0:
+		return fmt.Sprintf("~%dh %dm left", hours, minutes)
+	case minutes > 0:
+		return fmt.Sprintf("~%dm %ds left", minutes, seconds)
+	default:
+		return fmt.Sprintf("~%ds left", seconds)
+	}
+}
 
 // pasteProgressText renders buildStatusBar's own "a Paste is running"
 // segment, replacing the clipboard indicator for as long as job is
@@ -371,24 +493,23 @@ const pasteProgressBarWidth = 10
 // language as every other "in progress" indicator this app already
 // has, driven by animatePasteProgress's own ticker), "Copying"/"Moving"
 // naming which of the two this actually is, how many of the clipboard's
-// own top-level items have a final outcome so far, a block-character
-// bar for the same fraction, and the real file fsCopy/fsMove most
-// recently reported touching (see pasteJob.currentFile) — its bare
-// name, not the full path: the path is wherever the paste's own
-// destination already says it's going, and a long one would crowd out
-// every segment after it.
+// own top-level items have a final outcome so far, a leading
+// byte-percentage column and a dual progress bar once the job's own
+// byte total is known (see pasteBytesColumn/pasteDualBar and
+// pasteJob.bytesTotal's own doc comment for what "known" means and why
+// it isn't known from the very first tick), an estimated remaining
+// duration once that same total makes one possible (see pasteETA), and
+// the real file fsCopy/fsMove most recently reported touching (see
+// pasteJob.currentFile) — its bare name, not the full path: the path is
+// wherever the paste's own destination already says it's going, and a
+// long one would crowd out every segment after it.
 //
-// The count/bar is per top-level clipboard item, not per file: a
-// directory only advances it once, when the whole thing finishes, no
-// matter how many files it contains — currentFile is what actually
-// moves during that stretch, updating per real file underneath it even
-// while the bar itself sits still. Precise, granular byte- or
-// file-level progress would need summing every file's size (or count)
-// under every selected directory before a single byte moves — real
-// cost paid up front for every Paste, not just large ones — so this
-// starts at the cheaper, already-available item-level figure instead;
-// worth revisiting if that granularity turns out to matter in practice
-// (see feature_ideas.txt).
+// The N/total count and the dual bar's own top half are per top-level
+// clipboard item, not per file: a directory only advances either one
+// once, when the whole thing finishes, no matter how many files it
+// contains — currentFile (and the bar's own bottom half) is what
+// actually moves during that stretch, updating per real file
+// underneath it even while the top half sits still.
 func pasteProgressText(job *pasteJob) string {
 	verb := "Copying"
 	if job.cut {
@@ -399,29 +520,39 @@ func pasteProgressText(job *pasteJob) string {
 		done = 0
 	}
 	spinner := hashAnimationFrames[job.animFrame%len(hashAnimationFrames)]
-	bar := progressBar(done, job.total, pasteProgressBarWidth)
 
-	name := ""
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s %d/%d ", spinner, verb, done, job.total)
+
+	bytesTotal := job.bytesTotal.Load()
+	bytesDone := job.bytesBase.Load() + job.currentFileBytes.Load()
+	if bytesTotal > 0 {
+		b.WriteString(pasteBytesColumn(bytesDone, bytesTotal))
+		b.WriteByte(' ')
+	}
+
+	itemFrac := 0.0
+	if job.total > 0 {
+		itemFrac = float64(done) / float64(job.total)
+	}
+	fileFrac := 0.0
+	if size := job.currentFileSize.Load(); size > 0 {
+		fileFrac = float64(job.currentFileBytes.Load()) / float64(size)
+	}
+	b.WriteString(pasteDualBar(itemFrac, fileFrac, pasteProgressBarWidth))
+
+	if bytesTotal > 0 {
+		if eta, ok := pasteETA(job.startedAt, bytesDone, bytesTotal); ok {
+			b.WriteByte(' ')
+			b.WriteString(eta)
+		}
+	}
+
 	if current := job.currentFile.Load(); current != nil && *current != "" {
-		name = " " + filepath.Base(*current)
+		b.WriteByte(' ')
+		b.WriteString(filepath.Base(*current))
 	}
-	return fmt.Sprintf("%s %s %d/%d %s%s", spinner, verb, done, job.total, bar, name)
-}
-
-// progressBar renders a done-of-total fraction as a fixed-width bar of
-// filled ("█") and empty ("░") block characters, bracketed — total <= 0
-// renders as entirely empty rather than dividing by zero, and done is
-// clamped to total so a fraction that briefly exceeds 1 (shouldn't
-// happen, but cheap to guard) can never overfill it.
-func progressBar(done, total, width int) string {
-	if total <= 0 {
-		return "[" + strings.Repeat("░", width) + "]"
-	}
-	if done > total {
-		done = total
-	}
-	filled := done * width / total
-	return "[" + strings.Repeat("█", filled) + strings.Repeat("░", width-filled) + "]"
+	return b.String()
 }
 
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"

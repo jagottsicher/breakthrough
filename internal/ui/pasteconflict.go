@@ -76,6 +76,12 @@ type pasteJob struct {
 	cut     bool
 	destDir string
 
+	// startedAt is when this job was created (see startPaste) — never
+	// touched again. animatePasteProgress's own ticker uses it purely
+	// to average an ETA over the whole run so far (see pasteETA), not
+	// for anything correctness-sensitive.
+	startedAt time.Time
+
 	total int // clipboard items this job started with — never decremented, just for "N of M" reporting
 
 	// remaining is decremented once for every clipboard item whose final
@@ -116,6 +122,44 @@ type pasteJob struct {
 	// fsops.Hash's onProgress doc comment).
 	currentFile atomic.Pointer[string]
 
+	// bytesTotal is the sum of every real file's size across the whole
+	// job's own clipboard selection (see fsops.TotalBytes — a symlink
+	// contributes 0, a path this can't read contributes 0 rather than
+	// failing the scan outright) — computed once, in its own
+	// background goroutine started alongside pasteWalk itself (see
+	// scanPasteBytes), rather than blocking Paste on it: a very large
+	// selection's own scan could otherwise noticeably delay the very
+	// first file actually starting to copy, exactly the kind of
+	// upfront cost byte-accurate progress has always cost (see
+	// pasteProgressText's own doc comment on this same trade-off before
+	// this existed at all). 0 both before the scan finishes and for a
+	// genuinely empty-of-bytes selection (all zero-byte files, say) —
+	// deliberately not distinguished from each other with a separate
+	// "scan done" flag, since every reader already treats "nothing to
+	// show yet" and "nothing to show, full stop" exactly the same way:
+	// skip the byte-based parts of the display, item-count progress and
+	// the current file name keep working regardless either way.
+	bytesTotal atomic.Int64
+
+	// bytesBase, currentFileSize, and currentFileBytes together let
+	// animatePasteProgress's own ticker compute a live "bytes done so
+	// far, job-wide" total (see pasteProgressText) without pasteOne
+	// ever having to report one directly itself. onFile (see pasteOne)
+	// updates all three every time it reports a new path: the file that
+	// was current a moment ago, if any, is guaranteed to be fully done
+	// by then — only one file's content is ever being streamed at a
+	// time across the whole job (see ioMu's own doc comment) — so its
+	// own size folds into bytesBase right there, and
+	// currentFileSize/currentFileBytes reset for the one now starting.
+	// onBytes then only ever has to update currentFileBytes as that
+	// one's own copy actually progresses. All three are plain atomics
+	// for the same "single writer (whichever goroutine currently holds
+	// ioMu), sampled reader (this ticker, on a different goroutine)"
+	// reason currentFile above already is one.
+	bytesBase        atomic.Int64
+	currentFileSize  atomic.Int64
+	currentFileBytes atomic.Int64
+
 	// animFrame advances once per animatePasteProgress tick — purely
 	// decorative (see hashAnimationFrames, reused here for the same
 	// visual language), a "still alive" cue for a single very large file
@@ -148,13 +192,39 @@ func (r *Root) startPaste(items []string, cut bool, destDir string) {
 	r.cancelPasteJob()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: len(items), remaining: len(items)}
+	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: len(items), remaining: len(items), startedAt: time.Now()}
 	r.pasteJob = job
 
 	onPanic := func() { r.pasteJob = nil }
 	r.safeGo("paste", onPanic, func() { r.pasteWalk(job, items) })
 	r.safeGo("paste progress animation", onPanic, func() { r.animatePasteProgress(job) })
+	r.safeGo("paste byte scan", onPanic, func() { r.scanPasteBytes(job, items) })
 	r.refreshStatusBar() // show the progress segment immediately, not just once the first tick lands
+}
+
+// scanPasteBytes runs once per job, in its own goroutine started
+// alongside pasteWalk itself (see startPaste) rather than before it:
+// walking the whole selection to size it exactly is the one real cost
+// of showing byte-accurate progress at all (see
+// pasteJob.bytesTotal's own doc comment), and paying it up front,
+// blocking, would delay the very first file actually starting to copy
+// for however long a very large selection takes to size — this way the
+// two run fully concurrently, and the byte-based parts of the display
+// simply switch on once this finishes, whenever that happens to be,
+// with the item-count progress and current file name working from the
+// very first tick regardless.
+func (r *Root) scanPasteBytes(job *pasteJob, items []string) {
+	total := fsops.TotalBytes(job.ctx, items)
+	if job.ctx.Err() != nil {
+		return // cancelled or superseded before the scan finished — nothing left to report this to
+	}
+	job.bytesTotal.Store(total)
+	r.app.QueueUpdateDraw(func() {
+		if job.ctx.Err() != nil {
+			return
+		}
+		r.refreshStatusBar()
+	})
 }
 
 // cancelPasteJob stops whatever paste is currently running, if any — a
@@ -312,6 +382,13 @@ func (r *Root) reportPasteOutcome(job *pasteJob, fn func()) {
 // write, not routed through QueueUpdateDraw itself: animatePasteProgress
 // samples it on its own schedule, the same "no rate-limiting done at
 // the source" contract fsops.Hash's own onProgress already follows.
+// onFile also folds the *previous* file's own size into job.bytesBase
+// and resets currentFileSize/currentFileBytes for the one now starting
+// (see their own doc comment for why that inference is safe here); the
+// os.Lstat it does for the new file's size is a small, synchronous cost
+// paid once per file, on the same goroutine already about to do that
+// file's own real I/O, not on the UI thread. onBytes then only updates
+// currentFileBytes as that copy actually streams.
 //
 // mode is fsops.OverwriteMode — meaningless (see its own doc comment)
 // unless force is true and the conflict turns out to be a directory,
@@ -322,13 +399,23 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 	if job.ctx.Err() != nil {
 		return
 	}
-	onFile := func(path string) { job.currentFile.Store(&path) }
+	onFile := func(path string) {
+		job.currentFile.Store(&path)
+		job.bytesBase.Add(job.currentFileSize.Load())
+		var size int64
+		if fi, err := os.Lstat(path); err == nil {
+			size = fi.Size()
+		}
+		job.currentFileSize.Store(size)
+		job.currentFileBytes.Store(0)
+	}
+	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 	job.ioMu.Lock()
 	var err error
 	if job.cut {
-		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile})
+		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
 	} else {
-		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, OnFile: onFile})
+		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
 	}
 	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })

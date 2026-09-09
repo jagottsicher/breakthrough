@@ -33,6 +33,14 @@ type MoveOptions struct {
 	// and Copy's own OnFile doc comment for the fuller contract that
 	// applies once a fallback below reaches Copy instead.
 	OnFile func(path string)
+	// OnBytes, if non-nil, is only ever actually called if Move falls
+	// back to Copy (see this function's own doc comment: EXDEV, or
+	// ENOTEMPTY/EEXIST with Mode MergeInto) — the one path here that
+	// streams any bytes at all. The fast os.Rename path is atomic and
+	// instantaneous regardless of size, with nothing to report a
+	// running total of. See CopyOptions.OnBytes for the full contract
+	// once a fallback does reach it.
+	OnBytes func(copiedBytes int64)
 }
 
 // Move moves src to dst, refusing to overwrite an existing dst unless
@@ -117,7 +125,7 @@ func Move(src, dst string, opts MoveOptions) error {
 		return err
 	}
 
-	copyOpts := CopyOptions{Force: true, Mode: opts.Mode, OnFile: opts.OnFile}
+	copyOpts := CopyOptions{Force: true, Mode: opts.Mode, OnFile: opts.OnFile, OnBytes: opts.OnBytes}
 	if err := Copy(src, dst, copyOpts); err != nil {
 		return err
 	}

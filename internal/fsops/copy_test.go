@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -244,6 +245,64 @@ func TestCopyReportsEveryFileViaOnFile(t *testing.T) {
 			t.Errorf("onFile reported %v, want %v", reported, want)
 			break
 		}
+	}
+}
+
+// TestCopyReportsRunningTotalViaOnBytes pins OnBytes' own contract: a
+// cumulative running total *per file* (not across the whole Copy call
+// — see its own doc comment), reaching that file's exact full size by
+// the time the last chunk lands, and never called at all for a
+// directory itself or for a symlink recreated as a symlink (nothing
+// streamed either way).
+func TestCopyReportsRunningTotalViaOnBytes(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	content := strings.Repeat("x", 5000) // several read buffers' worth, not just one
+	if err := os.WriteFile(src, []byte(content), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	var reported []int64
+	dst := filepath.Join(dir, "dst")
+	if err := Copy(src, dst, CopyOptions{OnBytes: func(n int64) { reported = append(reported, n) }}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	if len(reported) == 0 {
+		t.Fatal("OnBytes was never called")
+	}
+	for i := 1; i < len(reported); i++ {
+		if reported[i] < reported[i-1] {
+			t.Fatalf("OnBytes reported a non-monotonic sequence: %v", reported)
+		}
+	}
+	if last := reported[len(reported)-1]; last != int64(len(content)) {
+		t.Errorf("OnBytes' last report = %d, want the file's full size %d", last, len(content))
+	}
+}
+
+// TestCopyNeverCallsOnBytesForASymlinkRecreatedAsALink pins the other
+// half of OnBytes' own contract: recreating a link (the default,
+// FollowSymlinks false) is a single name-and-target write, never a
+// byte stream, so there's nothing to report a running total of.
+func TestCopyNeverCallsOnBytesForASymlinkRecreatedAsALink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	dst := filepath.Join(dir, "dst")
+	if err := Copy(link, dst, CopyOptions{OnBytes: func(int64) { called = true }}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if called {
+		t.Error("OnBytes was called for a symlink recreated as a symlink — nothing was actually streamed")
 	}
 }
 

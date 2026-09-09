@@ -43,10 +43,10 @@ const (
 // this project's own convention past that point, rather than
 // accumulating further same-typed bool/enum arguments a call site could
 // silently transpose. The zero value (Force false, Mode MergeInto,
-// FollowSymlinks false, OnFile nil) is Copy's own original behavior
-// exactly, from before CopyOptions existed at all: refuse an existing
-// dst, and recreate a symlink as a symlink rather than copying whatever
-// it points at.
+// FollowSymlinks false, OnFile/OnBytes nil) is Copy's own original
+// behavior exactly, from before CopyOptions existed at all: refuse an
+// existing dst, and recreate a symlink as a symlink rather than
+// copying whatever it points at.
 type CopyOptions struct {
 	// Force allows overwriting an existing dst — refused outright
 	// otherwise (see refuseExisting), the same contract Rename uses.
@@ -77,6 +77,23 @@ type CopyOptions struct {
 	// own schedule instead (see animatePasteProgress in internal/ui)
 	// is free to.
 	OnFile func(path string)
+	// OnBytes, if non-nil, is called after every underlying read/write
+	// chunk copyFile performs on a real file's own content, with the
+	// running total of bytes copied so far *for that one file* —
+	// resets implicitly with each new file, since a fresh copyFile call
+	// starts its own fresh counter, the same way Hash's own progress
+	// counter starts fresh for each separate Hash call rather than
+	// accumulating across files. Never called for a directory itself,
+	// or for a symlink recreated as a symlink rather than followed
+	// (see copySymlink) — recreating a link is a single name-and-target
+	// write, never a byte stream, so there's nothing to report a
+	// running total of. Same "cheap, synchronous, no rate-limiting done
+	// here" contract OnFile above and Hash's own onProgress already
+	// follow — see the caller's own doc comment (pasteOne, in
+	// internal/ui) for how it turns a per-file running total plus
+	// OnFile's own "a new file just started" signal into a job-wide
+	// running total.
+	OnBytes func(copiedBytes int64)
 }
 
 // Copy copies src (a file, a directory recursively, or a symlink — see
@@ -214,6 +231,32 @@ func resolveExistingAncestor(path string) string {
 	return filepath.Join(resolveExistingAncestor(parent), filepath.Base(path))
 }
 
+// countingReader wraps r, calling onRead with the running total of
+// bytes read after every underlying Read that actually returned any —
+// the same "cumulative running total, reported synchronously, no
+// rate-limiting done here" shape as Hash's own progressReader (see its
+// doc comment), reused here for CopyOptions.OnBytes instead. Unlike
+// progressReader, there's no context to check here: Copy/Move don't
+// take one at all, so a cancelled copy simply runs to completion on
+// whatever goroutine started it (see internal/ui's own job.ctx, which
+// this counter's caller checks before ever starting a Copy at all).
+type countingReader struct {
+	r      io.Reader
+	read   int64
+	onRead func(readBytes int64)
+}
+
+func (c *countingReader) Read(b []byte) (int, error) {
+	n, err := c.r.Read(b)
+	if n > 0 {
+		c.read += int64(n)
+		if c.onRead != nil {
+			c.onRead(c.read)
+		}
+	}
+	return n, err
+}
+
 // copyFile copies one regular file's content and permission bits. If dst
 // already exists (only reached with opts.Force — the caller already
 // checked otherwise), it's removed first so the copy starts clean rather
@@ -244,7 +287,11 @@ func copyFile(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	// shadowing whichever error got there first.
 	defer func() { _ = out.Close() }()
 
-	if _, err := io.Copy(out, in); err != nil {
+	var reader io.Reader = in
+	if opts.OnBytes != nil {
+		reader = &countingReader{r: in, onRead: opts.OnBytes}
+	}
+	if _, err := io.Copy(out, reader); err != nil {
 		return err
 	}
 	return out.Close()

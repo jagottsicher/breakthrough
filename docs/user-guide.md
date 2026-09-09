@@ -582,7 +582,7 @@ from the clipboard indicator to its own live progress instead, for
 example:
 
 ```
-● Copying 2/5 [████░░░░░░] holiday-photo.jpg
+● Copying 2/5 ▅ ▀▀▀▀▀▄▄▄▄▄ ~14s left holiday-photo.jpg
 ```
 
 - A spinner (cycling dots, the same one Properties' own hash
@@ -593,11 +593,32 @@ example:
 - How many of the selection's own top-level items have a final outcome
   so far, out of the total — a directory only advances this once, when
   the whole thing finishes, not per file inside it.
-- A block-character bar for that same fraction.
+- A single character showing what percentage of the *entire
+  selection's own byte size* has copied so far, filling up from a thin
+  sliver to a solid block — the same glyph style the chord countdown
+  uses to drain, just running the other way. This (and the estimated
+  time below) only appears once a one-time background scan of the
+  whole selection has measured its total size — started the moment
+  Paste is pressed, running alongside the copy itself rather than
+  delaying it, so a very large selection still starts copying
+  immediately even though this one character and the estimate after
+  the bar take a moment longer to show up.
+- A two-row progress bar packed into a single line of half-block
+  characters: the *top* half of each character is the same item-count
+  fraction the count above already shows; the *bottom* half is the
+  file currently being written's own byte progress. Both halves fill
+  left to right independently, so a bar can show (for example) its top
+  half half-full while its bottom half is already nearly done with the
+  one file currently in flight.
+- An estimated remaining duration, once the background scan above has
+  a total to measure against and at least some progress to extrapolate
+  from — based on the average throughput since the Paste started, so
+  it settles down after the first moment rather than jumping around.
 - The real file currently being written — its bare name, not the full
   path, so a long one doesn't crowd out everything after it. Inside a
   large directory, this keeps changing file by file even while the
-  count/bar above sit still waiting for that one directory to finish.
+  count/top bar above sit still waiting for that one directory to
+  finish.
 
 Only one file actually copies or moves at a time, in whatever order
 each one happens to start, regardless of how large the selection is —

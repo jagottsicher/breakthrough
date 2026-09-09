@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -909,7 +910,6 @@ func TestAdvancePasteConflictsShowsNextQueuedConflict(t *testing.T) {
 	}
 }
 
-// TestPasteSummaryError pins pasteSummaryError's own two shapes: a
 // TestPasteOneSerializesRealIOAcrossConcurrentItems pins job.ioMu's own
 // whole point: however many goroutines pasteWalk/resolveConflictAsync
 // start at once, only one of them is ever actually inside fsCopy/fsMove
@@ -953,6 +953,66 @@ func TestPasteOneSerializesRealIOAcrossConcurrentItems(t *testing.T) {
 		go r.pasteOne(job, filepath.Join(dir, fmt.Sprintf("item-%d.txt", i)), filepath.Join(dir, fmt.Sprintf("out-%d.txt", i)), false, fsops.ReplaceEntirely)
 	}
 	waitPasteIO(t, done, 5)
+}
+
+// TestPasteOneFoldsPreviousFileSizeIntoBytesBaseOnTheNextFile pins the
+// job-wide byte bookkeeping pasteProgressText's own byte-percentage
+// column and dual bar read from (see pasteJob.bytesBase's own doc
+// comment): after one file's real Copy finishes, its own size sits in
+// currentFileSize/currentFileBytes, not yet folded into bytesBase —
+// only once a *second* file's own onFile fires (see pasteOne) is the
+// first one's size safely known to be done and added there, with
+// currentFileSize/currentFileBytes reset to the new file's own state.
+// Uses isolatePasteIO (real fsCopy, signaled per call) rather than
+// waiting for pasteOne itself to return, which would hang forever
+// without a live Application.Run() loop to service its own final
+// QueueUpdateDraw hand-off (see
+// TestPasteOneSerializesRealIOAcrossConcurrentItems's own doc comment
+// for the same reasoning).
+func TestPasteOneFoldsPreviousFileSizeIntoBytesBaseOnTheNextFile(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 2)
+
+	file1 := filepath.Join(dir, "size100.txt")
+	if err := os.WriteFile(file1, bytes.Repeat([]byte("a"), 100), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	file2 := filepath.Join(dir, "size200.txt")
+	if err := os.WriteFile(file2, bytes.Repeat([]byte("b"), 200), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	out1 := filepath.Join(dir, "out1.txt")
+	out2 := filepath.Join(dir, "out2.txt")
+
+	done := isolatePasteIO(t)
+
+	go r.pasteOne(job, file1, out1, false, fsops.ReplaceEntirely)
+	waitPasteIO(t, done, 1)
+	if got := job.currentFileSize.Load(); got != 100 {
+		t.Errorf("after file1: currentFileSize = %d, want 100", got)
+	}
+	if got := job.currentFileBytes.Load(); got != 100 {
+		t.Errorf("after file1: currentFileBytes = %d, want 100 (fully copied)", got)
+	}
+	if got := job.bytesBase.Load(); got != 0 {
+		t.Errorf("after file1: bytesBase = %d, want 0 (not folded in until a second file starts)", got)
+	}
+
+	go r.pasteOne(job, file2, out2, false, fsops.ReplaceEntirely)
+	waitPasteIO(t, done, 1)
+	if got := job.bytesBase.Load(); got != 100 {
+		t.Errorf("after file2 starts: bytesBase = %d, want 100 (file1's own size folded in)", got)
+	}
+	if got := job.currentFileSize.Load(); got != 200 {
+		t.Errorf("after file2: currentFileSize = %d, want 200", got)
+	}
+	if got := job.currentFileBytes.Load(); got != 200 {
+		t.Errorf("after file2: currentFileBytes = %d, want 200 (fully copied)", got)
+	}
 }
 
 // TestPasteSummaryError pins pasteSummaryError's own two shapes: a

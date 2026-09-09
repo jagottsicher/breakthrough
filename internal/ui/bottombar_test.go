@@ -515,22 +515,110 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	}
 }
 
-// TestProgressBar pins progressBar's own fixed-width, bracketed shape —
-// 0%, mid-way, 100%, and the total<=0 edge case (rendered entirely
-// empty rather than dividing by zero).
-func TestProgressBar(t *testing.T) {
+// TestClampFrac pins clampFrac's own [0,1] clamp, shared by every
+// fraction pasteDualBar/pasteBytesColumn turn into a glyph or bar
+// column.
+func TestClampFrac(t *testing.T) {
 	tests := []struct {
-		done, total, width int
-		want               string
+		in, want float64
 	}{
-		{0, 5, 10, "[░░░░░░░░░░]"},
-		{5, 5, 10, "[██████████]"},
-		{2, 5, 10, "[████░░░░░░]"},
-		{0, 0, 4, "[░░░░]"},
+		{-1, 0},
+		{0, 0},
+		{0.5, 0.5},
+		{1, 1},
+		{1.5, 1},
 	}
 	for _, tt := range tests {
-		if got := progressBar(tt.done, tt.total, tt.width); got != tt.want {
-			t.Errorf("progressBar(%d, %d, %d) = %q, want %q", tt.done, tt.total, tt.width, got, tt.want)
+		if got := clampFrac(tt.in); got != tt.want {
+			t.Errorf("clampFrac(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestPasteDualBar pins pasteDualBar's own shape: width columns, each
+// one a "▀" tagged with [fg:bg] — lit color when that column's own half
+// has reached its fraction, dim otherwise — and a trailing reset tag so
+// nothing appended after it inherits the bar's own last color.
+func TestPasteDualBar(t *testing.T) {
+	// topFrac 0.5 of 10 columns lights the top half of the first 5;
+	// fileFrac 0.2 lights the bottom half of the first 2 of those same
+	// 5 — so columns 0-1 are lit on both halves, columns 2-4 are lit on
+	// top only, and columns 5-9 are dim on both.
+	got := pasteDualBar(0.5, 0.2, 10)
+	wantLitTopOnly := strings.Count(got, "["+pasteDualBarLit+":"+pasteDualBarDim+"]▀")
+	if wantLitTopOnly != 3 {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) has %d lit-top/dim-bottom columns, want 3", wantLitTopOnly)
+	}
+	wantLitBoth := strings.Count(got, "["+pasteDualBarLit+":"+pasteDualBarLit+"]▀")
+	if wantLitBoth != 2 {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) has %d lit-top/lit-bottom columns, want 2 (a fifth of 10)", wantLitBoth)
+	}
+	if !strings.HasSuffix(got, "[-:-]") {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) = %q, want it to end with a reset tag", got)
+	}
+
+	full := pasteDualBar(1, 1, 4)
+	if strings.Count(full, "["+pasteDualBarDim) != 0 {
+		t.Errorf("pasteDualBar(1, 1, 4) = %q, want no dim columns at 100%%", full)
+	}
+	empty := pasteDualBar(0, 0, 4)
+	if strings.Count(empty, "["+pasteDualBarLit) != 0 {
+		t.Errorf("pasteDualBar(0, 0, 4) = %q, want no lit columns at 0%%", empty)
+	}
+}
+
+// TestPasteBytesColumn pins pasteBytesColumn's own direction — 0%
+// renders the thinnest of chordCountdownBlocks' own glyphs, 100% the
+// full block — the opposite direction from chordIndicatorText's own
+// draining countdown, since this fills up rather than runs out.
+func TestPasteBytesColumn(t *testing.T) {
+	if got := pasteBytesColumn(0, 100); got != "▁" {
+		t.Errorf("pasteBytesColumn(0, 100) = %q, want the thinnest sliver", got)
+	}
+	if got := pasteBytesColumn(100, 100); got != "█" {
+		t.Errorf("pasteBytesColumn(100, 100) = %q, want a full block", got)
+	}
+}
+
+// TestPasteETA pins pasteETA's own "not meaningful yet" refusals (no
+// time elapsed, nothing copied yet, or the total's already reached)
+// alongside a real estimate from a known, steady rate.
+func TestPasteETA(t *testing.T) {
+	if _, ok := pasteETA(time.Now(), 0, 100); ok {
+		t.Error("pasteETA with 0 bytes done should refuse an estimate, not divide by zero")
+	}
+	if _, ok := pasteETA(time.Time{}, 0, 100); ok {
+		t.Error("pasteETA with a zero startedAt should refuse an estimate")
+	}
+	if _, ok := pasteETA(time.Now().Add(-time.Second), 100, 100); ok {
+		t.Error("pasteETA once the total is already reached should refuse an estimate")
+	}
+
+	// 50 of 100 bytes done after 1 second of steady throughput: 50
+	// bytes/sec, 50 bytes left, ~1s left.
+	got, ok := pasteETA(time.Now().Add(-time.Second), 50, 100)
+	if !ok {
+		t.Fatal("pasteETA with real progress and elapsed time should return an estimate")
+	}
+	if got != "~1s left" {
+		t.Errorf("pasteETA(1s ago, 50, 100) = %q, want %q", got, "~1s left")
+	}
+}
+
+// TestFormatETA pins formatETA's own compact, at-most-two-unit shape.
+func TestFormatETA(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "~0s left"},
+		{5 * time.Second, "~5s left"},
+		{90 * time.Second, "~1m 30s left"},
+		{2*time.Hour + 15*time.Minute, "~2h 15m left"},
+	}
+	for _, tt := range tests {
+		if got := formatETA(tt.d); got != tt.want {
+			t.Errorf("formatETA(%v) = %q, want %q", tt.d, got, tt.want)
 		}
 	}
 }
@@ -564,6 +652,47 @@ func TestPasteProgressText(t *testing.T) {
 	}
 	if strings.Contains(got, "/some/deep/path") {
 		t.Errorf("pasteProgressText = %q, want only the bare file name, not its full path", got)
+	}
+}
+
+// TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes pins
+// pasteJob.bytesTotal's own doc comment: a job whose byte scan hasn't
+// finished yet (or found nothing to size) shows no byte-percentage
+// column and no ETA at all — only once bytesTotal is actually positive
+// do those segments appear (see TestPasteProgressTextShowsByteProgressOnceScanned).
+func TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes(t *testing.T) {
+	job := &pasteJob{total: 2, remaining: 1}
+	got := pasteProgressText(job)
+	for _, glyph := range chordCountdownBlocks {
+		if strings.ContainsRune(got, glyph) {
+			t.Errorf("pasteProgressText with no byte total yet = %q, should not contain a byte-percentage column glyph %q", got, string(glyph))
+		}
+	}
+	if strings.Contains(got, "left") {
+		t.Errorf("pasteProgressText with no byte total yet = %q, should not show an ETA", got)
+	}
+}
+
+// TestPasteProgressTextShowsByteProgressOnceScanned pins the opposite
+// case: once the background scan has stored a real bytesTotal (see
+// scanPasteBytes) and at least one byte has actually copied, the
+// leading byte-percentage column, the dual bar, and an ETA all appear.
+func TestPasteProgressTextShowsByteProgressOnceScanned(t *testing.T) {
+	job := &pasteJob{total: 2, remaining: 1, startedAt: time.Now().Add(-time.Second)}
+	job.bytesTotal.Store(100)
+	job.bytesBase.Store(40)
+	job.currentFileSize.Store(20)
+	job.currentFileBytes.Store(10) // 50 of 100 bytes done overall
+
+	got := pasteProgressText(job)
+	if !strings.ContainsRune(got, '▁') && !strings.ContainsRune(got, '▄') && !strings.ContainsRune(got, '█') {
+		t.Errorf("pasteProgressText with a known byte total = %q, want a byte-percentage column glyph", got)
+	}
+	if !strings.Contains(got, "▀") {
+		t.Errorf("pasteProgressText with a known byte total = %q, want the dual bar's own half-block glyphs", got)
+	}
+	if !strings.Contains(got, "left") {
+		t.Errorf("pasteProgressText with real progress and elapsed time = %q, want an ETA", got)
 	}
 }
 
