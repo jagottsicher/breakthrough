@@ -1,3 +1,5 @@
+//go:build unix
+
 package fsops
 
 import (
@@ -7,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // OverwriteMode selects what Copy/Move do about a directory whose dst
@@ -257,10 +260,70 @@ func (c *countingReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// preserveMetadata copies srcInfo's own permission bits, best-effort
+// ownership, and modification time onto dst, once dst's own content is
+// already fully in place — the user's own explicit request that copying
+// or moving a file must not silently leave it with today's date, this
+// process's own umask-narrowed permissions, and whoever ran breakthrough
+// as its new owner, when the whole point of a copy is often exactly to
+// preserve those (a backup, a deployment, a plain house-keeping move).
+// The same "-p" contract cp(1) offers as an explicit opt-in, applied
+// here as Copy/Move's own unconditional default instead — os.Rename
+// (Move's own fast, same-filesystem path) already preserves all three
+// for free, being the same inode throughout; this is what makes the
+// Copy-based fallback (a different filesystem, or a merge-mode
+// directory conflict — see Move's own doc comment) behave the same way
+// instead of visibly worse.
+//
+// os.Chmod, not the mode already passed to OpenFile/MkdirAll at
+// creation time: the kernel masks *that* mode against the current
+// process's own umask before ever applying it (POSIX behavior per
+// open(2)/mkdir(2), not a Go quirk), so a source file wider than the
+// umask allows (0777 under a 022 umask, say) would otherwise silently
+// end up narrower at dst. An explicit Chmod afterward is unaffected by
+// umask and sets exactly what was asked, the same way chmod(1) itself
+// would.
+//
+// Ownership is attempted but never required to succeed, and any error
+// from it is deliberately discarded: an unprivileged process can only
+// ever chown a file it owns to a group it already belongs to, and can
+// never chown to a different *owner* at all (EPERM, per chown(2)) — the
+// overwhelmingly common case for anyone running breakthrough as
+// themselves rather than root. Silently leaving dst owned by whoever
+// ran the copy in that case is the same trade-off cp -p itself makes
+// (it drops the file's setuid/setgid bits and otherwise proceeds rather
+// than failing the whole copy over a chown it was never going to be
+// allowed to do). Uses os.Lchown, not Chown: called for a recreated
+// symlink's own ownership too (see copySymlink), where following the
+// link would change its *target's* ownership instead of the link's own
+// — the one thing Chown itself cannot do at all.
+//
+// Permissions and timestamps are skipped entirely for a symlink:
+// lchmod(2) doesn't exist on Linux at all (symlink permission bits are
+// always reported as 0777 there and never consulted for access checks
+// in the first place — nothing meaningful to preserve), and Chtimes has
+// no portable way to set a symlink's own timestamps without following
+// it onto whatever it points at, which would be the wrong file
+// entirely (and, for a dangling link, one that doesn't even exist).
+func preserveMetadata(srcInfo os.FileInfo, dst string) {
+	if stat, ok := srcInfo.Sys().(*syscall.Stat_t); ok {
+		_ = os.Lchown(dst, int(stat.Uid), int(stat.Gid))
+	}
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return
+	}
+	_ = os.Chmod(dst, srcInfo.Mode().Perm())
+	_ = os.Chtimes(dst, srcInfo.ModTime(), srcInfo.ModTime())
+}
+
 // copyFile copies one regular file's content and permission bits. If dst
 // already exists (only reached with opts.Force — the caller already
 // checked otherwise), it's removed first so the copy starts clean rather
 // than potentially leaving stale bytes behind a shorter new file.
+// Preserves the source's own permissions (exactly, bypassing umask),
+// best-effort ownership, and modification time once its content is
+// fully written — see preserveMetadata's own doc comment for the full
+// reasoning and its limits.
 func copyFile(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	if opts.OnFile != nil {
 		opts.OnFile(src)
@@ -294,13 +357,45 @@ func copyFile(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	if _, err := io.Copy(out, reader); err != nil {
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return err
+	}
+
+	// Re-Lstat rather than threading a full os.FileInfo down from Copy's
+	// own top-level call (which only ever extracted Mode from it): a
+	// second syscall here is cheap next to the file content just copied,
+	// and keeps every caller's own signature exactly as it was rather
+	// than plumbing FileInfo through Copy/copyDir/copySymlink as well
+	// just for this. A failure here (src vanishing between opening and
+	// this point, say) leaves dst's content correct but its metadata as
+	// whatever creating it just produced — worth finishing the copy over,
+	// not worth failing it over.
+	if srcInfo, err := os.Lstat(src); err == nil {
+		preserveMetadata(srcInfo, dst)
+	}
+	return nil
 }
 
 // copyDir recursively copies a directory's contents into dst, creating
 // dst itself (or reusing it, if opts.Force allowed proceeding with an
 // existing one — see Copy's own doc comment on merge semantics).
+//
+// dst's own permissions/ownership/modification time are preserved from
+// src (see preserveMetadata) only when dst didn't already exist before
+// this call — a fresh copy, the overwhelmingly common case. A dst that
+// already existed (a merge-mode move/copy into an existing directory —
+// see Move's own doc comment) keeps its own metadata untouched on
+// purpose: "merge into existing folder" means the existing directory
+// itself is being kept, with src's own tree unioned into its contents,
+// not that the directory entry itself should suddenly take on src's own
+// permissions or owner. Applied only after every child has already been
+// copied, not right after MkdirAll: creating each child bumps a
+// directory's own modification time again, so setting it any earlier
+// would just be overwritten by the very act of populating it.
 func copyDir(src, dst string, mode os.FileMode, opts CopyOptions) error {
+	_, statErr := os.Lstat(dst)
+	dstAlreadyExisted := statErr == nil
+
 	if err := os.MkdirAll(dst, mode.Perm()); err != nil {
 		return err
 	}
@@ -338,6 +433,11 @@ func copyDir(src, dst string, mode os.FileMode, opts CopyOptions) error {
 		}
 	}
 
+	if !dstAlreadyExisted {
+		if srcInfo, err := os.Lstat(src); err == nil {
+			preserveMetadata(srcInfo, dst)
+		}
+	}
 	return nil
 }
 
@@ -377,7 +477,15 @@ func copySymlink(src, dst string, opts CopyOptions) error {
 		if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		return os.Symlink(target, dst)
+		if err := os.Symlink(target, dst); err != nil {
+			return err
+		}
+		// Ownership only — see preserveMetadata's own doc comment on why
+		// permissions/timestamps are skipped entirely for a symlink.
+		if srcInfo, err := os.Lstat(src); err == nil {
+			preserveMetadata(srcInfo, dst)
+		}
+		return nil
 	}
 
 	resolved, err := filepath.EvalSymlinks(src)

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // TestOverlaps pins its own exact contract: src itself and anything
@@ -535,5 +537,169 @@ func TestCopyFollowSymlinksRefusesWhenTargetOverlapsDestinationThroughADifferent
 	}
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
 		t.Errorf("dst should never have been created, stat err = %v", err)
+	}
+}
+
+// TestCopyFilePreservesModTime pins the user's own explicit request:
+// copying a file must not silently leave it with today's date — cp(1)'s
+// own "-p" contract, applied here as Copy's unconditional default (see
+// preserveMetadata's own doc comment) rather than an opt-in. src is
+// given a deliberately old, distinctive mtime first so a copy that
+// merely inherited "now" (whatever wall-clock time the test happens to
+// run at) can't be mistaken for one that actually preserved it.
+func TestCopyFilePreservesModTime(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(src, want, want); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst.txt")
+	if err := Copy(src, dst, CopyOptions{}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	fi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if !fi.ModTime().Equal(want) {
+		t.Errorf("dst ModTime = %v, want %v (src's own, not the copy's own creation time)", fi.ModTime(), want)
+	}
+}
+
+// TestCopyFilePreservesPermissionsBypassingUmask pins the other half:
+// permissions wider than the current process's own umask would allow
+// at creation time must still end up exactly as src had them — an
+// explicit os.Chmod after the fact, not the mode passed to OpenFile at
+// creation (which the kernel masks against umask regardless of what's
+// asked for — see preserveMetadata's own doc comment). A restrictive
+// 0077 umask is set for the duration of this test specifically so a
+// copy that merely inherited whatever OpenFile's own umask-narrowed
+// result was cannot be mistaken for one that actually preserved src's
+// own wider bits.
+func TestCopyFilePreservesPermissionsBypassingUmask(t *testing.T) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	// WriteFile's own mode argument is itself subject to umask — an
+	// explicit Chmod, exactly like preserveMetadata's own, is what
+	// actually gets the source file to a genuinely wide 0777 regardless.
+	if err := os.Chmod(src, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	srcFi, err := os.Stat(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srcFi.Mode().Perm() != 0o777 {
+		t.Fatalf("setup: src perm = %v, want 0777", srcFi.Mode().Perm())
+	}
+
+	dst := filepath.Join(dir, "dst.txt")
+	if err := Copy(src, dst, CopyOptions{}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	dstFi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if dstFi.Mode().Perm() != 0o777 {
+		t.Errorf("dst perm = %v, want 0777 (src's own, not narrowed by this process's own umask)", dstFi.Mode().Perm())
+	}
+}
+
+// TestCopyDirPreservesModTimeForAFreshDirectory pins copyDir's own half
+// of the same request, for the common case: a directory copied to a
+// destination that didn't already exist gets its own mtime set to
+// match src, applied only once every child underneath it has already
+// been copied — otherwise populating it would just bump it again right
+// afterward.
+func TestCopyDirPreservesModTimeForAFreshDirectory(t *testing.T) {
+	srcDir := t.TempDir()
+	src := filepath.Join(srcDir, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2019, 6, 15, 8, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(src, want, want); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(srcDir, "dst")
+	if err := Copy(src, dst, CopyOptions{}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	fi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if !fi.ModTime().Equal(want) {
+		t.Errorf("dst ModTime = %v, want %v (src's own, set after every child was copied)", fi.ModTime(), want)
+	}
+}
+
+// TestCopyMergeIntoExistingDirectoryLeavesItsOwnMetadataUntouched pins
+// the deliberate exception: metadata preservation applies to a
+// directory dst only when this copy actually created it. An existing
+// dst being merged into (see Copy's own doc comment on MergeInto) keeps
+// its own mtime and permissions exactly as they already were — "merge
+// into existing folder" means the existing directory entry itself is
+// kept, not that it should suddenly take on src's own attributes just
+// because src's tree was unioned into its contents.
+func TestCopyMergeIntoExistingDirectoryLeavesItsOwnMetadataUntouched(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "new.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srcOldTime := time.Date(2019, 6, 15, 8, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(src, srcOldTime, srcOldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst")
+	if err := os.Mkdir(dst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dstOwnTime := time.Date(2024, 3, 3, 3, 3, 3, 0, time.UTC)
+	if err := os.Chtimes(dst, dstOwnTime, dstOwnTime); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Copy(src, dst, CopyOptions{Force: true, Mode: MergeInto}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	fi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if fi.Mode().Perm() != 0o700 {
+		t.Errorf("dst perm = %v, want its own pre-existing 0700, not src's 0755", fi.Mode().Perm())
+	}
+	// Some filesystems only keep mtime to a coarser resolution than
+	// time.Time's own, so compare with a little slack rather than exact
+	// equality — the point here is "still 2024, not silently reset to
+	// src's 2019", not nanosecond precision.
+	if fi.ModTime().Before(dstOwnTime.Add(-time.Second)) {
+		t.Errorf("dst ModTime = %v, want it still near its own pre-existing %v, not src's %v", fi.ModTime(), dstOwnTime, srcOldTime)
 	}
 }
