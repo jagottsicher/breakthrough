@@ -217,6 +217,19 @@ type Root struct {
 	tabSwitcherTitleBar *tview.TextView
 	tabSwitcherLayout   *tview.Flex
 
+	// The filter-menu overlay (see filtermenu.go) — opened from
+	// whichever panel's own filterMenuBtn was clicked (see
+	// Panel.onOpenFilterMenu), rebuilt fresh against r.panel on every
+	// open (see renderFilterMenu) rather than built once, since the
+	// glob/regex row embeds that specific panel's own real
+	// filterField/filterRegexBtn, and which panel is "active" can
+	// change between one open and the next. filterMenuLayout is both
+	// the real focus target and what Pages actually shows — unlike
+	// menu/tabSwitcher, there's no separate inner List needing its own
+	// distinct rect here (see openFilterMenu's own doc comment).
+	filterMenuTitleBar *tview.TextView
+	filterMenuLayout   *tview.Flex
+
 	// menu is the context menu's own List — the real focus target
 	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
 	// title bar and the Flex stacking the two, which is what's actually
@@ -1115,6 +1128,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.tabSwitcherTitleBar, 1, 0, false).
 		AddItem(r.tabSwitcher, 0, 1, true)
 
+	// The filter-menu overlay (see filtermenu.go) — built with an empty
+	// body here; renderFilterMenu fills it in fresh on every open
+	// against whichever panel is active then, the same "rebuilt every
+	// time" reasoning tabSwitcher's own comment above gives, just
+	// against a Panel instead of the tab list.
+	r.filterMenuTitleBar = newPlainTitleBar("Filters")
+	r.filterMenuLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.filterMenuTitleBar, 1, 0, false)
+
 	// The Details sidebar (see detailssidebar.go): its own content is a
 	// single static TextView, same shape as Help/the Look pager above,
 	// topped with its own "Details" title bar (see newDetailsTitleBar) —
@@ -1186,6 +1208,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(viewerPage, r.viewerView, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
+	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
@@ -1278,6 +1301,15 @@ func (r *Root) wirePanel(panel *Panel) {
 	// separate, fixed-direction mouse controls rather than one shared
 	// toggle.
 	panel.onExpandDetails = r.showDetailsSidebar
+
+	// The header row's own "Nx Y" button opens the filter-menu dropdown
+	// (see Panel.onOpenFilterMenu/filterMenuBtn's own doc comments and
+	// Root.openFilterMenu) — always against whichever panel is active
+	// at the moment it's actually clicked (r.panel, read fresh inside
+	// the closure), not the one it happened to be wired from, the same
+	// "closure captures r, not this specific panel" shape
+	// onOpenTabSwitcher above already uses.
+	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
 
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see

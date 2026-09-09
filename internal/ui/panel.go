@@ -109,23 +109,68 @@ type Panel struct {
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
 
-	// filterField and filterRegexBtn sit alongside headerPages in the
-	// same top row (see NewPanel) — a live, always-visible narrow-the-
-	// listing box, and the toggle between its two matching modes (see
-	// filterByText). filterText/filterRegex are the field/button's
-	// current values, read by load() on every call; filterField's own
-	// SetChangedFunc is what actually drives a live reload as the user
-	// types (see NewPanel).
+	// filterField and filterRegexBtn back the glob/regex filter — a
+	// live narrow-the-listing box, and the toggle between its two
+	// matching modes (see filterByText). Both still exist as real,
+	// fully working widgets exactly as before, but per the user's own
+	// explicit request no longer sit directly in the header row — they
+	// only ever appear embedded in the filter-menu dropdown while it's
+	// open (see Root.openFilterMenu), which is what actually adds them
+	// to a layout on each open; Panel just owns and keeps them, the
+	// same "owned here, shown elsewhere" split filterMenuBtn's own
+	// click handler and Root.openFilterMenu together make possible.
+	// filterText/filterRegex are the field/button's current values,
+	// read by load() on every call; filterField's own SetChangedFunc is
+	// what actually drives a live reload as the user types (see
+	// NewPanel).
+	//
+	// filterGlobActive/filterSizeActive/filterMtimeActive are
+	// independent on/off toggles for the filter-menu's own three rows
+	// (glob/regex, size, modified-time) — per the user's own explicit
+	// request to be able to combine them rather than only ever having
+	// one filter kind active at a time. filterGlobActive defaults to
+	// true (see NewPanel) and auto-flips true again the moment
+	// filterField's own text goes from empty to non-empty (see its own
+	// SetChangedFunc) — the existing "type to filter, instantly"
+	// muscle memory keeps working completely unchanged for anyone who
+	// never opens the dropdown at all; the checkbox is only for the
+	// "temporarily disable without losing what's already typed" case
+	// that behavior alone can't cover, and filterByText's own new
+	// active parameter is what actually honors it. filterSizeActive/
+	// filterMtimeActive are pure UI toggles for now, read only by
+	// renderFilterMenuBtn's own active-count indicator — no filtering
+	// logic reads either yet, per the user's own explicit "it's enough
+	// to be able to turn them on and off in the dropdown for now".
 	// layout is the current column sizing (see columns.go), recomputed
 	// whenever the panel's width or the data format changes.
 	layout columnLayout
 
-	filterField    *tview.InputField
-	filterRegexBtn *tview.Button
-	filterText     string
-	filterRegex    bool
+	filterField       *tview.InputField
+	filterRegexBtn    *tview.Button
+	filterText        string
+	filterRegex       bool
+	filterGlobActive  bool
+	filterSizeActive  bool
+	filterMtimeActive bool
 
-	// detailsExpandBtn sits right after filterField in the same header
+	// filterMenuBtn replaces filterField/filterRegexBtn's own old,
+	// always-visible slot in the header row — a compact "Nx Y" button
+	// (see renderFilterMenuBtn), "Y" chosen for its own passing
+	// resemblance to a funnel and "N" naming how many of the three
+	// filter-menu rows are currently active, omitted entirely while
+	// none are (see the user's own explicit request for exactly this
+	// shape). Clicking it (or activating it from the keyboard) opens
+	// the dropdown (see onOpenFilterMenu/Root.openFilterMenu) that now
+	// holds everything filterField/filterRegexBtn/the two not-yet-built
+	// size/modified-time filters need — freeing most of the header row
+	// back to the path itself, which is the entire point: the five nav
+	// buttons just to its left grew considerably wider becoming real
+	// buttons (see buildHeaderSpans), and this is what pays for that
+	// space back.
+	filterMenuBtn    *tview.TextView
+	onOpenFilterMenu func()
+
+	// detailsExpandBtn sits right after filterMenuBtn in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
 	// alternative to "I"/the Details button: filterField itself gave up 3 columns
@@ -486,6 +531,14 @@ const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
 
+	// filterMenuBtnWidth is filterMenuBtn's own fixed width in the
+	// header row — enough for the widest indicator ("3x", since at most
+	// three filter-menu rows can ever be active at once) plus the
+	// three-column " Y " button itself, with the button always flush
+	// against this slot's own right edge (see renderFilterMenuBtn) so
+	// it never shifts as the indicator appears/disappears alongside it.
+	filterMenuBtnWidth = 6
+
 	// headerTabStripGap is one column of lead-in the tab strip draws for
 	// itself before its own first glyph ("+", or the first tab number) —
 	// without it that glyph sat flush against the filter box with no
@@ -550,6 +603,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
+	p.header.SetDynamicColors(true) // the five nav buttons' own ButtonBackground padding is a color tag — see buildHeaderSpans
 	p.header.SetMouseCapture(p.captureHeaderMouse)
 
 	p.headerEdit = tview.NewInputField()
@@ -580,6 +634,14 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.filterField = tview.NewInputField()
 	p.filterField.SetPlaceholder("filter")
+	// filterGlobActive starts true: the existing "type to filter,
+	// instantly" behavior stays exactly as familiar as before for
+	// anyone who never opens the filter-menu dropdown at all (see the
+	// struct's own doc comment on filterGlobActive) — it only needs
+	// deliberately turning off once, from inside that dropdown, the
+	// first time someone actually wants a typed pattern to stop
+	// applying without losing what they typed.
+	p.filterGlobActive = true
 	p.filterField.SetChangedFunc(func(text string) {
 		if text == p.filterText {
 			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
@@ -588,9 +650,37 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 			return // see filterRegexBtn's own identical guard just above
 		}
 		p.filterText = text
+		if text != "" {
+			// Going from empty to non-empty is as deliberate a signal
+			// as pressing the dropdown's own checkbox would be — auto-
+			// reactivating here is what keeps typing into the field
+			// alone enough, without an extra click, for anyone who
+			// never explicitly turned it off. Never auto-*deactivates*
+			// on the reverse transition, deliberately: filterByText
+			// already treats empty text as a no-op regardless (see its
+			// own doc comment), so there's nothing left to preserve by
+			// forcing the flag off too — and doing so would fight
+			// anyone who explicitly unchecked it while text happened to
+			// still be there, the moment they then cleared that text.
+			p.filterGlobActive = true
+		}
 		p.reportError(p.load(p.path))
 	})
 	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+
+	// filterMenuBtn is what actually sits in the header row now — see
+	// its own doc comment on the struct for the full reasoning.
+	// renderFilterMenuBtn (called from load(), and from Root's own
+	// filter-menu toggle handlers) fills in its real text; this just
+	// wires the click.
+	p.filterMenuBtn = tview.NewTextView().SetDynamicColors(true)
+	p.filterMenuBtn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action == tview.MouseLeftClick && p.onOpenFilterMenu != nil {
+			p.onOpenFilterMenu()
+		}
+		return tview.MouseConsumed, nil
+	})
+	p.renderFilterMenuBtn()
 
 	// The tab strip — see tabstrip.go. Starts empty and zero-width: a
 	// lone tab draws nothing (see refreshTabStrip), so a session that
@@ -642,12 +732,9 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// entirely.
 	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerRow.AddItem(p.headerPages, 0, 1, false)
-	headerRow.AddItem(p.filterRegexBtn, 8, 0, false)
-	// filterField is 3 columns narrower than it used to be
-	// (headerFilterWidth, was 20) — detailsExpandBtn's own 3-column slot
-	// right after it (headerDetailsExpandWidth) is exactly what those 3
-	// columns went to, per the user's own explicit request.
-	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	// filterMenuBtn replaces filterRegexBtn/filterField's own old,
+	// always-visible slot here — see its own doc comment on the struct.
+	headerRow.AddItem(p.filterMenuBtn, filterMenuBtnWidth, 0, false)
 	// The tab strip goes between the filter and the Details button, per
 	// the user's own explicit request. refreshTabStrip resizes this slot
 	// itself as tabs come and go, which is why headerRow is kept as a
@@ -865,8 +952,23 @@ func (p *Panel) load(dir string) error {
 	if newDirectory {
 		p.filterText = ""
 		p.filterField.SetText("")
+		// The filter-menu's own three toggles are exactly as scoped to
+		// "what's on screen right now" as the text/regex-mode they sit
+		// alongside — carrying size/modified-time filtering into a
+		// directory nobody asked to filter would be just as surprising
+		// as a stale text pattern silently doing the same (see this
+		// func's own doc comment on why that already resets here).
+		// filterGlobActive resets to its own default-on state rather
+		// than off, matching filterText's own reset to "" immediately
+		// above: both together are what let a fresh directory show
+		// everything, unfiltered, exactly as filterGlobActive's own doc
+		// comment already promises for anyone who's never touched the
+		// filter menu at all.
+		p.filterGlobActive = true
+		p.filterSizeActive = false
+		p.filterMtimeActive = false
 	}
-	entries = filterByText(entries, p.filterText, p.filterRegex)
+	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive)
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
 	p.table.Clear()
@@ -874,9 +976,10 @@ func (p *Panel) load(dir string) error {
 	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs)
+	text, spans := buildHeaderSpans(abs, p.theme)
 	p.header.SetText(text)
 	p.headerSpans = spans
+	p.renderFilterMenuBtn()
 
 	// Before the rows, not after: addRow shortens each name against the
 	// name column's width, which is whatever the Size and Modified
@@ -1063,7 +1166,7 @@ func (p *Panel) setSearchStatus(text string) {
 	prefix := text + separator
 	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
 
-	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath)
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme)
 	p.header.SetText(prefix + breadcrumbText)
 
 	spans := make([]headerSpan, len(breadcrumbSpans))
@@ -1243,20 +1346,69 @@ func filterModeLabel(regex bool) string {
 	return "Glob"
 }
 
+// renderFilterMenuBtn fills in filterMenuBtn's own text: an "Nx"
+// indicator (N = how many of the filter-menu's three rows are actually
+// in effect right now) immediately before a three-column " Y " button —
+// "Y" per the user's own explicit choice, for its own passing
+// resemblance to a funnel. Omitted entirely once N is 0, per the same
+// explicit request, rather than ever showing "0x" — left-padded up to
+// filterMenuBtnWidth instead, so the button's own three columns always
+// sit flush against this slot's own right edge (where the tab strip
+// picks up right after it) regardless of how wide the indicator is.
+//
+// The glob/regex row only actually counts once it's both switched on
+// *and* has something to filter by — matching filterByText's own real
+// no-op condition (see its own doc comment) — since the indicator's
+// whole point is "filtering is genuinely narrowing the list right now",
+// not just "a checkbox happens to be checked". Size/modified-time have
+// no such distinction yet (see filterSizeActive/filterMtimeActive's own
+// doc comment on the struct: pure toggles, no filtering logic behind
+// them) — their raw toggle state is the only signal there is.
+func (p *Panel) renderFilterMenuBtn() {
+	count := 0
+	if p.filterGlobActive && p.filterText != "" {
+		count++
+	}
+	if p.filterSizeActive {
+		count++
+	}
+	if p.filterMtimeActive {
+		count++
+	}
+
+	prefix := ""
+	if count > 0 {
+		prefix = fmt.Sprintf("%dx", count)
+	}
+
+	keyBG := colorTag(p.theme.ButtonBackground)
+	button := fmt.Sprintf("[:%s:] Y [-:-:-]", keyBG)
+	visible := tview.TaggedStringWidth(prefix) + 3 // the button's own 3 visible columns
+	if pad := filterMenuBtnWidth - visible; pad > 0 {
+		prefix = strings.Repeat(" ", pad) + prefix
+	}
+	p.filterMenuBtn.SetText(prefix + button)
+}
+
 // filterByText narrows entries to those whose name matches filterText —
 // via filepath.Match (shell-pattern globbing, "*"/"?"/"[...]", the same
 // syntax Select+/- already uses) by default, or via regexp.MatchString
 // once filterRegex is on — matching how Midnight Commander's own filter
 // dialog offers exactly the same two modes ("Shell Patterns" on or off).
-// An empty filterText is a no-op (every entry kept, unfiltered).
+// An empty filterText, or active being false, is a no-op (every entry
+// kept, unfiltered) — active is the filter-menu's own glob/regex
+// checkbox (see Panel.filterGlobActive's own doc comment): a pattern
+// left typed in but deliberately switched off stops applying without
+// losing it, the same "disable without clearing" every other toggle in
+// this app already offers.
 //
 // An invalid pattern is treated the same as "no filter yet" (every
 // entry kept) rather than surfaced as an error: this runs on every
 // keystroke, so an incomplete regex (or a malformed glob like an
 // unterminated "[") is an expected, transient state while typing, not
 // something worth interrupting for.
-func filterByText(entries []fsops.Entry, filterText string, filterRegex bool) []fsops.Entry {
-	if filterText == "" {
+func filterByText(entries []fsops.Entry, filterText string, filterRegex, active bool) []fsops.Entry {
+	if !active || filterText == "" {
 		return entries
 	}
 
@@ -2502,64 +2654,100 @@ func (p *Panel) previousPath() (string, bool) {
 	return prev.path, true
 }
 
-// buildHeaderSpans renders the header's display text — Start/Home/Back/
-// Forward/Up button glyphs followed by the path, one clickable span per
-// path component (the leading "/" plus each name in between), e.g.
-// clicking "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are
-// measured via tview.TaggedStringWidth, not a plain rune count — a
-// directory name containing double-width (e.g. CJK) characters occupies
-// two terminal columns per character, and a rune count would silently
-// drift the spans after it out of alignment with what's actually drawn
-// on screen.
-//
-// The five button glyphs are packed together with no space between
-// them, none before the first one either, and exactly one before the
-// path starts — per the user's own explicit request, "^ ~ < >" read as
-// more spread out than five single-purpose buttons need to be. Start's
-// own glyph is "∎" (U+220E), not "^": at the time this glyph was chosen,
-// this app's own button bar wrote Ctrl-shortcuts as "^E", "^L" and so
-// on, so a bare "^" here risked reading as one of those instead of a
-// button in its own right — "∎" carries no such collision. The button
-// bar has since moved to highlighting a plain letter within each label
-// instead (see buildButtonBar's own highlightKey), but "∎" remains the
-// right call regardless: a bare "^" would still misread as up/caret
-// shorthand rather than a button of its own. "^" itself
-// isn't reused for Up either, despite visually suggesting "upward": ↑
-// says that unambiguously and isn't asked to also serve as a
-// stand-in for whatever Start used to mean.
-//
-// A click that lands in the header but doesn't hit any of these spans
-// (e.g. on a "/" separator, or in empty space after the path) is handled
-// by captureHeaderMouse as "switch to edit mode" — deliberately not
-// represented as a span here, since it's everything else.
-// headerButtonPrefix is exactly what buildHeaderSpans' own five
-// buttons plus their trailing space render as, just below — reused by
+// headerButtons is the fixed definition of the five nav buttons shown at
+// the start of the header row — Start/Home/Back/Forward/Up — as one
+// shared slice so buildHeaderSpans (the colored, clickable rendering)
+// and headerButtonPrefix (headerEdit's own plain-text label — see its
+// own doc comment) can never drift out of column-alignment with each
+// other, verified by TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+// Start's own glyph is "∎" (U+220E), not "^": at the time this glyph
+// was chosen, this app's own button bar wrote Ctrl-shortcuts as "^E",
+// "^L" and so on, so a bare "^" here risked reading as one of those
+// instead of a button in its own right — "∎" carries no such collision.
+// The button bar has since moved to highlighting a plain letter within
+// each label instead (see buildButtonBar's own highlightKey), but "∎"
+// remains the right call regardless: a bare "^" would still misread as
+// up/caret shorthand rather than a button of its own. "^" itself isn't
+// reused for Up either, despite visually suggesting "upward": ↑ says
+// that unambiguously and isn't asked to also serve as a stand-in for
+// whatever Start used to mean.
+var headerButtons = []struct {
+	glyph  string
+	action headerAction
+}{
+	{"∎", actionStart},
+	{"~", actionHome},
+	{"<", actionBack},
+	{">", actionForward},
+	{"↑", actionUp},
+}
+
+// headerButtonSeparator is the plain, normal-background column between
+// each padded button (and once more before the path itself starts) —
+// per the user's own explicit request, deliberately left uncolored,
+// unlike the buttons themselves either side of it, so it reads as a
+// gap between two distinct buttons rather than part of either one.
+const headerButtonSeparator = " "
+
+// headerButtonPrefix is the plain-text form of the five nav buttons
+// plus their separators — see buildHeaderSpans for the colored,
+// clickable version actually drawn in the header. Reused by
 // headerEdit's own SetLabel (see NewPanel) so the path being edited
 // starts at the exact same column the displayed one already does,
 // rather than resetting to column 0 the moment editing starts, per the
-// user's own explicit report. A single shared string constant, not a
-// derivation from buildHeaderSpans' own output, since the five buttons
-// there each need their own click span — kept in sync instead by
-// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
-const headerButtonPrefix = "∎~<>↑ "
+// user's own explicit report. Deliberately plain, with no color tags:
+// column *width* has to match buildHeaderSpans exactly, but an
+// InputField's own label has no use for embedded color tags the way
+// the header TextView's dynamic-colored text does. Computed once from
+// headerButtons, not hand-typed, so the two can never silently drift
+// out of sync with each other on a future edit to either.
+var headerButtonPrefix = func() string {
+	var b strings.Builder
+	for _, btn := range headerButtons {
+		b.WriteString(" " + btn.glyph + " " + headerButtonSeparator)
+	}
+	return b.String()
+}()
 
-func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
+// buildHeaderSpans renders the header's display text — the five
+// headerButtons, each padded into its own three-column "button" (one
+// character of theme.ButtonBackground either side of the glyph, the
+// same highlightKey convention the bottom button bar already uses for
+// its own keys — see buildButtonBar — just without a trailing label,
+// since each of these five buttons *is* its own label already), then
+// the path, with one clickable span per path component (the leading
+// "/" plus each name in between), e.g. clicking "b" in "/a/b/c/d" jumps
+// to "/a/b". Column offsets are measured via tview.TaggedStringWidth,
+// not a plain rune count — a directory name containing double-width
+// (e.g. CJK) characters occupies two terminal columns per character,
+// and a rune count would silently drift the spans after it out of
+// alignment with what's actually drawn on screen.
+//
+// Per the user's own explicit request, each button's own click region
+// (the headerSpan recorded below) covers its full three-column padded
+// area, not just the glyph's own single column — clicking the
+// highlighted background either side of a glyph activates it exactly
+// the same as clicking the glyph itself, matching what "this whole
+// colored area is a button" actually implies.
+//
+// A click that lands in the header but doesn't hit any of these spans
+// (e.g. on a "/" separator, on one of the plain separator columns
+// between two buttons, or in empty space after the path) is handled by
+// captureHeaderMouse as "switch to edit mode" — deliberately not
+// represented as a span here, since it's everything else.
+func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
-	button := func(glyph string, action headerAction) {
+	keyBG := colorTag(theme.ButtonBackground)
+	for _, btn := range headerButtons {
 		start := col
-		b.WriteString(glyph)
-		col += tview.TaggedStringWidth(glyph)
-		spans = append(spans, headerSpan{start: start, end: col, action: action})
+		fmt.Fprintf(&b, "[:%s:] %s [-:-:-]", keyBG, btn.glyph)
+		col += 1 + tview.TaggedStringWidth(btn.glyph) + 1
+		spans = append(spans, headerSpan{start: start, end: col, action: btn.action})
+		b.WriteString(headerButtonSeparator)
+		col++
 	}
-	button("∎", actionStart)
-	button("~", actionHome)
-	button("<", actionBack)
-	button(">", actionForward)
-	button("↑", actionUp)
-	b.WriteString(" ")
-	col++
 
 	rootStart := col
 	b.WriteString("/")

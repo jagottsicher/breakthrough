@@ -145,9 +145,45 @@ they can be, since they say what kind of entry it is.
 This matters most in [split view](#split-view), where each pane is half
 the width.
 
-Sort by clicking a column heading (Name, Size, Modified). The filter box
-in the top row narrows the listing as you type; its own button switches
-between glob and regular-expression matching.
+Sort by clicking a column heading (Name, Size, Modified).
+
+### The path bar
+
+The five buttons at the very start of it — Start, Home, Back, Forward,
+Up — are real, clickable buttons: a background-colored square on
+either side of the glyph, with its own plain-background column between
+one button and the next, so each reads as its own separate control
+rather than a run of characters. Clicking anywhere in a button's own
+colored square activates it, not just the glyph's own single column.
+
+### Filtering
+
+Click the "Y" button near the right edge of the path bar (an "Nx"
+count appears right before it once one or more filters are actually
+narrowing the listing — omitted while none are) to open a small
+dropdown with three rows, all combinable:
+
+- **Glob/regex filter** — the same live, type-to-narrow filter this app
+  has always had, now living in the dropdown instead of always taking
+  up its own space in the path bar: its own button still switches
+  between glob and regular-expression matching, and its own checkbox
+  switches the filter off without clearing whatever pattern is already
+  typed — handy for temporarily seeing everything again without losing
+  your place.
+- **Size filter** — on/off for now; the comparison operators and
+  ranges (`size >= 1m`, `size < 1m AND size > 5m`, and so on) this is
+  meant to grow into aren't built yet.
+- **Modified-time filter** — on/off for now too; absolute and relative
+  date/time ranges (`before`, `after`, `between`, or "last N days") are
+  the planned next step.
+
+The dropdown stays open while you tick more than one of these — closing
+it only ever takes clicking elsewhere or `Ctrl`+`C`, the same as
+cancelling anything else. Navigating to a different directory resets
+all three back to their own defaults (the glob/regex filter cleared and
+re-enabled, size/modified-time switched off), the same "scoped to
+what's on screen, not carried across navigation" rule this filter has
+always followed.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, green for executable, red for a
@@ -181,7 +217,7 @@ back leaves all of it exactly as it was.
 | `t` or `Ctrl`+`T` | open the switcher on the current tab; press again to walk down it |
 
 The switcher lists every tab's full directory — the numbered strip
-beside the filter box deliberately shows numbers only, so the header
+beside the filter button deliberately shows numbers only, so the header
 doesn't change width as you navigate. In the switcher, `Enter` or
 `Space` goes to a tab, `Delete` closes one, `Escape` leaves things as
 they are, and the last row opens a new tab. Each row also carries a `◫`
@@ -437,8 +473,9 @@ through the real `tail -f`.
 
 ## The Details sidebar
 
-`I`, or the `<` button after the filter box. A live, read-only
-panel on the right that follows the cursor.
+`I`, or the `<` button at the far end of the path bar, right after the
+tab strip. A live, read-only panel on the right that follows the
+cursor.
 
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
