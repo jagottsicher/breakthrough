@@ -1097,6 +1097,104 @@ func TestPasteSummaryError(t *testing.T) {
 // the first still has a conflict dialog open: the old job's dialog
 // closes rather than staying stuck on screen for a job that no longer
 // exists.
+// TestStartPasteQueuesBehindARunningJob pins the user's own explicit
+// report and follow-up request: starting a second Paste while one is
+// already running used to cancel the first outright, silently dropping
+// whatever it hadn't gotten to yet. It now queues behind it instead —
+// r.pasteJob itself must stay exactly the running job, untouched, and
+// the new request lands in r.pasteQueue rather than starting or
+// replacing anything.
+func TestStartPasteQueuesBehindARunningJob(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	running := newPasteTestJob(r, false, dir, 1)
+
+	secondDestDir := t.TempDir()
+	secondItems := []string{filepath.Join(dir, "banana.txt")}
+	r.startPaste(secondItems, true, secondDestDir)
+
+	if r.pasteJob != running {
+		t.Fatal("starting a second Paste should not have touched the running job at all")
+	}
+	if running.ctx.Err() != nil {
+		t.Error("the running job must not be cancelled just because a second Paste was asked for")
+	}
+	if len(r.pasteQueue) != 1 {
+		t.Fatalf("pasteQueue = %+v, want exactly one queued entry", r.pasteQueue)
+	}
+	queued := r.pasteQueue[0]
+	if !queued.cut || queued.destDir != secondDestDir || len(queued.items) != 1 || queued.items[0] != secondItems[0] {
+		t.Errorf("queued entry = %+v, want cut=true destDir=%q items=%v", queued, secondDestDir, secondItems)
+	}
+}
+
+// TestFinishPasteJobStartsNextQueuedPaste pins the other half: once the
+// running job actually finishes, the next queued Paste starts
+// automatically, in order, rather than needing anything further to
+// trigger it. Uses applyPasteOneResult (via pasteItemDone), the same
+// path a real completed item takes, rather than calling finishPasteJob
+// directly, so this also exercises pasteItemDone's own "job is now
+// fully done" detection reaching all the way through to the queue.
+func TestFinishPasteJobStartsNextQueuedPaste(t *testing.T) {
+	srcDir := fixtureDir(t)
+	firstDestDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	firstJob := newPasteTestJob(r, false, firstDestDir, 1)
+
+	secondDestDir := t.TempDir()
+	secondItems := []string{filepath.Join(srcDir, "banana.txt")}
+	r.pasteQueue = append(r.pasteQueue, queuedPaste{items: secondItems, cut: true, destDir: secondDestDir})
+
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(firstDestDir, "apple.txt")
+	r.applyPasteOneResult(firstJob, src, dst, nil) // firstJob's only item — finishes it
+
+	if r.pasteJob == nil {
+		t.Fatal("finishing the first job should have started the next queued Paste")
+	}
+	if r.pasteJob == firstJob {
+		t.Fatal("r.pasteJob should now be the newly started job, not the one that just finished")
+	}
+	if !r.pasteJob.cut || r.pasteJob.destDir != secondDestDir || r.pasteJob.total != len(secondItems) {
+		t.Errorf("started job = %+v, want cut=true destDir=%q total=%d", r.pasteJob, secondDestDir, len(secondItems))
+	}
+	if len(r.pasteQueue) != 0 {
+		t.Error("the queue should be empty once its one entry has started")
+	}
+}
+
+// TestCancelPasteJobDropsTheWholeQueue pins a deliberate choice, not
+// just an oversight: an explicit cancel (Ctrl+C, or the confirmed
+// "cancel it and quit" answer — see cancelPasteJob's own doc comment)
+// drops whatever was queued behind the cancelled job too, rather than
+// letting it start right after. Continuing on to a paste the user never
+// asked to see start next would be exactly the kind of surprise this
+// whole queue exists to prevent in the first place.
+func TestCancelPasteJobDropsTheWholeQueue(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 1)
+	r.pasteQueue = append(r.pasteQueue, queuedPaste{items: []string{filepath.Join(dir, "banana.txt")}, destDir: t.TempDir()})
+
+	r.cancelPasteJob()
+
+	if r.pasteJob != nil {
+		t.Error("r.pasteJob should be cleared")
+	}
+	if len(r.pasteQueue) != 0 {
+		t.Error("cancelling should have dropped the queue too, not left it to start next")
+	}
+}
+
 func TestCancelPasteJobClosesOpenDialog(t *testing.T) {
 	r, job, _, _ := setUpPasteConflict(t, "")
 	if r.activePage != pasteConflictPage {

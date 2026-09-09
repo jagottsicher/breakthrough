@@ -63,12 +63,26 @@ type pasteConflict struct {
 	dstInfo  os.FileInfo
 }
 
+// queuedPaste is one Paste startPaste had to defer because another was
+// already running when it was asked for — see startPaste/
+// advancePasteQueue's own doc comments for the queue this becomes one
+// entry of. Just the three arguments startPaste itself takes, held
+// until it's this one's turn.
+type queuedPaste struct {
+	items   []string
+	cut     bool
+	destDir string
+}
+
 // pasteJob is one Paste's own asynchronous, resumable state — see
 // startPaste's own doc comment for the full shape end to end. Exactly
-// one lives on Root at a time (r.pasteJob); starting a second Paste
-// while one is still running cancels the first outright (see
-// cancelPasteJob) rather than letting two independent walks race on the
-// same destination directory.
+// one lives on Root at a time (r.pasteJob); a further Paste asked for
+// while one is still running queues behind it instead (see
+// r.pasteQueue/advancePasteQueue) rather than either racing two
+// independent walks on the same destination directory or silently
+// discarding whatever this one hadn't gotten to yet — see startPaste's
+// own doc comment for why it used to do exactly that, and why it no
+// longer does.
 type pasteJob struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -185,21 +199,72 @@ type pasteJob struct {
 // background while its own dialog is open, and a second conflict
 // discovered before the first is resolved queues behind it instead of
 // stacking a second dialog on top (see pasteConflictFound).
+//
+// A Paste asked for while another is still running queues behind it
+// (see r.pasteQueue/advancePasteQueue) rather than starting immediately
+// — the user's own explicit report on what this used to do instead:
+// startPaste unconditionally cancelled whatever was already running
+// first, which meant every item that first job hadn't gotten to yet
+// was simply abandoned, silently, with no error and no way to tell it
+// had happened. A real queue runs every requested Paste to completion,
+// in the order they were asked for, one at a time — matching the fact
+// that every job's own real disk I/O was already serialized to one
+// file at a time regardless (see pasteJob.ioMu's own doc comment);
+// queueing the *next job* the same way just extends that one step
+// further out, rather than pretending two independent jobs could ever
+// usefully run at once on top of it.
 func (r *Root) startPaste(items []string, cut bool, destDir string) {
 	if len(items) == 0 {
 		return
 	}
-	r.cancelPasteJob()
+	if r.pasteJob != nil {
+		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir})
+		r.refreshStatusBar() // the "+N queued" suffix should update immediately, not wait for the next tick
+		return
+	}
+	r.reallyStartPaste(items, cut, destDir)
+}
 
+// reallyStartPaste is startPaste's own "actually begin" body, split out
+// so advancePasteQueue can start the next queued Paste through exactly
+// the same path once the current one is out of the way, rather than a
+// second, drifting copy of the same setup.
+func (r *Root) reallyStartPaste(items []string, cut bool, destDir string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: len(items), remaining: len(items), startedAt: time.Now()}
 	r.pasteJob = job
 
-	onPanic := func() { r.pasteJob = nil }
+	// Guarded the same way finishPasteJob is, not a bare "r.pasteJob =
+	// nil": this same closure is shared across all three of this job's
+	// own goroutines below, so a second one panicking right after the
+	// first already recovered here would otherwise clear (and advance
+	// the queue past) whatever job had *already* started next, rather
+	// than this one's own already-settled state.
+	onPanic := func() {
+		if r.pasteJob != job {
+			return
+		}
+		r.pasteJob = nil
+		r.advancePasteQueue()
+	}
 	r.safeGo("paste", onPanic, func() { r.pasteWalk(job, items) })
 	r.safeGo("paste progress animation", onPanic, func() { r.animatePasteProgress(job) })
 	r.safeGo("paste byte scan", onPanic, func() { r.scanPasteBytes(job, items) })
 	r.refreshStatusBar() // show the progress segment immediately, not just once the first tick lands
+}
+
+// advancePasteQueue starts the next queued Paste, if any, once
+// r.pasteJob has just gone back to nil — called from both
+// finishPasteJob (the current job ran to completion) and cancelPasteJob
+// (it was cancelled outright) after each has settled its own job's
+// wrap-up, so the two never race over who starts the next one.
+func (r *Root) advancePasteQueue() {
+	if len(r.pasteQueue) == 0 {
+		return
+	}
+	next := r.pasteQueue[0]
+	r.pasteQueue = r.pasteQueue[1:]
+	r.reallyStartPaste(next.items, next.cut, next.destDir)
 }
 
 // scanPasteBytes runs once per job, in its own goroutine started
@@ -228,12 +293,20 @@ func (r *Root) scanPasteBytes(job *pasteJob, items []string) {
 }
 
 // cancelPasteJob stops whatever paste is currently running, if any — a
-// second Paste (or a real Cancel — see Root.RequestCancel) while one is
-// still in flight. pasteWalk itself checks job.ctx.Err() between every
-// item and stops there; anything already handed off to its own
-// pasteOne goroutine finishes that one last file rather than being
-// interrupted mid-write, but its result is discarded (see pasteOne's
-// own job-identity check).
+// real Cancel (see Root.RequestCancel), or the confirmed "cancel it and
+// quit" answer (see confirmQuitWhilePasting). pasteWalk itself checks
+// job.ctx.Err() between every item and stops there; anything already
+// handed off to its own pasteOne goroutine finishes that one last file
+// rather than being interrupted mid-write, but its result is discarded
+// (see pasteOne's own job-identity check).
+//
+// Also drops the whole queue behind it (see r.pasteQueue), not just
+// this one job: both callers are a deliberate, explicit "stop this" —
+// Ctrl+C reaching for a way out, or a confirmed quit — and continuing
+// on to whatever was queued right after either one would be a new
+// surprise of exactly the kind this whole queue exists to prevent (see
+// startPaste's own doc comment). Unlike finishPasteJob, this
+// deliberately does not call advancePasteQueue.
 func (r *Root) cancelPasteJob() {
 	if r.pasteJob == nil {
 		return
@@ -243,6 +316,7 @@ func (r *Root) cancelPasteJob() {
 		r.hideOverlay()
 	}
 	r.pasteJob = nil
+	r.pasteQueue = nil
 }
 
 // pasteWalk is startPaste's own background body — walks items in order,
@@ -475,8 +549,9 @@ func (r *Root) pasteItemDone(job *pasteJob) {
 // feature_ideas.txt's own note on this being step one, before any real
 // notification channel exists to send them to instead), reloads every
 // open tab showing the destination (per the user's own explicit
-// request for an auto-reload there), and clears the clipboard once a
-// clean (no errors) Cut has fully landed.
+// request for an auto-reload there), clears the clipboard once a clean
+// (no errors) Cut has fully landed, and starts the next queued Paste,
+// if any (see advancePasteQueue).
 func (r *Root) finishPasteJob(job *pasteJob) {
 	if r.pasteJob != job {
 		return // already superseded/cancelled — see cancelPasteJob
@@ -519,6 +594,12 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	if len(job.errors) > 0 {
 		r.showError(pasteSummaryError(job))
 	}
+
+	// Once this job's own wrap-up above is fully settled, not before —
+	// the next queued Paste (if any) starting mid-cleanup here could
+	// otherwise interleave its own very first status-bar refresh with
+	// this one's.
+	r.advancePasteQueue()
 }
 
 // pasteSummaryError collects every genuine failure a job ran into into
