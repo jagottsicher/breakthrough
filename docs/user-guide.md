@@ -109,10 +109,14 @@ clickable breadcrumb: click any path segment to jump straight there, or
 click the path itself to type a new one — `Tab` completes it, `Enter`
 goes.
 
-Back and Forward treat a trip into search results or the trash exactly
-like a real directory, and returning to one restores the cursor row you
-left it on. A search's results come back as they were, rather than being
-re-run.
+Entering a directory always lands at the top of it — Enter, a
+breadcrumb click, `..`, or Back/Forward, regardless of whatever row you
+last left it scrolled to. The trash is loaded as an ordinary directory
+path, so the same applies there too. A trip into search results is the
+one exception: Back/Forward there restores the exact cursor row you
+left it on, since a frozen result list isn't something to reset to the
+top of the way a real, re-listable directory is — and the results
+themselves come back as they were, rather than being re-run.
 
 ### Column widths
 
