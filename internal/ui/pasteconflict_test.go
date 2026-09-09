@@ -424,7 +424,11 @@ func TestPasteConflictOpensDialogInsteadOfErroring(t *testing.T) {
 	if err != nil || string(got) != "existing" {
 		t.Errorf("existing dst file should be untouched until a decision is made, got %q, %v", got, err)
 	}
-	if wantTitle := " Paste conflict "; r.pasteConflictDialogTitleBar.GetText(true) != wantTitle {
+	// The title bar carries the actual conflict message now, not a
+	// generic "Paste conflict" caption — the same "the question is the
+	// header" treatment confirmDialog's openConfirm gives its own
+	// question (see renderPasteConflictDialog's own doc comment).
+	if wantTitle := ` "apple.txt" already exists in this folder. `; r.pasteConflictDialogTitleBar.GetText(true) != wantTitle {
 		t.Errorf("pasteConflictDialogTitleBar text = %q, want %q", r.pasteConflictDialogTitleBar.GetText(true), wantTitle)
 	}
 }
@@ -853,7 +857,7 @@ func TestPasteConflictFoundQueuesBehindAnOpenDialog(t *testing.T) {
 	if len(job.pending) != 1 {
 		t.Fatalf("pending = %d, want the second conflict queued behind the first", len(job.pending))
 	}
-	msg, _ := r.pasteConflictDialog.GetItemText(pasteConflictMessageItem)
+	msg := r.pasteConflictDialogTitleBar.GetText(true)
 	if !strings.Contains(msg, "1 more waiting") {
 		t.Errorf("dialog message = %q, want it to mention the queued conflict", msg)
 	}
@@ -884,7 +888,15 @@ func TestPasteConflictDialogResizesWhenMessageGrows(t *testing.T) {
 	}
 	r.pasteConflictFound(job, newPasteTestConflict(t, src2, dst2))
 
+	// The message lives in the header now, not a list item (see
+	// renderPasteConflictDialog's own doc comment) — wantWidth has to
+	// account for that the same way resizePasteConflictDialog itself
+	// does, or this would just be re-deriving listSize's own now-stale
+	// answer instead of actually checking the resize.
 	wantWidth, _ := listSize(r.pasteConflictDialog)
+	if headerWidth := tview.TaggedStringWidth(r.pasteConflictDialogTitleBar.GetText(false)); headerWidth > wantWidth {
+		wantWidth = headerWidth
+	}
 	_, _, gotWidth, _ := r.pasteConflictDialog.GetRect()
 	if gotWidth != wantWidth {
 		t.Errorf("dialog width = %d, want %d (resized to fit the now-longer message)", gotWidth, wantWidth)
@@ -922,7 +934,7 @@ func TestAdvancePasteConflictsRefreshesCountForReQueuedConflict(t *testing.T) {
 	if len(job.pending) != 1 {
 		t.Fatalf("pending = %d, want the third conflict still queued behind the second", len(job.pending))
 	}
-	msg, _ := r.pasteConflictDialog.GetItemText(pasteConflictMessageItem)
+	msg := r.pasteConflictDialogTitleBar.GetText(true)
 	if !strings.Contains(msg, "1 more waiting") {
 		t.Errorf("dialog message = %q, want it to mention the third conflict still waiting", msg)
 	}

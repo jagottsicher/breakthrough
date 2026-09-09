@@ -633,7 +633,15 @@ func (r *Root) refreshPasteConflictDialog(job *pasteJob) {
 // (message changed while already open) rather than duplicated, since
 // both need the exact same listSize/centeredOnScreen/SetRect sequence.
 func (r *Root) resizePasteConflictDialog() {
+	// Width has to cover whichever of the header (the conflict message,
+	// which grows with "(N more waiting)" — see refreshPasteConflictDialog)
+	// or the list itself (the eight resolution buttons) is wider — the
+	// same reasoning openConfirm's own width calc gives, now that the
+	// message lives in the header rather than as a list item.
 	width, height := listSize(r.pasteConflictDialog)
+	if headerWidth := tview.TaggedStringWidth(r.pasteConflictDialogTitleBar.GetText(false)); headerWidth > width {
+		width = headerWidth
+	}
 	height++ // reserved title bar row (see pasteConflictDialogLayout)
 	x, y := r.centeredOnScreen(width, height)
 	r.pasteConflictDialogLayout.SetRect(x, y, width, height)
@@ -656,8 +664,7 @@ func (r *Root) resizePasteConflictDialog() {
 // newPasteConflictDialog's own AddItem calls would otherwise have to be
 // mirrored by hand everywhere they're used.
 const (
-	pasteConflictMessageItem = iota
-	pasteConflictOverwriteItem
+	pasteConflictOverwriteItem = iota
 	pasteConflictOverwriteAllItem
 	pasteConflictMergeItem
 	pasteConflictMergeAllItem
@@ -667,17 +674,20 @@ const (
 	pasteConflictIfNotEmptyItem
 )
 
-// renderPasteConflictDialog fills in job.current's own message — the
-// only part of the dialog that ever changes between one conflict and
-// the next; every button's own label is fixed, set once in
-// newPasteConflictDialog.
+// renderPasteConflictDialog fills in job.current's own message —
+// pasteConflictDialogTitleBar's own text now (the question IS the
+// header — the same treatment confirmDialog's openConfirm gives its own
+// question, per the user's own explicit request that both dialogs work
+// the same way), the only part of the dialog that ever changes between
+// one conflict and the next; every button's own label is fixed, set
+// once in newPasteConflictDialog.
 func (r *Root) renderPasteConflictDialog(job *pasteJob) {
 	c := *job.current
 	msg := fmt.Sprintf("%q already exists in this folder.", filepath.Base(c.dst))
 	if n := len(job.pending); n > 0 {
 		msg += fmt.Sprintf(" (%d more waiting)", n)
 	}
-	r.pasteConflictDialog.SetItemText(pasteConflictMessageItem, msg, "")
+	r.pasteConflictDialogTitleBar.SetText(" " + msg + " ")
 }
 
 // newPasteConflictDialog builds r.pasteConflictDialog once, called from
@@ -699,7 +709,9 @@ func (r *Root) newPasteConflictDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetBorderPadding(0, 0, 1, 1)
-	l.AddItem("", "", 0, nil) // pasteConflictMessageItem — set fresh by renderPasteConflictDialog before every show
+	// The conflict message itself lives in pasteConflictDialogTitleBar,
+	// not as a list item — see renderPasteConflictDialog's own doc
+	// comment.
 	l.AddItem("Overwrite", "", 0, func() { r.chooseConflictResolution(resolveOverwrite, false) })
 	l.AddItem("Overwrite all", "", 0, func() { r.chooseConflictResolution(resolveOverwrite, true) })
 	l.AddItem("Merge into existing folder", "", 0, func() { r.chooseConflictResolution(resolveMerge, false) })
