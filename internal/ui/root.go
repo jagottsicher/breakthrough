@@ -246,9 +246,12 @@ type Root struct {
 	// newConfirmDialog/openConfirm in trash.go for why). Same pattern
 	// r.picker/r.prompt already use. pendingConfirm is the action
 	// acceptConfirm runs once the user actually confirms, set by
-	// whichever caller opened the dialog. confirmDialogTitleBar/
-	// confirmDialogLayout are its own "Confirm" title bar and the Flex
-	// stacking the two, the same menuTitleBar/menuLayout split.
+	// whichever caller opened the dialog. confirmDialogTitleBar IS the
+	// question being asked (set fresh by openConfirm before every show,
+	// per the user's own explicit request — a generic "Confirm" caption
+	// above a separate question line was one line of chrome too many);
+	// confirmDialogLayout stacks the two, the same menuTitleBar/
+	// menuLayout split.
 	confirmDialog         *tview.List
 	confirmDialogTitleBar *tview.TextView
 	confirmDialogLayout   *tview.Flex
@@ -1047,7 +1050,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
 	r.confirmDialog = r.newConfirmDialog()
-	r.confirmDialogTitleBar = newPlainTitleBar("Confirm")
+	// Built empty — unlike quitConfirmTitleBar's fixed "Quit", this
+	// dialog's own question changes with every caller, so there is
+	// nothing meaningful to show before the first openConfirm sets its
+	// real text.
+	r.confirmDialogTitleBar = newPlainTitleBar("")
 	r.confirmDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
