@@ -133,6 +133,21 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     explicit request: someone who works this way every session
 //     shouldn't have to re-disable it by hand every time they start
 //     breakthrough.
+//   - filter_persistent: whether the panel's own filter menu (glob/
+//     regex text, and its size/modified-time toggles — see internal/ui's
+//     Panel.filterText/filterGlobActive/filterSizeActive/
+//     filterMtimeActive) carries over when you navigate into a
+//     different directory, or resets to "nothing filtered" the moment
+//     you do. true (persistent) by default, per the user's own explicit
+//     request: browsing several directories in a row with the same
+//     filter switched on is the whole point of a filter that survives
+//     navigation, and the filter-menu button's own "Nx" count (how many
+//     of the three are currently active) already exists specifically so
+//     a carried-over filter is never silently forgotten while browsing.
+//     Set to false to go back to the original behavior instead — every
+//     new directory starts unfiltered, which suits someone who filters
+//     one listing at a time and finds a lingering filter more confusing
+//     than useful once they've moved on to somewhere else.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -146,6 +161,7 @@ type Settings struct {
 	RestoreTabs       bool
 	SplitStacked      bool
 	MouseEnabled      bool
+	FilterPersistent  bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -167,6 +183,7 @@ func DefaultSettings() Settings {
 		RestoreTabs:       true,
 		SplitStacked:      false,
 		MouseEnabled:      true,
+		FilterPersistent:  true,
 	}
 }
 
@@ -217,6 +234,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.SplitStacked)
 	case "mouse_enabled":
 		return parseBool(&s.MouseEnabled)
+	case "filter_persistent":
+		return parseBool(&s.FilterPersistent)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
