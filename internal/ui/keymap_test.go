@@ -225,6 +225,51 @@ func TestChordStartsAndResolves(t *testing.T) {
 	}
 }
 
+// TestChordGoUpNavigatesToParent pins "gu" — the user's own explicit
+// request, added alongside "gp"/"gn" below: mirrors actionUp (the
+// header row's own "↑" button), one level up from wherever the panel
+// currently is.
+func TestChordGoUpNavigatesToParent(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	dir := root.panel.path
+	sub := filepath.Join(dir, "app-data")
+	if err := root.panel.navigate(sub); err != nil {
+		t.Fatalf("setup: navigate(sub): %v", err)
+	}
+
+	root.HandlePlainKey(runeEvent('g'))
+	root.HandlePlainKey(runeEvent('u'))
+
+	if root.panel.path != dir {
+		t.Errorf("path after \"gu\" = %q, want the parent %q", root.panel.path, dir)
+	}
+}
+
+// TestChordGoBackAndGoForwardStepThroughHistory pins "gp"/"gn" — the
+// user's own explicit request for a keyboard equivalent to the header
+// row's own "<"/">" buttons (actionBack/actionForward), which until now
+// only had a mouse path at all.
+func TestChordGoBackAndGoForwardStepThroughHistory(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	original := root.panel.path
+	sub := filepath.Join(original, "app-data")
+	if err := root.panel.navigate(sub); err != nil {
+		t.Fatalf("setup: navigate(sub): %v", err)
+	}
+
+	root.HandlePlainKey(runeEvent('g'))
+	root.HandlePlainKey(runeEvent('p')) // Back
+	if root.panel.path != original {
+		t.Fatalf("path after \"gp\" = %q, want %q", root.panel.path, original)
+	}
+
+	root.HandlePlainKey(runeEvent('g'))
+	root.HandlePlainKey(runeEvent('n')) // Forward
+	if root.panel.path != sub {
+		t.Errorf("path after \"gn\" = %q, want %q", root.panel.path, sub)
+	}
+}
+
 func TestChordEscapeCancelsWithoutRunningAnything(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.panel.focusRow(3)

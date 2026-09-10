@@ -114,6 +114,12 @@ func contextMenuTree() []menuEntry {
 			// top, consequential one a step further away" shape the
 			// plain-letter keyboard layer's own d/D pair already uses.
 			{label: "Remove", action: func(r *Root) { r.openRemoveConfirm() }},
+			// The dereferencing sibling of "Paste" above, kept out of the
+			// top level for the same reason — the keyboard layer's own
+			// v/V pair uses this exact placement too (see keymap.go).
+			// Same visibility gate as plain Paste: nothing to offer once
+			// the clipboard is empty either way.
+			{label: "Paste, following symlinks", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
 		}},
 		{label: "Selection", submenu: []menuEntry{
 			{label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
@@ -285,4 +291,15 @@ func (r *Root) resizeContextMenu(x, y int) {
 	height++ // reserved title bar row (see menuLayout)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.menuLayout.SetRect(x, y, width, height)
+	// r.menu's own rect is also set, to the same full area — a real,
+	// live-confirmed gap otherwise (see
+	// TestContextMenuBlocksRightDragSelection): captureOutsideClick's
+	// own "did this click land on the open overlay" check reads
+	// r.activeWidget.GetRect() directly, and r.activeWidget stays r.menu
+	// (the real focus target — see showMenu), not menuLayout. Left
+	// unset, r.menu's rect would stay at whatever tview.NewBox's own
+	// uninitialized default (0, 0, 15, 10) happens to be — which
+	// overlaps the panel itself — letting a click meant for the panel
+	// underneath be treated as if it had landed on the menu instead.
+	r.menu.SetRect(x, y, width, height)
 }

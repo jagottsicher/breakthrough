@@ -29,11 +29,16 @@ terminal.
 ## Features
 
 - Panel-based directory browsing: arrow-key and mouse navigation, a
-  clickable path breadcrumb bar with Start/Home/Back/Forward — its
+  clickable path breadcrumb bar with Start/Root/Home/Back/Forward — its
   history covers a trip into search results or the trash exactly the
   same as a real directory, and Back/Forward into any of them restores
   the cursor row it was left on, a search's own results included, shown
-  again exactly as they were rather than a live re-run — sortable
+  again exactly as they were rather than a live re-run — plus Reload
+  (`⭯`, right before the path itself), re-reading the current directory
+  straight from disk for anything this app has no other way to notice
+  on its own: another process changing files underneath it, a
+  network/mounted filesystem's own content changing, and so on —
+  sortable
   Name/Size/Modified columns, and file-type indicators (directory,
   symlink — including broken and multi-hop chains, socket, FIFO, device,
   mount point, hard link) matching Midnight Commander's own glyph scheme.
@@ -58,9 +63,47 @@ terminal.
   both the identifying start and the extension survive. This matters most
   in split view, where each pane is half as wide: before, Size collapsed
   to `…` and Modified disappeared off the right edge entirely.
-- A live filter, right in the top row: type to narrow the listing on
-  every keystroke, with a Glob/Regex toggle for how the pattern is
-  interpreted.
+- A live filter, tucked behind a compact "Y" button in the top row (an
+  "Nx" count appears right before it once one or more are actually
+  narrowing the listing, turning bright red instead if one is currently
+  hiding everything a directory would otherwise show): click it, or
+  press `/`, to open a small dropdown with three independently
+  combinable rows, each narrowing the listing live as you type:
+  - **Glob/regex** — the original filter, with a Glob/Regex toggle for
+    how the pattern is interpreted and its own checkbox to switch it
+    off without losing what's typed.
+  - **Size** — comparison expressions like `> 1m`, `>= 500k`, or a
+    range by joining two with `and` (`> 1m and < 1g`). Units are
+    `b`/`k`/`m`/`g`/`t`, binary (1024-based), the same convention the
+    Size column's own human-readable mode already uses; a bare number
+    means plain bytes.
+  - **Modified time** — `before`/`after`/`between ... and ...`, each
+    side either an absolute date (`2026-09-01`, optionally with a
+    time) or a relative one (`7 days`, `2 hours ago`); a bare relative
+    expression on its own (`last 7 days`) means "modified within
+    that span".
+
+  Typing into any field auto-activates its own row, the same way it
+  already did for glob. `Tab`/`Shift+Tab` cycle through all seven of
+  the dropdown's own pieces (checkbox + field for size and
+  modified-time, checkbox + mode button + field for glob),
+  `Space`/`Enter` toggles whichever checkbox has focus, `/` — once the
+  dropdown is already open — jumps straight to the next of the three
+  fields instead (the same "press it again to advance further" trick
+  `Ctrl+T` already does for the tab switcher; safe to repurpose since a
+  bare filename can never contain `/` in the first place), and `Escape`
+  closes it from any of them.
+  Carries over across a directory change by default (`filter_persistent`),
+  so browsing a whole tree with the same filter switched on is the
+  normal way to use it, not a special case; set it to `false` to go
+  back to every new directory starting unfiltered instead.
+- The six nav buttons (Start/Root/Home/Back/Forward/Up) at the very start
+  of the path bar are real, highlighted buttons now — a plain
+  background-colored square either side of each glyph, with its own
+  separator column between one button and the next. Root (`/`) sits right
+  next to Start and jumps straight to the filesystem root — the same
+  destination the path breadcrumb's own leading "/" already links to, just
+  as a second, consistently styled, easier-to-spot target for it.
 - Tabs: several directories open at once in one window, each keeping its
   own history, filter, sort order, selection and cursor position, so
   switching away and back leaves everything exactly as it was. `^1`
@@ -130,6 +173,92 @@ terminal.
   or Left arrow step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there.
+- Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
+  current selection, not just one file. Pasting into the very directory
+  a file is already in, or a directory into one of its own
+  subdirectories, is refused outright rather than started at all — the
+  first would have destroyed the only copy there ever was, the second
+  would recurse into itself without any bound. Paste runs in the
+  background — a file that already exists at the destination opens a
+  small dialog (Overwrite, Skip, "Merge into existing folder", an "all"
+  variant of each for the rest of this Paste, or apply "only if the
+  source is newer"/"only if the source isn't empty" to every conflict
+  it still runs into) without blocking anything else in the same
+  Paste: whatever doesn't conflict keeps copying/moving while that
+  dialog is up, and a second conflict found before the first is
+  answered queues behind it — shown as "(N more waiting)" right in the
+  dialog's own message — rather than stacking a second dialog on top.
+  Unlike every other dialog here, clicking outside it does nothing —
+  one of its own options, or Escape, is the only way past a conflict,
+  so a stray click can never leave one stranded, half-answered forever.
+  Overwriting a directory replaces it entirely (nothing left over from
+  whatever was there before — the right choice when "overwrite" needs
+  to mean "make this identical to the source", not "patch it"); Merge
+  is the explicit alternative, keeping whatever the source doesn't
+  also have. Starting a further Paste while one is already running
+  queues it rather than running it alongside the first or replacing
+  it outright — shown as "(+N queued)" right in the status bar's own
+  progress line — and it starts automatically the moment the one ahead
+  of it finishes, in the order each was asked for. Ctrl+C stops a
+  running Paste outright — whatever's already mid-write finishes
+  normally, on disk, right where it was headed; nothing still queued,
+  whether a pending conflict or a whole further Paste behind this one,
+  starts at all. Any real failure (permission, a full disk, ...) is
+  collected rather than stopping at the first one, and reported once
+  the whole Paste is done. Every open tab showing the destination
+  reloads automatically as items actually land, not just once the
+  whole Paste is fully done — including while an unrelated conflict's
+  own dialog is still sitting open, since whatever doesn't conflict
+  keeps landing regardless; Cut also reloads every open tab showing one
+  of the moved items' own source directories, live, as items actually
+  leave, so a tab something was cut from never keeps listing a file
+  that's actually gone — Copy leaves its own source list alone, since
+  nothing there was ever removed.
+  Whatever's currently on the clipboard shows
+  two ways: every row it holds gets a full-row tint — a slightly
+  bluish-tinted grey for Copy, a slightly pinkish-tinted grey for Cut,
+  a deliberately matched pair rather than two shades of one plain
+  grey, so a Cut selection reads as visually different from a Copy one
+  at a glance rather than needing a brightness comparison. This tint
+  stays visible even on whichever row the cursor happens to land on:
+  the ordinary focus highlight wins outright over it while this panel
+  actually has keyboard focus, so the cursor's own position among
+  several tinted rows is never ambiguous, but a dimmer variant of the
+  same tint takes over once focus moves elsewhere, still clearly Cut-
+  or Copy-colored rather than fading to a plain, indistinct gray —
+  across every open tab showing that row, not just the one Copy/Cut
+  was pressed in; and the status bar names it —
+  "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
+  chord countdown's own spot, for as long as there's something to
+  Paste. Once a Paste actually starts, that same spot switches to its
+  own live progress instead — a spinner, "Copying"/"Moving" and how
+  many of the selection's own top-level items are done, and a two-row
+  progress bar packed into one line of half-block characters (the top
+  half is that same item-count fraction, the bottom half is the file
+  currently being written's own byte progress), plus whichever real
+  file is being written right now (its bare name, e.g. inside a large
+  directory this Paste is still working through). A one-time background
+  scan of the whole selection's byte size (started alongside the Paste
+  itself, never blocking it) adds two more things once it's done: a
+  single character before the bar showing what percentage of the total
+  bytes has copied so far (the same shrinking/filling block style the
+  chord countdown uses), and an estimated remaining duration after the
+  bar. A same-filesystem move is atomic regardless of size, so a Cut
+  within one filesystem usually finishes too fast for any of this to
+  show anything at all — expected, not a bug: there's nothing to report
+  progress on.
+  `V` (Shift+Paste, or the context menu's "Paste, following symlinks")
+  is the dereferencing sibling of plain Paste: any symlink among the
+  pasted items — including one nested inside a folder being pasted —
+  is replaced at the destination with a real, independent copy of
+  whatever it points to (recursively, through a multi-hop chain too),
+  instead of being recreated as a symlink. Works for both a Copy- and a
+  Cut-marked clipboard alike; for a Cut, only the original link itself
+  is removed afterward — never whatever it pointed to, however far away
+  that actually lives (a different filesystem, a network mount). Always
+  asks for confirmation first, unlike plain `v`: dereferencing can turn
+  a small, instant symlink into an arbitrarily large copy, so this is
+  never a single, undialogued keypress.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
@@ -141,7 +270,14 @@ terminal.
   `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
   "Empty Trash" (`D`, same confirmation) round
-  it out. Persistent by default — lives under
+  it out. Restoring something whose original path now has an unrelated
+  file sitting on it — recreated after the original was trashed, say —
+  opens the exact same conflict dialog a Paste collision already does
+  (Overwrite/Skip and their "for all" and "if newer"/"if not empty"
+  variants, Skip preselected as the safe default), rather than silently
+  overwriting it or refusing outright with nothing but an error; a
+  multi-item restore can pull items whose own original locations were
+  entirely different folders, each resolved independently. Persistent by default — lives under
   `~/.local/share/breakthrough/trash`, so it's still there tomorrow, even
   across a login session boundary — or session-scoped via
   `trash_persistent = false` in your config, under `$XDG_RUNTIME_DIR`
@@ -370,7 +506,7 @@ need one, it cross-compiles from source in one command — see
 ### Debian, Ubuntu, Linux Mint, Raspberry Pi OS (`.deb`)
 
 ```sh
-VERSION=0.17.0                     # or whatever the latest release is
+VERSION=0.18.0                     # or whatever the latest release is
 ARCH=$(dpkg --print-architecture)  # amd64 or arm64
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${ARCH}.deb"
 sudo apt install "./breakthrough_${VERSION}_linux_${ARCH}.deb"
@@ -383,7 +519,7 @@ same way; remove with `sudo apt remove breakthrough`.
 ### Fedora, RHEL, AlmaLinux, Rocky, openSUSE (`.rpm`)
 
 ```sh
-VERSION=0.17.0
+VERSION=0.18.0
 ARCH=$(uname -m)                   # x86_64 or aarch64
 case "$ARCH" in x86_64) PKG=amd64 ;; aarch64) PKG=arm64 ;; esac
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_linux_${PKG}.rpm"
@@ -402,7 +538,7 @@ and `%config(noreplace)` on RPM.
 Works on any distribution, with or without root:
 
 ```sh
-VERSION=0.17.0
+VERSION=0.18.0
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')          # linux, darwin, freebsd
 case "$(uname -m)" in
   x86_64|amd64) ARCH=amd64 ;;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -128,7 +129,7 @@ func plainCommands() []plainCommand {
 		}},
 		{key: 'e', label: "Edit", action: func(r *Root) { r.editCurrentEntry() }},
 		{key: 'f', label: "Find", action: func(r *Root) { r.openSearch() }},
-		{key: '/', label: "Filter", action: func(r *Root) { r.app.SetFocus(r.panel.filterField) }},
+		{key: '/', label: "Filter", action: func(r *Root) { r.openFilterMenu() }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
 		{key: 'm', label: "Context menu", quick: true, short: "Menu", action: func(r *Root) { r.MenuShortcut() }},
@@ -151,6 +152,15 @@ func plainCommands() []plainCommand {
 			}
 			r.openRemoveConfirm()
 		}},
+		// The user's own explicit request: a way to paste a symlink
+		// dereferenced — a real copy of whatever it points to, instead of
+		// recreating the link itself — for both Copy- and Cut-marked
+		// clipboards alike. Not quick (no button-bar slot), the same
+		// treatment 'D' above already gets: this is deliberately the
+		// rarer, more consequential sibling of the everyday 'v', always
+		// gated behind its own confirmation dialog (see
+		// pasteClipboardFollowingSymlinks) rather than a single keypress.
+		{key: 'V', label: "Paste, following symlinks", action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
 		// quick despite the narrower row this leaves: the button bar is
 		// the only always-present, clickable route to toggling Details
 		// *while Properties is open with unsaved changes* — every other
@@ -249,9 +259,29 @@ type chordFamily struct {
 // oversight; a key that explains itself does not.
 func chordFamilies() []chordFamily {
 	return []chordFamily{
+		// Ordered to match the header row's own five nav buttons
+		// (∎~<>↑ — Start/Home/Back/Forward/Up, see buildHeaderSpans),
+		// per the user's own explicit request to sort this family
+		// properly once it grew past the original four: gg/gh/gp/gn/gu
+		// step along the *same* axis those buttons do (start, home, then
+		// three ways to move relative to where you already are), before
+		// gr/gb — jumps to a fixed, unrelated place — close it out.
 		{prefix: 'g', name: "go to", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
+			// "p"/"n" (previous/next), not "b"/"f" — "b" was already
+			// spoken for by Trash below, and "back"/"forward" as
+			// abbreviations read no more naturally than "previous"/
+			// "next" once one of the two obvious pairs is unavailable —
+			// the user's own explicit choice of wording ("go prev und go
+			// next") settled it either way.
+			{'p', "Back", func(r *Root) { r.panel.back() }},
+			{'n', "Forward", func(r *Root) { r.panel.forward() }},
+			// Mirrors actionUp's own filepath.Dir(p.path) — see its own
+			// doc comment on why filepath.Dir("/") == "/" (a harmless
+			// no-op at the filesystem root) needs no special-casing here
+			// either.
+			{'u', "Up", func(r *Root) { r.showError(r.panel.navigate(filepath.Dir(r.panel.path))) }},
 			// "/ (root)", not "Root /": a label ending in "/" sat right
 			// against the single-space separator before the next member
 			// (see chordHintBar), reading as if the "/" were part of that
@@ -273,6 +303,7 @@ func chordFamilies() []chordFamily {
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
 			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
 			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
+			{'r', "Reload", func(r *Root) { r.reloadCurrentTab() }},
 		}},
 		{prefix: 'y', name: "yank (reserved — no system clipboard yet)", members: []chordMember{
 			{'p', "Copy full path", reservedYankMember("Copy full path")},

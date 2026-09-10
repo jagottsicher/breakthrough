@@ -6,6 +6,8 @@
   "focused_background": "#268bd2",
   "error_background": "#dc322f",
   "directory_background": "#b58900",
+  "clipboard_copy_background": "#134652",
+  "clipboard_cut_background": "#3b6978",
   "text": "#93a1a1",
   "editable_background": "#586e75",
   "placeholder_text": "#657b83",
@@ -16,5 +18,7 @@
   "entry_special": "#cb4b16",
   "entry_unreadable": "#a52523",
   "entry_archive": "#d33682",
-  "entry_hidden": "#4b5960"
+  "entry_hidden": "#4b5960",
+  "warning_text": "#cb4b16",
+  "critical_text": "#dc322f"
 }

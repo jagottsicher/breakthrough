@@ -91,6 +91,29 @@ func TestOpenChmodPrefillsFromFirstTarget(t *testing.T) {
 	}
 }
 
+// TestOpenChmodHasATitleBar pins the same fix
+// TestOpenRemoveConfirmHasATitleBar/TestRequestQuitHasATitleBar pin for
+// their own dialogs: chmod used to have no heading naming it either,
+// despite its own doc comment already claiming "the same three-page
+// shape newPropertiesView already has" — Properties' own fourth,
+// title-bar page was the one part that claim didn't actually cover.
+func TestOpenChmodHasATitleBar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+
+	if got, want := r.chmodTitleBar.GetText(true), " Permissions "; got != want {
+		t.Errorf("chmodTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.chmodPages.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("chmodPages rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
 // TestOpenChmodDefaultsFilesModeFromMainMode pins the traditional
 // dir/file relationship default (755/644, ...): Files' own starting
 // value is Permissions' own starting value with every execute bit

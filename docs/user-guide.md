@@ -19,6 +19,7 @@ material, always matching the version you are actually running.
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
 - [Properties](#properties)
+- [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
 - [The command line](#the-command-line)
 - [Options and configuration](#options-and-configuration)
@@ -44,7 +45,7 @@ dialog open.
 | `r` | Rename | `e` | Edit | `/` | Filter |
 | `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
-| `s` | Split view on/off | | | `a` | Select all |
+| `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
@@ -54,7 +55,10 @@ A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
 isn't. Browsing the Trash itself flips two of these to their
 trash-specific meaning: `r` restores instead of renaming, `D` empties
-the whole Trash instead of removing one file.
+the whole Trash instead of removing one file. `V` is `v` Paste's own
+bigger sibling too — see [Paste, following
+symlinks](#paste-following-symlinks) — and, like `D`, always asks first
+rather than firing on a single keypress.
 
 `h`/`k`/`M` target whichever of Properties/Details is relevant right
 now (Properties first if both are open on the same file), opening the
@@ -71,9 +75,9 @@ chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gr` `/` (filesystem root) · `gb` Trash |
+| `g` — go to | `gg` top · `gh` home · `gp` back · `gn` forward · `gu` up · `gr` `/` (filesystem root) · `gb` Trash |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes |
+| `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -109,10 +113,22 @@ clickable breadcrumb: click any path segment to jump straight there, or
 click the path itself to type a new one — `Tab` completes it, `Enter`
 goes.
 
-Back and Forward treat a trip into search results or the trash exactly
-like a real directory, and returning to one restores the cursor row you
-left it on. A search's results come back as they were, rather than being
-re-run.
+Entering a directory always lands at the top of it — Enter, a
+breadcrumb click, `..`, or Back/Forward, regardless of whatever row you
+last left it scrolled to. The trash is loaded as an ordinary directory
+path, so the same applies there too. A trip into search results is the
+one exception: Back/Forward there restores the exact cursor row you
+left it on, since a frozen result list isn't something to reset to the
+top of the way a real, re-listable directory is — and the results
+themselves come back as they were, rather than being re-run.
+
+`⭯`, right before the path itself, is Reload — the `z` chord's own `r`
+member (`zr`) does the same from the keyboard. Re-reads the current
+directory straight from disk, for anything this app has no other way
+to notice on its own: another process changing files underneath it, a
+network/mounted filesystem's own content changing, and so on. While
+search results are showing, this exits back to the plain directory
+listing rather than re-running the search.
 
 ### Column widths
 
@@ -141,9 +157,97 @@ they can be, since they say what kind of entry it is.
 This matters most in [split view](#split-view), where each pane is half
 the width.
 
-Sort by clicking a column heading (Name, Size, Modified). The filter box
-in the top row narrows the listing as you type; its own button switches
-between glob and regular-expression matching.
+Sort by clicking a column heading (Name, Size, Modified).
+
+### The path bar
+
+The six buttons at the very start of it — Start, Root, Home, Back,
+Forward, Up — are real, clickable buttons: a background-colored square
+on either side of the glyph, with its own plain-background column
+between one button and the next, so each reads as its own separate
+control rather than a run of characters. Clicking anywhere in a
+button's own colored square activates it, not just the glyph's own
+single column. Root (`/`) sits right after Start and jumps to the
+filesystem root — the breadcrumb's own leading "/" already links there
+too, but as a plain, easy-to-miss character; Root gives that same
+destination a proper, styled button of its own.
+
+### Filtering
+
+Click the "Y" button near the right edge of the path bar, or press
+`/`, to open a small dropdown with three rows, all combinable. An "Nx"
+count appears right before the button once one or more filters are
+actually narrowing the listing (omitted while none are) — and turns
+bright red if a filter is currently hiding *everything* a directory
+would otherwise show, which otherwise looks exactly like a genuinely
+empty folder (a filter carried over from browsing somewhere else
+entirely, say, after `filter_persistent` — see below — brought it along
+into a directory it was never meant to apply to).
+
+- **Glob/regex filter** — the same live, type-to-narrow filter this app
+  has always had, now living in the dropdown instead of always taking
+  up its own space in the path bar: its own button still switches
+  between glob and regular-expression matching, and its own checkbox
+  switches the filter off without clearing whatever pattern is already
+  typed — handy for temporarily seeing everything again without losing
+  your place.
+- **Size filter** — a comparison expression, typed straight into its
+  own field: `> 1m`, `>= 500k`, `= 0` (empty files), or a range by
+  joining two clauses with `and` — `> 1m and < 1g`. The operators are
+  `<`, `<=`, `>`, `>=`, `=` (`==` also works, for anyone typing it out
+  of habit); units are `b`/`k`/`m`/`g`/`t`, case-insensitive and
+  binary (1024-based, the same convention the Size column's own
+  human-readable mode already uses) — a bare number with no unit means
+  plain bytes.
+- **Modified-time filter** — also a typed expression: `before <moment>`,
+  `after <moment>`, or `between <moment> and <moment>` for a range.
+  A moment is either an absolute date/time (`2026-09-01`,
+  `2026-09-01 14:30`, or with seconds/a timezone) or a relative one
+  (`7 days`, `2 hours ago`, `30 minutes`) — `sec`/`min`/`hour`/`day`/
+  `week`/`month`/`year` (singular or plural) are all recognized units,
+  and month/year are necessarily approximate (30/365 days). Leaving
+  off the `before`/`after`/`between` keyword entirely and just typing a
+  relative moment on its own — `last 7 days`, or plain `7 days` — is
+  shorthand for "modified within that span", the most common case.
+
+Typing into the size or modified-time field auto-activates its own
+checkbox, exactly the way typing into the glob field already does —
+ticking the checkbox by hand is only for temporarily switching a
+filter off without losing what's typed, the same "disable without
+clearing" convenience the glob row has always had. An expression that
+doesn't parse yet (still mid-keystroke, say) is treated as no filter
+at all rather than an error, so half-typed text never throws the
+listing into a confusing state.
+
+The dropdown stays open while you tick or fill in more than one of
+these — narrowing by name, size, and modified time all at once is the
+point. `Tab`/`Shift+Tab` cycle keyboard focus through all seven of its
+own pieces — the glob checkbox, its Glob/Regex button, the pattern
+field, the size checkbox, the size expression field, the modified-time
+checkbox, and the modified-time expression field, wrapping back to the
+first — `Space` or `Enter` toggles whichever checkbox currently has
+focus, and `Escape` closes the whole dropdown from any of them, the
+same as clicking elsewhere or `Ctrl`+`C` already did.
+
+`/` itself, pressed again once the dropdown is already open, is a
+faster way to reach the size or modified-time field specifically: it
+jumps straight to the next of the three real fields (glob → size →
+modified-time → back to glob), skipping every checkbox and the
+Glob/Regex button in between — the same "press it again to advance
+further" behavior `Ctrl`+`T` already has for the tab switcher. This is
+safe to repurpose from typing a literal `/`: a bare filename can never
+contain one (it's the OS's own path separator), so none of these three
+expressions — a glob pattern, a size comparison, or a modified-time
+one — could ever legitimately need to type it. By default (the
+`filter_persistent` setting, see the reference below), all three carry
+straight over when you navigate to a different directory — browsing a
+whole tree with the same filter switched on is the point, and the "Nx"
+count in the path bar is what keeps a still-active filter from going
+unnoticed while you do. Set `filter_persistent = false` to go back to
+the original behavior instead: navigating to a different directory
+resets all three back to their own defaults (the glob/regex filter
+cleared and re-enabled, size/modified-time switched off and cleared),
+so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, green for executable, red for a
@@ -177,7 +281,7 @@ back leaves all of it exactly as it was.
 | `t` or `Ctrl`+`T` | open the switcher on the current tab; press again to walk down it |
 
 The switcher lists every tab's full directory — the numbered strip
-beside the filter box deliberately shows numbers only, so the header
+beside the filter button deliberately shows numbers only, so the header
 doesn't change width as you navigate. In the switcher, `Enter` or
 `Space` goes to a tab, `Delete` closes one, `Escape` leaves things as
 they are, and the last row opens a new tab. Each row also carries a `◫`
@@ -433,8 +537,9 @@ through the real `tail -f`.
 
 ## The Details sidebar
 
-`I`, or the `<` button after the filter box. A live, read-only
-panel on the right that follows the cursor.
+`I`, or the `<` button at the far end of the path bar, right after the
+tab strip. A live, read-only panel on the right that follows the
+cursor.
 
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
@@ -474,6 +579,245 @@ group, and the modified date and time.
 `Tab` moves between fields, `Enter` or `Space` activates the focused
 one, `Escape` cancels.
 
+## Copy, Cut and Paste
+
+`c`/`x` copy or cut the current selection — the whole selection, not
+just the file under the cursor — onto an internal clipboard; `v` pastes
+it into whatever directory the panel is showing. The context menu
+offers all three too, with Paste only appearing once the clipboard
+actually has something in it.
+
+Pasting into the very directory a file is already in, or a directory
+into one of its own subdirectories, is refused outright rather than
+started at all — the first would destroy the only copy of the file
+there ever was, the second would recurse into itself without any
+bound.
+
+Paste runs in the background rather than one file at a time in a
+blocking loop. A file that copies or moves cleanly just lands at its
+destination with no interruption. One that already exists there opens
+a small dialog instead, without stopping anything else in the same
+Paste:
+
+| Option | Effect |
+| --- | --- |
+| Overwrite | Replace this one entry; the next conflict (if any) gets its own dialog |
+| Overwrite all | Same, and apply it to every conflict the rest of this Paste runs into |
+| Merge into existing folder | For a directory conflict specifically: copy the source's own files over it, keeping whatever's already there that the source doesn't have; the next conflict gets its own dialog |
+| Merge all into existing folders | Same, for every conflict the rest of this Paste runs into |
+| Skip | Leave the existing entry untouched; the next conflict gets its own dialog |
+| Skip all | Same, for every conflict the rest of this Paste runs into |
+| Overwrite all if source is newer | Overwrite only where the copied file's modified time is newer than the existing one; skip the rest — applies to every remaining conflict |
+| Overwrite all if source is not empty | Overwrite only where the copied file actually has content, so a zero-byte source never replaces something real; skip the rest — applies to every remaining conflict |
+
+For a plain file conflict, Overwrite and Merge behave identically —
+there's nothing to merge, only a whole file's content to replace
+either way. The distinction is real for a directory: **Overwrite makes
+the destination identical to the source**, removing anything already
+there that the source doesn't have, while **Merge keeps it**. Replacing
+a compromised directory from a known-clean copy (a WordPress install's
+own core files, say) needs Overwrite specifically — a merge would
+leave anything an attacker planted there, that the clean source never
+had to begin with, completely untouched.
+
+`Up`/`Down` move between the options, `Enter`/`Space` applies the
+highlighted one, `Escape` is the same as the preselected "Skip" — a
+stray keypress can never overwrite anything by accident. Clicking
+anywhere outside the dialog does nothing at all, on purpose — unlike
+every other dialog in breakthrough, this one can't be dismissed by an
+outside click: one of its own options, or `Escape`, is the only way
+past it, so a conflict can never be left half-answered by an accidental
+click elsewhere.
+
+Everything that doesn't conflict keeps copying or moving in the
+background while this dialog is open. Paste doesn't scan the whole
+selection for conflicts before starting either — it checks each item
+in order and starts copying/moving it immediately if nothing's in the
+way, so most of a large selection is often already done, or well under
+way, before you've even answered the first conflict. If Paste runs into
+a second conflict before the first is answered, it doesn't stack a
+second dialog on top — it queues behind the one already showing,
+reflected right in that dialog's own message as "(N more waiting)" the
+moment it's found (which, since checking whether something's in the
+way is quick, usually means well before you've answered the one
+currently shown), and gets its own dialog (or resolves automatically,
+if an "all" option was already chosen) once the current one is
+answered.
+
+Starting a further Paste while one is already running doesn't run it
+alongside the first, and doesn't replace it either — it queues behind
+it, shown as "(+N queued)" right in the status bar's own progress line,
+and starts automatically, in the order each was asked for, the moment
+the one ahead of it finishes.
+
+`Ctrl+C` stops a running Paste outright, whether or not its own
+conflict dialog happens to be open at the time. Whatever's already
+mid-write finishes normally — on disk, exactly where it was already
+headed — rather than being interrupted mid-write; anything not yet
+started simply never starts, including a whole further Paste still
+queued behind this one. A *different* dialog (Properties, say)
+happening to be open while a Paste merely continues in the background
+is unaffected — `Ctrl+C` there closes that dialog as it always has,
+since it's what you're actually looking at.
+
+Any real failure along the way — a permission error, a full disk, and
+so on, never a conflict, which always has a decision — is collected
+rather than stopping the whole Paste at the first one, and reported
+together once every item has a final outcome.
+
+Every open tab showing the destination reloads automatically as items
+actually land — not just once the whole Paste is fully done — in every
+tab it's open in, not just wherever Paste was pressed, and not gated on
+answering a conflict dialog that's still sitting open: whatever doesn't
+conflict keeps landing in the background regardless (see above), and
+now shows up there too, live, while the dialog waits. No manual
+`zr`/`⭯` needed to see what's already landed. Cut gets the same
+treatment on the other side: every open tab showing one of the moved
+items' own source directories reloads too, as items actually leave, so
+a tab you cut something from never keeps listing a file that's already
+gone — which, within the same filesystem, can happen almost the
+instant Paste is pressed, moves being close to instant there. Copy
+leaves its own source list alone, since nothing there was ever removed.
+
+### What's on the clipboard right now
+
+Two indicators, both live for as long as there's actually something to
+Paste:
+
+- **Every row the clipboard holds** gets a full-row background tint —
+  not just its checkbox, the whole row — so it stays visible while
+  scrolling past it or browsing elsewhere. Cut and Copy get their own
+  distinct colors rather than two shades of the same one
+  (`clipboard_cut_background`/`clipboard_copy_background` in the active
+  color scheme): a slightly pinkish-tinted gray for Cut, a slightly
+  bluish-tinted gray for Copy — Cut is the more consequential of the
+  two operations, since the original disappears once Paste actually
+  succeeds, so it's worth being able to tell the two apart at a glance
+  rather than needing a brightness comparison. This tint stays visible
+  even on whichever row the cursor happens to be on — a selection that
+  includes the cursor's own row (the common case: checking several
+  files, or a right-drag, naturally leaves the cursor on the last one)
+  still reads as staged for Cut/Copy instead of looking deselected the
+  moment focus moves elsewhere, say to a different tab. Exactly how
+  depends on whether this panel currently has the keyboard's real
+  focus: while it does, the ordinary focus highlight wins outright over
+  the tint for that one row, so the cursor's own position among several
+  tinted rows is never ambiguous; once focus moves away, that row shows
+  its own tint again instead, but a dimmer variant of it — clearly
+  still Cut- or Copy-colored, just distinguishable from every other
+  tinted row in the same selection, which keep their full-brightness
+  color regardless. That dimmer variant is computed automatically from
+  a scheme's own `clipboard_cut_background`/`clipboard_copy_background`
+  (no extra configuration needed for a custom scheme to get a sensible
+  one), but a scheme can also set
+  `clipboard_cut_background_inactive`/`clipboard_copy_background_inactive`
+  explicitly to override it, for a tint the automatic computation
+  doesn't suit. A directory that's also on the clipboard shows this
+  tint across its whole row instead of its usual gold name highlight —
+  the two would otherwise compete for the same
+  characters, so the clipboard tint wins outright rather than the two
+  blending. This applies across every open tab currently showing that
+  row, not only the tab Copy/Cut was pressed in, since the clipboard
+  itself is shared by the whole application, not scoped to one tab.
+- **The status bar** names what's held — "Copy: 3 files, 1 dir" or
+  "Cut: 2 files" (a zero count is dropped rather than shown as "0
+  dirs") — right after the chord countdown's own leading spot, ahead
+  of the username. Disappears the moment the clipboard is empty again,
+  the same "just show one less segment" shape as the disk-usage/
+  uptime/load segments further along the same line.
+
+### Watching a Paste while it runs
+
+The moment a Paste actually starts, that same status bar spot switches
+from the clipboard indicator to its own live progress instead, for
+example:
+
+```
+● Copying 2/5 ▅ ▀▀▀▀▀▄▄▄▄▄ ~14s left holiday-photo.jpg
+```
+
+- A spinner (cycling dots, the same one Properties' own hash
+  computation already uses) — a "still working" cue even during a
+  single very large file, where the rest of this line might otherwise
+  sit still for a while.
+- "Copying"/"Moving", naming which of the two this is.
+- How many of the selection's own top-level items have a final outcome
+  so far, out of the total — a directory only advances this once, when
+  the whole thing finishes, not per file inside it.
+- A single character showing what percentage of the *entire
+  selection's own byte size* has copied so far, filling up from a thin
+  sliver to a solid block — the same glyph style the chord countdown
+  uses to drain, just running the other way. This (and the estimated
+  time below) only appears once a one-time background scan of the
+  whole selection has measured its total size — started the moment
+  Paste is pressed, running alongside the copy itself rather than
+  delaying it, so a very large selection still starts copying
+  immediately even though this one character and the estimate after
+  the bar take a moment longer to show up.
+- A two-row progress bar packed into a single line of half-block
+  characters: the *top* half of each character is the same item-count
+  fraction the count above already shows; the *bottom* half is the
+  file currently being written's own byte progress. Both halves fill
+  left to right independently, so a bar can show (for example) its top
+  half half-full while its bottom half is already nearly done with the
+  one file currently in flight.
+- An estimated remaining duration, once the background scan above has
+  a total to measure against and at least some progress to extrapolate
+  from — based on the average throughput since the Paste started, so
+  it settles down after the first moment rather than jumping around.
+- The real file currently being written — its bare name, not the full
+  path, so a long one doesn't crowd out everything after it. Inside a
+  large directory, this keeps changing file by file even while the
+  count/top bar above sit still waiting for that one directory to
+  finish.
+
+Only one file actually copies or moves at a time, in whatever order
+each one happens to start, regardless of how large the selection is —
+so this line's own "current file" is always a single, unambiguous
+answer, and a very large Paste never launches more than one real disk
+operation at once.
+
+A same-filesystem move is atomic regardless of size — `mv` on the same
+disk doesn't copy bytes at all, it just relinks a name — so cutting and
+pasting within one filesystem usually finishes before this ever has a
+chance to show anything at all. That's correct, not a missed update:
+there is no meaningful "progress" to report for an operation that's
+already done by the time it started.
+
+### Paste, following symlinks
+
+Plain Paste (`v`) recreates a symlink as a symlink at the destination —
+the link itself moves or gets copied, never whatever it points to.
+`V` (Shift+Paste, or the context menu's "Paste, following symlinks")
+is the dereferencing alternative: any symlink among the pasted items —
+including one nested somewhere inside a folder being pasted — is
+replaced at the destination with a real, independent copy of whatever
+it resolves to, following a multi-hop chain of links if there is one.
+
+This works the same way whether the clipboard is holding a Copy or a
+Cut selection. For a Cut, only the *original link itself* is removed
+once its content has safely landed at the destination — never whatever
+it pointed to, no matter how far away that actually lives (a different
+directory, a different filesystem, a network mount like NFS or EFS).
+A real (non-symlink) folder that merely contains a symlink somewhere
+inside it is handled the same careful way: only that nested symlink's
+own entry is ever removed, the target it pointed to is left untouched.
+
+Because dereferencing can turn a small, instant symlink into an
+arbitrarily large copy — and, for a Cut, permanently removes the
+original link — `V` always asks for confirmation first, unlike plain
+`v`. Declining leaves the clipboard and everything on disk exactly as
+it was, ready for an ordinary Paste instead.
+
+One trade-off worth knowing: `V` always copies an item's full content
+before removing its source, even for a large folder that only contains
+a symlink somewhere deep inside it — there's currently no fast path
+that moves the non-symlink parts of a selection instantly and only
+dereferences the symlinks it actually finds along the way. For the
+common case (dereferencing an actual symlink, or a folder that mostly
+consists of one) this doesn't matter; it's only a real cost for a huge,
+mostly-ordinary folder pasted with `V` by mistake instead of plain `v`.
+
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a
@@ -493,6 +837,23 @@ real on-disk name (which carries a collision-avoidance hash), and labels
 the Modified column "Deletion time". Both respect the timestamp
 formatting toggle and the column sort, so the same file trashed twice
 from the same place stays distinguishable.
+
+### Restoring into a conflict
+
+Restoring something whose original path now has an unrelated file
+sitting on it — recreated after the original was trashed, say — opens
+the exact same conflict dialog a Paste collision already does
+(Overwrite, Overwrite all, Merge/Merge all for a directory, Skip, Skip
+all, "overwrite all if source is newer", "overwrite all if source isn't
+empty"), rather than silently overwriting whatever's there or refusing
+outright with nothing but an error message to explain why. Skip is
+preselected by default — the same safety-first convention every other
+confirmation in this app already follows — so restoring a whole
+selection at once, some of them conflicting and some not, never
+accidentally clobbers anything on a stray `Enter`. Restoring a
+multi-item selection whose members came from entirely different
+original folders works the same way a single item does — each one is
+resolved against its own real destination independently.
 
 The trash is persistent by default, under
 `~/.local/share/breakthrough/trash`. Set `trash_persistent = false` for
@@ -602,6 +963,7 @@ Every key breakthrough recognizes, with its default:
 | `restore_tabs` | `true` | Reopen the tabs (and split) that were open on last exit |
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
+| `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
@@ -665,3 +1027,30 @@ with a timestamped header per session, and tracebacks are set to `all`
 so every goroutine is captured. Recovered panics are additionally shown
 in the error overlay and logged to `crash.log` in the same directory,
 with or without this flag.
+
+### Terminal recovery over a dropped connection
+
+breakthrough responds to SIGHUP, SIGTERM and SIGINT by restoring the
+terminal (exiting the alternate screen buffer, turning off mouse
+reporting) before the process actually exits — the same reason
+vim/htop/less and most other full-screen terminal programs install a
+handler like this. A dropped SSH connection delivers exactly one of
+these (SIGHUP — literally "hang up") once the session tears down, and
+without a handler, an unhandled signal terminates a Go process
+immediately, skipping every bit of cleanup: whichever raw modes were
+on stay on at the terminal emulator itself, showing up afterward as
+garbled output and mouse movements arriving as stray character
+sequences.
+
+This can only help, not guarantee a fix in every case: a connection
+that's already fully, physically severed leaves no channel left to
+send a reset sequence over, so nothing running remotely can undo that
+after the fact. For that situation — or simply to keep breakthrough
+(and whatever it's running in its own embedded shell) alive across a
+dropped connection at all, rather than relying on a signal handler to
+merely leave a clean terminal behind — running it inside a remote
+`tmux` or `screen` session is the robust fix: the session keeps
+running, completely undisturbed, independent of any one SSH
+connection to it, and reattaching afterward needs no recovery of any
+kind because the new connection's own terminal was never touched by
+breakthrough in the first place.
