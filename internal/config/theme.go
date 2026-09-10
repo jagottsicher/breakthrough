@@ -91,17 +91,29 @@ type Theme struct {
 	// succeeds, rather than staying put the way Copy leaves it), and a
 	// plain gray/dimgray pairing read as "the same thing, just lighter"
 	// rather than as two genuinely different states worth telling apart
-	// at a glance — a slightly pinkish-tinted gray for Cut keeps it
-	// close enough to Copy's own neutral grey to still read as the same
-	// *family* of highlight ("administrative state", not another
-	// file-type or severity signal — DirectoryBackground's gold,
-	// EntryError's red, and so on stay meaningfully distinct from both),
-	// while still being immediately distinguishable from it as its own
-	// color rather than requiring a side-by-side brightness comparison.
-	// Being a full-cell background rather than DirectoryBackground's own
-	// narrow inline-tag highlight, a clipboard-held directory shows this
-	// tint across its whole row instead of the two competing for the
-	// same pixels.
+	// at a glance. Both now share the same neutral gray base (0x8a on
+	// every channel) with one channel each boosted by the same amount in
+	// an opposite direction — Cut's own red (a slightly pinkish-tinted
+	// gray, "warmer") versus Copy's own blue (a slightly bluish-tinted
+	// gray, "cooler"), a deliberately matched, symmetric pair rather than
+	// two independently-picked colors — while both stay close enough to
+	// a plain neutral gray to still read as the same *family* of
+	// highlight ("administrative state", not another file-type or
+	// severity signal — DirectoryBackground's gold, EntryError's red,
+	// and so on stay meaningfully distinct from both), immediately
+	// distinguishable from each other as their own colors rather than
+	// requiring a side-by-side brightness comparison. Being a full-cell
+	// background rather than DirectoryBackground's own narrow inline-tag
+	// highlight, a clipboard-held directory shows this tint across its
+	// whole row instead of the two competing for the same pixels — and,
+	// since Panel.setRowCells/paintFixedRowCells also give every tinted
+	// cell a matching SetSelectedStyle, this tint stays visible even on
+	// whichever row happens to be the table's own current cursor row,
+	// focused or not, rather than being invisibly replaced by
+	// FocusedBackground/EditableBackground the way it used to be — a
+	// real, user-reported gap (a Cut/Copy selection that included the
+	// cursor's own row looked "deselected" the moment focus moved
+	// elsewhere, even though it never actually stopped being staged).
 	ClipboardCopyBackground string `json:"clipboard_copy_background"`
 	ClipboardCutBackground  string `json:"clipboard_cut_background"`
 
@@ -205,8 +217,8 @@ func DefaultTheme() Theme {
 		ErrorBackground:     "darkred",
 		DirectoryBackground: "darkgoldenrod",
 
-		ClipboardCopyBackground: "dimgray",
-		ClipboardCutBackground:  "#a08a8a", // a slightly pinkish-tinted gray — see this field's own doc comment for why Cut gets a genuinely different color rather than just a lighter shade of Copy's
+		ClipboardCopyBackground: "#8a8aa0", // a slightly bluish-tinted gray — see this field's own doc comment for the matched pair this and ClipboardCutBackground deliberately form
+		ClipboardCutBackground:  "#a08a8a", // a slightly pinkish-tinted gray — same base gray, same offset, just on red instead of blue — see this field's own doc comment
 
 		Text:               "white",
 		EditableBackground: "slategray",

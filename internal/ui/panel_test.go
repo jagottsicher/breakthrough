@@ -1414,6 +1414,21 @@ func cellBackground(cell *tview.TableCell) (bg tcell.Color, tinted bool) {
 	return bg, true
 }
 
+// cellSelectedBackground reports cell's own SelectedStyle background,
+// and whether one is actually set at all (tcell.StyleDefault, the zero
+// value, means "none" — tview then falls back to the table-wide
+// SetSelectedStyle instead, see setSelectionStyle) — the same
+// Decompose() approach cellBackground uses for the cell's ordinary
+// Style, just for the separate style tview only ever applies to
+// whichever row is currently the table's own cursor row.
+func cellSelectedBackground(cell *tview.TableCell) (bg tcell.Color, set bool) {
+	if cell.SelectedStyle == tcell.StyleDefault {
+		return 0, false
+	}
+	_, bg, _ = cell.SelectedStyle.Decompose()
+	return bg, true
+}
+
 // TestSetClipboardTintsHeldRowAcrossWholeRow pins the user's own
 // explicit request: a file on the clipboard gets a colored background
 // across its whole row, not just its checkbox glyph — every column,
@@ -1485,6 +1500,96 @@ func TestSetClipboardCutUsesItsOwnDistinctColor(t *testing.T) {
 	bg, tinted := cellBackground(p.table.GetCell(row, colName))
 	if !tinted || bg != theme.ClipboardCutBackground {
 		t.Errorf("held.txt name cell after Cut: background = %v, tinted = %v, want ClipboardCutBackground (%v)", bg, tinted, theme.ClipboardCutBackground)
+	}
+}
+
+// TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle pins a real,
+// user-reported gap: selecting several files (checkbox or a right-drag)
+// leaves the cursor on the last one; Cut/Copy tints the whole
+// selection, but the cursor's own row used to lose that tint the
+// instant it was drawn as the table's current row — tview always
+// prefers the table-wide SetSelectedStyle (see setSelectionStyle:
+// FocusedBackground while focused, EditableBackground once focus moves
+// elsewhere, e.g. Tab to another split pane) over a cell's own
+// Style/BackgroundColor, UNLESS that cell has its own SelectedStyle —
+// which addRow/setRowCells never set at all before this fix. The user
+// only noticed once Tab moved focus away and that one row visibly
+// turned plain gray, as if deselected, but it never actually showed
+// the clipboard color in the first place, focused or not — this pins
+// both, not just the "after Tab" half, since fixing one without the
+// other isn't possible: the same missing SelectedStyle causes both.
+func TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	other := filepath.Join(dir, "other.txt")
+	for _, f := range []string{held, other} {
+		if err := os.WriteFile(f, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+
+	heldRow, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		bg, set := cellSelectedBackground(p.table.GetCell(heldRow, col))
+		if !set || bg != theme.ClipboardCopyBackground {
+			t.Errorf("held.txt col %d: SelectedStyle background = %v, set = %v, want ClipboardCopyBackground (%v), set = true — this is what keeps the tint visible when this row is the cursor row", col, bg, set, theme.ClipboardCopyBackground)
+		}
+	}
+
+	otherRow, ok := rowForPath(p, other)
+	if !ok {
+		t.Fatal("other.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(otherRow, col)); set {
+			t.Errorf("other.txt col %d: SelectedStyle unexpectedly set — it was never on the clipboard, its cursor-row rendering should still follow the table-wide, focus-dependent style", col)
+		}
+	}
+}
+
+// TestSetClipboardClearsSelectedStyleWhenUntinted pins the reverse
+// direction for the fix above: a row's own SelectedStyle must go back
+// to tcell.StyleDefault (tview's own "nothing cell-specific set" zero
+// value) once it's no longer on the clipboard, or it would keep
+// silently overriding the table-wide, focus-dependent selected style
+// forever after, even for a row with nothing left to do with the
+// clipboard.
+func TestSetClipboardClearsSelectedStyleWhenUntinted(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	if _, set := cellSelectedBackground(p.table.GetCell(row, colCheckbox)); !set {
+		t.Fatal("setup: held.txt's checkbox cell should have its own SelectedStyle set before the clipboard clears")
+	}
+
+	p.setClipboard(nil, false) // clipboard cleared, e.g. a clean Cut+Paste landing
+
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("held.txt col %d: SelectedStyle still set after the clipboard cleared", col)
+		}
 	}
 }
 

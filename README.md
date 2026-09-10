@@ -186,10 +186,13 @@ terminal.
   that's actually gone — Copy leaves its own source list alone, since
   nothing there was ever removed.
   Whatever's currently on the clipboard shows
-  two ways: every row it holds gets a full-row tint — a neutral grey for
-  Copy, a distinct, slightly pinkish-tinted grey for Cut, so a Cut
-  selection reads as visually different at a glance rather than just a
-  lighter shade of the same hue — across every open tab showing that row, not
+  two ways: every row it holds gets a full-row tint — a slightly
+  bluish-tinted grey for Copy, a slightly pinkish-tinted grey for Cut,
+  a deliberately matched pair rather than two shades of one plain
+  grey, so a Cut selection reads as visually different from a Copy one
+  at a glance rather than needing a brightness comparison. This tint
+  stays visible even on whichever row the cursor happens to land on,
+  focused or not — across every open tab showing that row, not
   just the one Copy/Cut was pressed in; and the status bar names it —
   "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
   chord countdown's own spot, for as long as there's something to
