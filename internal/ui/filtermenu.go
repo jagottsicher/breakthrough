@@ -97,10 +97,12 @@ func filterMenuRowStyle(row *tview.TextView, theme config.ResolvedTheme, focused
 }
 
 // filterMenuCheckboxCapture is the InputCapture shared by all three of
-// the filter-menu's own checkbox-style rows (globCheckbox, sizeRow,
-// mtimeRow — see renderFilterMenu/newFilterMenuToggleRow): Space or
-// Enter toggles the row, Down/Tab moves keyboard focus to the next
-// stop in the dropdown's own order, Up/Backtab to the previous one,
+// the filter-menu's own checkbox-style rows (globCheckbox, and the size/
+// modified-time rows' own checkboxes — see renderFilterMenu/
+// newFilterMenuFieldRow): Space or Enter toggles the row, Down/Tab
+// moves keyboard focus to the next stop in the dropdown's own order,
+// Up/Backtab to the previous one, "/" jumps straight to the next real
+// filter field (see nextField's own doc comment in renderFilterMenu),
 // and Escape closes the whole dropdown. Consumes every one of these
 // outright — unlike filterRegexBtn/filterField (real tview widgets
 // whose own native handling for some of these keys is worth
@@ -116,14 +118,17 @@ func filterMenuRowStyle(row *tview.TextView, theme config.ResolvedTheme, focused
 // renderFilterMenu's own doc comment on filterField's own fix for the
 // closely related half of the same report), let alone reaching the
 // size/modified-time rows without a mouse.
-func filterMenuCheckboxCapture(this tview.Primitive, toggle func(), moveFocus func(tview.Primitive, int), closeMenu func()) func(*tcell.EventKey) *tcell.EventKey {
+func filterMenuCheckboxCapture(this tview.Primitive, toggle func(), moveFocus func(tview.Primitive, int), nextField func(tview.Primitive), closeMenu func()) func(*tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		isSpace := event.Key() == tcell.KeyRune && event.Rune() == ' '
+		isSlash := event.Key() == tcell.KeyRune && event.Rune() == '/'
 		switch {
 		case event.Key() == tcell.KeyEscape:
 			closeMenu()
 		case event.Key() == tcell.KeyEnter, isSpace:
 			toggle()
+		case isSlash:
+			nextField(this)
 		case event.Key() == tcell.KeyDown, event.Key() == tcell.KeyTab:
 			moveFocus(this, 1)
 		case event.Key() == tcell.KeyUp, event.Key() == tcell.KeyBacktab:
@@ -181,25 +186,81 @@ func (r *Root) renderFilterMenu() {
 		}
 	}
 	closeMenu := func() { r.hideOverlay() }
-	// arrowCapture intercepts only Down/Up — the one pair of keys
-	// neither Button.SetExitFunc nor InputField's own SetDoneFunc ever
-	// sees at all (both only ever fire for Enter/Escape/Tab/Backtab,
-	// verified directly against tview's own button.go/inputfield.go) —
-	// and lets every other key fall through unchanged to whichever
-	// primitive's own native handling comes next (typing, Enter,
-	// Tab/Backtab/Escape, ...). Shared by filterRegexBtn and
-	// filterField, the two real tview widgets in order that need this
-	// added on top of their own native handling rather than instead of
-	// it, the way filterMenuCheckboxCapture replaces it entirely for
-	// the three plain TextView rows.
+
+	// fields holds the dropdown's three real comparison-expression
+	// fields (glob, size, modified-time) once all three exist below —
+	// nextField closes over the variable itself, the same "filled in as
+	// we go, read only once actually invoked at runtime" idiom order/
+	// moveFocus already establish just above (a field row constructed
+	// later still ends up reachable once the user actually presses "/",
+	// long after this closure was first created).
+	var fields []tview.Primitive
+
+	// nextField is "/" own repurposed meaning once the dropdown is
+	// already open (see openFilterMenu's own doc comment for the other
+	// half: a bare "/" from plain browsing still just opens it,
+	// unchanged) — jumps straight to the next of the three real fields,
+	// deliberately skipping every checkbox and the glob/regex mode
+	// button in between, the same "second press of an already-
+	// meaningful key advances further" pattern Ctrl+T already uses for
+	// the tab switcher. Safe to steal "/" outright from every one of
+	// these three fields, typing included: a bare filename can never
+	// contain "/" (the OS reserves it as the path separator), so no
+	// glob pattern, size expression, or modified-time expression
+	// (dates included — this app's own absolute-date layouts are all
+	// hyphen-separated, never "/") ever legitimately needs to type one.
+	nextField := func(current tview.Primitive) {
+		startIdx := -1
+		for i, p := range order {
+			if p == current {
+				startIdx = i
+				break
+			}
+		}
+		if startIdx == -1 {
+			return
+		}
+		isField := func(p tview.Primitive) bool {
+			for _, f := range fields {
+				if p == f {
+					return true
+				}
+			}
+			return false
+		}
+		for step := 1; step <= len(order); step++ {
+			idx := (startIdx + step) % len(order)
+			if isField(order[idx]) {
+				r.app.SetFocus(order[idx])
+				return
+			}
+		}
+	}
+
+	// arrowCapture intercepts Down/Up (the one pair of keys neither
+	// Button.SetExitFunc nor InputField's own SetDoneFunc ever sees at
+	// all — both only ever fire for Enter/Escape/Tab/Backtab, verified
+	// directly against tview's own button.go/inputfield.go) and "/"
+	// (see nextField's own doc comment just above for why every one of
+	// these three fields can safely give it up) — letting every other
+	// key fall through unchanged to whichever primitive's own native
+	// handling comes next (typing, Enter, Tab/Backtab/Escape, ...).
+	// Shared by filterRegexBtn and the three fields, the real tview
+	// widgets in order that need this added on top of their own native
+	// handling rather than instead of it, the way
+	// filterMenuCheckboxCapture replaces it entirely for the three
+	// plain TextView checkboxes.
 	arrowCapture := func(this tview.Primitive) func(*tcell.EventKey) *tcell.EventKey {
 		return func(event *tcell.EventKey) *tcell.EventKey {
-			switch event.Key() {
-			case tcell.KeyDown:
+			switch {
+			case event.Key() == tcell.KeyDown:
 				moveFocus(this, 1)
 				return nil
-			case tcell.KeyUp:
+			case event.Key() == tcell.KeyUp:
 				moveFocus(this, -1)
+				return nil
+			case event.Key() == tcell.KeyRune && event.Rune() == '/':
+				nextField(this)
 				return nil
 			}
 			return event
@@ -232,7 +293,7 @@ func (r *Root) renderFilterMenu() {
 	})
 	globCheckbox.SetFocusFunc(func() { filterMenuRowStyle(globCheckbox, panel.theme, true) })
 	globCheckbox.SetBlurFunc(func() { filterMenuRowStyle(globCheckbox, panel.theme, false) })
-	globCheckbox.SetInputCapture(filterMenuCheckboxCapture(globCheckbox, toggleGlob, moveFocus, closeMenu))
+	globCheckbox.SetInputCapture(filterMenuCheckboxCapture(globCheckbox, toggleGlob, moveFocus, nextField, closeMenu))
 	order = append(order, globCheckbox)
 
 	panel.filterRegexBtn.SetInputCapture(arrowCapture(panel.filterRegexBtn))
@@ -282,7 +343,7 @@ func (r *Root) renderFilterMenu() {
 		AddItem(panel.filterRegexBtn, 8, 0, false).
 		AddItem(panel.filterField, 0, 1, true)
 
-	sizeRow, sizeCheckbox, sizeField := r.newFilterMenuFieldRow(&panel.filterSizeActive, &panel.filterSizeText, "Size filter", "e.g. > 1m and < 1g", panel, moveFocus, closeMenu)
+	sizeRow, sizeCheckbox, sizeField := r.newFilterMenuFieldRow(&panel.filterSizeActive, &panel.filterSizeText, "Size filter", "e.g. > 1m and < 1g", panel, moveFocus, nextField, closeMenu)
 	order = append(order, sizeCheckbox)
 	sizeField.SetInputCapture(arrowCapture(sizeField))
 	sizeField.SetDoneFunc(func(key tcell.Key) {
@@ -297,7 +358,7 @@ func (r *Root) renderFilterMenu() {
 	})
 	order = append(order, sizeField)
 
-	mtimeRow, mtimeCheckbox, mtimeField := r.newFilterMenuFieldRow(&panel.filterMtimeActive, &panel.filterMtimeText, "Modified time filter", "e.g. last 7 days", panel, moveFocus, closeMenu)
+	mtimeRow, mtimeCheckbox, mtimeField := r.newFilterMenuFieldRow(&panel.filterMtimeActive, &panel.filterMtimeText, "Modified time filter", "e.g. last 7 days", panel, moveFocus, nextField, closeMenu)
 	order = append(order, mtimeCheckbox)
 	mtimeField.SetInputCapture(arrowCapture(mtimeField))
 	mtimeField.SetDoneFunc(func(key tcell.Key) {
@@ -311,6 +372,13 @@ func (r *Root) renderFilterMenu() {
 		}
 	})
 	order = append(order, mtimeField)
+
+	// nextField's own target list, now that all three fields exist —
+	// see its own doc comment further up for why filling this in only
+	// now (rather than needing it complete at closure-creation time) is
+	// fine: nothing actually calls nextField until a real "/" keypress
+	// happens, long after this whole render pass has finished.
+	fields = []tview.Primitive{panel.filterField, sizeField, mtimeField}
 
 	r.filterMenuLayout.Clear()
 	r.filterMenuLayout.
@@ -345,9 +413,9 @@ func (r *Root) renderFilterMenu() {
 // Returns the row itself plus its own checkbox/field so
 // renderFilterMenu can wire both into the dropdown's own keyboard
 // focus-cycling separately — two real stops per row now, not one.
-// moveFocus/closeMenu come from renderFilterMenu's own single render
-// pass rather than being rebuilt here.
-func (r *Root) newFilterMenuFieldRow(active *bool, text *string, label, placeholder string, panel *Panel, moveFocus func(tview.Primitive, int), closeMenu func()) (row *tview.Flex, checkbox *tview.TextView, field *tview.InputField) {
+// moveFocus/nextField/closeMenu come from renderFilterMenu's own single
+// render pass rather than being rebuilt here.
+func (r *Root) newFilterMenuFieldRow(active *bool, text *string, label, placeholder string, panel *Panel, moveFocus func(tview.Primitive, int), nextField func(tview.Primitive), closeMenu func()) (row *tview.Flex, checkbox *tview.TextView, field *tview.InputField) {
 	checkbox = tview.NewTextView().SetDynamicColors(true)
 	filterMenuRowStyle(checkbox, panel.theme, false)
 	renderCheckbox := func() { checkbox.SetText(checkboxText(*active) + " " + label) }
@@ -379,7 +447,7 @@ func (r *Root) newFilterMenuFieldRow(active *bool, text *string, label, placehol
 	})
 	checkbox.SetFocusFunc(func() { filterMenuRowStyle(checkbox, panel.theme, true) })
 	checkbox.SetBlurFunc(func() { filterMenuRowStyle(checkbox, panel.theme, false) })
-	checkbox.SetInputCapture(filterMenuCheckboxCapture(checkbox, toggle, moveFocus, closeMenu))
+	checkbox.SetInputCapture(filterMenuCheckboxCapture(checkbox, toggle, moveFocus, nextField, closeMenu))
 
 	field = tview.NewInputField()
 	field.SetPlaceholder(placeholder)

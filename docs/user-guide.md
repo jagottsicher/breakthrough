@@ -227,7 +227,18 @@ field, the size checkbox, the size expression field, the modified-time
 checkbox, and the modified-time expression field, wrapping back to the
 first — `Space` or `Enter` toggles whichever checkbox currently has
 focus, and `Escape` closes the whole dropdown from any of them, the
-same as clicking elsewhere or `Ctrl`+`C` already did. By default (the
+same as clicking elsewhere or `Ctrl`+`C` already did.
+
+`/` itself, pressed again once the dropdown is already open, is a
+faster way to reach the size or modified-time field specifically: it
+jumps straight to the next of the three real fields (glob → size →
+modified-time → back to glob), skipping every checkbox and the
+Glob/Regex button in between — the same "press it again to advance
+further" behavior `Ctrl`+`T` already has for the tab switcher. This is
+safe to repurpose from typing a literal `/`: a bare filename can never
+contain one (it's the OS's own path separator), so none of these three
+expressions — a glob pattern, a size comparison, or a modified-time
+one — could ever legitimately need to type it. By default (the
 `filter_persistent` setting, see the reference below), all three carry
 straight over when you navigate to a different directory — browsing a
 whole tree with the same filter switched on is the point, and the "Nx"

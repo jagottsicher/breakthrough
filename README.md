@@ -87,7 +87,11 @@ terminal.
   already did for glob. `Tab`/`Shift+Tab` cycle through all seven of
   the dropdown's own pieces (checkbox + field for size and
   modified-time, checkbox + mode button + field for glob),
-  `Space`/`Enter` toggles whichever checkbox has focus, and `Escape`
+  `Space`/`Enter` toggles whichever checkbox has focus, `/` — once the
+  dropdown is already open — jumps straight to the next of the three
+  fields instead (the same "press it again to advance further" trick
+  `Ctrl+T` already does for the tab switcher; safe to repurpose since a
+  bare filename can never contain `/` in the first place), and `Escape`
   closes it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
