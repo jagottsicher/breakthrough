@@ -65,12 +65,17 @@ terminal.
   to `…` and Modified disappeared off the right edge entirely.
 - A live filter, tucked behind a compact "Y" button in the top row (an
   "Nx" count appears right before it once one or more are actually
-  narrowing the listing): click it to open a small dropdown with the
+  narrowing the listing, turning bright red instead if one is currently
+  hiding everything a directory would otherwise show): click it, or
+  press `/`, to open a small dropdown with the
   glob/regex filter (type to narrow the listing on every keystroke,
   with a Glob/Regex toggle for how the pattern is interpreted, and its
   own checkbox to switch it off without losing what's typed), plus a
   size filter and a modified-time filter — combinable, on/off for now
   while their own comparison/range options are still being built out.
+  `Tab`/`Shift+Tab` cycle through all five of the dropdown's own pieces,
+  `Space`/`Enter` toggles whichever one has focus, and `Escape` closes
+  it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go

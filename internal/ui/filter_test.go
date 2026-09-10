@@ -272,15 +272,23 @@ func TestFilterFieldDoneReturnsFocusToTableWithoutClearing(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
+	// filterField's own SetDoneFunc is only ever installed by
+	// renderFilterMenu (see its own doc comment for why) — going
+	// through the real openFilterMenu, not setting text/focus directly,
+	// is what actually wires it for this test the same way a real "/"
+	// press or "Y" click would.
+	r.openFilterMenu()
 	r.panel.filterField.SetText("ap*")
-	r.app.SetFocus(r.panel.filterField)
 
 	r.panel.filterField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.panel.filterField.GetText(); got != "ap*" {
 		t.Errorf("filterField text after Enter = %q, want unchanged %q", got, "ap*")
 	}
+	if r.activePage == filterMenuPage {
+		t.Error("Enter in the filter field should close the dropdown, not just move focus")
+	}
 	if !r.panel.table.HasFocus() {
-		t.Error("focus should return to the table after Enter in the filter field")
+		t.Error("focus should return to the table after Enter closes the filter menu")
 	}
 }
