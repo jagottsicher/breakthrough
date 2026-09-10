@@ -16,6 +16,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
@@ -137,10 +138,11 @@ type Panel struct {
 	// "temporarily disable without losing what's already typed" case
 	// that behavior alone can't cover, and filterByText's own new
 	// active parameter is what actually honors it. filterSizeActive/
-	// filterMtimeActive are pure UI toggles for now, read only by
-	// renderFilterMenuBtn's own active-count indicator — no filtering
-	// logic reads either yet, per the user's own explicit "it's enough
-	// to be able to turn them on and off in the dropdown for now".
+	// filterMtimeActive gate filterBySize/filterByMtime the same way —
+	// each row's own real expression lives in filterSizeText/
+	// filterMtimeText just below, following the exact same "type it,
+	// the listing narrows immediately, an incomplete expression is a
+	// harmless no-op" contract filterText/filterByText already set.
 	// layout is the current column sizing (see columns.go), recomputed
 	// whenever the panel's width or the data format changes.
 	layout columnLayout
@@ -152,6 +154,18 @@ type Panel struct {
 	filterGlobActive  bool
 	filterSizeActive  bool
 	filterMtimeActive bool
+
+	// filterSizeText/filterMtimeText are the size/modified-time rows'
+	// own expression fields — internal/filterexpr's own syntax (see its
+	// doc comment), parsed and matched by filterBySize/filterByMtime.
+	// Kept as plain strings here, not a pre-parsed filterexpr.SizeFilter/
+	// MtimeFilter, for the same reason filterText itself is: parsing has
+	// to happen fresh on every load() anyway (an expression can be mid-
+	// edit, one keystroke away from parsing cleanly), so there's nothing
+	// to gain from caching a parse result that's this cheap to redo and
+	// that would otherwise need its own invalidation tracking.
+	filterSizeText  string
+	filterMtimeText string
 
 	// filterPersistent mirrors config.Settings.FilterPersistent (see its
 	// own doc comment there for the full reasoning) — set once from it
@@ -1076,9 +1090,13 @@ func (p *Panel) load(dir string) error {
 		p.filterGlobActive = true
 		p.filterSizeActive = false
 		p.filterMtimeActive = false
+		p.filterSizeText = ""
+		p.filterMtimeText = ""
 	}
 	beforeFilterCount := len(entries)
 	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive)
+	entries = filterBySize(entries, p.filterSizeText, p.filterSizeActive)
+	entries = filterByMtime(entries, p.filterMtimeText, p.filterMtimeActive, time.Now())
 	// See filterMatchesNothing's own doc comment: beforeFilterCount > 0
 	// is what tells "the filter hid everything" apart from "this
 	// directory is simply empty" — filterByText itself is a no-op on an
@@ -1500,14 +1518,14 @@ func filterModeLabel(regex bool) string {
 // sit flush against this slot's own right edge (where the tab strip
 // picks up right after it) regardless of how wide the indicator is.
 //
-// The glob/regex row only actually counts once it's both switched on
-// *and* has something to filter by — matching filterByText's own real
-// no-op condition (see its own doc comment) — since the indicator's
-// whole point is "filtering is genuinely narrowing the list right now",
-// not just "a checkbox happens to be checked". Size/modified-time have
-// no such distinction yet (see filterSizeActive/filterMtimeActive's own
-// doc comment on the struct: pure toggles, no filtering logic behind
-// them) — their raw toggle state is the only signal there is.
+// Every one of the three rows only actually counts once it's both
+// switched on *and* has something to filter by — matching filterByText/
+// filterBySize/filterByMtime's own real no-op condition (see their own
+// doc comments) — since the indicator's whole point is "filtering is
+// genuinely narrowing the list right now", not just "a checkbox
+// happens to be checked" (a size/modified-time row ticked on with its
+// own expression field still empty doesn't filter anything yet either,
+// the same as the glob row's own checkbox with nothing typed into it).
 //
 // Also colors the "Nx" itself EntryError's own red whenever
 // filterMatchesNothing is true (see its own doc comment) — a filter
@@ -1522,10 +1540,10 @@ func (p *Panel) renderFilterMenuBtn() {
 	if p.filterGlobActive && p.filterText != "" {
 		count++
 	}
-	if p.filterSizeActive {
+	if p.filterSizeActive && p.filterSizeText != "" {
 		count++
 	}
-	if p.filterMtimeActive {
+	if p.filterMtimeActive && p.filterMtimeText != "" {
 		count++
 	}
 
@@ -1594,6 +1612,56 @@ func filterByText(entries []fsops.Entry, filterText string, filterRegex, active 
 	visible := entries[:0] // reuses entries' backing array, same as filterHidden
 	for _, e := range entries {
 		if match(e.Name) {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// filterBySize narrows entries to those whose Size satisfies expr (see
+// internal/filterexpr.ParseSize for the syntax: comparison operators,
+// b/k/m/g/t units, "and"-joined ranges). Same no-op contract
+// filterByText already established: inactive, an empty expr, or one
+// that fails to parse all leave entries untouched — the last case
+// matters for exactly the same reason it does there, an expression
+// still being typed (e.g. "> 1" before a unit follows) is an expected,
+// transient state, not something worth interrupting the listing over.
+func filterBySize(entries []fsops.Entry, expr string, active bool) []fsops.Entry {
+	if !active || expr == "" {
+		return entries
+	}
+	f, err := filterexpr.ParseSize(expr)
+	if err != nil {
+		return entries
+	}
+	visible := entries[:0]
+	for _, e := range entries {
+		if f.Match(e.Size) {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// filterByMtime narrows entries to those whose ModTime satisfies expr
+// (see internal/filterexpr.ParseMtime for the syntax: before/after/
+// between, absolute dates, and relative "last N days"-style clauses) —
+// otherwise the same no-op contract as filterByText/filterBySize. now
+// is threaded through from the caller (see Panel.load) rather than
+// read here via time.Now(), so every relative clause in a single
+// load() call measures itself against the same instant regardless of
+// how long filtering the whole listing actually takes.
+func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Time) []fsops.Entry {
+	if !active || expr == "" {
+		return entries
+	}
+	f, err := filterexpr.ParseMtime(expr, now)
+	if err != nil {
+		return entries
+	}
+	visible := entries[:0]
+	for _, e := range entries {
+		if f.Match(e.ModTime) {
 			visible = append(visible, e)
 		}
 	}

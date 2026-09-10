@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -107,6 +109,84 @@ func TestFilterByTextRegexInvalidPatternKeepsEverything(t *testing.T) {
 	}
 }
 
+func TestFilterBySizeEmptyIsNoop(t *testing.T) {
+	entries := []fsops.Entry{{Name: "small.txt", Size: 10}, {Name: "big.txt", Size: 10_000_000}}
+	got := filterBySize(entries, "", true)
+	if len(got) != 2 {
+		t.Errorf("filterBySize with an empty expression = %v, want all entries kept", entryNames(got))
+	}
+}
+
+func TestFilterBySizeInactiveIsNoopEvenWithExpression(t *testing.T) {
+	entries := []fsops.Entry{{Name: "small.txt", Size: 10}, {Name: "big.txt", Size: 10_000_000}}
+	got := filterBySize(entries, "> 1m", false)
+	if len(got) != 2 {
+		t.Errorf("filterBySize with active=false = %v, want every entry kept despite a real expression", entryNames(got))
+	}
+}
+
+func TestFilterBySizeNarrowsByComparison(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "small.txt", Size: 10},
+		{Name: "medium.txt", Size: 500 * 1024},
+		{Name: "big.txt", Size: 5 * 1024 * 1024},
+	}
+	got := filterBySize(entries, "> 1m", true)
+	if len(got) != 1 || got[0].Name != "big.txt" {
+		t.Errorf("filterBySize(> 1m) = %v, want just big.txt", entryNames(got))
+	}
+}
+
+func TestFilterBySizeInvalidExpressionKeepsEverything(t *testing.T) {
+	entries := []fsops.Entry{{Name: "small.txt", Size: 10}, {Name: "big.txt", Size: 10_000_000}}
+	// ">" alone (no number yet) is exactly the mid-keystroke shape this
+	// no-op contract exists for — someone about to type "> 1m" passes
+	// through this incomplete state on the way there.
+	got := filterBySize(entries, ">", true)
+	if len(got) != len(entries) {
+		t.Errorf("filterBySize(>) = %v, want every entry kept (incomplete expression treated as no filter yet)", entryNames(got))
+	}
+}
+
+func TestFilterByMtimeEmptyIsNoop(t *testing.T) {
+	now := time.Now()
+	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
+	got := filterByMtime(entries, "", true, now)
+	if len(got) != 2 {
+		t.Errorf("filterByMtime with an empty expression = %v, want all entries kept", entryNames(got))
+	}
+}
+
+func TestFilterByMtimeInactiveIsNoopEvenWithExpression(t *testing.T) {
+	now := time.Now()
+	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
+	got := filterByMtime(entries, "last 7 days", false, now)
+	if len(got) != 2 {
+		t.Errorf("filterByMtime with active=false = %v, want every entry kept despite a real expression", entryNames(got))
+	}
+}
+
+func TestFilterByMtimeNarrowsByComparison(t *testing.T) {
+	now := time.Now()
+	entries := []fsops.Entry{
+		{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)},
+		{Name: "recent.txt", ModTime: now.Add(-2 * 24 * time.Hour)},
+	}
+	got := filterByMtime(entries, "last 7 days", true, now)
+	if len(got) != 1 || got[0].Name != "recent.txt" {
+		t.Errorf("filterByMtime(last 7 days) = %v, want just recent.txt", entryNames(got))
+	}
+}
+
+func TestFilterByMtimeInvalidExpressionKeepsEverything(t *testing.T) {
+	now := time.Now()
+	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
+	got := filterByMtime(entries, "sometime soon-ish", true, now)
+	if len(got) != len(entries) {
+		t.Errorf("filterByMtime(garbage) = %v, want every entry kept (unparseable expression treated as no filter yet)", entryNames(got))
+	}
+}
+
 // TestFilterFieldNarrowsListingLive pins the actual end-to-end wiring:
 // typing into filterField (via SetChangedFunc, not just on Enter/Tab)
 // reloads the panel with the filter applied immediately.
@@ -141,6 +221,77 @@ func TestFilterFieldNarrowsListingLive(t *testing.T) {
 	}
 	if names["banana.txt"] || names["app-data"] || names["apple.txt"] {
 		t.Errorf("filtered listing should not include non-matching entries, got rows %v", names)
+	}
+}
+
+// TestSizeFieldNarrowsListingLive is the size row's own counterpart to
+// TestFilterFieldNarrowsListingLive: typing into the dropdown's real
+// InputField (via SetChangedFunc — see newFilterMenuFieldRow) reloads
+// the panel with the size filter applied immediately, auto-activating
+// its own checkbox exactly like typing into the glob field does.
+func TestSizeFieldNarrowsListingLive(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "small.txt"), make([]byte, 10), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "big.txt"), make([]byte, 5*1024*1024), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	filterMenuFieldRowField(t, r, 2).SetText("> 1m")
+
+	if !r.panel.filterSizeActive {
+		t.Fatal("typing into the size field should auto-activate it")
+	}
+	rowCount := r.panel.table.GetRowCount()
+	if rowCount != 2 { // ".." + big.txt
+		t.Fatalf("row count after filtering to \"> 1m\" = %d, want 2 (.., big.txt)", rowCount)
+	}
+	ref, ok := r.panel.rowRef(1)
+	if !ok || ref.name != "big.txt" {
+		t.Errorf("row 1 = %+v, ok=%v, want big.txt", ref, ok)
+	}
+}
+
+// TestMtimeFieldNarrowsListingLive is the modified-time row's own
+// counterpart to TestFilterFieldNarrowsListingLive.
+func TestMtimeFieldNarrowsListingLive(t *testing.T) {
+	dir := t.TempDir()
+	oldFile := filepath.Join(dir, "old.txt")
+	newFile := filepath.Join(dir, "new.txt")
+	if err := os.WriteFile(oldFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	longAgo := time.Now().Add(-365 * 24 * time.Hour)
+	if err := os.Chtimes(oldFile, longAgo, longAgo); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	filterMenuFieldRowField(t, r, 3).SetText("last 7 days")
+
+	if !r.panel.filterMtimeActive {
+		t.Fatal("typing into the modified-time field should auto-activate it")
+	}
+	rowCount := r.panel.table.GetRowCount()
+	if rowCount != 2 { // ".." + new.txt
+		t.Fatalf("row count after filtering to \"last 7 days\" = %d, want 2 (.., new.txt)", rowCount)
+	}
+	ref, ok := r.panel.rowRef(1)
+	if !ok || ref.name != "new.txt" {
+		t.Errorf("row 1 = %+v, ok=%v, want new.txt", ref, ok)
 	}
 }
 
@@ -202,6 +353,10 @@ func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	if r.panel.filterText != "ap*" {
 		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
 	}
+	r.panel.filterSizeActive = true
+	r.panel.filterSizeText = "> 1m"
+	r.panel.filterMtimeActive = true
+	r.panel.filterMtimeText = "last 7 days"
 
 	sub := filepath.Join(dir, "app-data")
 	if err := r.panel.navigate(sub); err != nil {
@@ -212,6 +367,12 @@ func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	}
 	if got := r.panel.filterField.GetText(); got != "ap*" {
 		t.Errorf("filterField text after navigating to a new directory = %q, want unchanged %q", got, "ap*")
+	}
+	if !r.panel.filterSizeActive || r.panel.filterSizeText != "> 1m" {
+		t.Errorf("size filter after navigating = active %v, text %q, want unchanged (active, %q)", r.panel.filterSizeActive, r.panel.filterSizeText, "> 1m")
+	}
+	if !r.panel.filterMtimeActive || r.panel.filterMtimeText != "last 7 days" {
+		t.Errorf("modified-time filter after navigating = active %v, text %q, want unchanged (active, %q)", r.panel.filterMtimeActive, r.panel.filterMtimeText, "last 7 days")
 	}
 }
 
@@ -234,6 +395,10 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	if r.panel.filterText != "ap*" {
 		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
 	}
+	r.panel.filterSizeActive = true
+	r.panel.filterSizeText = "> 1m"
+	r.panel.filterMtimeActive = true
+	r.panel.filterMtimeText = "last 7 days"
 
 	// Same-directory refresh (what toggling hidden files does under the
 	// hood) must not touch the filter either way.
@@ -245,6 +410,9 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	}
 	if got := r.panel.filterField.GetText(); got != "ap*" {
 		t.Errorf("filterField text after a same-directory refresh = %q, want unchanged %q", got, "ap*")
+	}
+	if r.panel.filterSizeText != "> 1m" || r.panel.filterMtimeText != "last 7 days" {
+		t.Errorf("size/modified-time text after a same-directory refresh = %q/%q, want unchanged", r.panel.filterSizeText, r.panel.filterMtimeText)
 	}
 
 	// Navigating to a different directory must clear it, since
@@ -258,6 +426,12 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	}
 	if got := r.panel.filterField.GetText(); got != "" {
 		t.Errorf("filterField text after navigating to a new directory = %q, want cleared", got)
+	}
+	if r.panel.filterSizeActive || r.panel.filterSizeText != "" {
+		t.Errorf("size filter after navigating = active %v, text %q, want cleared", r.panel.filterSizeActive, r.panel.filterSizeText)
+	}
+	if r.panel.filterMtimeActive || r.panel.filterMtimeText != "" {
+		t.Errorf("modified-time filter after navigating = active %v, text %q, want cleared", r.panel.filterMtimeActive, r.panel.filterMtimeText)
 	}
 }
 
