@@ -838,6 +838,23 @@ the Modified column "Deletion time". Both respect the timestamp
 formatting toggle and the column sort, so the same file trashed twice
 from the same place stays distinguishable.
 
+### Restoring into a conflict
+
+Restoring something whose original path now has an unrelated file
+sitting on it — recreated after the original was trashed, say — opens
+the exact same conflict dialog a Paste collision already does
+(Overwrite, Overwrite all, Merge/Merge all for a directory, Skip, Skip
+all, "overwrite all if source is newer", "overwrite all if source isn't
+empty"), rather than silently overwriting whatever's there or refusing
+outright with nothing but an error message to explain why. Skip is
+preselected by default — the same safety-first convention every other
+confirmation in this app already follows — so restoring a whole
+selection at once, some of them conflicting and some not, never
+accidentally clobbers anything on a stray `Enter`. Restoring a
+multi-item selection whose members came from entirely different
+original folders works the same way a single item does — each one is
+resolved against its own real destination independently.
+
 The trash is persistent by default, under
 `~/.local/share/breakthrough/trash`. Set `trash_persistent = false` for
 a session-scoped one under `$XDG_RUNTIME_DIR`, discarded when your login
