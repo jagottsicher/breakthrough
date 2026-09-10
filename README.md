@@ -29,7 +29,7 @@ terminal.
 ## Features
 
 - Panel-based directory browsing: arrow-key and mouse navigation, a
-  clickable path breadcrumb bar with Start/Home/Back/Forward — its
+  clickable path breadcrumb bar with Start/Root/Home/Back/Forward — its
   history covers a trip into search results or the trash exactly the
   same as a real directory, and Back/Forward into any of them restores
   the cursor row it was left on, a search's own results included, shown
@@ -80,10 +80,13 @@ terminal.
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go
   back to every new directory starting unfiltered instead.
-- The five nav buttons (Start/Home/Back/Forward/Up) at the very start
+- The six nav buttons (Start/Root/Home/Back/Forward/Up) at the very start
   of the path bar are real, highlighted buttons now — a plain
   background-colored square either side of each glyph, with its own
-  separator column between one button and the next.
+  separator column between one button and the next. Root (`/`) sits right
+  next to Start and jumps straight to the filesystem root — the same
+  destination the path breadcrumb's own leading "/" already links to, just
+  as a second, consistently styled, easier-to-spot target for it.
 - Tabs: several directories open at once in one window, each keeping its
   own history, filter, sort order, selection and cursor position, so
   switching away and back leaves everything exactly as it was. `^1`
