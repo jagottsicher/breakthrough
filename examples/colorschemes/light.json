@@ -18,5 +18,7 @@
   "entry_special": "#b35900",
   "entry_unreadable": "#902a20",
   "entry_archive": "#8e3b8e",
-  "entry_hidden": "#595959"
+  "entry_hidden": "#595959",
+  "warning_text": "#b35900",
+  "critical_text": "#c0392b"
 }
