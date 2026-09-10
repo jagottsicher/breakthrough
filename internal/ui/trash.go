@@ -300,13 +300,16 @@ func (r *Root) TrashbinShortcut() {
 // hand-built confirmation would be a second place for the "Cancel is
 // preselected" rule below to be got wrong.
 //
-// Deliberately NOT SetCurrentItem(0) the way RequestQuit's quitConfirm
-// is: Ctrl+Q is already a single, deliberate keypress toward quitting, so
-// defaulting to "Quit" on Enter is low-friction and cheaply undone
-// (restart the app). What comes through here — Remove, Empty Trash,
-// resetting settings — is either unrecoverable or tedious to redo from a
-// single stray Enter, so openConfirm always preselects index 1
-// ("Cancel") instead.
+// Item order matches quitConfirm's own, per the user's own explicit
+// request: the confirming answer is always listed first (top), Cancel
+// always last (bottom) — regardless of which one actually starts
+// pre-selected. openConfirm still preselects Cancel here (now index 1,
+// not index 0 — see its own doc comment), same as quitConfirm's own
+// SetCurrentItem(1) does: Ctrl+Q is already a single, deliberate
+// keypress toward quitting, and what comes through openConfirm —
+// Remove, Empty Trash, resetting settings — is either unrecoverable or
+// tedious to redo from a single stray Enter, so both dialogs default a
+// plain Enter to Cancel regardless of which position that ends up at.
 func (r *Root) newConfirmDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
@@ -314,10 +317,10 @@ func (r *Root) newConfirmDialog() *tview.List {
 	// The question itself lives in confirmDialogTitleBar, not as a list
 	// item — per the user's own explicit request that the question BE
 	// the header rather than sit under a generic "Confirm" caption. Only
-	// index 1 (the confirming answer) is still set fresh by openConfirm
+	// index 0 (the confirming answer) is still set fresh by openConfirm
 	// before every show.
-	l.AddItem("Cancel", "", 0, r.cancelConfirm)
 	l.AddItem("", "", 0, r.acceptConfirm)
+	l.AddItem("Cancel", "", 0, r.cancelConfirm)
 	l.SetDoneFunc(r.cancelConfirm) // Escape
 	return l
 }
@@ -343,7 +346,7 @@ func (r *Root) newConfirmDialog() *tview.List {
 func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	r.pendingConfirm = action
 	r.confirmDialogTitleBar.SetText(" " + message + " ")
-	r.confirmDialog.SetItemText(1, confirmLabel, "")
+	r.confirmDialog.SetItemText(0, confirmLabel, "")
 
 	// Width has to cover whichever of the header (the question, which
 	// can run long — "Reset all N settings, in every category, to their
@@ -366,7 +369,7 @@ func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	// stays r.confirmDialog, the real focus target) needs this even
 	// though confirmDialogLayout is what's actually drawn/positioned.
 	r.confirmDialog.SetRect(x, y, width, height)
-	r.confirmDialog.SetCurrentItem(0) // "Cancel" - see newConfirmDialog's own comment
+	r.confirmDialog.SetCurrentItem(1) // "Cancel" - see newConfirmDialog's own comment
 	// Layered on top of whatever asked, rather than replacing it:
 	// answering a question is not a reason to close the thing that
 	// raised it. The Options screen in particular has to still be there
