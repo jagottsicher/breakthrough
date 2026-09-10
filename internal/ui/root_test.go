@@ -166,8 +166,8 @@ func TestRequestQuitWhilePastingAsksToCancelTheCopyInstead(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q (the shared confirm dialog)", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
-		t.Errorf("preselected item = %d, want 0 (Cancel) — a stray Enter must never cancel the copy and quit", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Errorf("preselected item = %d, want 1 (Cancel) — a stray Enter must never cancel the copy and quit", got)
 	}
 	if r.pasteJob == nil {
 		t.Error("merely asking should not have cancelled the running paste")
@@ -190,7 +190,7 @@ func TestConfirmingQuitWhilePastingCancelsTheJobThenQuits(t *testing.T) {
 	newPasteTestJob(r, false, dir, 1)
 
 	r.RequestQuit()
-	r.confirmDialog.SetCurrentItem(1) // "Yes, cancel and quit"
+	r.confirmDialog.SetCurrentItem(0) // "Yes, cancel and quit"
 	r.acceptConfirm()
 
 	if r.pasteJob != nil {
