@@ -42,16 +42,16 @@ func selectOptionCategory(t *testing.T, r *Root, name string) {
 // with its confirming choice — what a reset now goes through, so a test
 // exercising one has to as well.
 //
-// Deliberately selects index 1 explicitly rather than pressing Enter on
-// whatever is preselected: the dialog opens on "Cancel" on purpose, and
-// a helper that quietly relied on that ordering would stop confirming
-// anything the moment it changed.
+// Deliberately selects index 0 explicitly rather than pressing Enter on
+// whatever is preselected: the dialog opens on "Cancel" (index 1) on
+// purpose, and a helper that quietly relied on that ordering would stop
+// confirming anything the moment it changed.
 func confirmReset(t *testing.T, r *Root) {
 	t.Helper()
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirmation dialog %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(1)
+	r.confirmDialog.SetCurrentItem(0)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
@@ -634,8 +634,8 @@ func TestResetAsksBeforeDiscardingAnything(t *testing.T) {
 		t.Error("the reset already took effect before being confirmed")
 	}
 
-	// Cancel — index 0, and also what the dialog opens on.
-	r.confirmDialog.SetCurrentItem(0)
+	// Cancel — index 1, and also what the dialog opens on.
+	r.confirmDialog.SetCurrentItem(1)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if r.panel.showHidden != changed {
@@ -658,8 +658,8 @@ func TestResetConfirmationOpensOnCancel(t *testing.T) {
 
 	r.resetAllOptions()
 
-	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
-		t.Errorf("confirmation opened on item %d, want 0 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Errorf("confirmation opened on item %d, want 1 (Cancel)", got)
 	}
 }
 
@@ -674,12 +674,12 @@ func TestResetConfirmationNamesTheAction(t *testing.T) {
 
 	r.resetCurrentOptionCategory()
 	categoryQuestion := r.confirmDialogTitleBar.GetText(true)
-	categoryAnswer, _ := r.confirmDialog.GetItemText(1)
+	categoryAnswer, _ := r.confirmDialog.GetItemText(0)
 	r.cancelConfirm()
 
 	r.resetAllOptions()
 	allQuestion := r.confirmDialogTitleBar.GetText(true)
-	allAnswer, _ := r.confirmDialog.GetItemText(1)
+	allAnswer, _ := r.confirmDialog.GetItemText(0)
 	r.cancelConfirm()
 
 	if categoryQuestion == allQuestion {
