@@ -111,6 +111,39 @@ func TestThemeResolveAcceptsHexColors(t *testing.T) {
 	}
 }
 
+// TestClipboardBackgroundInactiveDefaultsToComputedShade pins the
+// default, no-override case: a scheme that never sets
+// clipboard_copy_background_inactive/clipboard_cut_background_inactive
+// still gets a sensible Inactive variant, derived from its own
+// (possibly also overridden) bright ClipboardCopyBackground/
+// ClipboardCutBackground — not left at ColorDefault, and not always
+// DefaultTheme's own value regardless of what this scheme's bright
+// tint actually is.
+func TestClipboardBackgroundInactiveDefaultsToComputedShade(t *testing.T) {
+	th := Theme{ClipboardCopyBackground: "#123456"}
+	resolved := th.Resolve()
+	if want := darkenForInactiveFocus(tcell.GetColor("#123456")); resolved.ClipboardCopyBackgroundInactive != want {
+		t.Errorf("ClipboardCopyBackgroundInactive = %v, want %v (derived from this scheme's own overridden bright color)", resolved.ClipboardCopyBackgroundInactive, want)
+	}
+}
+
+// TestClipboardBackgroundInactiveAcceptsExplicitOverride pins the new
+// capability itself: a scheme file can set
+// clipboard_copy_background_inactive/clipboard_cut_background_inactive
+// explicitly, bypassing darkenForInactiveFocus's own computed default
+// entirely — for a scheme whose own clipboard tint doesn't darken well
+// under the fixed factors tuned for this app's own defaults.
+func TestClipboardBackgroundInactiveAcceptsExplicitOverride(t *testing.T) {
+	th := Theme{
+		ClipboardCopyBackground:         "#123456",
+		ClipboardCopyBackgroundInactive: "#abcdef",
+	}
+	resolved := th.Resolve()
+	if want := tcell.GetColor("#abcdef"); resolved.ClipboardCopyBackgroundInactive != want {
+		t.Errorf("ClipboardCopyBackgroundInactive = %v, want the explicit override %v, not the computed default", resolved.ClipboardCopyBackgroundInactive, want)
+	}
+}
+
 func writeScheme(t *testing.T, dir, filename, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -116,6 +116,22 @@ type Theme struct {
 	// elsewhere, even though it never actually stopped being staged).
 	ClipboardCopyBackground string `json:"clipboard_copy_background"`
 	ClipboardCutBackground  string `json:"clipboard_cut_background"`
+	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
+	// override the color a clipboard-held row shows while it's also the
+	// panel's own current cursor row but this panel does NOT have real
+	// keyboard focus — left empty (the default for every scheme
+	// shipped with this app, including DefaultTheme itself), Resolve
+	// derives a sensible one automatically from this scheme's own
+	// ClipboardCopyBackground/ClipboardCutBackground (see
+	// darkenForInactiveFocus's own doc comment for exactly how), so a
+	// scheme file only needs to set these two at all if the computed
+	// default doesn't come out right for its own particular tint
+	// colors — a scheme with a very dark or already-low-saturation
+	// clipboard tint to begin with, say, where darkenForInactiveFocus's
+	// own fixed factors might not land as well as they do for this
+	// app's own defaults.
+	ClipboardCopyBackgroundInactive string `json:"clipboard_copy_background_inactive"`
+	ClipboardCutBackgroundInactive  string `json:"clipboard_cut_background_inactive"`
 
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
@@ -188,13 +204,14 @@ type ResolvedTheme struct {
 
 	ClipboardCopyBackground tcell.Color
 	ClipboardCutBackground  tcell.Color
-	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive are
-	// derived, not independently configurable (see darkenForInactiveFocus
-	// and this pair's own use in internal/ui's Panel.rowSelectedStyle):
-	// a deliberately darker shade of ClipboardCopyBackground/
-	// ClipboardCutBackground themselves, used only for a clipboard-held
+	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
+	// default to a derived shade of ClipboardCopyBackground/
+	// ClipboardCutBackground themselves (see darkenForInactiveFocus), but
+	// a scheme file can override either explicitly (see Theme's own
+	// same-named fields) — used only for a clipboard-held
 	// row that's also the panel's own current cursor row while the panel
-	// does NOT have real keyboard focus. Without a color of its own for
+	// does NOT have real keyboard focus (see internal/ui's own
+	// Panel.rowSelectedStyle). Without a color of its own for
 	// that specific combination, that row either lost its clipboard tint
 	// entirely (the original bug FocusedBackground/EditableBackground's
 	// own doc comment covers) or, once that was fixed, became visually
@@ -276,6 +293,23 @@ func (t Theme) Resolve() ResolvedTheme {
 	}
 	copyBg := resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground)
 	cutBg := resolve(t.ClipboardCutBackground, def.ClipboardCutBackground)
+	// The Inactive pair's own "fallback" isn't a fixed default-theme
+	// string the way every other field's is — it's computed from
+	// *this* scheme's own copyBg/cutBg above (already resolved,
+	// including any override), so a scheme that also overrides
+	// ClipboardCopyBackground/ClipboardCutBackground themselves still
+	// gets an Inactive variant actually derived from its own colors,
+	// not DefaultTheme's. resolve itself can't express that (it only
+	// ever falls back to a fixed string), so this is inlined directly
+	// rather than forcing that shared helper to special-case it.
+	copyBgInactive := darkenForInactiveFocus(copyBg)
+	if c := tcell.GetColor(t.ClipboardCopyBackgroundInactive); c != tcell.ColorDefault {
+		copyBgInactive = c
+	}
+	cutBgInactive := darkenForInactiveFocus(cutBg)
+	if c := tcell.GetColor(t.ClipboardCutBackgroundInactive); c != tcell.ColorDefault {
+		cutBgInactive = c
+	}
 	return ResolvedTheme{
 		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
@@ -286,8 +320,8 @@ func (t Theme) Resolve() ResolvedTheme {
 
 		ClipboardCopyBackground:         copyBg,
 		ClipboardCutBackground:          cutBg,
-		ClipboardCopyBackgroundInactive: darkenForInactiveFocus(copyBg),
-		ClipboardCutBackgroundInactive:  darkenForInactiveFocus(cutBg),
+		ClipboardCopyBackgroundInactive: copyBgInactive,
+		ClipboardCutBackgroundInactive:  cutBgInactive,
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),

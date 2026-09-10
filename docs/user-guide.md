@@ -651,7 +651,13 @@ Paste:
   its own tint again instead, but a dimmer variant of it — clearly
   still Cut- or Copy-colored, just distinguishable from every other
   tinted row in the same selection, which keep their full-brightness
-  color regardless. A directory that's also on the clipboard shows this
+  color regardless. That dimmer variant is computed automatically from
+  a scheme's own `clipboard_cut_background`/`clipboard_copy_background`
+  (no extra configuration needed for a custom scheme to get a sensible
+  one), but a scheme can also set
+  `clipboard_cut_background_inactive`/`clipboard_copy_background_inactive`
+  explicitly to override it, for a tint the automatic computation
+  doesn't suit. A directory that's also on the clipboard shows this
   tint across its whole row instead of its usual gold name highlight —
   the two would otherwise compete for the same
   characters, so the clipboard tint wins outright rather than the two
