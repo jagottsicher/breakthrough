@@ -67,15 +67,28 @@ terminal.
   "Nx" count appears right before it once one or more are actually
   narrowing the listing, turning bright red instead if one is currently
   hiding everything a directory would otherwise show): click it, or
-  press `/`, to open a small dropdown with the
-  glob/regex filter (type to narrow the listing on every keystroke,
-  with a Glob/Regex toggle for how the pattern is interpreted, and its
-  own checkbox to switch it off without losing what's typed), plus a
-  size filter and a modified-time filter — combinable, on/off for now
-  while their own comparison/range options are still being built out.
-  `Tab`/`Shift+Tab` cycle through all five of the dropdown's own pieces,
-  `Space`/`Enter` toggles whichever one has focus, and `Escape` closes
-  it from any of them.
+  press `/`, to open a small dropdown with three independently
+  combinable rows, each narrowing the listing live as you type:
+  - **Glob/regex** — the original filter, with a Glob/Regex toggle for
+    how the pattern is interpreted and its own checkbox to switch it
+    off without losing what's typed.
+  - **Size** — comparison expressions like `> 1m`, `>= 500k`, or a
+    range by joining two with `and` (`> 1m and < 1g`). Units are
+    `b`/`k`/`m`/`g`/`t`, binary (1024-based), the same convention the
+    Size column's own human-readable mode already uses; a bare number
+    means plain bytes.
+  - **Modified time** — `before`/`after`/`between ... and ...`, each
+    side either an absolute date (`2026-09-01`, optionally with a
+    time) or a relative one (`7 days`, `2 hours ago`); a bare relative
+    expression on its own (`last 7 days`) means "modified within
+    that span".
+
+  Typing into any field auto-activates its own row, the same way it
+  already did for glob. `Tab`/`Shift+Tab` cycle through all seven of
+  the dropdown's own pieces (checkbox + field for size and
+  modified-time, checkbox + mode button + field for glob),
+  `Space`/`Enter` toggles whichever checkbox has focus, and `Escape`
+  closes it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go
