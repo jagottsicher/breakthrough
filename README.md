@@ -270,7 +270,14 @@ terminal.
   `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
   "Empty Trash" (`D`, same confirmation) round
-  it out. Persistent by default — lives under
+  it out. Restoring something whose original path now has an unrelated
+  file sitting on it — recreated after the original was trashed, say —
+  opens the exact same conflict dialog a Paste collision already does
+  (Overwrite/Skip and their "for all" and "if newer"/"if not empty"
+  variants, Skip preselected as the safe default), rather than silently
+  overwriting it or refusing outright with nothing but an error; a
+  multi-item restore can pull items whose own original locations were
+  entirely different folders, each resolved independently. Persistent by default — lives under
   `~/.local/share/breakthrough/trash`, so it's still there tomorrow, even
   across a login session boundary — or session-scoped via
   `trash_persistent = false` in your config, under `$XDG_RUNTIME_DIR`
