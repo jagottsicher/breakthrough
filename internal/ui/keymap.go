@@ -129,7 +129,7 @@ func plainCommands() []plainCommand {
 		}},
 		{key: 'e', label: "Edit", action: func(r *Root) { r.editCurrentEntry() }},
 		{key: 'f', label: "Find", action: func(r *Root) { r.openSearch() }},
-		{key: '/', label: "Filter", action: func(r *Root) { r.app.SetFocus(r.panel.filterField) }},
+		{key: '/', label: "Filter", action: func(r *Root) { r.openFilterMenu() }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
 		{key: 'm', label: "Context menu", quick: true, short: "Menu", action: func(r *Root) { r.MenuShortcut() }},
