@@ -90,6 +90,27 @@ type pasteJob struct {
 	cut     bool
 	destDir string
 
+	// sourceDirs is the set of directories every clipboard item's own
+	// src lives in — computed once, up front, alongside job itself (see
+	// reallyStartPaste). Only ever consulted for a Cut (see
+	// finishPasteJob): once a Move actually lands, whatever tab was
+	// showing that item's own source directory is stale — the row is
+	// genuinely gone from there, not just newly arrived wherever it
+	// landed — the same "reload once the whole job settles" treatment
+	// destDir's own reload already gets, just for the opposite side of
+	// the move. A plain Copy never touches its own source at all, so
+	// this is simply never consulted there, even though it's computed
+	// regardless (a handful of filepath.Dir calls — cheap enough not to
+	// bother gating on job.cut at the one call site that fills it in).
+	//
+	// Almost always a single directory in practice — an ordinary Cut
+	// only ever selects rows out of one panel's own current directory
+	// (see clipboardTargets) — but computed generally off every item's
+	// own actual parent rather than assumed to be a single directory: a
+	// Cut made from search results (see Panel.searchMode) can hold rows
+	// scattered across more than one real directory.
+	sourceDirs map[string]bool
+
 	// startedAt is when this job was created (see startPaste) — never
 	// touched again. animatePasteProgress's own ticker uses it purely
 	// to average an ETA over the whole run so far (see pasteETA), not
@@ -231,7 +252,11 @@ func (r *Root) startPaste(items []string, cut bool, destDir string) {
 // second, drifting copy of the same setup.
 func (r *Root) reallyStartPaste(items []string, cut bool, destDir string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: len(items), remaining: len(items), startedAt: time.Now()}
+	job := &pasteJob{
+		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir,
+		total: len(items), remaining: len(items), startedAt: time.Now(),
+		sourceDirs: distinctParentDirs(items),
+	}
 	r.pasteJob = job
 
 	// Guarded the same way finishPasteJob is, not a bare "r.pasteJob =
@@ -251,6 +276,17 @@ func (r *Root) reallyStartPaste(items []string, cut bool, destDir string) {
 	r.safeGo("paste progress animation", onPanic, func() { r.animatePasteProgress(job) })
 	r.safeGo("paste byte scan", onPanic, func() { r.scanPasteBytes(job, items) })
 	r.refreshStatusBar() // show the progress segment immediately, not just once the first tick lands
+}
+
+// distinctParentDirs returns the set of directories items themselves
+// live in — filepath.Dir of each, deduplicated — see pasteJob.sourceDirs'
+// own doc comment for what this is used for.
+func distinctParentDirs(items []string) map[string]bool {
+	dirs := make(map[string]bool, len(items))
+	for _, item := range items {
+		dirs[filepath.Dir(item)] = true
+	}
+	return dirs
 }
 
 // advancePasteQueue starts the next queued Paste, if any, once
@@ -548,10 +584,12 @@ func (r *Root) pasteItemDone(job *pasteJob) {
 // synchronous pasteInto did (per the user's own explicit request — see
 // feature_ideas.txt's own note on this being step one, before any real
 // notification channel exists to send them to instead), reloads every
-// open tab showing the destination (per the user's own explicit
-// request for an auto-reload there), clears the clipboard once a clean
-// (no errors) Cut has fully landed, and starts the next queued Paste,
-// if any (see advancePasteQueue).
+// open tab showing the destination or, for a Cut, one of the sources
+// (per the user's own explicit request for an auto-reload there —
+// initially only for the destination, then again once reported that a
+// Cut's own source tab was left showing files no longer actually there),
+// clears the clipboard once a clean (no errors) Cut has fully landed,
+// and starts the next queued Paste, if any (see advancePasteQueue).
 func (r *Root) finishPasteJob(job *pasteJob) {
 	if r.pasteJob != job {
 		return // already superseded/cancelled — see cancelPasteJob
@@ -578,12 +616,21 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	// same directory can be open in more than one tab (see
 	// syncClipboardHighlight's own doc comment for the same "one
 	// Root-level event, every matching tab needs to know" reasoning).
-	// A tab showing something else — a search result's own directory,
-	// elsewhere, or a different path entirely — is left exactly as it
-	// was; pasting shouldn't force-navigate or otherwise disturb it
-	// (see pasteClipboard's own doc comment).
+	// For a Cut, a tab showing one of job.sourceDirs gets the same
+	// treatment: a Move that actually landed removed that row from
+	// there for real, not just wherever it landed — leaving that tab
+	// unreloaded left it still listing files gone the moment the Move
+	// itself finished (which, same-filesystem, is close to instant —
+	// see fsops.Move's own os.Rename fast path), a real, user-reported
+	// gap this closes. Copy is deliberately left out of that half: its
+	// own source is never touched at all, nothing there could possibly
+	// be stale. A tab showing something else entirely — a search
+	// result's own directory, or any other unrelated path — is left
+	// exactly as it was; pasting shouldn't force-navigate or otherwise
+	// disturb it (see pasteClipboard's own doc comment).
 	r.forEachTab(func(p *Panel) {
-		if p.path != job.destDir {
+		reload := p.path == job.destDir || (job.cut && job.sourceDirs[p.path])
+		if !reload {
 			return
 		}
 		if err := p.load(p.path); err != nil {

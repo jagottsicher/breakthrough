@@ -159,6 +159,9 @@ terminal.
   dialog is up, and a second conflict found before the first is
   answered queues behind it — shown as "(N more waiting)" right in the
   dialog's own message — rather than stacking a second dialog on top.
+  Unlike every other dialog here, clicking outside it does nothing —
+  one of its own options, or Escape, is the only way past a conflict,
+  so a stray click can never leave one stranded, half-answered forever.
   Overwriting a directory replaces it entirely (nothing left over from
   whatever was there before — the right choice when "overwrite" needs
   to mean "make this identical to the source", not "patch it"); Merge
@@ -173,10 +176,17 @@ terminal.
   whether a pending conflict or a whole further Paste behind this one,
   starts at all. Any real failure (permission, a full disk, ...) is
   collected rather than stopping at the first one, and reported once
-  the whole Paste is done. Whatever's currently on the clipboard shows
-  two ways: every row it holds gets a full-row grey tint (a lighter
-  shade for Cut than Copy, since Cut is the one where the original
-  actually disappears), across every open tab showing that row, not
+  the whole Paste is done. Every open tab showing the destination
+  reloads automatically once the whole Paste lands, in every tab it's
+  open in; Cut also reloads every open tab showing one of the moved
+  items' own source directories, so a tab something was cut from never
+  keeps listing a file that's actually gone — Copy leaves its own
+  source list alone, since nothing there was ever removed.
+  Whatever's currently on the clipboard shows
+  two ways: every row it holds gets a full-row tint — a neutral grey for
+  Copy, a distinct, slightly pinkish-tinted grey for Cut, so a Cut
+  selection reads as visually different at a glance rather than just a
+  lighter shade of the same hue — across every open tab showing that row, not
   just the one Copy/Cut was pressed in; and the status bar names it —
   "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
   chord countdown's own spot, for as long as there's something to

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -219,6 +220,89 @@ func TestFinishPasteJobReloadsEveryOpenTabShowingDestDir(t *testing.T) {
 	}
 	if _, ok := rowForPath(tabC, newFile); ok {
 		t.Error("tab C (a different directory) should never show destDir's own file")
+	}
+}
+
+// TestFinishPasteJobReloadsSourceTabsAfterACut pins the user's own
+// direct follow-up report: Cut+Paste across the same filesystem lands
+// almost instantly (see fsops.Move's own os.Rename fast path), but the
+// tab the moved file came *from* stayed showing it anyway, stale,
+// until reloaded by hand — only destDir ever got the auto-reload
+// TestFinishPasteJobReloadsEveryOpenTabShowingDestDir already pins.
+// Mirrors that test's own shape for the opposite side of a Move: every
+// open tab showing the source directory, not just r.panel, must lose
+// the row that's actually gone.
+func TestFinishPasteJobReloadsSourceTabsAfterACut(t *testing.T) {
+	srcDir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	destDir := t.TempDir()
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.newTab(srcDir) // a second tab on the very same source directory
+	if len(r.tabs) != 2 {
+		t.Fatalf("setup: want 2 tabs, got %d", len(r.tabs))
+	}
+	tabA, tabB := r.tabs[0], r.tabs[1]
+
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(destDir, "apple.txt")
+	// The real move already happened by the time finishPasteJob's own
+	// reload runs (applyPasteOneResult only ever fires after pasteOne's
+	// own real fsMove call already returned) — renaming it away here
+	// mirrors that end state without needing a real background paste
+	// for this test.
+	if err := os.Rename(src, dst); err != nil {
+		t.Fatal(err)
+	}
+
+	job := newPasteTestJob(r, true, destDir, 1)
+	job.sourceDirs = distinctParentDirs([]string{src})
+	r.applyPasteOneResult(job, src, dst, nil)
+
+	for name, p := range map[string]*Panel{"tab A": tabA, "tab B": tabB} {
+		if _, ok := rowForPath(p, src); ok {
+			t.Errorf("%s (showing the source dir): apple.txt still listed after the Cut moved it away", name)
+		}
+	}
+}
+
+// TestFinishPasteJobLeavesSourceTabsAloneAfterACopy pins Copy's own
+// half of the same change: unlike a Cut, nothing at the source was ever
+// removed, so a tab showing it must not even be reloaded — pinned via
+// srcDir itself not existing as a real, loadable directory by the time
+// finishPasteJob runs; a reload attempt there would record a load
+// error that this test would then see in job.errors.
+func TestFinishPasteJobLeavesSourceTabsAloneAfterACopy(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(destDir, "apple.txt")
+	if err := os.WriteFile(dst, []byte("copied"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	job.sourceDirs = distinctParentDirs([]string{src})
+	// Removed only after the job is set up, right before the reload
+	// this test is actually pinning would run — if a Copy's own reload
+	// ever mistakenly included the source, r.panel.load(srcDir) would
+	// fail right here and land in job.errors.
+	if err := os.RemoveAll(srcDir); err != nil {
+		t.Fatal(err)
+	}
+
+	r.applyPasteOneResult(job, src, dst, nil)
+
+	if len(job.errors) != 0 {
+		t.Errorf("job.errors = %v, want none — a Copy's own source must never be reloaded", job.errors)
 	}
 }
 
@@ -1261,6 +1345,44 @@ func TestRequestCancelFromConflictDialogCancelsWholeJob(t *testing.T) {
 	}
 	if job.ctx.Err() == nil {
 		t.Error("the whole job should be cancelled, not just its dialog dismissed")
+	}
+}
+
+// TestCaptureOutsideClickBlockedForPasteConflictDialog pins the mouse-side
+// sibling of TestRequestCancelFromConflictDialogCancelsWholeJob just
+// above: a stray click outside the dialog — not a deliberate Ctrl+C —
+// used to reach captureOutsideClick's ordinary hideOverlay path like any
+// other overlay, closing the dialog while leaving job.current pointing
+// at a conflict nothing could ever resolve again. The job then neither
+// progressed (its one open conflict was never answered) nor ever
+// reported as finished, and the dialog never reappeared either — a real,
+// user-reported dead end after clicking anywhere outside it. The click
+// must now be swallowed instead, leaving the dialog open and the
+// conflict still pending until one of its own buttons (or Escape) is
+// actually used.
+func TestCaptureOutsideClickBlockedForPasteConflictDialog(t *testing.T) {
+	r, job, _, _ := setUpPasteConflict(t, "")
+	if r.activePage != pasteConflictPage {
+		t.Fatal("setup: the conflict dialog should be open")
+	}
+
+	// r.SetRect(0, 0, 100, 40) in setUpPasteConflict centers a small
+	// dialog somewhere in the middle of that area — (0, 0) is always
+	// clear of it, the same corner-of-the-screen approach
+	// outsidePropertiesClick's own doc comment uses for Properties.
+	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.Button1, 0))
+
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("outside click should be consumed and swallowed, got action=%v event=%v", action, event)
+	}
+	if r.activePage != pasteConflictPage {
+		t.Errorf("activePage = %q, want the dialog to stay open", r.activePage)
+	}
+	if job.current == nil {
+		t.Error("job.current should still be set — the conflict must still be pending, not silently stranded")
+	}
+	if r.pasteJob == nil {
+		t.Error("the job itself should still be running, not cancelled by a stray outside click")
 	}
 }
 

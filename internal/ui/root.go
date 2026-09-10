@@ -1665,14 +1665,36 @@ func (r *Root) closeAllOverlays() {
 // every individual mouse-action variant tview has to be enumerated and
 // kept in sync here by hand.
 //
-// The Properties overlay is the one exception to "click outside closes
-// it": once propertiesDirty is true (see markPropertiesDirty), an
-// outside click is consumed and otherwise ignored instead — Cancel or
-// Save is the only way out from there, so an in-progress edit (a
-// permission bit already toggled, a name half-typed) can't be silently
-// discarded, or just as silently lost track of, by a stray click.
+// The Properties overlay is one exception to "click outside closes it":
+// once propertiesDirty is true (see markPropertiesDirty), an outside
+// click is consumed and otherwise ignored instead — Cancel or Save is
+// the only way out from there, so an in-progress edit (a permission bit
+// already toggled, a name half-typed) can't be silently discarded, or
+// just as silently lost track of, by a stray click.
 //
-// The Details button specifically is a second, narrower exception,
+// The paste-conflict dialog (pasteConflictPage) is a second, unconditional
+// exception — every stray click outside it is consumed and ignored, not
+// just while some dirty-like state holds, the same way RequestCancel
+// already treats this one dialog differently from every other overlay
+// (see its own doc comment): closing it via the ordinary hideOverlay
+// path below would leave job.current pointing at a conflict nothing
+// could ever resolve again — its own buttons (or Escape, wired to
+// resolveSkip via SetDoneFunc) are the only path to
+// chooseConflictResolution, which is what actually clears job.current
+// and lets the job either move on to its next conflict or finish. Before
+// this exception existed, a single accidental click anywhere outside the
+// dialog silently dismissed it while leaving job.current stuck non-nil
+// forever — pasteItemDone's own "finished" check
+// (remaining<=0 && current==nil && len(pending)==0) then never became
+// true again, so the job neither progressed (nothing left to resolve
+// it) nor ever reported as done, and the dialog never reappeared either
+// — a real, user-reported dead end, not a hypothetical one. Consuming
+// the click here instead forces every conflict through an explicit
+// decision, exactly as intended: the job keeps running everything it
+// already can in the background regardless (see pasteWalk), only the
+// one open question is blocked on the user actually answering it.
+//
+// The Details button specifically is a third, narrower exception,
 // checked before either of the above: a click on it reaches the button
 // bar's own handling (see buttonBarActionAt) completely untouched,
 // toggling the Details sidebar alongside
@@ -1705,6 +1727,9 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
 		if r.activePage == propertiesPage && r.propertiesDirty {
 			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		}
+		if r.activePage == pasteConflictPage {
+			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
 		}
 		r.hideOverlay()
 	}
@@ -1944,7 +1969,12 @@ func (r *Root) confirmQuitWhilePasting() {
 // dialog would leave job.current pointing at a conflict nothing can
 // ever resolve again (its own three buttons are the only path to
 // chooseConflictResolution), silently stranding the job forever,
-// finished neither cleanly nor by this cancel. A *different* overlay
+// finished neither cleanly nor by this cancel. captureOutsideClick's own
+// doc comment covers the sibling gap this same hazard had on the mouse
+// side — a stray click, not a deliberate Ctrl+C — and blocks it the same
+// way, by refusing to close the dialog at all rather than cancelling the
+// job outright the way this keyboard path does; either way, job.current
+// never ends up abandoned instead of resolved. A *different* overlay
 // happening to be open while a paste merely continues in the background
 // (Properties, say) is left alone here — Ctrl+C in that case is about
 // whatever the user is actually looking at, not a paste they may not
