@@ -152,6 +152,15 @@ func plainCommands() []plainCommand {
 			}
 			r.openRemoveConfirm()
 		}},
+		// The user's own explicit request: a way to paste a symlink
+		// dereferenced — a real copy of whatever it points to, instead of
+		// recreating the link itself — for both Copy- and Cut-marked
+		// clipboards alike. Not quick (no button-bar slot), the same
+		// treatment 'D' above already gets: this is deliberately the
+		// rarer, more consequential sibling of the everyday 'v', always
+		// gated behind its own confirmation dialog (see
+		// pasteClipboardFollowingSymlinks) rather than a single keypress.
+		{key: 'V', label: "Paste, following symlinks", action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
 		// quick despite the narrower row this leaves: the button bar is
 		// the only always-present, clickable route to toggling Details
 		// *while Properties is open with unsaved changes* — every other

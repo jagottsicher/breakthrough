@@ -347,3 +347,163 @@ func TestMoveMergeFallbackPreservesModTime(t *testing.T) {
 		t.Errorf("dst/a.txt ModTime = %v, want %v (preserved through Move's own Copy-based fallback)", fi.ModTime(), want)
 	}
 }
+
+// TestMoveFollowingSymlinksOnATopLevelSymlinkRemovesOnlyTheLink pins the
+// user's own explicit safety requirement: cutting a symlink with
+// dereferencing on must never touch whatever the link points to, no
+// matter how far away that lives — "remote" is simulated here as an
+// entirely separate sibling directory (the same shape an NFS/EFS mount
+// point would have: some other path this function never descends into
+// to remove anything), so a bug that accidentally removed the *resolved*
+// path instead of the literal symlink path would delete this sibling
+// and fail the test loudly, rather than the danger only ever showing up
+// against a real network mount.
+func TestMoveFollowingSymlinksOnATopLevelSymlinkRemovesOnlyTheLink(t *testing.T) {
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote-share") // stands in for an NFS/EFS mount
+	if err := os.MkdirAll(remote, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(remote, "data.txt"), []byte("remote content"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(base, "link-to-remote")
+	if err := os.Symlink(remote, link); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "materialized")
+	if err := MoveFollowingSymlinks(link, dst, MoveOptions{}); err != nil {
+		t.Fatalf("MoveFollowingSymlinks: %v", err)
+	}
+
+	if fi, err := os.Lstat(dst); err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("dst should be a real directory, not a symlink (mode %v, err %v)", fi.Mode(), err)
+	}
+	if got, err := os.ReadFile(filepath.Join(dst, "data.txt")); err != nil || string(got) != "remote content" {
+		t.Errorf("dst/data.txt = %q, %v, want %q", got, err, "remote content")
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("the original symlink should be gone, Lstat err = %v", err)
+	}
+
+	// The actual point of this test: the "remote" target itself must
+	// still be there, completely untouched, not silently wiped out by a
+	// removal step that resolved the link instead of using its own
+	// literal path.
+	if got, err := os.ReadFile(filepath.Join(remote, "data.txt")); err != nil || string(got) != "remote content" {
+		t.Fatalf("the symlink's own target must survive untouched, got %q, %v, want %q", got, err, "remote content")
+	}
+}
+
+// TestMoveFollowingSymlinksOnARealDirectoryRemovesOnlyTheNestedLink
+// pins the same guarantee one level down: a real (non-symlink) directory
+// that is itself being cut, but merely *contains* a symlink somewhere
+// inside it pointing at a "remote" share, must still only ever lose that
+// nested symlink's own entry when its source is removed — os.RemoveAll
+// never follows a symlink while descending, so the remote target must
+// come through unscathed here too.
+func TestMoveFollowingSymlinksOnARealDirectoryRemovesOnlyTheNestedLink(t *testing.T) {
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote-share")
+	if err := os.MkdirAll(remote, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(remote, "data.txt"), []byte("remote content"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	src := filepath.Join(base, "src")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "plain.txt"), []byte("plain"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(remote, filepath.Join(src, "nested-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst")
+	if err := MoveFollowingSymlinks(src, dst, MoveOptions{}); err != nil {
+		t.Fatalf("MoveFollowingSymlinks: %v", err)
+	}
+
+	if got, err := os.ReadFile(filepath.Join(dst, "plain.txt")); err != nil || string(got) != "plain" {
+		t.Errorf("dst/plain.txt = %q, %v, want %q", got, err, "plain")
+	}
+	if got, err := os.ReadFile(filepath.Join(dst, "nested-link", "data.txt")); err != nil || string(got) != "remote content" {
+		t.Errorf("dst/nested-link should be a real, materialized copy of the remote content, got %q, %v", got, err)
+	}
+	if _, err := os.Stat(src); !os.IsNotExist(err) {
+		t.Errorf("src should be entirely gone after a successful cut, stat err = %v", err)
+	}
+
+	// Again the actual point: the remote share itself must be untouched.
+	if got, err := os.ReadFile(filepath.Join(remote, "data.txt")); err != nil || string(got) != "remote content" {
+		t.Fatalf("the nested symlink's own target must survive untouched, got %q, %v, want %q", got, err, "remote content")
+	}
+}
+
+// TestMoveFollowingSymlinksOnAFileSymlinkRemovesOnlyTheLink is the
+// single-file counterpart: a symlink to a plain file, not a directory.
+func TestMoveFollowingSymlinksOnAFileSymlinkRemovesOnlyTheLink(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target.txt")
+	if err := os.WriteFile(target, []byte("original"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst.txt")
+	if err := MoveFollowingSymlinks(link, dst, MoveOptions{}); err != nil {
+		t.Fatalf("MoveFollowingSymlinks: %v", err)
+	}
+
+	if fi, err := os.Lstat(dst); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("dst should be a real file, not a symlink (mode %v, err %v)", fi.Mode(), err)
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("the original symlink should be gone, Lstat err = %v", err)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "original" {
+		t.Fatalf("the symlink's own target file must survive untouched, got %q, %v", got, err)
+	}
+}
+
+// TestMoveFollowingSymlinksLeavesSourceUntouchedWhenCopyFails pins the
+// same ordering Move's own EXDEV/merge fallback already guarantees:
+// nothing is ever removed from src unless the new copy at dst is
+// already safely in place. Forced here via an existing, non-forced dst
+// — the cheapest way to make the Copy step fail without needing a real
+// EXDEV condition.
+func TestMoveFollowingSymlinksLeavesSourceUntouchedWhenCopyFails(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target.txt")
+	if err := os.WriteFile(target, []byte("original"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(base, "dst.txt")
+	if err := os.WriteFile(dst, []byte("already here"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MoveFollowingSymlinks(link, dst, MoveOptions{}); err == nil {
+		t.Fatal("MoveFollowingSymlinks should have refused — dst already exists and Force is false")
+	}
+
+	if _, err := os.Lstat(link); err != nil {
+		t.Errorf("the original symlink should still be there after a failed copy, Lstat err = %v", err)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "original" {
+		t.Errorf("the symlink's own target must be untouched, got %q, %v", got, err)
+	}
+}
