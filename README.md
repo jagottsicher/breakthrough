@@ -191,9 +191,14 @@ terminal.
   a deliberately matched pair rather than two shades of one plain
   grey, so a Cut selection reads as visually different from a Copy one
   at a glance rather than needing a brightness comparison. This tint
-  stays visible even on whichever row the cursor happens to land on,
-  focused or not — across every open tab showing that row, not
-  just the one Copy/Cut was pressed in; and the status bar names it —
+  stays visible even on whichever row the cursor happens to land on:
+  the ordinary focus highlight wins outright over it while this panel
+  actually has keyboard focus, so the cursor's own position among
+  several tinted rows is never ambiguous, but a dimmer variant of the
+  same tint takes over once focus moves elsewhere, still clearly Cut-
+  or Copy-colored rather than fading to a plain, indistinct gray —
+  across every open tab showing that row, not just the one Copy/Cut
+  was pressed in; and the status bar names it —
   "Copy: 3 files, 1 dir" or "Cut: ..." — right after the button-bar
   chord countdown's own spot, for as long as there's something to
   Paste. Once a Paste actually starts, that same spot switches to its

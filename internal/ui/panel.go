@@ -869,12 +869,31 @@ func (p *Panel) paintStaticChrome() {
 // hasFocus true first, then calls the callback), but both pass their
 // own already-known answer explicitly here anyway, for the same reason
 // rather than leaving one of the two paths relying on it.
+//
+// Also refreshes the current cursor row's own SelectedStyle (see
+// rowSelectedStyle) — the one thing that can change with nothing else
+// about that row changing at all: a pure focus/blur transition (Tab to
+// a different tab, say) doesn't touch any row's own text or clipboard
+// state, only whether tview should show this function's own table-wide
+// style here, or a tinted cursor row's own dedicated one, for that row
+// specifically (see rowSelectedStyle's own doc comment for why either
+// one can be right, depending on focused). Every *other* row is left
+// alone: rowSelectedStyle's own verdict for a row that isn't the
+// current cursor is never actually consulted by tview at all (see
+// Table.Draw's own selected-cell branch), so there's nothing to gain by
+// touching more than this one.
 func (p *Panel) setSelectionStyle(focused bool) {
 	bg := p.theme.EditableBackground
 	if focused {
 		bg = p.theme.FocusedBackground
 	}
 	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
+
+	row, _ := p.table.GetSelection()
+	if ref, ok := p.rowRef(row); ok {
+		p.setRowCells(row, ref, focused)
+		p.paintFixedRowCells(row, ref, focused)
+	}
 }
 
 // setFilterFieldStyle sets filterField's own background (and its
@@ -1596,8 +1615,9 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
-	p.setRowCells(row, ref)
-	p.paintFixedRowCells(row, ref)
+	focused := p.table.HasFocus()
+	p.setRowCells(row, ref, focused)
+	p.paintFixedRowCells(row, ref, focused)
 }
 
 // rowBackground is what addRow/setRowCells/paintFixedRowCells tint
@@ -1629,6 +1649,59 @@ func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
 	return p.theme.ClipboardCopyBackground, true
 }
 
+// rowBackgroundInactive is rowBackground's own Inactive-variant sibling
+// — same shape, same conditions, just ClipboardCopyBackgroundInactive/
+// ClipboardCutBackgroundInactive instead of the full-brightness colors
+// (see their own doc comment in internal/config/theme.go) — used only
+// by rowSelectedStyle, for a tinted row that's also the cursor row
+// while this panel doesn't currently have real keyboard focus.
+func (p *Panel) rowBackgroundInactive(ref rowRef) (bg tcell.Color, ok bool) {
+	if !ref.checkable || !p.clipboardPaths[ref.path] {
+		return 0, false
+	}
+	if p.clipboardCut {
+		return p.theme.ClipboardCutBackgroundInactive, true
+	}
+	return p.theme.ClipboardCopyBackgroundInactive, true
+}
+
+// rowSelectedStyle computes what ref's own cells should carry as their
+// SelectedStyle — the separate style tview only ever consults for
+// whichever row currently is the table's own cursor row (see
+// Table.Draw's own selected-cell branch: a cell's SelectedStyle wins
+// outright over the table-wide SetSelectedStyle whenever it's actually
+// set, checked in that order) — given focused, this panel's own current
+// real-keyboard-focus state.
+//
+// tcell.StyleDefault (tview's own "nothing cell-specific set" zero
+// value, letting the table-wide SetSelectedStyle apply instead — see
+// setSelectionStyle) for an untinted row always, and for a tinted one
+// specifically while focused is true: the user's own explicit request
+// that the focus/cursor indicator (FocusedBackground) win outright over
+// the clipboard tint while this panel is actively focused, so the
+// cursor's own position stays unambiguous even among several tinted
+// rows in the same selection — the same "current row happens to also
+// be selected" ambiguity a plain, unconditional tint would otherwise
+// reintroduce for exactly the case FocusedBackground already existed to
+// solve.
+//
+// Once focused is false, a tinted row's own color takes over instead —
+// its dedicated, deliberately darker Inactive variant (see
+// rowBackgroundInactive), not its full-brightness one: a second,
+// separate real gap the user reported once the first fix landed —
+// without its own distinct color, an unfocused clipboard-held cursor
+// row became indistinguishable from every other tinted row in the same
+// selection, losing "where would the cursor land if I switched back"
+// exactly as thoroughly as the original bug lost "is this file still
+// on the clipboard at all".
+func (p *Panel) rowSelectedStyle(ref rowRef, focused bool) tcell.Style {
+	if _, tinted := p.rowBackground(ref); !tinted || focused {
+		return tcell.StyleDefault
+	}
+	bg, _ := p.rowBackgroundInactive(ref)
+	return tcell.StyleDefault.Background(bg).Foreground(p.theme.Text)
+}
+
 // paintFixedRowCells applies rowBackground's own verdict to the three
 // cells addRow builds directly (checkbox, type, modifier) — colName/
 // colSize/colModified are setRowCells' own responsibility, since it
@@ -1644,32 +1717,27 @@ func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
 // hardcoding a value that could drift from the table's own actual
 // background (see rowBackground's own doc comment).
 //
-// Also sets (or clears) each cell's own SelectedStyle alongside its
-// ordinary one — a real, user-reported gap: tview only ever falls back
-// to a cell's own background/style at all once it isn't the table's
-// current cursor row; for the row the cursor happens to be on, tview
-// instead always paints the *table-wide* SetSelectedStyle (see
-// setSelectionStyle — FocusedBackground while this panel has real
-// keyboard focus, EditableBackground once it doesn't), completely
-// hiding whatever clipboard tint that same row already has, in either
-// focus state — the user first noticed this once Tab moved focus
-// elsewhere and the row they'd just Cut/Copied turned plain gray, as if
-// deselected, but it was never actually showing the clipboard color
-// even while still focused; a "current row happens to also be
-// selected" indicator that petrol already gives, unlike the clipboard
-// state, just made this easy to miss until focus actually moved. Giving
-// the cell its own SelectedStyle — identical to its own ordinary tinted
-// Style — makes tview use *that* instead of the table-wide one (see
-// Table.Draw's own selected-cell branch, checked in that order),
-// keeping the clipboard color visible regardless of which row the
-// cursor is on or whether this panel currently has focus at all. Reset
-// back to tcell.StyleDefault when untinted, the zero value tview
-// itself treats as "nothing cell-specific set" — otherwise a cell that
-// was once tinted (a completed Cut/Paste, say) would keep overriding
-// the table-wide selected style forever after, even once it has
-// nothing to do with the clipboard any more.
-func (p *Panel) paintFixedRowCells(row int, ref rowRef) {
+// Also sets each cell's own SelectedStyle to rowSelectedStyle's own
+// verdict, given focused — this panel's current real-keyboard-focus
+// state, passed in explicitly rather than queried here (see this
+// function's own callers: addRow/relayoutColumns/setClipboard can
+// safely call p.table.HasFocus() themselves since none of them run
+// from inside a blur callback, but setSelectionStyle's own SetBlurFunc
+// caller cannot — see its own doc comment on why HasFocus() lies from
+// there specifically). See rowSelectedStyle's own doc comment for the
+// full reasoning: without this at all, a clipboard-held row that's also
+// the cursor row loses its own tint entirely, hidden by the table-wide
+// SetSelectedStyle regardless of focus state — the original,
+// user-reported bug; with it always applying regardless of focus, the
+// cursor's own position became ambiguous among several tinted rows
+// instead — a real, separate follow-up report. Threading focused
+// through, rather than always giving a tinted row the same override, is
+// what lets the cursor/focus indicator win while focused and the tint's
+// own darker Inactive variant win once it isn't, rather than picking
+// one of those two real, contradictory requirements to satisfy.
+func (p *Panel) paintFixedRowCells(row int, ref rowRef, focused bool) {
 	bg, tinted := p.rowBackground(ref)
+	selStyle := p.rowSelectedStyle(ref, focused)
 	for _, col := range [...]int{colCheckbox, colType, colModifier} {
 		cell := p.table.GetCell(row, col)
 		if cell == nil {
@@ -1677,11 +1745,10 @@ func (p *Panel) paintFixedRowCells(row int, ref rowRef) {
 		}
 		if tinted {
 			cell.SetBackgroundColor(bg)
-			cell.SetSelectedStyle(cell.Style)
 		} else {
 			cell.SetTransparency(true)
-			cell.SetSelectedStyle(tcell.StyleDefault)
 		}
+		cell.SetSelectedStyle(selStyle)
 	}
 }
 
@@ -1701,10 +1768,11 @@ func (p *Panel) setClipboard(paths []string, cut bool) {
 	p.clipboardPaths = m
 	p.clipboardCut = cut
 
+	focused := p.table.HasFocus()
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		if ref, ok := p.rowRef(row); ok {
-			p.setRowCells(row, ref)
-			p.paintFixedRowCells(row, ref)
+			p.setRowCells(row, ref, focused)
+			p.paintFixedRowCells(row, ref, focused)
 		}
 	}
 }
@@ -1715,9 +1783,16 @@ func (p *Panel) setClipboard(paths []string, cut bool) {
 // Split out of addRow so relayoutColumns can re-render an existing row
 // after the panel's width changed, without rebuilding the whole listing
 // or touching the filesystem.
-func (p *Panel) setRowCells(row int, ref rowRef) {
+//
+// focused is this panel's own current real-keyboard-focus state,
+// passed in explicitly rather than queried here — see
+// paintFixedRowCells' own doc comment for the full reasoning (shared
+// verbatim, since both functions get it from the exact same set of
+// callers) and rowSelectedStyle's for what it actually does with it.
+func (p *Panel) setRowCells(row int, ref rowRef, focused bool) {
 	color := p.entryColor(ref)
 	bg, tinted := p.rowBackground(ref)
+	selStyle := p.rowSelectedStyle(ref, focused)
 
 	// The suffix travels separately from the name so shortenNameLabel
 	// can protect it: a trailing "/" or " -> target" says what kind of
@@ -1771,14 +1846,13 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		// directory's row still reads as one consistent color instead of
 		// two different backgrounds fighting for the same few characters.
 		nameCell.SetBackgroundColor(bg)
-		// Also this cell's own SelectedStyle, matching Style exactly (see
-		// paintFixedRowCells' own doc comment for the full reasoning:
-		// without this, the clipboard tint disappears the instant this
-		// row happens to be the table's own cursor row, since tview
-		// falls back to the table-wide, focus-dependent SetSelectedStyle
-		// for any selectable cell that doesn't have its own).
-		nameCell.SetSelectedStyle(nameCell.Style)
 	}
+	// See paintFixedRowCells' own doc comment for the full reasoning —
+	// unconditional on tinted, unlike SetBackgroundColor just above:
+	// rowSelectedStyle already returns tcell.StyleDefault for the
+	// untinted case, exactly matching what this freshly constructed
+	// cell already starts with anyway.
+	nameCell.SetSelectedStyle(selStyle)
 	p.table.SetCell(row, colName, nameCell)
 
 	// ".." (checkable false) has no real Entry behind it, so ref.size/
@@ -1798,12 +1872,13 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		sizeCell.SetBackgroundColor(bg)
 		modSepCell.SetBackgroundColor(bg)
 		modCell.SetBackgroundColor(bg)
-		// See nameCell's own SetSelectedStyle call above for why.
-		sizeSepCell.SetSelectedStyle(sizeSepCell.Style)
-		sizeCell.SetSelectedStyle(sizeCell.Style)
-		modSepCell.SetSelectedStyle(modSepCell.Style)
-		modCell.SetSelectedStyle(modCell.Style)
 	}
+	// See nameCell's own SetSelectedStyle call above for why this is
+	// unconditional on tinted.
+	sizeSepCell.SetSelectedStyle(selStyle)
+	sizeCell.SetSelectedStyle(selStyle)
+	modSepCell.SetSelectedStyle(selStyle)
+	modCell.SetSelectedStyle(selStyle)
 	p.table.SetCell(row, colSizeSep, sizeSepCell)
 	p.table.SetCell(row, colSize, sizeCell)
 	p.table.SetCell(row, colModifiedSep, modSepCell)
@@ -1924,12 +1999,13 @@ func (p *Panel) relayoutColumns(width int) bool {
 	}
 	p.layout = layout
 
+	focused := p.table.HasFocus()
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		ref, ok := p.rowRef(row)
 		if !ok {
 			continue
 		}
-		p.setRowCells(row, ref)
+		p.setRowCells(row, ref, focused)
 	}
 	p.buildColumnHeader()
 	return true

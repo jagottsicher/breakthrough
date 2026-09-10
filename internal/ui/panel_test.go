@@ -1503,22 +1503,32 @@ func TestSetClipboardCutUsesItsOwnDistinctColor(t *testing.T) {
 	}
 }
 
-// TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle pins a real,
-// user-reported gap: selecting several files (checkbox or a right-drag)
-// leaves the cursor on the last one; Cut/Copy tints the whole
-// selection, but the cursor's own row used to lose that tint the
+// TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant pins a
+// real, user-reported gap: selecting several files (checkbox or a
+// right-drag) leaves the cursor on the last one; Cut/Copy tints the
+// whole selection, but the cursor's own row used to lose that tint the
 // instant it was drawn as the table's current row — tview always
 // prefers the table-wide SetSelectedStyle (see setSelectionStyle:
 // FocusedBackground while focused, EditableBackground once focus moves
-// elsewhere, e.g. Tab to another split pane) over a cell's own
+// elsewhere, e.g. to a different tab) over a cell's own
 // Style/BackgroundColor, UNLESS that cell has its own SelectedStyle —
-// which addRow/setRowCells never set at all before this fix. The user
-// only noticed once Tab moved focus away and that one row visibly
-// turned plain gray, as if deselected, but it never actually showed
-// the clipboard color in the first place, focused or not — this pins
-// both, not just the "after Tab" half, since fixing one without the
-// other isn't possible: the same missing SelectedStyle causes both.
-func TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle(t *testing.T) {
+// which addRow/setRowCells never set at all before this fix.
+//
+// Giving every tinted row's own SelectedStyle its full-brightness tint
+// unconditionally was the first fix tried, and directly caused a
+// second, separate user-reported gap: with several files selected, the
+// cursor's own row (the one that matters for a next action) became
+// visually identical to every other tinted row, losing "where would
+// the cursor land" just as thoroughly as the original bug lost "is
+// this still on the clipboard" — see
+// TestFocusedTintedCursorRowLetsFocusColorWin for that half. This test
+// pins the *unfocused* half specifically: NewPanel's own table starts
+// unfocused (no Application.Run() loop here to ever focus it), so a
+// tinted cursor row should show its own Inactive variant — dimmer than
+// the plain tint, but still recognizably tinted, not the same color as
+// an ordinary EditableBackground row nor identical to its own
+// full-brightness siblings.
+func TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant(t *testing.T) {
 	dir := t.TempDir()
 	held := filepath.Join(dir, "held.txt")
 	other := filepath.Join(dir, "other.txt")
@@ -1533,6 +1543,9 @@ func TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
+	if p.table.HasFocus() {
+		t.Fatal("setup: table should start unfocused")
+	}
 	p.setClipboard([]string{held}, false)
 
 	heldRow, ok := rowForPath(p, held)
@@ -1541,8 +1554,8 @@ func TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle(t *testing.T) {
 	}
 	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
 		bg, set := cellSelectedBackground(p.table.GetCell(heldRow, col))
-		if !set || bg != theme.ClipboardCopyBackground {
-			t.Errorf("held.txt col %d: SelectedStyle background = %v, set = %v, want ClipboardCopyBackground (%v), set = true — this is what keeps the tint visible when this row is the cursor row", col, bg, set, theme.ClipboardCopyBackground)
+		if !set || bg != theme.ClipboardCopyBackgroundInactive {
+			t.Errorf("held.txt col %d: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v), set = true — this is what keeps the tint visible, but distinguishable from the cursor's own row, while unfocused", col, bg, set, theme.ClipboardCopyBackgroundInactive)
 		}
 	}
 
@@ -1554,6 +1567,86 @@ func TestSetClipboardGivesTintedRowsTheirOwnSelectedStyle(t *testing.T) {
 		if _, set := cellSelectedBackground(p.table.GetCell(otherRow, col)); set {
 			t.Errorf("other.txt col %d: SelectedStyle unexpectedly set — it was never on the clipboard, its cursor-row rendering should still follow the table-wide, focus-dependent style", col)
 		}
+	}
+}
+
+// TestFocusedTintedCursorRowLetsFocusColorWin pins the user's own
+// explicit request, the other half of the story
+// TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant tells:
+// while this panel actually has real keyboard focus, the cursor/focus
+// indicator (FocusedBackground) must win outright over a clipboard
+// tint, not the other way around — otherwise several tinted rows in
+// the same selection become indistinguishable from one another, and
+// the cursor's own current position is lost. Table.Focus(nil) sets
+// hasFocus directly and fires the same SetFocusFunc callback a real
+// Application.SetFocus would, without needing a running event loop.
+func TestFocusedTintedCursorRowLetsFocusColorWin(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.table.Focus(nil)
+	if !p.table.HasFocus() {
+		t.Fatal("setup: table should report focused after Focus(nil)")
+	}
+	p.setClipboard([]string{held}, false)
+
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("held.txt col %d: SelectedStyle unexpectedly set while focused — the table-wide FocusedBackground should win here, not the clipboard tint", col)
+		}
+	}
+}
+
+// TestSetSelectionStyleRefreshesTintedCursorRowOnFocusChange pins
+// setSelectionStyle's own targeted repaint: a pure focus/blur
+// transition touches no row's own text or clipboard state at all, only
+// whether the table-wide or a tinted row's own dedicated SelectedStyle
+// should apply for whichever row is currently the cursor — so toggling
+// focus alone, with no further setClipboard call, must still update
+// that one row's own rendering both ways.
+func TestSetSelectionStyleRefreshesTintedCursorRowOnFocusChange(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false) // unfocused so far
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	p.focusRow(row) // the cursor lands on held.txt, matching setSelectionStyle's own "whichever row GetSelection() reports" target
+	if bg, set := cellSelectedBackground(p.table.GetCell(row, colName)); !set || bg != theme.ClipboardCopyBackgroundInactive {
+		t.Fatalf("setup: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v) before focusing", bg, set, theme.ClipboardCopyBackgroundInactive)
+	}
+
+	p.table.Focus(nil) // no setClipboard call in between — focus alone must still refresh this row
+
+	if _, set := cellSelectedBackground(p.table.GetCell(row, colName)); set {
+		t.Error("SelectedStyle still set after focusing — the focus color should win now, with no override at all")
+	}
+
+	p.table.Blur()
+
+	if bg, set := cellSelectedBackground(p.table.GetCell(row, colName)); !set || bg != theme.ClipboardCopyBackgroundInactive {
+		t.Errorf("after blur: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v) again", bg, set, theme.ClipboardCopyBackgroundInactive)
 	}
 }
 
