@@ -11,17 +11,21 @@ import (
 func TestDefaultThemeResolvesAllFieldsToValidColors(t *testing.T) {
 	resolved := DefaultTheme().Resolve()
 	fields := map[string]tcell.Color{
-		"PanelBackground":    resolved.PanelBackground,
-		"ButtonBackground":   resolved.ButtonBackground,
-		"AccentBackground":   resolved.AccentBackground,
-		"FocusedBackground":  resolved.FocusedBackground,
-		"ErrorBackground":    resolved.ErrorBackground,
-		"Text":               resolved.Text,
-		"EditableBackground": resolved.EditableBackground,
-		"PlaceholderText":    resolved.PlaceholderText,
-		"EntryNormal":        resolved.EntryNormal,
-		"EntryExecutable":    resolved.EntryExecutable,
-		"EntryError":         resolved.EntryError,
+		"PanelBackground":         resolved.PanelBackground,
+		"ButtonBackground":        resolved.ButtonBackground,
+		"AccentBackground":        resolved.AccentBackground,
+		"FocusedBackground":       resolved.FocusedBackground,
+		"ErrorBackground":         resolved.ErrorBackground,
+		"ClipboardCopyBackground": resolved.ClipboardCopyBackground,
+		"ClipboardCutBackground":  resolved.ClipboardCutBackground,
+		"Text":                    resolved.Text,
+		"EditableBackground":      resolved.EditableBackground,
+		"PlaceholderText":         resolved.PlaceholderText,
+		"EntryNormal":             resolved.EntryNormal,
+		"EntryExecutable":         resolved.EntryExecutable,
+		"EntryError":              resolved.EntryError,
+		"WarningText":             resolved.WarningText,
+		"CriticalText":            resolved.CriticalText,
 	}
 	for name, c := range fields {
 		if c == tcell.ColorDefault {
@@ -50,11 +54,95 @@ func TestThemeResolveFallsBackPerFieldOnEmptyOrInvalidValue(t *testing.T) {
 	}
 }
 
+// spread reports the difference between c's own brightest and dimmest
+// RGB channel — the absolute magnitude a viewer's eye actually reads
+// as "this has a color cast", independent of how dark or bright c is
+// overall.
+func spread(c tcell.Color) int32 {
+	r, g, b := c.RGB()
+	max, min := r, r
+	for _, v := range []int32{g, b} {
+		if v > max {
+			max = v
+		}
+		if v < min {
+			min = v
+		}
+	}
+	return max - min
+}
+
+// TestDarkenForInactiveFocusBoostsSpreadWhileStillDarker pins the
+// combined fix for two real, user-reported outcomes of the two earlier,
+// rejected attempts in turn (see darkenForInactiveFocus's own doc
+// comment for the full history): scaling every RGB channel down by the
+// same factor shrank the absolute spread between channels right along
+// with the darkening, reading as plain dark gray; preserving that
+// spread exactly, instead of shrinking it, still read as both too dark
+// and barely colored, because the same raw spread reads as less
+// colorful the darker the two colors around it are. The final version
+// must therefore end up BOTH noticeably darker overall than the
+// full-brightness color AND with a wider spread than it started
+// with — not merely an unchanged one — to compensate for exactly that
+// darkness-dependent perceived-colorfulness loss. Checked for both of
+// this app's own clipboard colors, rather than relying on eyeballing
+// one specific computed hex value.
+func TestDarkenForInactiveFocusBoostsSpreadWhileStillDarker(t *testing.T) {
+	def := DefaultTheme().Resolve()
+	for name, pair := range map[string][2]tcell.Color{
+		"Copy": {def.ClipboardCopyBackground, def.ClipboardCopyBackgroundInactive},
+		"Cut":  {def.ClipboardCutBackground, def.ClipboardCutBackgroundInactive},
+	} {
+		bright, dim := pair[0], pair[1]
+		if got, want := spread(dim), spread(bright); got <= want {
+			t.Errorf("%s: Inactive spread = %d, want more than the full-brightness color's own %d — darkening must boost it, not just preserve or shrink it", name, got, want)
+		}
+		brightR, brightG, brightB := bright.RGB()
+		dimR, dimG, dimB := dim.RGB()
+		if dimR+dimG+dimB >= brightR+brightG+brightB {
+			t.Errorf("%s: Inactive (%d,%d,%d) is not darker overall than the full-brightness color (%d,%d,%d)", name, dimR, dimG, dimB, brightR, brightG, brightB)
+		}
+	}
+}
+
 func TestThemeResolveAcceptsHexColors(t *testing.T) {
 	th := Theme{AccentBackground: "#112233"}
 	resolved := th.Resolve()
 	if want := tcell.GetColor("#112233"); resolved.AccentBackground != want {
 		t.Errorf("AccentBackground = %v, want %v", resolved.AccentBackground, want)
+	}
+}
+
+// TestClipboardBackgroundInactiveDefaultsToComputedShade pins the
+// default, no-override case: a scheme that never sets
+// clipboard_copy_background_inactive/clipboard_cut_background_inactive
+// still gets a sensible Inactive variant, derived from its own
+// (possibly also overridden) bright ClipboardCopyBackground/
+// ClipboardCutBackground — not left at ColorDefault, and not always
+// DefaultTheme's own value regardless of what this scheme's bright
+// tint actually is.
+func TestClipboardBackgroundInactiveDefaultsToComputedShade(t *testing.T) {
+	th := Theme{ClipboardCopyBackground: "#123456"}
+	resolved := th.Resolve()
+	if want := darkenForInactiveFocus(tcell.GetColor("#123456")); resolved.ClipboardCopyBackgroundInactive != want {
+		t.Errorf("ClipboardCopyBackgroundInactive = %v, want %v (derived from this scheme's own overridden bright color)", resolved.ClipboardCopyBackgroundInactive, want)
+	}
+}
+
+// TestClipboardBackgroundInactiveAcceptsExplicitOverride pins the new
+// capability itself: a scheme file can set
+// clipboard_copy_background_inactive/clipboard_cut_background_inactive
+// explicitly, bypassing darkenForInactiveFocus's own computed default
+// entirely — for a scheme whose own clipboard tint doesn't darken well
+// under the fixed factors tuned for this app's own defaults.
+func TestClipboardBackgroundInactiveAcceptsExplicitOverride(t *testing.T) {
+	th := Theme{
+		ClipboardCopyBackground:         "#123456",
+		ClipboardCopyBackgroundInactive: "#abcdef",
+	}
+	resolved := th.Resolve()
+	if want := tcell.GetColor("#abcdef"); resolved.ClipboardCopyBackgroundInactive != want {
+		t.Errorf("ClipboardCopyBackgroundInactive = %v, want the explicit override %v, not the computed default", resolved.ClipboardCopyBackgroundInactive, want)
 	}
 }
 

@@ -79,6 +79,60 @@ type Theme struct {
 	// /home/jens/Pictures" shows it only on "pictures".
 	DirectoryBackground string `json:"directory_background"`
 
+	// ClipboardCopyBackground/ClipboardCutBackground tint every cell of
+	// a row whose absolute path is currently held on the clipboard (see
+	// Root.clipboard/clipboardCut in internal/ui) — a full-row
+	// background, not just the checkbox glyph a checked selection
+	// already changes, so "this is staged for Copy/Cut" stays visible
+	// without having to scan the checkbox column specifically. Two
+	// visibly different colors, not two shades of the same one, per the
+	// user's own explicit request: Cut is the more consequential of the
+	// two operations (the original disappears once Paste actually
+	// succeeds, rather than staying put the way Copy leaves it), and a
+	// plain gray/dimgray pairing read as "the same thing, just lighter"
+	// rather than as two genuinely different states worth telling apart
+	// at a glance. Both now share the same neutral gray base (0x8a on
+	// every channel) with one channel each boosted by the same amount in
+	// an opposite direction — Cut's own red (a slightly pinkish-tinted
+	// gray, "warmer") versus Copy's own blue (a slightly bluish-tinted
+	// gray, "cooler"), a deliberately matched, symmetric pair rather than
+	// two independently-picked colors — while both stay close enough to
+	// a plain neutral gray to still read as the same *family* of
+	// highlight ("administrative state", not another file-type or
+	// severity signal — DirectoryBackground's gold, EntryError's red,
+	// and so on stay meaningfully distinct from both), immediately
+	// distinguishable from each other as their own colors rather than
+	// requiring a side-by-side brightness comparison. Being a full-cell
+	// background rather than DirectoryBackground's own narrow inline-tag
+	// highlight, a clipboard-held directory shows this tint across its
+	// whole row instead of the two competing for the same pixels — and,
+	// since Panel.setRowCells/paintFixedRowCells also give every tinted
+	// cell a matching SetSelectedStyle, this tint stays visible even on
+	// whichever row happens to be the table's own current cursor row,
+	// focused or not, rather than being invisibly replaced by
+	// FocusedBackground/EditableBackground the way it used to be — a
+	// real, user-reported gap (a Cut/Copy selection that included the
+	// cursor's own row looked "deselected" the moment focus moved
+	// elsewhere, even though it never actually stopped being staged).
+	ClipboardCopyBackground string `json:"clipboard_copy_background"`
+	ClipboardCutBackground  string `json:"clipboard_cut_background"`
+	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
+	// override the color a clipboard-held row shows while it's also the
+	// panel's own current cursor row but this panel does NOT have real
+	// keyboard focus — left empty (the default for every scheme
+	// shipped with this app, including DefaultTheme itself), Resolve
+	// derives a sensible one automatically from this scheme's own
+	// ClipboardCopyBackground/ClipboardCutBackground (see
+	// darkenForInactiveFocus's own doc comment for exactly how), so a
+	// scheme file only needs to set these two at all if the computed
+	// default doesn't come out right for its own particular tint
+	// colors — a scheme with a very dark or already-low-saturation
+	// clipboard tint to begin with, say, where darkenForInactiveFocus's
+	// own fixed factors might not land as well as they do for this
+	// app's own defaults.
+	ClipboardCopyBackgroundInactive string `json:"clipboard_copy_background_inactive"`
+	ClipboardCutBackgroundInactive  string `json:"clipboard_cut_background_inactive"`
+
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
 	Text string `json:"text"`
@@ -136,6 +190,22 @@ type Theme struct {
 	// executable keeps that color instead, since those all say something
 	// more specific and more worth noticing than "this is a dotfile".
 	EntryHidden string `json:"entry_hidden"`
+
+	// WarningText and CriticalText are this app's own "stopper colors" —
+	// deliberately jarring against the rest of a scheme, for the rare
+	// moment something needs to grab attention rather than blend in. Per
+	// the user's own explicit request, formalized into the theme rather
+	// than staying a hardcoded tcell.ColorOrange/tcell.ColorRed the way
+	// they used to be (see diskUsageWarnColor in internal/ui/
+	// bottombar.go, their first and — so far — only use: the status
+	// bar's own disk/inode usage percentage, orange at 80% or more,
+	// red at 90% or more) — a scheme that already leans orange or red
+	// elsewhere would otherwise have no way to still make this one
+	// specific thing stand out. Foreground-only, the same as
+	// Text/PlaceholderText, since both are drawn as plain colored text
+	// rather than a colored background field.
+	WarningText  string `json:"warning_text"`
+	CriticalText string `json:"critical_text"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -147,6 +217,33 @@ type ResolvedTheme struct {
 	FocusedBackground   tcell.Color
 	ErrorBackground     tcell.Color
 	DirectoryBackground tcell.Color
+
+	ClipboardCopyBackground tcell.Color
+	ClipboardCutBackground  tcell.Color
+	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
+	// default to a derived shade of ClipboardCopyBackground/
+	// ClipboardCutBackground themselves (see darkenForInactiveFocus), but
+	// a scheme file can override either explicitly (see Theme's own
+	// same-named fields) — used only for a clipboard-held
+	// row that's also the panel's own current cursor row while the panel
+	// does NOT have real keyboard focus (see internal/ui's own
+	// Panel.rowSelectedStyle). Without a color of its own for
+	// that specific combination, that row either lost its clipboard tint
+	// entirely (the original bug FocusedBackground/EditableBackground's
+	// own doc comment covers) or, once that was fixed, became visually
+	// identical to every other tinted row in the same selection — a
+	// real, user-reported follow-up: with several files selected, the
+	// cursor's own position (the one that would matter for a next
+	// action) became just as invisible as the color it replaced, only
+	// now for the opposite reason. A plain blend with EditableBackground
+	// was tried and rejected: EditableBackground ("slategray") already
+	// leans toward Copy's own cool/bluish hue, so blending it into Cut's
+	// own warm/reddish tint cancels out almost the whole difference that
+	// makes Cut recognizable as Cut in the first place, an asymmetry a
+	// scale-down avoids entirely by never mixing in a third, unrelated
+	// hue at all — see darkenForInactiveFocus's own doc comment.
+	ClipboardCopyBackgroundInactive tcell.Color
+	ClipboardCutBackgroundInactive  tcell.Color
 
 	Text               tcell.Color
 	EditableBackground tcell.Color
@@ -160,6 +257,9 @@ type ResolvedTheme struct {
 	EntryUnreadable tcell.Color
 	EntryArchive    tcell.Color
 	EntryHidden     tcell.Color
+
+	WarningText  tcell.Color
+	CriticalText tcell.Color
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -176,6 +276,9 @@ func DefaultTheme() Theme {
 		ErrorBackground:     "darkred",
 		DirectoryBackground: "darkgoldenrod",
 
+		ClipboardCopyBackground: "#8a8aa0", // a slightly bluish-tinted gray — see this field's own doc comment for the matched pair this and ClipboardCutBackground deliberately form
+		ClipboardCutBackground:  "#a08a8a", // a slightly pinkish-tinted gray — same base gray, same offset, just on red instead of blue — see this field's own doc comment
+
 		Text:               "white",
 		EditableBackground: "slategray",
 		PlaceholderText:    "lightgray",
@@ -188,6 +291,9 @@ func DefaultTheme() Theme {
 		EntryUnreadable: "#ad0000",
 		EntryArchive:    "fuchsia",
 		EntryHidden:     "dimgray",
+
+		WarningText:  "orange",
+		CriticalText: "red",
 	}
 }
 
@@ -207,6 +313,25 @@ func (t Theme) Resolve() ResolvedTheme {
 		}
 		return tcell.GetColor(fallback)
 	}
+	copyBg := resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground)
+	cutBg := resolve(t.ClipboardCutBackground, def.ClipboardCutBackground)
+	// The Inactive pair's own "fallback" isn't a fixed default-theme
+	// string the way every other field's is — it's computed from
+	// *this* scheme's own copyBg/cutBg above (already resolved,
+	// including any override), so a scheme that also overrides
+	// ClipboardCopyBackground/ClipboardCutBackground themselves still
+	// gets an Inactive variant actually derived from its own colors,
+	// not DefaultTheme's. resolve itself can't express that (it only
+	// ever falls back to a fixed string), so this is inlined directly
+	// rather than forcing that shared helper to special-case it.
+	copyBgInactive := darkenForInactiveFocus(copyBg)
+	if c := tcell.GetColor(t.ClipboardCopyBackgroundInactive); c != tcell.ColorDefault {
+		copyBgInactive = c
+	}
+	cutBgInactive := darkenForInactiveFocus(cutBg)
+	if c := tcell.GetColor(t.ClipboardCutBackgroundInactive); c != tcell.ColorDefault {
+		cutBgInactive = c
+	}
 	return ResolvedTheme{
 		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
@@ -214,6 +339,11 @@ func (t Theme) Resolve() ResolvedTheme {
 		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
+
+		ClipboardCopyBackground:         copyBg,
+		ClipboardCutBackground:          cutBg,
+		ClipboardCopyBackgroundInactive: copyBgInactive,
+		ClipboardCutBackgroundInactive:  cutBgInactive,
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),
@@ -227,7 +357,93 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntryUnreadable: resolve(t.EntryUnreadable, def.EntryUnreadable),
 		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
 		EntryHidden:     resolve(t.EntryHidden, def.EntryHidden),
+
+		WarningText:  resolve(t.WarningText, def.WarningText),
+		CriticalText: resolve(t.CriticalText, def.CriticalText),
 	}
+}
+
+// inactiveFocusBaseDarkenFactor is how much darkenForInactiveFocus
+// dims c's own shared, achromatic base — see its own doc comment for
+// what that means and why only the base, not the whole color, is
+// scaled by this. 1.0 would mean no dimming at all; the lower this is,
+// the darker the shared base gets.
+const inactiveFocusBaseDarkenFactor = 0.8
+
+// inactiveFocusExcessBoost is how much darkenForInactiveFocus
+// multiplies c's own per-channel excess above its shared base (see its
+// own doc comment) — deliberately *greater* than 1.0: a human eye
+// reads a given RGB difference as less colorful the darker the two
+// colors it's between are (this app's own default clipboard tints are
+// already a deliberately subtle cast to begin with — a 22-point spread
+// on a bright base — see ClipboardCopyBackground/ClipboardCutBackground's
+// own doc comment), so the same absolute spread that reads as a clear,
+// if subtle, tint at full brightness reads as barely-there on a dimmer
+// base — a real, user-reported outcome of the very first fix here,
+// which preserved the spread exactly but left it that dim regardless.
+// Boosting it compensates.
+const inactiveFocusExcessBoost = 2.0
+
+// darkenForInactiveFocus derives ClipboardCopyBackgroundInactive/
+// ClipboardCutBackgroundInactive from their own full-brightness
+// counterparts — dimmer, but still clearly recognizable as the same
+// hue, not a shade of plain gray.
+//
+// Two rejected attempts before this one, in order, each addressing a
+// real, specific gap the previous one left open rather than a
+// hypothetical concern:
+//
+//  1. Scaling every RGB channel down by the same factor: preserves
+//     saturation (the max/min ratio is unchanged by a uniform scale),
+//     but shrinks the absolute difference between channels by that
+//     same factor — and it's that absolute difference a viewer's eye
+//     actually picks up against a dim terminal background. The result
+//     read as plain dark gray.
+//  2. Decomposing c into its shared, achromatic base (min(R, G, B))
+//     and each channel's own excess above it, then dimming only the
+//     base while leaving the excess exactly as it was: fixed the
+//     shrinking spread from attempt 1, but the result was reported as
+//     both still too dark overall and still barely colored — the
+//     unchanged spread, it turns out, isn't enough on its own once the
+//     base it sits on is this much dimmer; the same raw RGB gap simply
+//     reads as less colorful at lower brightness (see
+//     inactiveFocusExcessBoost's own doc comment).
+//
+// This version keeps attempt 2's own decomposition, but tunes both
+// halves in the two directions actually reported as needed: the base
+// is dimmed less (inactiveFocusBaseDarkenFactor raised, so the overall
+// result is noticeably brighter — "too dark" was the direct
+// complaint), and the excess is deliberately amplified beyond its own
+// original magnitude (inactiveFocusExcessBoost), rather than merely
+// preserved, to compensate for exactly the darkness-dependent
+// perceived-colorfulness loss attempt 2 didn't account for. Clamped to
+// the valid 0-255 range per channel either way — boosting the excess
+// this much could otherwise push a channel out of range for some other
+// scheme's own, more saturated clipboard colors, even though none of
+// this app's own default ones come close.
+func darkenForInactiveFocus(c tcell.Color) tcell.Color {
+	r, g, b := c.RGB()
+	base := r
+	if g < base {
+		base = g
+	}
+	if b < base {
+		base = b
+	}
+	dimmedBase := float64(base) * inactiveFocusBaseDarkenFactor
+	clamp := func(v int32) int32 {
+		excess := float64(v-base) * inactiveFocusExcessBoost
+		result := int32(dimmedBase + excess)
+		switch {
+		case result < 0:
+			return 0
+		case result > 255:
+			return 255
+		default:
+			return result
+		}
+	}
+	return tcell.NewRGBColor(clamp(r), clamp(g), clamp(b))
 }
 
 // NamedTheme pairs a Theme with the stable slug used to select it from

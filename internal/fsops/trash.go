@@ -111,7 +111,7 @@ func MoveToTrash(src, trashDir string) error {
 	}
 	slug := id + "_" + base
 
-	if err := Move(src, target, false); err != nil {
+	if err := Move(src, target, MoveOptions{}); err != nil { // zero value: Force false, mode never consulted
 		return err
 	}
 
@@ -204,24 +204,41 @@ func ListTrash(trashDir string) ([]TrashItem, error) {
 // RestoreFromTrash moves item back to its OriginalPath. Baseline
 // behaviour only, via Move's own force=false contract: refuses rather
 // than overwriting if something already occupies OriginalPath, and fails
-// outright if OriginalPath's parent directory no longer exists — this
-// project's own feature notes flag richer conflict handling here (rename,
-// merge into an existing same-named directory, ...) as something to
-// think through separately, not decided yet, so this deliberately stays
-// at the safe, minimal baseline rather than guessing at that UX.
+// outright if OriginalPath's parent directory no longer exists. Richer
+// conflict handling (rename, merge into an existing same-named
+// directory, ...) now exists too — internal/ui's own Restore-from-Trash
+// routes through the same async, conflict-resolving Paste machinery an
+// ordinary Paste already uses, which needs Move's own Force/OverwriteMode
+// threaded through per-conflict rather than this function's own
+// hardcoded zero-value MoveOptions{}, so it calls Move and
+// RemoveTrashSidecar itself rather than through this one, simpler
+// function. This one remains as the plain, no-conflict-resolution
+// primitive — a real building block used by its own tests below, not
+// dead code kept only for compatibility.
 //
 // Uses Move rather than a raw os.Rename for the same cross-device reason
 // MoveToTrash does — a session trash under $XDG_RUNTIME_DIR restoring
 // back to a real filesystem path is realistically a cross-device move as
 // often as not.
 func RestoreFromTrash(item TrashItem, trashDir string) error {
-	if err := Move(item.Path(trashDir), item.OriginalPath, false); err != nil {
+	if err := Move(item.Path(trashDir), item.OriginalPath, MoveOptions{}); err != nil { // zero value: Force false, mode never consulted
 		return err
 	}
 	// If removing the sidecar fails, ListTrash's own self-healing (the
 	// files/ entry is gone now, so this record no longer matches
 	// anything) cleans it up on the next call — see its own doc comment.
-	return os.Remove(trashInfoPath(trashDir, item.ID))
+	return RemoveTrashSidecar(trashDir, item.ID)
+}
+
+// RemoveTrashSidecar removes item's own .trashinfo sidecar directly,
+// without touching its real payload at all — split out of
+// RestoreFromTrash's own single combined call so a caller that needs to
+// choose how the payload itself gets moved (Force, an OverwriteMode
+// picked through a conflict dialog, ...) can still reuse just this half
+// afterward. See RestoreFromTrash's own doc comment for exactly that
+// caller.
+func RemoveTrashSidecar(trashDir, id string) error {
+	return os.Remove(trashInfoPath(trashDir, id))
 }
 
 // PurgeCompletely permanently removes path: os.Remove for a file or

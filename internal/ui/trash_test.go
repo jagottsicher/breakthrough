@@ -112,7 +112,7 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 	}
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
 	r.acceptConfirm()
 
 	if r.detailsTarget != "" {
@@ -123,6 +123,19 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 // TestRestoreFromTrashRefreshesDetailsShowingSameFile pins Restore's own
 // half: Details following the trashed item (shown while browsing the
 // trash itself) back to its own real, original path once it's restored.
+//
+// Restore now runs through the same asynchronous Paste machinery an
+// ordinary Cut+Paste already does (see restoreSelectionFromTrash's own
+// doc comment) — applyPasteOneResult is what actually updates
+// detailsTarget, but only ever runs via a QueueUpdateDraw hop no test
+// here has a live Application.Run() loop to service (see
+// applyPasteOneResult's own doc comment on exactly this gap). Calling it
+// directly, the same way TestPasteMoveRefreshesDetailsShowingSameFile
+// already does for an ordinary Cut+Paste, exercises the one thing this
+// test actually pins without needing that loop — the real on-disk move
+// itself is performed by the direct fsops.RestoreFromTrash call just
+// below instead, exactly the same real effect the async path would
+// produce.
 func TestRestoreFromTrashRefreshesDetailsShowingSameFile(t *testing.T) {
 	r, dir, file := newTestRootWithFile(t)
 	r.SetRect(0, 0, 100, 40)
@@ -140,13 +153,278 @@ func TestRestoreFromTrashRefreshesDetailsShowingSameFile(t *testing.T) {
 		t.Fatalf("setup: detailsTarget = %q, want the trash-internal path %q", r.detailsTarget, trashPath)
 	}
 
-	r.restoreSelectionFromTrash()
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	trashItems, err := fsops.ListTrash(trashDir)
+	if err != nil || len(trashItems) != 1 {
+		t.Fatalf("ListTrash = %+v, %v, want exactly one item", trashItems, err)
+	}
+	if err := fsops.RestoreFromTrash(trashItems[0], trashDir); err != nil {
+		t.Fatalf("RestoreFromTrash: %v", err)
+	}
+
+	job := newPasteTestJob(r, true, "", 1)
+	r.applyPasteOneResult(job, trashPath, file, nil)
 
 	if r.detailsTarget != file {
 		t.Errorf("detailsTarget after Restore = %q, want the original path %q", r.detailsTarget, file)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
 		t.Fatalf("setup sanity: restored file missing: %v", err)
+	}
+}
+
+// TestRestoreConflictOpensTheSameSixOptionDialog pins the whole point of
+// this feature: restoring an item whose original path now has something
+// else sitting on it (recreated after the original was trashed, say) no
+// longer refuses outright with a bare error the way
+// fsops.RestoreFromTrash's own simpler contract does — it opens the same
+// conflict dialog an ordinary Paste conflict already does (see
+// pasteConflictFound), leaving the existing file untouched until a
+// decision is made. Calls pasteConflictFound directly, the same
+// established reason TestPasteConflictOpensDialogInsteadOfErroring
+// already does: pasteWalk only ever reaches this through
+// QueueUpdateDraw, which never fires without a live Application.Run()
+// loop.
+func TestRestoreConflictOpensTheSameSixOptionDialog(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(original, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	trashDir := t.TempDir()
+	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+		t.Fatalf("MoveToTrash: %v", err)
+	}
+	// Something new now sits at the original path — restoring must
+	// collide with it, not silently overwrite or refuse outright.
+	if err := os.WriteFile(original, []byte("recreated after delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	trashItems, err := fsops.ListTrash(trashDir)
+	if err != nil || len(trashItems) != 1 {
+		t.Fatalf("ListTrash = %+v, %v, want exactly one item", trashItems, err)
+	}
+	trashPath := trashItems[0].Path(trashDir)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	job := newRestoreTestJob(r, []string{original}, trashDir, 1)
+	r.pasteConflictFound(job, newPasteTestConflict(t, trashPath, original))
+
+	if r.activePage != pasteConflictPage {
+		t.Errorf("activePage = %q, want %q — a restore conflict should open the same dialog an ordinary Paste conflict does", r.activePage, pasteConflictPage)
+	}
+	got, err := os.ReadFile(original)
+	if err != nil || string(got) != "recreated after delete" {
+		t.Errorf("the file at the original path should be untouched until a decision is made, got %q, %v", got, err)
+	}
+	if _, err := os.Lstat(trashPath); err != nil {
+		t.Errorf("the trashed payload should still be there too, untouched until a decision is made: %v", err)
+	}
+}
+
+// TestRestoreConflictOverwriteRestoresAndRemovesSidecar pins the
+// Overwrite path end to end: the real fsMove goes through (see
+// isolatePasteIO), the file at the original path becomes the restored
+// content, and — the one thing genuinely new to Restore's own path
+// through pasteOne, not something an ordinary Paste ever has to do —
+// the trashed item's own .trashinfo sidecar is gone afterward too (see
+// fsops.RemoveTrashSidecar), the same cleanup fsops.RestoreFromTrash's
+// own simpler, no-conflict path already does in one combined call.
+func TestRestoreConflictOverwriteRestoresAndRemovesSidecar(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(original, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trashDir := t.TempDir()
+	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+		t.Fatalf("MoveToTrash: %v", err)
+	}
+	if err := os.WriteFile(original, []byte("recreated after delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trashItems, err := fsops.ListTrash(trashDir)
+	if err != nil || len(trashItems) != 1 {
+		t.Fatalf("ListTrash = %+v, %v, want exactly one item", trashItems, err)
+	}
+	trashPath := trashItems[0].Path(trashDir)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	job := newRestoreTestJob(r, []string{original}, trashDir, 1)
+	r.pasteConflictFound(job, newPasteTestConflict(t, trashPath, original))
+
+	done := isolatePasteIO(t)
+	r.chooseConflictResolution(resolveOverwrite, false)
+	waitPasteIO(t, done, 1)
+	// chooseConflictResolution's own real move happens on a background
+	// goroutine (see resolveConflictAsync) — waitPasteIO only waits for
+	// the wrapped fsMove call itself to return, not for the
+	// QueueUpdateDraw-gated applyPasteOneResult afterward (see its own
+	// doc comment on why nothing here can). The sidecar removal lives in
+	// applyPasteOneResult, so it's exercised directly, the same
+	// established reason every other detailsTarget/clipboard assertion
+	// in this file already does.
+	r.applyPasteOneResult(job, trashPath, original, nil)
+
+	got, err := os.ReadFile(original)
+	if err != nil || string(got) != "original" {
+		t.Errorf("original path content = %q, %v, want the restored %q", got, err, "original")
+	}
+	// Checked via a second RemoveTrashSidecar call, not fsops.ListTrash:
+	// ListTrash silently self-heals an orphaned sidecar itself the
+	// moment it notices the payload is already gone (see its own doc
+	// comment), which would report "empty" here regardless of whether
+	// applyPasteOneResult's own cleanup actually ran at all — this way
+	// genuinely distinguishes "already removed" (os.ErrNotExist) from
+	// "still there" (nil).
+	if err := fsops.RemoveTrashSidecar(trashDir, trashItems[0].ID); !os.IsNotExist(err) {
+		t.Errorf("sidecar removal after a confirmed restore = %v, want os.ErrNotExist (already gone)", err)
+	}
+}
+
+// TestRestoreConflictSkipLeavesEverythingInPlace pins "Skip": the file
+// already at the original path is left exactly as it was, and the
+// trashed item is neither removed from the trash nor restored — a
+// skipped conflict is a genuine no-op, not a partial restore.
+func TestRestoreConflictSkipLeavesEverythingInPlace(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(original, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trashDir := t.TempDir()
+	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+		t.Fatalf("MoveToTrash: %v", err)
+	}
+	if err := os.WriteFile(original, []byte("recreated after delete"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trashItems, err := fsops.ListTrash(trashDir)
+	if err != nil || len(trashItems) != 1 {
+		t.Fatalf("ListTrash = %+v, %v, want exactly one item", trashItems, err)
+	}
+	trashPath := trashItems[0].Path(trashDir)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	job := newRestoreTestJob(r, []string{original}, trashDir, 1)
+	r.pasteConflictFound(job, newPasteTestConflict(t, trashPath, original))
+	r.chooseConflictResolution(resolveSkip, false)
+
+	got, err := os.ReadFile(original)
+	if err != nil || string(got) != "recreated after delete" {
+		t.Errorf("original path content = %q, %v, want the untouched %q", got, err, "recreated after delete")
+	}
+	remaining, err := fsops.ListTrash(trashDir)
+	if err != nil || len(remaining) != 1 {
+		t.Errorf("ListTrash after Skip = %+v, %v, want the one item still there, unrestored", remaining, err)
+	}
+	if r.activePage == pasteConflictPage {
+		t.Error("the dialog should have closed after Skip")
+	}
+}
+
+// TestRestoreDoesNotClearUnrelatedClipboard pins the real, easy-to-miss
+// hazard reusing the Paste machinery for Restore introduced: Restore
+// also sets job.cut (it genuinely is a move), and finishPasteJob's own
+// clipboard-clearing was, until this was guarded, keyed on job.cut
+// alone — which would silently wipe out a completely unrelated Copy/Cut
+// the user still had pending, just because a Restore happened to finish
+// while it was sitting there. Restore was never sourced from
+// r.clipboard in the first place, so it must never touch it either way.
+func TestRestoreDoesNotClearUnrelatedClipboard(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.copyToClipboard()
+	if len(r.clipboard) == 0 {
+		t.Fatal("setup: clipboard should hold something unrelated to the restore below")
+	}
+
+	job := newRestoreTestJob(r, []string{filepath.Join(dir, "restored.txt")}, t.TempDir(), 1)
+	r.applyPasteOneResult(job, filepath.Join(dir, "trash-payload"), filepath.Join(dir, "restored.txt"), nil)
+
+	if len(r.clipboard) == 0 {
+		t.Error("an unrelated pending Copy should survive a Restore finishing — Restore was never sourced from the clipboard")
+	}
+}
+
+// TestRestoreMultiSelectFromDifferentOriginalDirsRestoresBoth pins the
+// actual reason Restore couldn't just reuse startPaste's own single
+// shared destDir unchanged: a multi-select restore can pull items whose
+// own OriginalPath lived in entirely different directories, unlike an
+// ordinary Paste's items, which always share one destination. Both
+// items' own real fsMove calls are exercised here (see isolatePasteIO),
+// proving pasteWalk's own per-item restoreDests[i] lookup — not a single
+// job.destDir — is what actually drives each one's destination.
+func TestRestoreMultiSelectFromDifferentOriginalDirsRestoresBoth(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	fileA := filepath.Join(dirA, "a.txt")
+	fileB := filepath.Join(dirB, "b.txt")
+	if err := os.WriteFile(fileA, []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	trashDir := t.TempDir()
+	if err := fsops.MoveToTrash(fileA, trashDir); err != nil {
+		t.Fatalf("MoveToTrash(a): %v", err)
+	}
+	if err := fsops.MoveToTrash(fileB, trashDir); err != nil {
+		t.Fatalf("MoveToTrash(b): %v", err)
+	}
+	trashItems, err := fsops.ListTrash(trashDir)
+	if err != nil || len(trashItems) != 2 {
+		t.Fatalf("ListTrash = %+v, %v, want exactly two items", trashItems, err)
+	}
+
+	byOriginal := map[string]fsops.TrashItem{}
+	for _, item := range trashItems {
+		byOriginal[item.OriginalPath] = item
+	}
+	itemA, itemB := byOriginal[fileA], byOriginal[fileB]
+
+	r, err := NewRoot(tview.NewApplication(), dirA)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	items := []string{itemA.Path(trashDir), itemB.Path(trashDir)}
+	dests := []string{fileA, fileB}
+	done := isolatePasteIO(t)
+	r.startPaste(items, true, "", false, dests, trashDir)
+	waitPasteIO(t, done, 2)
+
+	if got, err := os.ReadFile(fileA); err != nil || string(got) != "a" {
+		t.Errorf("fileA after restore = %q, %v, want %q", got, err, "a")
+	}
+	if got, err := os.ReadFile(fileB); err != nil || string(got) != "b" {
+		t.Errorf("fileB after restore = %q, %v, want %q", got, err, "b")
 	}
 }
 
@@ -172,6 +450,26 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	}
 }
 
+// TestOpenRemoveConfirmHasATitleBar pins the fix for a real, user-reported
+// gap: the Remove/Empty-Trash confirmation used to be a bare List with
+// no heading at all, unlike every other dialog in this app (Properties,
+// Menu, Options, ...) — see confirmDialogTitleBar's own doc comment. The
+// title bar now carries the actual question rather than a generic
+// "Confirm" caption — a later, separately user-requested change (see
+// openConfirm's own doc comment).
+func TestOpenRemoveConfirmHasATitleBar(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+
+	r.openRemoveConfirm()
+
+	if got, want := r.confirmDialogTitleBar.GetText(true), " Permanently delete \"a.txt\"? "; got != want {
+		t.Errorf("confirmDialogTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.confirmDialogLayout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("confirmDialogLayout rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
 // resolvePurgeConfirmByCurrentFocus resolves the currently open
 // purgeConfirm exactly the way pressing Enter on the table's current
 // selection would: it does not force a particular outcome, unlike
@@ -181,7 +479,7 @@ func (r *Root) resolvePurgeConfirmByCurrentFocus(t *testing.T) {
 	switch r.confirmDialog.GetCurrentItem() {
 	case 1:
 		r.cancelConfirm()
-	case 2:
+	case 0:
 		r.acceptConfirm()
 	default:
 		t.Fatalf("unexpected purgeConfirm focus %d", r.confirmDialog.GetCurrentItem())
@@ -192,7 +490,7 @@ func TestOpenRemoveConfirmConfirmedDeletesPermanently(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(2) // deliberately move to "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // deliberately move to "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	if _, err := os.Lstat(file); !os.IsNotExist(err) {
@@ -311,7 +609,7 @@ func TestOpenEmptyTrashConfirmRemovesEverything(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	trashDir, err := r.trashDir()

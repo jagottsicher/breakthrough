@@ -169,6 +169,30 @@ func removeConfirmSingleMessage(target string) string {
 // contains files/ and info/, never a trashed item directly) — anywhere
 // else this reports a plain error via the same overlay every other fsops
 // failure already uses, rather than silently doing nothing.
+//
+// Routes through the same asynchronous, conflict-resolving Paste
+// machinery an ordinary Paste already uses (see startPaste in
+// pasteconflict.go), rather than fsops.RestoreFromTrash's own simpler,
+// refuse-outright-on-conflict behavior: restoring something whose
+// original path now has an unrelated file sitting on it — because it
+// was recreated after the original was trashed, say — deserves the
+// exact same Overwrite/Skip/"if newer"/"if not empty" choice a Paste
+// conflict already offers, not a silent refusal with nothing but an
+// error message to explain why. job.restoreDests carries each item's
+// own OriginalPath — pasteWalk's own per-item dst computation uses it
+// directly instead of the one shared destDir an ordinary Paste's items
+// all join a common basename onto (see pasteJob.restoreDests' own doc
+// comment) — and job.restoreTrashDir is what applyPasteOneResult needs
+// afterward to remove each item's own now-stale .trashinfo sidecar
+// (see fsops.RemoveTrashSidecar) once its payload has safely landed.
+//
+// Deliberately does not call r.panel.deselectAll() itself, unlike the
+// old synchronous version: reloadPasteAffectedTabs already reloads the
+// trash listing (job.sourceDirs, gated on job.cut, which this job always
+// sets) as items actually finish landing, and Panel.load unconditionally
+// clears its own selection on every call regardless of path (see its own
+// doc comment) — the exact same mechanism an ordinary Cut+Paste already
+// relies on for this, not a gap specific to Restore.
 func (r *Root) restoreSelectionFromTrash() {
 	dir, err := r.trashDir()
 	if err != nil {
@@ -181,7 +205,7 @@ func (r *Root) restoreSelectionFromTrash() {
 		return
 	}
 
-	items, err := fsops.ListTrash(dir)
+	trashItems, err := fsops.ListTrash(dir)
 	if err != nil {
 		r.showError(err)
 		return
@@ -191,32 +215,23 @@ func (r *Root) restoreSelectionFromTrash() {
 		return
 	}
 
-	byPath := make(map[string]fsops.TrashItem, len(items))
-	for _, item := range items {
+	byPath := make(map[string]fsops.TrashItem, len(trashItems))
+	for _, item := range trashItems {
 		byPath[filepath.Clean(item.Path(dir))] = item
 	}
 
-	var firstErr error
+	items := make([]string, 0, len(targets))
+	dests := make([]string, 0, len(targets))
 	for _, target := range targets {
 		item, ok := byPath[filepath.Clean(target)]
 		if !ok {
 			continue
 		}
-		if err := fsops.RestoreFromTrash(item, dir); err != nil && firstErr == nil {
-			firstErr = err
-		} else if err == nil {
-			// item.Path(dir), not target: target is already
-			// filepath.Clean(target), but the map (and so what Details
-			// could actually have keyed itself on while browsing the
-			// trash) is built from item.Path(dir) specifically — the two
-			// only differ if target itself wasn't already clean, but
-			// matching the same value used to look item up here is the
-			// robust way to say that rather than assuming they agree.
-			r.refreshDetailsIfShowing(item.Path(dir), item.OriginalPath)
-		}
+		items = append(items, item.Path(dir))
+		dests = append(dests, item.OriginalPath)
 	}
-	r.panel.deselectAll()
-	r.reloadPanel(firstErr)
+
+	r.startPaste(items, true, "", false, dests, dir)
 }
 
 // openEmptyTrashConfirm is the context menu's "Empty Trash" — same
@@ -300,22 +315,27 @@ func (r *Root) TrashbinShortcut() {
 // hand-built confirmation would be a second place for the "Cancel is
 // preselected" rule below to be got wrong.
 //
-// Deliberately NOT SetCurrentItem(0) the way RequestQuit's quitConfirm
-// is: Ctrl+Q is already a single, deliberate keypress toward quitting, so
-// defaulting to "Quit" on Enter is low-friction and cheaply undone
-// (restart the app). What comes through here — Remove, Empty Trash,
-// resetting settings — is either unrecoverable or tedious to redo from a
-// single stray Enter, so openConfirm always preselects index 1
-// ("Cancel") instead.
+// Item order matches quitConfirm's own, per the user's own explicit
+// request: the confirming answer is always listed first (top), Cancel
+// always last (bottom) — regardless of which one actually starts
+// pre-selected. openConfirm still preselects Cancel here (now index 1,
+// not index 0 — see its own doc comment), same as quitConfirm's own
+// SetCurrentItem(1) does: Ctrl+Q is already a single, deliberate
+// keypress toward quitting, and what comes through openConfirm —
+// Remove, Empty Trash, resetting settings — is either unrecoverable or
+// tedious to redo from a single stray Enter, so both dialogs default a
+// plain Enter to Cancel regardless of which position that ends up at.
 func (r *Root) newConfirmDialog() *tview.List {
 	l := tview.NewList().ShowSecondaryText(false)
 	l.SetHighlightFullLine(true)
 	l.SetBorderPadding(0, 0, 1, 1)
-	// Both index 0 (the question) and index 2 (the confirming answer)
-	// are set fresh by openConfirm before every show.
-	l.AddItem("", "", 0, nil)
-	l.AddItem("Cancel", "", 0, r.cancelConfirm)
+	// The question itself lives in confirmDialogTitleBar, not as a list
+	// item — per the user's own explicit request that the question BE
+	// the header rather than sit under a generic "Confirm" caption. Only
+	// index 0 (the confirming answer) is still set fresh by openConfirm
+	// before every show.
 	l.AddItem("", "", 0, r.acceptConfirm)
+	l.AddItem("Cancel", "", 0, r.cancelConfirm)
 	l.SetDoneFunc(r.cancelConfirm) // Escape
 	return l
 }
@@ -329,20 +349,40 @@ func (r *Root) newConfirmDialog() *tview.List {
 // Empty Trash (see openPurgeConfirm just below, which is only a fixed
 // wording for this) and the Options screen's own two resets.
 //
+// message becomes confirmDialogTitleBar's own text — the question IS
+// the header, not a generic "Confirm" caption above a separate question
+// line (per the user's own explicit request: "braucht nicht Confirm im
+// header stehen, sondern einfach die Frage ist die Headerzeile").
+//
 // confirmLabel is the action itself, phrased as an answer ("Yes, delete
 // permanently", "Yes, reset"), not a bare "OK" — at the moment of
 // deciding, the button should say what it will do rather than make the
 // reader remember the question above it.
 func (r *Root) openConfirm(message, confirmLabel string, action func()) {
 	r.pendingConfirm = action
-	r.confirmDialog.SetItemText(0, message, "")
-	r.confirmDialog.SetItemText(2, confirmLabel, "")
+	r.confirmDialogTitleBar.SetText(" " + message + " ")
+	r.confirmDialog.SetItemText(0, confirmLabel, "")
 
+	// Width has to cover whichever of the header (the question, which
+	// can run long — "Reset all N settings, in every category, to their
+	// defaults?") or the list itself (Cancel/confirmLabel) is wider; the
+	// header no longer being a list item means listSize alone can no
+	// longer see it.
 	width, height := listSize(r.confirmDialog)
+	if headerWidth := tview.TaggedStringWidth(r.confirmDialogTitleBar.GetText(false)); headerWidth > width {
+		width = headerWidth
+	}
+	height++ // reserved title bar row (see confirmDialogLayout)
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 
+	r.confirmDialogLayout.SetRect(x, y, width, height)
+	// r.confirmDialog's own rect is also set, to the same full area —
+	// see RequestQuit's own comment on why captureOutsideClick's bounds
+	// check (which reads r.activeWidget.GetRect(), and r.activeWidget
+	// stays r.confirmDialog, the real focus target) needs this even
+	// though confirmDialogLayout is what's actually drawn/positioned.
 	r.confirmDialog.SetRect(x, y, width, height)
 	r.confirmDialog.SetCurrentItem(1) // "Cancel" - see newConfirmDialog's own comment
 	// Layered on top of whatever asked, rather than replacing it:
