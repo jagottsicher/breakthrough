@@ -2739,7 +2739,7 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // conflict-resolving shape); a no-op if nothing was ever copied/cut,
 // same as before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
-	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks)
+	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "")
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker

@@ -377,7 +377,28 @@ func TestPasteFollowingSymlinksOnCopyLeavesSourceSymlinkInPlace(t *testing.T) {
 // silently no-op instead of exercising it.
 func newPasteTestJob(r *Root, cut bool, destDir string, total int) *pasteJob {
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &pasteJob{ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: total, remaining: total}
+	job := &pasteJob{
+		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: total, remaining: total,
+		destDirs: map[string]bool{destDir: true}, // mirrors reallyStartPaste's own computation
+	}
+	r.pasteJob = job
+	return job
+}
+
+// newRestoreTestJob is newPasteTestJob's own counterpart for a Restore
+// job specifically (see pasteJob.restoreDests' own doc comment): cut is
+// always true (Restore always moves), and destDirs is computed the same
+// way reallyStartPaste itself computes it for a real restore — every
+// distinct parent directory across restoreDests — rather than the
+// {destDir: true} shape newPasteTestJob's own ordinary-Paste case uses.
+func newRestoreTestJob(r *Root, restoreDests []string, restoreTrashDir string, total int) *pasteJob {
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &pasteJob{
+		ctx: ctx, cancel: cancel, cut: true,
+		restoreDests: restoreDests, restoreTrashDir: restoreTrashDir,
+		destDirs: distinctParentDirs(restoreDests),
+		total:    total, remaining: total,
+	}
 	r.pasteJob = job
 	return job
 }
@@ -1479,7 +1500,7 @@ func TestStartPasteQueuesBehindARunningJob(t *testing.T) {
 
 	secondDestDir := t.TempDir()
 	secondItems := []string{filepath.Join(dir, "banana.txt")}
-	r.startPaste(secondItems, true, secondDestDir, false)
+	r.startPaste(secondItems, true, secondDestDir, false, nil, "")
 
 	if r.pasteJob != running {
 		t.Fatal("starting a second Paste should not have touched the running job at all")
