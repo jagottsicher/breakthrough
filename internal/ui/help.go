@@ -59,16 +59,24 @@ var helpText = strings.TrimLeft(`
   both exist: "d" is reversible (the Trash), "D" is not (asks first).
   While browsing the Trash itself, "r" restores and "D" empties it,
   instead of their ordinary meaning — the same two letters, read
-  differently in the one place that makes sense.
+  differently in the one place that makes sense. "V" is "v" Paste's own
+  bigger sibling too: instead of recreating a symlink as a symlink at
+  the destination, it replaces it (and any symlink nested inside a
+  pasted folder) with a real copy of whatever it points to — for a Cut,
+  only the original link itself is removed afterward, never its
+  target, however far away that lives. Always asks first, the same as
+  "D", since a small, instant symlink can turn into an arbitrarily
+  large copy this way.
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
   button bar for what the second key can be):
 
-    g  go to    gg top · gh home · gr / (root) · gb Trash
+    g  go to    gg top · gh home · gp back · gn forward · gu up ·
+                gr / (root) · gb Trash
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes
+                zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
@@ -126,9 +134,9 @@ var helpText = strings.TrimLeft(`
   A read-only, live-updating panel of file info (stat fields; for an
   image or PDF, a preview with its own click zone/"l" for fullscreen;
   hashes, or for a directory, its total size) for whichever entry is
-  currently selected. The "<" button right after the filter box expands
-  it the same way "I" does; once open, the ">" button in its own
-  top-right corner collapses it again.
+  currently selected. The "<" button at the far end of the path bar
+  (right after the tab strip) expands it the same way "I" does; once
+  open, the ">" button in its own top-right corner collapses it again.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
@@ -139,14 +147,41 @@ var helpText = strings.TrimLeft(`
       real, visible amount of time on a large tree
   M   Load an image's metadata (EXIF etc. — not implemented yet)
 
-  Click a path segment in the header to jump straight there; click
-  the path itself to type a new one (Tab completes it, Enter goes);
-  click a column heading to sort by it; type into the filter box to
-  narrow the list live (its own button switches between a plain glob
-  and a regular expression).
+  Click a path segment in the header to jump straight there; click the
+  path itself to type a new one (Tab completes it, Enter goes); click
+  a column heading to sort by it; click the "Y" button near the right
+  edge of the path bar (an "Nx" count appears before it once one or
+  more are actually narrowing the listing, turning red if a filter is
+  hiding everything a directory would otherwise show) — or press "/" —
+  to open the filter dropdown, three independently combinable (AND)
+  rows, each narrowing the listing live as you type:
 
-  While plainly browsing (not editing the path, not in the filter box)
-  and the Details sidebar is shown, Tab moves keyboard focus into it —
+    Glob/regex      type to narrow the list live; its own button
+                    switches glob/regex, its own checkbox disables it
+                    without clearing what's typed
+    Size            "> 1m", ">= 500k", "= 0", or a range joined with
+                    "and" ("> 1m and < 1g"); units b/k/m/g/t, binary
+                    (1024-based) — a bare number means plain bytes
+    Modified time   before/after/between <moment>, or a bare moment
+                    alone meaning "within the last ..."; a moment is
+                    absolute ("2026-09-01", optionally with a time) or
+                    relative ("7 days", "2 hours ago", "last 30
+                    minutes") — sec/min/hour/day/week/month/year,
+                    singular or plural
+
+  Typing into a field auto-activates its own row. Tab/Shift+Tab cycle
+  all seven of the dropdown's own pieces; "/" — once the dropdown is
+  already open — jumps straight to the next of the three fields
+  instead, the same "press it again to advance further" trick Ctrl+T
+  uses for the tab switcher. Escape closes it. By default
+  (filter_persistent) all three carry over across a directory change,
+  so browsing a whole tree with the same filter on is the normal way
+  to use it; set filter_persistent = false to have every new directory
+  start unfiltered instead.
+
+  While plainly browsing (not editing the path, not in the filter
+  dropdown) and the Details sidebar is shown, Tab moves keyboard focus
+  into it —
   its own scrolling (arrow keys, PageUp/PageDown, Home/End, mouse
   wheel) then works once its content is longer than it has room for —
   and Tab again moves focus back to the panel. A click anywhere in the
@@ -265,7 +300,7 @@ var helpText = strings.TrimLeft(`
   to the row above. The first tab has no "✕" — one tab always stays
   open.
 
-  The numbered strip after the filter box shows the open tabs; the
+  The numbered strip after the filter button shows the open tabs; the
   highlighted number is the one you're on. Click a number to switch,
   click "+" for a new tab, click anywhere else in the strip to open the
   switcher — which lists every tab's full directory, since the numbers
@@ -344,6 +379,67 @@ var helpText = strings.TrimLeft(`
   breadcrumb next to the status line — click a button or segment (or
   edit the path directly) to keep browsing normally, the same as
   clicking a result already does, without needing to pick one first.
+
+[::b]Paste conflicts ("v", when a destination already exists)[::-]
+
+  Up / Down         Move between the options
+  Enter / Space     Apply the highlighted option
+  Escape            Skip — same as the preselected default
+
+  Overwrite               Replace this one entry entirely (a
+                          directory ends up identical to the source —
+                          nothing extra left over), decide the next
+                          conflict separately
+  Overwrite all           Same, and apply it to every conflict this
+                          Paste still runs into, with no further
+                          asking
+  Merge into existing folder      Directory conflicts only: copy the
+                          source's files over it, keeping whatever's
+                          already there the source doesn't have —
+                          identical to Overwrite for a plain file
+  Merge all into existing folders Same, for every conflict this
+                          Paste still runs into
+  Skip                    Leave the existing entry untouched, decide
+                          the next conflict separately
+  Skip all               Same, for every conflict this Paste still
+                          runs into
+  Overwrite all if source is newer      Overwrite only where the
+                          copied file's own modified time is newer
+                          than what's already there; skip the rest —
+                          applies to every conflict, like the other
+                          "all" options
+  Overwrite all if source is not empty  Overwrite only where the
+                          copied file actually has content; skip a
+                          zero-byte source instead of replacing
+                          something real with nothing — also applies
+                          to every conflict
+
+  Everything else in the Paste keeps copying/moving in the background
+  while this dialog is open — a conflict found before this one is
+  answered queues behind it instead of opening a second dialog on top,
+  shown as "(N more waiting)" right in this one's own message.
+
+  Ctrl+C stops the whole Paste outright, dialog open or not — whatever
+  was already mid-write finishes normally where it was headed, nothing
+  still queued starts. A different overlay merely open while a Paste
+  continues in the background is unaffected.
+
+  Whatever's currently on the clipboard shows two ways: every row it
+  holds gets a full-row grey tint (a lighter shade for Cut than Copy),
+  across every open tab showing that row, not just the one Copy/Cut
+  was pressed in; and the status bar names it — "Copy: 3 files, 1
+  dir" — right after the chord countdown's own spot. Once Paste
+  actually starts, that same spot shows its own live progress instead
+  — a spinner, how many items are done, a two-row bar packed into one
+  line of half-block characters (top half: item count, bottom half:
+  the current file's own byte progress), and the real file currently
+  being written. Once a background scan of the whole selection's size
+  finishes (started the moment Paste was pressed, never delaying it),
+  a leading character also fills in showing overall byte progress, and
+  an estimated remaining duration appears after the bar. A
+  same-filesystem move is instant regardless of size, so it usually
+  finishes before any of this ever shows anything at all — expected,
+  not a missed update.
 
 [::b]Other dialogs (Options, Rename, pickers, Tree)[::-]
 

@@ -21,9 +21,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -356,7 +358,72 @@ func run() error {
 		return event
 	})
 
+	// See installSignalHandler's own doc comment for why this matters at
+	// all for a full-screen terminal application — a dropped SSH
+	// connection is exactly the scenario this exists for.
+	installSignalHandler(app.Stop)
+
 	return app.SetRoot(root, true).Run()
+}
+
+// installSignalHandler arranges for stop to run, in its own goroutine,
+// the first time this process receives SIGHUP, SIGTERM, or SIGINT —
+// split out from run itself so a test can pass a fake stop and send a
+// real signal to the very process running it, without needing a real
+// tview.Application/tcell.Screen at all.
+//
+// tcell only ever installs its own signal handler for SIGWINCH
+// (terminal resize) — verified directly against its own tty_unix.go,
+// not assumed. Left uncaught, Go's runtime applies each of these three
+// signals' own default disposition, which is to terminate the process
+// immediately: no deferred cleanup runs at all, tcell's own
+// screen.Fini() included. A dropped SSH connection delivers exactly one
+// of these (SIGHUP — literally "hang up", the name predating SSH by
+// decades but describing exactly this) once the session tears down; so
+// does `kill`/systemd stopping the process (SIGTERM), or a stray SIGINT
+// reaching this process from outside its own terminal (Ctrl+C itself
+// never generates one here — tcell's raw mode intercepts it as a key
+// event first, see run's own SetInputCapture — but nothing guarantees
+// every caller of this binary goes through a terminal at all). Left
+// this way, whichever raw modes tcell turned on (mouse reporting, the
+// alternate screen buffer, ...) stay switched on at the terminal
+// emulator itself once the process is simply gone — showing as garbled
+// output and mouse movements arriving as literal escape-sequence
+// garbage, a real, reported symptom. Confirmed live, side by side, not
+// just reasoned about: sending SIGHUP to an unpatched build leaves a
+// tmux pane frozen on breakthrough's own last-drawn screen ("Pane is
+// dead (signal 1, ...)"); the same signal against a build with this
+// handler installed leaves a blank pane instead ("Pane is dead (status
+// 0, ...)") — the alternate screen was actually exited before exit.
+//
+// This can only help, never hurt: a connection that's already
+// genuinely, fully severed can't be fixed after the fact regardless —
+// there is no channel left to send a reset sequence over by then — but
+// plenty of real disconnects still leave the underlying pty willing to
+// accept one last write for a brief window before it's actually torn
+// down, and this is what spends that window on exactly the sequence
+// that matters instead of wasting it on nothing at all, the same reason
+// vim/htop/less and most other full-screen terminal programs all
+// install a handler like this one.
+//
+// stop is app.Stop in production — tview's own documented, concurrency-
+// safe way to call screen.Fini() from outside its own event loop
+// (verified directly against tview's own application.go: Stop locks the
+// Application, calls Fini() on its current screen, and signals Run's
+// own internal loop to return cleanly) — the exact same path confirmQuit
+// already uses for an ordinary "q". Deliberately not also saving the
+// open tab layout the way confirmQuit does: this fires on a signal, not
+// the user's own deliberate choice to leave, the same "a crash or a
+// kill should not persist a half-finished state nobody actually chose"
+// reasoning saveTabs' own doc comment already gives for skipping it
+// there too.
+func installSignalHandler(stop func()) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-sigCh
+		stop()
+	}()
 }
 
 // startDir picks the directory breakthrough opens in: an explicit

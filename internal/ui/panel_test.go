@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,24 +18,49 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
-func TestBuildHeaderSpans(t *testing.T) {
-	text, spans := buildHeaderSpans("/a/bb/c")
+// stripColorTags removes tview's own "[...]" dynamic-color tags from s,
+// leaving just the visible text — used only by the header-span tests
+// below, which need to check buildHeaderSpans' own visible content
+// without also hard-coding its exact ButtonBackground hex value (see
+// buildHeaderSpans' own doc comment on why each button is now padded
+// with one).
+func stripColorTags(s string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch {
+		case r == '[':
+			depth++
+		case r == ']' && depth > 0:
+			depth--
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
-	wantText := "∎~<>↑ /a/bb/c"
-	if text != wantText {
-		t.Fatalf("text = %q, want %q", text, wantText)
+func TestBuildHeaderSpans(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	text, spans := buildHeaderSpans("/a/bb/c", theme)
+
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/a/bb/c"
+	if got := stripColorTags(text); got != wantVisible {
+		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
 	want := []headerSpan{
-		{start: 0, end: 1, action: actionStart},
-		{start: 1, end: 2, action: actionHome},
-		{start: 2, end: 3, action: actionBack},
-		{start: 3, end: 4, action: actionForward},
-		{start: 4, end: 5, action: actionUp},
-		{start: 6, end: 7, action: actionNavigate, target: "/"},
-		{start: 7, end: 8, action: actionNavigate, target: "/a"},
-		{start: 9, end: 11, action: actionNavigate, target: "/a/bb"},
-		{start: 12, end: 13, action: actionNavigate, target: "/a/bb/c"},
+		{start: 0, end: 3, action: actionStart},
+		{start: 4, end: 7, action: actionRoot},
+		{start: 8, end: 11, action: actionHome},
+		{start: 12, end: 15, action: actionBack},
+		{start: 16, end: 19, action: actionForward},
+		{start: 20, end: 23, action: actionUp},
+		{start: 24, end: 27, action: actionReload},
+		{start: 28, end: 29, action: actionNavigate, target: "/"},
+		{start: 29, end: 30, action: actionNavigate, target: "/a"},
+		{start: 31, end: 33, action: actionNavigate, target: "/a/bb"},
+		{start: 34, end: 35, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -49,7 +75,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 	// Every path span's slice of text must equal its own last path
 	// component (or "/" for the root span) — this is what makes clicking
 	// a name actually correspond to what's drawn under the cursor.
-	runes := []rune(text)
+	runes := []rune(stripColorTags(text))
 	for _, s := range spans {
 		if s.action != actionNavigate {
 			continue
@@ -74,30 +100,35 @@ func TestBuildHeaderSpans(t *testing.T) {
 // TestHeaderButtonPrefixMatchesBuildHeaderSpans pins headerButtonPrefix
 // (headerEdit's own SetLabel — see NewPanel/openEdit) in sync with what
 // buildHeaderSpans actually renders before the path itself starts —
-// the two can't share a single construction (the five buttons there
-// each need their own click span), so this is what would catch either
-// one drifting from the other instead.
+// the two can't share a single construction (the six buttons there
+// each need their own click span, and only one of the two needs the
+// ButtonBackground color tags at all), so this is what would catch
+// either one drifting from the other instead. Compares the *visible*
+// text only — headerButtonPrefix is deliberately plain, with no color
+// tags of its own (see its own doc comment).
 func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
-	text, _ := buildHeaderSpans("/a/bb/c")
-	if !strings.HasPrefix(text, headerButtonPrefix) {
-		t.Errorf("buildHeaderSpans' own text %q does not start with headerButtonPrefix %q", text, headerButtonPrefix)
+	theme := config.DefaultTheme().Resolve()
+	text, _ := buildHeaderSpans("/a/bb/c", theme)
+	if visible := stripColorTags(text); !strings.HasPrefix(visible, headerButtonPrefix) {
+		t.Errorf("buildHeaderSpans' own visible text %q does not start with headerButtonPrefix %q", visible, headerButtonPrefix)
 	}
 }
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
-	text, spans := buildHeaderSpans("/")
+	theme := config.DefaultTheme().Resolve()
+	text, spans := buildHeaderSpans("/", theme)
 
-	wantText := "∎~<>↑ /"
-	if text != wantText {
-		t.Fatalf("text = %q, want %q", text, wantText)
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/"
+	if got := stripColorTags(text); got != wantVisible {
+		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
-	// 5 buttons + the root span.
-	if len(spans) != 6 {
-		t.Fatalf("got %d spans, want 6: %+v", len(spans), spans)
+	// 7 buttons + the root span.
+	if len(spans) != 8 {
+		t.Fatalf("got %d spans, want 8: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 6, end: 7, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 28, end: 29, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -109,22 +140,25 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 // target it maps to) drifts out of alignment with what's actually drawn
 // on screen. "文档" is 2 runes but 4 terminal columns.
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
-	text, spans := buildHeaderSpans("/文档/c")
+	theme := config.DefaultTheme().Resolve()
+	text, spans := buildHeaderSpans("/文档/c", theme)
 
-	wantText := "∎~<>↑ /文档/c"
-	if text != wantText {
-		t.Fatalf("text = %q, want %q", text, wantText)
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/文档/c"
+	if got := stripColorTags(text); got != wantVisible {
+		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
 	want := []headerSpan{
-		{start: 0, end: 1, action: actionStart},
-		{start: 1, end: 2, action: actionHome},
-		{start: 2, end: 3, action: actionBack},
-		{start: 3, end: 4, action: actionForward},
-		{start: 4, end: 5, action: actionUp},
-		{start: 6, end: 7, action: actionNavigate, target: "/"},
-		{start: 7, end: 11, action: actionNavigate, target: "/文档"},
-		{start: 12, end: 13, action: actionNavigate, target: "/文档/c"},
+		{start: 0, end: 3, action: actionStart},
+		{start: 4, end: 7, action: actionRoot},
+		{start: 8, end: 11, action: actionHome},
+		{start: 12, end: 15, action: actionBack},
+		{start: 16, end: 19, action: actionForward},
+		{start: 20, end: 23, action: actionUp},
+		{start: 24, end: 27, action: actionReload},
+		{start: 28, end: 29, action: actionNavigate, target: "/"},
+		{start: 29, end: 33, action: actionNavigate, target: "/文档"},
+		{start: 34, end: 35, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -1355,6 +1389,404 @@ func TestAddRowHighlightsOnlyDirectoryNames(t *testing.T) {
 	}
 }
 
+// rowForPath finds the row whose own rowRef.path is path — the
+// clipboard tests below key everything by absolute path (the same way
+// rowBackground itself does), rather than by display name the way
+// TestAddRowHighlightsOnlyDirectoryNames' own byName map does.
+func rowForPath(p *Panel, path string) (row int, ok bool) {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.path == path {
+			return row, true
+		}
+	}
+	return 0, false
+}
+
+// cellBackground reports cell's own resolved background, and whether
+// it's actually painted at all — false for a Transparent cell (see
+// rowBackground's own doc comment on why "untinted" means Transparent,
+// not an explicitly-set PanelBackground), the same distinction
+// TestAddRowHighlightsOnlyDirectoryNames above already checks for
+// directly.
+func cellBackground(cell *tview.TableCell) (bg tcell.Color, tinted bool) {
+	if cell.Transparent {
+		return 0, false
+	}
+	_, bg, _ = cell.Style.Decompose()
+	return bg, true
+}
+
+// cellSelectedBackground reports cell's own SelectedStyle background,
+// and whether one is actually set at all (tcell.StyleDefault, the zero
+// value, means "none" — tview then falls back to the table-wide
+// SetSelectedStyle instead, see setSelectionStyle) — the same
+// Decompose() approach cellBackground uses for the cell's ordinary
+// Style, just for the separate style tview only ever applies to
+// whichever row is currently the table's own cursor row.
+func cellSelectedBackground(cell *tview.TableCell) (bg tcell.Color, set bool) {
+	if cell.SelectedStyle == tcell.StyleDefault {
+		return 0, false
+	}
+	_, bg, _ = cell.SelectedStyle.Decompose()
+	return bg, true
+}
+
+// TestSetClipboardTintsHeldRowAcrossWholeRow pins the user's own
+// explicit request: a file on the clipboard gets a colored background
+// across its whole row, not just its checkbox glyph — every column,
+// not only the name (which addRow/setRowCells build from two different
+// places — see rowBackground's own doc comment).
+func TestSetClipboardTintsHeldRowAcrossWholeRow(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	other := filepath.Join(dir, "other.txt")
+	for _, f := range []string{held, other} {
+		if err := os.WriteFile(f, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+
+	heldRow, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		bg, tinted := cellBackground(p.table.GetCell(heldRow, col))
+		if !tinted || bg != theme.ClipboardCopyBackground {
+			t.Errorf("held.txt col %d: background = %v, tinted = %v, want ClipboardCopyBackground (%v), tinted = true", col, bg, tinted, theme.ClipboardCopyBackground)
+		}
+	}
+
+	otherRow, ok := rowForPath(p, other)
+	if !ok {
+		t.Fatal("other.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, tinted := cellBackground(p.table.GetCell(otherRow, col)); tinted {
+			t.Errorf("other.txt col %d: unexpectedly tinted — it was never on the clipboard", col)
+		}
+	}
+}
+
+// TestSetClipboardCutUsesItsOwnDistinctColor pins the other half of the
+// same request: Cut gets ClipboardCutBackground, a genuinely different
+// color than Copy's own — a slightly pinkish-tinted gray rather than
+// just a lighter shade of the same neutral gray, per the user's own
+// explicit request (see ClipboardCutBackground's own doc comment in
+// internal/config/theme.go for the full reasoning).
+func TestSetClipboardCutUsesItsOwnDistinctColor(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, true)
+
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	bg, tinted := cellBackground(p.table.GetCell(row, colName))
+	if !tinted || bg != theme.ClipboardCutBackground {
+		t.Errorf("held.txt name cell after Cut: background = %v, tinted = %v, want ClipboardCutBackground (%v)", bg, tinted, theme.ClipboardCutBackground)
+	}
+}
+
+// TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant pins a
+// real, user-reported gap: selecting several files (checkbox or a
+// right-drag) leaves the cursor on the last one; Cut/Copy tints the
+// whole selection, but the cursor's own row used to lose that tint the
+// instant it was drawn as the table's current row — tview always
+// prefers the table-wide SetSelectedStyle (see setSelectionStyle:
+// FocusedBackground while focused, EditableBackground once focus moves
+// elsewhere, e.g. to a different tab) over a cell's own
+// Style/BackgroundColor, UNLESS that cell has its own SelectedStyle —
+// which addRow/setRowCells never set at all before this fix.
+//
+// Giving every tinted row's own SelectedStyle its full-brightness tint
+// unconditionally was the first fix tried, and directly caused a
+// second, separate user-reported gap: with several files selected, the
+// cursor's own row (the one that matters for a next action) became
+// visually identical to every other tinted row, losing "where would
+// the cursor land" just as thoroughly as the original bug lost "is
+// this still on the clipboard" — see
+// TestFocusedTintedCursorRowLetsFocusColorWin for that half. This test
+// pins the *unfocused* half specifically: NewPanel's own table starts
+// unfocused (no Application.Run() loop here to ever focus it), so a
+// tinted cursor row should show its own Inactive variant — dimmer than
+// the plain tint, but still recognizably tinted, not the same color as
+// an ordinary EditableBackground row nor identical to its own
+// full-brightness siblings.
+func TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	other := filepath.Join(dir, "other.txt")
+	for _, f := range []string{held, other} {
+		if err := os.WriteFile(f, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	if p.table.HasFocus() {
+		t.Fatal("setup: table should start unfocused")
+	}
+	p.setClipboard([]string{held}, false)
+
+	heldRow, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		bg, set := cellSelectedBackground(p.table.GetCell(heldRow, col))
+		if !set || bg != theme.ClipboardCopyBackgroundInactive {
+			t.Errorf("held.txt col %d: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v), set = true — this is what keeps the tint visible, but distinguishable from the cursor's own row, while unfocused", col, bg, set, theme.ClipboardCopyBackgroundInactive)
+		}
+	}
+
+	otherRow, ok := rowForPath(p, other)
+	if !ok {
+		t.Fatal("other.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(otherRow, col)); set {
+			t.Errorf("other.txt col %d: SelectedStyle unexpectedly set — it was never on the clipboard, its cursor-row rendering should still follow the table-wide, focus-dependent style", col)
+		}
+	}
+}
+
+// TestFocusedTintedCursorRowLetsFocusColorWin pins the user's own
+// explicit request, the other half of the story
+// TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant tells:
+// while this panel actually has real keyboard focus, the cursor/focus
+// indicator (FocusedBackground) must win outright over a clipboard
+// tint, not the other way around — otherwise several tinted rows in
+// the same selection become indistinguishable from one another, and
+// the cursor's own current position is lost. Table.Focus(nil) sets
+// hasFocus directly and fires the same SetFocusFunc callback a real
+// Application.SetFocus would, without needing a running event loop.
+func TestFocusedTintedCursorRowLetsFocusColorWin(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.table.Focus(nil)
+	if !p.table.HasFocus() {
+		t.Fatal("setup: table should report focused after Focus(nil)")
+	}
+	p.setClipboard([]string{held}, false)
+
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("held.txt col %d: SelectedStyle unexpectedly set while focused — the table-wide FocusedBackground should win here, not the clipboard tint", col)
+		}
+	}
+}
+
+// TestSetSelectionStyleRefreshesTintedCursorRowOnFocusChange pins
+// setSelectionStyle's own targeted repaint: a pure focus/blur
+// transition touches no row's own text or clipboard state at all, only
+// whether the table-wide or a tinted row's own dedicated SelectedStyle
+// should apply for whichever row is currently the cursor — so toggling
+// focus alone, with no further setClipboard call, must still update
+// that one row's own rendering both ways.
+func TestSetSelectionStyleRefreshesTintedCursorRowOnFocusChange(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false) // unfocused so far
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	p.focusRow(row) // the cursor lands on held.txt, matching setSelectionStyle's own "whichever row GetSelection() reports" target
+	if bg, set := cellSelectedBackground(p.table.GetCell(row, colName)); !set || bg != theme.ClipboardCopyBackgroundInactive {
+		t.Fatalf("setup: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v) before focusing", bg, set, theme.ClipboardCopyBackgroundInactive)
+	}
+
+	p.table.Focus(nil) // no setClipboard call in between — focus alone must still refresh this row
+
+	if _, set := cellSelectedBackground(p.table.GetCell(row, colName)); set {
+		t.Error("SelectedStyle still set after focusing — the focus color should win now, with no override at all")
+	}
+
+	p.table.Blur()
+
+	if bg, set := cellSelectedBackground(p.table.GetCell(row, colName)); !set || bg != theme.ClipboardCopyBackgroundInactive {
+		t.Errorf("after blur: SelectedStyle background = %v, set = %v, want ClipboardCopyBackgroundInactive (%v) again", bg, set, theme.ClipboardCopyBackgroundInactive)
+	}
+}
+
+// TestSetClipboardClearsSelectedStyleWhenUntinted pins the reverse
+// direction for the fix above: a row's own SelectedStyle must go back
+// to tcell.StyleDefault (tview's own "nothing cell-specific set" zero
+// value) once it's no longer on the clipboard, or it would keep
+// silently overriding the table-wide, focus-dependent selected style
+// forever after, even for a row with nothing left to do with the
+// clipboard.
+func TestSetClipboardClearsSelectedStyleWhenUntinted(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	if _, set := cellSelectedBackground(p.table.GetCell(row, colCheckbox)); !set {
+		t.Fatal("setup: held.txt's checkbox cell should have its own SelectedStyle set before the clipboard clears")
+	}
+
+	p.setClipboard(nil, false) // clipboard cleared, e.g. a clean Cut+Paste landing
+
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("held.txt col %d: SelectedStyle still set after the clipboard cleared", col)
+		}
+	}
+}
+
+// TestSetClipboardUntintsRowsNoLongerHeld pins the reverse direction:
+// a row that was tinted stops being tinted the moment setClipboard is
+// called again without its path — Paste completing a Cut, or a fresh
+// Copy replacing what was there before — restoring the exact
+// "never touched" (Transparent) state a fresh cell already starts in,
+// not some explicitly-set "normal" color of its own (see
+// paintFixedRowCells's own doc comment on why that distinction
+// matters).
+func TestSetClipboardUntintsRowsNoLongerHeld(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	if _, tinted := cellBackground(p.table.GetCell(row, colName)); !tinted {
+		t.Fatal("setup: held.txt should be tinted before the clipboard clears")
+	}
+
+	p.setClipboard(nil, false) // clipboard cleared, e.g. a clean Cut+Paste landing
+
+	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, tinted := cellBackground(p.table.GetCell(row, col)); tinted {
+			t.Errorf("held.txt col %d: still tinted after the clipboard cleared", col)
+		}
+	}
+}
+
+// TestRowBackgroundNeverTintsTheDotDotRow pins a real edge case:
+// rowRef.path for ".." is the *parent* directory, not something
+// Copy/Cut could ever really have captured — but if the clipboard
+// happened to hold that same path anyway (Copy/Cut'ing the current
+// directory itself while browsing one level down inside it), ".."
+// must still never tint, the same way it never gets a real checkbox
+// either (see rowRef.checkable).
+func TestRowBackgroundNeverTintsTheDotDotRow(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "child")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{parent}, false) // ".." row's own ref.path
+
+	row, ok := rowForPath(p, parent)
+	if !ok {
+		t.Fatal("\"..\" row not found")
+	}
+	if _, tinted := cellBackground(p.table.GetCell(row, colName)); tinted {
+		t.Error(`".." tinted even though it isn't a real clipboard target`)
+	}
+}
+
+// TestSetClipboardSurvivesLoad pins the doc comment on
+// Panel.clipboardPaths: unlike the checkbox selection, the clipboard
+// highlight is not scoped to whatever's on screen right now — a fresh
+// load() (sort change, hidden-files toggle, plain re-navigation back
+// to the same directory) must not lose it.
+func TestSetClipboardSurvivesLoad(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.setClipboard([]string{held}, false)
+
+	if err := p.load(dir); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found after reload")
+	}
+	bg, tinted := cellBackground(p.table.GetCell(row, colName))
+	if !tinted || bg != theme.ClipboardCopyBackground {
+		t.Errorf("held.txt after reload: background = %v, tinted = %v, want it still tinted with ClipboardCopyBackground", bg, tinted)
+	}
+}
+
 // TestActivateRowNavigatesIntoDirectorySymlink pins a behavior change
 // that comes for free now that ListDir resolves symlinks to classify
 // them (see fsops.Entry.IsDir's doc comment): Enter/click on a directory
@@ -2054,7 +2486,7 @@ func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
 
 	p.setSearchStatus("⠋ searching…")
 
-	want := "⠋ searching…, or continue here: " + buildHeaderSpansText(dir)
+	want := "⠋ searching…, or continue here: " + stripColorTags(buildHeaderSpansText(dir, config.DefaultTheme().Resolve()))
 	if got := p.header.GetText(true); got != want {
 		t.Errorf("header text = %q, want %q", got, want)
 	}
@@ -2072,8 +2504,8 @@ func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
 
 // buildHeaderSpansText is buildHeaderSpans' own text half, for a test
 // that only needs to compare against it, not the spans too.
-func buildHeaderSpansText(abs string) string {
-	text, _ := buildHeaderSpans(abs)
+func buildHeaderSpansText(abs string, theme config.ResolvedTheme) string {
+	text, _ := buildHeaderSpans(abs, theme)
 	return text
 }
 
@@ -2138,10 +2570,60 @@ func TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode(t *testing.
 	}
 }
 
+// TestRunHeaderActionReloadReReadsFromDisk pins the Reload button's
+// whole point: a file that appears after the panel already loaded its
+// directory (another process, a mounted filesystem, ...) shows up once
+// Reload runs, without navigating anywhere.
+func TestRunHeaderActionReloadReReadsFromDisk(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	newFile := filepath.Join(dir, "just-landed.txt")
+	if err := os.WriteFile(newFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rowForPath(p, newFile); ok {
+		t.Fatal("setup: just-landed.txt shouldn't be visible before Reload runs")
+	}
+
+	p.runHeaderAction(headerSpan{action: actionReload})
+
+	if _, ok := rowForPath(p, newFile); !ok {
+		t.Error("just-landed.txt still not visible after Reload")
+	}
+	if p.path != dir {
+		t.Errorf("p.path = %q after Reload, want it unchanged (%q)", p.path, dir)
+	}
+}
+
+// TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode mirrors
+// TestRunHeaderActionDuringSearchModeNavigatesAndLeavesSearchMode for
+// Reload specifically: it goes through Panel.load the same as any
+// other header action, which always exits search mode (see load's own
+// doc comment) — Reload doesn't re-run the search itself.
+func TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode(t *testing.T) {
+	dir := fixtureDir(t)
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	p.showSearchResults()
+	p.setSearchStatus("Done — 0 found")
+
+	p.runHeaderAction(headerSpan{action: actionReload})
+
+	if p.searchMode {
+		t.Error("searchMode still true after Reload")
+	}
+}
+
 // TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
 // real user report that switching the header into edit mode reset the
 // editable path's own start column to 0 instead of lining up with
-// where p.header was already showing it, right after the "∎~<>↑ "
+// where p.header was already showing it, right after the "∎~<>↑⭯ "
 // buttons. headerEdit's own label (see NewPanel) is what reserves that
 // same width now — there's nothing further for openEdit itself to do
 // per call, so this only needs checking once, right after construction.
@@ -2450,6 +2932,89 @@ func TestBackForwardAlwaysLandsOnTopForPlainDirectories(t *testing.T) {
 	p.forward()
 	if row, _ := p.table.GetSelection(); row != 0 {
 		t.Errorf("selected row after Forward into %s = %d, want 0", sub, row)
+	}
+}
+
+// TestUpAndBackResetScrollToTopNotJustTheCursorRow pins a real,
+// user-reported gap the test above never caught: it only ever checks
+// GetSelection() (the cursor row), never GetOffset() (the actual
+// scroll position) — see load's own newDirectory comment for the full
+// mechanism. Reproduced with exactly the shape reported: scrolled deep
+// into a long directory, entering a short subfolder small enough to
+// fit on screen entirely (the condition that leaves tview's own
+// trackEnd flag — a persistent "snap to the bottom on the next Draw"
+// bit that Table.Clear never resets, since load reuses the same
+// *tview.Table across every directory it ever shows — stuck true),
+// then going back up (or Back, which lands in load the same way).
+// Needs a real Draw pass along the way: trackEnd is only ever set by
+// tview's own Table.Draw, never reachable directly from this package.
+func TestUpAndBackResetScrollToTopNotJustTheCursorRow(t *testing.T) {
+	dir := t.TempDir()
+	// Directories sort before files (see applySortPreference) — enough
+	// of them, alphabetically before "sub", to push it well past a
+	// normal screen's worth of rows.
+	for i := 0; i < 40; i++ {
+		if err := os.Mkdir(filepath.Join(dir, fmt.Sprintf("adir%02d", i)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 30)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 30)
+	r.Draw(screen)
+	r.Draw(screen)
+
+	var subRow int
+	for row := 0; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok && ref.name == "sub" {
+			subRow = row
+			break
+		}
+	}
+	if subRow == 0 {
+		t.Fatal("setup: sub should not be at row 0")
+	}
+	r.panel.focusRow(subRow)
+	r.Draw(screen)
+	r.Draw(screen)
+	if rowOff, _ := r.panel.table.GetOffset(); rowOff == 0 {
+		t.Fatal("setup: expected to be scrolled down before entering the subfolder")
+	}
+
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate into sub: %v", err)
+	}
+	r.Draw(screen) // sub fits entirely on screen — this is what leaves tview's own trackEnd stuck true
+
+	if err := r.panel.navigate(filepath.Dir(r.panel.path)); err != nil {
+		t.Fatalf("navigate back up: %v", err)
+	}
+	r.Draw(screen)
+	r.Draw(screen)
+
+	rowOff, _ := r.panel.table.GetOffset()
+	selRow, _ := r.panel.table.GetSelection()
+	if selRow != 0 {
+		t.Errorf("selected row after going up = %d, want 0", selRow)
+	}
+	if rowOff != 0 {
+		t.Errorf("row offset after going up = %d, want 0 (scrolled to the very top, not left tracking the short subfolder's own bottom)", rowOff)
 	}
 }
 
@@ -2802,5 +3367,77 @@ func TestActivateRowOnContentMatchDoesNotCallOnExitSearchResults(t *testing.T) {
 
 	if called {
 		t.Error("onExitSearchResults ran for a content match, want it left alone (search mode still showing)")
+	}
+}
+
+// TestColumnHeaderNameWidthMatchesDataRows pins a real, user-reported
+// bug: columnHeader (the column-label row) and the data table are two
+// separate tview.Table widgets, and each independently computed its own
+// Name column's width via tview's own Expansion/leftover-distribution
+// mechanism (verified directly against tview's own table.go, not
+// assumed) — which measurably doesn't always agree between two separate
+// tables sharing the same inputs, even though the two are supposed to
+// converge on the same final width. Confirmed live against a real
+// directory (/home/jens/Pictures, not theoretical) before being fixed
+// by padRight-padding every Name cell in both tables to the exact same
+// externally-computed width (p.layout.name) instead — see padRight/
+// setRowCells/buildColumnHeader for the full reasoning.
+//
+// The reliable trigger, isolated by trial against the real directory:
+// a symlink row specifically — its own suffix (" -> " plus the target
+// path, both often long) is what actually makes the two tables'
+// independent width computations diverge; a long plain name or
+// directory (just a trailing "/" suffix) on its own was tried first and
+// did not reproduce it, nor did scrolling the widest name off-screen by
+// itself. One symlink among plain files, with no scrolling needed at
+// all, is the minimal case that does. Checked under both size formats
+// per the user's own report that this isn't bytes-format-specific,
+// despite that being the format the original report happened to notice
+// it in.
+func TestColumnHeaderNameWidthMatchesDataRows(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("f%02d.txt", i)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	realDir := filepath.Join(dir, "some-real-directory")
+	if err := os.Mkdir(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkName := "a-symlink-with-a-somewhat-long-name-pointing-elsewhere"
+	if err := os.Symlink(realDir, filepath.Join(dir, symlinkName)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bytesMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("sizeBytes=%v", bytesMode), func(t *testing.T) {
+			root, err := NewRoot(tview.NewApplication(), dir)
+			if err != nil {
+				t.Fatalf("NewRoot: %v", err)
+			}
+			root.panel.sizeBytes = bytesMode
+
+			screen := tcell.NewSimulationScreen("")
+			if err := screen.Init(); err != nil {
+				t.Fatalf("screen.Init: %v", err)
+			}
+			defer screen.Fini()
+			screen.SetSize(100, 30)
+			root.SetRect(0, 0, 100, 30)
+			root.Draw(screen)
+			root.Draw(screen)
+
+			_, _, headerWidth := root.panel.columnHeader.GetCell(0, colName).GetLastPosition()
+			if headerWidth == 0 {
+				t.Fatal("setup: columnHeader's own Name cell has no position — was it actually drawn?")
+			}
+			for row := 1; row < root.panel.table.GetRowCount(); row++ {
+				if _, _, w := root.panel.table.GetCell(row, colName).GetLastPosition(); w != headerWidth {
+					t.Errorf("row %d Name column width = %d, want %d (columnHeader's own)", row, w, headerWidth)
+				}
+			}
+		})
 	}
 }

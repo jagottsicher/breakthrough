@@ -149,6 +149,33 @@ func TestOpenSearchShowsFieldsPrefilledWithPanelScopeAndFocusesFilename(t *testi
 	}
 }
 
+// TestOpenSearchHasATitleBar pins the same fix
+// TestOpenRemoveConfirmHasATitleBar/TestRequestQuitHasATitleBar/
+// TestOpenChmodHasATitleBar/TestOpenSedReplaceHasATitleBar pin for their
+// own dialogs: Search used to have no heading either. Also guards
+// against the AddPage-ordering regression fixed alongside it (see
+// newSearchDialog's own doc comment): real keyboard focus must still
+// land inside the search fields, not on the title bar itself.
+func TestOpenSearchHasATitleBar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openSearch()
+
+	if got, want := r.searchTitleBar.GetText(true), " Search "; got != want {
+		t.Errorf("searchTitleBar text = %q, want %q", got, want)
+	}
+	if r.searchTitleBar.HasFocus() {
+		t.Error("real keyboard focus should not have landed on the title bar")
+	}
+	if !r.searchFieldsPages.HasFocus() {
+		t.Error("real keyboard focus should be inside searchFieldsPages")
+	}
+}
+
 func TestCloseSearchHidesOverlay(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)

@@ -176,9 +176,30 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.prompt.SetLabelColor(theme.Text)
 	r.prompt.SetFieldTextColor(theme.Text)
 
+	// FocusedBackground, fixed rather than active/inactive-dependent the
+	// way propertiesTitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
+	// quitConfirm/confirmDialog are single-layer, always-modal blocking
+	// dialogs, never themselves the base a further overlay stacks on top
+	// of the way Properties/Menu/Help can be — the same reasoning
+	// optionsTitleBar's own fixed FocusedBackground already follows.
 	styleList(r.quitConfirm, theme)
+	r.quitConfirmTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.quitConfirmTitleBar.SetTextColor(theme.Text)
 
 	styleList(r.confirmDialog, theme)
+	r.confirmDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.confirmDialogTitleBar.SetTextColor(theme.Text)
+
+	// styleList(r.pasteConflictDialog, ...) and the title bar's own
+	// coloring were both simply missing before — unlike every other List
+	// in this app, this one was never themed at all. FocusedBackground,
+	// fixed rather than active/inactive-dependent: this dialog is a
+	// single-layer, always-modal overlay nothing else ever stacks on top
+	// of, the same reasoning quitConfirm/confirmDialog's own (still
+	// title-bar-less on this branch) styling already follows.
+	styleList(r.pasteConflictDialog, theme)
+	r.pasteConflictDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.pasteConflictDialogTitleBar.SetTextColor(theme.Text)
 
 	styleList(r.picker, theme)
 
@@ -320,6 +341,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.searchButtons.SetBackgroundColor(theme.AccentBackground)
 		styleButton(r.searchCancelBtn, theme)
 		styleButton(r.searchSearchBtn, theme)
+		// FocusedBackground, fixed — Search is a single-layer, always-modal
+		// dialog nothing else ever stacks on top of, the same reasoning
+		// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+		r.searchTitleBar.SetBackgroundColor(theme.FocusedBackground)
+		r.searchTitleBar.SetTextColor(theme.Text)
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
@@ -329,6 +355,13 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.chmodEditField.SetBackgroundColor(theme.FocusedBackground)
 		r.chmodEditField.SetFieldTextColor(theme.Text)
 		r.chmodButtons.SetBackgroundColor(theme.AccentBackground)
+		// FocusedBackground, fixed — chmod is a single-layer, always-modal
+		// dialog nothing else ever stacks on top of, the same reasoning
+		// optionsTitleBar's own fixed FocusedBackground already follows
+		// (see confirmDialogTitleBar/quitConfirmTitleBar just above for
+		// the identical choice on the same grounds).
+		r.chmodTitleBar.SetBackgroundColor(theme.FocusedBackground)
+		r.chmodTitleBar.SetTextColor(theme.Text)
 		styleButton(r.chmodCancelBtn, theme)
 		styleButton(r.chmodApplyBtn, theme)
 		r.rerenderChmodDialog() // repaints focusTag/dimTag's own style tags with the new theme
@@ -391,6 +424,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedForm.SetFieldTextColor(theme.Text)
 	styleList(r.sedFlagsList, theme)
 	styleList(r.sedActions, theme)
+	// FocusedBackground, fixed — Sed Replace/Preview are single-layer,
+	// always-modal dialogs nothing else ever stacks on top of, the same
+	// reasoning confirmDialogTitleBar/quitConfirmTitleBar/chmodTitleBar
+	// already follow.
+	r.sedTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.sedTitleBar.SetTextColor(theme.Text)
 
 	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewStatus.SetTextColor(theme.Text)
@@ -399,6 +438,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Background(theme.FocusedBackground).
 		Foreground(theme.Text))
 	styleList(r.sedPreviewActions, theme)
+	r.sedPreviewTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.sedPreviewTitleBar.SetTextColor(theme.Text)
 
 	r.tabSwitcher.SetBackgroundColor(theme.AccentBackground)
 	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.
@@ -406,6 +447,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Foreground(theme.Text))
 	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
 	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
+
+	// AccentBackground, the same as tabSwitcherTitleBar just above, not
+	// the FocusedBackground every centered, always-modal dialog's own
+	// title bar (confirmDialog/chmod/Sed Replace/Search, ...) uses: this
+	// is a small dropdown anchored under a header button, closer in
+	// spirit to the tab switcher than to a full dialog.
+	r.filterMenuTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.filterMenuTitleBar.SetTextColor(theme.Text)
 
 	// Every tab, not just the visible one: a color scheme is as global as
 	// a setting gets, and a background tab still holding the old palette

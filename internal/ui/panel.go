@@ -16,6 +16,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
@@ -109,23 +110,112 @@ type Panel struct {
 	header      *tview.TextView   // display mode: buttons + path breadcrumbs
 	headerEdit  *tview.InputField // edit mode: raw, freely editable path
 
-	// filterField and filterRegexBtn sit alongside headerPages in the
-	// same top row (see NewPanel) — a live, always-visible narrow-the-
-	// listing box, and the toggle between its two matching modes (see
-	// filterByText). filterText/filterRegex are the field/button's
-	// current values, read by load() on every call; filterField's own
-	// SetChangedFunc is what actually drives a live reload as the user
-	// types (see NewPanel).
+	// filterField and filterRegexBtn back the glob/regex filter — a
+	// live narrow-the-listing box, and the toggle between its two
+	// matching modes (see filterByText). Both still exist as real,
+	// fully working widgets exactly as before, but per the user's own
+	// explicit request no longer sit directly in the header row — they
+	// only ever appear embedded in the filter-menu dropdown while it's
+	// open (see Root.openFilterMenu), which is what actually adds them
+	// to a layout on each open; Panel just owns and keeps them, the
+	// same "owned here, shown elsewhere" split filterMenuBtn's own
+	// click handler and Root.openFilterMenu together make possible.
+	// filterText/filterRegex are the field/button's current values,
+	// read by load() on every call; filterField's own SetChangedFunc is
+	// what actually drives a live reload as the user types (see
+	// NewPanel).
+	//
+	// filterGlobActive/filterSizeActive/filterMtimeActive are
+	// independent on/off toggles for the filter-menu's own three rows
+	// (glob/regex, size, modified-time) — per the user's own explicit
+	// request to be able to combine them rather than only ever having
+	// one filter kind active at a time. filterGlobActive defaults to
+	// true (see NewPanel) and auto-flips true again the moment
+	// filterField's own text goes from empty to non-empty (see its own
+	// SetChangedFunc) — the existing "type to filter, instantly"
+	// muscle memory keeps working completely unchanged for anyone who
+	// never opens the dropdown at all; the checkbox is only for the
+	// "temporarily disable without losing what's already typed" case
+	// that behavior alone can't cover, and filterByText's own new
+	// active parameter is what actually honors it. filterSizeActive/
+	// filterMtimeActive gate filterBySize/filterByMtime the same way —
+	// each row's own real expression lives in filterSizeText/
+	// filterMtimeText just below, following the exact same "type it,
+	// the listing narrows immediately, an incomplete expression is a
+	// harmless no-op" contract filterText/filterByText already set.
 	// layout is the current column sizing (see columns.go), recomputed
 	// whenever the panel's width or the data format changes.
 	layout columnLayout
 
-	filterField    *tview.InputField
-	filterRegexBtn *tview.Button
-	filterText     string
-	filterRegex    bool
+	filterField       *tview.InputField
+	filterRegexBtn    *tview.Button
+	filterText        string
+	filterRegex       bool
+	filterGlobActive  bool
+	filterSizeActive  bool
+	filterMtimeActive bool
 
-	// detailsExpandBtn sits right after filterField in the same header
+	// filterSizeText/filterMtimeText are the size/modified-time rows'
+	// own expression fields — internal/filterexpr's own syntax (see its
+	// doc comment), parsed and matched by filterBySize/filterByMtime.
+	// Kept as plain strings here, not a pre-parsed filterexpr.SizeFilter/
+	// MtimeFilter, for the same reason filterText itself is: parsing has
+	// to happen fresh on every load() anyway (an expression can be mid-
+	// edit, one keystroke away from parsing cleanly), so there's nothing
+	// to gain from caching a parse result that's this cheap to redo and
+	// that would otherwise need its own invalidation tracking.
+	filterSizeText  string
+	filterMtimeText string
+
+	// filterPersistent mirrors config.Settings.FilterPersistent (see its
+	// own doc comment there for the full reasoning) — set once from it
+	// in NewPanel, updated for every open tab together by
+	// Root.setFilterPersistent, exactly the same shape showHidden/
+	// sizeBytes/mtimeUnix already follow. Read only by load's own
+	// newDirectory branch: true (the default) skips resetting
+	// filterText/filterGlobActive/filterSizeActive/filterMtimeActive
+	// there at all, so whatever filter was active carries straight into
+	// the new directory; false restores the original, pre-this-setting
+	// behavior of always starting a freshly navigated directory
+	// unfiltered.
+	filterPersistent bool
+
+	// filterMatchesNothing is true whenever load's own filterByText call
+	// hid every single entry a directory would otherwise have shown —
+	// set there, read only by renderFilterMenuBtn (see its own doc
+	// comment for what it does with this). A real, user-reported gap
+	// filterPersistent's own arrival exposed: a filter carried over from
+	// browsing an entirely different, unrelated directory (see
+	// config.Settings.FilterPersistent's own doc comment) can silently
+	// hide everything in a directory it was never meant to apply to —
+	// files freshly pasted in from another tab, say — leaving a listing
+	// indistinguishable from a genuinely empty folder unless you already
+	// know to check the filter-menu's own indicator. Deliberately not
+	// set for a directory that's simply, actually empty to begin with
+	// (filterByText is a no-op then regardless — see load's own
+	// computation of this field for exactly how that distinction is
+	// made) — this is about a filter actively hiding something, not
+	// about there being nothing there in the first place.
+	filterMatchesNothing bool
+
+	// filterMenuBtn replaces filterField/filterRegexBtn's own old,
+	// always-visible slot in the header row — a compact "Nx Y" button
+	// (see renderFilterMenuBtn), "Y" chosen for its own passing
+	// resemblance to a funnel and "N" naming how many of the three
+	// filter-menu rows are currently active, omitted entirely while
+	// none are (see the user's own explicit request for exactly this
+	// shape). Clicking it (or activating it from the keyboard) opens
+	// the dropdown (see onOpenFilterMenu/Root.openFilterMenu) that now
+	// holds everything filterField/filterRegexBtn/the two not-yet-built
+	// size/modified-time filters need — freeing most of the header row
+	// back to the path itself, which is the entire point: the six nav
+	// buttons just to its left grew considerably wider becoming real
+	// buttons (see buildHeaderSpans), and this is what pays for that
+	// space back.
+	filterMenuBtn    *tview.TextView
+	onOpenFilterMenu func()
+
+	// detailsExpandBtn sits right after filterMenuBtn in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
 	// alternative to "I"/the Details button: filterField itself gave up 3 columns
@@ -181,6 +271,18 @@ type Panel struct {
 	// the directory currently on screen, not carried across navigation,
 	// matching how most file managers treat it.
 	selected map[string]bool
+
+	// clipboardPaths/clipboardCut mirror the app-wide clipboard's own
+	// state (see Root.clipboard/clipboardCut) — pushed down explicitly
+	// by setClipboard rather than read from Root directly, since Panel
+	// has no reference to Root (see onExpandDetails's own doc comment
+	// for why) and the clipboard itself is one Root-level value shared
+	// by every open tab, not something each Panel owns. Unlike
+	// selected above, survives a load(): the clipboard isn't scoped to
+	// whatever directory happens to be on screen, so navigating away
+	// and back must still show the same rows highlighted.
+	clipboardPaths map[string]bool
+	clipboardCut   bool
 
 	// headerSpans locates each clickable region in the header's display
 	// text (see buildHeaderSpans), rebuilt on every load().
@@ -398,10 +500,12 @@ type headerAction int
 const (
 	actionNavigate headerAction = iota // go to target
 	actionStart                        // go to the directory breakthrough was launched from
+	actionRoot                         // go to the filesystem root ("/")
 	actionHome                         // go to the user's home directory
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
 	actionUp                           // go up one level (the parent directory)
+	actionReload                       // re-read the current directory from disk
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -486,6 +590,14 @@ const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
 
+	// filterMenuBtnWidth is filterMenuBtn's own fixed width in the
+	// header row — enough for the widest indicator ("3x", since at most
+	// three filter-menu rows can ever be active at once) plus the
+	// three-column " Y " button itself, with the button always flush
+	// against this slot's own right edge (see renderFilterMenuBtn) so
+	// it never shifts as the indicator appears/disappears alongside it.
+	filterMenuBtnWidth = 6
+
 	// headerTabStripGap is one column of lead-in the tab strip draws for
 	// itself before its own first glyph ("+", or the first tab number) —
 	// without it that glyph sat flush against the filter box with no
@@ -512,6 +624,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		showHidden:       settings.ShowHidden,
 		sizeBytes:        settings.SizeBytes,
 		mtimeUnix:        settings.MtimeUnix,
+		filterPersistent: settings.FilterPersistent,
 		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
 	p.table.SetBorders(false)
@@ -547,9 +660,11 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.columnHeader.SetBorders(false)
 	p.columnHeader.SetSelectable(false, false) // labels only, not a second navigable row
+	p.columnHeader.SetMouseCapture(p.captureColumnHeaderMouse)
 
 	p.header = tview.NewTextView()
 	p.header.SetWrap(false)
+	p.header.SetDynamicColors(true) // the six nav buttons' own ButtonBackground padding is a color tag — see buildHeaderSpans
 	p.header.SetMouseCapture(p.captureHeaderMouse)
 
 	p.headerEdit = tview.NewInputField()
@@ -580,6 +695,14 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 
 	p.filterField = tview.NewInputField()
 	p.filterField.SetPlaceholder("filter")
+	// filterGlobActive starts true: the existing "type to filter,
+	// instantly" behavior stays exactly as familiar as before for
+	// anyone who never opens the filter-menu dropdown at all (see the
+	// struct's own doc comment on filterGlobActive) — it only needs
+	// deliberately turning off once, from inside that dropdown, the
+	// first time someone actually wants a typed pattern to stop
+	// applying without losing what they typed.
+	p.filterGlobActive = true
 	p.filterField.SetChangedFunc(func(text string) {
 		if text == p.filterText {
 			return // triggered by load()'s own reset SetText, not real typing — see its doc comment
@@ -588,9 +711,60 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 			return // see filterRegexBtn's own identical guard just above
 		}
 		p.filterText = text
+		if text != "" {
+			// Going from empty to non-empty is as deliberate a signal
+			// as pressing the dropdown's own checkbox would be — auto-
+			// reactivating here is what keeps typing into the field
+			// alone enough, without an extra click, for anyone who
+			// never explicitly turned it off. Never auto-*deactivates*
+			// on the reverse transition, deliberately: filterByText
+			// already treats empty text as a no-op regardless (see its
+			// own doc comment), so there's nothing left to preserve by
+			// forcing the flag off too — and doing so would fight
+			// anyone who explicitly unchecked it while text happened to
+			// still be there, the moment they then cleared that text.
+			p.filterGlobActive = true
+		}
 		p.reportError(p.load(p.path))
 	})
-	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+	// No SetDoneFunc set here, unlike most other fields this app builds
+	// in their own NewX constructor: filterField only ever actually
+	// receives focus once it's embedded inside the filter-menu dropdown
+	// (see Root.renderFilterMenu, which rebuilds and rewires the whole
+	// dropdown fresh on every open) — never directly, the way an early
+	// version of this binding once did (see openFilterMenu's own doc
+	// comment on the "/" plain command's own fix). renderFilterMenu is
+	// what sets a real one there instead, closing over that render
+	// pass's own keyboard focus-cycling order and close callback —
+	// something a fixed, one-time SetDoneFunc set here could never do.
+
+	// filterMenuBtn is what actually sits in the header row now — see
+	// its own doc comment on the struct for the full reasoning.
+	// renderFilterMenuBtn (called from load(), and from Root's own
+	// filter-menu toggle handlers) fills in its real text; this just
+	// wires the click.
+	p.filterMenuBtn = tview.NewTextView().SetDynamicColors(true)
+	p.filterMenuBtn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		// Checked first, before anything else — a real, user-reported
+		// regression otherwise: tview.Flex.MouseHandler (verified
+		// directly against its own flex.go, not assumed) never checks a
+		// child's own rect itself before calling its MouseHandler; it
+		// simply calls every item in headerRow, in order, until one
+		// consumes the event. filterMenuBtn sits before tabStrip and
+		// detailsExpandBtn there, so without this check it swallowed
+		// every click meant for either of them too, regardless of where
+		// it actually landed — every other mouse capture in this
+		// package already guards this way (see captureHeaderMouse/
+		// captureTabStripMouse), this one just missed it originally.
+		if !p.filterMenuBtn.InRect(event.Position()) {
+			return action, event
+		}
+		if action == tview.MouseLeftClick && p.onOpenFilterMenu != nil {
+			p.onOpenFilterMenu()
+		}
+		return tview.MouseConsumed, nil
+	})
+	p.renderFilterMenuBtn()
 
 	// The tab strip — see tabstrip.go. Starts empty and zero-width: a
 	// lone tab draws nothing (see refreshTabStrip), so a session that
@@ -609,6 +783,13 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 			p.onExpandDetails()
 		}
 	})
+	// The Details sidebar is deliberately non-modal (the panel stays
+	// focused/usable alongside it — see its own doc comment), so a click
+	// on the button that opens it must not itself steal real keyboard
+	// focus away from whichever of panel/sidebar actually had it —
+	// suppressButtonFocusSteal's own doc comment has the full reasoning
+	// (a real, user-reported regression without it).
+	suppressButtonFocusSteal(p.detailsExpandBtn)
 
 	// Not SetFocusFunc/SetBlurFunc, unlike every other focus-dependent
 	// widget in this file — verified directly against tview's own
@@ -642,12 +823,9 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	// entirely.
 	headerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerRow.AddItem(p.headerPages, 0, 1, false)
-	headerRow.AddItem(p.filterRegexBtn, 8, 0, false)
-	// filterField is 3 columns narrower than it used to be
-	// (headerFilterWidth, was 20) — detailsExpandBtn's own 3-column slot
-	// right after it (headerDetailsExpandWidth) is exactly what those 3
-	// columns went to, per the user's own explicit request.
-	headerRow.AddItem(p.filterField, headerFilterWidth, 0, false)
+	// filterMenuBtn replaces filterRegexBtn/filterField's own old,
+	// always-visible slot here — see its own doc comment on the struct.
+	headerRow.AddItem(p.filterMenuBtn, filterMenuBtnWidth, 0, false)
 	// The tab strip goes between the filter and the Details button, per
 	// the user's own explicit request. refreshTabStrip resizes this slot
 	// itself as tabs come and go, which is why headerRow is kept as a
@@ -679,6 +857,15 @@ func (p *Panel) paintStaticChrome() {
 
 	p.header.SetTextColor(p.theme.Text)
 	p.header.SetBackgroundColor(p.theme.AccentBackground)
+
+	// filterMenuBtn's own "Nx" prefix (and the padding filling out
+	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)
+	// carries no color tag of its own, unlike its own trailing " Y "
+	// button — without an explicit background here it fell back to
+	// tview's own uninitialized default (plain black), a real,
+	// user-reported mismatch against the rest of the header row right
+	// beside it.
+	p.filterMenuBtn.SetBackgroundColor(p.theme.AccentBackground)
 
 	// FocusedBackground, not AccentBackground: like propertiesEditField/
 	// chmodEditField/searchEditField, headerEdit only ever exists on
@@ -738,12 +925,31 @@ func (p *Panel) paintStaticChrome() {
 // hasFocus true first, then calls the callback), but both pass their
 // own already-known answer explicitly here anyway, for the same reason
 // rather than leaving one of the two paths relying on it.
+//
+// Also refreshes the current cursor row's own SelectedStyle (see
+// rowSelectedStyle) — the one thing that can change with nothing else
+// about that row changing at all: a pure focus/blur transition (Tab to
+// a different tab, say) doesn't touch any row's own text or clipboard
+// state, only whether tview should show this function's own table-wide
+// style here, or a tinted cursor row's own dedicated one, for that row
+// specifically (see rowSelectedStyle's own doc comment for why either
+// one can be right, depending on focused). Every *other* row is left
+// alone: rowSelectedStyle's own verdict for a row that isn't the
+// current cursor is never actually consulted by tview at all (see
+// Table.Draw's own selected-cell branch), so there's nothing to gain by
+// touching more than this one.
 func (p *Panel) setSelectionStyle(focused bool) {
 	bg := p.theme.EditableBackground
 	if focused {
 		bg = p.theme.FocusedBackground
 	}
 	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
+
+	row, _ := p.table.GetSelection()
+	if ref, ok := p.rowRef(row); ok {
+		p.setRowCells(row, ref, focused)
+		p.paintFixedRowCells(row, ref, focused)
+	}
 }
 
 // setFilterFieldStyle sets filterField's own background (and its
@@ -791,14 +997,18 @@ func (p *Panel) applyTheme(theme config.ResolvedTheme) {
 // to a same-directory refresh, e.g. after toggling hidden files, sort,
 // or the filter's own regex mode) resets two things:
 //
-//   - The filter box, the same "scoped to what's on screen, not
-//     carried across navigation" rule selected already follows, and for
-//     the same reason: a filter that stayed applied after moving
-//     somewhere unrelated would too easily leave the new directory
-//     looking empty for a reason that isn't obvious. filterField.SetText
-//     below re-enters this func's own SetChangedFunc, which no-ops
-//     there since filterText already matches by the time it fires — see
-//     that handler's own comment.
+//   - The filter box — unless filterPersistent is true (the default;
+//     see config.Settings.FilterPersistent's own doc comment), in which
+//     case this step is skipped entirely and whatever filter was active
+//     carries straight into the new directory. filterPersistent false
+//     restores the original behavior: a filter scoped to "what's on
+//     screen, not carried across navigation", the same rule selected
+//     already follows, and for the same reason — a filter that stayed
+//     applied after moving somewhere unrelated would too easily leave
+//     the new directory looking empty for a reason that isn't obvious.
+//     filterField.SetText below re-enters this func's own
+//     SetChangedFunc, which no-ops there since filterText already
+//     matches by the time it fires — see that handler's own comment.
 //   - The table's own cursor, back to the top row — per the user's own
 //     request, landing on wherever the table's internal selection
 //     happened to be left (Table.Clear doesn't touch it, so without this
@@ -862,11 +1072,37 @@ func (p *Panel) load(dir string) error {
 	}
 
 	newDirectory := abs != p.path
-	if newDirectory {
+	if newDirectory && !p.filterPersistent {
 		p.filterText = ""
 		p.filterField.SetText("")
+		// The filter-menu's own three toggles are exactly as scoped to
+		// "what's on screen right now" as the text/regex-mode they sit
+		// alongside — carrying size/modified-time filtering into a
+		// directory nobody asked to filter would be just as surprising
+		// as a stale text pattern silently doing the same (see this
+		// func's own doc comment on why that already resets here).
+		// filterGlobActive resets to its own default-on state rather
+		// than off, matching filterText's own reset to "" immediately
+		// above: both together are what let a fresh directory show
+		// everything, unfiltered, exactly as filterGlobActive's own doc
+		// comment already promises for anyone who's never touched the
+		// filter menu at all.
+		p.filterGlobActive = true
+		p.filterSizeActive = false
+		p.filterMtimeActive = false
+		p.filterSizeText = ""
+		p.filterMtimeText = ""
 	}
-	entries = filterByText(entries, p.filterText, p.filterRegex)
+	beforeFilterCount := len(entries)
+	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive)
+	entries = filterBySize(entries, p.filterSizeText, p.filterSizeActive)
+	entries = filterByMtime(entries, p.filterMtimeText, p.filterMtimeActive, time.Now())
+	// See filterMatchesNothing's own doc comment: beforeFilterCount > 0
+	// is what tells "the filter hid everything" apart from "this
+	// directory is simply empty" — filterByText itself is a no-op on an
+	// already-empty entries slice either way, so both would otherwise
+	// look identical here.
+	p.filterMatchesNothing = len(entries) == 0 && beforeFilterCount > 0
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
 	p.table.Clear()
@@ -874,9 +1110,10 @@ func (p *Panel) load(dir string) error {
 	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs)
+	text, spans := buildHeaderSpans(abs, p.theme)
 	p.header.SetText(text)
 	p.headerSpans = spans
+	p.renderFilterMenuBtn()
 
 	// Before the rows, not after: addRow shortens each name against the
 	// name column's width, which is whatever the Size and Modified
@@ -920,6 +1157,34 @@ func (p *Panel) load(dir string) error {
 	p.buildColumnHeader()
 
 	if newDirectory {
+		// SetOffset(0, 0) first, not just focusRow(0): p.table is the
+		// same tview.Table instance across every directory this panel
+		// ever shows (load only ever Clears its cells, never replaces
+		// it), and tview's own scroll state — rowOffset, and especially
+		// trackEnd — lives on that instance too, untouched by Clear.
+		// trackEnd in particular is a *sticky* "snap to the bottom on
+		// the next Draw" flag that tview sets on its own whenever an
+		// entire listing already fits on screen (harmless there — there
+		// is no "bottom" to snap past) but never clears again just
+		// because a different, much longer directory loads next.
+		// focusRow(0) alone can leave it stuck true: tview's own
+		// Select()-driven clamp only ever resets trackEnd as a side
+		// effect of also scrolling rowOffset up to reveal row 0 — which
+		// it only bothers doing when the *previous* rowOffset was
+		// already greater than 0. Coming from a directory small enough
+		// to fit on screen at all (a real, reproduced case: a short
+		// subfolder, itself entered from partway down a long one),
+		// rowOffset was already sitting at 0 for an unrelated reason,
+		// so that clamp branch never fires, trackEnd survives the trip
+		// untouched, and the very next Draw of the new, much longer
+		// directory snaps the view straight to its own bottom —
+		// cursor correctly on row 0, but scrolled to the last screenful
+		// instead, a real, reported "doesn't actually land at the top"
+		// bug. SetOffset(0, 0) resets both rowOffset and trackEnd
+		// unconditionally (verified directly against tview's own
+		// table.go), sidestepping this Select()-clamp heuristic
+		// entirely rather than depending on it to happen to fire.
+		p.table.SetOffset(0, 0)
 		p.focusRow(0) // top of the listing — see this func's own doc comment
 	}
 
@@ -1063,7 +1328,7 @@ func (p *Panel) setSearchStatus(text string) {
 	prefix := text + separator
 	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
 
-	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath)
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme)
 	p.header.SetText(prefix + breadcrumbText)
 
 	spans := make([]headerSpan, len(breadcrumbSpans))
@@ -1243,20 +1508,81 @@ func filterModeLabel(regex bool) string {
 	return "Glob"
 }
 
+// renderFilterMenuBtn fills in filterMenuBtn's own text: an "Nx"
+// indicator (N = how many of the filter-menu's three rows are actually
+// in effect right now) immediately before a three-column " Y " button —
+// "Y" per the user's own explicit choice, for its own passing
+// resemblance to a funnel. Omitted entirely once N is 0, per the same
+// explicit request, rather than ever showing "0x" — left-padded up to
+// filterMenuBtnWidth instead, so the button's own three columns always
+// sit flush against this slot's own right edge (where the tab strip
+// picks up right after it) regardless of how wide the indicator is.
+//
+// Every one of the three rows only actually counts once it's both
+// switched on *and* has something to filter by — matching filterByText/
+// filterBySize/filterByMtime's own real no-op condition (see their own
+// doc comments) — since the indicator's whole point is "filtering is
+// genuinely narrowing the list right now", not just "a checkbox
+// happens to be checked" (a size/modified-time row ticked on with its
+// own expression field still empty doesn't filter anything yet either,
+// the same as the glob row's own checkbox with nothing typed into it).
+//
+// Also colors the "Nx" itself EntryError's own red whenever
+// filterMatchesNothing is true (see its own doc comment) — a filter
+// hiding every single entry reads exactly like a genuinely empty
+// directory otherwise, and this indicator is the one place a plain,
+// unfiltered look at the listing itself never will be: a stray glance
+// at "Nx" in a color already meaningful elsewhere as "something's
+// wrong" is far more likely to register than noticing a small, neutral
+// count is present at all.
+func (p *Panel) renderFilterMenuBtn() {
+	count := 0
+	if p.filterGlobActive && p.filterText != "" {
+		count++
+	}
+	if p.filterSizeActive && p.filterSizeText != "" {
+		count++
+	}
+	if p.filterMtimeActive && p.filterMtimeText != "" {
+		count++
+	}
+
+	prefix := ""
+	if count > 0 {
+		prefix = fmt.Sprintf("%dx", count)
+		if p.filterMatchesNothing {
+			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(p.theme.EntryError), prefix)
+		}
+	}
+
+	keyBG := colorTag(p.theme.ButtonBackground)
+	button := fmt.Sprintf("[:%s:] Y [-:-:-]", keyBG)
+	visible := tview.TaggedStringWidth(prefix) + 3 // the button's own 3 visible columns
+	if pad := filterMenuBtnWidth - visible; pad > 0 {
+		prefix = strings.Repeat(" ", pad) + prefix
+	}
+	p.filterMenuBtn.SetText(prefix + button)
+}
+
 // filterByText narrows entries to those whose name matches filterText —
 // via filepath.Match (shell-pattern globbing, "*"/"?"/"[...]", the same
 // syntax Select+/- already uses) by default, or via regexp.MatchString
 // once filterRegex is on — matching how Midnight Commander's own filter
 // dialog offers exactly the same two modes ("Shell Patterns" on or off).
-// An empty filterText is a no-op (every entry kept, unfiltered).
+// An empty filterText, or active being false, is a no-op (every entry
+// kept, unfiltered) — active is the filter-menu's own glob/regex
+// checkbox (see Panel.filterGlobActive's own doc comment): a pattern
+// left typed in but deliberately switched off stops applying without
+// losing it, the same "disable without clearing" every other toggle in
+// this app already offers.
 //
 // An invalid pattern is treated the same as "no filter yet" (every
 // entry kept) rather than surfaced as an error: this runs on every
 // keystroke, so an incomplete regex (or a malformed glob like an
 // unterminated "[") is an expected, transient state while typing, not
 // something worth interrupting for.
-func filterByText(entries []fsops.Entry, filterText string, filterRegex bool) []fsops.Entry {
-	if filterText == "" {
+func filterByText(entries []fsops.Entry, filterText string, filterRegex, active bool) []fsops.Entry {
+	if !active || filterText == "" {
 		return entries
 	}
 
@@ -1286,6 +1612,56 @@ func filterByText(entries []fsops.Entry, filterText string, filterRegex bool) []
 	visible := entries[:0] // reuses entries' backing array, same as filterHidden
 	for _, e := range entries {
 		if match(e.Name) {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// filterBySize narrows entries to those whose Size satisfies expr (see
+// internal/filterexpr.ParseSize for the syntax: comparison operators,
+// b/k/m/g/t units, "and"-joined ranges). Same no-op contract
+// filterByText already established: inactive, an empty expr, or one
+// that fails to parse all leave entries untouched — the last case
+// matters for exactly the same reason it does there, an expression
+// still being typed (e.g. "> 1" before a unit follows) is an expected,
+// transient state, not something worth interrupting the listing over.
+func filterBySize(entries []fsops.Entry, expr string, active bool) []fsops.Entry {
+	if !active || expr == "" {
+		return entries
+	}
+	f, err := filterexpr.ParseSize(expr)
+	if err != nil {
+		return entries
+	}
+	visible := entries[:0]
+	for _, e := range entries {
+		if f.Match(e.Size) {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// filterByMtime narrows entries to those whose ModTime satisfies expr
+// (see internal/filterexpr.ParseMtime for the syntax: before/after/
+// between, absolute dates, and relative "last N days"-style clauses) —
+// otherwise the same no-op contract as filterByText/filterBySize. now
+// is threaded through from the caller (see Panel.load) rather than
+// read here via time.Now(), so every relative clause in a single
+// load() call measures itself against the same instant regardless of
+// how long filtering the whole listing actually takes.
+func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Time) []fsops.Entry {
+	if !active || expr == "" {
+		return entries
+	}
+	f, err := filterexpr.ParseMtime(expr, now)
+	if err != nil {
+		return entries
+	}
+	visible := entries[:0]
+	for _, e := range entries {
+		if f.Match(e.ModTime) {
 			visible = append(visible, e)
 		}
 	}
@@ -1372,7 +1748,166 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
 	p.table.SetCell(row, colModifier, modCell)
 
-	p.setRowCells(row, ref)
+	focused := p.table.HasFocus()
+	p.setRowCells(row, ref, focused)
+	p.paintFixedRowCells(row, ref, focused)
+}
+
+// rowBackground is what addRow/setRowCells/paintFixedRowCells tint
+// ref's own row with: a shade from ClipboardCopyBackground/
+// ClipboardCutBackground if ref.path is currently held on the
+// clipboard (see setClipboard), ok false otherwise — meaning "leave
+// this cell exactly as its own zero-value construction already has
+// it", not "paint it PanelBackground": a cell nothing has ever called
+// SetBackgroundColor on stays Transparent (tview's own term), showing
+// through to whatever the table's own background already is, and
+// explicitly repainting that same color on every single cell of every
+// ordinary row would risk it drifting from the table's own actual
+// background under some future tview change instead of a single
+// source of truth. Checked by absolute path, not selection state:
+// unrelated to the checkbox column (see checkboxText) — a file can be
+// checked without being on the clipboard, and vice versa (Copy/Cut
+// capture the checked selection as a snapshot, which the checkboxes
+// are then free to change independently of it). ".." (checkable
+// false) never tints even if its own path happens to match — it isn't
+// a real clipboard target, and rowRef.path for it is the parent
+// directory, not something Copy/Cut could ever have captured.
+func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
+	if !ref.checkable || !p.clipboardPaths[ref.path] {
+		return 0, false
+	}
+	if p.clipboardCut {
+		return p.theme.ClipboardCutBackground, true
+	}
+	return p.theme.ClipboardCopyBackground, true
+}
+
+// rowBackgroundInactive is rowBackground's own Inactive-variant sibling
+// — same shape, same conditions, just ClipboardCopyBackgroundInactive/
+// ClipboardCutBackgroundInactive instead of the full-brightness colors
+// (see their own doc comment in internal/config/theme.go) — used only
+// by rowSelectedStyle, for a tinted row that's also the cursor row
+// while this panel doesn't currently have real keyboard focus.
+func (p *Panel) rowBackgroundInactive(ref rowRef) (bg tcell.Color, ok bool) {
+	if !ref.checkable || !p.clipboardPaths[ref.path] {
+		return 0, false
+	}
+	if p.clipboardCut {
+		return p.theme.ClipboardCutBackgroundInactive, true
+	}
+	return p.theme.ClipboardCopyBackgroundInactive, true
+}
+
+// rowSelectedStyle computes what ref's own cells should carry as their
+// SelectedStyle — the separate style tview only ever consults for
+// whichever row currently is the table's own cursor row (see
+// Table.Draw's own selected-cell branch: a cell's SelectedStyle wins
+// outright over the table-wide SetSelectedStyle whenever it's actually
+// set, checked in that order) — given focused, this panel's own current
+// real-keyboard-focus state.
+//
+// tcell.StyleDefault (tview's own "nothing cell-specific set" zero
+// value, letting the table-wide SetSelectedStyle apply instead — see
+// setSelectionStyle) for an untinted row always, and for a tinted one
+// specifically while focused is true: the user's own explicit request
+// that the focus/cursor indicator (FocusedBackground) win outright over
+// the clipboard tint while this panel is actively focused, so the
+// cursor's own position stays unambiguous even among several tinted
+// rows in the same selection — the same "current row happens to also
+// be selected" ambiguity a plain, unconditional tint would otherwise
+// reintroduce for exactly the case FocusedBackground already existed to
+// solve.
+//
+// Once focused is false, a tinted row's own color takes over instead —
+// its dedicated, deliberately darker Inactive variant (see
+// rowBackgroundInactive), not its full-brightness one: a second,
+// separate real gap the user reported once the first fix landed —
+// without its own distinct color, an unfocused clipboard-held cursor
+// row became indistinguishable from every other tinted row in the same
+// selection, losing "where would the cursor land if I switched back"
+// exactly as thoroughly as the original bug lost "is this file still
+// on the clipboard at all".
+func (p *Panel) rowSelectedStyle(ref rowRef, focused bool) tcell.Style {
+	if _, tinted := p.rowBackground(ref); !tinted || focused {
+		return tcell.StyleDefault
+	}
+	bg, _ := p.rowBackgroundInactive(ref)
+	return tcell.StyleDefault.Background(bg).Foreground(p.theme.Text)
+}
+
+// paintFixedRowCells applies rowBackground's own verdict to the three
+// cells addRow builds directly (checkbox, type, modifier) — colName/
+// colSize/colModified are setRowCells' own responsibility, since it
+// rebuilds those from scratch every time it runs anyway (see its own
+// doc comment) and a freshly constructed cell is already untinted by
+// default. These three, unlike those, are only ever built once by
+// addRow itself — setClipboard's own repaint (a clipboard change,
+// nothing on disk) mutates them in place here rather than recreating
+// them, which would also throw away the checkbox's own click handler.
+// SetTransparency(true) is the untint path, not SetBackgroundColor(
+// PanelBackground): it puts a previously tinted cell back into the
+// exact same "never touched" state a fresh one starts in, rather than
+// hardcoding a value that could drift from the table's own actual
+// background (see rowBackground's own doc comment).
+//
+// Also sets each cell's own SelectedStyle to rowSelectedStyle's own
+// verdict, given focused — this panel's current real-keyboard-focus
+// state, passed in explicitly rather than queried here (see this
+// function's own callers: addRow/relayoutColumns/setClipboard can
+// safely call p.table.HasFocus() themselves since none of them run
+// from inside a blur callback, but setSelectionStyle's own SetBlurFunc
+// caller cannot — see its own doc comment on why HasFocus() lies from
+// there specifically). See rowSelectedStyle's own doc comment for the
+// full reasoning: without this at all, a clipboard-held row that's also
+// the cursor row loses its own tint entirely, hidden by the table-wide
+// SetSelectedStyle regardless of focus state — the original,
+// user-reported bug; with it always applying regardless of focus, the
+// cursor's own position became ambiguous among several tinted rows
+// instead — a real, separate follow-up report. Threading focused
+// through, rather than always giving a tinted row the same override, is
+// what lets the cursor/focus indicator win while focused and the tint's
+// own darker Inactive variant win once it isn't, rather than picking
+// one of those two real, contradictory requirements to satisfy.
+func (p *Panel) paintFixedRowCells(row int, ref rowRef, focused bool) {
+	bg, tinted := p.rowBackground(ref)
+	selStyle := p.rowSelectedStyle(ref, focused)
+	for _, col := range [...]int{colCheckbox, colType, colModifier} {
+		cell := p.table.GetCell(row, col)
+		if cell == nil {
+			continue
+		}
+		if tinted {
+			cell.SetBackgroundColor(bg)
+		} else {
+			cell.SetTransparency(true)
+		}
+		cell.SetSelectedStyle(selStyle)
+	}
+}
+
+// setClipboard applies the app-wide clipboard's current contents (see
+// Root.clipboard/clipboardCut and Root.syncClipboardHighlight, which
+// calls this for every open tab, not just whichever one triggered the
+// change) to this panel's own row highlighting. Repaints whatever rows
+// are already on screen in place — nothing on disk changed, so there's
+// nothing to reload — and stores paths/cut so any row addRow builds
+// afterward (a fresh load(), not just a repaint) picks up the current
+// state too.
+func (p *Panel) setClipboard(paths []string, cut bool) {
+	m := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		m[path] = true
+	}
+	p.clipboardPaths = m
+	p.clipboardCut = cut
+
+	focused := p.table.HasFocus()
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			p.setRowCells(row, ref, focused)
+			p.paintFixedRowCells(row, ref, focused)
+		}
+	}
 }
 
 // setRowCells fills the three width-dependent cells of one row — Name,
@@ -1381,8 +1916,16 @@ func (p *Panel) addRow(row int, ref rowRef) {
 // Split out of addRow so relayoutColumns can re-render an existing row
 // after the panel's width changed, without rebuilding the whole listing
 // or touching the filesystem.
-func (p *Panel) setRowCells(row int, ref rowRef) {
+//
+// focused is this panel's own current real-keyboard-focus state,
+// passed in explicitly rather than queried here — see
+// paintFixedRowCells' own doc comment for the full reasoning (shared
+// verbatim, since both functions get it from the exact same set of
+// callers) and rowSelectedStyle's for what it actually does with it.
+func (p *Panel) setRowCells(row int, ref rowRef, focused bool) {
 	color := p.entryColor(ref)
+	bg, tinted := p.rowBackground(ref)
+	selStyle := p.rowSelectedStyle(ref, focused)
 
 	// The suffix travels separately from the name so shortenNameLabel
 	// can protect it: a trailing "/" or " -> target" says what kind of
@@ -1413,13 +1956,36 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		label = nameHighlightTags(label, p.theme.DirectoryBackground)
 	}
 	label += tview.Escape(suffix)
+	if width := p.layout.name; width > 0 {
+		// Pads out to the column's own full width — see padRight's own
+		// doc comment for why this, rather than SetExpansion, is what
+		// keeps this table's Name column in step with columnHeader's.
+		// Guarded on a real (post-first-draw) width, the same guard
+		// nameColumnWidth's own huge fallback exists for: padding to
+		// that placeholder would try to build a gigabyte-long string.
+		label = padRight(label, width)
+	}
 
 	nameCell := tview.NewTableCell(label).SetTextColor(color)
 	nameCell.SetReference(ref)
-	nameCell.SetExpansion(1) // consume the rest of the row's width
 	nameCell.SetClickedFunc(func() bool {
 		return p.handleNameClick(row)
 	})
+	if tinted {
+		// Supersedes the inline DirectoryBackground tag above rather than
+		// layering with it: SetBackgroundColor repaints this cell's whole
+		// rectangle, tag-highlighted name text included, not just the
+		// blank padding around it — deliberate, so a clipboard-held
+		// directory's row still reads as one consistent color instead of
+		// two different backgrounds fighting for the same few characters.
+		nameCell.SetBackgroundColor(bg)
+	}
+	// See paintFixedRowCells' own doc comment for the full reasoning —
+	// unconditional on tinted, unlike SetBackgroundColor just above:
+	// rowSelectedStyle already returns tcell.StyleDefault for the
+	// untinted case, exactly matching what this freshly constructed
+	// cell already starts with anyway.
+	nameCell.SetSelectedStyle(selStyle)
 	p.table.SetCell(row, colName, nameCell)
 
 	// ".." (checkable false) has no real Entry behind it, so ref.size/
@@ -1430,12 +1996,26 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		sizeText = formatSizeCell(ref.size, p.sizeBytes)
 		mtimeText = formatModTimeCell(ref.modTime, p.mtimeUnix)
 	}
-	p.table.SetCell(row, colSizeSep, p.columnSeparator())
-	p.table.SetCell(row, colSize,
-		tview.NewTableCell(padLeft(sizeText, p.layout.size)).SetTextColor(p.theme.Text))
-	p.table.SetCell(row, colModifiedSep, p.columnSeparator())
-	p.table.SetCell(row, colModified,
-		tview.NewTableCell(padLeft(mtimeText, p.layout.mod)).SetTextColor(p.theme.Text))
+	sizeSepCell := p.columnSeparator()
+	sizeCell := tview.NewTableCell(padLeft(sizeText, p.layout.size)).SetTextColor(p.theme.Text)
+	modSepCell := p.columnSeparator()
+	modCell := tview.NewTableCell(padLeft(mtimeText, p.layout.mod)).SetTextColor(p.theme.Text)
+	if tinted {
+		sizeSepCell.SetBackgroundColor(bg)
+		sizeCell.SetBackgroundColor(bg)
+		modSepCell.SetBackgroundColor(bg)
+		modCell.SetBackgroundColor(bg)
+	}
+	// See nameCell's own SetSelectedStyle call above for why this is
+	// unconditional on tinted.
+	sizeSepCell.SetSelectedStyle(selStyle)
+	sizeCell.SetSelectedStyle(selStyle)
+	modSepCell.SetSelectedStyle(selStyle)
+	modCell.SetSelectedStyle(selStyle)
+	p.table.SetCell(row, colSizeSep, sizeSepCell)
+	p.table.SetCell(row, colSize, sizeCell)
+	p.table.SetCell(row, colModifiedSep, modSepCell)
+	p.table.SetCell(row, colModified, modCell)
 }
 
 // nameColumnWidth is how much room a row's name has. Falls back to a
@@ -1552,12 +2132,13 @@ func (p *Panel) relayoutColumns(width int) bool {
 	}
 	p.layout = layout
 
+	focused := p.table.HasFocus()
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		ref, ok := p.rowRef(row)
 		if !ok {
 			continue
 		}
-		p.setRowCells(row, ref)
+		p.setRowCells(row, ref, focused)
 	}
 	p.buildColumnHeader()
 	return true
@@ -1577,6 +2158,59 @@ func sortArrow(descending bool) string {
 	return " ↑"
 }
 
+// captureColumnHeaderMouse suppresses tview.Table's own default
+// MouseLeftDown handling for columnHeader — a real, user-reported
+// regression otherwise: tview.Table.MouseHandler (verified directly
+// against its own table.go, not assumed) unconditionally calls
+// setFocus(t) on MouseLeftDown before anything else runs, regardless of
+// which cell (if any) is actually clicked. columnHeader is a bare
+// non-navigable label row (SetSelectable(false, false) — see its own
+// construction), never meant to hold real keyboard focus, so every
+// click on it — Name/Size/Modified to sort, or the header's own
+// select-all checkbox — silently stole focus away from the table
+// underneath, leaving c/x/v/d and every other plain-key shortcut dead
+// until something else happened to refocus the table again.
+//
+// MouseLeftClick itself is deliberately passed through unchanged rather
+// than replaced: tview.Table.MouseHandler's own MouseLeftClick case
+// only runs each cell's own Clicked callback (setSortKey/
+// toggleSelectAllViaHeader, wired in buildColumnHeader below) — it
+// never calls setFocus itself (again verified directly against table.go)
+// — so letting it fall through still fires the intended action without
+// ever touching focus, the exact same InRect-then-"only click passes"
+// shape captureTabStripMouse already uses for the same reason.
+func (p *Panel) captureColumnHeaderMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if !p.columnHeader.InRect(event.Position()) {
+		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
+// suppressButtonFocusSteal wraps btn's own SetMouseCapture so a click
+// on it never grants real keyboard focus to btn itself — tview's own
+// Button.MouseHandler (verified directly against its own button.go)
+// unconditionally calls setFocus(b) on MouseLeftDown, before Selected
+// ever runs. The same InRect-then-suppress-non-click shape
+// captureColumnHeaderMouse/captureButtonBarMouse already use to close
+// the same class of bug for those: MouseLeftClick is passed through
+// unchanged (Button.MouseHandler's own MouseLeftClick case only calls
+// Selected, never setFocus — verified the same way), so the button's
+// own action still fires normally.
+func suppressButtonFocusSteal(btn *tview.Button) {
+	btn.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if !btn.InRect(event.Position()) {
+			return action, event
+		}
+		if action != tview.MouseLeftClick {
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	})
+}
+
 // buildColumnHeader (re)builds columnHeader's one row: the checkbox
 // column gets a clickable ○/● of its own (see toggleSelectAllViaHeader)
 // — an additional way to trigger the context menu's Select all/Deselect
@@ -1587,15 +2221,21 @@ func sortArrow(descending bool) string {
 // active key, or reversing direction if it was. The active column's
 // label gets sortArrow's suffix.
 //
-// This table's columns only end up matching table's own widths by
-// construction, not any explicit synchronization: colCheckbox/colType/
-// colModifier are always exactly 1 character wide in both tables (their
-// content is always exactly that long), and colSize/colModified are
-// always formatted to a fixed width (see formatSizeCell/
-// formatModTimeCell) regardless of value or format — since
-// tview.Table sizes each column to its widest cell, two separate tables
-// with the same per-column content-width characteristics size
-// identically without needing to coordinate.
+// This table's columns only end up matching table's own widths because
+// every cell in both tables is explicitly padded to the exact same
+// externally-computed width, not because the two tables' widths happen
+// to agree on their own: colCheckbox/colType/colModifier are always
+// exactly 1 character wide in both tables (their content is always
+// exactly that long), colSize/colModified are always padded to
+// p.layout.size/mod (see formatSizeCell/formatModTimeCell and padLeft),
+// and colName is always padded to p.layout.name (see padRight, and
+// setRowCells' identical treatment for the data table's own Name
+// cells) — deliberately not left to tview.Table's own per-table
+// Expansion/leftover-distribution math, which turned out not to
+// reliably agree between two *separate* Table widgets even when their
+// own inputs (p.layout) were identical (a real, user-reported bug —
+// see padRight's own doc comment for the full reasoning and how it was
+// confirmed live, not assumed).
 func (p *Panel) buildColumnHeader() {
 	p.columnHeader.Clear()
 
@@ -1612,8 +2252,15 @@ func (p *Panel) buildColumnHeader() {
 	if p.sortKey == sortByName {
 		nameLabel += sortArrow(p.sortDescending)
 	}
+	if width := p.layout.name; width > 0 {
+		// See padRight's own doc comment: padding to the exact same
+		// externally-computed width setRowCells pads every data row's
+		// own Name cell to is what keeps this header's Name column from
+		// drifting a column off from the data table's, rather than
+		// leaving it to SetExpansion's own per-table leftover math.
+		nameLabel = padRight(nameLabel, width)
+	}
 	nameCell := tview.NewTableCell(nameLabel).SetTextColor(p.theme.Text)
-	nameCell.SetExpansion(1)
 	nameCell.SetClickedFunc(func() bool {
 		p.setSortKey(sortByName)
 		return false
@@ -2502,64 +3149,125 @@ func (p *Panel) previousPath() (string, bool) {
 	return prev.path, true
 }
 
-// buildHeaderSpans renders the header's display text — Start/Home/Back/
-// Forward/Up button glyphs followed by the path, one clickable span per
-// path component (the leading "/" plus each name in between), e.g.
-// clicking "b" in "/a/b/c/d" jumps to "/a/b". Column offsets are
-// measured via tview.TaggedStringWidth, not a plain rune count — a
-// directory name containing double-width (e.g. CJK) characters occupies
-// two terminal columns per character, and a rune count would silently
-// drift the spans after it out of alignment with what's actually drawn
-// on screen.
+// headerButtons is the fixed definition of the seven nav buttons shown
+// at the start of the header row — Start/Root/Home/Back/Forward/Up/
+// Reload — as one shared slice so buildHeaderSpans (the colored,
+// clickable rendering) and headerButtonPrefix (headerEdit's own
+// plain-text label — see its own doc comment) can never drift out of
+// column-alignment with each other, verified by
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+// Start's own glyph is "∎" (U+220E), not "^": at the time this glyph
+// was chosen, this app's own button bar wrote Ctrl-shortcuts as "^E",
+// "^L" and so on, so a bare "^" here risked reading as one of those
+// instead of a button in its own right — "∎" carries no such collision.
+// The button bar has since moved to highlighting a plain letter within
+// each label instead (see buildButtonBar's own highlightKey), but "∎"
+// remains the right call regardless: a bare "^" would still misread as
+// up/caret shorthand rather than a button of its own. "^" itself isn't
+// reused for Up either, despite visually suggesting "upward": ↑ says
+// that unambiguously and isn't asked to also serve as a stand-in for
+// whatever Start used to mean. "⭯" (U+2B6F) is Reload — the user's own
+// explicit choice of glyph, added at the end rather than interrupting
+// the original five: this app has no other way to notice a file
+// changing underneath it (another process, a network/mounted
+// filesystem, ...), so re-reading the current directory from disk on
+// demand needs a click target of its own, the same reasoning the other
+// six buttons here already follow.
 //
-// The five button glyphs are packed together with no space between
-// them, none before the first one either, and exactly one before the
-// path starts — per the user's own explicit request, "^ ~ < >" read as
-// more spread out than five single-purpose buttons need to be. Start's
-// own glyph is "∎" (U+220E), not "^": at the time this glyph was chosen,
-// this app's own button bar wrote Ctrl-shortcuts as "^E", "^L" and so
-// on, so a bare "^" here risked reading as one of those instead of a
-// button in its own right — "∎" carries no such collision. The button
-// bar has since moved to highlighting a plain letter within each label
-// instead (see buildButtonBar's own highlightKey), but "∎" remains the
-// right call regardless: a bare "^" would still misread as up/caret
-// shorthand rather than a button of its own. "^" itself
-// isn't reused for Up either, despite visually suggesting "upward": ↑
-// says that unambiguously and isn't asked to also serve as a
-// stand-in for whatever Start used to mean.
-//
-// A click that lands in the header but doesn't hit any of these spans
-// (e.g. on a "/" separator, or in empty space after the path) is handled
-// by captureHeaderMouse as "switch to edit mode" — deliberately not
-// represented as a span here, since it's everything else.
-// headerButtonPrefix is exactly what buildHeaderSpans' own five
-// buttons plus their trailing space render as, just below — reused by
+// "/" (Root) is the newest addition, per the user's own explicit
+// request, placed right after Start rather than at the end the way
+// Reload was: Reload is unrelated to the other five (it re-reads the
+// current directory, it doesn't go anywhere), so tacking it on last
+// avoided disturbing an established, muscle-memorized order; Root, by
+// contrast, belongs with Start/Home as a third "jump to a fixed place"
+// destination, and reads most naturally sitting right beside Start —
+// the button its own "go to the directory breakthrough started in"
+// meaning is closest to, conceptually. A second way to reach the exact
+// same destination the breadcrumb's own leading "/" (actionNavigate,
+// target "/") already provided — see actionRoot's own doc comment on
+// runHeaderAction for why a second, dedicated button is worth having
+// anyway: that first "/" is plain, unstyled breadcrumb text, no more
+// visually a "button" than any other path segment, easy to never
+// notice as a click target at all.
+var headerButtons = []struct {
+	glyph  string
+	action headerAction
+}{
+	{"∎", actionStart},
+	{"/", actionRoot},
+	{"~", actionHome},
+	{"<", actionBack},
+	{">", actionForward},
+	{"↑", actionUp},
+	{"⭯", actionReload},
+}
+
+// headerButtonSeparator is the plain, normal-background column between
+// each padded button (and once more before the path itself starts) —
+// per the user's own explicit request, deliberately left uncolored,
+// unlike the buttons themselves either side of it, so it reads as a
+// gap between two distinct buttons rather than part of either one.
+const headerButtonSeparator = " "
+
+// headerButtonPrefix is the plain-text form of the six nav buttons
+// plus their separators — see buildHeaderSpans for the colored,
+// clickable version actually drawn in the header. Reused by
 // headerEdit's own SetLabel (see NewPanel) so the path being edited
 // starts at the exact same column the displayed one already does,
 // rather than resetting to column 0 the moment editing starts, per the
-// user's own explicit report. A single shared string constant, not a
-// derivation from buildHeaderSpans' own output, since the five buttons
-// there each need their own click span — kept in sync instead by
-// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
-const headerButtonPrefix = "∎~<>↑ "
+// user's own explicit report. Deliberately plain, with no color tags:
+// column *width* has to match buildHeaderSpans exactly, but an
+// InputField's own label has no use for embedded color tags the way
+// the header TextView's dynamic-colored text does. Computed once from
+// headerButtons, not hand-typed, so the two can never silently drift
+// out of sync with each other on a future edit to either.
+var headerButtonPrefix = func() string {
+	var b strings.Builder
+	for _, btn := range headerButtons {
+		b.WriteString(" " + btn.glyph + " " + headerButtonSeparator)
+	}
+	return b.String()
+}()
 
-func buildHeaderSpans(abs string) (text string, spans []headerSpan) {
+// buildHeaderSpans renders the header's display text — the six
+// headerButtons, each padded into its own three-column "button" (one
+// character of theme.ButtonBackground either side of the glyph, the
+// same highlightKey convention the bottom button bar already uses for
+// its own keys — see buildButtonBar — just without a trailing label,
+// since each of these six buttons *is* its own label already), then
+// the path, with one clickable span per path component (the leading
+// "/" plus each name in between), e.g. clicking "b" in "/a/b/c/d" jumps
+// to "/a/b". Column offsets are measured via tview.TaggedStringWidth,
+// not a plain rune count — a directory name containing double-width
+// (e.g. CJK) characters occupies two terminal columns per character,
+// and a rune count would silently drift the spans after it out of
+// alignment with what's actually drawn on screen.
+//
+// Per the user's own explicit request, each button's own click region
+// (the headerSpan recorded below) covers its full three-column padded
+// area, not just the glyph's own single column — clicking the
+// highlighted background either side of a glyph activates it exactly
+// the same as clicking the glyph itself, matching what "this whole
+// colored area is a button" actually implies.
+//
+// A click that lands in the header but doesn't hit any of these spans
+// (e.g. on a "/" separator, on one of the plain separator columns
+// between two buttons, or in empty space after the path) is handled by
+// captureHeaderMouse as "switch to edit mode" — deliberately not
+// represented as a span here, since it's everything else.
+func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
-	button := func(glyph string, action headerAction) {
+	keyBG := colorTag(theme.ButtonBackground)
+	for _, btn := range headerButtons {
 		start := col
-		b.WriteString(glyph)
-		col += tview.TaggedStringWidth(glyph)
-		spans = append(spans, headerSpan{start: start, end: col, action: action})
+		fmt.Fprintf(&b, "[:%s:] %s [-:-:-]", keyBG, btn.glyph)
+		col += 1 + tview.TaggedStringWidth(btn.glyph) + 1
+		spans = append(spans, headerSpan{start: start, end: col, action: btn.action})
+		b.WriteString(headerButtonSeparator)
+		col++
 	}
-	button("∎", actionStart)
-	button("~", actionHome)
-	button("<", actionBack)
-	button(">", actionForward)
-	button("↑", actionUp)
-	b.WriteString(" ")
-	col++
 
 	rootStart := col
 	b.WriteString("/")
@@ -2639,6 +3347,13 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// historyEntry.isSearch): nothing can search before ever having
 		// navigated anywhere at all.
 		p.reportError(p.navigate(p.history[0].path))
+	case actionRoot:
+		// Same target the breadcrumb's own leading "/" (actionNavigate,
+		// target "/") already jumps to — this is a second, dedicated,
+		// consistently-styled button for it, at the user's own explicit
+		// request, rather than relying on that first "/" alone being
+		// discoverable as a click target in the first place.
+		p.reportError(p.navigate("/"))
 	case actionHome:
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -2658,6 +3373,20 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// home). Mirrors the ".." row's own identical parent-or-self
 		// check in load, just without needing a visible row for it.
 		p.reportError(p.navigate(filepath.Dir(p.path)))
+	case actionReload:
+		// Straight to load, not navigate: navigate exists to move
+		// somewhere and record that move in history (see its own doc
+		// comment) — reloading the same directory in place is neither,
+		// so it skips navigate's own snapshotCurrentEntry/
+		// pushHistoryEntry bookkeeping entirely rather than going
+		// through it just to have pushHistoryEntry's own same-path check
+		// (see its own doc comment) turn it into a no-op regardless.
+		// Clicking this while search results are showing exits back to
+		// the plain directory listing rather than re-running the search
+		// — load always does that (see its own doc comment), the same
+		// behavior the "z" chord's own Reload member and
+		// setShowHidden/toggleHidden already have too.
+		p.reportError(p.load(p.path))
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
@@ -2668,7 +3397,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
 // and moves keyboard focus there. headerEdit's own label (see NewPanel)
-// already reserves the "∎~<>↑ " prefix's own width, so the path text
+// already reserves the "∎~<>↑⭯ " prefix's own width, so the path text
 // itself lines up with wherever p.header was just showing it — nothing
 // further to do here for that.
 func (p *Panel) openEdit() {

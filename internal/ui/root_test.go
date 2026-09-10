@@ -124,6 +124,85 @@ func TestRequestQuitPreselectsCancel(t *testing.T) {
 	}
 }
 
+// TestRequestQuitHasATitleBar pins the same fix
+// TestOpenRemoveConfirmHasATitleBar does for its own dialog: quitConfirm
+// used to be a bare List with no heading either.
+func TestRequestQuitHasATitleBar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.RequestQuit()
+
+	if got, want := r.quitConfirmTitleBar.GetText(true), " Quit "; got != want {
+		t.Errorf("quitConfirmTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.quitConfirmLayout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("quitConfirmLayout rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
+// TestRequestQuitWhilePastingAsksToCancelTheCopyInstead pins the user's
+// own explicit report: quitting must not be possible at all while a
+// Paste is still running, out from under a copy already mid-write to
+// disk — RequestQuit must not even open the ordinary quitConfirm in
+// this state, since accepting it would tear the app (and the running
+// copy) down immediately with no way back.
+func TestRequestQuitWhilePastingAsksToCancelTheCopyInstead(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 1)
+
+	r.RequestQuit()
+
+	if r.activePage == quitConfirmPage {
+		t.Fatal("RequestQuit opened the ordinary quit prompt while a paste is still running")
+	}
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q (the shared confirm dialog)", r.activePage, confirmPage)
+	}
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Errorf("preselected item = %d, want 1 (Cancel) — a stray Enter must never cancel the copy and quit", got)
+	}
+	if r.pasteJob == nil {
+		t.Error("merely asking should not have cancelled the running paste")
+	}
+}
+
+// TestConfirmingQuitWhilePastingCancelsTheJobThenQuits pins the other
+// half: actually accepting the question TestRequestQuitWhilePastingAsksToCancelTheCopyInstead
+// opens must cancel the running paste (see cancelPasteJob's own doc
+// comment: whatever file is already mid-write finishes exactly where it
+// was headed, nothing is left half-written) before quitting — not quit
+// first and leave the job dangling, and not quit without ever touching
+// it either.
+func TestConfirmingQuitWhilePastingCancelsTheJobThenQuits(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 1)
+
+	r.RequestQuit()
+	r.confirmDialog.SetCurrentItem(0) // "Yes, cancel and quit"
+	r.acceptConfirm()
+
+	if r.pasteJob != nil {
+		t.Error("confirming should have cancelled the running paste job")
+	}
+	// confirmQuit itself calls Application.Stop, which is a safe no-op
+	// here (no screen was ever set — see tview's own application.go) —
+	// nothing further to observe about the quit half beyond it not
+	// panicking, which a failing t.Fatalf above would already have
+	// caught if reached in a broken state.
+}
+
 // TestMouseStatusText pins the exact wording buildStatusBar's own
 // "Mouse on/off" segment uses.
 func TestMouseStatusText(t *testing.T) {
@@ -293,134 +372,10 @@ func TestToggleMtimeUnix(t *testing.T) {
 	}
 }
 
-// TestCopyToClipboardThenPasteLeavesSourceInPlace exercises Copy/Paste
-// end to end: capture a target via clipboardTargets, navigate elsewhere,
-// paste — the source must survive since Copy, unlike Cut, never removes
-// it.
-func TestCopyToClipboardThenPasteLeavesSourceInPlace(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	r.target = filepath.Join(srcDir, "apple.txt")
-	r.copyToClipboard()
-
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
-	}
-	r.pasteClipboard()
-
-	if _, err := os.Stat(filepath.Join(dstDir, "apple.txt")); err != nil {
-		t.Errorf("pasted file missing in dst: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(srcDir, "apple.txt")); err != nil {
-		t.Errorf("Copy should leave the source file in place: %v", err)
-	}
-}
-
-// TestCutToClipboardThenPasteRemovesSource is Copy's counterpart for Cut:
-// the source must be gone afterwards, and the clipboard cleared so a
-// stray second Paste doesn't try to move something that's already moved.
-func TestCutToClipboardThenPasteRemovesSource(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	r.target = filepath.Join(srcDir, "banana.txt")
-	r.cutToClipboard()
-
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
-	}
-	r.pasteClipboard()
-
-	if _, err := os.Stat(filepath.Join(dstDir, "banana.txt")); err != nil {
-		t.Errorf("pasted file missing in dst: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(srcDir, "banana.txt")); !os.IsNotExist(err) {
-		t.Errorf("Cut should remove the source file, stat err = %v", err)
-	}
-	if len(r.clipboard) != 0 {
-		t.Errorf("clipboard should be cleared after a successful cut-paste, got %v", r.clipboard)
-	}
-}
-
-// TestPasteMoveRefreshesDetailsShowingSameFile pins the user's own
-// explicit request extended to Cut+Paste: a moved file is the same real
-// entry under a new path, exactly like a rename — Details needs to keep
-// following it (see refreshDetailsIfShowing's own doc comment and
-// pasteInto's own "only for a successful Move, not Copy" scoping). The
-// panel deliberately never navigates away here (pasteInto can target
-// any directory directly, not just wherever the panel currently is —
-// see its own doc comment): moving away would already reset Details on
-// its own via the ordinary SetSelectionChangedFunc path, which isn't
-// what this is pinning.
-func TestPasteMoveRefreshesDetailsShowingSameFile(t *testing.T) {
-	dir := fixtureDir(t)
-	otherDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.SetRect(0, 0, 100, 40)
-
-	src := filepath.Join(dir, "banana.txt")
-	r.target = src
-	r.cutToClipboard()
-
-	r.panel.focusRow(4) // banana.txt — the panel itself stays in dir throughout
-	r.showDetailsSidebar()
-	if r.detailsTarget != src {
-		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
-	}
-
-	r.pasteInto(otherDir)
-
-	want := filepath.Join(otherDir, "banana.txt")
-	if r.detailsTarget != want {
-		t.Errorf("detailsTarget after Cut+Paste = %q, want %q", r.detailsTarget, want)
-	}
-}
-
-// TestPasteCopyDoesNotDisturbDetails is the copy-side counterpart: the
-// source is untouched by a copy, so Details showing it must not be
-// redirected anywhere — unlike Move, there's no "same entry, new path"
-// to follow.
-func TestPasteCopyDoesNotDisturbDetails(t *testing.T) {
-	dir := fixtureDir(t)
-	otherDir := t.TempDir()
-
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.SetRect(0, 0, 100, 40)
-
-	src := filepath.Join(dir, "banana.txt")
-	r.target = src
-	r.copyToClipboard()
-
-	r.panel.focusRow(4) // banana.txt
-	r.showDetailsSidebar()
-	if r.detailsTarget != src {
-		t.Fatalf("setup: detailsTarget = %q, want %q", r.detailsTarget, src)
-	}
-
-	r.pasteInto(otherDir)
-
-	if r.detailsTarget != src {
-		t.Errorf("detailsTarget after Copy+Paste = %q, want unchanged %q", r.detailsTarget, src)
-	}
-}
+// Copy/Cut/Paste's own round-trip tests (on-disk effect, clipboard
+// clearing, Details refresh, and the whole paste-conflict-resolution
+// feature) live in pasteconflict_test.go now, alongside the async
+// engine (pasteconflict.go) they exercise.
 
 // TestClipboardTargetsPrefersSelectionOverTarget pins clipboardTargets'
 // rule: the checkbox selection wins over the right-clicked target when
@@ -443,35 +398,86 @@ func TestClipboardTargetsPrefersSelectionOverTarget(t *testing.T) {
 	}
 }
 
-// TestPasteConflictReportsErrorAndLeavesDestUntouched pins Paste's
-// collision handling: an existing dst entry is refused (see fsops.Copy's
-// force parameter), reported through the error overlay, and left as it
-// was.
-func TestPasteConflictReportsErrorAndLeavesDestUntouched(t *testing.T) {
-	srcDir := fixtureDir(t)
-	dstDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dstDir, "apple.txt"), []byte("existing"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-
-	r, err := NewRoot(tview.NewApplication(), srcDir)
+// TestCopyToClipboardCountsFilesAndDirs pins clipboardCounts' own
+// classification, exercised through the real Copy path — a directory
+// symlink among the targets would count as a dir here too (see
+// isDirish), the same as everywhere else in this app already treats
+// one, though fixtureDir itself has no symlink to cover that with.
+func TestCopyToClipboardCountsFilesAndDirs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.target = filepath.Join(srcDir, "apple.txt")
+
+	r.panel.toggleCheckbox(1) // app-data (dir)
+	r.panel.toggleCheckbox(2) // apple.txt (file)
+	r.panel.toggleCheckbox(3) // apricot.txt (file)
 	r.copyToClipboard()
 
-	if err := r.panel.load(dstDir); err != nil {
-		t.Fatalf("load(dstDir): %v", err)
+	if r.clipboardDirs != 1 || r.clipboardFiles != 2 {
+		t.Errorf("clipboardDirs/Files = %d/%d, want 1/2", r.clipboardDirs, r.clipboardFiles)
 	}
-	r.pasteClipboard()
+}
 
-	if r.activePage != errorPage {
-		t.Error("pasting onto an existing file should open the error overlay")
+// TestCopyToClipboardSyncsHighlightAcrossOpenTabs pins
+// syncClipboardHighlight's own point: the clipboard is one Root-level
+// value shared by every tab, so Copy from tab 1 must also tint the
+// same path's row in tab 2, without switching to it first.
+func TestCopyToClipboardSyncsHighlightAcrossOpenTabs(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(dstDir, "apple.txt"))
-	if err != nil || string(got) != "existing" {
-		t.Errorf("existing dst file should be untouched, got %q, %v", got, err)
+	r.newTab(dir) // a second tab on the very same directory
+	if len(r.tabs) != 2 {
+		t.Fatalf("setup: want 2 tabs, got %d", len(r.tabs))
+	}
+	firstTab, secondTab := r.tabs[0], r.tabs[1]
+
+	r.switchToTab(0)
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+
+	held := filepath.Join(dir, "apple.txt")
+	for name, p := range map[string]*Panel{"first (triggering) tab": firstTab, "second tab": secondTab} {
+		row, ok := rowForPath(p, held)
+		if !ok {
+			t.Fatalf("%s: apple.txt row not found", name)
+		}
+		if _, tinted := cellBackground(p.table.GetCell(row, colName)); !tinted {
+			t.Errorf("%s: apple.txt not tinted after Copy on the other tab", name)
+		}
+	}
+}
+
+// TestReloadCurrentTabReReadsFromDisk pins the "z" chord's own "r"
+// member ("Reload"): a file that shows up after the active tab already
+// loaded its directory is visible once reloadCurrentTab runs — the
+// header row's own "⭯" button does the same thing via
+// Panel.runHeaderAction directly (see
+// TestRunHeaderActionReloadReReadsFromDisk); this is Root's own
+// keyboard-reachable path to it.
+func TestReloadCurrentTabReReadsFromDisk(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	newFile := filepath.Join(dir, "just-landed.txt")
+	if err := os.WriteFile(newFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rowForPath(r.panel, newFile); ok {
+		t.Fatal("setup: just-landed.txt shouldn't be visible before reload runs")
+	}
+
+	r.reloadCurrentTab()
+
+	if _, ok := rowForPath(r.panel, newFile); !ok {
+		t.Error("just-landed.txt still not visible after reloadCurrentTab")
 	}
 }
 

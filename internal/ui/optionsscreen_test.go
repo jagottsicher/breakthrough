@@ -42,16 +42,16 @@ func selectOptionCategory(t *testing.T, r *Root, name string) {
 // with its confirming choice — what a reset now goes through, so a test
 // exercising one has to as well.
 //
-// Deliberately selects index 2 explicitly rather than pressing Enter on
-// whatever is preselected: the dialog opens on "Cancel" on purpose, and
-// a helper that quietly relied on that ordering would stop confirming
-// anything the moment it changed.
+// Deliberately selects index 0 explicitly rather than pressing Enter on
+// whatever is preselected: the dialog opens on "Cancel" (index 1) on
+// purpose, and a helper that quietly relied on that ordering would stop
+// confirming anything the moment it changed.
 func confirmReset(t *testing.T, r *Root) {
 	t.Helper()
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want the confirmation dialog %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(2)
+	r.confirmDialog.SetCurrentItem(0)
 	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
@@ -666,18 +666,20 @@ func TestResetConfirmationOpensOnCancel(t *testing.T) {
 // TestResetConfirmationNamesTheAction pins that the confirming answer
 // says what it will do rather than a bare "OK", and that the two resets
 // are told apart — "Reset category" and "Reset all" ask genuinely
-// different questions.
+// different questions. The question itself now lives in
+// confirmDialogTitleBar, not a list item — see openConfirm's own doc
+// comment.
 func TestResetConfirmationNamesTheAction(t *testing.T) {
 	r, _ := newOptionsRoot(t)
 
 	r.resetCurrentOptionCategory()
-	categoryQuestion, _ := r.confirmDialog.GetItemText(0)
-	categoryAnswer, _ := r.confirmDialog.GetItemText(2)
+	categoryQuestion := r.confirmDialogTitleBar.GetText(true)
+	categoryAnswer, _ := r.confirmDialog.GetItemText(0)
 	r.cancelConfirm()
 
 	r.resetAllOptions()
-	allQuestion, _ := r.confirmDialog.GetItemText(0)
-	allAnswer, _ := r.confirmDialog.GetItemText(2)
+	allQuestion := r.confirmDialogTitleBar.GetText(true)
+	allAnswer, _ := r.confirmDialog.GetItemText(0)
 	r.cancelConfirm()
 
 	if categoryQuestion == allQuestion {
@@ -688,6 +690,28 @@ func TestResetConfirmationNamesTheAction(t *testing.T) {
 			t.Errorf("confirming answer = %q, want it to name the action", answer)
 		}
 	}
+}
+
+// TestConfirmDialogWidthCoversLongQuestion pins a gap the header move
+// itself opened up: confirmDialogLayout used to size itself purely off
+// listSize(r.confirmDialog), which was fine while the question was
+// itself a list item, but stopped covering it once the question moved
+// into confirmDialogTitleBar instead (see openConfirm's own doc
+// comment) — "Reset all N settings, in every category, to their
+// defaults?" runs considerably longer than either "Cancel" or "Yes,
+// reset everything", the two list items actually left.
+func TestConfirmDialogWidthCoversLongQuestion(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	r.resetAllOptions()
+
+	headerWidth := tview.TaggedStringWidth(r.confirmDialogTitleBar.GetText(false))
+	_, _, layoutWidth, _ := r.confirmDialogLayout.GetRect()
+	if layoutWidth < headerWidth {
+		t.Errorf("confirmDialogLayout width = %d, want at least %d to fit the question %q",
+			layoutWidth, headerWidth, r.confirmDialogTitleBar.GetText(true))
+	}
+	r.cancelConfirm()
 }
 
 // TestResetLeavesTheOptionsScreenOpen pins a real bug found by driving
