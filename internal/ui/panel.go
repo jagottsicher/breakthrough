@@ -486,6 +486,7 @@ type headerAction int
 const (
 	actionNavigate headerAction = iota // go to target
 	actionStart                        // go to the directory breakthrough was launched from
+	actionRoot                         // go to the filesystem root ("/")
 	actionHome                         // go to the user's home directory
 	actionBack                         // step back in history
 	actionForward                      // step forward in history
@@ -3080,12 +3081,13 @@ func (p *Panel) previousPath() (string, bool) {
 	return prev.path, true
 }
 
-// headerButtons is the fixed definition of the six nav buttons shown at
-// the start of the header row — Start/Home/Back/Forward/Up/Reload — as
-// one shared slice so buildHeaderSpans (the colored, clickable
-// rendering) and headerButtonPrefix (headerEdit's own plain-text label
-// — see its own doc comment) can never drift out of column-alignment
-// with each other, verified by TestHeaderButtonPrefixMatchesBuildHeaderSpans.
+// headerButtons is the fixed definition of the seven nav buttons shown
+// at the start of the header row — Start/Root/Home/Back/Forward/Up/
+// Reload — as one shared slice so buildHeaderSpans (the colored,
+// clickable rendering) and headerButtonPrefix (headerEdit's own
+// plain-text label — see its own doc comment) can never drift out of
+// column-alignment with each other, verified by
+// TestHeaderButtonPrefixMatchesBuildHeaderSpans.
 // Start's own glyph is "∎" (U+220E), not "^": at the time this glyph
 // was chosen, this app's own button bar wrote Ctrl-shortcuts as "^E",
 // "^L" and so on, so a bare "^" here risked reading as one of those
@@ -3103,11 +3105,28 @@ func (p *Panel) previousPath() (string, bool) {
 // filesystem, ...), so re-reading the current directory from disk on
 // demand needs a click target of its own, the same reasoning the other
 // six buttons here already follow.
+//
+// "/" (Root) is the newest addition, per the user's own explicit
+// request, placed right after Start rather than at the end the way
+// Reload was: Reload is unrelated to the other five (it re-reads the
+// current directory, it doesn't go anywhere), so tacking it on last
+// avoided disturbing an established, muscle-memorized order; Root, by
+// contrast, belongs with Start/Home as a third "jump to a fixed place"
+// destination, and reads most naturally sitting right beside Start —
+// the button its own "go to the directory breakthrough started in"
+// meaning is closest to, conceptually. A second way to reach the exact
+// same destination the breadcrumb's own leading "/" (actionNavigate,
+// target "/") already provided — see actionRoot's own doc comment on
+// runHeaderAction for why a second, dedicated button is worth having
+// anyway: that first "/" is plain, unstyled breadcrumb text, no more
+// visually a "button" than any other path segment, easy to never
+// notice as a click target at all.
 var headerButtons = []struct {
 	glyph  string
 	action headerAction
 }{
 	{"∎", actionStart},
+	{"/", actionRoot},
 	{"~", actionHome},
 	{"<", actionBack},
 	{">", actionForward},
@@ -3260,6 +3279,13 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// historyEntry.isSearch): nothing can search before ever having
 		// navigated anywhere at all.
 		p.reportError(p.navigate(p.history[0].path))
+	case actionRoot:
+		// Same target the breadcrumb's own leading "/" (actionNavigate,
+		// target "/") already jumps to — this is a second, dedicated,
+		// consistently-styled button for it, at the user's own explicit
+		// request, rather than relying on that first "/" alone being
+		// discoverable as a click target in the first place.
+		p.reportError(p.navigate("/"))
 	case actionHome:
 		home, err := os.UserHomeDir()
 		if err != nil {

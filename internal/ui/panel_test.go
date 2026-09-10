@@ -44,22 +44,23 @@ func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/a/bb/c", theme)
 
-	wantVisible := " ∎  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
 	want := []headerSpan{
 		{start: 0, end: 3, action: actionStart},
-		{start: 4, end: 7, action: actionHome},
-		{start: 8, end: 11, action: actionBack},
-		{start: 12, end: 15, action: actionForward},
-		{start: 16, end: 19, action: actionUp},
-		{start: 20, end: 23, action: actionReload},
-		{start: 24, end: 25, action: actionNavigate, target: "/"},
-		{start: 25, end: 26, action: actionNavigate, target: "/a"},
-		{start: 27, end: 29, action: actionNavigate, target: "/a/bb"},
-		{start: 30, end: 31, action: actionNavigate, target: "/a/bb/c"},
+		{start: 4, end: 7, action: actionRoot},
+		{start: 8, end: 11, action: actionHome},
+		{start: 12, end: 15, action: actionBack},
+		{start: 16, end: 19, action: actionForward},
+		{start: 20, end: 23, action: actionUp},
+		{start: 24, end: 27, action: actionReload},
+		{start: 28, end: 29, action: actionNavigate, target: "/"},
+		{start: 29, end: 30, action: actionNavigate, target: "/a"},
+		{start: 31, end: 33, action: actionNavigate, target: "/a/bb"},
+		{start: 34, end: 35, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -117,17 +118,17 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/", theme)
 
-	wantVisible := " ∎  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
-	// 6 buttons + the root span.
-	if len(spans) != 7 {
-		t.Fatalf("got %d spans, want 7: %+v", len(spans), spans)
+	// 7 buttons + the root span.
+	if len(spans) != 8 {
+		t.Fatalf("got %d spans, want 8: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 24, end: 25, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 28, end: 29, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -142,21 +143,22 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/文档/c", theme)
 
-	wantVisible := " ∎  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
 	want := []headerSpan{
 		{start: 0, end: 3, action: actionStart},
-		{start: 4, end: 7, action: actionHome},
-		{start: 8, end: 11, action: actionBack},
-		{start: 12, end: 15, action: actionForward},
-		{start: 16, end: 19, action: actionUp},
-		{start: 20, end: 23, action: actionReload},
-		{start: 24, end: 25, action: actionNavigate, target: "/"},
-		{start: 25, end: 29, action: actionNavigate, target: "/文档"},
-		{start: 30, end: 31, action: actionNavigate, target: "/文档/c"},
+		{start: 4, end: 7, action: actionRoot},
+		{start: 8, end: 11, action: actionHome},
+		{start: 12, end: 15, action: actionBack},
+		{start: 16, end: 19, action: actionForward},
+		{start: 20, end: 23, action: actionUp},
+		{start: 24, end: 27, action: actionReload},
+		{start: 28, end: 29, action: actionNavigate, target: "/"},
+		{start: 29, end: 33, action: actionNavigate, target: "/文档"},
+		{start: 34, end: 35, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
