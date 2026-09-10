@@ -1067,6 +1067,34 @@ func (p *Panel) load(dir string) error {
 	p.buildColumnHeader()
 
 	if newDirectory {
+		// SetOffset(0, 0) first, not just focusRow(0): p.table is the
+		// same tview.Table instance across every directory this panel
+		// ever shows (load only ever Clears its cells, never replaces
+		// it), and tview's own scroll state — rowOffset, and especially
+		// trackEnd — lives on that instance too, untouched by Clear.
+		// trackEnd in particular is a *sticky* "snap to the bottom on
+		// the next Draw" flag that tview sets on its own whenever an
+		// entire listing already fits on screen (harmless there — there
+		// is no "bottom" to snap past) but never clears again just
+		// because a different, much longer directory loads next.
+		// focusRow(0) alone can leave it stuck true: tview's own
+		// Select()-driven clamp only ever resets trackEnd as a side
+		// effect of also scrolling rowOffset up to reveal row 0 — which
+		// it only bothers doing when the *previous* rowOffset was
+		// already greater than 0. Coming from a directory small enough
+		// to fit on screen at all (a real, reproduced case: a short
+		// subfolder, itself entered from partway down a long one),
+		// rowOffset was already sitting at 0 for an unrelated reason,
+		// so that clamp branch never fires, trackEnd survives the trip
+		// untouched, and the very next Draw of the new, much longer
+		// directory snaps the view straight to its own bottom —
+		// cursor correctly on row 0, but scrolled to the last screenful
+		// instead, a real, reported "doesn't actually land at the top"
+		// bug. SetOffset(0, 0) resets both rowOffset and trackEnd
+		// unconditionally (verified directly against tview's own
+		// table.go), sidestepping this Select()-clamp heuristic
+		// entirely rather than depending on it to happen to fire.
+		p.table.SetOffset(0, 0)
 		p.focusRow(0) // top of the listing — see this func's own doc comment
 	}
 
