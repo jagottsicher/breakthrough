@@ -2369,6 +2369,23 @@ func (r *Root) setMtimeUnix(unix bool) {
 	r.persistSetting("mtime_unix", strconv.FormatBool(unix))
 }
 
+// setFilterPersistent is the Options screen's own "filter_persistent"
+// toggle (see config.Settings.FilterPersistent's own doc comment) —
+// otherwise a copy of setShowHidden/setSizeBytes/setMtimeUnix's own
+// shape, with one deliberate difference: no p.load(p.path) reload for
+// any tab. Those three are display toggles whose effect is visible in
+// the *current* listing, so flipping one has to repaint it immediately
+// to mean anything at all; this one only changes what happens the next
+// time a tab navigates somewhere else (see Panel.load's own
+// newDirectory branch) — nothing about what's already on screen right
+// now needs to, or should, change just because the setting itself
+// changed.
+func (r *Root) setFilterPersistent(persistent bool) {
+	r.forEachTab(func(p *Panel) { p.filterPersistent = persistent })
+	r.settings.FilterPersistent = persistent
+	r.persistSetting("filter_persistent", strconv.FormatBool(persistent))
+}
+
 // listSize returns a no-border, no-secondary-text List's width — the
 // widest item's rendered text plus 1-char left/right padding (see the
 // SetBorderPadding calls in NewRoot) — and its height, one row per item.
