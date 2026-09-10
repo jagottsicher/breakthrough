@@ -274,8 +274,8 @@ func TestConfirmApplySedCancelPreselectedDoesNotWrite(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
-		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
 	r.cancelConfirm()
 
@@ -291,7 +291,7 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently" - see newPurgeConfirm
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently" - see newPurgeConfirm
 	r.acceptConfirm()
 
 	data, err := os.ReadFile(file)
@@ -313,7 +313,7 @@ func TestConfirmApplySedWithBackupKeepsOriginal(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.confirmDialog.SetCurrentItem(1)
+	r.confirmDialog.SetCurrentItem(0)
 	r.acceptConfirm()
 
 	backup, err := os.ReadFile(file + ".bak")

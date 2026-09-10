@@ -112,7 +112,7 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 	}
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
 	r.acceptConfirm()
 
 	if r.detailsTarget != "" {
@@ -157,8 +157,8 @@ func TestOpenRemoveConfirmCancelPreselectedDoesNotDelete(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
-		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
 
 	// Enter without ever moving focus - must cancel, never delete.
@@ -199,9 +199,9 @@ func TestOpenRemoveConfirmHasATitleBar(t *testing.T) {
 func (r *Root) resolvePurgeConfirmByCurrentFocus(t *testing.T) {
 	t.Helper()
 	switch r.confirmDialog.GetCurrentItem() {
-	case 0:
-		r.cancelConfirm()
 	case 1:
+		r.cancelConfirm()
+	case 0:
 		r.acceptConfirm()
 	default:
 		t.Fatalf("unexpected purgeConfirm focus %d", r.confirmDialog.GetCurrentItem())
@@ -212,7 +212,7 @@ func TestOpenRemoveConfirmConfirmedDeletesPermanently(t *testing.T) {
 	r, _, file := newTestRootWithFile(t)
 
 	r.openRemoveConfirm()
-	r.confirmDialog.SetCurrentItem(1) // deliberately move to "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // deliberately move to "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	if _, err := os.Lstat(file); !os.IsNotExist(err) {
@@ -331,7 +331,7 @@ func TestOpenEmptyTrashConfirmRemovesEverything(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently"
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
 	r.resolvePurgeConfirmByCurrentFocus(t)
 
 	trashDir, err := r.trashDir()
@@ -372,8 +372,8 @@ func TestMoveSelectionToTrashInsideTrashRedirectsToRemove(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
-		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
+		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
 	}
 
 	// Cancel must still actually cancel — nothing removed by this redirect alone.
