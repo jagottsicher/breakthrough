@@ -151,13 +151,33 @@ var helpText = strings.TrimLeft(`
   path itself to type a new one (Tab completes it, Enter goes); click
   a column heading to sort by it; click the "Y" button near the right
   edge of the path bar (an "Nx" count appears before it once one or
-  more are actually narrowing the listing) to open the filter dropdown
-  — the glob/regex filter (type to narrow the list live, its own
-  button switches between a plain glob and a regular expression, and
-  its own checkbox switches it off without clearing what's typed),
-  plus a size filter and a modified-time filter, on/off for now, all
-  three combinable. Navigating to a different directory resets all
-  three.
+  more are actually narrowing the listing, turning red if a filter is
+  hiding everything a directory would otherwise show) — or press "/" —
+  to open the filter dropdown, three independently combinable (AND)
+  rows, each narrowing the listing live as you type:
+
+    Glob/regex      type to narrow the list live; its own button
+                    switches glob/regex, its own checkbox disables it
+                    without clearing what's typed
+    Size            "> 1m", ">= 500k", "= 0", or a range joined with
+                    "and" ("> 1m and < 1g"); units b/k/m/g/t, binary
+                    (1024-based) — a bare number means plain bytes
+    Modified time   before/after/between <moment>, or a bare moment
+                    alone meaning "within the last ..."; a moment is
+                    absolute ("2026-09-01", optionally with a time) or
+                    relative ("7 days", "2 hours ago", "last 30
+                    minutes") — sec/min/hour/day/week/month/year,
+                    singular or plural
+
+  Typing into a field auto-activates its own row. Tab/Shift+Tab cycle
+  all seven of the dropdown's own pieces; "/" — once the dropdown is
+  already open — jumps straight to the next of the three fields
+  instead, the same "press it again to advance further" trick Ctrl+T
+  uses for the tab switcher. Escape closes it. By default
+  (filter_persistent) all three carry over across a directory change,
+  so browsing a whole tree with the same filter on is the normal way
+  to use it; set filter_persistent = false to have every new directory
+  start unfiltered instead.
 
   While plainly browsing (not editing the path, not in the filter
   dropdown) and the Details sidebar is shown, Tab moves keyboard focus
