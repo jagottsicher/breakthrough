@@ -1643,6 +1643,31 @@ func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
 // exact same "never touched" state a fresh one starts in, rather than
 // hardcoding a value that could drift from the table's own actual
 // background (see rowBackground's own doc comment).
+//
+// Also sets (or clears) each cell's own SelectedStyle alongside its
+// ordinary one — a real, user-reported gap: tview only ever falls back
+// to a cell's own background/style at all once it isn't the table's
+// current cursor row; for the row the cursor happens to be on, tview
+// instead always paints the *table-wide* SetSelectedStyle (see
+// setSelectionStyle — FocusedBackground while this panel has real
+// keyboard focus, EditableBackground once it doesn't), completely
+// hiding whatever clipboard tint that same row already has, in either
+// focus state — the user first noticed this once Tab moved focus
+// elsewhere and the row they'd just Cut/Copied turned plain gray, as if
+// deselected, but it was never actually showing the clipboard color
+// even while still focused; a "current row happens to also be
+// selected" indicator that petrol already gives, unlike the clipboard
+// state, just made this easy to miss until focus actually moved. Giving
+// the cell its own SelectedStyle — identical to its own ordinary tinted
+// Style — makes tview use *that* instead of the table-wide one (see
+// Table.Draw's own selected-cell branch, checked in that order),
+// keeping the clipboard color visible regardless of which row the
+// cursor is on or whether this panel currently has focus at all. Reset
+// back to tcell.StyleDefault when untinted, the zero value tview
+// itself treats as "nothing cell-specific set" — otherwise a cell that
+// was once tinted (a completed Cut/Paste, say) would keep overriding
+// the table-wide selected style forever after, even once it has
+// nothing to do with the clipboard any more.
 func (p *Panel) paintFixedRowCells(row int, ref rowRef) {
 	bg, tinted := p.rowBackground(ref)
 	for _, col := range [...]int{colCheckbox, colType, colModifier} {
@@ -1652,8 +1677,10 @@ func (p *Panel) paintFixedRowCells(row int, ref rowRef) {
 		}
 		if tinted {
 			cell.SetBackgroundColor(bg)
+			cell.SetSelectedStyle(cell.Style)
 		} else {
 			cell.SetTransparency(true)
+			cell.SetSelectedStyle(tcell.StyleDefault)
 		}
 	}
 }
@@ -1744,6 +1771,13 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		// directory's row still reads as one consistent color instead of
 		// two different backgrounds fighting for the same few characters.
 		nameCell.SetBackgroundColor(bg)
+		// Also this cell's own SelectedStyle, matching Style exactly (see
+		// paintFixedRowCells' own doc comment for the full reasoning:
+		// without this, the clipboard tint disappears the instant this
+		// row happens to be the table's own cursor row, since tview
+		// falls back to the table-wide, focus-dependent SetSelectedStyle
+		// for any selectable cell that doesn't have its own).
+		nameCell.SetSelectedStyle(nameCell.Style)
 	}
 	p.table.SetCell(row, colName, nameCell)
 
@@ -1764,6 +1798,11 @@ func (p *Panel) setRowCells(row int, ref rowRef) {
 		sizeCell.SetBackgroundColor(bg)
 		modSepCell.SetBackgroundColor(bg)
 		modCell.SetBackgroundColor(bg)
+		// See nameCell's own SetSelectedStyle call above for why.
+		sizeSepCell.SetSelectedStyle(sizeSepCell.Style)
+		sizeCell.SetSelectedStyle(sizeCell.Style)
+		modSepCell.SetSelectedStyle(modSepCell.Style)
+		modCell.SetSelectedStyle(modCell.Style)
 	}
 	p.table.SetCell(row, colSizeSep, sizeSepCell)
 	p.table.SetCell(row, colSize, sizeCell)
