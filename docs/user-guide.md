@@ -188,11 +188,16 @@ dropdown with three rows, all combinable:
 
 The dropdown stays open while you tick more than one of these — closing
 it only ever takes clicking elsewhere or `Ctrl`+`C`, the same as
-cancelling anything else. Navigating to a different directory resets
-all three back to their own defaults (the glob/regex filter cleared and
-re-enabled, size/modified-time switched off), the same "scoped to
-what's on screen, not carried across navigation" rule this filter has
-always followed.
+cancelling anything else. By default (the `filter_persistent` setting,
+see the reference below), all three carry straight over when you
+navigate to a different directory — browsing a whole tree with the
+same filter switched on is the point, and the "Nx" count in the path
+bar is what keeps a still-active filter from going unnoticed while you
+do. Set `filter_persistent = false` to go back to the original
+behavior instead: navigating to a different directory resets all three
+back to their own defaults (the glob/regex filter cleared and
+re-enabled, size/modified-time switched off), so every new directory
+starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, green for executable, red for a
@@ -857,6 +862,7 @@ Every key breakthrough recognizes, with its default:
 | `restore_tabs` | `true` | Reopen the tabs (and split) that were open on last exit |
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
+| `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
