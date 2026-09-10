@@ -70,27 +70,30 @@ func spread(c tcell.Color) int32 {
 	return max - min
 }
 
-// TestDarkenForInactiveFocusPreservesAbsoluteSpread pins the fix for a
-// real, user-reported outcome of an earlier, rejected approach: scaling
-// every RGB channel down by the same factor preserves relative
-// saturation but shrinks the ABSOLUTE difference between channels by
-// that same factor — and it's the absolute difference a viewer's eye
-// actually picks up against a dim terminal background, so the result
-// read as plain dark gray rather than a darker version of the original
-// hue. darkenForInactiveFocus must instead leave the spread exactly as
-// it was, only dimming the shared, achromatic base underneath it (see
-// its own doc comment) — this pins that property directly, for both of
+// TestDarkenForInactiveFocusBoostsSpreadWhileStillDarker pins the
+// combined fix for two real, user-reported outcomes of the two earlier,
+// rejected attempts in turn (see darkenForInactiveFocus's own doc
+// comment for the full history): scaling every RGB channel down by the
+// same factor shrank the absolute spread between channels right along
+// with the darkening, reading as plain dark gray; preserving that
+// spread exactly, instead of shrinking it, still read as both too dark
+// and barely colored, because the same raw spread reads as less
+// colorful the darker the two colors around it are. The final version
+// must therefore end up BOTH noticeably darker overall than the
+// full-brightness color AND with a wider spread than it started
+// with — not merely an unchanged one — to compensate for exactly that
+// darkness-dependent perceived-colorfulness loss. Checked for both of
 // this app's own clipboard colors, rather than relying on eyeballing
 // one specific computed hex value.
-func TestDarkenForInactiveFocusPreservesAbsoluteSpread(t *testing.T) {
+func TestDarkenForInactiveFocusBoostsSpreadWhileStillDarker(t *testing.T) {
 	def := DefaultTheme().Resolve()
 	for name, pair := range map[string][2]tcell.Color{
 		"Copy": {def.ClipboardCopyBackground, def.ClipboardCopyBackgroundInactive},
 		"Cut":  {def.ClipboardCutBackground, def.ClipboardCutBackgroundInactive},
 	} {
 		bright, dim := pair[0], pair[1]
-		if got, want := spread(dim), spread(bright); got != want {
-			t.Errorf("%s: Inactive spread = %d, want %d (same as the full-brightness color's own spread — darkening must not shrink it)", name, got, want)
+		if got, want := spread(dim), spread(bright); got <= want {
+			t.Errorf("%s: Inactive spread = %d, want more than the full-brightness color's own %d — darkening must boost it, not just preserve or shrink it", name, got, want)
 		}
 		brightR, brightG, brightB := bright.RGB()
 		dimR, dimG, dimB := dim.RGB()

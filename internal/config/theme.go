@@ -308,41 +308,60 @@ func (t Theme) Resolve() ResolvedTheme {
 // dims c's own shared, achromatic base — see its own doc comment for
 // what that means and why only the base, not the whole color, is
 // scaled by this. 1.0 would mean no dimming at all; the lower this is,
-// the darker the shared base gets, independent of how much of the
-// original hue survives (which this factor never touches at all).
-const inactiveFocusBaseDarkenFactor = 0.5
+// the darker the shared base gets.
+const inactiveFocusBaseDarkenFactor = 0.8
+
+// inactiveFocusExcessBoost is how much darkenForInactiveFocus
+// multiplies c's own per-channel excess above its shared base (see its
+// own doc comment) — deliberately *greater* than 1.0: a human eye
+// reads a given RGB difference as less colorful the darker the two
+// colors it's between are (this app's own default clipboard tints are
+// already a deliberately subtle cast to begin with — a 22-point spread
+// on a bright base — see ClipboardCopyBackground/ClipboardCutBackground's
+// own doc comment), so the same absolute spread that reads as a clear,
+// if subtle, tint at full brightness reads as barely-there on a dimmer
+// base — a real, user-reported outcome of the very first fix here,
+// which preserved the spread exactly but left it that dim regardless.
+// Boosting it compensates.
+const inactiveFocusExcessBoost = 2.0
 
 // darkenForInactiveFocus derives ClipboardCopyBackgroundInactive/
 // ClipboardCutBackgroundInactive from their own full-brightness
 // counterparts — dimmer, but still clearly recognizable as the same
 // hue, not a shade of plain gray.
 //
-// Scaling every RGB channel down by the same factor — tried first —
-// technically preserves saturation (the max/min ratio is unchanged by
-// a uniform scale), but shrinks the ABSOLUTE difference between
-// channels by that same factor, and it's that absolute difference a
-// viewer's eye actually picks up against a dim terminal background.
-// c's own default clipboard tints are already a deliberately subtle
-// cast to begin with (a 22-point spread on top of a bright base — see
-// ClipboardCopyBackground/ClipboardCutBackground's own doc comment);
-// scaling that down by the same factor as the darkening shrinks the
-// spread right along with the base, so the whole result reads as
-// plain dark gray instead of a darker version of the original hue — a
-// real, user-reported outcome of that first attempt, not a
-// hypothetical one.
+// Two rejected attempts before this one, in order, each addressing a
+// real, specific gap the previous one left open rather than a
+// hypothetical concern:
 //
-// The fix: decompose c into its shared, achromatic base
-// (min(R, G, B) — the amount of "gray" every channel has in common)
-// and its own per-channel excess above that base (the actual
-// hue-defining difference). Only the base gets dimmed, by
-// inactiveFocusBaseDarkenFactor; the excess is left completely
-// untouched, so the absolute spread between channels — and with it,
-// the hue itself — survives exactly as it was, rather than shrinking
-// along with everything else. Equivalent to subtracting a fixed amount
-// (derived from the base) from every channel rather than scaling every
-// channel by a fixed ratio; clamped at 0 per channel for safety,
-// though none of this app's own clipboard colors are dark enough to
-// need it.
+//  1. Scaling every RGB channel down by the same factor: preserves
+//     saturation (the max/min ratio is unchanged by a uniform scale),
+//     but shrinks the absolute difference between channels by that
+//     same factor — and it's that absolute difference a viewer's eye
+//     actually picks up against a dim terminal background. The result
+//     read as plain dark gray.
+//  2. Decomposing c into its shared, achromatic base (min(R, G, B))
+//     and each channel's own excess above it, then dimming only the
+//     base while leaving the excess exactly as it was: fixed the
+//     shrinking spread from attempt 1, but the result was reported as
+//     both still too dark overall and still barely colored — the
+//     unchanged spread, it turns out, isn't enough on its own once the
+//     base it sits on is this much dimmer; the same raw RGB gap simply
+//     reads as less colorful at lower brightness (see
+//     inactiveFocusExcessBoost's own doc comment).
+//
+// This version keeps attempt 2's own decomposition, but tunes both
+// halves in the two directions actually reported as needed: the base
+// is dimmed less (inactiveFocusBaseDarkenFactor raised, so the overall
+// result is noticeably brighter — "too dark" was the direct
+// complaint), and the excess is deliberately amplified beyond its own
+// original magnitude (inactiveFocusExcessBoost), rather than merely
+// preserved, to compensate for exactly the darkness-dependent
+// perceived-colorfulness loss attempt 2 didn't account for. Clamped to
+// the valid 0-255 range per channel either way — boosting the excess
+// this much could otherwise push a channel out of range for some other
+// scheme's own, more saturated clipboard colors, even though none of
+// this app's own default ones come close.
 func darkenForInactiveFocus(c tcell.Color) tcell.Color {
 	r, g, b := c.RGB()
 	base := r
@@ -352,14 +371,20 @@ func darkenForInactiveFocus(c tcell.Color) tcell.Color {
 	if b < base {
 		base = b
 	}
-	shift := base - int32(float64(base)*inactiveFocusBaseDarkenFactor)
-	darken := func(v int32) int32 {
-		if v -= shift; v < 0 {
+	dimmedBase := float64(base) * inactiveFocusBaseDarkenFactor
+	clamp := func(v int32) int32 {
+		excess := float64(v-base) * inactiveFocusExcessBoost
+		result := int32(dimmedBase + excess)
+		switch {
+		case result < 0:
 			return 0
+		case result > 255:
+			return 255
+		default:
+			return result
 		}
-		return v
 	}
-	return tcell.NewRGBColor(darken(r), darken(g), darken(b))
+	return tcell.NewRGBColor(clamp(r), clamp(g), clamp(b))
 }
 
 // NamedTheme pairs a Theme with the stable slug used to select it from
