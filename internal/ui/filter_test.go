@@ -28,7 +28,7 @@ func entryNames(entries []fsops.Entry) []string {
 
 func TestFilterByTextEmptyIsNoop(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "", false)
+	got := filterByText(entries, "", false, true)
 	if len(got) != 2 {
 		t.Errorf("filterByText with empty filterText = %v, want all entries kept", entryNames(got))
 	}
@@ -37,18 +37,18 @@ func TestFilterByTextEmptyIsNoop(t *testing.T) {
 func TestFilterByTextGlobMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "*.txt", false)
+	got := filterByText(entries, "*.txt", false, true)
 	if len(got) != 3 {
 		t.Errorf("filterByText(*.txt) = %v, want all 3 kept", entryNames(got))
 	}
 
-	got = filterByText(entries, "ap*", false)
+	got = filterByText(entries, "ap*", false, true)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(ap*) = %v, want %v", entryNames(got), want)
 	}
 
-	got = filterByText(entries, "banana.txt", false)
+	got = filterByText(entries, "banana.txt", false, true)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(banana.txt) (exact, no wildcard) = %v, want just banana.txt", entryNames(got))
 	}
@@ -56,15 +56,27 @@ func TestFilterByTextGlobMode(t *testing.T) {
 	// No wildcard, not an exact name either: filepath.Match anchors the
 	// whole name, the same as Select+/- already relies on — "an"
 	// (contained in "banana.txt") should not match it.
-	got = filterByText(entries, "an", false)
+	got = filterByText(entries, "an", false, true)
 	if len(got) != 0 {
 		t.Errorf("filterByText(an) = %v, want none — glob mode is anchored, not substring", entryNames(got))
 	}
 }
 
+// TestFilterByTextInactiveIsNoopEvenWithText pins the filter-menu's own
+// "disable without clearing" checkbox (see Panel.filterGlobActive's own
+// doc comment): active false is a no-op regardless of how real a
+// pattern filterText holds, the same as if it were empty.
+func TestFilterByTextInactiveIsNoopEvenWithText(t *testing.T) {
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
+	got := filterByText(entries, "ap*", false, false)
+	if len(got) != len(entries) {
+		t.Errorf("filterByText with active=false = %v, want every entry kept despite a real pattern", entryNames(got))
+	}
+}
+
 func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "[", false) // unterminated character class
+	got := filterByText(entries, "[", false, true) // unterminated character class
 	if len(got) != len(entries) {
 		t.Errorf("filterByText([) = %v, want every entry kept (malformed pattern treated as no filter yet)", entryNames(got))
 	}
@@ -73,7 +85,7 @@ func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 func TestFilterByTextRegexMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "^ap", true)
+	got := filterByText(entries, "^ap", true, true)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(^ap, regex) = %v, want %v", entryNames(got), want)
@@ -81,7 +93,7 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 	// Unlike glob mode, regexp.MatchString is unanchored by default —
 	// substring matching is exactly what a bare regex like "an" does.
-	got = filterByText(entries, "an", true)
+	got = filterByText(entries, "an", true, true)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(an, regex) = %v, want just banana.txt", entryNames(got))
 	}
@@ -89,7 +101,7 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 func TestFilterByTextRegexInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "(unclosed", true)
+	got := filterByText(entries, "(unclosed", true, true)
 	if len(got) != len(entries) {
 		t.Errorf("filterByText((unclosed, regex) = %v, want every entry kept (invalid regex treated as no filter yet)", entryNames(got))
 	}
@@ -170,16 +182,20 @@ func TestFilterRegexToggleFlipsModeAndRelabels(t *testing.T) {
 	}
 }
 
-// TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh pins the two
-// halves of load()'s own reset rule: moving to a different directory
-// clears the filter (both the field's text and Panel.filterText),
-// while reloading the same directory (e.g. toggling hidden files)
-// leaves it exactly as typed.
-func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
+// TestFilterPersistsAcrossNavigationByDefault pins the user's own
+// explicit request (config.Settings.FilterPersistent's own doc
+// comment): browsing several directories in a row with the same
+// filter switched on is the default — navigating to a genuinely
+// different directory must NOT clear the filter (neither the field's
+// text nor Panel.filterText) the way it always used to.
+func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
+	}
+	if !r.panel.filterPersistent {
+		t.Fatal("setup: filterPersistent should default to true")
 	}
 
 	r.panel.filterField.SetText("ap*")
@@ -187,8 +203,40 @@ func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
 		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
 	}
 
+	sub := filepath.Join(dir, "app-data")
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+	if r.panel.filterText != "ap*" {
+		t.Errorf("filterText after navigating to a new directory = %q, want unchanged %q (persistent by default)", r.panel.filterText, "ap*")
+	}
+	if got := r.panel.filterField.GetText(); got != "ap*" {
+		t.Errorf("filterField text after navigating to a new directory = %q, want unchanged %q", got, "ap*")
+	}
+}
+
+// TestFilterResetsOnNavigationWhenNotPersistent pins the opt-out (see
+// config.Settings.FilterPersistent's own doc comment for the "off"
+// half): a same-directory refresh (what toggling hidden files does
+// under the hood) must still not touch the filter regardless of
+// filterPersistent, but navigating to a genuinely different directory
+// now clears it — restoring the original, pre-this-setting behavior
+// for anyone who prefers it.
+func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterPersistent = false
+
+	r.panel.filterField.SetText("ap*")
+	if r.panel.filterText != "ap*" {
+		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
+	}
+
 	// Same-directory refresh (what toggling hidden files does under the
-	// hood) must not touch the filter.
+	// hood) must not touch the filter either way.
 	if err := r.panel.load(r.panel.path); err != nil {
 		t.Fatalf("load (refresh): %v", err)
 	}
@@ -199,7 +247,8 @@ func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
 		t.Errorf("filterField text after a same-directory refresh = %q, want unchanged %q", got, "ap*")
 	}
 
-	// Navigating to a different directory must clear it.
+	// Navigating to a different directory must clear it, since
+	// filterPersistent is false here.
 	sub := filepath.Join(dir, "app-data")
 	if err := r.panel.navigate(sub); err != nil {
 		t.Fatalf("navigate: %v", err)
@@ -223,15 +272,23 @@ func TestFilterFieldDoneReturnsFocusToTableWithoutClearing(t *testing.T) {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
+	// filterField's own SetDoneFunc is only ever installed by
+	// renderFilterMenu (see its own doc comment for why) — going
+	// through the real openFilterMenu, not setting text/focus directly,
+	// is what actually wires it for this test the same way a real "/"
+	// press or "Y" click would.
+	r.openFilterMenu()
 	r.panel.filterField.SetText("ap*")
-	r.app.SetFocus(r.panel.filterField)
 
 	r.panel.filterField.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 
 	if got := r.panel.filterField.GetText(); got != "ap*" {
 		t.Errorf("filterField text after Enter = %q, want unchanged %q", got, "ap*")
 	}
+	if r.activePage == filterMenuPage {
+		t.Error("Enter in the filter field should close the dropdown, not just move focus")
+	}
 	if !r.panel.table.HasFocus() {
-		t.Error("focus should return to the table after Enter in the filter field")
+		t.Error("focus should return to the table after Enter closes the filter menu")
 	}
 }

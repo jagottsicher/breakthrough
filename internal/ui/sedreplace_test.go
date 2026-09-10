@@ -82,6 +82,23 @@ func TestOpenSedReplacePopulatesTargetAndOpensForm(t *testing.T) {
 	}
 }
 
+// TestOpenSedReplaceHasATitleBar pins the same fix
+// TestOpenRemoveConfirmHasATitleBar/TestRequestQuitHasATitleBar/
+// TestOpenChmodHasATitleBar pin for their own dialogs: Sed Replace used
+// to have no heading either.
+func TestOpenSedReplaceHasATitleBar(t *testing.T) {
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+
+	r.openSedReplace()
+
+	if got, want := r.sedTitleBar.GetText(true), " Sed Replace "; got != want {
+		t.Errorf("sedTitleBar text = %q, want %q", got, want)
+	}
+	if _, _, w, h := r.sedLayout.GetRect(); w <= 0 || h <= 0 {
+		t.Errorf("sedLayout rect = %dx%d, want a real, positioned size", w, h)
+	}
+}
+
 func TestToggleSedFlagUpdatesStateAndLabel(t *testing.T) {
 	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
 	r.openSedReplace()
@@ -175,6 +192,9 @@ func TestRunSedPreviewOpensPreviewPageWithProgressState(t *testing.T) {
 	if r.sedPreviewCancel == nil {
 		t.Error("sedPreviewCancel should be set while a preview is in flight")
 	}
+	if got, want := r.sedPreviewTitleBar.GetText(true), " Sed Preview "; got != want {
+		t.Errorf("sedPreviewTitleBar text = %q, want %q", got, want)
+	}
 	_ = file
 }
 
@@ -254,8 +274,8 @@ func TestConfirmApplySedCancelPreselectedDoesNotWrite(t *testing.T) {
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, confirmPage)
 	}
-	if got := r.confirmDialog.GetCurrentItem(); got != 1 {
-		t.Fatalf("preselected item = %d, want 1 (Cancel)", got)
+	if got := r.confirmDialog.GetCurrentItem(); got != 0 {
+		t.Fatalf("preselected item = %d, want 0 (Cancel)", got)
 	}
 	r.cancelConfirm()
 
@@ -271,7 +291,7 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.confirmDialog.SetCurrentItem(2) // "Yes, delete permanently" - see newPurgeConfirm
+	r.confirmDialog.SetCurrentItem(1) // "Yes, delete permanently" - see newPurgeConfirm
 	r.acceptConfirm()
 
 	data, err := os.ReadFile(file)
@@ -293,7 +313,7 @@ func TestConfirmApplySedWithBackupKeepsOriginal(t *testing.T) {
 	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
 
 	r.confirmApplySed()
-	r.confirmDialog.SetCurrentItem(2)
+	r.confirmDialog.SetCurrentItem(1)
 	r.acceptConfirm()
 
 	backup, err := os.ReadFile(file + ".bak")

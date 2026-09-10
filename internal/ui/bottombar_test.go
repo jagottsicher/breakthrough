@@ -518,6 +518,288 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 	}
 }
 
+// TestClampFrac pins clampFrac's own [0,1] clamp, shared by every
+// fraction pasteDualBar/pasteBytesColumn turn into a glyph or bar
+// column.
+func TestClampFrac(t *testing.T) {
+	tests := []struct {
+		in, want float64
+	}{
+		{-1, 0},
+		{0, 0},
+		{0.5, 0.5},
+		{1, 1},
+		{1.5, 1},
+	}
+	for _, tt := range tests {
+		if got := clampFrac(tt.in); got != tt.want {
+			t.Errorf("clampFrac(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestPasteDualBar pins pasteDualBar's own shape: width columns, each
+// one a "▀" tagged with [fg:bg] — lit color when that column's own half
+// has reached its fraction, dim otherwise — and a trailing reset tag so
+// nothing appended after it inherits the bar's own last color.
+func TestPasteDualBar(t *testing.T) {
+	// topFrac 0.5 of 10 columns lights the top half of the first 5;
+	// fileFrac 0.2 lights the bottom half of the first 2 of those same
+	// 5 — so columns 0-1 are lit on both halves, columns 2-4 are lit on
+	// top only, and columns 5-9 are dim on both.
+	got := pasteDualBar(0.5, 0.2, 10)
+	wantLitTopOnly := strings.Count(got, "["+pasteDualBarLit+":"+pasteDualBarDim+"]▀")
+	if wantLitTopOnly != 3 {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) has %d lit-top/dim-bottom columns, want 3", wantLitTopOnly)
+	}
+	wantLitBoth := strings.Count(got, "["+pasteDualBarLit+":"+pasteDualBarLit+"]▀")
+	if wantLitBoth != 2 {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) has %d lit-top/lit-bottom columns, want 2 (a fifth of 10)", wantLitBoth)
+	}
+	if !strings.HasSuffix(got, "[-:-]") {
+		t.Errorf("pasteDualBar(0.5, 0.2, 10) = %q, want it to end with a reset tag", got)
+	}
+
+	full := pasteDualBar(1, 1, 4)
+	if strings.Count(full, "["+pasteDualBarDim) != 0 {
+		t.Errorf("pasteDualBar(1, 1, 4) = %q, want no dim columns at 100%%", full)
+	}
+	empty := pasteDualBar(0, 0, 4)
+	if strings.Count(empty, "["+pasteDualBarLit) != 0 {
+		t.Errorf("pasteDualBar(0, 0, 4) = %q, want no lit columns at 0%%", empty)
+	}
+}
+
+// TestPasteBytesColumn pins pasteBytesColumn's own direction — 0%
+// renders the thinnest of chordCountdownBlocks' own glyphs, 100% the
+// full block — the opposite direction from chordIndicatorText's own
+// draining countdown, since this fills up rather than runs out.
+func TestPasteBytesColumn(t *testing.T) {
+	if got := pasteBytesColumn(0, 100); got != "▁" {
+		t.Errorf("pasteBytesColumn(0, 100) = %q, want the thinnest sliver", got)
+	}
+	if got := pasteBytesColumn(100, 100); got != "█" {
+		t.Errorf("pasteBytesColumn(100, 100) = %q, want a full block", got)
+	}
+}
+
+// TestPasteETA pins pasteETA's own "not meaningful yet" refusals (no
+// time elapsed, nothing copied yet, or the total's already reached)
+// alongside a real estimate from a known, steady rate.
+func TestPasteETA(t *testing.T) {
+	if _, ok := pasteETA(time.Now(), 0, 100); ok {
+		t.Error("pasteETA with 0 bytes done should refuse an estimate, not divide by zero")
+	}
+	if _, ok := pasteETA(time.Time{}, 0, 100); ok {
+		t.Error("pasteETA with a zero startedAt should refuse an estimate")
+	}
+	if _, ok := pasteETA(time.Now().Add(-time.Second), 100, 100); ok {
+		t.Error("pasteETA once the total is already reached should refuse an estimate")
+	}
+
+	// 50 of 100 bytes done after 1 second of steady throughput: 50
+	// bytes/sec, 50 bytes left, ~1s left.
+	got, ok := pasteETA(time.Now().Add(-time.Second), 50, 100)
+	if !ok {
+		t.Fatal("pasteETA with real progress and elapsed time should return an estimate")
+	}
+	if got != "~1s left" {
+		t.Errorf("pasteETA(1s ago, 50, 100) = %q, want %q", got, "~1s left")
+	}
+}
+
+// TestFormatETA pins formatETA's own compact, at-most-two-unit shape.
+func TestFormatETA(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "~0s left"},
+		{5 * time.Second, "~5s left"},
+		{90 * time.Second, "~1m 30s left"},
+		{2*time.Hour + 15*time.Minute, "~2h 15m left"},
+	}
+	for _, tt := range tests {
+		if got := formatETA(tt.d); got != tt.want {
+			t.Errorf("formatETA(%v) = %q, want %q", tt.d, got, tt.want)
+		}
+	}
+}
+
+// TestPasteProgressText pins pasteProgressText's own shape: the verb
+// naming Copy vs. Cut ("Copying"/"Moving"), the N/total count derived
+// from total-remaining, the bar, and the current file's bare name (not
+// its full path) appended when one is set — or nothing at all appended
+// when it isn't (job.currentFile never stored to yet, e.g. right after
+// startPaste before the first file's own onFile call has landed).
+func TestPasteProgressText(t *testing.T) {
+	job := &pasteJob{total: 5, remaining: 3}
+	got := pasteProgressText(job, 0)
+	if !strings.Contains(got, "Copying 2/5") {
+		t.Errorf("pasteProgressText = %q, want it to contain %q", got, "Copying 2/5")
+	}
+	if strings.Contains(got, "/") == false {
+		t.Errorf("pasteProgressText = %q, want a progress bar in it", got)
+	}
+
+	job.cut = true
+	if got := pasteProgressText(job, 0); !strings.Contains(got, "Moving 2/5") {
+		t.Errorf("pasteProgressText (cut) = %q, want it to contain %q", got, "Moving 2/5")
+	}
+
+	current := "/some/deep/path/apple.txt"
+	job.currentFile.Store(&current)
+	got = pasteProgressText(job, 0)
+	if !strings.HasSuffix(got, "apple.txt") {
+		t.Errorf("pasteProgressText with a current file = %q, want it to end with the bare name %q, not the full path", got, "apple.txt")
+	}
+	if strings.Contains(got, "/some/deep/path") {
+		t.Errorf("pasteProgressText = %q, want only the bare file name, not its full path", got)
+	}
+}
+
+// TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes pins
+// pasteJob.bytesTotal's own doc comment: a job whose byte scan hasn't
+// finished yet (or found nothing to size) shows no byte-percentage
+// column and no ETA at all — only once bytesTotal is actually positive
+// do those segments appear (see TestPasteProgressTextShowsByteProgressOnceScanned).
+func TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes(t *testing.T) {
+	job := &pasteJob{total: 2, remaining: 1}
+	got := pasteProgressText(job, 0)
+	for _, glyph := range chordCountdownBlocks {
+		if strings.ContainsRune(got, glyph) {
+			t.Errorf("pasteProgressText with no byte total yet = %q, should not contain a byte-percentage column glyph %q", got, string(glyph))
+		}
+	}
+	if strings.Contains(got, "left") {
+		t.Errorf("pasteProgressText with no byte total yet = %q, should not show an ETA", got)
+	}
+}
+
+// TestPasteProgressTextShowsByteProgressOnceScanned pins the opposite
+// case: once the background scan has stored a real bytesTotal (see
+// scanPasteBytes) and at least one byte has actually copied, the
+// leading byte-percentage column, the dual bar, and an ETA all appear.
+func TestPasteProgressTextShowsByteProgressOnceScanned(t *testing.T) {
+	job := &pasteJob{total: 2, remaining: 1, startedAt: time.Now().Add(-time.Second)}
+	job.bytesTotal.Store(100)
+	job.bytesBase.Store(40)
+	job.currentFileSize.Store(20)
+	job.currentFileBytes.Store(10) // 50 of 100 bytes done overall
+
+	got := pasteProgressText(job, 0)
+	if !strings.ContainsRune(got, '▁') && !strings.ContainsRune(got, '▄') && !strings.ContainsRune(got, '█') {
+		t.Errorf("pasteProgressText with a known byte total = %q, want a byte-percentage column glyph", got)
+	}
+	if !strings.Contains(got, "▀") {
+		t.Errorf("pasteProgressText with a known byte total = %q, want the dual bar's own half-block glyphs", got)
+	}
+	if !strings.Contains(got, "left") {
+		t.Errorf("pasteProgressText with real progress and elapsed time = %q, want an ETA", got)
+	}
+}
+
+// TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero pins the
+// "(+N queued)" suffix startPaste's own queue (see r.pasteQueue/
+// advancePasteQueue) needs a visible sign of: present, naming the exact
+// count, once something is waiting behind the job currently shown;
+// completely absent — not "(+0 queued)" — once nothing is.
+func TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero(t *testing.T) {
+	job := &pasteJob{total: 5, remaining: 3}
+
+	if got := pasteProgressText(job, 0); strings.Contains(got, "queued") {
+		t.Errorf("pasteProgressText with an empty queue = %q, should not mention queueing at all", got)
+	}
+	if got := pasteProgressText(job, 2); !strings.Contains(got, "(+2 queued)") {
+		t.Errorf("pasteProgressText with 2 queued = %q, want it to contain %q", got, "(+2 queued)")
+	}
+}
+
+// TestClipboardIndicatorText pins clipboardIndicatorText's own shape:
+// empty once nothing is held, "Copy"/"Cut" naming the pending
+// operation rather than a progressive "Copying"/"Cutting" (nothing is
+// actually in flight until Paste runs), a zero count dropped entirely
+// rather than shown as "0 dirs", and singular/plural picked correctly
+// either way.
+func TestClipboardIndicatorText(t *testing.T) {
+	tests := []struct {
+		cut         bool
+		dirs, files int
+		want        string
+	}{
+		{false, 0, 0, ""},
+		{false, 0, 1, "Copy: 1 file"},
+		{false, 0, 3, "Copy: 3 files"},
+		{false, 1, 0, "Copy: 1 dir"},
+		{false, 2, 0, "Copy: 2 dirs"},
+		{false, 1, 1, "Copy: 1 file, 1 dir"},
+		{false, 2, 3, "Copy: 3 files, 2 dirs"},
+		{true, 0, 1, "Cut: 1 file"},
+		{true, 2, 3, "Cut: 3 files, 2 dirs"},
+	}
+	for _, tt := range tests {
+		if got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files); got != tt.want {
+			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want %q", tt.cut, tt.dirs, tt.files, got, tt.want)
+		}
+	}
+}
+
+// TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser pins
+// where the user's own explicit request placed this segment: between
+// the chord indicator's own leading slot and the username, not
+// trailing after everything else where an already-optional segment
+// (disk usage, uptime, load) could end up shifting it around.
+func TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	before := r.buildStatusBar()
+	if strings.Contains(before, "Copy:") {
+		t.Fatalf("status bar already mentions Copy before anything was copied: %q", before)
+	}
+
+	r.panel.toggleCheckbox(2) // apple.txt — see fixtureDir
+	r.copyToClipboard()
+
+	got := r.buildStatusBar()
+	wantSeg := "Copy: 1 file"
+	userIdx := strings.Index(got, r.currentUser)
+	segIdx := strings.Index(got, wantSeg)
+	if segIdx == -1 || userIdx == -1 || segIdx >= userIdx {
+		t.Errorf("status bar = %q, want %q to appear before the username %q", got, wantSeg, r.currentUser)
+	}
+}
+
+// TestBuildStatusBarPrefersPasteProgressOverClipboardIndicator pins
+// buildStatusBar's own precedence rule: a running Paste's progress
+// takes the clipboard indicator's own leading slot for as long as
+// r.pasteJob is non-nil, since "what's copying right now" is more
+// specific and more time-sensitive than "what's staged to paste" — even
+// though both would technically apply here (a Copy's own clipboard
+// stays populated through its own Paste, on purpose, in case of a
+// second one elsewhere).
+func TestBuildStatusBarPrefersPasteProgressOverClipboardIndicator(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+	r.pasteJob = &pasteJob{total: 3, remaining: 1}
+
+	got := r.buildStatusBar()
+	if strings.Contains(got, "Copy: 1 file") {
+		t.Errorf("status bar = %q, should not show the clipboard indicator while a paste is running", got)
+	}
+	if !strings.Contains(got, "Copying 2/3") {
+		t.Errorf("status bar = %q, want it to show the running paste's own progress instead", got)
+	}
+}
+
 // clickButtonBar simulates a real left-click on the button bar at the
 // given column, the same way capturePropertiesMouse's own tests draw a
 // real screen first so InRect/GetInnerRect have real layout to resolve

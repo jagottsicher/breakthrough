@@ -30,6 +30,11 @@ const (
 	confirmPage     = "confirm"
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
+	// pasteConflictPage's own dialog is built in pasteconflict.go
+	// (newPasteConflictDialog), not here — kept in this block anyway,
+	// like every other page name, so cmd/breakthrough and tests never
+	// have to guess which file actually owns one.
+	pasteConflictPage = "paste-conflict"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -217,6 +222,19 @@ type Root struct {
 	tabSwitcherTitleBar *tview.TextView
 	tabSwitcherLayout   *tview.Flex
 
+	// The filter-menu overlay (see filtermenu.go) — opened from
+	// whichever panel's own filterMenuBtn was clicked (see
+	// Panel.onOpenFilterMenu), rebuilt fresh against r.panel on every
+	// open (see renderFilterMenu) rather than built once, since the
+	// glob/regex row embeds that specific panel's own real
+	// filterField/filterRegexBtn, and which panel is "active" can
+	// change between one open and the next. filterMenuLayout is both
+	// the real focus target and what Pages actually shows — unlike
+	// menu/tabSwitcher, there's no separate inner List needing its own
+	// distinct rect here (see openFilterMenu's own doc comment).
+	filterMenuTitleBar *tview.TextView
+	filterMenuLayout   *tview.Flex
+
 	// menu is the context menu's own List — the real focus target
 	// throughout (see showMenu); menuTitleBar/menuLayout are its "Menu"
 	// title bar and the Flex stacking the two, which is what's actually
@@ -228,9 +246,17 @@ type Root struct {
 	menuLayout   *tview.Flex
 	rename       *tview.InputField
 	prompt       *tview.InputField
-	picker       *tview.List // owner/group picker — see openOwnerGroupPicker
+	picker       *tview.List // owner/group picker — see openOwnerGroupPicker; the one dialog in this app deliberately left without a title bar, per the user's own explicit exception
 	errorView    *tview.TextView
-	quitConfirm  *tview.List
+
+	// quitConfirm is the real focus target (see RequestQuit); its own
+	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
+	// are what's actually registered on Pages/positioned instead — the
+	// same widget/layout split menu/menuTitleBar/menuLayout already
+	// established just above.
+	quitConfirm         *tview.List
+	quitConfirmTitleBar *tview.TextView
+	quitConfirmLayout   *tview.Flex
 
 	// confirmDialog backs every confirmation in this app — Remove,
 	// Empty Trash, and the Options screen's own two resets — as one
@@ -238,9 +264,16 @@ type Root struct {
 	// newConfirmDialog/openConfirm in trash.go for why). Same pattern
 	// r.picker/r.prompt already use. pendingConfirm is the action
 	// acceptConfirm runs once the user actually confirms, set by
-	// whichever caller opened the dialog.
-	confirmDialog  *tview.List
-	pendingConfirm func()
+	// whichever caller opened the dialog. confirmDialogTitleBar IS the
+	// question being asked (set fresh by openConfirm before every show,
+	// per the user's own explicit request — a generic "Confirm" caption
+	// above a separate question line was one line of chrome too many);
+	// confirmDialogLayout stacks the two, the same menuTitleBar/
+	// menuLayout split.
+	confirmDialog         *tview.List
+	confirmDialogTitleBar *tview.TextView
+	confirmDialogLayout   *tview.Flex
+	pendingConfirm        func()
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -265,6 +298,16 @@ type Root struct {
 	sedFlags         map[string]bool
 	sedFlagsList     *tview.List
 	sedActions       *tview.List
+	// sedTitleBar/sedContentLayout are the "Sed Replace" title bar and
+	// the Flex it's stacked above (see newSedContentLayout for what that
+	// one already was on its own) — sedLayout, the outer wrapper of the
+	// two, is what sedReplacePage actually shows/positions instead (the
+	// same widget/layout split menu/menuTitleBar/menuLayout already
+	// established — focus still cascades all the way down to sedForm via
+	// tview.Flex.Focus's own delegate chain, verified directly against
+	// tview's own flex.go/application.go, not assumed).
+	sedTitleBar      *tview.TextView
+	sedContentLayout *tview.Flex
 	sedLayout        *tview.Flex
 	sedTargets       []string
 
@@ -284,6 +327,7 @@ type Root struct {
 	sedPreviewStatus     *tview.TextView
 	sedPreviewTable      *tview.Table
 	sedPreviewActions    *tview.List
+	sedPreviewTitleBar   *tview.TextView // " Sed Preview " — see newSedPreviewLayout, the same wrapping sedTitleBar/sedLayout already establish for the dialog it returns to
 	sedPreviewLayout     *tview.Flex
 	sedPendingChanges    []replace.FileChange
 	sedPreviewCancel     context.CancelFunc
@@ -536,6 +580,7 @@ type Root struct {
 	// otherwise — the exact opposite scoping of searchIncludeArchives).
 	searchPages             *tview.Pages
 	searchFieldsPages       *tview.Pages
+	searchTitleBar          *tview.TextView // " Search " — see newSearchDialog, the same absolutely-positioned extra Pages page propertiesTitleBar/chmodTitleBar already are
 	searchTop               *tview.TextView
 	searchLeft              *tview.TextView
 	searchRight             *tview.TextView
@@ -626,6 +671,7 @@ type Root struct {
 	chmodEditField  *tview.InputField
 	chmodEditTarget chmodField
 	chmodButtons    *tview.Flex
+	chmodTitleBar   *tview.TextView // " Permissions " — see newChmodDialog, the same absolutely-positioned extra Pages page propertiesTitleBar already is
 	chmodCancelBtn  *tview.Button
 	chmodApplyBtn   *tview.Button
 	chmodSpans      []chmodSpan
@@ -763,6 +809,43 @@ type Root struct {
 	// when true.
 	clipboard    []string
 	clipboardCut bool
+
+	// clipboardDirs/clipboardFiles tally how many of clipboard's own
+	// paths are directories vs plain files (see clipboardCounts) — for
+	// the status bar's own "Copy: N files, M dirs" indicator (see
+	// bottombar.go). Computed once, when Copy/Cut captures the
+	// clipboard, not recomputed on every status bar refresh: a Stat per
+	// path once a second (the clock's own refresh cadence — see
+	// StartClock) for however long something sits on the clipboard
+	// would be wasted work for a value that only actually changes at
+	// Copy/Cut/Paste time.
+	clipboardDirs  int
+	clipboardFiles int
+
+	// pasteJob is the currently-running Paste, if any — see startPaste's
+	// own doc comment in pasteconflict.go for the whole async, resumable
+	// shape. nil whenever nothing is pasting right now.
+	pasteJob *pasteJob
+	// pasteQueue holds every further Paste asked for while one was
+	// already running — see startPaste/advancePasteQueue's own doc
+	// comments. Processed strictly in order, one at a time, the same as
+	// pasteJob itself only ever running one job at a time; empty
+	// whenever nothing is waiting.
+	pasteQueue []queuedPaste
+	// pasteConflictDialog is the one dialog every paste conflict shares
+	// (see newPasteConflictDialog) — built once here, the same as
+	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
+	// itself (set fresh by renderPasteConflictDialog before every show,
+	// the same "the question is the header" treatment confirmDialog got
+	// — per the user's own explicit request that this apply to both);
+	// pasteConflictDialogLayout stacks the two, the same widget/layout
+	// split menu/menuTitleBar/menuLayout already established —
+	// pasteConflictDialogLayout, not pasteConflictDialog itself, is what's
+	// actually registered on Pages/positioned (see
+	// resizePasteConflictDialog).
+	pasteConflictDialog         *tview.List
+	pasteConflictDialogTitleBar *tview.TextView
+	pasteConflictDialogLayout   *tview.Flex
 
 	// menuInSubmenu is nil while the context menu shows its own top-level
 	// entries (see contextMenuTree in contextmenu.go), or points at
@@ -1013,11 +1096,36 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.quitConfirm.AddItem("Quit breakthrough", "", 0, r.confirmQuit)
 	r.quitConfirm.AddItem("Cancel", "", 0, r.cancelQuit)
 	r.quitConfirm.SetDoneFunc(r.cancelQuit) // Escape
+	r.quitConfirmTitleBar = newPlainTitleBar("Quit")
+	r.quitConfirmLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.quitConfirmTitleBar, 1, 0, false).
+		AddItem(r.quitConfirm, 0, 1, true)
 
 	// The Remove/Empty-Trash confirmation (see trash.go) — same "one
 	// shared List" shape as quitConfirm above, deliberately different
 	// default focus (see newPurgeConfirm's own comment).
 	r.confirmDialog = r.newConfirmDialog()
+	// Built empty — unlike quitConfirmTitleBar's fixed "Quit", this
+	// dialog's own question changes with every caller, so there is
+	// nothing meaningful to show before the first openConfirm sets its
+	// real text.
+	r.confirmDialogTitleBar = newPlainTitleBar("")
+	r.confirmDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.confirmDialogTitleBar, 1, 0, false).
+		AddItem(r.confirmDialog, 0, 1, true)
+
+	// The Paste conflict dialog (see pasteconflict.go) — one shared List
+	// again, this time with several distinct answers rather than a
+	// single confirm/cancel pair.
+	r.pasteConflictDialog = r.newPasteConflictDialog()
+	// Built empty — its real text is a per-conflict message set fresh by
+	// renderPasteConflictDialog before the dialog is ever shown, per the
+	// user's own explicit request that the question itself be the header
+	// rather than a generic caption above it.
+	r.pasteConflictDialogTitleBar = newPlainTitleBar("")
+	r.pasteConflictDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.pasteConflictDialogTitleBar, 1, 0, false).
+		AddItem(r.pasteConflictDialog, 0, 1, true)
 
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
@@ -1082,6 +1190,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.tabSwitcherTitleBar, 1, 0, false).
 		AddItem(r.tabSwitcher, 0, 1, true)
 
+	// The filter-menu overlay (see filtermenu.go) — built with an empty
+	// body here; renderFilterMenu fills it in fresh on every open
+	// against whichever panel is active then, the same "rebuilt every
+	// time" reasoning tabSwitcher's own comment above gives, just
+	// against a Panel instead of the tab list.
+	r.filterMenuTitleBar = newPlainTitleBar("Filters")
+	r.filterMenuLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.filterMenuTitleBar, 1, 0, false)
+
 	// The Details sidebar (see detailssidebar.go): its own content is a
 	// single static TextView, same shape as Help/the Look pager above,
 	// topped with its own "Details" title bar (see newDetailsTitleBar) —
@@ -1131,8 +1248,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(propertiesPage, r.properties, false, false)
 	r.AddPage(pickerPage, r.picker, false, false)
 	r.AddPage(errorPage, r.errorView, false, false)
-	r.AddPage(quitConfirmPage, r.quitConfirm, false, false)
-	r.AddPage(confirmPage, r.confirmDialog, false, false)
+	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
+	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
+	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
@@ -1153,6 +1271,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(viewerPage, r.viewerView, false, false)
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
+	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
@@ -1246,6 +1365,15 @@ func (r *Root) wirePanel(panel *Panel) {
 	// toggle.
 	panel.onExpandDetails = r.showDetailsSidebar
 
+	// The header row's own "Nx Y" button opens the filter-menu dropdown
+	// (see Panel.onOpenFilterMenu/filterMenuBtn's own doc comments and
+	// Root.openFilterMenu) — always against whichever panel is active
+	// at the moment it's actually clicked (r.panel, read fresh inside
+	// the closure), not the one it happened to be wired from, the same
+	// "closure captures r, not this specific panel" shape
+	// onOpenTabSwitcher above already uses.
+	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
@@ -1271,6 +1399,14 @@ func (r *Root) wirePanel(panel *Panel) {
 	panel.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		return r.captureMouseOnPanel(panel, action, event)
 	})
+
+	// A freshly created tab (NewRoot's own first one, "New tab", or a
+	// restored session) starts showing whatever's already on the
+	// clipboard, the same as every other open tab — see
+	// syncClipboardHighlight's own doc comment for why this is
+	// Root-level, shared state rather than something a tab could ever
+	// start blank on.
+	panel.setClipboard(r.clipboard, r.clipboardCut)
 }
 
 // captureMouseOnPanel makes panel the active one before handing the
@@ -1529,14 +1665,36 @@ func (r *Root) closeAllOverlays() {
 // every individual mouse-action variant tview has to be enumerated and
 // kept in sync here by hand.
 //
-// The Properties overlay is the one exception to "click outside closes
-// it": once propertiesDirty is true (see markPropertiesDirty), an
-// outside click is consumed and otherwise ignored instead — Cancel or
-// Save is the only way out from there, so an in-progress edit (a
-// permission bit already toggled, a name half-typed) can't be silently
-// discarded, or just as silently lost track of, by a stray click.
+// The Properties overlay is one exception to "click outside closes it":
+// once propertiesDirty is true (see markPropertiesDirty), an outside
+// click is consumed and otherwise ignored instead — Cancel or Save is
+// the only way out from there, so an in-progress edit (a permission bit
+// already toggled, a name half-typed) can't be silently discarded, or
+// just as silently lost track of, by a stray click.
 //
-// The Details button specifically is a second, narrower exception,
+// The paste-conflict dialog (pasteConflictPage) is a second, unconditional
+// exception — every stray click outside it is consumed and ignored, not
+// just while some dirty-like state holds, the same way RequestCancel
+// already treats this one dialog differently from every other overlay
+// (see its own doc comment): closing it via the ordinary hideOverlay
+// path below would leave job.current pointing at a conflict nothing
+// could ever resolve again — its own buttons (or Escape, wired to
+// resolveSkip via SetDoneFunc) are the only path to
+// chooseConflictResolution, which is what actually clears job.current
+// and lets the job either move on to its next conflict or finish. Before
+// this exception existed, a single accidental click anywhere outside the
+// dialog silently dismissed it while leaving job.current stuck non-nil
+// forever — pasteItemDone's own "finished" check
+// (remaining<=0 && current==nil && len(pending)==0) then never became
+// true again, so the job neither progressed (nothing left to resolve
+// it) nor ever reported as done, and the dialog never reappeared either
+// — a real, user-reported dead end, not a hypothetical one. Consuming
+// the click here instead forces every conflict through an explicit
+// decision, exactly as intended: the job keeps running everything it
+// already can in the background regardless (see pasteWalk), only the
+// one open question is blocked on the user actually answering it.
+//
+// The Details button specifically is a third, narrower exception,
 // checked before either of the above: a click on it reaches the button
 // bar's own handling (see buttonBarActionAt) completely untouched,
 // toggling the Details sidebar alongside
@@ -1569,6 +1727,9 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	if action == tview.MouseLeftClick || action == tview.MouseRightClick {
 		if r.activePage == propertiesPage && r.propertiesDirty {
 			return tview.MouseConsumed, nil // Cancel/Save only, see propertiesDirty's own doc comment above
+		}
+		if r.activePage == pasteConflictPage {
+			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
 		}
 		r.hideOverlay()
 	}
@@ -1729,15 +1890,69 @@ func (r *Root) RequestQuit() {
 	// hideOverlay hands focus to the panel's table rather than back to it.
 	r.panel.cancelEdit()
 
+	// A running Paste takes priority over the ordinary quit prompt, per
+	// the user's own explicit report: quitting must never simply tear
+	// the app down out from under a copy already mid-write to disk (see
+	// confirmQuitWhilePasting's own doc comment for the full reasoning).
+	if r.pasteJob != nil {
+		r.confirmQuitWhilePasting()
+		return
+	}
+
 	width, height := listSize(r.quitConfirm)
+	height++ // reserved title bar row (see quitConfirmLayout)
 
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 
+	r.quitConfirmLayout.SetRect(x, y, width, height)
+	// r.quitConfirm's own rect is also set here, to the same full
+	// (title-bar-row included) area rather than left at whatever it last
+	// was — captureOutsideClick's own "did this click land on the open
+	// overlay" check reads r.activeWidget.GetRect() directly, and
+	// r.activeWidget stays r.quitConfirm (the real focus target — see
+	// showOverlay just below), not quitConfirmLayout. Flex.Draw() would
+	// eventually correct this to the exact, one-row-shorter sub-rect on
+	// the very next real redraw, but a click arriving before that first
+	// redraw would otherwise see whatever tview.NewBox's own uninitialized
+	// default (0, 0, 15, 10) happens to be — which overlaps the panel
+	// itself — and be let straight through as if it had landed on the
+	// dialog, a real, live-tested regression this fixes: caught by
+	// TestQuitConfirmBlocksRightDragSelection, which drives the drag
+	// straight through captureOutsideClick without ever forcing a second
+	// Draw() in between, exactly the gap a real terminal's own draw loop
+	// closes so fast it would otherwise never be noticed.
 	r.quitConfirm.SetRect(x, y, width, height)
 	r.quitConfirm.SetCurrentItem(1) // "Cancel" — see newConfirmDialog's own comment
 	r.showOverlay(quitConfirmPage, r.quitConfirm)
+}
+
+// confirmQuitWhilePasting is RequestQuit's own branch for while a Paste
+// is still running — per the user's own explicit report, it must not be
+// possible to simply quit out from under a copy in progress at all;
+// there has to at least be a way to end the copy first and then
+// breakthrough. Asks a different question than the ordinary quit prompt
+// (quitConfirm itself, hardcoded to "Quit breakthrough"/"Cancel"), so
+// this reuses the generic confirmDialog (openConfirm) instead, the same
+// one Remove/Empty Trash/the Options resets already share — Cancel
+// leaves the copy running exactly as before (nothing quits), the one
+// confirming answer cancels the job outright (see cancelPasteJob's own
+// doc comment: whatever file is already mid-write finishes on disk
+// first, nothing is left half-written) and only then actually quits.
+func (r *Root) confirmQuitWhilePasting() {
+	verb := "copy"
+	if r.pasteJob.cut {
+		verb = "move"
+	}
+	r.openConfirm(
+		fmt.Sprintf("A %s is still running. Cancel it and quit breakthrough?", verb),
+		"Yes, cancel and quit",
+		func() {
+			r.cancelPasteJob()
+			r.confirmQuit()
+		},
+	)
 }
 
 // RequestCancel is the Ctrl+Q sibling for Ctrl+C (see cmd/breakthrough):
@@ -1746,10 +1961,43 @@ func (r *Root) RequestQuit() {
 // while the path header is being edited — Ctrl+C is the keyboard way out
 // of that, where otherwise only a mouse click would do.
 //
+// A running Paste takes priority over both of those, per the user's own
+// explicit report that one, once started, could never be interrupted at
+// all: the paste-conflict dialog specifically (see pasteConflictPage)
+// cancels the whole job outright rather than just closing the dialog
+// the way any other overlay's own hideOverlay would — closing only the
+// dialog would leave job.current pointing at a conflict nothing can
+// ever resolve again (its own three buttons are the only path to
+// chooseConflictResolution), silently stranding the job forever,
+// finished neither cleanly nor by this cancel. captureOutsideClick's own
+// doc comment covers the sibling gap this same hazard had on the mouse
+// side — a stray click, not a deliberate Ctrl+C — and blocks it the same
+// way, by refusing to close the dialog at all rather than cancelling the
+// job outright the way this keyboard path does; either way, job.current
+// never ends up abandoned instead of resolved. A *different* overlay
+// happening to be open while a paste merely continues in the background
+// (Properties, say) is left alone here — Ctrl+C in that case is about
+// whatever the user is actually looking at, not a paste they may not
+// even be thinking about; the plain "no overlay open, paste still
+// running" case below is what actually answers the original report.
+// cancelPasteJob's own doc comment covers what happens to whatever was
+// already mid-flight: it finishes, on disk, exactly where it already
+// was headed, rather than being interrupted mid-write.
+//
 // It never quits: stopping breakthrough is Ctrl+Q plus a confirmation.
 func (r *Root) RequestCancel() {
+	if r.activePage == pasteConflictPage {
+		r.cancelPasteJob()
+		r.refreshStatusBar() // the progress segment should vanish immediately, not wait for the next tick
+		return
+	}
 	if r.activePage != "" {
 		r.hideOverlay()
+		return
+	}
+	if r.pasteJob != nil {
+		r.cancelPasteJob()
+		r.refreshStatusBar()
 		return
 	}
 	r.panel.cancelEdit()
@@ -1874,6 +2122,29 @@ func (r *Root) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (
 			r.dragMoved = false
 			r.dragging = true
 			r.panel.focusRow(row) // move the highlight to the press row right away, not just on release
+			// focusRow above only moves the table's own row cursor
+			// (Table.Select) — it says nothing about real Application-level
+			// keyboard focus, which is what acceptsPlainKeyCommand's own
+			// r.panel.table.HasFocus() check actually reads. A plain
+			// left-click gets that for free from tview's own
+			// Table.MouseHandler (MouseLeftDown calls setFocus(t)
+			// internally), but this whole right-button gesture is handled
+			// here instead, in a plain MouseCapture that never receives
+			// tview's own setFocus callback at all (see this func's own
+			// doc comment) — so without this, drag-selecting rows with the
+			// right button while focus happened to be elsewhere beforehand
+			// (the filter field, the bash line, another pane, ...) left the
+			// rows visibly toggled but every plain-letter shortcut
+			// (c/x/v/d/...) still locked out right afterward, since the
+			// table itself never actually became the keyboard focus target
+			// — a real, user-reported gap. Set unconditionally here, before
+			// the click-vs-drag distinction is even known: a genuine drag
+			// needs exactly this; a plain right-click's own
+			// MouseRightClick case goes on to open the context menu right
+			// after, which immediately claims focus for itself (see
+			// pushOverlay), so this is harmlessly redundant for that path
+			// rather than wrong.
+			r.app.SetFocus(r.panel.table)
 		} else {
 			r.dragging = false
 		}
@@ -2025,6 +2296,25 @@ func (r *Root) toggleHidden() {
 	r.setShowHidden(!r.panel.showHidden)
 }
 
+// reloadCurrentTab is the "z" chord's own "r" member ("Reload") — the
+// active tab only (per the user's own explicit request), not every
+// open one the way setShowHidden's own global toggle applies to (see
+// its own doc comment): re-reading a directory from disk is a one-off
+// action on whatever's currently in front of you, not a persistent
+// view setting every tab should agree on. Re-reads r.panel.path
+// straight from disk (see Panel.load), discarding whatever the
+// listing already had cached in memory — for anything this app has no
+// other way to notice on its own (another process changing files
+// underneath it, a network/mounted filesystem's own content changing,
+// ...). While search results are showing, this exits search mode back
+// to the plain directory listing rather than re-running the search —
+// Panel.load always does that (it sets searchMode = false
+// unconditionally), the same behavior setShowHidden/toggleHidden
+// already have too, not something new here.
+func (r *Root) reloadCurrentTab() {
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // setShowHidden is toggleHidden's own body with the target value passed
 // in rather than derived by flipping — split out so the Options screen
 // (see optionsscreen.go) can set a specific value through exactly the
@@ -2079,6 +2369,23 @@ func (r *Root) setMtimeUnix(unix bool) {
 	r.persistSetting("mtime_unix", strconv.FormatBool(unix))
 }
 
+// setFilterPersistent is the Options screen's own "filter_persistent"
+// toggle (see config.Settings.FilterPersistent's own doc comment) —
+// otherwise a copy of setShowHidden/setSizeBytes/setMtimeUnix's own
+// shape, with one deliberate difference: no p.load(p.path) reload for
+// any tab. Those three are display toggles whose effect is visible in
+// the *current* listing, so flipping one has to repaint it immediately
+// to mean anything at all; this one only changes what happens the next
+// time a tab navigates somewhere else (see Panel.load's own
+// newDirectory branch) — nothing about what's already on screen right
+// now needs to, or should, change just because the setting itself
+// changed.
+func (r *Root) setFilterPersistent(persistent bool) {
+	r.forEachTab(func(p *Panel) { p.filterPersistent = persistent })
+	r.settings.FilterPersistent = persistent
+	r.persistSetting("filter_persistent", strconv.FormatBool(persistent))
+}
+
 // listSize returns a no-border, no-secondary-text List's width — the
 // widest item's rendered text plus 1-char left/right padding (see the
 // SetBorderPadding calls in NewRoot) — and its height, one row per item.
@@ -2092,6 +2399,27 @@ func listSize(l *tview.List) (width, height int) {
 		}
 	}
 	return width + 2, l.GetItemCount() // +2: 1-char padding on each side
+}
+
+// newPlainTitleBar builds one overlay's fixed, one-row " Name " caption
+// — the exact three lines menuTitleBar/tabSwitcherTitleBar/
+// helpTitleBar/detailsTitleBar/etc. each already build ad hoc, factored
+// out here once a further few dialogs (quitConfirm, confirmDialog, the
+// paste-conflict dialog) need the identical shape, per the user's own
+// explicit request that every pane/overlay/dialog in this app get one
+// of these — the owner/group picker (r.picker) is the one deliberate
+// exception, left exactly as plain as it always was. Callers still wrap
+// the result in their own Flex/Pages the same way the existing ones do
+// (see menuLayout, confirmDialogLayout, quitConfirmLayout,
+// pasteConflictDialogLayout) — this only builds the bar itself, not the
+// stacking around it, since a Pages-based dialog (Properties, chmod)
+// and a List-based one (Menu, confirmDialog, the paste-conflict dialog)
+// need different wrappers around the same bar.
+func newPlainTitleBar(text string) *tview.TextView {
+	bar := tview.NewTextView()
+	bar.SetWrap(false)
+	bar.SetText(" " + text + " ")
+	return bar
 }
 
 // closeMenu hides the context menu without taking any action (Escape at
@@ -2248,15 +2576,68 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
 func (r *Root) copyToClipboard() {
-	r.clipboard = r.clipboardTargets()
-	r.clipboardCut = false
+	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
 // the targets (removing them from here) instead of copying them.
 func (r *Root) cutToClipboard() {
-	r.clipboard = r.clipboardTargets()
-	r.clipboardCut = true
+	r.setClipboard(r.clipboardTargets(), true)
+}
+
+// setClipboard is copyToClipboard/cutToClipboard's own shared body,
+// also used by finishPasteJob (pasteconflict.go) to clear the
+// clipboard once a clean Cut+Paste has fully landed — every place
+// clipboard/clipboardCut actually change goes through here, so the
+// dependent state (clipboardDirs/clipboardFiles, every open tab's own
+// row highlighting, the status bar's own indicator) can never drift
+// out of sync with them by only being updated from some of the call
+// sites.
+func (r *Root) setClipboard(paths []string, cut bool) {
+	r.clipboard = paths
+	r.clipboardCut = cut
+	r.clipboardDirs, r.clipboardFiles = clipboardCounts(paths)
+	r.syncClipboardHighlight()
+	r.refreshStatusBar()
+}
+
+// syncClipboardHighlight pushes the clipboard's current contents to
+// every open tab's own Panel (see forEachTab), not just whichever one
+// triggered the change — the clipboard is one Root-level value shared
+// by every tab, so a file copied while browsing tab 1 must still show
+// as clipboard-held if the same directory happens to be open in tab 2
+// as well. Repaints rows already on screen in place (see
+// Panel.setClipboard); nothing on disk changed, so there's nothing to
+// reload.
+func (r *Root) syncClipboardHighlight() {
+	r.forEachTab(func(p *Panel) {
+		p.setClipboard(r.clipboard, r.clipboardCut)
+	})
+}
+
+// clipboardCounts tallies how many of paths are directories vs plain
+// files, following symlinks the same way Properties' own hash button
+// already does (see isDirish) — so a directory symlink counts as a
+// dir here too, not as a file. A path Stat fails for (deleted out from
+// under the selection between checking it and Copy/Cut capturing it)
+// is silently left out of both counts rather than reported as an
+// error: this feeds a purely informational status bar segment, not a
+// place this app's own "no silent errors" guardrail needs to reach —
+// the paste itself, when it actually runs, is where a genuinely
+// missing source file gets reported (see pasteconflict.go).
+func clipboardCounts(paths []string) (dirs, files int) {
+	for _, path := range paths {
+		info, err := fsops.Stat(path)
+		if err != nil {
+			continue
+		}
+		if isDirish(info) {
+			dirs++
+		} else {
+			files++
+		}
+	}
+	return dirs, files
 }
 
 // pasteClipboard is "Paste": copies or moves (per clipboardCut)
@@ -2278,67 +2659,87 @@ func (r *Root) pasteClipboard() {
 	if r.panel.searchMode {
 		dir = filepath.Dir(r.target)
 	}
-	r.pasteInto(dir)
+	r.pasteInto(dir, false)
 }
 
-// pasteInto is pasteClipboard's own shared implementation, generalized
-// to an explicit destination directory — pasteClipboard itself is the
-// only caller, picking a search result's own directory instead of
-// r.panel.path while search results are showing (see its own doc
-// comment). A no-op if nothing was ever copied/cut.
+// pasteClipboardFollowingSymlinks is "V" (Shift+Paste): the
+// dereferencing sibling of plain Paste — see pasteJob.followSymlinks'
+// own doc comment in pasteconflict.go for exactly what changes once
+// this is on. Always asks for explicit confirmation first, through the
+// same openConfirm primitive every other consequential, hard-to-undo
+// action in this app already uses (Remove, Empty Trash, the Options
+// screen's own resets): unlike an ordinary Copy/Cut, this can turn a
+// small, instant symlink into an arbitrarily large copy of whatever it
+// points to — possibly living on a different device, or over a network
+// mount entirely (NFS, EFS, ...) — and, for a Cut, permanently removes
+// the original link once that copy has safely landed. That risk is
+// exactly what the user's own explicit request was about, so this is
+// deliberately never a single, undialogued keypress the way plain 'v'
+// is (see also fsops.MoveFollowingSymlinks' own doc comment for the
+// guarantee that makes the Cut half of this safe at all: only the
+// original link is ever removed, never its target).
 //
-// Each target that would collide with an existing entry in dir is
-// skipped with an error — asking "overwrite?" once per colliding file
-// in a multi-file paste isn't built yet (a known simplification;
-// fsops.Copy/Move's force parameter is where that would hook in).
-// Only the first error is reported, to avoid stacking one error
-// overlay per failed file; the rest of the paste still runs to
-// completion rather than stopping at the first collision.
-func (r *Root) pasteInto(dir string) {
+// A no-op, like pasteClipboard itself, if nothing was ever copied/cut —
+// checked here rather than left to startPaste's own len(items) guard,
+// since there would otherwise be nothing to phrase the confirmation
+// message about.
+func (r *Root) pasteClipboardFollowingSymlinks() {
 	if len(r.clipboard) == 0 {
 		return
 	}
-
-	var firstErr error
-	for _, src := range r.clipboard {
-		dst := filepath.Join(dir, filepath.Base(src))
-		var err error
-		if r.clipboardCut {
-			err = fsops.Move(src, dst, false)
-		} else {
-			err = fsops.Copy(src, dst, false)
-		}
-		if err != nil && firstErr == nil {
-			firstErr = err
-		}
-		// Only for a successful Move, not Copy: src is untouched by a
-		// copy (still exactly what Details would already be showing, if
-		// anything), and dst is a brand new path a copy could never
-		// already have been the target of. A move, like a rename,
-		// genuinely relocates the same real entry — Details needs to
-		// keep following it under its new path.
-		if err == nil && r.clipboardCut {
-			r.refreshDetailsIfShowing(src, dst)
-		}
+	dir := r.panel.path
+	if r.panel.searchMode {
+		dir = filepath.Dir(r.target)
 	}
+	message, confirmLabel := followSymlinksPasteConfirmText(len(r.clipboard), r.clipboardCut)
+	r.openConfirm(message, confirmLabel, func() {
+		r.pasteInto(dir, true)
+	})
+}
 
-	if r.clipboardCut && firstErr == nil {
-		r.clipboard = nil // moved away cleanly; nothing left to paste again
+// followSymlinksPasteConfirmText builds openConfirm's own message and
+// confirmLabel for pasteClipboardFollowingSymlinks — split out on its
+// own so a test can pin the exact wording without opening a real
+// dialog. count is the number of clipboard items, not how many of them
+// actually are (or contain) a symlink — knowing that in advance would
+// need a full recursive scan of every marked directory before ever
+// asking, the same upfront cost this app already avoids elsewhere for
+// byte-accurate progress (see scanPasteBytes' own doc comment for that
+// same trade-off) — so the wording stays deliberately general rather
+// than promising a precise count it can't cheaply back up.
+//
+// Symlink handling itself is worded identically for cut and copy (see
+// pasteOne's own followSymlinks branch — both replace a symlink with a
+// real copy of whatever it resolves to, the same way); the one
+// sentence that actually differs is what happens to the source
+// afterward, since only a Cut ever removes anything there at all.
+func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel string) {
+	item := "item"
+	if count != 1 {
+		item = "items"
 	}
+	message = fmt.Sprintf(
+		"Paste %d %s, following symlinks: any symlink among them — including one nested inside a folder — will be replaced with a full copy of whatever it points to, which may be large or live on a different device or network mount (NFS, EFS, ...).",
+		count, item,
+	)
+	if cut {
+		message += " Afterward, only the original link itself is removed — never its target."
+	} else {
+		message += " Nothing at the source is touched."
+	}
+	return message, "Yes, paste (following symlinks)"
+}
 
-	// Only reload if the panel actually happens to be showing dir right
-	// now — pasting into a search result's own directory, elsewhere,
-	// shouldn't force-navigate or otherwise disturb whatever the panel
-	// currently has on screen.
-	if r.panel.path == dir {
-		if err := r.panel.load(r.panel.path); err != nil {
-			firstErr = err // the reload failing is more urgent to report than a copy conflict
-		}
-	}
-
-	if firstErr != nil {
-		r.showError(firstErr)
-	}
+// pasteInto is pasteClipboard's/pasteClipboardFollowingSymlinks' own
+// shared implementation, generalized to an explicit destination
+// directory and an explicit followSymlinks choice — pasteClipboard
+// itself picks a search result's own directory instead of r.panel.path
+// while search results are showing (see its own doc comment). A thin
+// wrapper around startPaste (see pasteconflict.go for the full async,
+// conflict-resolving shape); a no-op if nothing was ever copied/cut,
+// same as before.
+func (r *Root) pasteInto(dir string, followSymlinks bool) {
+	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks)
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker

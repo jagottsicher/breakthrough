@@ -261,6 +261,35 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
+	// A running Paste's own progress takes this same leading spot instead
+	// of the clipboard indicator below while one is actually in flight —
+	// "what's copying right now" is more specific and more time-sensitive
+	// than "what's staged to paste", so it wins for however long there's
+	// something to say. Reverts to the clipboard indicator the moment
+	// r.pasteJob clears (see finishPasteJob), the same instant the two
+	// would otherwise have said contradictory things (a Cut's own
+	// clipboard normally empties out right as its Paste finishes).
+	switch {
+	case r.pasteJob != nil:
+		write(pasteProgressText(r.pasteJob, len(r.pasteQueue)))
+		sep()
+	default:
+		// The clipboard's own contents, if anything — right after the
+		// chord indicator and before the username, the same leading,
+		// fixed position and the same reasoning: it needs to be seen
+		// without hunting for it, and everything after the username is
+		// each already optional on its own platform, so a fixed spot
+		// ahead of all of that is the one place adding or removing this
+		// segment never shifts something else around. Empty (no leading
+		// text, no separator) once the clipboard itself is empty again,
+		// the same "just show one less segment" shape as disk usage/
+		// uptime/load below.
+		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
+			write(clip)
+			sep()
+		}
+	}
+
 	write(r.currentUser)
 	sep()
 	write(mouseStatusText(r.mouseEnabled))
@@ -285,6 +314,255 @@ func (r *Root) buildStatusBar() string {
 	}
 	write(clockText())
 
+	return b.String()
+}
+
+// clipboardIndicatorText renders buildStatusBar's own clipboard segment
+// — "" once dirs and files are both 0 (nothing on the clipboard, the
+// overwhelmingly common case), otherwise "Copy: N files, M dirs" or
+// "Cut: N files, M dirs" (whichever of dirs/files is 0 dropped
+// entirely, rather than shown as "0 dirs" — noise, not information).
+// "Copy"/"Cut" name the pending operation itself, not "Copying"/
+// "Cutting": nothing is actually in flight yet at this point — Paste
+// hasn't been pressed — and this same text keeps showing, unchanged,
+// for as long as the clipboard holds these paths, including through a
+// Copy+Paste that leaves them there for a possible second Paste
+// elsewhere. See config.Theme.ClipboardCopyBackground/
+// ClipboardCutBackground for this same information's other half — the
+// row highlighting a real file's own line gets while it's held.
+func clipboardIndicatorText(cut bool, dirs, files int) string {
+	if dirs == 0 && files == 0 {
+		return ""
+	}
+	verb := "Copy"
+	if cut {
+		verb = "Cut"
+	}
+	var parts []string
+	if files > 0 {
+		parts = append(parts, pluralCount(files, "file", "files"))
+	}
+	if dirs > 0 {
+		parts = append(parts, pluralCount(dirs, "dir", "dirs"))
+	}
+	return fmt.Sprintf("%s: %s", verb, strings.Join(parts, ", "))
+}
+
+// pluralCount renders n paired with singular or plural, whichever n
+// itself calls for ("1 file", "2 files") — used wherever this bar
+// counts something instead of just naming it, starting with
+// clipboardIndicatorText above.
+func pluralCount(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
+}
+
+// pasteProgressBarWidth is how many characters wide pasteProgressText's
+// own dual bar (see pasteDualBar) is — narrow enough to leave room for
+// the segments after it (username, disk usage, uptime, ...), wide
+// enough to actually read as a bar rather than a handful of ambiguous
+// pixels.
+const pasteProgressBarWidth = 10
+
+// pasteDualBarLit/pasteDualBarDim are the two colors pasteDualBar fills
+// each half-block character with — this bar's own fixed look,
+// deliberately not part of the theme system config.Theme's other
+// colors go through: a status-bar progress indicator, like the chord
+// countdown's own block glyphs (see chordCountdownBlocks) or the
+// spinner (see hashAnimationFrames), has never been a themed element
+// in this app.
+const (
+	pasteDualBarLit = "green"
+	pasteDualBarDim = "gray"
+)
+
+// pasteDualBar renders a width-wide row of upper-half-block characters
+// (▀), each one's own foreground painting that column's top half and
+// background painting its bottom half — a real terminal rendering
+// behavior of that specific glyph, not a tview trick, which is what
+// lets a single row of characters carry two independent fractions at
+// once, per the user's own explicit request: topFrac (the same
+// item-level "how much of the clipboard has a final outcome" fraction
+// the old single bar showed) above, fileFrac (the file currently being
+// streamed's own byte progress) below. Both clamped to [0,1] first — a
+// fraction exceeding 1 (shouldn't happen, but cheap to guard, the same
+// reasoning the old bar's own done>total clamp already followed) would
+// otherwise overfill past width. Ends with a reset tag so whatever
+// pasteProgressText appends after it (the ETA, the current file's own
+// name) isn't left drawn in this bar's own last column's colors.
+func pasteDualBar(topFrac, fileFrac float64, width int) string {
+	topLit := int(clampFrac(topFrac) * float64(width))
+	fileLit := int(clampFrac(fileFrac) * float64(width))
+
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		fg, bg := pasteDualBarDim, pasteDualBarDim
+		if i < topLit {
+			fg = pasteDualBarLit
+		}
+		if i < fileLit {
+			bg = pasteDualBarLit
+		}
+		fmt.Fprintf(&b, "[%s:%s]▀", fg, bg)
+	}
+	b.WriteString("[-:-]")
+	return b.String()
+}
+
+// clampFrac clamps f to [0,1] — shared by every fraction this file
+// turns into a glyph or a bar column, so a value that briefly strays
+// outside that range (a size read mid-write growing past what an
+// earlier stat reported, say) can never overfill or index out of
+// bounds anywhere that happens.
+func clampFrac(f float64) float64 {
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// pasteBytesColumn renders bytesDone/bytesTotal as a single character
+// from chordCountdownBlocks' own eight-level glyph set — the same "one
+// lone character stands in for a fraction, no color needed" idea the
+// chord countdown (see chordIndicatorText) already uses, per the
+// user's own explicit request to style this the same way, just filling
+// upward (0% is the thinnest sliver, 100% is a full block) instead of
+// that one's own draining-downward direction, since this represents
+// progress accumulating rather than time running out. Callers check
+// bytesTotal > 0 themselves before calling this at all (see
+// pasteProgressText and pasteJob.bytesTotal's own doc comment on what
+// <= 0 means), so this only ever has to handle an already-known,
+// positive total.
+func pasteBytesColumn(bytesDone, bytesTotal int64) string {
+	frac := clampFrac(float64(bytesDone) / float64(bytesTotal))
+	idx := int(frac * float64(len(chordCountdownBlocks)-1))
+	return string(chordCountdownBlocks[len(chordCountdownBlocks)-1-idx])
+}
+
+// pasteETA estimates a paste job's own remaining time from the average
+// throughput observed since it started (bytesDone/elapsed) rather than
+// an instantaneous rate sampled between two ticks — inherently
+// smoother, since the denominator only ever grows, and needs no state
+// of its own beyond the job's own start time (see pasteJob.startedAt),
+// already recorded for exactly this. ok is false whenever an estimate
+// wouldn't mean anything yet — no time has passed, nothing has copied
+// yet, or the total is already reached — so the caller
+// (pasteProgressText) simply omits the segment rather than showing a
+// division-by-zero result or a stale "0s left" once the job is already
+// wrapping up.
+func pasteETA(startedAt time.Time, bytesDone, bytesTotal int64) (string, bool) {
+	elapsed := time.Since(startedAt)
+	if bytesDone <= 0 || elapsed <= 0 || bytesTotal <= bytesDone {
+		return "", false
+	}
+	rate := float64(bytesDone) / elapsed.Seconds()
+	remainingSeconds := float64(bytesTotal-bytesDone) / rate
+	return formatETA(time.Duration(remainingSeconds * float64(time.Second))), true
+}
+
+// formatETA renders d as a compact "~Ns"/"~Mm Ns"/"~Hh Mm" — never more
+// than two units, rounded to the nearest whole second. Prefixed with
+// "~" throughout: this is always an extrapolation from an average
+// rate observed so far, never a guarantee.
+func formatETA(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	totalSeconds := int(d.Round(time.Second).Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds / 60) % 60
+	seconds := totalSeconds % 60
+	switch {
+	case hours > 0:
+		return fmt.Sprintf("~%dh %dm left", hours, minutes)
+	case minutes > 0:
+		return fmt.Sprintf("~%dm %ds left", minutes, seconds)
+	default:
+		return fmt.Sprintf("~%ds left", seconds)
+	}
+}
+
+// pasteProgressText renders buildStatusBar's own "a Paste is running"
+// segment, replacing the clipboard indicator for as long as job is
+// non-nil (see buildStatusBar's own doc comment on why one wins over
+// the other): a spinner (reusing hashAnimationFrames — the same visual
+// language as every other "in progress" indicator this app already
+// has, driven by animatePasteProgress's own ticker), "Copying"/"Moving"
+// naming which of the two this actually is, how many of the clipboard's
+// own top-level items have a final outcome so far, a leading
+// byte-percentage column and a dual progress bar once the job's own
+// byte total is known (see pasteBytesColumn/pasteDualBar and
+// pasteJob.bytesTotal's own doc comment for what "known" means and why
+// it isn't known from the very first tick), an estimated remaining
+// duration once that same total makes one possible (see pasteETA), and
+// the real file fsCopy/fsMove most recently reported touching (see
+// pasteJob.currentFile) — its bare name, not the full path: the path is
+// wherever the paste's own destination already says it's going, and a
+// long one would crowd out every segment after it.
+//
+// The N/total count and the dual bar's own top half are per top-level
+// clipboard item, not per file: a directory only advances either one
+// once, when the whole thing finishes, no matter how many files it
+// contains — currentFile (and the bar's own bottom half) is what
+// actually moves during that stretch, updating per real file
+// underneath it even while the top half sits still.
+//
+// queued is len(r.pasteQueue) at render time — a trailing "(+N
+// queued)" once a further Paste is waiting behind this one (see
+// startPaste/advancePasteQueue), omitted entirely at zero rather than
+// shown as "(+0 queued)": the whole point is to say something is
+// waiting, not to always report a count that's usually zero.
+func pasteProgressText(job *pasteJob, queued int) string {
+	verb := "Copying"
+	if job.cut {
+		verb = "Moving"
+	}
+	done := job.total - job.remaining
+	if done < 0 {
+		done = 0
+	}
+	spinner := hashAnimationFrames[job.animFrame%len(hashAnimationFrames)]
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s %d/%d ", spinner, verb, done, job.total)
+
+	bytesTotal := job.bytesTotal.Load()
+	bytesDone := job.bytesBase.Load() + job.currentFileBytes.Load()
+	if bytesTotal > 0 {
+		b.WriteString(pasteBytesColumn(bytesDone, bytesTotal))
+		b.WriteByte(' ')
+	}
+
+	itemFrac := 0.0
+	if job.total > 0 {
+		itemFrac = float64(done) / float64(job.total)
+	}
+	fileFrac := 0.0
+	if size := job.currentFileSize.Load(); size > 0 {
+		fileFrac = float64(job.currentFileBytes.Load()) / float64(size)
+	}
+	b.WriteString(pasteDualBar(itemFrac, fileFrac, pasteProgressBarWidth))
+
+	if bytesTotal > 0 {
+		if eta, ok := pasteETA(job.startedAt, bytesDone, bytesTotal); ok {
+			b.WriteByte(' ')
+			b.WriteString(eta)
+		}
+	}
+
+	if current := job.currentFile.Load(); current != nil && *current != "" {
+		b.WriteByte(' ')
+		b.WriteString(filepath.Base(*current))
+	}
+
+	if queued > 0 {
+		fmt.Fprintf(&b, " (+%d queued)", queued)
+	}
 	return b.String()
 }
 
@@ -475,9 +753,27 @@ func (r *Root) buttonBarActionAt(x, y int) (buttonBarSpan, bool) {
 // buttons (see buildButtonBar/buttonBarSpan) to its action. A click
 // elsewhere on the row (the gaps between buttons, or empty space) just
 // does nothing.
+//
+// InRect is checked before the action-type gate, not folded into the
+// same condition — a real, user-reported regression otherwise:
+// combining them (as this used to) let a MouseLeftDown that landed
+// inside buttonBar's own rect fall through to its default TextView
+// MouseHandler unsuppressed (verified directly against tview's own
+// textview.go — its MouseLeftDown case unconditionally calls setFocus),
+// stealing real keyboard focus onto the button bar itself and leaving
+// c/x/v/d and every other plain-key shortcut dead afterward, exactly
+// the same class of bug captureColumnHeaderMouse's own doc comment
+// describes. Checking InRect first and unconditionally suppressing
+// anything that isn't MouseLeftClick — the same shape
+// captureHeaderMouse/captureTabStripMouse already use — closes it: a
+// button bar click is never anything more than a one-shot trigger, so
+// there is nothing for it to hold focus for afterward.
 func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick || !r.buttonBar.InRect(event.Position()) {
+	if !r.buttonBar.InRect(event.Position()) {
 		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
 	}
 
 	x, y := event.Position()
