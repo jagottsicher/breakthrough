@@ -9,25 +9,31 @@ import (
 
 const filterMenuPage = "filter-menu"
 
-// filterMenuWidth/Height are the dropdown's own fixed size: a one-row
-// title bar over three fixed-height rows (glob/regex, size,
-// modified-time). Wide enough for the glob row's own embedded
-// filterRegexBtn (8 columns) and filterField (headerFilterWidth, 17
-// columns) plus a 2-column checkbox lead-in and a little breathing
-// room either side — the two stub rows (size/modified-time) fit
-// comfortably inside the same width with room to spare.
+// filterMenuLabelWidth/filterMenuExprWidth/filterMenuWidth/Height are
+// the dropdown's own fixed size: a one-row title bar over three
+// fixed-height rows (glob/regex, size, modified-time). filterMenuWidth
+// is sized off the size/modified-time rows now, not the glob row —
+// "Modified time filter" (the longer of their two labels) plus its own
+// checkbox glyph and a space is filterMenuLabelWidth wide, with a
+// little breathing room to spare before filterMenuExprWidth's own
+// expression field starts; the glob row's own filterField simply
+// stretches to fill whatever that leaves (see renderFilterMenu's own
+// proportional AddItem for it) rather than needing a width constant of
+// its own to stay in sync with these two.
 const (
-	filterMenuWidth  = 2 + 8 + headerFilterWidth + 4
-	filterMenuHeight = 4
+	filterMenuLabelWidth = 25
+	filterMenuExprWidth  = 22
+	filterMenuWidth      = filterMenuLabelWidth + filterMenuExprWidth + 2
+	filterMenuHeight     = 4
 )
 
 // openFilterMenu shows the filter-menu dropdown for the currently
 // active panel (r.panel) — see Panel.filterMenuBtn/onOpenFilterMenu's
 // own doc comments for why this exists at all: filterField/
-// filterRegexBtn (the existing glob/regex filter, fully working,
-// unchanged) plus two not-yet-built toggles for size and
-// modified-time, all three combinable, per the user's own explicit
-// request.
+// filterRegexBtn (the glob/regex filter) plus a size row and a
+// modified-time row, each pairing a checkbox with its own real
+// comparison-expression field (see internal/filterexpr), all three
+// combinable, per the user's own explicit request.
 //
 // Also what the "/" plain command opens now (see plainCommands in
 // keymap.go) — a real, user-reported fix: it used to call
@@ -137,10 +143,11 @@ func filterMenuCheckboxCapture(this tview.Primitive, toggle func(), moveFocus fu
 // itself owns neither.
 //
 // Also wires up the whole dropdown's own keyboard focus-cycling and
-// closing, fresh on every render: order lists its five genuinely
+// closing, fresh on every render: order lists its seven genuinely
 // different focusable pieces in the same order Tab moves through them
 // (glob checkbox, glob/regex mode button, glob pattern field, size
-// toggle, modified-time toggle, wrapping back to the first) — tview
+// checkbox, size expression field, modified-time checkbox,
+// modified-time expression field, wrapping back to the first) — tview
 // has no built-in way to cycle Tab between Primitives of different
 // types on its own, so this is hand-rolled the same way chmoddialog.go
 // already hand-rolls its own multi-field Tab-cycling, for the same
@@ -262,15 +269,48 @@ func (r *Root) renderFilterMenu() {
 	// so typing works the instant this dropdown opens, matching every
 	// other dialog in this app whose own first field takes focus
 	// immediately (Sed Replace's sedForm, Search's Filename span, ...).
+	//
+	// filterField itself stretches to fill whatever filterMenuWidth
+	// leaves once the checkbox/regex-button take their own fixed share
+	// (0 fixed width, proportion 1) rather than a fixed width of its
+	// own — filterMenuWidth is now sized off the size/modified-time
+	// rows below (see its own doc comment), so this row simply takes
+	// whatever's left instead of needing a second width constant kept
+	// in sync with the first.
 	globRow := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(globCheckbox, 2, 0, false).
 		AddItem(panel.filterRegexBtn, 8, 0, false).
-		AddItem(panel.filterField, headerFilterWidth, 0, true)
+		AddItem(panel.filterField, 0, 1, true)
 
-	sizeRow := r.newFilterMenuToggleRow(&panel.filterSizeActive, "Size filter", panel, moveFocus, closeMenu)
-	order = append(order, sizeRow)
-	mtimeRow := r.newFilterMenuToggleRow(&panel.filterMtimeActive, "Modified time filter", panel, moveFocus, closeMenu)
-	order = append(order, mtimeRow)
+	sizeRow, sizeCheckbox, sizeField := r.newFilterMenuFieldRow(&panel.filterSizeActive, &panel.filterSizeText, "Size filter", "e.g. > 1m and < 1g", panel, moveFocus, closeMenu)
+	order = append(order, sizeCheckbox)
+	sizeField.SetInputCapture(arrowCapture(sizeField))
+	sizeField.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			moveFocus(sizeField, 1)
+		case tcell.KeyBacktab:
+			moveFocus(sizeField, -1)
+		case tcell.KeyEnter, tcell.KeyEscape:
+			closeMenu()
+		}
+	})
+	order = append(order, sizeField)
+
+	mtimeRow, mtimeCheckbox, mtimeField := r.newFilterMenuFieldRow(&panel.filterMtimeActive, &panel.filterMtimeText, "Modified time filter", "e.g. last 7 days", panel, moveFocus, closeMenu)
+	order = append(order, mtimeCheckbox)
+	mtimeField.SetInputCapture(arrowCapture(mtimeField))
+	mtimeField.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			moveFocus(mtimeField, 1)
+		case tcell.KeyBacktab:
+			moveFocus(mtimeField, -1)
+		case tcell.KeyEnter, tcell.KeyEscape:
+			closeMenu()
+		}
+	})
+	order = append(order, mtimeField)
 
 	r.filterMenuLayout.Clear()
 	r.filterMenuLayout.
@@ -280,40 +320,56 @@ func (r *Root) renderFilterMenu() {
 		AddItem(mtimeRow, 1, 0, false)
 }
 
-// newFilterMenuToggleRow builds one of the filter-menu's two not-yet-
-// built stub rows (size/modified-time — see Panel.filterSizeActive's
-// own doc comment on why there's no filtering logic behind either
-// yet): a single clickable "○/● label" TextView, the same checkboxText
-// convention every other toggle in this app already uses (see
-// checkboxText in panel.go — Sed Replace's own flag list, the Search
-// dialog's checkboxes, chmod's recursive/Files toggles). Clicking it,
-// or reaching it by keyboard and pressing Space/Enter (see
-// filterMenuCheckboxCapture), flips *active in place and re-renders
-// just this row, the same "toggle relabels itself, dialog stays open"
-// shape Root.toggleSedFlag already has — the whole point of a menu
-// offering three independently combinable filters is that ticking one
-// doesn't close it before you can tick another. moveFocus/closeMenu
-// come from renderFilterMenu's own single render pass (see its own doc
-// comment) rather than being rebuilt here.
-func (r *Root) newFilterMenuToggleRow(active *bool, label string, panel *Panel, moveFocus func(tview.Primitive, int), closeMenu func()) *tview.TextView {
-	row := tview.NewTextView().SetDynamicColors(true)
-	filterMenuRowStyle(row, panel.theme, false)
-	render := func() { row.SetText(checkboxText(*active) + " " + label) }
-	render()
+// newFilterMenuFieldRow builds one of the filter-menu's size/modified-
+// time rows: a checkbox+label (the same checkboxText convention every
+// other toggle in this app already uses — Sed Replace's own flag list,
+// the Search dialog's checkboxes, chmod's recursive/Files toggles)
+// paired with a real InputField for the row's own comparison
+// expression (see internal/filterexpr for the syntax each one
+// accepts) — the same real-time "type it, the listing narrows
+// immediately" behavior the glob row's own filterField already has.
+// Typing anything into the field auto-activates the checkbox, exactly
+// mirroring filterField's own identical "going from empty to
+// non-empty is as deliberate a signal as pressing the checkbox would
+// be" behavior (see panel.go's own doc comment on filterGlobActive).
+//
+// Neither the checkbox nor the field is a persistent Panel field the
+// way filterField/filterRegexBtn are: *active/*text (pointers into
+// Panel.filterSizeActive/filterSizeText or their modified-time
+// counterparts) already hold everything worth keeping between opens,
+// so a fresh checkbox+field seeded from them on every render (the same
+// "cheap enough to just rebuild" reasoning the old checkbox-only rows
+// already followed) is simpler than also giving each its own
+// long-lived widget identity to keep in sync.
+//
+// Returns the row itself plus its own checkbox/field so
+// renderFilterMenu can wire both into the dropdown's own keyboard
+// focus-cycling separately — two real stops per row now, not one.
+// moveFocus/closeMenu come from renderFilterMenu's own single render
+// pass rather than being rebuilt here.
+func (r *Root) newFilterMenuFieldRow(active *bool, text *string, label, placeholder string, panel *Panel, moveFocus func(tview.Primitive, int), closeMenu func()) (row *tview.Flex, checkbox *tview.TextView, field *tview.InputField) {
+	checkbox = tview.NewTextView().SetDynamicColors(true)
+	filterMenuRowStyle(checkbox, panel.theme, false)
+	renderCheckbox := func() { checkbox.SetText(checkboxText(*active) + " " + label) }
+	renderCheckbox()
+
+	reload := func() { panel.reportError(panel.load(panel.path)) }
+
 	toggle := func() {
 		*active = !*active
-		render()
+		renderCheckbox()
 		panel.renderFilterMenuBtn()
+		reload()
 	}
-	row.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	checkbox.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		// Checked first — see Panel.filterMenuBtn's own identical guard
 		// for the full reasoning (a real, user-reported regression
 		// without it): filterMenuLayout calls every top-level row in
 		// order regardless of which one a click actually landed on, so
-		// this row's own capture must decline whatever isn't actually
-		// its own, or it swallows clicks meant for whichever row comes
-		// after it (mtimeRow, when this is sizeRow).
-		if !row.InRect(event.Position()) {
+		// this checkbox's own capture must decline whatever isn't
+		// actually its own, or it swallows clicks meant for its own
+		// field right next to it, or the row after it.
+		if !checkbox.InRect(event.Position()) {
 			return action, event
 		}
 		if action == tview.MouseLeftClick {
@@ -321,8 +377,28 @@ func (r *Root) newFilterMenuToggleRow(active *bool, label string, panel *Panel, 
 		}
 		return tview.MouseConsumed, nil
 	})
-	row.SetFocusFunc(func() { filterMenuRowStyle(row, panel.theme, true) })
-	row.SetBlurFunc(func() { filterMenuRowStyle(row, panel.theme, false) })
-	row.SetInputCapture(filterMenuCheckboxCapture(row, toggle, moveFocus, closeMenu))
-	return row
+	checkbox.SetFocusFunc(func() { filterMenuRowStyle(checkbox, panel.theme, true) })
+	checkbox.SetBlurFunc(func() { filterMenuRowStyle(checkbox, panel.theme, false) })
+	checkbox.SetInputCapture(filterMenuCheckboxCapture(checkbox, toggle, moveFocus, closeMenu))
+
+	field = tview.NewInputField()
+	field.SetPlaceholder(placeholder)
+	field.SetText(*text)
+	field.SetChangedFunc(func(t string) {
+		if t == *text {
+			return // triggered by this same SetText call above, not real typing
+		}
+		*text = t
+		if t != "" {
+			*active = true
+			renderCheckbox()
+			panel.renderFilterMenuBtn()
+		}
+		reload()
+	})
+
+	row = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(checkbox, filterMenuLabelWidth, 0, false).
+		AddItem(field, 0, 1, false)
+	return row, checkbox, field
 }
