@@ -52,6 +52,54 @@ func TestThemeResolveFallsBackPerFieldOnEmptyOrInvalidValue(t *testing.T) {
 	}
 }
 
+// spread reports the difference between c's own brightest and dimmest
+// RGB channel — the absolute magnitude a viewer's eye actually reads
+// as "this has a color cast", independent of how dark or bright c is
+// overall.
+func spread(c tcell.Color) int32 {
+	r, g, b := c.RGB()
+	max, min := r, r
+	for _, v := range []int32{g, b} {
+		if v > max {
+			max = v
+		}
+		if v < min {
+			min = v
+		}
+	}
+	return max - min
+}
+
+// TestDarkenForInactiveFocusPreservesAbsoluteSpread pins the fix for a
+// real, user-reported outcome of an earlier, rejected approach: scaling
+// every RGB channel down by the same factor preserves relative
+// saturation but shrinks the ABSOLUTE difference between channels by
+// that same factor — and it's the absolute difference a viewer's eye
+// actually picks up against a dim terminal background, so the result
+// read as plain dark gray rather than a darker version of the original
+// hue. darkenForInactiveFocus must instead leave the spread exactly as
+// it was, only dimming the shared, achromatic base underneath it (see
+// its own doc comment) — this pins that property directly, for both of
+// this app's own clipboard colors, rather than relying on eyeballing
+// one specific computed hex value.
+func TestDarkenForInactiveFocusPreservesAbsoluteSpread(t *testing.T) {
+	def := DefaultTheme().Resolve()
+	for name, pair := range map[string][2]tcell.Color{
+		"Copy": {def.ClipboardCopyBackground, def.ClipboardCopyBackgroundInactive},
+		"Cut":  {def.ClipboardCutBackground, def.ClipboardCutBackgroundInactive},
+	} {
+		bright, dim := pair[0], pair[1]
+		if got, want := spread(dim), spread(bright); got != want {
+			t.Errorf("%s: Inactive spread = %d, want %d (same as the full-brightness color's own spread — darkening must not shrink it)", name, got, want)
+		}
+		brightR, brightG, brightB := bright.RGB()
+		dimR, dimG, dimB := dim.RGB()
+		if dimR+dimG+dimB >= brightR+brightG+brightB {
+			t.Errorf("%s: Inactive (%d,%d,%d) is not darker overall than the full-brightness color (%d,%d,%d)", name, dimR, dimG, dimB, brightR, brightG, brightB)
+		}
+	}
+}
+
 func TestThemeResolveAcceptsHexColors(t *testing.T) {
 	th := Theme{AccentBackground: "#112233"}
 	resolved := th.Resolve()

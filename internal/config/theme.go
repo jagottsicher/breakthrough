@@ -304,33 +304,62 @@ func (t Theme) Resolve() ResolvedTheme {
 	}
 }
 
-// inactiveFocusDarkenFactor scales every RGB channel down by this much
-// for ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
-// (see darkenForInactiveFocus) — picked to land clearly between the
-// two colors it needs to stay distinguishable from: bright enough not
-// to collapse into EditableBackground's own plain gray (losing the
-// "this is still clipboard-held" signal the darkening exists to keep),
-// dim enough not to read as the same as the row's own full-brightness
-// tint (losing the "but this one specifically is where the cursor
-// would land" signal that's the whole point of a separate color here).
-const inactiveFocusDarkenFactor = 0.7
+// inactiveFocusBaseDarkenFactor is how much darkenForInactiveFocus
+// dims c's own shared, achromatic base — see its own doc comment for
+// what that means and why only the base, not the whole color, is
+// scaled by this. 1.0 would mean no dimming at all; the lower this is,
+// the darker the shared base gets, independent of how much of the
+// original hue survives (which this factor never touches at all).
+const inactiveFocusBaseDarkenFactor = 0.5
 
-// darkenForInactiveFocus scales c's own RGB channels down by
-// inactiveFocusDarkenFactor, preserving its hue and the relative
-// proportions between channels while dimming its overall brightness —
-// see ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive's
-// own doc comment for why a uniform scale-down was chosen over blending
-// in a third color (EditableBackground, say): blending can cancel out
-// exactly the channel difference that makes one of the two tints
-// recognizable in the first place, depending on which way the blended-in
-// color itself leans, an asymmetry that would need re-tuning by hand for
-// any future clipboard color and that scaling toward black avoids
-// automatically, for any color, by never mixing in an unrelated hue at
-// all.
+// darkenForInactiveFocus derives ClipboardCopyBackgroundInactive/
+// ClipboardCutBackgroundInactive from their own full-brightness
+// counterparts — dimmer, but still clearly recognizable as the same
+// hue, not a shade of plain gray.
+//
+// Scaling every RGB channel down by the same factor — tried first —
+// technically preserves saturation (the max/min ratio is unchanged by
+// a uniform scale), but shrinks the ABSOLUTE difference between
+// channels by that same factor, and it's that absolute difference a
+// viewer's eye actually picks up against a dim terminal background.
+// c's own default clipboard tints are already a deliberately subtle
+// cast to begin with (a 22-point spread on top of a bright base — see
+// ClipboardCopyBackground/ClipboardCutBackground's own doc comment);
+// scaling that down by the same factor as the darkening shrinks the
+// spread right along with the base, so the whole result reads as
+// plain dark gray instead of a darker version of the original hue — a
+// real, user-reported outcome of that first attempt, not a
+// hypothetical one.
+//
+// The fix: decompose c into its shared, achromatic base
+// (min(R, G, B) — the amount of "gray" every channel has in common)
+// and its own per-channel excess above that base (the actual
+// hue-defining difference). Only the base gets dimmed, by
+// inactiveFocusBaseDarkenFactor; the excess is left completely
+// untouched, so the absolute spread between channels — and with it,
+// the hue itself — survives exactly as it was, rather than shrinking
+// along with everything else. Equivalent to subtracting a fixed amount
+// (derived from the base) from every channel rather than scaling every
+// channel by a fixed ratio; clamped at 0 per channel for safety,
+// though none of this app's own clipboard colors are dark enough to
+// need it.
 func darkenForInactiveFocus(c tcell.Color) tcell.Color {
 	r, g, b := c.RGB()
-	scale := func(v int32) int32 { return int32(float64(v) * inactiveFocusDarkenFactor) }
-	return tcell.NewRGBColor(scale(r), scale(g), scale(b))
+	base := r
+	if g < base {
+		base = g
+	}
+	if b < base {
+		base = b
+	}
+	shift := base - int32(float64(base)*inactiveFocusBaseDarkenFactor)
+	darken := func(v int32) int32 {
+		if v -= shift; v < 0 {
+			return 0
+		}
+		return v
+	}
+	return tcell.NewRGBColor(darken(r), darken(g), darken(b))
 }
 
 // NamedTheme pairs a Theme with the stable slug used to select it from
