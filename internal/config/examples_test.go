@@ -51,6 +51,8 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 			"EntryUnreadable":         resolved.EntryUnreadable,
 			"EntryArchive":            resolved.EntryArchive,
 			"EntryHidden":             resolved.EntryHidden,
+			"WarningText":             resolved.WarningText,
+			"CriticalText":            resolved.CriticalText,
 		}
 		defaults := DefaultTheme().Resolve()
 		defaultFields := map[string]tcell.Color{
@@ -73,6 +75,8 @@ func TestExampleColorSchemesParseAndResolve(t *testing.T) {
 			"EntryUnreadable":         defaults.EntryUnreadable,
 			"EntryArchive":            defaults.EntryArchive,
 			"EntryHidden":             defaults.EntryHidden,
+			"WarningText":             defaults.WarningText,
+			"CriticalText":            defaults.CriticalText,
 		}
 		for field, c := range fields {
 			// Every field in both example files sets its own value,

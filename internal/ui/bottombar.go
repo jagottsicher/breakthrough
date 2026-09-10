@@ -13,6 +13,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -294,9 +295,9 @@ func (r *Root) buildStatusBar() string {
 	write(mouseStatusText(r.mouseEnabled))
 	sep()
 	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
-		write(diskUsageText(u))
+		write(diskUsageText(u, r.theme))
 		sep()
-		write(inodeUsageText(u))
+		write(inodeUsageText(u, r.theme))
 		sep()
 	}
 	if k := kernelVersionText(); k != "" {
@@ -652,16 +653,21 @@ func loadAverageText() (string, bool) {
 }
 
 // diskUsageWarnColor is the color a usage percentage should stand out
-// in — tcell.ColorRed at 90% or more, tcell.ColorOrange at 80% or
+// in — warn.CriticalText at 90% or more, warn.WarningText at 80% or
 // more, tcell.ColorDefault (no warning, leave the surrounding text's
 // own color alone) otherwise — the two thresholds the user asked for,
-// shared by both the disk-space and the inode percentage.
-func diskUsageWarnColor(percent int) tcell.Color {
+// shared by both the disk-space and the inode percentage. Reads its two
+// "stand out" colors from the active theme (see
+// config.Theme.WarningText/CriticalText's own doc comment) rather than
+// a hardcoded tcell.ColorOrange/tcell.ColorRed, so a scheme that already
+// leans orange or red elsewhere can still make this specific warning
+// legible against it.
+func diskUsageWarnColor(percent int, warn config.ResolvedTheme) tcell.Color {
 	switch {
 	case percent >= 90:
-		return tcell.ColorRed
+		return warn.CriticalText
 	case percent >= 80:
-		return tcell.ColorOrange
+		return warn.WarningText
 	default:
 		return tcell.ColorDefault
 	}
@@ -674,8 +680,8 @@ func diskUsageWarnColor(percent int) tcell.Color {
 // foreground back to the status bar's own configured text color
 // afterward, not a hardcoded one, so this still looks right under
 // every color scheme (see Root.applyTheme).
-func formatUsagePercent(percent int) string {
-	color := diskUsageWarnColor(percent)
+func formatUsagePercent(percent int, theme config.ResolvedTheme) string {
+	color := diskUsageWarnColor(percent, theme)
 	if color == tcell.ColorDefault {
 		return fmt.Sprintf("%d%%", percent)
 	}
@@ -689,12 +695,12 @@ func formatUsagePercent(percent int) string {
 // die heißen sollen"), and explicit used *and* free numbers for
 // inodes specifically, per the user's own request, rather than just a
 // percentage.
-func diskUsageText(u fsops.DiskUsage) string {
-	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent))
+func diskUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
+	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent, theme))
 }
 
-func inodeUsageText(u fsops.DiskUsage) string {
-	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent))
+func inodeUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
+	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent, theme))
 }
 
 // humanCount renders n the same way humanSize renders a byte count
