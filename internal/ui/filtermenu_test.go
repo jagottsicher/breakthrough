@@ -282,6 +282,78 @@ func TestRenderFilterMenuBtnOmitsIndicatorWhenNoFiltersActive(t *testing.T) {
 	}
 }
 
+// TestFilterMatchesNothingColorsIndicatorRed pins a real, user-reported
+// gap filterPersistent's own arrival exposed: a filter carried over
+// from an entirely unrelated directory (files pasted in from another
+// tab, say) can silently hide everything a directory would otherwise
+// show, leaving a listing indistinguishable from a genuinely empty
+// folder unless you already know to check the "Nx" indicator. Once a
+// filter hides everything, that indicator's own count must render in
+// EntryError's own red instead of the plain default color, impossible
+// to miss even at a glance.
+func TestFilterMatchesNothingColorsIndicatorRed(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterField.SetText("*.zzz") // matches nothing in fixtureDir
+
+	if !r.panel.filterMatchesNothing {
+		t.Fatal("filterMatchesNothing should be true once the filter hides every entry")
+	}
+	if got := r.panel.table.GetRowCount(); got != 1 { // ".." only
+		t.Errorf("row count with a filter matching nothing = %d, want 1 (\"..\" only)", got)
+	}
+
+	wantTag := "[" + colorTag(r.panel.theme.EntryError) + "::]"
+	if got := r.panel.filterMenuBtn.GetText(false); !containsSubstring(got, wantTag) {
+		t.Errorf("filterMenuBtn raw text = %q, want it to contain the EntryError color tag %q", got, wantTag)
+	}
+	if got := r.panel.filterMenuBtn.GetText(true); !containsSubstring(got, "1x") {
+		t.Errorf("filterMenuBtn text = %q, want it to still contain \"1x\"", got)
+	}
+}
+
+// TestFilterMatchesNothingFalseForGenuinelyEmptyDirectory pins the
+// other half: an actually empty directory, with no filter narrowing
+// anything, must not be mistaken for "a filter is hiding everything" —
+// there's nothing here to warn about, and the "Nx" indicator itself is
+// already correctly absent (see
+// TestRenderFilterMenuBtnOmitsIndicatorWhenNoFiltersActive) since no
+// filter is even active.
+func TestFilterMatchesNothingFalseForGenuinelyEmptyDirectory(t *testing.T) {
+	dir := t.TempDir() // genuinely empty — not even fixtureDir's own entries
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if r.panel.filterMatchesNothing {
+		t.Error("filterMatchesNothing should be false for a directory that's simply empty, filter or no filter")
+	}
+}
+
+// TestFilterMatchesNothingFalseWhenSomeEntriesStillMatch pins that a
+// filter narrowing the listing down to a strict subset — the ordinary,
+// self-evident case, not the one this field exists to flag — never
+// sets filterMatchesNothing, even though it did hide *some* entries.
+func TestFilterMatchesNothingFalseWhenSomeEntriesStillMatch(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterField.SetText("ap*") // matches apple.txt/apricot.txt, not banana.txt
+
+	if r.panel.filterMatchesNothing {
+		t.Error("filterMatchesNothing should be false when the filter still matches some entries")
+	}
+	if got := r.panel.filterMenuBtn.GetText(false); containsSubstring(got, colorTag(r.panel.theme.EntryError)) {
+		t.Errorf("filterMenuBtn raw text = %q, should not carry the EntryError color when the filter still matches something", got)
+	}
+}
+
 // TestFilterMenuStateSurvivesReopen pins that the filter-menu's own
 // three toggles genuinely live on Panel, not on the transient overlay
 // widgets renderFilterMenu rebuilds from scratch on every open — a
@@ -308,5 +380,126 @@ func TestFilterMenuStateSurvivesReopen(t *testing.T) {
 	}
 	if got, want := mtimeRow.GetText(true), checkboxText(true)+" Modified time filter"; got != want {
 		t.Errorf("modified-time row after reopening = %q, want %q (state should have survived)", got, want)
+	}
+}
+
+// TestFilterMenuEscapeClosesDropdownFromAnyRow pins a real, user-
+// reported gap: before this, Escape (or Enter/Tab/Backtab) in
+// filterField only ever moved keyboard focus to the table, never
+// actually closed the dropdown itself (see renderFilterMenu's own doc
+// comment on filterField's own fix), and the two toggle rows had no
+// keyboard handling of any kind. Checked from a toggle row
+// specifically, not the glob field, since that's the row type that
+// previously had no keyboard path out at all.
+func TestFilterMenuEscapeClosesDropdownFromAnyRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	if r.activePage != filterMenuPage {
+		t.Fatal("setup: the dropdown should be open")
+	}
+
+	sizeRow, ok := filterMenuRow(t, r, 2).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 2 is not a *tview.TextView")
+	}
+	sizeRow.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage == filterMenuPage {
+		t.Error("Escape from the size row should close the dropdown")
+	}
+}
+
+// TestFilterMenuSpaceTogglesRowFromKeyboard pins the other half of the
+// same gap: Space (or Enter) on a toggle row must flip it, the
+// keyboard equivalent of clicking it, without closing the dropdown —
+// ticking one filter and then reaching the next is the whole point.
+func TestFilterMenuSpaceTogglesRowFromKeyboard(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+
+	sizeRow, ok := filterMenuRow(t, r, 2).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 2 is not a *tview.TextView")
+	}
+	sizeRow.InputHandler()(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), func(tview.Primitive) {})
+
+	if !r.panel.filterSizeActive {
+		t.Error("Space on the size row should toggle filterSizeActive, same as clicking it")
+	}
+	if r.activePage != filterMenuPage {
+		t.Error("toggling a row by keyboard should not close the dropdown")
+	}
+}
+
+// TestFilterMenuTabCyclesFocusThroughAllFiveStops pins the user's own
+// explicit request: keyboard navigation within the dropdown, the same
+// as the tab switcher already offers — Tab must move focus through
+// every one of the dropdown's own five stops in order (glob checkbox,
+// glob/regex mode button, glob pattern field, size toggle,
+// modified-time toggle) and wrap back to the first, not just exit the
+// dropdown outright the way every one of them used to.
+func TestFilterMenuTabCyclesFocusThroughAllFiveStops(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+
+	globCheckbox := filterMenuGlobCheckbox(t, r)
+	globRow, ok := filterMenuRow(t, r, 1).(*tview.Flex)
+	if !ok {
+		t.Fatal("filterMenuLayout item 1 is not a *tview.Flex")
+	}
+	regexBtn, ok := globRow.GetItem(1).(*tview.Button)
+	if !ok {
+		t.Fatal("glob row item 1 is not a *tview.Button")
+	}
+	sizeRow, ok := filterMenuRow(t, r, 2).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 2 is not a *tview.TextView")
+	}
+	mtimeRow, ok := filterMenuRow(t, r, 3).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 3 is not a *tview.TextView")
+	}
+
+	if !r.panel.filterField.HasFocus() {
+		t.Fatal("setup: filterField should have initial focus when the dropdown opens")
+	}
+
+	tab := tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	r.panel.filterField.InputHandler()(tab, noop)
+	if !sizeRow.HasFocus() {
+		t.Error("Tab from filterField should move focus to the size row")
+	}
+
+	sizeRow.InputHandler()(tab, noop)
+	if !mtimeRow.HasFocus() {
+		t.Error("Tab from the size row should move focus to the modified-time row")
+	}
+
+	mtimeRow.InputHandler()(tab, noop)
+	if !globCheckbox.HasFocus() {
+		t.Error("Tab from the modified-time row should wrap back to the glob checkbox")
+	}
+
+	globCheckbox.InputHandler()(tab, noop)
+	if !regexBtn.HasFocus() {
+		t.Error("Tab from the glob checkbox should move focus to the glob/regex mode button")
+	}
+
+	if r.activePage != filterMenuPage {
+		t.Error("cycling focus with Tab should never close the dropdown")
 	}
 }

@@ -166,6 +166,24 @@ type Panel struct {
 	// unfiltered.
 	filterPersistent bool
 
+	// filterMatchesNothing is true whenever load's own filterByText call
+	// hid every single entry a directory would otherwise have shown —
+	// set there, read only by renderFilterMenuBtn (see its own doc
+	// comment for what it does with this). A real, user-reported gap
+	// filterPersistent's own arrival exposed: a filter carried over from
+	// browsing an entirely different, unrelated directory (see
+	// config.Settings.FilterPersistent's own doc comment) can silently
+	// hide everything in a directory it was never meant to apply to —
+	// files freshly pasted in from another tab, say — leaving a listing
+	// indistinguishable from a genuinely empty folder unless you already
+	// know to check the filter-menu's own indicator. Deliberately not
+	// set for a directory that's simply, actually empty to begin with
+	// (filterByText is a no-op then regardless — see load's own
+	// computation of this field for exactly how that distinction is
+	// made) — this is about a filter actively hiding something, not
+	// about there being nothing there in the first place.
+	filterMatchesNothing bool
+
 	// filterMenuBtn replaces filterField/filterRegexBtn's own old,
 	// always-visible slot in the header row — a compact "Nx Y" button
 	// (see renderFilterMenuBtn), "Y" chosen for its own passing
@@ -694,7 +712,16 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		}
 		p.reportError(p.load(p.path))
 	})
-	p.filterField.SetDoneFunc(func(tcell.Key) { p.app.SetFocus(p.table) })
+	// No SetDoneFunc set here, unlike most other fields this app builds
+	// in their own NewX constructor: filterField only ever actually
+	// receives focus once it's embedded inside the filter-menu dropdown
+	// (see Root.renderFilterMenu, which rebuilds and rewires the whole
+	// dropdown fresh on every open) — never directly, the way an early
+	// version of this binding once did (see openFilterMenu's own doc
+	// comment on the "/" plain command's own fix). renderFilterMenu is
+	// what sets a real one there instead, closing over that render
+	// pass's own keyboard focus-cycling order and close callback —
+	// something a fixed, one-time SetDoneFunc set here could never do.
 
 	// filterMenuBtn is what actually sits in the header row now — see
 	// its own doc comment on the struct for the full reasoning.
@@ -1049,7 +1076,14 @@ func (p *Panel) load(dir string) error {
 		p.filterSizeActive = false
 		p.filterMtimeActive = false
 	}
+	beforeFilterCount := len(entries)
 	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive)
+	// See filterMatchesNothing's own doc comment: beforeFilterCount > 0
+	// is what tells "the filter hid everything" apart from "this
+	// directory is simply empty" — filterByText itself is a no-op on an
+	// already-empty entries slice either way, so both would otherwise
+	// look identical here.
+	p.filterMatchesNothing = len(entries) == 0 && beforeFilterCount > 0
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
 	p.table.Clear()
@@ -1473,6 +1507,15 @@ func filterModeLabel(regex bool) string {
 // no such distinction yet (see filterSizeActive/filterMtimeActive's own
 // doc comment on the struct: pure toggles, no filtering logic behind
 // them) — their raw toggle state is the only signal there is.
+//
+// Also colors the "Nx" itself EntryError's own red whenever
+// filterMatchesNothing is true (see its own doc comment) — a filter
+// hiding every single entry reads exactly like a genuinely empty
+// directory otherwise, and this indicator is the one place a plain,
+// unfiltered look at the listing itself never will be: a stray glance
+// at "Nx" in a color already meaningful elsewhere as "something's
+// wrong" is far more likely to register than noticing a small, neutral
+// count is present at all.
 func (p *Panel) renderFilterMenuBtn() {
 	count := 0
 	if p.filterGlobActive && p.filterText != "" {
@@ -1488,6 +1531,9 @@ func (p *Panel) renderFilterMenuBtn() {
 	prefix := ""
 	if count > 0 {
 		prefix = fmt.Sprintf("%dx", count)
+		if p.filterMatchesNothing {
+			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(p.theme.EntryError), prefix)
+		}
 	}
 
 	keyBG := colorTag(p.theme.ButtonBackground)
