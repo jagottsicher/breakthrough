@@ -158,12 +158,16 @@ Sort by clicking a column heading (Name, Size, Modified).
 
 ### The path bar
 
-The five buttons at the very start of it — Start, Home, Back, Forward,
-Up — are real, clickable buttons: a background-colored square on
-either side of the glyph, with its own plain-background column between
-one button and the next, so each reads as its own separate control
-rather than a run of characters. Clicking anywhere in a button's own
-colored square activates it, not just the glyph's own single column.
+The six buttons at the very start of it — Start, Root, Home, Back,
+Forward, Up — are real, clickable buttons: a background-colored square
+on either side of the glyph, with its own plain-background column
+between one button and the next, so each reads as its own separate
+control rather than a run of characters. Clicking anywhere in a
+button's own colored square activates it, not just the glyph's own
+single column. Root (`/`) sits right after Start and jumps to the
+filesystem root — the breadcrumb's own leading "/" already links there
+too, but as a plain, easy-to-miss character; Root gives that same
+destination a proper, styled button of its own.
 
 ### Filtering
 
