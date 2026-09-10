@@ -24,6 +24,8 @@ func TestDefaultThemeResolvesAllFieldsToValidColors(t *testing.T) {
 		"EntryNormal":             resolved.EntryNormal,
 		"EntryExecutable":         resolved.EntryExecutable,
 		"EntryError":              resolved.EntryError,
+		"WarningText":             resolved.WarningText,
+		"CriticalText":            resolved.CriticalText,
 	}
 	for name, c := range fields {
 		if c == tcell.ColorDefault {
