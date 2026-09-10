@@ -191,29 +191,52 @@ into a directory it was never meant to apply to).
   switches the filter off without clearing whatever pattern is already
   typed — handy for temporarily seeing everything again without losing
   your place.
-- **Size filter** — on/off for now; the comparison operators and
-  ranges (`size >= 1m`, `size < 1m AND size > 5m`, and so on) this is
-  meant to grow into aren't built yet.
-- **Modified-time filter** — on/off for now too; absolute and relative
-  date/time ranges (`before`, `after`, `between`, or "last N days") are
-  the planned next step.
+- **Size filter** — a comparison expression, typed straight into its
+  own field: `> 1m`, `>= 500k`, `= 0` (empty files), or a range by
+  joining two clauses with `and` — `> 1m and < 1g`. The operators are
+  `<`, `<=`, `>`, `>=`, `=` (`==` also works, for anyone typing it out
+  of habit); units are `b`/`k`/`m`/`g`/`t`, case-insensitive and
+  binary (1024-based, the same convention the Size column's own
+  human-readable mode already uses) — a bare number with no unit means
+  plain bytes.
+- **Modified-time filter** — also a typed expression: `before <moment>`,
+  `after <moment>`, or `between <moment> and <moment>` for a range.
+  A moment is either an absolute date/time (`2026-09-01`,
+  `2026-09-01 14:30`, or with seconds/a timezone) or a relative one
+  (`7 days`, `2 hours ago`, `30 minutes`) — `sec`/`min`/`hour`/`day`/
+  `week`/`month`/`year` (singular or plural) are all recognized units,
+  and month/year are necessarily approximate (30/365 days). Leaving
+  off the `before`/`after`/`between` keyword entirely and just typing a
+  relative moment on its own — `last 7 days`, or plain `7 days` — is
+  shorthand for "modified within that span", the most common case.
 
-The dropdown stays open while you tick more than one of these. `Tab`/
-`Shift+Tab` cycle keyboard focus through all five of its own pieces —
-the glob checkbox, its Glob/Regex button, the pattern field, then the
-size and modified-time rows, wrapping back to the first — `Space` or
-`Enter` toggles whichever checkbox-style row currently has focus, and
-`Escape` closes the whole dropdown from any of them, the same as
-clicking elsewhere or `Ctrl`+`C` already did. By default (the `filter_persistent` setting,
-see the reference below), all three carry straight over when you
-navigate to a different directory — browsing a whole tree with the
-same filter switched on is the point, and the "Nx" count in the path
-bar is what keeps a still-active filter from going unnoticed while you
-do. Set `filter_persistent = false` to go back to the original
-behavior instead: navigating to a different directory resets all three
-back to their own defaults (the glob/regex filter cleared and
-re-enabled, size/modified-time switched off), so every new directory
-starts unfiltered.
+Typing into the size or modified-time field auto-activates its own
+checkbox, exactly the way typing into the glob field already does —
+ticking the checkbox by hand is only for temporarily switching a
+filter off without losing what's typed, the same "disable without
+clearing" convenience the glob row has always had. An expression that
+doesn't parse yet (still mid-keystroke, say) is treated as no filter
+at all rather than an error, so half-typed text never throws the
+listing into a confusing state.
+
+The dropdown stays open while you tick or fill in more than one of
+these — narrowing by name, size, and modified time all at once is the
+point. `Tab`/`Shift+Tab` cycle keyboard focus through all seven of its
+own pieces — the glob checkbox, its Glob/Regex button, the pattern
+field, the size checkbox, the size expression field, the modified-time
+checkbox, and the modified-time expression field, wrapping back to the
+first — `Space` or `Enter` toggles whichever checkbox currently has
+focus, and `Escape` closes the whole dropdown from any of them, the
+same as clicking elsewhere or `Ctrl`+`C` already did. By default (the
+`filter_persistent` setting, see the reference below), all three carry
+straight over when you navigate to a different directory — browsing a
+whole tree with the same filter switched on is the point, and the "Nx"
+count in the path bar is what keeps a still-active filter from going
+unnoticed while you do. Set `filter_persistent = false` to go back to
+the original behavior instead: navigating to a different directory
+resets all three back to their own defaults (the glob/regex filter
+cleared and re-enabled, size/modified-time switched off and cleared),
+so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, green for executable, red for a
