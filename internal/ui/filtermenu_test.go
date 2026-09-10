@@ -490,6 +490,127 @@ func TestFilterMenuSpaceTogglesRowFromKeyboard(t *testing.T) {
 	}
 }
 
+// TestFilterMenuSlashAdvancesThroughFieldsAndWraps pins "/" own
+// repurposed meaning once the dropdown is already open (see
+// openFilterMenu's own doc comment for the other half — a bare "/"
+// from plain browsing still just opens it, unchanged): jumping
+// straight to the next of the three real fields, skipping every
+// checkbox and the glob/regex mode button in between, wrapping back to
+// the first — the same "second press of an already-meaningful key
+// advances further" pattern Ctrl+T already uses for the tab switcher.
+func TestFilterMenuSlashAdvancesThroughFieldsAndWraps(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+
+	sizeField := filterMenuFieldRowField(t, r, 2)
+	mtimeField := filterMenuFieldRowField(t, r, 3)
+
+	if !r.panel.filterField.HasFocus() {
+		t.Fatal("setup: filterField should have initial focus when the dropdown opens")
+	}
+
+	slash := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	r.panel.filterField.InputHandler()(slash, noop)
+	if !sizeField.HasFocus() {
+		t.Error("\"/\" from filterField should jump straight to the size field, skipping the size checkbox")
+	}
+
+	sizeField.InputHandler()(slash, noop)
+	if !mtimeField.HasFocus() {
+		t.Error("\"/\" from the size field should jump straight to the modified-time field, skipping its checkbox")
+	}
+
+	mtimeField.InputHandler()(slash, noop)
+	if !r.panel.filterField.HasFocus() {
+		t.Error("\"/\" from the modified-time field should wrap back to filterField")
+	}
+
+	if r.activePage != filterMenuPage {
+		t.Error("\"/\" advancing through fields should never close the dropdown")
+	}
+}
+
+// TestFilterMenuSlashFromCheckboxJumpsToItsOwnField pins the other
+// starting point: "/" pressed while a checkbox (not yet a field) has
+// focus jumps to that same row's own field — the field immediately
+// follows its checkbox in the dropdown's own order, so this is the
+// same "skip anything that isn't a field" rule as the field-to-field
+// case, just starting one stop earlier.
+func TestFilterMenuSlashFromCheckboxJumpsToItsOwnField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+
+	sizeCheckbox := filterMenuFieldRowCheckbox(t, r, 2)
+	sizeField := filterMenuFieldRowField(t, r, 2)
+	slash := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	r.app.SetFocus(sizeCheckbox)
+	sizeCheckbox.InputHandler()(slash, noop)
+	if !sizeField.HasFocus() {
+		t.Error("\"/\" from the size checkbox should jump to the size field, its own row's field")
+	}
+}
+
+// TestFilterMenuSlashIsNeverTypedIntoAField pins the safety property
+// the whole design leans on: "/" must never actually land in any of
+// these fields' own text content, only ever change focus — verified
+// here because a bare filename can never contain "/", so it was never
+// a character any of these expressions could legitimately need
+// (glob patterns match a bare Name, never a path; this app's own
+// absolute-date layouts are all hyphen-separated).
+func TestFilterMenuSlashIsNeverTypedIntoAField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	sizeField := filterMenuFieldRowField(t, r, 2)
+	r.app.SetFocus(sizeField)
+
+	sizeField.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone), func(tview.Primitive) {})
+
+	if got := sizeField.GetText(); got != "" {
+		t.Errorf("size field text = %q after pressing \"/\", want empty — \"/\" should only move focus, never be typed", got)
+	}
+}
+
+// TestSlashViaHandlePlainKeyDoesNotReopenAnAlreadyOpenDropdown pins the
+// other half of "/" own dual meaning at the real top-level dispatch,
+// not just the widget-level InputCapture the tests above exercise
+// directly: acceptsPlainKeyCommand already refuses any plain command
+// while an overlay is showing (see its own doc comment), so
+// HandlePlainKey("/") returns false once the dropdown is open instead
+// of calling openFilterMenu a second time — letting the key event fall
+// through to tview's own focus-based routing instead, which is where
+// nextField's own InputCapture wiring actually lives.
+func TestSlashViaHandlePlainKeyDoesNotReopenAnAlreadyOpenDropdown(t *testing.T) {
+	r := newPlainKeyRoot(t) // acceptsPlainKeyCommand needs the table to genuinely hold focus
+	slash := tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone)
+
+	if !r.HandlePlainKey(slash) {
+		t.Fatal("setup: \"/\" from plain browsing should open the dropdown")
+	}
+	if r.activePage != filterMenuPage {
+		t.Fatal("setup: the dropdown should now be open")
+	}
+
+	if r.HandlePlainKey(slash) {
+		t.Error("\"/\" while the dropdown is already open should not be handled as a plain command at all")
+	}
+}
+
 // TestFilterMenuTabCyclesFocusThroughAllSevenStops pins the user's own
 // explicit request: keyboard navigation within the dropdown, the same
 // as the tab switcher already offers — Tab must move focus through
