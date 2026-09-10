@@ -153,6 +153,19 @@ type Panel struct {
 	filterSizeActive  bool
 	filterMtimeActive bool
 
+	// filterPersistent mirrors config.Settings.FilterPersistent (see its
+	// own doc comment there for the full reasoning) — set once from it
+	// in NewPanel, updated for every open tab together by
+	// Root.setFilterPersistent, exactly the same shape showHidden/
+	// sizeBytes/mtimeUnix already follow. Read only by load's own
+	// newDirectory branch: true (the default) skips resetting
+	// filterText/filterGlobActive/filterSizeActive/filterMtimeActive
+	// there at all, so whatever filter was active carries straight into
+	// the new directory; false restores the original, pre-this-setting
+	// behavior of always starting a freshly navigated directory
+	// unfiltered.
+	filterPersistent bool
+
 	// filterMenuBtn replaces filterField/filterRegexBtn's own old,
 	// always-visible slot in the header row — a compact "Nx Y" button
 	// (see renderFilterMenuBtn), "Y" chosen for its own passing
@@ -578,6 +591,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		showHidden:       settings.ShowHidden,
 		sizeBytes:        settings.SizeBytes,
 		mtimeUnix:        settings.MtimeUnix,
+		filterPersistent: settings.FilterPersistent,
 		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
 	p.table.SetBorders(false)
@@ -941,14 +955,18 @@ func (p *Panel) applyTheme(theme config.ResolvedTheme) {
 // to a same-directory refresh, e.g. after toggling hidden files, sort,
 // or the filter's own regex mode) resets two things:
 //
-//   - The filter box, the same "scoped to what's on screen, not
-//     carried across navigation" rule selected already follows, and for
-//     the same reason: a filter that stayed applied after moving
-//     somewhere unrelated would too easily leave the new directory
-//     looking empty for a reason that isn't obvious. filterField.SetText
-//     below re-enters this func's own SetChangedFunc, which no-ops
-//     there since filterText already matches by the time it fires — see
-//     that handler's own comment.
+//   - The filter box — unless filterPersistent is true (the default;
+//     see config.Settings.FilterPersistent's own doc comment), in which
+//     case this step is skipped entirely and whatever filter was active
+//     carries straight into the new directory. filterPersistent false
+//     restores the original behavior: a filter scoped to "what's on
+//     screen, not carried across navigation", the same rule selected
+//     already follows, and for the same reason — a filter that stayed
+//     applied after moving somewhere unrelated would too easily leave
+//     the new directory looking empty for a reason that isn't obvious.
+//     filterField.SetText below re-enters this func's own
+//     SetChangedFunc, which no-ops there since filterText already
+//     matches by the time it fires — see that handler's own comment.
 //   - The table's own cursor, back to the top row — per the user's own
 //     request, landing on wherever the table's internal selection
 //     happened to be left (Table.Clear doesn't touch it, so without this
@@ -1012,7 +1030,7 @@ func (p *Panel) load(dir string) error {
 	}
 
 	newDirectory := abs != p.path
-	if newDirectory {
+	if newDirectory && !p.filterPersistent {
 		p.filterText = ""
 		p.filterField.SetText("")
 		// The filter-menu's own three toggles are exactly as scoped to

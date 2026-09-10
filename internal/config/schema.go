@@ -117,6 +117,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "filter_persistent",
+			Default:     strconv.FormatBool(d.FilterPersistent),
+			Kind:        KindBool,
+			Summary:     "Keep the filter menu's own text/size/modified-time filters active when you navigate into a different directory.",
+			Implemented: true,
+		},
+		{
 			Key:         "pager",
 			Default:     d.Pager,
 			Kind:        KindEnum,

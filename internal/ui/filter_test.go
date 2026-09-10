@@ -182,16 +182,20 @@ func TestFilterRegexToggleFlipsModeAndRelabels(t *testing.T) {
 	}
 }
 
-// TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh pins the two
-// halves of load()'s own reset rule: moving to a different directory
-// clears the filter (both the field's text and Panel.filterText),
-// while reloading the same directory (e.g. toggling hidden files)
-// leaves it exactly as typed.
-func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
+// TestFilterPersistsAcrossNavigationByDefault pins the user's own
+// explicit request (config.Settings.FilterPersistent's own doc
+// comment): browsing several directories in a row with the same
+// filter switched on is the default — navigating to a genuinely
+// different directory must NOT clear the filter (neither the field's
+// text nor Panel.filterText) the way it always used to.
+func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
+	}
+	if !r.panel.filterPersistent {
+		t.Fatal("setup: filterPersistent should default to true")
 	}
 
 	r.panel.filterField.SetText("ap*")
@@ -199,8 +203,40 @@ func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
 		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
 	}
 
+	sub := filepath.Join(dir, "app-data")
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+	if r.panel.filterText != "ap*" {
+		t.Errorf("filterText after navigating to a new directory = %q, want unchanged %q (persistent by default)", r.panel.filterText, "ap*")
+	}
+	if got := r.panel.filterField.GetText(); got != "ap*" {
+		t.Errorf("filterField text after navigating to a new directory = %q, want unchanged %q", got, "ap*")
+	}
+}
+
+// TestFilterResetsOnNavigationWhenNotPersistent pins the opt-out (see
+// config.Settings.FilterPersistent's own doc comment for the "off"
+// half): a same-directory refresh (what toggling hidden files does
+// under the hood) must still not touch the filter regardless of
+// filterPersistent, but navigating to a genuinely different directory
+// now clears it — restoring the original, pre-this-setting behavior
+// for anyone who prefers it.
+func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterPersistent = false
+
+	r.panel.filterField.SetText("ap*")
+	if r.panel.filterText != "ap*" {
+		t.Fatalf("setup: filterText = %q, want %q", r.panel.filterText, "ap*")
+	}
+
 	// Same-directory refresh (what toggling hidden files does under the
-	// hood) must not touch the filter.
+	// hood) must not touch the filter either way.
 	if err := r.panel.load(r.panel.path); err != nil {
 		t.Fatalf("load (refresh): %v", err)
 	}
@@ -211,7 +247,8 @@ func TestFilterResetsOnNavigationButNotOnSameDirectoryRefresh(t *testing.T) {
 		t.Errorf("filterField text after a same-directory refresh = %q, want unchanged %q", got, "ap*")
 	}
 
-	// Navigating to a different directory must clear it.
+	// Navigating to a different directory must clear it, since
+	// filterPersistent is false here.
 	sub := filepath.Join(dir, "app-data")
 	if err := r.panel.navigate(sub); err != nil {
 		t.Fatalf("navigate: %v", err)

@@ -231,6 +231,19 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.mouseEnabled },
 					func(r *Root, b bool) { r.setMouseEnabled(b) },
 				),
+				boolOption("filter_persistent", "Filter carries over between directories",
+					"Whether the filter menu's own text/glob/regex pattern and its size/"+
+						"modified-time toggles stay active when you move to a different directory.\n\n"+
+						"On (the default) keeps browsing with the same filter switched on until "+
+						"you change or clear it yourself — the filter-menu button's own \"Nx\" "+
+						"count stays visible the whole time, so a filter that's still narrowing "+
+						"what you see is never silently forgotten. Off goes back to the original "+
+						"behavior: every new directory starts unfiltered, and you filter it again "+
+						"from scratch if you want to.",
+					false,
+					func(r *Root) bool { return r.settings.FilterPersistent },
+					func(r *Root, b bool) { r.setFilterPersistent(b) },
+				),
 			},
 		},
 		{
@@ -337,6 +350,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.SplitStacked), true
 	case "mouse_enabled":
 		return strconv.FormatBool(s.MouseEnabled), true
+	case "filter_persistent":
+		return strconv.FormatBool(s.FilterPersistent), true
 	}
 	return "", false
 }

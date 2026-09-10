@@ -71,6 +71,10 @@ terminal.
   own checkbox to switch it off without losing what's typed), plus a
   size filter and a modified-time filter — combinable, on/off for now
   while their own comparison/range options are still being built out.
+  Carries over across a directory change by default (`filter_persistent`),
+  so browsing a whole tree with the same filter switched on is the
+  normal way to use it, not a special case; set it to `false` to go
+  back to every new directory starting unfiltered instead.
 - The five nav buttons (Start/Home/Back/Forward/Up) at the very start
   of the path bar are real, highlighted buttons now — a plain
   background-colored square either side of each glyph, with its own
