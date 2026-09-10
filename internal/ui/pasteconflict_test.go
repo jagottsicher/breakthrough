@@ -306,6 +306,84 @@ func TestFinishPasteJobLeavesSourceTabsAloneAfterACopy(t *testing.T) {
 	}
 }
 
+// TestMaybeReloadPasteAffectedTabsReloadsWhileConflictDialogOpen pins
+// the user's own exact report: pasting a selection where a couple of
+// items already exist at the destination opens a dialog for the first
+// conflict it finds, but everything else in the selection keeps
+// copying/moving in the background regardless (see pasteWalk's own doc
+// comment) — before this fix, none of that background progress ever
+// became visible in the affected tab(s) until every conflict was
+// answered, however long that took, since finishPasteJob's own reload
+// was the *only* one and it never ran until job.current/job.pending
+// were both clear. job.current being non-nil here (mimicking an open
+// dialog, without needing a real one) must not block this reload at
+// all — only whether an item's own outcome actually changed since the
+// last check should.
+func TestMaybeReloadPasteAffectedTabsReloadsWhileConflictDialogOpen(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	job := newPasteTestJob(r, false, destDir, 2)
+	c := pasteConflict{src: "/irrelevant/whatever.txt", dst: filepath.Join(destDir, "whatever.txt")}
+	job.current = &c // a conflict dialog is "open" for a *different* item than the one below
+
+	newFile := filepath.Join(destDir, "banana.txt")
+	if err := os.WriteFile(newFile, []byte("just landed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job.remaining-- // mimics pasteItemDone having recorded that item's own final outcome
+
+	r.maybeReloadPasteAffectedTabs(job)
+
+	if _, ok := rowForPath(r.panel, newFile); !ok {
+		t.Error("destination tab should already show the newly landed file, even with the conflict dialog still open")
+	}
+	if job.current == nil {
+		t.Error("this reload must not itself touch the open dialog's own state")
+	}
+}
+
+// TestMaybeReloadPasteAffectedTabsSkipsWhenNothingChanged pins the
+// other half: a tick where job.remaining hasn't moved since the last
+// reload (mid-copy on one large file, or simply no tick has landed
+// exactly when an item finished) must not reload at all. Pinned via a
+// manual checkbox selection surviving (or not) across the call, since
+// Panel.load unconditionally clears it even for a same-path reload
+// that changes nothing else — a reliable, already-established way to
+// detect whether a reload actually ran without needing a mock.
+func TestMaybeReloadPasteAffectedTabsSkipsWhenNothingChanged(t *testing.T) {
+	destDir := t.TempDir()
+	existing := filepath.Join(destDir, "existing.txt")
+	if err := os.WriteFile(existing, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	job.lastReloadedRemaining = job.remaining // as if a reload already ran and saw today's count
+	r.panel.selected[existing] = true         // a selection unrelated to this paste
+
+	r.maybeReloadPasteAffectedTabs(job)
+	if !r.panel.selected[existing] {
+		t.Error("nothing changed since the last reload — this call should have been skipped, not clearing an unrelated selection")
+	}
+
+	job.remaining-- // now something actually did change
+	r.maybeReloadPasteAffectedTabs(job)
+	if r.panel.selected[existing] {
+		t.Error("remaining changed since the last reload — this call should have actually reloaded")
+	}
+	if job.lastReloadedRemaining != job.remaining {
+		t.Errorf("lastReloadedRemaining = %d, want %d (updated to match)", job.lastReloadedRemaining, job.remaining)
+	}
+}
+
 // TestApplyPasteOneResultClearsClipboardAfterCut pins Cut+Paste's own
 // clipboard-clearing — logic that only ever runs inside
 // applyPasteOneResult (via pasteItemDone/finishPasteJob), so it's

@@ -93,13 +93,11 @@ type pasteJob struct {
 	// sourceDirs is the set of directories every clipboard item's own
 	// src lives in — computed once, up front, alongside job itself (see
 	// reallyStartPaste). Only ever consulted for a Cut (see
-	// finishPasteJob): once a Move actually lands, whatever tab was
-	// showing that item's own source directory is stale — the row is
-	// genuinely gone from there, not just newly arrived wherever it
-	// landed — the same "reload once the whole job settles" treatment
-	// destDir's own reload already gets, just for the opposite side of
-	// the move. A plain Copy never touches its own source at all, so
-	// this is simply never consulted there, even though it's computed
+	// reloadPasteAffectedTabs): once a Move actually lands, whatever tab
+	// was showing that item's own source directory is stale — the row
+	// is genuinely gone from there, not just newly arrived wherever it
+	// landed. A plain Copy never touches its own source at all, so this
+	// is simply never consulted there, even though it's computed
 	// regardless (a handful of filepath.Dir calls — cheap enough not to
 	// bother gating on job.cut at the one call site that fills it in).
 	//
@@ -110,6 +108,27 @@ type pasteJob struct {
 	// Cut made from search results (see Panel.searchMode) can hold rows
 	// scattered across more than one real directory.
 	sourceDirs map[string]bool
+
+	// lastReloadedRemaining is the value of remaining (see its own doc
+	// comment) as of the most recent reloadPasteAffectedTabs call —
+	// initialized to len(items) in reallyStartPaste, the same starting
+	// value remaining itself gets, so the very first tick with nothing
+	// yet done correctly counts as "no change" too. animatePasteProgress's
+	// own ticker compares this against the current remaining on every
+	// tick and only actually reloads (updating this to match) when
+	// they differ — i.e., when at least one more item has reached a
+	// final outcome since the last reload, whether or not that outcome
+	// changed anything a listing would show (a skip or an error changes
+	// nothing on disk, but is cheap enough not to bother distinguishing
+	// from a real copy/move here). Skipping the reload otherwise matters
+	// for more than performance: Panel.load unconditionally clears
+	// p.selected on every call, even for the exact same path (see its
+	// own doc comment) — an unconditional reload on every tick would
+	// otherwise keep wiping out a checkbox selection made in an
+	// unrelated tab that just happens to be showing destDir/a
+	// sourceDir, for the entire duration of a Paste, even on ticks
+	// where nothing on disk changed at all.
+	lastReloadedRemaining int
 
 	// startedAt is when this job was created (see startPaste) — never
 	// touched again. animatePasteProgress's own ticker uses it purely
@@ -255,7 +274,8 @@ func (r *Root) reallyStartPaste(items []string, cut bool, destDir string) {
 	job := &pasteJob{
 		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir,
 		total: len(items), remaining: len(items), startedAt: time.Now(),
-		sourceDirs: distinctParentDirs(items),
+		sourceDirs:            distinctParentDirs(items),
+		lastReloadedRemaining: len(items),
 	}
 	r.pasteJob = job
 
@@ -287,6 +307,38 @@ func distinctParentDirs(items []string) map[string]bool {
 		dirs[filepath.Dir(item)] = true
 	}
 	return dirs
+}
+
+// reloadPasteAffectedTabs reloads every open tab currently showing
+// job.destDir, not just r.panel — the same directory can be open in
+// more than one tab (see syncClipboardHighlight's own doc comment for
+// the same "one Root-level event, every matching tab needs to know"
+// reasoning). For a Cut, a tab showing one of job.sourceDirs gets the
+// same treatment: a Move that actually lands removes that row from
+// there for real, not just wherever it landed — a real, user-reported
+// gap (a tab left listing files already gone, sometimes for the whole
+// rest of the job's own run if a conflict dialog was blocking
+// finishPasteJob from ever running its own reload — see
+// animatePasteProgress's own call site for why this no longer waits
+// that long). Copy is deliberately left out of that half: its own
+// source is never touched at all, nothing there could possibly be
+// stale. A tab showing something else entirely — a search result's own
+// directory, or any other unrelated path — is left exactly as it was;
+// pasting shouldn't force-navigate or otherwise disturb it (see
+// pasteClipboard's own doc comment). Any load failure is recorded the
+// same way regardless of which call site (the periodic one below, or
+// finishPasteJob's own final pass) actually hit it, so it surfaces in
+// the one end-of-job summary either way.
+func (r *Root) reloadPasteAffectedTabs(job *pasteJob) {
+	r.forEachTab(func(p *Panel) {
+		reload := p.path == job.destDir || (job.cut && job.sourceDirs[p.path])
+		if !reload {
+			return
+		}
+		if err := p.load(p.path); err != nil {
+			job.errors = append(job.errors, err)
+		}
+	})
 }
 
 // advancePasteQueue starts the next queued Paste, if any, once
@@ -430,13 +482,50 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 	}
 }
 
+// maybeReloadPasteAffectedTabs calls reloadPasteAffectedTabs only if at
+// least one more item has reached a final outcome since the last such
+// reload (see job.lastReloadedRemaining's own doc comment) — the guard
+// animatePasteProgress's own ticker applies on every tick, split out on
+// its own so a test can drive it directly without a real ticker or an
+// Application.Run() loop.
+//
+// This is the one place reloadPasteAffectedTabs runs *before* the whole
+// job is done — a real, user-reported gap: everything that doesn't
+// conflict already keeps copying/moving in the background while a
+// conflict dialog sits open (see pasteWalk's own doc comment), but
+// finishPasteJob's own reload only ever ran once every single item,
+// conflicts included, had a final outcome — so a destination (or, for
+// a Cut, source) tab stayed showing exactly what it did before Paste
+// even started for as long as one open dialog took to answer, even
+// once every non-conflicting item had already long finished landing or
+// leaving for real, on disk. job.current being non-nil (a dialog is
+// currently shown) plays no part in this decision at all — only
+// whether an item's own outcome actually changed since the last look.
+//
+// Skipped entirely when nothing changed — mid-copy on one large file,
+// say, or every tick before the very first item finishes — not just as
+// a performance nicety: a same-path Panel.load unconditionally clears
+// the checkbox selection even when nothing else changes, which an
+// unconditional reload here would otherwise do, repeatedly, to an
+// unrelated selection in any tab that happens to be showing destDir or
+// a sourceDir, for the entire span of a long Paste.
+func (r *Root) maybeReloadPasteAffectedTabs(job *pasteJob) {
+	if job.remaining == job.lastReloadedRemaining {
+		return
+	}
+	job.lastReloadedRemaining = job.remaining
+	r.reloadPasteAffectedTabs(job)
+}
+
 // animatePasteProgress advances job.animFrame and redraws the status
 // bar every hashAnimationInterval until job.ctx is done — mirrors
 // Properties' own animateHashProgress (same interval, same idea: keep a
 // "something is happening" cue moving smoothly regardless of how bursty
 // the actual I/O is, decoupled from it on its own goroutine), reusing
 // hashAnimationFrames' own glyph set for visual consistency with every
-// other "in progress" indicator this app already shows.
+// other "in progress" indicator this app already shows. Also drives
+// maybeReloadPasteAffectedTabs on the same cadence — see its own doc
+// comment for what that actually does and why.
 func (r *Root) animatePasteProgress(job *pasteJob) {
 	ticker := time.NewTicker(hashAnimationInterval)
 	defer ticker.Stop()
@@ -452,6 +541,7 @@ func (r *Root) animatePasteProgress(job *pasteJob) {
 				}
 				job.animFrame++
 				r.refreshStatusBar()
+				r.maybeReloadPasteAffectedTabs(job)
 			})
 		case <-job.ctx.Done():
 			return
@@ -612,31 +702,11 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 		r.setClipboard(nil, false)
 	}
 
-	// Every open tab currently showing destDir, not just r.panel — the
-	// same directory can be open in more than one tab (see
-	// syncClipboardHighlight's own doc comment for the same "one
-	// Root-level event, every matching tab needs to know" reasoning).
-	// For a Cut, a tab showing one of job.sourceDirs gets the same
-	// treatment: a Move that actually landed removed that row from
-	// there for real, not just wherever it landed — leaving that tab
-	// unreloaded left it still listing files gone the moment the Move
-	// itself finished (which, same-filesystem, is close to instant —
-	// see fsops.Move's own os.Rename fast path), a real, user-reported
-	// gap this closes. Copy is deliberately left out of that half: its
-	// own source is never touched at all, nothing there could possibly
-	// be stale. A tab showing something else entirely — a search
-	// result's own directory, or any other unrelated path — is left
-	// exactly as it was; pasting shouldn't force-navigate or otherwise
-	// disturb it (see pasteClipboard's own doc comment).
-	r.forEachTab(func(p *Panel) {
-		reload := p.path == job.destDir || (job.cut && job.sourceDirs[p.path])
-		if !reload {
-			return
-		}
-		if err := p.load(p.path); err != nil {
-			job.errors = append(job.errors, err)
-		}
-	})
+	// One final reload, guaranteed correct regardless of how the
+	// periodic ones during the job happened to land relative to the
+	// very last item (see reloadPasteAffectedTabs' own doc comment for
+	// what this actually touches and why).
+	r.reloadPasteAffectedTabs(job)
 
 	if len(job.errors) > 0 {
 		r.showError(pasteSummaryError(job))

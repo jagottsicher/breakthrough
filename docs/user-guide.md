@@ -610,12 +610,16 @@ so on, never a conflict, which always has a decision — is collected
 rather than stopping the whole Paste at the first one, and reported
 together once every item has a final outcome.
 
-Once the whole Paste is done, every open tab showing its destination
-reloads automatically, in every tab it's open in, not just wherever
-Paste was pressed — no manual `zr`/`⭯` needed to see what just landed.
-Cut gets the same treatment on the other side: every open tab showing
-one of the moved items' own source directories reloads too, so a tab
-you cut something from never keeps listing a file that's actually
+Every open tab showing the destination reloads automatically as items
+actually land — not just once the whole Paste is fully done — in every
+tab it's open in, not just wherever Paste was pressed, and not gated on
+answering a conflict dialog that's still sitting open: whatever doesn't
+conflict keeps landing in the background regardless (see above), and
+now shows up there too, live, while the dialog waits. No manual
+`zr`/`⭯` needed to see what's already landed. Cut gets the same
+treatment on the other side: every open tab showing one of the moved
+items' own source directories reloads too, as items actually leave, so
+a tab you cut something from never keeps listing a file that's already
 gone — which, within the same filesystem, can happen almost the
 instant Paste is pressed, moves being close to instant there. Copy
 leaves its own source list alone, since nothing there was ever removed.

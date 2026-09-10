@@ -177,11 +177,14 @@ terminal.
   starts at all. Any real failure (permission, a full disk, ...) is
   collected rather than stopping at the first one, and reported once
   the whole Paste is done. Every open tab showing the destination
-  reloads automatically once the whole Paste lands, in every tab it's
-  open in; Cut also reloads every open tab showing one of the moved
-  items' own source directories, so a tab something was cut from never
-  keeps listing a file that's actually gone — Copy leaves its own
-  source list alone, since nothing there was ever removed.
+  reloads automatically as items actually land, not just once the
+  whole Paste is fully done — including while an unrelated conflict's
+  own dialog is still sitting open, since whatever doesn't conflict
+  keeps landing regardless; Cut also reloads every open tab showing one
+  of the moved items' own source directories, live, as items actually
+  leave, so a tab something was cut from never keeps listing a file
+  that's actually gone — Copy leaves its own source list alone, since
+  nothing there was ever removed.
   Whatever's currently on the clipboard shows
   two ways: every row it holds gets a full-row tint — a neutral grey for
   Copy, a distinct, slightly pinkish-tinted grey for Cut, so a Cut
