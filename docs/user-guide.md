@@ -167,10 +167,15 @@ colored square activates it, not just the glyph's own single column.
 
 ### Filtering
 
-Click the "Y" button near the right edge of the path bar (an "Nx"
-count appears right before it once one or more filters are actually
-narrowing the listing — omitted while none are) to open a small
-dropdown with three rows, all combinable:
+Click the "Y" button near the right edge of the path bar, or press
+`/`, to open a small dropdown with three rows, all combinable. An "Nx"
+count appears right before the button once one or more filters are
+actually narrowing the listing (omitted while none are) — and turns
+bright red if a filter is currently hiding *everything* a directory
+would otherwise show, which otherwise looks exactly like a genuinely
+empty folder (a filter carried over from browsing somewhere else
+entirely, say, after `filter_persistent` — see below — brought it along
+into a directory it was never meant to apply to).
 
 - **Glob/regex filter** — the same live, type-to-narrow filter this app
   has always had, now living in the dropdown instead of always taking
@@ -186,9 +191,13 @@ dropdown with three rows, all combinable:
   date/time ranges (`before`, `after`, `between`, or "last N days") are
   the planned next step.
 
-The dropdown stays open while you tick more than one of these — closing
-it only ever takes clicking elsewhere or `Ctrl`+`C`, the same as
-cancelling anything else. By default (the `filter_persistent` setting,
+The dropdown stays open while you tick more than one of these. `Tab`/
+`Shift+Tab` cycle keyboard focus through all five of its own pieces —
+the glob checkbox, its Glob/Regex button, the pattern field, then the
+size and modified-time rows, wrapping back to the first — `Space` or
+`Enter` toggles whichever checkbox-style row currently has focus, and
+`Escape` closes the whole dropdown from any of them, the same as
+clicking elsewhere or `Ctrl`+`C` already did. By default (the `filter_persistent` setting,
 see the reference below), all three carry straight over when you
 navigate to a different directory — browsing a whole tree with the
 same filter switched on is the point, and the "Nx" count in the path
