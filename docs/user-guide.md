@@ -567,15 +567,27 @@ had to begin with, completely untouched.
 
 `Up`/`Down` move between the options, `Enter`/`Space` applies the
 highlighted one, `Escape` is the same as the preselected "Skip" — a
-stray keypress can never overwrite anything by accident.
+stray keypress can never overwrite anything by accident. Clicking
+anywhere outside the dialog does nothing at all, on purpose — unlike
+every other dialog in breakthrough, this one can't be dismissed by an
+outside click: one of its own options, or `Escape`, is the only way
+past it, so a conflict can never be left half-answered by an accidental
+click elsewhere.
 
 Everything that doesn't conflict keeps copying or moving in the
-background while this dialog is open. If Paste runs into a second
-conflict before the first is answered, it doesn't stack a second
-dialog on top — it queues behind the one already showing, reflected
-right in that dialog's own message as "(N more waiting)", and gets
-its own dialog (or resolves automatically, if an "all" option was
-already chosen) once the current one is answered.
+background while this dialog is open. Paste doesn't scan the whole
+selection for conflicts before starting either — it checks each item
+in order and starts copying/moving it immediately if nothing's in the
+way, so most of a large selection is often already done, or well under
+way, before you've even answered the first conflict. If Paste runs into
+a second conflict before the first is answered, it doesn't stack a
+second dialog on top — it queues behind the one already showing,
+reflected right in that dialog's own message as "(N more waiting)" the
+moment it's found (which, since checking whether something's in the
+way is quick, usually means well before you've answered the one
+currently shown), and gets its own dialog (or resolves automatically,
+if an "all" option was already chosen) once the current one is
+answered.
 
 Starting a further Paste while one is already running doesn't run it
 alongside the first, and doesn't replace it either — it queues behind
@@ -597,6 +609,16 @@ Any real failure along the way — a permission error, a full disk, and
 so on, never a conflict, which always has a decision — is collected
 rather than stopping the whole Paste at the first one, and reported
 together once every item has a final outcome.
+
+Once the whole Paste is done, every open tab showing its destination
+reloads automatically, in every tab it's open in, not just wherever
+Paste was pressed — no manual `zr`/`⭯` needed to see what just landed.
+Cut gets the same treatment on the other side: every open tab showing
+one of the moved items' own source directories reloads too, so a tab
+you cut something from never keeps listing a file that's actually
+gone — which, within the same filesystem, can happen almost the
+instant Paste is pressed, moves being close to instant there. Copy
+leaves its own source list alone, since nothing there was ever removed.
 
 ### What's on the clipboard right now
 
