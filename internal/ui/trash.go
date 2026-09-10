@@ -169,6 +169,30 @@ func removeConfirmSingleMessage(target string) string {
 // contains files/ and info/, never a trashed item directly) — anywhere
 // else this reports a plain error via the same overlay every other fsops
 // failure already uses, rather than silently doing nothing.
+//
+// Routes through the same asynchronous, conflict-resolving Paste
+// machinery an ordinary Paste already uses (see startPaste in
+// pasteconflict.go), rather than fsops.RestoreFromTrash's own simpler,
+// refuse-outright-on-conflict behavior: restoring something whose
+// original path now has an unrelated file sitting on it — because it
+// was recreated after the original was trashed, say — deserves the
+// exact same Overwrite/Skip/"if newer"/"if not empty" choice a Paste
+// conflict already offers, not a silent refusal with nothing but an
+// error message to explain why. job.restoreDests carries each item's
+// own OriginalPath — pasteWalk's own per-item dst computation uses it
+// directly instead of the one shared destDir an ordinary Paste's items
+// all join a common basename onto (see pasteJob.restoreDests' own doc
+// comment) — and job.restoreTrashDir is what applyPasteOneResult needs
+// afterward to remove each item's own now-stale .trashinfo sidecar
+// (see fsops.RemoveTrashSidecar) once its payload has safely landed.
+//
+// Deliberately does not call r.panel.deselectAll() itself, unlike the
+// old synchronous version: reloadPasteAffectedTabs already reloads the
+// trash listing (job.sourceDirs, gated on job.cut, which this job always
+// sets) as items actually finish landing, and Panel.load unconditionally
+// clears its own selection on every call regardless of path (see its own
+// doc comment) — the exact same mechanism an ordinary Cut+Paste already
+// relies on for this, not a gap specific to Restore.
 func (r *Root) restoreSelectionFromTrash() {
 	dir, err := r.trashDir()
 	if err != nil {
@@ -181,7 +205,7 @@ func (r *Root) restoreSelectionFromTrash() {
 		return
 	}
 
-	items, err := fsops.ListTrash(dir)
+	trashItems, err := fsops.ListTrash(dir)
 	if err != nil {
 		r.showError(err)
 		return
@@ -191,32 +215,23 @@ func (r *Root) restoreSelectionFromTrash() {
 		return
 	}
 
-	byPath := make(map[string]fsops.TrashItem, len(items))
-	for _, item := range items {
+	byPath := make(map[string]fsops.TrashItem, len(trashItems))
+	for _, item := range trashItems {
 		byPath[filepath.Clean(item.Path(dir))] = item
 	}
 
-	var firstErr error
+	items := make([]string, 0, len(targets))
+	dests := make([]string, 0, len(targets))
 	for _, target := range targets {
 		item, ok := byPath[filepath.Clean(target)]
 		if !ok {
 			continue
 		}
-		if err := fsops.RestoreFromTrash(item, dir); err != nil && firstErr == nil {
-			firstErr = err
-		} else if err == nil {
-			// item.Path(dir), not target: target is already
-			// filepath.Clean(target), but the map (and so what Details
-			// could actually have keyed itself on while browsing the
-			// trash) is built from item.Path(dir) specifically — the two
-			// only differ if target itself wasn't already clean, but
-			// matching the same value used to look item up here is the
-			// robust way to say that rather than assuming they agree.
-			r.refreshDetailsIfShowing(item.Path(dir), item.OriginalPath)
-		}
+		items = append(items, item.Path(dir))
+		dests = append(dests, item.OriginalPath)
 	}
-	r.panel.deselectAll()
-	r.reloadPanel(firstErr)
+
+	r.startPaste(items, true, "", false, dests, dir)
 }
 
 // openEmptyTrashConfirm is the context menu's "Empty Trash" — same

@@ -67,13 +67,20 @@ type pasteConflict struct {
 // queuedPaste is one Paste startPaste had to defer because another was
 // already running when it was asked for — see startPaste/
 // advancePasteQueue's own doc comments for the queue this becomes one
-// entry of. Just the four arguments startPaste itself takes, held
-// until it's this one's turn.
+// entry of. Just the arguments startPaste itself takes, held until
+// it's this one's turn.
 type queuedPaste struct {
 	items          []string
 	cut            bool
 	destDir        string
 	followSymlinks bool
+
+	// restoreDests/restoreTrashDir are Restore-from-Trash's own two
+	// extra arguments (see startPaste's own doc comment on why Restore
+	// reuses this whole machinery) — nil/"" for an ordinary Paste,
+	// exactly like on pasteJob itself.
+	restoreDests    []string
+	restoreTrashDir string
 }
 
 // pasteJob is one Paste's own asynchronous, resumable state — see
@@ -91,6 +98,43 @@ type pasteJob struct {
 
 	cut     bool
 	destDir string
+
+	// restoreDests, when non-nil, is Restore-from-Trash's own per-item
+	// destination list, parallel to items (see Root.restoreSelectionFromTrash):
+	// each trashed item's own original path, rather than the one shared
+	// destDir every ordinary Paste has. destDir/destDirs both still get
+	// set for a restore job (destDirs to the distinct set of
+	// restoreDests' own parent directories — see reallyStartPaste), but
+	// destDir itself is meaningless there and never actually read; only
+	// pasteWalk's own per-item dst computation ever consults
+	// restoreDests, and only when it's non-nil.
+	//
+	// Reusing this whole asynchronous, conflict-resolving machinery for
+	// Restore rather than building a second, parallel one was a
+	// deliberate design choice: Restore is architecturally the same
+	// shape as Paste (move item(s) from one place to another), it needs
+	// exactly the same six-option conflict dialog a destination that
+	// already exists should raise, and duplicating that dialog and its
+	// resolution logic a second time would just be a second place for
+	// "no data loss, no silent overwrite" to be got wrong.
+	//
+	// restoreTrashDir is the trash directory every item in a restore job
+	// came from — needed only to remove each item's own .trashinfo
+	// sidecar (see fsops.RemoveTrashSidecar) once its real payload has
+	// safely landed at its own restoreDests entry; "" for an ordinary
+	// Paste, where there is no sidecar at all.
+	restoreDests    []string
+	restoreTrashDir string
+
+	// destDirs is the set of directories a completed item should be
+	// visible in — the destination-side counterpart to sourceDirs just
+	// below, generalized so reloadPasteAffectedTabs never has to
+	// special-case Restore's own per-item destinations against an
+	// ordinary Paste's one shared destDir: for an ordinary Paste this is
+	// simply {destDir: true}; for a Restore it's every distinct parent
+	// directory across restoreDests (see reallyStartPaste, which fills
+	// this in identically to how it already fills in sourceDirs).
+	destDirs map[string]bool
 
 	// followSymlinks is Shift+V's own flag (see
 	// Root.pasteClipboardFollowingSymlinks) — plain Paste ('v') always
@@ -272,26 +316,31 @@ type pasteJob struct {
 // queueing the *next job* the same way just extends that one step
 // further out, rather than pretending two independent jobs could ever
 // usefully run at once on top of it.
-func (r *Root) startPaste(items []string, cut bool, destDir string, followSymlinks bool) {
+func (r *Root) startPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string) {
 	if len(items) == 0 {
 		return
 	}
 	if r.pasteJob != nil {
-		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir, followSymlinks: followSymlinks})
+		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir, followSymlinks: followSymlinks, restoreDests: restoreDests, restoreTrashDir: restoreTrashDir})
 		r.refreshStatusBar() // the "+N queued" suffix should update immediately, not wait for the next tick
 		return
 	}
-	r.reallyStartPaste(items, cut, destDir, followSymlinks)
+	r.reallyStartPaste(items, cut, destDir, followSymlinks, restoreDests, restoreTrashDir)
 }
 
 // reallyStartPaste is startPaste's own "actually begin" body, split out
 // so advancePasteQueue can start the next queued Paste through exactly
 // the same path once the current one is out of the way, rather than a
 // second, drifting copy of the same setup.
-func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, followSymlinks bool) {
+func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string) {
 	ctx, cancel := context.WithCancel(context.Background())
+	destDirs := map[string]bool{destDir: true}
+	if restoreDests != nil {
+		destDirs = distinctParentDirs(restoreDests)
+	}
 	job := &pasteJob{
 		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, followSymlinks: followSymlinks,
+		restoreDests: restoreDests, restoreTrashDir: restoreTrashDir, destDirs: destDirs,
 		total: len(items), remaining: len(items), startedAt: time.Now(),
 		sourceDirs:            distinctParentDirs(items),
 		lastReloadedRemaining: len(items),
@@ -328,11 +377,15 @@ func distinctParentDirs(items []string) map[string]bool {
 	return dirs
 }
 
-// reloadPasteAffectedTabs reloads every open tab currently showing
-// job.destDir, not just r.panel — the same directory can be open in
+// reloadPasteAffectedTabs reloads every open tab currently showing one
+// of job.destDirs, not just r.panel — the same directory can be open in
 // more than one tab (see syncClipboardHighlight's own doc comment for
 // the same "one Root-level event, every matching tab needs to know"
-// reasoning). For a Cut, a tab showing one of job.sourceDirs gets the
+// reasoning). destDirs is a single {destDir: true} set for an ordinary
+// Paste, and every distinct parent directory across a Restore's own
+// per-item restoreDests otherwise (see reallyStartPaste) — this never
+// needs to know which shape it's looking at. For a Cut, a tab showing
+// one of job.sourceDirs gets the
 // same treatment: a Move that actually lands removes that row from
 // there for real, not just wherever it landed — a real, user-reported
 // gap (a tab left listing files already gone, sometimes for the whole
@@ -350,7 +403,7 @@ func distinctParentDirs(items []string) map[string]bool {
 // the one end-of-job summary either way.
 func (r *Root) reloadPasteAffectedTabs(job *pasteJob) {
 	r.forEachTab(func(p *Panel) {
-		reload := p.path == job.destDir || (job.cut && job.sourceDirs[p.path])
+		reload := job.destDirs[p.path] || (job.cut && job.sourceDirs[p.path])
 		if !reload {
 			return
 		}
@@ -371,7 +424,7 @@ func (r *Root) advancePasteQueue() {
 	}
 	next := r.pasteQueue[0]
 	r.pasteQueue = r.pasteQueue[1:]
-	r.reallyStartPaste(next.items, next.cut, next.destDir, next.followSymlinks)
+	r.reallyStartPaste(next.items, next.cut, next.destDir, next.followSymlinks, next.restoreDests, next.restoreTrashDir)
 }
 
 // scanPasteBytes runs once per job, in its own goroutine started
@@ -454,12 +507,20 @@ func (r *Root) cancelPasteJob() {
 // target use actually pastes at once; a real bounded worker pool would
 // be the next step if that ever stopped being true.
 func (r *Root) pasteWalk(job *pasteJob, items []string) {
-	for _, src := range items {
+	for i, src := range items {
 		if job.ctx.Err() != nil {
 			return // superseded by a newer paste, or cancelled outright — see cancelPasteJob
 		}
 		src := src
+		// restoreDests[i], when set, is this item's own real destination
+		// (a trashed item's own original path — see
+		// Root.restoreSelectionFromTrash) — every item in a Restore job
+		// has its own, rather than sharing job.destDir the way an
+		// ordinary Paste's items all do.
 		dst := filepath.Join(job.destDir, filepath.Base(src))
+		if job.restoreDests != nil {
+			dst = job.restoreDests[i]
+		}
 
 		// Checked before anything else, including the conflict scan just
 		// below: pasting a file back into the very directory it's already
@@ -676,6 +737,18 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 		// keep following it under its new path.
 		r.refreshDetailsIfShowing(src, dst)
 	}
+	if job.restoreDests != nil {
+		// The payload itself already landed safely at dst — this is
+		// just removing the now-stale .trashinfo sidecar behind it.
+		// Best-effort, its error deliberately discarded rather than
+		// added to job.errors: an orphaned sidecar left behind here
+		// isn't lost data, and ListTrash's own self-healing (see its
+		// own doc comment: a sidecar whose files/ entry is already gone
+		// no longer matches anything real) quietly cleans it up on the
+		// next call regardless — not worth surfacing a scary "N of M
+		// items failed" summary over something that fixes itself.
+		_ = fsops.RemoveTrashSidecar(job.restoreTrashDir, filepath.Base(src))
+	}
 	r.pasteItemDone(job)
 }
 
@@ -723,7 +796,14 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	// process exits.
 	job.cancel()
 
-	if job.cut && len(job.errors) == 0 {
+	if job.cut && job.restoreDests == nil && len(job.errors) == 0 {
+		// job.restoreDests == nil excludes Restore-from-Trash: it also
+		// sets job.cut (it genuinely is a move), but was never sourced
+		// from r.clipboard in the first place — clearing it here would
+		// silently discard an unrelated Copy/Cut the user still has
+		// pending from a completely different action, just because a
+		// Restore happened to finish while it was sitting there.
+		//
 		// Moved away cleanly; nothing left to paste again — goes through
 		// setClipboard (not a bare "r.clipboard = nil"), the same as
 		// Copy/Cut themselves, so every open tab's own row highlighting
