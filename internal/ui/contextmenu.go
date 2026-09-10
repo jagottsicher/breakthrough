@@ -114,6 +114,12 @@ func contextMenuTree() []menuEntry {
 			// top, consequential one a step further away" shape the
 			// plain-letter keyboard layer's own d/D pair already uses.
 			{label: "Remove", action: func(r *Root) { r.openRemoveConfirm() }},
+			// The dereferencing sibling of "Paste" above, kept out of the
+			// top level for the same reason — the keyboard layer's own
+			// v/V pair uses this exact placement too (see keymap.go).
+			// Same visibility gate as plain Paste: nothing to offer once
+			// the clipboard is empty either way.
+			{label: "Paste, following symlinks", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
 		}},
 		{label: "Selection", submenu: []menuEntry{
 			{label: "Select all", action: func(r *Root) { r.panel.selectAll() }},

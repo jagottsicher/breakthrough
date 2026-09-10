@@ -31,7 +31,7 @@ import (
 func isolatePasteIO(t *testing.T) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{}, 64)
-	origCopy, origMove := fsCopy, fsMove
+	origCopy, origMove, origMoveFollowingSymlinks := fsCopy, fsMove, fsMoveFollowingSymlinks
 	fsCopy = func(src, dst string, opts fsops.CopyOptions) error {
 		err := origCopy(src, dst, opts)
 		done <- struct{}{}
@@ -42,7 +42,12 @@ func isolatePasteIO(t *testing.T) <-chan struct{} {
 		done <- struct{}{}
 		return err
 	}
-	t.Cleanup(func() { fsCopy, fsMove = origCopy, origMove })
+	fsMoveFollowingSymlinks = func(src, dst string, opts fsops.MoveOptions) error {
+		err := origMoveFollowingSymlinks(src, dst, opts)
+		done <- struct{}{}
+		return err
+	}
+	t.Cleanup(func() { fsCopy, fsMove, fsMoveFollowingSymlinks = origCopy, origMove, origMoveFollowingSymlinks })
 	return done
 }
 
@@ -159,6 +164,204 @@ func TestCutToClipboardThenPasteRemovesSourceOnDisk(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(srcDir, "banana.txt")); !os.IsNotExist(err) {
 		t.Errorf("Cut should remove the source file, stat err = %v", err)
+	}
+}
+
+// TestPasteClipboardFollowingSymlinksIsNoOpWhenClipboardEmpty pins the
+// same "nothing to do" guard pasteClipboard itself has always had —
+// checked explicitly here rather than left to startPaste's own
+// len(items)==0 return, since there would otherwise be nothing to
+// phrase a confirmation dialog about at all.
+func TestPasteClipboardFollowingSymlinksIsNoOpWhenClipboardEmpty(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.pasteClipboardFollowingSymlinks()
+
+	if r.activePage == confirmPage {
+		t.Error("an empty clipboard should never open the confirmation dialog")
+	}
+	if r.pasteJob != nil {
+		t.Error("an empty clipboard should never start a paste job")
+	}
+}
+
+// TestPasteClipboardFollowingSymlinksAsksForConfirmationFirst pins the
+// user's own explicit safety requirement: Shift+V must never be a
+// single, undialogued keypress the way plain Paste is — it can turn a
+// small, instant symlink into an arbitrarily large copy of whatever it
+// points to (potentially over a network), so it always shows the
+// generic confirmDialog first (see openConfirm) rather than starting a
+// paste immediately.
+func TestPasteClipboardFollowingSymlinksAsksForConfirmationFirst(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.copyToClipboard()
+
+	r.pasteClipboardFollowingSymlinks()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+	if r.pasteJob != nil {
+		t.Error("no paste job should start before the confirmation is answered")
+	}
+	if !strings.Contains(r.confirmDialogTitleBar.GetText(true), "following symlinks") {
+		t.Errorf("confirmation message = %q, want it to mention following symlinks", r.confirmDialogTitleBar.GetText(true))
+	}
+}
+
+// TestPasteClipboardFollowingSymlinksCancelledLeavesClipboardAndDiskUntouched
+// pins the other half of that same safety requirement: declining the
+// confirmation must be a true no-op, not just "the dialog closes" —
+// nothing on disk changes and the clipboard survives for a later,
+// ordinary Paste.
+func TestPasteClipboardFollowingSymlinksCancelledLeavesClipboardAndDiskUntouched(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = filepath.Join(dir, "apple.txt")
+	r.copyToClipboard()
+
+	r.pasteClipboardFollowingSymlinks()
+	r.cancelConfirm()
+
+	if r.pasteJob != nil {
+		t.Error("cancelling the confirmation should never start a paste job")
+	}
+	if len(r.clipboard) == 0 {
+		t.Error("cancelling should leave the clipboard exactly as it was, for a later ordinary Paste")
+	}
+}
+
+// TestFollowSymlinksPasteConfirmTextDiffersForCutVsCopy pins the one
+// sentence that actually has to differ between the two: only a Cut
+// ever removes anything at the source at all, so only its own wording
+// should say so — the symlink-handling sentence itself stays identical
+// either way (see pasteOne's own followSymlinks branch, which really
+// does treat both the same for that part).
+func TestFollowSymlinksPasteConfirmTextDiffersForCutVsCopy(t *testing.T) {
+	copyMessage, _ := followSymlinksPasteConfirmText(2, false)
+	cutMessage, _ := followSymlinksPasteConfirmText(2, true)
+
+	if strings.Contains(copyMessage, "removed") {
+		t.Errorf("a Copy's own message should never claim anything is removed, got %q", copyMessage)
+	}
+	if !strings.Contains(cutMessage, "removed") {
+		t.Errorf("a Cut's own message should say the original link is removed, got %q", cutMessage)
+	}
+	if !strings.Contains(cutMessage, "never its target") && !strings.Contains(cutMessage, "never touches") {
+		t.Errorf("a Cut's own message should explicitly reassure that the target itself is never touched, got %q", cutMessage)
+	}
+}
+
+// TestFollowSymlinksPasteConfirmTextUsesSingularForOneItem pins the
+// same singular/plural care this app already takes for its clipboard
+// status line ("Copy: 1 file" vs "2 files").
+func TestFollowSymlinksPasteConfirmTextUsesSingularForOneItem(t *testing.T) {
+	message, _ := followSymlinksPasteConfirmText(1, false)
+	if !strings.Contains(message, "1 item,") {
+		t.Errorf("message for a single item = %q, want it to say %q", message, "1 item,")
+	}
+	message, _ = followSymlinksPasteConfirmText(2, false)
+	if !strings.Contains(message, "2 items,") {
+		t.Errorf("message for two items = %q, want it to say %q", message, "2 items,")
+	}
+}
+
+// TestPasteFollowingSymlinksOnCutMaterializesContentAndRemovesOnlyTheLink
+// is this feature's own end-to-end safety test, run through the real
+// async engine rather than calling fsops.MoveFollowingSymlinks directly
+// (that guarantee is already pinned at the fsops level — see
+// move_test.go's own TestMoveFollowingSymlinks* tests) — this one
+// instead pins that the UI layer actually wires job.followSymlinks
+// through to it at all. "remote" stands in for a network mount (NFS,
+// EFS, ...) the user's own report was specifically worried about: an
+// entirely separate sibling directory this whole path must never
+// delete from, no matter what.
+func TestPasteFollowingSymlinksOnCutMaterializesContentAndRemovesOnlyTheLink(t *testing.T) {
+	srcDir := fixtureDir(t)
+	dstDir := t.TempDir()
+	remote := t.TempDir()
+	if err := os.WriteFile(filepath.Join(remote, "data.txt"), []byte("remote content"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(srcDir, "link-to-remote")
+	if err := os.Symlink(remote, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = link
+	r.cutToClipboard()
+	if err := r.panel.load(dstDir); err != nil {
+		t.Fatalf("load(dstDir): %v", err)
+	}
+
+	done := isolatePasteIO(t)
+	r.pasteClipboardFollowingSymlinks()
+	r.acceptConfirm()
+	waitPasteIO(t, done, 1)
+
+	if fi, err := os.Lstat(filepath.Join(dstDir, "link-to-remote")); err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("dst should be a real, materialized directory, not a symlink (mode %v, err %v)", fi.Mode(), err)
+	}
+	if got, err := os.ReadFile(filepath.Join(dstDir, "link-to-remote", "data.txt")); err != nil || string(got) != "remote content" {
+		t.Errorf("dst content = %q, %v, want %q", got, err, "remote content")
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("the original symlink should be gone, Lstat err = %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(remote, "data.txt")); err != nil || string(got) != "remote content" {
+		t.Fatalf("the symlink's own remote target must survive completely untouched, got %q, %v", got, err)
+	}
+}
+
+// TestPasteFollowingSymlinksOnCopyLeavesSourceSymlinkInPlace is the
+// Copy-side counterpart: dereferencing never touches the source at
+// all, symlink or not — only a Cut ever removes anything.
+func TestPasteFollowingSymlinksOnCopyLeavesSourceSymlinkInPlace(t *testing.T) {
+	srcDir := fixtureDir(t)
+	dstDir := t.TempDir()
+	target := filepath.Join(srcDir, "apple.txt") // an existing fixture file
+
+	link := filepath.Join(srcDir, "link-to-apple")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = link
+	r.copyToClipboard()
+	if err := r.panel.load(dstDir); err != nil {
+		t.Fatalf("load(dstDir): %v", err)
+	}
+
+	done := isolatePasteIO(t)
+	r.pasteClipboardFollowingSymlinks()
+	r.acceptConfirm()
+	waitPasteIO(t, done, 1)
+
+	if fi, err := os.Lstat(filepath.Join(dstDir, "link-to-apple")); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("dst should be a real, dereferenced file, not a symlink (mode %v, err %v)", fi.Mode(), err)
+	}
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("a Copy must leave the original symlink completely in place, Lstat mode %v, err %v", fi.Mode(), err)
 	}
 }
 
@@ -1276,7 +1479,7 @@ func TestStartPasteQueuesBehindARunningJob(t *testing.T) {
 
 	secondDestDir := t.TempDir()
 	secondItems := []string{filepath.Join(dir, "banana.txt")}
-	r.startPaste(secondItems, true, secondDestDir)
+	r.startPaste(secondItems, true, secondDestDir, false)
 
 	if r.pasteJob != running {
 		t.Fatal("starting a second Paste should not have touched the running job at all")

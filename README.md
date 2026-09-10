@@ -230,6 +230,18 @@ terminal.
   within one filesystem usually finishes too fast for any of this to
   show anything at all — expected, not a bug: there's nothing to report
   progress on.
+  `V` (Shift+Paste, or the context menu's "Paste, following symlinks")
+  is the dereferencing sibling of plain Paste: any symlink among the
+  pasted items — including one nested inside a folder being pasted —
+  is replaced at the destination with a real, independent copy of
+  whatever it points to (recursively, through a multi-hop chain too),
+  instead of being recreated as a symlink. Works for both a Copy- and a
+  Cut-marked clipboard alike; for a Cut, only the original link itself
+  is removed afterward — never whatever it pointed to, however far away
+  that actually lives (a different filesystem, a network mount). Always
+  asks for confirmation first, unlike plain `v`: dereferencing can turn
+  a small, instant symlink into an arbitrarily large copy, so this is
+  never a single, undialogued keypress.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

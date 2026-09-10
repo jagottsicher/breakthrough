@@ -2659,18 +2659,87 @@ func (r *Root) pasteClipboard() {
 	if r.panel.searchMode {
 		dir = filepath.Dir(r.target)
 	}
-	r.pasteInto(dir)
+	r.pasteInto(dir, false)
 }
 
-// pasteInto is pasteClipboard's own shared implementation, generalized
-// to an explicit destination directory — pasteClipboard itself is the
-// only caller, picking a search result's own directory instead of
-// r.panel.path while search results are showing (see its own doc
-// comment). A thin wrapper around startPaste (see pasteconflict.go for
-// the full async, conflict-resolving shape); a no-op if nothing was
-// ever copied/cut, same as before.
-func (r *Root) pasteInto(dir string) {
-	r.startPaste(r.clipboard, r.clipboardCut, dir)
+// pasteClipboardFollowingSymlinks is "V" (Shift+Paste): the
+// dereferencing sibling of plain Paste — see pasteJob.followSymlinks'
+// own doc comment in pasteconflict.go for exactly what changes once
+// this is on. Always asks for explicit confirmation first, through the
+// same openConfirm primitive every other consequential, hard-to-undo
+// action in this app already uses (Remove, Empty Trash, the Options
+// screen's own resets): unlike an ordinary Copy/Cut, this can turn a
+// small, instant symlink into an arbitrarily large copy of whatever it
+// points to — possibly living on a different device, or over a network
+// mount entirely (NFS, EFS, ...) — and, for a Cut, permanently removes
+// the original link once that copy has safely landed. That risk is
+// exactly what the user's own explicit request was about, so this is
+// deliberately never a single, undialogued keypress the way plain 'v'
+// is (see also fsops.MoveFollowingSymlinks' own doc comment for the
+// guarantee that makes the Cut half of this safe at all: only the
+// original link is ever removed, never its target).
+//
+// A no-op, like pasteClipboard itself, if nothing was ever copied/cut —
+// checked here rather than left to startPaste's own len(items) guard,
+// since there would otherwise be nothing to phrase the confirmation
+// message about.
+func (r *Root) pasteClipboardFollowingSymlinks() {
+	if len(r.clipboard) == 0 {
+		return
+	}
+	dir := r.panel.path
+	if r.panel.searchMode {
+		dir = filepath.Dir(r.target)
+	}
+	message, confirmLabel := followSymlinksPasteConfirmText(len(r.clipboard), r.clipboardCut)
+	r.openConfirm(message, confirmLabel, func() {
+		r.pasteInto(dir, true)
+	})
+}
+
+// followSymlinksPasteConfirmText builds openConfirm's own message and
+// confirmLabel for pasteClipboardFollowingSymlinks — split out on its
+// own so a test can pin the exact wording without opening a real
+// dialog. count is the number of clipboard items, not how many of them
+// actually are (or contain) a symlink — knowing that in advance would
+// need a full recursive scan of every marked directory before ever
+// asking, the same upfront cost this app already avoids elsewhere for
+// byte-accurate progress (see scanPasteBytes' own doc comment for that
+// same trade-off) — so the wording stays deliberately general rather
+// than promising a precise count it can't cheaply back up.
+//
+// Symlink handling itself is worded identically for cut and copy (see
+// pasteOne's own followSymlinks branch — both replace a symlink with a
+// real copy of whatever it resolves to, the same way); the one
+// sentence that actually differs is what happens to the source
+// afterward, since only a Cut ever removes anything there at all.
+func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel string) {
+	item := "item"
+	if count != 1 {
+		item = "items"
+	}
+	message = fmt.Sprintf(
+		"Paste %d %s, following symlinks: any symlink among them — including one nested inside a folder — will be replaced with a full copy of whatever it points to, which may be large or live on a different device or network mount (NFS, EFS, ...).",
+		count, item,
+	)
+	if cut {
+		message += " Afterward, only the original link itself is removed — never its target."
+	} else {
+		message += " Nothing at the source is touched."
+	}
+	return message, "Yes, paste (following symlinks)"
+}
+
+// pasteInto is pasteClipboard's/pasteClipboardFollowingSymlinks' own
+// shared implementation, generalized to an explicit destination
+// directory and an explicit followSymlinks choice — pasteClipboard
+// itself picks a search result's own directory instead of r.panel.path
+// while search results are showing (see its own doc comment). A thin
+// wrapper around startPaste (see pasteconflict.go for the full async,
+// conflict-resolving shape); a no-op if nothing was ever copied/cut,
+// same as before.
+func (r *Root) pasteInto(dir string, followSymlinks bool) {
+	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks)
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker
