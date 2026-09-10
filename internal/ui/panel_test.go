@@ -2735,6 +2735,89 @@ func TestBackForwardAlwaysLandsOnTopForPlainDirectories(t *testing.T) {
 	}
 }
 
+// TestUpAndBackResetScrollToTopNotJustTheCursorRow pins a real,
+// user-reported gap the test above never caught: it only ever checks
+// GetSelection() (the cursor row), never GetOffset() (the actual
+// scroll position) — see load's own newDirectory comment for the full
+// mechanism. Reproduced with exactly the shape reported: scrolled deep
+// into a long directory, entering a short subfolder small enough to
+// fit on screen entirely (the condition that leaves tview's own
+// trackEnd flag — a persistent "snap to the bottom on the next Draw"
+// bit that Table.Clear never resets, since load reuses the same
+// *tview.Table across every directory it ever shows — stuck true),
+// then going back up (or Back, which lands in load the same way).
+// Needs a real Draw pass along the way: trackEnd is only ever set by
+// tview's own Table.Draw, never reachable directly from this package.
+func TestUpAndBackResetScrollToTopNotJustTheCursorRow(t *testing.T) {
+	dir := t.TempDir()
+	// Directories sort before files (see applySortPreference) — enough
+	// of them, alphabetically before "sub", to push it well past a
+	// normal screen's worth of rows.
+	for i := 0; i < 40; i++ {
+		if err := os.Mkdir(filepath.Join(dir, fmt.Sprintf("adir%02d", i)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 30)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 30)
+	r.Draw(screen)
+	r.Draw(screen)
+
+	var subRow int
+	for row := 0; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok && ref.name == "sub" {
+			subRow = row
+			break
+		}
+	}
+	if subRow == 0 {
+		t.Fatal("setup: sub should not be at row 0")
+	}
+	r.panel.focusRow(subRow)
+	r.Draw(screen)
+	r.Draw(screen)
+	if rowOff, _ := r.panel.table.GetOffset(); rowOff == 0 {
+		t.Fatal("setup: expected to be scrolled down before entering the subfolder")
+	}
+
+	if err := r.panel.navigate(sub); err != nil {
+		t.Fatalf("navigate into sub: %v", err)
+	}
+	r.Draw(screen) // sub fits entirely on screen — this is what leaves tview's own trackEnd stuck true
+
+	if err := r.panel.navigate(filepath.Dir(r.panel.path)); err != nil {
+		t.Fatalf("navigate back up: %v", err)
+	}
+	r.Draw(screen)
+	r.Draw(screen)
+
+	rowOff, _ := r.panel.table.GetOffset()
+	selRow, _ := r.panel.table.GetSelection()
+	if selRow != 0 {
+		t.Errorf("selected row after going up = %d, want 0", selRow)
+	}
+	if rowOff != 0 {
+		t.Errorf("row offset after going up = %d, want 0 (scrolled to the very top, not left tracking the short subfolder's own bottom)", rowOff)
+	}
+}
+
 // TestOpenTrashIsHistoryAwareBackReturnsToOriginalDirectory pins the
 // other explicit part of the user's own request: visiting the trash
 // (see Root.openTrash) is a real history entry now, not invisible to
