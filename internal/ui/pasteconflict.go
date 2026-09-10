@@ -21,8 +21,9 @@ import (
 // of touching a real filesystem, and can synchronize with pasteWalk's
 // own background goroutine (see isolatePaste in pasteconflict_test.go).
 var (
-	fsCopy = fsops.Copy
-	fsMove = fsops.Move
+	fsCopy                  = fsops.Copy
+	fsMove                  = fsops.Move
+	fsMoveFollowingSymlinks = fsops.MoveFollowingSymlinks
 )
 
 // conflictResolution is one way to handle a single paste conflict — the
@@ -66,12 +67,13 @@ type pasteConflict struct {
 // queuedPaste is one Paste startPaste had to defer because another was
 // already running when it was asked for — see startPaste/
 // advancePasteQueue's own doc comments for the queue this becomes one
-// entry of. Just the three arguments startPaste itself takes, held
+// entry of. Just the four arguments startPaste itself takes, held
 // until it's this one's turn.
 type queuedPaste struct {
-	items   []string
-	cut     bool
-	destDir string
+	items          []string
+	cut            bool
+	destDir        string
+	followSymlinks bool
 }
 
 // pasteJob is one Paste's own asynchronous, resumable state — see
@@ -89,6 +91,23 @@ type pasteJob struct {
 
 	cut     bool
 	destDir string
+
+	// followSymlinks is Shift+V's own flag (see
+	// Root.pasteClipboardFollowingSymlinks) — plain Paste ('v') always
+	// leaves this false, and every field/behavior below this comment is
+	// completely unaffected by it either way. When true, every clipboard
+	// item's own symlinks — its own top-level entry, if it is one, or
+	// any found nested inside a directory being pasted — are replaced at
+	// dst with a real copy of whatever they resolve to, instead of being
+	// recreated as symlinks (see fsops.CopyOptions.FollowSymlinks, which
+	// this flag maps straight onto for a Copy). For a Cut (job.cut also
+	// true), pasteOne routes the item through fsops.MoveFollowingSymlinks
+	// instead of fsops.Move — see that function's own doc comment for
+	// the one property that matters most here: only the original link
+	// itself is ever removed afterward, never whatever it points to,
+	// however far away that actually lives (a different filesystem, a
+	// network mount, ...).
+	followSymlinks bool
 
 	// sourceDirs is the set of directories every clipboard item's own
 	// src lives in — computed once, up front, alongside job itself (see
@@ -253,26 +272,26 @@ type pasteJob struct {
 // queueing the *next job* the same way just extends that one step
 // further out, rather than pretending two independent jobs could ever
 // usefully run at once on top of it.
-func (r *Root) startPaste(items []string, cut bool, destDir string) {
+func (r *Root) startPaste(items []string, cut bool, destDir string, followSymlinks bool) {
 	if len(items) == 0 {
 		return
 	}
 	if r.pasteJob != nil {
-		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir})
+		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir, followSymlinks: followSymlinks})
 		r.refreshStatusBar() // the "+N queued" suffix should update immediately, not wait for the next tick
 		return
 	}
-	r.reallyStartPaste(items, cut, destDir)
+	r.reallyStartPaste(items, cut, destDir, followSymlinks)
 }
 
 // reallyStartPaste is startPaste's own "actually begin" body, split out
 // so advancePasteQueue can start the next queued Paste through exactly
 // the same path once the current one is out of the way, rather than a
 // second, drifting copy of the same setup.
-func (r *Root) reallyStartPaste(items []string, cut bool, destDir string) {
+func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, followSymlinks bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &pasteJob{
-		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir,
+		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, followSymlinks: followSymlinks,
 		total: len(items), remaining: len(items), startedAt: time.Now(),
 		sourceDirs:            distinctParentDirs(items),
 		lastReloadedRemaining: len(items),
@@ -352,7 +371,7 @@ func (r *Root) advancePasteQueue() {
 	}
 	next := r.pasteQueue[0]
 	r.pasteQueue = r.pasteQueue[1:]
-	r.reallyStartPaste(next.items, next.cut, next.destDir)
+	r.reallyStartPaste(next.items, next.cut, next.destDir, next.followSymlinks)
 }
 
 // scanPasteBytes runs once per job, in its own goroutine started
@@ -566,7 +585,12 @@ func (r *Root) reportPasteOutcome(job *pasteJob, fn func()) {
 // freshly-spawned goroutine either way, whether pasteWalk found no
 // conflict at all or a conflict resolved to something other than "skip"
 // (see resolveConflictAsync) — always off the UI thread, reporting back
-// through QueueUpdateDraw once it's done either way.
+// through QueueUpdateDraw once it's done either way. Which of the three
+// (fsMove, fsMoveFollowingSymlinks, or fsCopy) actually runs depends on
+// job.cut and job.followSymlinks together — see pasteJob.followSymlinks'
+// own doc comment for what changes and why a dereferencing Cut needs a
+// genuinely different function rather than just another CopyOptions
+// field passed to fsMove.
 //
 // Checks job.ctx.Err() before touching the filesystem at all: a
 // conflict resolved just as (or after) the job itself was cancelled —
@@ -612,10 +636,16 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 	job.ioMu.Lock()
 	var err error
-	if job.cut {
+	switch {
+	case job.cut && job.followSymlinks:
+		// See fsops.MoveFollowingSymlinks' own doc comment for the one
+		// guarantee that matters most here: only the original link
+		// itself is ever removed, never whatever it points to.
+		err = fsMoveFollowingSymlinks(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
+	case job.cut:
 		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
-	} else {
-		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
+	default:
+		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, FollowSymlinks: job.followSymlinks, OnFile: onFile, OnBytes: onBytes})
 	}
 	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })

@@ -45,7 +45,7 @@ dialog open.
 | `r` | Rename | `e` | Edit | `/` | Filter |
 | `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
-| `s` | Split view on/off | | | `a` | Select all |
+| `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
@@ -55,7 +55,10 @@ A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
 isn't. Browsing the Trash itself flips two of these to their
 trash-specific meaning: `r` restores instead of renaming, `D` empties
-the whole Trash instead of removing one file.
+the whole Trash instead of removing one file. `V` is `v` Paste's own
+bigger sibling too — see [Paste, following
+symlinks](#paste-following-symlinks) — and, like `D`, always asks first
+rather than firing on a single keypress.
 
 `h`/`k`/`M` target whichever of Properties/Details is relevant right
 now (Properties first if both are open on the same file), opening the
@@ -746,6 +749,40 @@ pasting within one filesystem usually finishes before this ever has a
 chance to show anything at all. That's correct, not a missed update:
 there is no meaningful "progress" to report for an operation that's
 already done by the time it started.
+
+### Paste, following symlinks
+
+Plain Paste (`v`) recreates a symlink as a symlink at the destination —
+the link itself moves or gets copied, never whatever it points to.
+`V` (Shift+Paste, or the context menu's "Paste, following symlinks")
+is the dereferencing alternative: any symlink among the pasted items —
+including one nested somewhere inside a folder being pasted — is
+replaced at the destination with a real, independent copy of whatever
+it resolves to, following a multi-hop chain of links if there is one.
+
+This works the same way whether the clipboard is holding a Copy or a
+Cut selection. For a Cut, only the *original link itself* is removed
+once its content has safely landed at the destination — never whatever
+it pointed to, no matter how far away that actually lives (a different
+directory, a different filesystem, a network mount like NFS or EFS).
+A real (non-symlink) folder that merely contains a symlink somewhere
+inside it is handled the same careful way: only that nested symlink's
+own entry is ever removed, the target it pointed to is left untouched.
+
+Because dereferencing can turn a small, instant symlink into an
+arbitrarily large copy — and, for a Cut, permanently removes the
+original link — `V` always asks for confirmation first, unlike plain
+`v`. Declining leaves the clipboard and everything on disk exactly as
+it was, ready for an ordinary Paste instead.
+
+One trade-off worth knowing: `V` always copies an item's full content
+before removing its source, even for a large folder that only contains
+a symlink somewhere deep inside it — there's currently no fast path
+that moves the non-symlink parts of a selection instantly and only
+dereferences the symlinks it actually finds along the way. For the
+common case (dereferencing an actual symlink, or a folder that mostly
+consists of one) this doesn't matter; it's only a real cost for a huge,
+mostly-ordinary folder pasted with `V` by mistake instead of plain `v`.
 
 ## Trash, Remove and Restore
 

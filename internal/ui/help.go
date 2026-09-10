@@ -59,7 +59,14 @@ var helpText = strings.TrimLeft(`
   both exist: "d" is reversible (the Trash), "D" is not (asks first).
   While browsing the Trash itself, "r" restores and "D" empties it,
   instead of their ordinary meaning — the same two letters, read
-  differently in the one place that makes sense.
+  differently in the one place that makes sense. "V" is "v" Paste's own
+  bigger sibling too: instead of recreating a symlink as a symlink at
+  the destination, it replaces it (and any symlink nested inside a
+  pasted folder) with a real copy of whatever it points to — for a Cut,
+  only the original link itself is removed afterward, never its
+  target, however far away that lives. Always asks first, the same as
+  "D", since a small, instant symlink can turn into an arbitrarily
+  large copy this way.
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
