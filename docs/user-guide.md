@@ -639,15 +639,21 @@ Paste:
   two operations, since the original disappears once Paste actually
   succeeds, so it's worth being able to tell the two apart at a glance
   rather than needing a brightness comparison. This tint stays visible
-  even on whichever row the cursor happens to be on, whether or not
-  this panel currently has the keyboard's real focus — a selection that
+  even on whichever row the cursor happens to be on — a selection that
   includes the cursor's own row (the common case: checking several
   files, or a right-drag, naturally leaves the cursor on the last one)
   still reads as staged for Cut/Copy instead of looking deselected the
-  moment focus moves elsewhere, say to a different tab. A directory
-  that's also on the clipboard shows this tint across its whole row
-  instead of its usual
-  gold name highlight — the two would otherwise compete for the same
+  moment focus moves elsewhere, say to a different tab. Exactly how
+  depends on whether this panel currently has the keyboard's real
+  focus: while it does, the ordinary focus highlight wins outright over
+  the tint for that one row, so the cursor's own position among several
+  tinted rows is never ambiguous; once focus moves away, that row shows
+  its own tint again instead, but a dimmer variant of it — clearly
+  still Cut- or Copy-colored, just distinguishable from every other
+  tinted row in the same selection, which keep their full-brightness
+  color regardless. A directory that's also on the clipboard shows this
+  tint across its whole row instead of its usual gold name highlight —
+  the two would otherwise compete for the same
   characters, so the clipboard tint wins outright rather than the two
   blending. This applies across every open tab currently showing that
   row, not only the tab Copy/Cut was pressed in, since the clipboard

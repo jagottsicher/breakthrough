@@ -188,6 +188,29 @@ type ResolvedTheme struct {
 
 	ClipboardCopyBackground tcell.Color
 	ClipboardCutBackground  tcell.Color
+	// ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive are
+	// derived, not independently configurable (see darkenForInactiveFocus
+	// and this pair's own use in internal/ui's Panel.rowSelectedStyle):
+	// a deliberately darker shade of ClipboardCopyBackground/
+	// ClipboardCutBackground themselves, used only for a clipboard-held
+	// row that's also the panel's own current cursor row while the panel
+	// does NOT have real keyboard focus. Without a color of its own for
+	// that specific combination, that row either lost its clipboard tint
+	// entirely (the original bug FocusedBackground/EditableBackground's
+	// own doc comment covers) or, once that was fixed, became visually
+	// identical to every other tinted row in the same selection — a
+	// real, user-reported follow-up: with several files selected, the
+	// cursor's own position (the one that would matter for a next
+	// action) became just as invisible as the color it replaced, only
+	// now for the opposite reason. A plain blend with EditableBackground
+	// was tried and rejected: EditableBackground ("slategray") already
+	// leans toward Copy's own cool/bluish hue, so blending it into Cut's
+	// own warm/reddish tint cancels out almost the whole difference that
+	// makes Cut recognizable as Cut in the first place, an asymmetry a
+	// scale-down avoids entirely by never mixing in a third, unrelated
+	// hue at all — see darkenForInactiveFocus's own doc comment.
+	ClipboardCopyBackgroundInactive tcell.Color
+	ClipboardCutBackgroundInactive  tcell.Color
 
 	Text               tcell.Color
 	EditableBackground tcell.Color
@@ -251,6 +274,8 @@ func (t Theme) Resolve() ResolvedTheme {
 		}
 		return tcell.GetColor(fallback)
 	}
+	copyBg := resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground)
+	cutBg := resolve(t.ClipboardCutBackground, def.ClipboardCutBackground)
 	return ResolvedTheme{
 		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
 		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
@@ -259,8 +284,10 @@ func (t Theme) Resolve() ResolvedTheme {
 		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
 		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
 
-		ClipboardCopyBackground: resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground),
-		ClipboardCutBackground:  resolve(t.ClipboardCutBackground, def.ClipboardCutBackground),
+		ClipboardCopyBackground:         copyBg,
+		ClipboardCutBackground:          cutBg,
+		ClipboardCopyBackgroundInactive: darkenForInactiveFocus(copyBg),
+		ClipboardCutBackgroundInactive:  darkenForInactiveFocus(cutBg),
 
 		Text:               resolve(t.Text, def.Text),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),
@@ -275,6 +302,35 @@ func (t Theme) Resolve() ResolvedTheme {
 		EntryArchive:    resolve(t.EntryArchive, def.EntryArchive),
 		EntryHidden:     resolve(t.EntryHidden, def.EntryHidden),
 	}
+}
+
+// inactiveFocusDarkenFactor scales every RGB channel down by this much
+// for ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive
+// (see darkenForInactiveFocus) — picked to land clearly between the
+// two colors it needs to stay distinguishable from: bright enough not
+// to collapse into EditableBackground's own plain gray (losing the
+// "this is still clipboard-held" signal the darkening exists to keep),
+// dim enough not to read as the same as the row's own full-brightness
+// tint (losing the "but this one specifically is where the cursor
+// would land" signal that's the whole point of a separate color here).
+const inactiveFocusDarkenFactor = 0.7
+
+// darkenForInactiveFocus scales c's own RGB channels down by
+// inactiveFocusDarkenFactor, preserving its hue and the relative
+// proportions between channels while dimming its overall brightness —
+// see ClipboardCopyBackgroundInactive/ClipboardCutBackgroundInactive's
+// own doc comment for why a uniform scale-down was chosen over blending
+// in a third color (EditableBackground, say): blending can cancel out
+// exactly the channel difference that makes one of the two tints
+// recognizable in the first place, depending on which way the blended-in
+// color itself leans, an asymmetry that would need re-tuning by hand for
+// any future clipboard color and that scaling toward black avoids
+// automatically, for any color, by never mixing in an unrelated hue at
+// all.
+func darkenForInactiveFocus(c tcell.Color) tcell.Color {
+	r, g, b := c.RGB()
+	scale := func(v int32) int32 { return int32(float64(v) * inactiveFocusDarkenFactor) }
+	return tcell.NewRGBColor(scale(r), scale(g), scale(b))
 }
 
 // NamedTheme pairs a Theme with the stable slug used to select it from
