@@ -75,7 +75,9 @@ var helpText = strings.TrimLeft(`
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
-  button bar for what the second key can be):
+  button bar for what the second key can be). That timeout itself is
+  "Chord timeout (ms)" under Options (Behavior, Miscellaneous),
+  4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trash

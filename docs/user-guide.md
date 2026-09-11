@@ -70,9 +70,10 @@ itself is open, rather than being blocked the way every other plain
 letter correctly is once an overlay has focus.
 
 **Chords** cover the rarer, related actions — one letter, then within
-about four seconds one more. The status bar shows a small countdown
-(`g▆`, shrinking) while one is pending, and the button bar becomes that
-chord's own legend:
+about four seconds one more (`chord_timeout_ms` under Options, Behavior's
+own Miscellaneous subsection, `4000` by default). The status bar shows a
+small countdown (`g▆`, shrinking) while one is pending, and the button
+bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
@@ -1037,6 +1038,7 @@ Every key breakthrough recognizes, with its default:
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
+| `chord_timeout_ms` | `4000` | How long, in milliseconds, a chord's second key stays live for |
 | `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
 | `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
 | `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |
