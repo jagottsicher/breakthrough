@@ -70,15 +70,20 @@ func TestOpenOptionsShowsTheActiveSchemeAsAValue(t *testing.T) {
 }
 
 // optionRowByKey finds the table row currently showing the setting named
-// key, in whichever category is selected.
+// key, in whichever category is selected — the *table* row, via
+// optionCategoryDisplayRows, not the setting's own index into
+// cat.options: the two only coincide for a category with no subsection
+// headers ahead of it (see optionSpec.section's own doc comment), which
+// most categories are, but Behavior's own Copy & Move settings sit
+// after one.
 func optionRowByKey(r *Root, key string) (int, bool) {
 	cat, ok := r.currentOptionCategory()
 	if !ok {
 		return 0, false
 	}
-	for i, opt := range cat.options {
-		if opt.key == key {
-			return i, true
+	for row, dr := range optionCategoryDisplayRows(cat) {
+		if dr.header == "" && dr.opt.key == key {
+			return row, true
 		}
 	}
 	return 0, false
