@@ -2659,25 +2659,55 @@ func (r *Root) pasteClipboard() {
 	if r.panel.searchMode {
 		dir = filepath.Dir(r.target)
 	}
-	r.pasteInto(dir, false)
+	r.pasteInto(dir, r.configuredFollowSymlinksDefault())
 }
 
-// pasteClipboardFollowingSymlinks is "V" (Shift+Paste): the
-// dereferencing sibling of plain Paste — see pasteJob.followSymlinks'
-// own doc comment in pasteconflict.go for exactly what changes once
-// this is on. Always asks for explicit confirmation first, through the
-// same openConfirm primitive every other consequential, hard-to-undo
-// action in this app already uses (Remove, Empty Trash, the Options
-// screen's own resets): unlike an ordinary Copy/Cut, this can turn a
-// small, instant symlink into an arbitrarily large copy of whatever it
-// points to — possibly living on a different device, or over a network
-// mount entirely (NFS, EFS, ...) — and, for a Cut, permanently removes
-// the original link once that copy has safely landed. That risk is
-// exactly what the user's own explicit request was about, so this is
-// deliberately never a single, undialogued keypress the way plain 'v'
-// is (see also fsops.MoveFollowingSymlinks' own doc comment for the
-// guarantee that makes the Cut half of this safe at all: only the
-// original link is ever removed, never its target).
+// configuredFollowSymlinksDefault resolves the global "Follow symlinks"
+// default a plain Paste ('v') actually uses — the Copy-side setting
+// (settings.CopyFollowSymlinks) for a Copy, the Move-side one
+// (settings.MoveFollowSymlinks) for a Cut, chosen by r.clipboardCut the
+// same way pasteJob.cut itself later picks which of Copy/Move's own
+// options apply (see reallyStartPaste). Silent either way: turning this
+// on in Options is itself the one deliberate consent this needs, made
+// once rather than asked about again on every single paste — see
+// pasteClipboardFollowingSymlinks' own doc comment for the one paste
+// that still asks.
+func (r *Root) configuredFollowSymlinksDefault() bool {
+	if r.clipboardCut {
+		return r.settings.MoveFollowSymlinks
+	}
+	return r.settings.CopyFollowSymlinks
+}
+
+// pasteClipboardFollowingSymlinks is "V" (Shift+Paste): flips the
+// configured "Follow symlinks" default (see
+// configuredFollowSymlinksDefault) for this one paste only, without
+// changing the setting itself — see pasteJob.followSymlinks' own doc
+// comment in pasteconflict.go for exactly what changes once
+// dereferencing is actually on.
+//
+// Only asks for explicit confirmation first, through the same
+// openConfirm primitive every other consequential, hard-to-undo action
+// in this app already uses (Remove, Empty Trash, the Options screen's
+// own resets), when this keypress is the one thing actually turning
+// dereferencing on — i.e. the configured default was off, and this
+// flip is what activates it for this paste. Unlike an ordinary Copy/
+// Cut, that can turn a small, instant symlink into an arbitrarily large
+// copy of whatever it points to — possibly living on a different
+// device, or over a network mount entirely (NFS, EFS, ...) — and, for a
+// Cut, permanently removes the original link once that copy has safely
+// landed. That risk is exactly what the user's own explicit request was
+// about, so activating it is deliberately never a single, undialogued
+// keypress the way plain 'v' is (see also
+// fsops.MoveFollowingSymlinks' own doc comment for the guarantee that
+// makes the Cut half of this safe at all: only the original link is
+// ever removed, never its target).
+//
+// The other direction needs no such confirmation: if the configured
+// default is already on, this flip only ever turns dereferencing *off*
+// for this one paste — the safer of the two directions, no different
+// from an ordinary Paste that was never going to dereference anything
+// at all, and asking to confirm turning a risk off would be backwards.
 //
 // A no-op, like pasteClipboard itself, if nothing was ever copied/cut —
 // checked here rather than left to startPaste's own len(items) guard,
@@ -2690,6 +2720,11 @@ func (r *Root) pasteClipboardFollowingSymlinks() {
 	dir := r.panel.path
 	if r.panel.searchMode {
 		dir = filepath.Dir(r.target)
+	}
+	effective := !r.configuredFollowSymlinksDefault()
+	if !effective {
+		r.pasteInto(dir, false)
+		return
 	}
 	message, confirmLabel := followSymlinksPasteConfirmText(len(r.clipboard), r.clipboardCut)
 	r.openConfirm(message, confirmLabel, func() {

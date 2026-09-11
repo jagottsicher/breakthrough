@@ -540,6 +540,189 @@ func TestCopyFollowSymlinksRefusesWhenTargetOverlapsDestinationThroughADifferent
 	}
 }
 
+// TestCopyStableSymlinksRewritesRelativeInternalLink pins the core
+// case: a directory being copied contains a relative symlink pointing
+// at a sibling file also inside that same directory — with
+// StableSymlinks, the recreated link at the destination must point at
+// the *copied* sibling, not carry the original relative offset forward
+// (which would happen to still resolve correctly here only because
+// both files sit at the same depth — see the absolute-target and
+// external-target tests below for cases where blindly copying the
+// target text verbatim would actually break).
+func TestCopyStableSymlinksRewritesRelativeInternalLink(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "real.txt"), []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real.txt", filepath.Join(srcDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "copied")
+	if err := Copy(srcDir, dst, CopyOptions{StableSymlinks: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	if got != "real.txt" {
+		t.Errorf("copied link target = %q, want %q (the copied sibling, same relative offset)", got, "real.txt")
+	}
+	content, err := os.ReadFile(filepath.Join(dst, "link.txt"))
+	if err != nil || string(content) != "hi" {
+		t.Errorf("following the copied link = %q, %v, want %q", content, err, "hi")
+	}
+}
+
+// TestCopyStableSymlinksRewritesRelativeLinkThatNamesTheRoot covers the
+// one shape of relative target that actually needs rewriting: most
+// relative links only ever climb up and back down within the tree
+// being copied (e.g. "../real.txt"), and copyDir mirrors that whole
+// tree structure verbatim, so their original ".." encoding already
+// resolves correctly at the new location without any help — nothing
+// for StableSymlinks to fix there. This link instead climbs out past
+// the root being copied and back down by the root's own directory
+// name (a shape real tools occasionally produce, even though it isn't
+// the minimal encoding a person would write by hand). Copied verbatim
+// into a destination with a different name and a different parent —
+// what a real copy-to-another-location almost always is — that raw
+// string points at a sibling that was never created and resolves
+// nowhere. StableSymlinks has to resolve the absolute target first,
+// confirm it lands inside the tree being copied, and only then
+// re-express it relative to the new location, rather than ever
+// trusting the original ".." count on its own.
+func TestCopyStableSymlinksRewritesRelativeLinkThatNamesTheRoot(t *testing.T) {
+	parent := t.TempDir()
+	srcDir := filepath.Join(parent, "mysrc")
+	if err := os.MkdirAll(filepath.Join(srcDir, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "real.txt"), []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	// Climbs out of "sub", out of "mysrc" itself, then back down into
+	// "mysrc" by name — resolves to the same real.txt as "../real.txt"
+	// would, but only as long as the copy's own root keeps the exact
+	// same name in the exact same parent, which copying to a
+	// differently-named destination elsewhere breaks.
+	target := filepath.Join("..", "..", "mysrc", "real.txt")
+	if err := os.Symlink(target, filepath.Join(srcDir, "sub", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "renamed-copy")
+	if err := Copy(srcDir, dst, CopyOptions{StableSymlinks: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "sub", "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	if got != filepath.Join("..", "real.txt") {
+		t.Errorf("copied link target = %q, want %q (re-expressed relative to the new root, not the old root's name)", got, filepath.Join("..", "real.txt"))
+	}
+	content, err := os.ReadFile(filepath.Join(dst, "sub", "link.txt"))
+	if err != nil || string(content) != "hi" {
+		t.Errorf("following the copied link = %q, %v, want %q — the raw, unrewritten target would resolve nowhere at a differently-named destination", content, err, "hi")
+	}
+}
+
+// TestCopyStableSymlinksRewritesAbsoluteInternalLink pins the same
+// rewrite for an originally *absolute* target: copied verbatim (the
+// default), it would still point back at the original source tree
+// instead of the new copy — exactly the "not actually self-contained"
+// surprise StableSymlinks exists to avoid. The rewritten target stays
+// absolute too, matching the original target's own style (see
+// stableSymlinkTarget's own doc comment).
+func TestCopyStableSymlinksRewritesAbsoluteInternalLink(t *testing.T) {
+	srcDir := t.TempDir()
+	real := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(real, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(srcDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "copied")
+	if err := Copy(srcDir, dst, CopyOptions{StableSymlinks: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	wantTarget := filepath.Join(dst, "real.txt")
+	if got != wantTarget {
+		t.Errorf("copied link target = %q, want %q (the copy's own real.txt, not the original source tree)", got, wantTarget)
+	}
+}
+
+// TestCopyStableSymlinksLeavesExternalLinkUnchanged pins the other
+// half: a symlink pointing at something entirely unrelated to the tree
+// being copied — the overwhelming majority of real-world symlinks —
+// must be copied completely untouched, exactly like without
+// StableSymlinks at all.
+func TestCopyStableSymlinksLeavesExternalLinkUnchanged(t *testing.T) {
+	srcDir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "elsewhere.txt")
+	if err := os.WriteFile(outside, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(srcDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "copied")
+	if err := Copy(srcDir, dst, CopyOptions{StableSymlinks: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	if got != outside {
+		t.Errorf("copied link target = %q, want unchanged %q — a link to somewhere outside the copied tree should never be rewritten", got, outside)
+	}
+}
+
+// TestCopyStableSymlinksHasNoEffectByDefault pins the zero-value
+// contract: without StableSymlinks, an internal relative link is
+// copied completely verbatim — including into a case where that
+// leaves it broken, which is exactly the gap StableSymlinks exists to
+// close, not something this default is expected to paper over on its
+// own.
+func TestCopyStableSymlinksHasNoEffectByDefault(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "real.txt"), []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(srcDir, "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "real.txt"), filepath.Join(srcDir, "sub", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(t.TempDir(), "copied")
+	if err := Copy(srcDir, dst, CopyOptions{}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "sub", "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	if got != filepath.Join("..", "real.txt") {
+		t.Errorf("copied link target = %q, want the original, unrewritten %q", got, filepath.Join("..", "real.txt"))
+	}
+}
+
 // TestCopyFilePreservesModTime pins the user's own explicit request:
 // copying a file must not silently leave it with today's date — cp(1)'s
 // own "-p" contract, applied here as Copy's unconditional default (see
@@ -616,6 +799,72 @@ func TestCopyFilePreservesPermissionsBypassingUmask(t *testing.T) {
 	}
 	if dstFi.Mode().Perm() != 0o777 {
 		t.Errorf("dst perm = %v, want 0777 (src's own, not narrowed by this process's own umask)", dstFi.Mode().Perm())
+	}
+}
+
+// TestCopySkipAttributesLeavesDstAtItsOwnCreatedPermissions pins the
+// opt-out: with SkipAttributes, dst never gets src's own exact
+// permission bits copied onto it at all — it's left at whatever
+// OpenFile's own mode argument (itself narrowed by this process's own
+// umask, same as any ordinary new file) already produced, the same
+// widely-permissive src used by TestCopyFilePreservesPermissionsBypassingUmask
+// above to make the "did this actually get skipped" difference obvious
+// rather than a coincidence.
+func TestCopySkipAttributesLeavesDstAtItsOwnCreatedPermissions(t *testing.T) {
+	old := syscall.Umask(0o022)
+	defer syscall.Umask(old)
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(src, 0o777); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst.txt")
+	if err := Copy(src, dst, CopyOptions{SkipAttributes: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	dstFi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if dstFi.Mode().Perm() == 0o777 {
+		t.Errorf("dst perm = %v, want anything other than src's own 0777 — SkipAttributes should have left it at its own created default", dstFi.Mode().Perm())
+	}
+}
+
+// TestCopySkipAttributesLeavesModTimeAlone is SkipAttributes' own
+// mtime-side counterpart to the permissions test above.
+func TestCopySkipAttributesLeavesModTimeAlone(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2018, 4, 4, 4, 4, 4, 0, time.UTC)
+	if err := os.Chtimes(src, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst.txt")
+	before := time.Now().Add(-time.Second) // a window wide enough for filesystem mtime granularity
+	if err := Copy(src, dst, CopyOptions{SkipAttributes: true}); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	dstFi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if dstFi.ModTime().Equal(old) {
+		t.Errorf("dst ModTime = %v, want unequal to src's own %v — SkipAttributes should have left it at whatever creating it just produced", dstFi.ModTime(), old)
+	}
+	if dstFi.ModTime().Before(before) {
+		t.Errorf("dst ModTime = %v, want at or after %v (its own real creation time)", dstFi.ModTime(), before)
 	}
 }
 

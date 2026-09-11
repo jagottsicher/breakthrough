@@ -348,6 +348,92 @@ func TestMoveMergeFallbackPreservesModTime(t *testing.T) {
 	}
 }
 
+// TestMoveMergeFallbackSkipAttributesLeavesModTimeAlone is
+// TestMoveMergeFallbackPreservesModTime's own opt-out counterpart:
+// SkipAttributes threaded from MoveOptions into the Copy fallback's own
+// CopyOptions must actually take effect there, not just on a direct
+// Copy call.
+func TestMoveMergeFallbackSkipAttributesLeavesModTimeAlone(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	srcFile := filepath.Join(src, "a.txt")
+	if err := os.WriteFile(srcFile, []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2018, 4, 4, 4, 4, 4, 0, time.UTC)
+	if err := os.Chtimes(srcFile, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "already-there.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	before := time.Now().Add(-time.Second) // a window wide enough for filesystem mtime granularity
+	if err := Move(src, dst, MoveOptions{Force: true, Mode: MergeInto, SkipAttributes: true}); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	fi, err := os.Stat(filepath.Join(dst, "a.txt"))
+	if err != nil {
+		t.Fatalf("Stat(dst/a.txt): %v", err)
+	}
+	if fi.ModTime().Equal(old) {
+		t.Errorf("dst/a.txt ModTime = %v, want unequal to src's own %v — SkipAttributes should have reached Move's own Copy-based fallback too", fi.ModTime(), old)
+	}
+	if fi.ModTime().Before(before) {
+		t.Errorf("dst/a.txt ModTime = %v, want at or after %v (its own real creation time)", fi.ModTime(), before)
+	}
+}
+
+// TestMoveMergeFallbackStableSymlinksRewritesAbsoluteInternalLink pins
+// StableSymlinks' own equivalent threading, using an absolute internal
+// link — the shape that's meaningfully rewritten regardless of tree
+// structure (see stableSymlinkTarget's own doc comment in copy.go for
+// why a plain relative link wouldn't discriminate this case at all).
+func TestMoveMergeFallbackStableSymlinksRewritesAbsoluteInternalLink(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(src, "real.txt")
+	if err := os.WriteFile(real, []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(src, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(base, "dst")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "already-there.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Move(src, dst, MoveOptions{Force: true, Mode: MergeInto, StableSymlinks: true}); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	got, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	wantTarget := filepath.Join(dst, "real.txt")
+	if got != wantTarget {
+		t.Errorf("moved link target = %q, want %q — StableSymlinks should have reached Move's own Copy-based fallback too", got, wantTarget)
+	}
+}
+
 // TestMoveFollowingSymlinksOnATopLevelSymlinkRemovesOnlyTheLink pins the
 // user's own explicit safety requirement: cutting a symlink with
 // dereferencing on must never touch whatever the link points to, no
