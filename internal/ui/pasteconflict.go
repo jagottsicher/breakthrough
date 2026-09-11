@@ -153,6 +153,28 @@ type pasteJob struct {
 	// network mount, ...).
 	followSymlinks bool
 
+	// skipAttributes/stableSymlinks/autoMergeDirectories are the Options
+	// screen's own Copy/Move settings (settings.Copy*/settings.Move*, see
+	// their own doc comments in config/settings.go), resolved exactly
+	// once by reallyStartPaste — from settings.Copy* if !cut, from
+	// settings.Move* if cut — and never re-read from r.settings again for
+	// the rest of this job's own lifetime. Resolved once up front rather
+	// than read live at each call site for the same reason destDirs/
+	// sourceDirs already are (see their own doc comments): a long-running
+	// paste job's own behavior has to stay consistent from item to item,
+	// even if the user opens Options and changes one of these mid-job.
+	//
+	// skipAttributes is the negation of the user-facing
+	// CopyPreserveAttributes/MovePreserveAttributes setting (see
+	// fsops.CopyOptions.SkipAttributes' own doc comment for why the
+	// opt-out itself, not the user-facing setting, is the field named to
+	// match a zero-value-safe fsops API); stableSymlinks and
+	// autoMergeDirectories map straight onto the identically-named
+	// concepts.
+	skipAttributes       bool
+	stableSymlinks       bool
+	autoMergeDirectories bool
+
 	// sourceDirs is the set of directories every clipboard item's own
 	// src lives in — computed once, up front, alongside job itself (see
 	// reallyStartPaste). Only ever consulted for a Cut (see
@@ -338,12 +360,25 @@ func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, follow
 	if restoreDests != nil {
 		destDirs = distinctParentDirs(restoreDests)
 	}
+	var skipAttributes, stableSymlinks, autoMergeDirectories bool
+	if cut {
+		skipAttributes = !r.settings.MovePreserveAttributes
+		stableSymlinks = r.settings.MoveStableSymlinks
+		autoMergeDirectories = r.settings.MoveAutoMergeDirectories
+	} else {
+		skipAttributes = !r.settings.CopyPreserveAttributes
+		stableSymlinks = r.settings.CopyStableSymlinks
+		autoMergeDirectories = r.settings.CopyAutoMergeDirectories
+	}
 	job := &pasteJob{
 		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, followSymlinks: followSymlinks,
 		restoreDests: restoreDests, restoreTrashDir: restoreTrashDir, destDirs: destDirs,
 		total: len(items), remaining: len(items), startedAt: time.Now(),
 		sourceDirs:            distinctParentDirs(items),
 		lastReloadedRemaining: len(items),
+		skipAttributes:        skipAttributes,
+		stableSymlinks:        stableSymlinks,
+		autoMergeDirectories:  autoMergeDirectories,
 	}
 	r.pasteJob = job
 
@@ -547,6 +582,20 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 				r.reportPasteOutcome(job, func() { r.recordPasteError(job, srcErr) })
 				continue
 			}
+			// "Dive into subdir if exists": when both sides of the
+			// conflict are directories and the relevant Copy/Move setting
+			// is on, resolve it as a merge immediately, the same outcome
+			// the conflict dialog's own "Merge" answer would give,
+			// without ever showing that dialog at all. A file-vs-file or
+			// file-vs-directory conflict always still goes to the dialog
+			// below, regardless of this setting — "merge" has no meaning
+			// for either shape.
+			if job.autoMergeDirectories && srcInfo.IsDir() && dstInfo.IsDir() {
+				r.safeGo("paste", func() { r.pasteItemDone(job) }, func() {
+					r.pasteOne(job, src, dst, true, fsops.MergeInto)
+				})
+				continue
+			}
 			conflict := pasteConflict{src: src, dst: dst, srcInfo: srcInfo, dstInfo: dstInfo}
 			r.reportPasteOutcome(job, func() { r.pasteConflictFound(job, conflict) })
 		case os.IsNotExist(err):
@@ -702,11 +751,15 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 		// See fsops.MoveFollowingSymlinks' own doc comment for the one
 		// guarantee that matters most here: only the original link
 		// itself is ever removed, never whatever it points to.
-		err = fsMoveFollowingSymlinks(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
+		// StableSymlinks is passed for documentation's sake only: with
+		// FollowSymlinks always true here, nothing ever survives as a
+		// link for it to rewrite (see MoveFollowingSymlinks' own doc
+		// comment on why it doesn't even forward this field internally).
+		err = fsMoveFollowingSymlinks(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
 	case job.cut:
-		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes})
+		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
 	default:
-		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, FollowSymlinks: job.followSymlinks, OnFile: onFile, OnBytes: onBytes})
+		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, FollowSymlinks: job.followSymlinks, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
 	}
 	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })

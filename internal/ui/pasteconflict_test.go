@@ -102,6 +102,183 @@ func TestPasteWalkNeverAttemptsWhenDestinationOverlapsSource(t *testing.T) {
 	}
 }
 
+// TestPasteWalkAutoMergesDirectoryConflictWithoutDialog pins "Dive into
+// subdir if exists": with job.autoMergeDirectories on, a directory-vs-
+// directory conflict is resolved as a merge immediately — no dialog
+// ever shows, and the outcome matches resolveMerge's own documented
+// behavior (TestChooseConflictResolutionMergeKeepsExtraDestFiles):
+// dst's own "extra" file, absent from src, survives untouched.
+func TestPasteWalkAutoMergesDirectoryConflictWithoutDialog(t *testing.T) {
+	srcParent := t.TempDir()
+	dstParent := t.TempDir()
+	src := filepath.Join(srcParent, "somedir")
+	dst := filepath.Join(dstParent, "somedir")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "shared"), []byte("clean"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "shared"), []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "extra"), []byte("not from source"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcParent)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dstParent, 1)
+	job.autoMergeDirectories = true
+
+	done := isolatePasteIO(t)
+	r.pasteWalk(job, []string{src})
+	waitPasteIO(t, done, 1)
+
+	if r.activePage == pasteConflictPage {
+		t.Error("auto-merge should never have shown the conflict dialog at all")
+	}
+	if got, err := os.ReadFile(filepath.Join(dst, "shared")); err != nil || string(got) != "clean" {
+		t.Errorf("dst/shared = %q, %v, want %q", got, err, "clean")
+	}
+	if got, err := os.ReadFile(filepath.Join(dst, "extra")); err != nil || string(got) != "not from source" {
+		t.Errorf("dst/extra = %q, %v, want it left untouched by the auto-merge", got, err)
+	}
+}
+
+// TestPasteWalkAutoMergeDoesNotApplyToFileConflicts pins the other half
+// of "Dive into subdir if exists": it only ever applies when *both*
+// sides of a conflict are directories. A file-vs-file conflict must
+// still show the usual dialog, even with the setting on — "merge" has
+// no meaning there.
+func TestPasteWalkAutoMergeDoesNotApplyToFileConflicts(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "same.txt"), []byte("new content"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dstDir, "same.txt"), []byte("old content"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dstDir, 1)
+	job.autoMergeDirectories = true
+
+	// Mirrors TestPasteWalkNeverAttemptsWhenDestinationOverlapsSource's
+	// own approach: the conflict-dialog path routes through
+	// reportPasteOutcome's own QueueUpdateDraw hand-off, which has
+	// nothing to service it without a running Application.Run() loop —
+	// so this waits for the *absence* of a real I/O call within a
+	// generous window instead of trying to observe the dialog opening
+	// directly.
+	done := isolatePasteIO(t)
+	r.pasteWalk(job, []string{filepath.Join(srcDir, "same.txt")})
+
+	select {
+	case <-done:
+		t.Fatal("fsCopy was called — a file-vs-file conflict must never be auto-merged, even with the setting on")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: no I/O call happened — the conflict should have gone
+		// to the dialog instead.
+	}
+
+	got, err := os.ReadFile(filepath.Join(dstDir, "same.txt"))
+	if err != nil || string(got) != "old content" {
+		t.Errorf("dst content = %q, %v, want unchanged %q — nothing should have happened before the dialog is answered", got, err, "old content")
+	}
+}
+
+// TestPasteOneAppliesSkipAttributesFromJob pins that job.skipAttributes
+// actually reaches the real fsCopy call pasteOne makes — the UI-layer
+// half of a guarantee already pinned at the fsops level directly (see
+// copy_test.go's own TestCopySkipAttributesLeavesModTimeAlone); this one
+// exists because that alone wouldn't catch pasteOne forgetting to pass
+// the field through at all.
+func TestPasteOneAppliesSkipAttributesFromJob(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	src := filepath.Join(srcDir, "a.txt")
+	if err := os.WriteFile(src, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2018, 4, 4, 4, 4, 4, 0, time.UTC)
+	if err := os.Chtimes(src, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dstDir, 1)
+	job.skipAttributes = true
+
+	done := isolatePasteIO(t)
+	r.pasteWalk(job, []string{src})
+	waitPasteIO(t, done, 1)
+
+	fi, err := os.Stat(filepath.Join(dstDir, "a.txt"))
+	if err != nil {
+		t.Fatalf("Stat(dst): %v", err)
+	}
+	if fi.ModTime().Equal(old) {
+		t.Errorf("dst ModTime = %v, want unequal to src's own %v — job.skipAttributes should have reached the real Copy call", fi.ModTime(), old)
+	}
+}
+
+// TestPasteOneAppliesStableSymlinksFromJob is
+// TestPasteOneAppliesSkipAttributesFromJob's own StableSymlinks
+// counterpart, using the absolute-internal-link shape already pinned at
+// the fsops level (copy_test.go's own
+// TestCopyStableSymlinksRewritesAbsoluteInternalLink) to confirm pasteOne
+// actually threads job.stableSymlinks through too.
+func TestPasteOneAppliesStableSymlinksFromJob(t *testing.T) {
+	srcParent := t.TempDir()
+	src := filepath.Join(srcParent, "somedir")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(src, "real.txt")
+	if err := os.WriteFile(real, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(src, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	dstParent := t.TempDir()
+	dst := filepath.Join(dstParent, "somedir")
+
+	r, err := NewRoot(tview.NewApplication(), srcParent)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dstParent, 1)
+	job.stableSymlinks = true
+
+	done := isolatePasteIO(t)
+	r.pasteWalk(job, []string{src})
+	waitPasteIO(t, done, 1)
+
+	got, err := os.Readlink(filepath.Join(dst, "link.txt"))
+	if err != nil {
+		t.Fatalf("Readlink: %v", err)
+	}
+	wantTarget := filepath.Join(dst, "real.txt")
+	if got != wantTarget {
+		t.Errorf("copied link target = %q, want %q — job.stableSymlinks should have reached the real Copy call", got, wantTarget)
+	}
+}
+
 // TestCopyToClipboardThenPasteLeavesSourceInPlace pins Copy's own real,
 // end-to-end effect through the async engine (see isolatePasteIO): the
 // file lands at dst, and — unlike Cut — src is left exactly where it
@@ -165,6 +342,95 @@ func TestCutToClipboardThenPasteRemovesSourceOnDisk(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(srcDir, "banana.txt")); !os.IsNotExist(err) {
 		t.Errorf("Cut should remove the source file, stat err = %v", err)
 	}
+}
+
+// TestStartPasteResolvesCopySettingsOnce pins reallyStartPaste's own
+// contract for a plain Copy job (cut == false): job.skipAttributes/
+// stableSymlinks/autoMergeDirectories are resolved from the Copy-side
+// settings (settings.Copy*), not the Move-side ones, and resolved
+// exactly once at job creation — never left to be re-read live from
+// r.settings for the rest of the job (see pasteJob's own doc comment on
+// why that has to be true for a long-running job's behavior to stay
+// consistent). Values are deliberately mixed (not all true or all
+// false) so a field mix-up between Copy/Move or a field mix-up between
+// the three settings themselves would fail this test rather than pass
+// it by coincidence.
+func TestStartPasteResolvesCopySettingsOnce(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.CopyPreserveAttributes = false // -> skipAttributes true
+	r.settings.CopyStableSymlinks = true
+	r.settings.CopyAutoMergeDirectories = false
+	r.settings.MovePreserveAttributes = true // -> would give skipAttributes false if mixed up
+	r.settings.MoveStableSymlinks = false
+	r.settings.MoveAutoMergeDirectories = true
+
+	// Goes through the real startPaste path (rather than newPasteTestJob's
+	// fake, already-in-flight job) specifically to exercise
+	// reallyStartPaste's own settings resolution end to end — which means
+	// real background goroutines really do start, and isolatePasteIO/
+	// waitPasteIO are needed to let the one real fsCopy call actually
+	// finish before this test returns: otherwise it keeps running after
+	// the assertions below, racing a later test's own isolatePasteIO
+	// swapping the same package-level fsCopy var out from under it.
+	done := isolatePasteIO(t)
+	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, false, t.TempDir(), false, nil, "")
+
+	job := r.pasteJob
+	if job == nil {
+		t.Fatal("startPaste should have created a job")
+	}
+	if !job.skipAttributes {
+		t.Error("skipAttributes = false, want true (CopyPreserveAttributes was set to false)")
+	}
+	if !job.stableSymlinks {
+		t.Error("stableSymlinks = false, want true (CopyStableSymlinks was set to true)")
+	}
+	if job.autoMergeDirectories {
+		t.Error("autoMergeDirectories = true, want false (CopyAutoMergeDirectories was left false)")
+	}
+	waitPasteIO(t, done, 1)
+}
+
+// TestStartPasteResolvesMoveSettingsOnce is the above test's Move-side
+// (cut == true) counterpart, with the settings mixed the other way —
+// together the two pin that job.cut, not any other state, is what picks
+// which of Copy's/Move's own three settings apply.
+func TestStartPasteResolvesMoveSettingsOnce(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.CopyPreserveAttributes = true
+	r.settings.CopyStableSymlinks = false
+	r.settings.CopyAutoMergeDirectories = true
+	r.settings.MovePreserveAttributes = false // -> skipAttributes true
+	r.settings.MoveStableSymlinks = true
+	r.settings.MoveAutoMergeDirectories = false
+
+	// See TestStartPasteResolvesCopySettingsOnce's own comment for why
+	// isolatePasteIO/waitPasteIO are needed here at all.
+	done := isolatePasteIO(t)
+	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, true, t.TempDir(), false, nil, "")
+
+	job := r.pasteJob
+	if job == nil {
+		t.Fatal("startPaste should have created a job")
+	}
+	if !job.skipAttributes {
+		t.Error("skipAttributes = false, want true (MovePreserveAttributes was set to false)")
+	}
+	if !job.stableSymlinks {
+		t.Error("stableSymlinks = false, want true (MoveStableSymlinks was set to true)")
+	}
+	if job.autoMergeDirectories {
+		t.Error("autoMergeDirectories = true, want false (MoveAutoMergeDirectories was left false)")
+	}
+	waitPasteIO(t, done, 1)
 }
 
 // TestPasteClipboardFollowingSymlinksIsNoOpWhenClipboardEmpty pins the
@@ -362,6 +628,130 @@ func TestPasteFollowingSymlinksOnCopyLeavesSourceSymlinkInPlace(t *testing.T) {
 	}
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("a Copy must leave the original symlink completely in place, Lstat mode %v, err %v", fi.Mode(), err)
+	}
+}
+
+// TestPasteClipboardUsesConfiguredFollowSymlinksDefaultForCopy pins
+// plain Paste's ('v') own new contract: with settings.CopyFollowSymlinks
+// on, an ordinary Copy paste dereferences a symlink silently — no
+// confirmation dialog at all, since turning the setting on in Options
+// was itself the deliberate consent (see configuredFollowSymlinksDefault's
+// own doc comment).
+func TestPasteClipboardUsesConfiguredFollowSymlinksDefaultForCopy(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	target := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(srcDir, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.CopyFollowSymlinks = true
+	r.target = link
+	r.copyToClipboard()
+	if err := r.panel.load(dstDir); err != nil {
+		t.Fatalf("load(dstDir): %v", err)
+	}
+
+	done := isolatePasteIO(t)
+	r.pasteClipboard()
+	waitPasteIO(t, done, 1)
+
+	if r.activePage == confirmPage {
+		t.Error("a plain Paste applying an already-configured default should never ask for confirmation")
+	}
+	if fi, err := os.Lstat(filepath.Join(dstDir, "link.txt")); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("dst should be a real, dereferenced file, not a symlink (mode %v, err %v) — CopyFollowSymlinks was on", fi.Mode(), err)
+	}
+}
+
+// TestPasteClipboardUsesConfiguredFollowSymlinksDefaultForMove is the
+// above test's Cut counterpart: settings.MoveFollowSymlinks, not the
+// Copy-side setting, must govern a Cut paste.
+func TestPasteClipboardUsesConfiguredFollowSymlinksDefaultForMove(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	target := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(srcDir, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.MoveFollowSymlinks = true
+	r.target = link
+	r.cutToClipboard()
+	if err := r.panel.load(dstDir); err != nil {
+		t.Fatalf("load(dstDir): %v", err)
+	}
+
+	done := isolatePasteIO(t)
+	r.pasteClipboard()
+	waitPasteIO(t, done, 1)
+
+	if r.activePage == confirmPage {
+		t.Error("a plain Paste applying an already-configured default should never ask for confirmation")
+	}
+	if fi, err := os.Lstat(filepath.Join(dstDir, "link.txt")); err != nil || fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("dst should be a real, dereferenced file, not a symlink (mode %v, err %v) — MoveFollowSymlinks was on", fi.Mode(), err)
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Errorf("the original symlink should be gone after a Cut, Lstat err = %v", err)
+	}
+}
+
+// TestPasteClipboardFollowingSymlinksFlipsOffWithoutConfirmationWhenDefaultIsOn
+// pins "V"'s own other direction: when the configured default is already
+// on, Shift+Paste flips dereferencing *off* for this one paste — the
+// safer direction, needing no confirmation at all (see
+// pasteClipboardFollowingSymlinks' own doc comment for why only the
+// direction that activates the risk asks).
+func TestPasteClipboardFollowingSymlinksFlipsOffWithoutConfirmationWhenDefaultIsOn(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	target := filepath.Join(srcDir, "real.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(srcDir, "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.CopyFollowSymlinks = true
+	r.target = link
+	r.copyToClipboard()
+	if err := r.panel.load(dstDir); err != nil {
+		t.Fatalf("load(dstDir): %v", err)
+	}
+
+	done := isolatePasteIO(t)
+	r.pasteClipboardFollowingSymlinks()
+
+	if r.activePage == confirmPage {
+		t.Error("flipping dereferencing OFF should never ask for confirmation")
+	}
+	waitPasteIO(t, done, 1)
+
+	if fi, err := os.Lstat(filepath.Join(dstDir, "link.txt")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("dst should be a symlink, not dereferenced (mode %v, err %v) — \"V\" should have flipped the on-by-default dereferencing off for this one paste", fi.Mode(), err)
 	}
 }
 

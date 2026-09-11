@@ -60,13 +60,18 @@ var helpText = strings.TrimLeft(`
   While browsing the Trash itself, "r" restores and "D" empties it,
   instead of their ordinary meaning — the same two letters, read
   differently in the one place that makes sense. "V" is "v" Paste's own
-  bigger sibling too: instead of recreating a symlink as a symlink at
-  the destination, it replaces it (and any symlink nested inside a
-  pasted folder) with a real copy of whatever it points to — for a Cut,
-  only the original link itself is removed afterward, never its
-  target, however far away that lives. Always asks first, the same as
-  "D", since a small, instant symlink can turn into an arbitrarily
-  large copy this way.
+  bigger sibling too, for symlinks specifically: plain "v" pastes using
+  whichever "Follow symlinks" default is configured under Options for
+  Copy or Move (off unless you've turned it on) — recreating a symlink
+  as a symlink at the destination if that default is off, or replacing
+  it (and any symlink nested inside a pasted folder) with a real copy
+  of whatever it points to if it's on. "V" flips that default for this
+  one paste only, without changing the setting itself. Only asks first
+  when it's actually turning dereferencing on (the default was off) —
+  a small, instant symlink can turn into an arbitrarily large copy that
+  way; flipping it off instead never needs to ask. For a Cut that does
+  dereference, only the original link itself is removed afterward,
+  never its target, however far away that lives.
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
@@ -381,6 +386,13 @@ var helpText = strings.TrimLeft(`
   clicking a result already does, without needing to pick one first.
 
 [::b]Paste conflicts ("v", when a destination already exists)[::-]
+
+  With "Auto-merge directories" on under Options (off by default, set
+  separately for Copy and Move), a conflict between two directories
+  skips this dialog entirely and merges immediately, every time — the
+  same outcome "Merge into existing folder" below gives by hand. A
+  conflict between two files, or a file and a directory, always still
+  opens this dialog regardless, since merging has no meaning there.
 
   Up / Down         Move between the options
   Enter / Space     Apply the highlighted option

@@ -148,6 +148,47 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     new directory starts unfiltered, which suits someone who filters
 //     one listing at a time and finds a lingering filter more confusing
 //     than useful once they've moved on to somewhere else.
+//   - copy_preserve_attributes, move_preserve_attributes: whether a Copy
+//     or Move job preserves the source's own permissions/ownership/mtime
+//     on the destination (see internal/fsops' CopyOptions/MoveOptions'
+//     own SkipAttributes field — these settings are its logical negation,
+//     phrased the way someone would actually think about turning it off:
+//     "stop preserving attributes", not "start skipping them"). true by
+//     default for both — matches breakthrough's own unconditional
+//     behavior before this setting existed, so nobody's existing workflow
+//     changes just because the option now exists.
+//   - copy_follow_symlinks, move_follow_symlinks: whether a paste
+//     dereferences a symlink by default, writing a real copy of whatever
+//     it points to instead of a new symlink pointing at the same place
+//     (see internal/fsops' CopyOptions.FollowSymlinks and
+//     MoveFollowingSymlinks). false by default for both — a symlink is
+//     copied as a symlink unless asked otherwise, since dereferencing can
+//     silently pull in far more data than the size shown in the panel (a
+//     symlink to a large file or an entire directory tree) and can never
+//     be undone back into "just a link" afterward.
+//   - copy_auto_merge_directories, move_auto_merge_directories: whether a
+//     directory-vs-directory paste conflict is resolved automatically as
+//     a merge (recursing in and combining the two trees, the same
+//     outcome the paste-conflict dialog's own "Merge" answer already
+//     gives) rather than showing that dialog at all. Only ever applies
+//     when *both* sides of the conflict are directories — a file-vs-file
+//     or file-vs-directory conflict always still shows the dialog,
+//     regardless of this setting, since "merge" has no meaning there.
+//     false by default for both — an unattended paste job never silently
+//     starts combining directory contents unless explicitly told to.
+//   - copy_stable_symlinks, move_stable_symlinks: whether a symlink whose
+//     target lives inside the tree being copied gets its target rewritten
+//     to point at the corresponding new location, instead of keeping the
+//     original target verbatim (see internal/fsops' stableSymlinkTarget).
+//     Without this, a symlink pointing elsewhere in the very tree being
+//     copied can end up pointing back at the original source (an
+//     absolute target) or nowhere at all (a relative target that climbed
+//     out of the copied root and back in by its old name) once that
+//     source is later moved, renamed, or removed. false by default for
+//     both, matching MC's own default for the equivalent option —
+//     verbatim copying is the simpler, more predictable behavior, and
+//     rewriting a symlink's target is itself a change to its meaning that
+//     shouldn't happen without asking.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -162,6 +203,15 @@ type Settings struct {
 	SplitStacked      bool
 	MouseEnabled      bool
 	FilterPersistent  bool
+
+	CopyPreserveAttributes   bool
+	MovePreserveAttributes   bool
+	CopyFollowSymlinks       bool
+	MoveFollowSymlinks       bool
+	CopyAutoMergeDirectories bool
+	MoveAutoMergeDirectories bool
+	CopyStableSymlinks       bool
+	MoveStableSymlinks       bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -184,6 +234,15 @@ func DefaultSettings() Settings {
 		SplitStacked:      false,
 		MouseEnabled:      true,
 		FilterPersistent:  true,
+
+		CopyPreserveAttributes:   true,
+		MovePreserveAttributes:   true,
+		CopyFollowSymlinks:       false,
+		MoveFollowSymlinks:       false,
+		CopyAutoMergeDirectories: false,
+		MoveAutoMergeDirectories: false,
+		CopyStableSymlinks:       false,
+		MoveStableSymlinks:       false,
 	}
 }
 
@@ -236,6 +295,22 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.MouseEnabled)
 	case "filter_persistent":
 		return parseBool(&s.FilterPersistent)
+	case "copy_preserve_attributes":
+		return parseBool(&s.CopyPreserveAttributes)
+	case "move_preserve_attributes":
+		return parseBool(&s.MovePreserveAttributes)
+	case "copy_follow_symlinks":
+		return parseBool(&s.CopyFollowSymlinks)
+	case "move_follow_symlinks":
+		return parseBool(&s.MoveFollowSymlinks)
+	case "copy_auto_merge_directories":
+		return parseBool(&s.CopyAutoMergeDirectories)
+	case "move_auto_merge_directories":
+		return parseBool(&s.MoveAutoMergeDirectories)
+	case "copy_stable_symlinks":
+		return parseBool(&s.CopyStableSymlinks)
+	case "move_stable_symlinks":
+		return parseBool(&s.MoveStableSymlinks)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
