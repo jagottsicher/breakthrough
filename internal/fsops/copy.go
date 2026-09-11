@@ -46,10 +46,12 @@ const (
 // this project's own convention past that point, rather than
 // accumulating further same-typed bool/enum arguments a call site could
 // silently transpose. The zero value (Force false, Mode MergeInto,
-// FollowSymlinks false, OnFile/OnBytes nil) is Copy's own original
-// behavior exactly, from before CopyOptions existed at all: refuse an
-// existing dst, and recreate a symlink as a symlink rather than
-// copying whatever it points at.
+// FollowSymlinks false, SkipAttributes false, StableSymlinks false,
+// OnFile/OnBytes nil) is Copy's own original behavior exactly, from
+// before CopyOptions existed at all: refuse an existing dst, recreate a
+// symlink as a symlink rather than copying whatever it points at, and
+// preserve permissions/ownership/modification time on everything
+// copied.
 type CopyOptions struct {
 	// Force allows overwriting an existing dst — refused outright
 	// otherwise (see refuseExisting), the same contract Rename uses.
@@ -66,6 +68,41 @@ type CopyOptions struct {
 	// src itself: every symlink copyDir encounters underneath it is
 	// resolved and followed the same way.
 	FollowSymlinks bool
+	// SkipAttributes turns off preserveMetadata's own unconditional
+	// default (permissions, best-effort ownership, and modification
+	// time, copied exactly onto every file/directory/symlink Copy
+	// touches — see preserveMetadata's own doc comment) — named so its
+	// zero value (false) keeps today's long-standing default of always
+	// preserving them, rather than a PreserveAttributes bool whose zero
+	// value would silently flip every existing bare CopyOptions{}
+	// caller (including this package's own tests) over to never
+	// preserving anything at all.
+	SkipAttributes bool
+	// StableSymlinks rewrites a recreated symlink's own target so it
+	// still correctly points at the corresponding file *within this
+	// same copy*, if the symlink's original target happened to resolve
+	// to somewhere inside the src tree being copied — rather than
+	// preserving the original target text verbatim, which after the
+	// copy would either still point back at the *original* location
+	// (surprising: the copied tree isn't self-contained) or, for a
+	// relative target whose meaning depends on the symlink's own
+	// position, potentially resolve to the wrong file entirely once
+	// recreated somewhere else. Has no effect at all when
+	// FollowSymlinks is also set — there is no symlink left to rewrite
+	// once the target itself is being copied instead. See
+	// stableSymlinkTarget's own doc comment for exactly how "inside the
+	// src tree" and "the corresponding file" are determined.
+	StableSymlinks bool
+	// rootSrc/rootDst are the original top-level src/dst Copy itself
+	// was called with, filled in once, right there, before any
+	// recursion starts — never set directly by a caller (StableSymlinks
+	// above is the public toggle). copySymlink needs both to answer
+	// "does this nested symlink's own target fall inside the tree
+	// actually being copied, and if so, where does the corresponding
+	// file end up at the new destination" — seeing only its own
+	// immediate src/dst pair (like every other recursive call already
+	// does) isn't enough to answer that on its own.
+	rootSrc, rootDst string
 	// OnFile, if non-nil, is called with a real file or symlink's own
 	// path just before that one starts being copied — for a directory,
 	// once per entry found underneath it, recursively, in
@@ -118,6 +155,23 @@ type CopyOptions struct {
 func Copy(src, dst string, opts CopyOptions) error {
 	if Overlaps(src, dst) {
 		return fmt.Errorf("fsops: %s and %s are the same, or one is inside the other — refusing to copy", src, dst)
+	}
+
+	// Filled in once, here, at the true top-level entry point — every
+	// recursive call from here down (copyDir/copyFile/copySymlink) is
+	// called directly, never back through this function, so this never
+	// re-runs partway through a single Copy — see StableSymlinks' own
+	// doc comment for what these two are actually for. Absolute so a
+	// nested symlink's own (possibly differently-rooted, if the caller
+	// passed a relative src/dst) path can be compared against them
+	// meaningfully via Overlaps/filepath.Rel.
+	if opts.rootSrc == "" {
+		if abs, err := filepath.Abs(src); err == nil {
+			opts.rootSrc = abs
+		}
+		if abs, err := filepath.Abs(dst); err == nil {
+			opts.rootDst = abs
+		}
 	}
 
 	fi, err := os.Lstat(src)
@@ -207,6 +261,63 @@ func Overlaps(src, dst string) bool {
 		return false
 	}
 	return !strings.HasPrefix(rel, "..")
+}
+
+// stableSymlinkTarget answers CopyOptions.StableSymlinks' own question
+// for one symlink being recreated at dst: does src's own target
+// resolve to somewhere inside rootSrc (the tree actually being
+// copied), and if so, what should the recreated link point at instead
+// so it still correctly resolves to the corresponding file at the new
+// location — rather than the original target text verbatim, which
+// after the copy would either still point back at the *original* tree
+// (surprising: a copy that isn't actually self-contained) or, for a
+// relative target, potentially resolve to the wrong file entirely once
+// recreated somewhere else with a different directory structure around
+// it (a Merge into an existing directory, say).
+//
+// target is resolved against src's own directory first if it's
+// relative — a symlink's own target is always relative to the link's
+// own location, never the current working directory — then compared
+// against rootSrc via the same Overlaps this package's own overlap
+// checks elsewhere already use. Only ever chases that one step: a
+// target that is itself a further symlink is a separate entry copyDir
+// will reach (and potentially rewrite) on its own turn, not something
+// this needs to resolve itself.
+//
+// Returns ok false — leave target exactly as it was written — for
+// anything outside rootSrc (the overwhelming majority of real-world
+// symlinks, which point at something entirely unrelated to whatever
+// tree happens to be getting copied) or a target that can't be
+// resolved to an absolute path at all.
+func stableSymlinkTarget(src, dst, target, rootSrc, rootDst string) (rewritten string, ok bool) {
+	absTarget := target
+	if !filepath.IsAbs(absTarget) {
+		absTarget = filepath.Join(filepath.Dir(src), absTarget)
+	}
+	absTarget = filepath.Clean(absTarget)
+
+	if !Overlaps(rootSrc, absTarget) {
+		return "", false
+	}
+	rel, err := filepath.Rel(rootSrc, absTarget)
+	if err != nil {
+		return "", false
+	}
+	newAbsTarget := filepath.Join(rootDst, rel)
+
+	// Keeps the same style the original target had: an absolute target
+	// stays absolute; a relative one stays relative, recomputed from
+	// dst's own directory so the copied tree remains self-contained and
+	// portable even if it's moved again later, rather than carrying
+	// forward an offset that only ever made sense relative to src's own
+	// position.
+	if filepath.IsAbs(target) {
+		return newAbsTarget, true
+	}
+	if relFromDst, err := filepath.Rel(filepath.Dir(dst), newAbsTarget); err == nil {
+		return relFromDst, true
+	}
+	return newAbsTarget, true // absolute is still a correct target, just not the original relative style
 }
 
 // resolveExistingAncestor returns path with every symlink resolved for
@@ -370,8 +481,10 @@ func copyFile(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	// this point, say) leaves dst's content correct but its metadata as
 	// whatever creating it just produced — worth finishing the copy over,
 	// not worth failing it over.
-	if srcInfo, err := os.Lstat(src); err == nil {
-		preserveMetadata(srcInfo, dst)
+	if !opts.SkipAttributes {
+		if srcInfo, err := os.Lstat(src); err == nil {
+			preserveMetadata(srcInfo, dst)
+		}
 	}
 	return nil
 }
@@ -433,7 +546,7 @@ func copyDir(src, dst string, mode os.FileMode, opts CopyOptions) error {
 		}
 	}
 
-	if !dstAlreadyExisted {
+	if !dstAlreadyExisted && !opts.SkipAttributes {
 		if srcInfo, err := os.Lstat(src); err == nil {
 			preserveMetadata(srcInfo, dst)
 		}
@@ -474,16 +587,24 @@ func copySymlink(src, dst string, opts CopyOptions) error {
 		if err != nil {
 			return err
 		}
+		if opts.StableSymlinks && opts.rootSrc != "" {
+			if rewritten, ok := stableSymlinkTarget(src, dst, target, opts.rootSrc, opts.rootDst); ok {
+				target = rewritten
+			}
+		}
 		if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		if err := os.Symlink(target, dst); err != nil {
 			return err
 		}
-		// Ownership only — see preserveMetadata's own doc comment on why
-		// permissions/timestamps are skipped entirely for a symlink.
-		if srcInfo, err := os.Lstat(src); err == nil {
-			preserveMetadata(srcInfo, dst)
+		if !opts.SkipAttributes {
+			// Ownership only — see preserveMetadata's own doc comment on
+			// why permissions/timestamps are skipped entirely for a
+			// symlink.
+			if srcInfo, err := os.Lstat(src); err == nil {
+				preserveMetadata(srcInfo, dst)
+			}
 		}
 		return nil
 	}
