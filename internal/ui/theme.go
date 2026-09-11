@@ -433,16 +433,31 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 
 	r.duplicateForm.SetBackgroundColor(theme.AccentBackground)
 	r.duplicateForm.SetLabelColor(theme.Text)
-	r.duplicateForm.SetFieldBackgroundColor(theme.FocusedBackground)
+	// EditableBackground, not FocusedBackground — per the user's own
+	// explicit request that Multiply's plain text fields look like
+	// Properties' own "editable" fields (see EditableBackground's own
+	// doc comment on config/theme.go), not the same "always looks
+	// focused" cyan they shared with the dropdowns before.
+	//
+	// This is Form's own ONE shared field color, applied to EVERY item
+	// (including both dropdowns) fresh on every single Draw call — a
+	// hard tview constraint, not a choice: Form.Draw unconditionally
+	// re-calls item.SetFormAttributes(..., fieldTextColor,
+	// fieldBackgroundColor) for every item on every frame (verified
+	// directly against tview's own form.go, not assumed), and
+	// DropDown.SetFormAttributes routes straight into SetFieldStyle —
+	// so a dropdown's own *unfocused* look can never differ from a
+	// plain field's here without pulling it out of the Form entirely.
+	// Its *focused* look still can, and does (see themeDuplicateDropDown
+	// just below): DropDown keeps a second, separate focusedStyle
+	// SetFormAttributes never touches at all, which is exactly why the
+	// dropdowns still visibly pop to theme.FocusedBackground once
+	// they're the one thing actually being interacted with, even though
+	// their own resting look now matches every plain field around them
+	// — per the user's own explicit "das muss sich halt besser abheben",
+	// unchanged from before this color swap, not weakened by it.
+	r.duplicateForm.SetFieldBackgroundColor(theme.EditableBackground)
 	r.duplicateForm.SetFieldTextColor(theme.Text)
-	// See themeDuplicateDropDown's own doc comment (duplicate.go) for why
-	// both dropdowns need this explicit call at all: SetFormAttributes
-	// (what the two lines above actually drive, applied fresh every
-	// Draw) only ever reaches DropDown's own fieldStyle, never its
-	// separate focusedStyle, and never its open popup list's own colors
-	// either — a color-scheme switch while Multiply happens to be open
-	// would otherwise leave either dropdown showing stale colors, or the
-	// popup showing tview's own stock palette, indefinitely.
 	// duplicateDateTimeTypeField only exists while the Date/time
 	// strategy is the one currently selected (see renderDuplicateForm).
 	if r.duplicateStrategyField != nil {
@@ -451,17 +466,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.duplicateDateTimeTypeField != nil {
 		r.themeDuplicateDropDown(r.duplicateDateTimeTypeField)
 	}
-	// The Date/time format field's own disabled ("Unix timestamp") look
-	// is set directly in renderDuplicateDateTimeFields, not by Form's
-	// own generic pass above (which would otherwise fight it back to
-	// the ordinary editable field colors) — refreshed here too, for the
-	// same reason the other two dropdowns are: a color-scheme switch
-	// while it's showing must not leave it in the previous scheme's dim
-	// color indefinitely.
-	if r.duplicateDateTimeFormatField != nil && r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix {
-		r.duplicateDateTimeFormatField.SetFieldTextColor(theme.PlaceholderText)
-		r.duplicateDateTimeFormatField.SetFieldBackgroundColor(theme.AccentBackground)
-	}
+	// Nothing to refresh here for the disabled ("Unix timestamp") Date/time
+	// format field: its own dimmed look comes from SetDisabled(true)
+	// alone, skipping its field-background fill so the Form's own base
+	// AccentBackground (set once, right above, and already scheme-aware)
+	// shows through — see renderDuplicateDateTimeFields' own doc comment
+	// for the full mechanism. A per-widget color call here would be inert
+	// regardless (Form's own generic pass overwrites it every Draw the
+	// same as any other field's), so there's nothing this needs to touch.
 	r.duplicatePreviewView.SetBackgroundColor(theme.AccentBackground)
 	r.duplicatePreviewView.SetTextColor(theme.Text)
 	r.duplicateSpacer.SetBackgroundColor(theme.AccentBackground)

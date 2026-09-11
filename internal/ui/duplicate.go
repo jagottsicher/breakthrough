@@ -317,9 +317,23 @@ func (r *Root) renderDuplicateDateTimeFields() {
 	switch r.duplicateDateTimeFormatType {
 	case duplicateDateTimeTypeUnix:
 		r.duplicateDateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
+		// SetDisabled(true) alone is what actually dims this field — not
+		// a color call of our own, which Form's own generic per-item
+		// theming would silently overwrite on the very next Draw anyway
+		// (see themeDuplicateDropDown's own doc comment below for that
+		// same constraint, verified the same way here: reading
+		// TextArea.Draw itself, not assumed). A disabled TextArea skips
+		// its own field-background fill entirely — "if t.disabled { bg =
+		// t.backgroundColor }" makes the fill condition just below it
+		// false unconditionally — so the Form's own base AccentBackground
+		// (already painted underneath by Box.DrawForSubclass) simply
+		// shows through where an enabled field would otherwise paint its
+		// own vivid, editable-looking fill. That contrast against every
+		// other, still-editable field around it is the entire "grayed
+		// out" effect; setting SetFieldTextColor/SetFieldBackgroundColor
+		// here would be dead code that happens to look right for exactly
+		// one frame and never actually renders.
 		r.duplicateDateTimeFormatField.SetDisabled(true)
-		r.duplicateDateTimeFormatField.SetFieldTextColor(r.theme.PlaceholderText)
-		r.duplicateDateTimeFormatField.SetFieldBackgroundColor(r.theme.AccentBackground)
 	case duplicateDateTimeTypeStrftime:
 		r.duplicateDateTimeFormatField.SetText(r.duplicateDateTimeFormatStrftimeValue)
 		r.duplicateDateTimeFormatField.SetChangedFunc(func(v string) {
