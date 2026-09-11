@@ -502,9 +502,10 @@ func optionCategories() []optionCategory {
 					},
 				)),
 				withSection("Duplicate", boolOption("duplicate_datetime_strftime", "Strftime-style format",
-					"How \"Date/time format\" above is interpreted — the same \"a checkbox picks "+
-						"which syntax the text field means\" shape the filter menu's own Glob/"+
-						"Regex toggle already uses.\n\n"+
+					"How \"Date/time format\" above is interpreted — in the Multiply dialog "+
+						"itself, its own \"Date/time format type\" dropdown picks this (and "+
+						"\"Use Unix timestamp\" below) directly instead of a pair of separate "+
+						"toggles.\n\n"+
 						"Off (the default): Go's own reference-time layout, the format Go's code "+
 						"itself uses internally — e.g. \"2006-1-2 15:04:05\" renders as "+
 						"\"2026-11-9 23:59:59\".\n\n"+

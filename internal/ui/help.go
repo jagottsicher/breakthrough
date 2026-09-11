@@ -381,8 +381,8 @@ var helpText = strings.TrimLeft(`
   combined: the Strategy dropdown shows only the fields that strategy
   actually uses, never all three strategies' own fields at once.
 
-  Target                Read-only — what this Multiply run is for
-  Strategy              Numbered (default): counts up from 1 until a
+  Target                 Read-only — what this Multiply run is for
+  Strategy               Numbered (default): counts up from 1 until a
                          free name is found. Fixed suffix text: the
                          same literal text every time — duplicating the
                          result again doubles it ("_copy_copy"), rather
@@ -396,11 +396,15 @@ var helpText = strings.TrimLeft(`
   Number padding         Zero-pads "Numbered"'s own number ("_001"
                          instead of "_1") — shown only for that
                          strategy
-  Date/time format,      "Date/time"'s own format string (Go's
-  Strftime-style         reference-time layout by default, or a
-  format, Use Unix       strftime-style one with the checkbox turned
-  timestamp              on) plus its two toggles — shown only for
-                         that strategy
+  Date/time format type  Go format string (default), Strftime-style
+                         Format, or Unix timestamp — a second dropdown,
+                         shown only for the Date/time strategy
+  Date/time format       Go's own reference-time layout or a
+                         strftime-style format, each with its own
+                         independently-edited example text that
+                         survives switching back and forth; disabled
+                         and showing today's real Unix timestamp
+                         instead once "Unix timestamp" above is picked
   Number of duplicates   How many copies this one run creates, capped
                          by "Maximum number of duplicates" under
                          Options
