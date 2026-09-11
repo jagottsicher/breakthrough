@@ -358,17 +358,22 @@ func userHomeDir() string {
 	return dir
 }
 
-// chordTimeout is how long a chord's second key stays live for.
-//
-// Long enough to actually read the button bar's own legend first — a
-// family like "g" lists four members with a label each, and the first
-// value tried here (2.5s) turned out too short to read that before
-// choosing, never mind reach for the key — short enough that an
-// abandoned chord (the user got distracted, or simply changed their
-// mind) doesn't sit waiting indefinitely for a keystroke that might
-// arrive minutes later and mean something completely different by
-// then.
-const chordTimeout = 4 * time.Second
+// chordTimeout is how long a chord's second key stays live for —
+// settings.ChordTimeoutMS (see its own doc comment in config/settings.go),
+// a live setting rather than the fixed constant this used to be, so a
+// change under Options takes effect on the very next chord without a
+// restart. 4000ms by default, the same value that was hardcoded before
+// this setting existed: long enough to actually read the button bar's
+// own legend first — a family like "g" lists four members with a label
+// each, and the first value tried here (2.5s) turned out too short to
+// read that before choosing, never mind reach for the key — short
+// enough that an abandoned chord (the user got distracted, or simply
+// changed their mind) doesn't sit waiting indefinitely for a keystroke
+// that might arrive minutes later and mean something completely
+// different by then.
+func (r *Root) chordTimeout() time.Duration {
+	return time.Duration(r.settings.ChordTimeoutMS) * time.Millisecond
+}
 
 // chordTickInterval is how often the status bar's own countdown
 // indicator (see chordIndicatorText) is repainted while a chord is
@@ -450,7 +455,7 @@ func (r *Root) acceptsPropertiesAwareKey() bool {
 // starts counting the timeout down.
 func (r *Root) startChord(family chordFamily) {
 	r.pendingChord = family.prefix
-	r.chordDeadline = time.Now().Add(chordTimeout)
+	r.chordDeadline = time.Now().Add(r.chordTimeout())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r.chordCancel = cancel
@@ -587,7 +592,7 @@ func (r *Root) chordIndicatorText() string {
 	// here was a real bug, caught live: the indicator showed nearly
 	// empty right after pressing the prefix key, and nearly full right
 	// before it expired.
-	elapsedFrac := 1 - float64(remaining)/float64(chordTimeout)
+	elapsedFrac := 1 - float64(remaining)/float64(r.chordTimeout())
 	idx := int(elapsedFrac * float64(len(chordCountdownBlocks)))
 	if idx >= len(chordCountdownBlocks) {
 		idx = len(chordCountdownBlocks) - 1
