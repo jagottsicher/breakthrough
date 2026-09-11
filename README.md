@@ -174,7 +174,11 @@ terminal.
   the last two only once a split actually exists). `◂ Back`, `Escape`,
   or Left arrow step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
-  Properties, since almost nothing else still applies there.
+  Properties, since almost nothing else still applies there. Once open,
+  `l`/`e`/`r`/`c`/`x`/`d` — the same letters Look/Edit/Rename/Copy/Cut/
+  Move to Trash already have on their own — fire that entry directly,
+  without arrowing down to it first; one whose own entry isn't
+  currently showing does nothing.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own

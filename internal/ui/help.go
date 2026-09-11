@@ -128,15 +128,15 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
-                  Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Batch rename, Undo last
-                  rename, Move to Trash, Remove, Go to Trash, Restore
-                  from Trash, Empty Trash, New tab, Close tab, Switch
-                  tab..., Split view, Split above/below, Ping (test),
-                  grep*, zgrep*, du*, df*, and three toggles: hidden
-                  files, size format, modified-time format — *planned,
-                  not built yet)
+  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Paste,
+                  Move to Trash, Properties, and submenus for rarer
+                  actions — tail -f/chown/chmod/sed/Batch rename/Undo
+                  last rename/Remove/Paste following symlinks,
+                  Selection, Tabs & Split). "m" opens the same menu
+                  from the keyboard. Once it's open, "l"/"e"/"r"/"c"/
+                  "x"/"d" — the same letters those six already have on
+                  their own — fire that entry directly, without
+                  arrowing down to it first.
 
 [::b]Details sidebar ("I")[::-]
 

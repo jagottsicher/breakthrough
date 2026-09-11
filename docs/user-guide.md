@@ -372,6 +372,12 @@ actually put something in the clipboard. Inside "Tabs & Split",
 **Split orientation** and **Swap panes** only show up once a split is
 actually active — there's nothing to orient or swap before that.
 
+Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d` — the same letters
+**Look**/**Edit**/**Rename**/**Copy**/**Cut**/**Move to Trash** already
+have as their own single-key shortcuts — fire that entry directly,
+without arrowing down to it first. A letter whose own entry isn't
+currently showing (`e` for a directory, say) does nothing.
+
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
 to something already trashed:
