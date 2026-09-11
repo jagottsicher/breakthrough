@@ -72,6 +72,14 @@ type menuEntry struct {
 	// (the zero rune) for every entry with no such shortcut, which is
 	// most of them — this is for the handful the user singled out
 	// explicitly, not a rule every entry has to have an opinion on.
+	//
+	// "Multiply" is the one deliberate exception to "not the entry's own
+	// first letter": it has no plain-key equivalent to mirror at all —
+	// Duplicate only ever opens from inside this menu (see duplicate.go),
+	// never from a bare letter of its own — so there is nothing else for
+	// its mnemonic to agree with. Its own first letter happening to be
+	// the same "m" that opens the menu is the whole point, per the user's
+	// own explicit design: "m" opens the menu, "mm" duplicates.
 	mnemonic rune
 
 	action  func(r *Root)
@@ -112,6 +120,7 @@ func contextMenuTree() []menuEntry {
 		{label: "Rename", mnemonic: 'r', action: func(r *Root) { r.openRename() }},
 		{label: "Copy", mnemonic: 'c', action: func(r *Root) { r.copyToClipboard() }},
 		{label: "Cut", mnemonic: 'x', action: func(r *Root) { r.cutToClipboard() }},
+		{label: "Multiply", mnemonic: 'm', action: func(r *Root) { r.openDuplicate() }},
 		// Only once there's actually something to paste — per the user's
 		// own explicit request that the menu stop always showing every
 		// action regardless of whether it currently means anything.

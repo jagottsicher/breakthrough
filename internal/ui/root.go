@@ -30,6 +30,7 @@ const (
 	confirmPage     = "confirm"
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
+	duplicatePage   = "duplicate"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -335,6 +336,76 @@ type Root struct {
 	sedPreviewProcessed  int
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
+
+	// duplicateForm/duplicateButtons/duplicateLayout together make up the
+	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
+	// fixed field set, Multiply's own Form is genuinely strategy-driven:
+	// only the fields the currently selected naming strategy actually
+	// uses ever appear at once (see renderDuplicateForm) — never all
+	// three strategies' own fields shown/combined together, which read
+	// as one confusing pile rather than a guided choice. Strategy itself
+	// is a real Form dropdown (tview.Form.AddDropDown) rather than a
+	// separate cycling row, and the two Date/time-only toggles are real
+	// Form checkboxes — both native, immediately recognizable widgets,
+	// not a hand-rolled list-with-a-glyph. duplicateButtons is a real
+	// Cancel/Duplicate button row, bottom-left/bottom-right, the same
+	// shape newChmodButtons/newSearchButtons/newPropertiesButtons
+	// already establish elsewhere in this app, not the vertical
+	// two-item List Sed Replace's own dialog uses for the same job.
+	//
+	// duplicateForm's own field widgets (duplicateSeparatorField and
+	// friends) only exist for as long as the current strategy actually
+	// shows them — nil otherwise (see renderDuplicateForm's own reset at
+	// the top) — so every *value* that has to survive a strategy switch
+	// (which rebuilds the Form's items from scratch, the same "Form has
+	// no in-place reset" reasoning newSedForm's own doc comment gives)
+	// is separately mirrored into its own plain string field
+	// (duplicateSeparatorValue and friends, kept in sync via each
+	// field's own SetChangedFunc/dropdown callback) — reading these
+	// mirrors, never the widgets themselves, is what makes
+	// currentDuplicateOptions/applyDuplicateSelection/
+	// renderDuplicatePreview safe to call regardless of which fields
+	// happen to be mounted right now. duplicateFlags is the same "plain
+	// mirror" shape for the two checkboxes, keyed by their label
+	// constants (the same shape sedFlags already has for Sed Replace's
+	// own toggles). None of these mirrors is r.settings itself: all
+	// start out copied from it on open (see resetDuplicateForm) and are
+	// only ever written back on confirm (see applyDuplicateSelection) —
+	// Cancel leaves the sticky defaults alone.
+	//
+	// duplicatePreviewView is its own always-visible sibling row below
+	// the Form, not a Form item — deliberately, after a real,
+	// reproducible bug an earlier version of this dialog had: a
+	// TextView added via Form.AddFormItem without an explicit height
+	// defaulted to tview's own 5-row DefaultFormFieldHeight and bled
+	// into the widget below it. Living outside the Form entirely rules
+	// that whole class of bug out rather than just remembering to set
+	// the height correctly.
+	//
+	// duplicateTargets is the file(s) this open is for (see
+	// selectedOrCurrentPaths).
+	duplicateForm                *tview.Form
+	duplicateStrategyField       *tview.DropDown
+	duplicateSeparatorField      *tview.InputField
+	duplicateSuffixTextField     *tview.InputField
+	duplicateNumberPaddingField  *tview.InputField
+	duplicateDateTimeFormatField *tview.InputField
+	duplicateCountField          *tview.InputField
+	duplicateSeparatorValue      string
+	duplicateStrategy            string
+	duplicateSuffixTextValue     string
+	duplicateNumberPaddingValue  string
+	duplicateDateTimeFormatValue string
+	duplicateCountValue          string
+	duplicateFlags               map[string]bool
+	duplicatePreviewView         *tview.TextView
+	duplicateCancelBtn           *tview.Button
+	duplicateApplyBtn            *tview.Button
+	duplicateButtons             *tview.Flex
+	duplicateTitleBar            *tview.TextView
+	duplicateContentLayout       *tview.Flex
+	duplicateLayout              *tview.Flex
+	duplicateTargets             []string
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
@@ -1138,6 +1209,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sedLayout = r.newSedLayout()
 	r.sedPreviewLayout = r.newSedPreviewLayout()
 
+	// The "Multiply" dialog (see duplicate.go) — same "built once here,
+	// contents rebuilt fresh per open" shape as Sed Replace just above.
+	r.duplicateForm = r.newDuplicateForm()
+	r.duplicatePreviewView = r.newDuplicatePreviewView()
+	r.duplicateButtons = r.newDuplicateButtons()
+	r.duplicateLayout = r.newDuplicateLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
@@ -1253,6 +1331,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.
