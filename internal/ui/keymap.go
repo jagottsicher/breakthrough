@@ -292,7 +292,7 @@ func chordFamilies() []chordFamily {
 			// mistaken for. Matches the help text's own existing phrasing
 			// ("gr / (root)" — see help.go).
 			{'r', "/ (root)", func(r *Root) { r.showError(r.panel.navigate("/")) }},
-			{'b', "Trash", func(r *Root) { r.openTrash() }},
+			{'b', "Trashbin", func(r *Root) { r.openTrash() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
