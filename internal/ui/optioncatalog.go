@@ -384,6 +384,23 @@ func optionCategories() []optionCategory {
 						r.persistSetting("move_stable_symlinks", strconv.FormatBool(b))
 					},
 				)),
+				// "Miscellaneous" subsection — per the user's own explicit
+				// request, for settings that don't belong to a larger
+				// cluster of their own.
+				withSection("Miscellaneous", intOption("chord_timeout_ms", "Chord timeout (ms)",
+					"How long, in milliseconds, a chord's second key (gg, oo, po, zr, ...) "+
+						"stays live for once the first key is pressed.\n\n"+
+						"4000 (four seconds) by default — long enough to actually read the "+
+						"button bar's own legend for the chord's members first, short enough "+
+						"that an abandoned chord doesn't sit waiting indefinitely for a "+
+						"keystroke that might arrive minutes later and mean something "+
+						"completely different by then.",
+					func(r *Root) int { return r.settings.ChordTimeoutMS },
+					func(r *Root, n int) {
+						r.settings.ChordTimeoutMS = n
+						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
+					},
+				)),
 			},
 		},
 		{
@@ -509,6 +526,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MouseEnabled), true
 	case "filter_persistent":
 		return strconv.FormatBool(s.FilterPersistent), true
+	case "chord_timeout_ms":
+		return strconv.Itoa(s.ChordTimeoutMS), true
 	case "copy_preserve_attributes":
 		return strconv.FormatBool(s.CopyPreserveAttributes), true
 	case "move_preserve_attributes":
