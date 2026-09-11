@@ -49,11 +49,14 @@ func (r *Root) inTrash() bool {
 }
 
 // moveSelectionToTrash is the context menu's "Move to Trash", and
-// (through TrashShortcut) Entf's action. No confirmation — per this
-// project's own feature notes, moving to the trash is the reversible
-// action by design, unlike Remove/Empty Trash below. A directory goes in
-// whole, recursively, the same way a plain move always has — there is
-// nothing to warn about since nothing is actually being destroyed yet.
+// (through TrashShortcut) Entf's action. No confirmation by default —
+// per this project's own feature notes, moving to the trash is the
+// reversible action by design, unlike Remove/Empty Trash below — but
+// settings.TrashConfirm (off unless turned on under Options) asks first
+// anyway, for anyone who wants that extra safety net regardless. A
+// directory goes in whole, recursively, the same way a plain move
+// always has — there is nothing to warn about since nothing is actually
+// being destroyed yet, confirmed or not.
 //
 // Redirects to openRemoveConfirm instead when r.inTrash(): an item
 // that's already in the trash has nowhere sensible left to be "moved to
@@ -74,6 +77,24 @@ func (r *Root) moveSelectionToTrash() {
 	if len(targets) == 0 {
 		return
 	}
+
+	if r.settings.TrashConfirm {
+		r.openConfirm(moveToTrashConfirmMessage(targets), "Yes, move to Trash", func() {
+			r.reallyMoveToTrash(targets)
+		})
+		return
+	}
+	r.reallyMoveToTrash(targets)
+}
+
+// reallyMoveToTrash is moveSelectionToTrash's own actual work, split out
+// so the confirmation path (settings.TrashConfirm on) and the direct
+// path (off, the default) both funnel through exactly the same logic —
+// targets is computed once, by the caller, so a confirmed action always
+// still acts on the exact selection that was current when "d" was
+// pressed, not whatever happens to be selected once the dialog is
+// answered.
+func (r *Root) reallyMoveToTrash(targets []string) {
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
@@ -96,6 +117,27 @@ func (r *Root) moveSelectionToTrash() {
 	}
 	r.panel.deselectAll()
 	r.reloadPanel(firstErr)
+}
+
+// moveToTrashConfirmMessage words the optional "Move to Trash"
+// confirmation (settings.TrashConfirm) for one file, one directory
+// (with its own real item count, the same as removeConfirmMessage
+// already does for Remove), or several targets at once — phrased for a
+// reversible move, not removeConfirmMessage's own "permanently delete"
+// wording, since nothing is actually being destroyed here.
+func moveToTrashConfirmMessage(targets []string) string {
+	if len(targets) == 1 {
+		return moveToTrashConfirmSingleMessage(targets[0])
+	}
+	return fmt.Sprintf("Move %d selected items to Trash?", len(targets))
+}
+
+func moveToTrashConfirmSingleMessage(target string) string {
+	name := filepath.Base(target)
+	if count, err := fsops.CountEntries(target); err == nil && count > 0 {
+		return fmt.Sprintf("Move \"%s\" and %d items inside it to Trash?", name, count)
+	}
+	return fmt.Sprintf("Move \"%s\" to Trash?", name)
 }
 
 // openTrash is the context menu's "Go to Trash", and (through the "gb"

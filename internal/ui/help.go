@@ -57,7 +57,9 @@ var helpText = strings.TrimLeft(`
 
   A capital letter is the bigger sibling of its own lowercase one where
   both exist: "d" is reversible (the Trash), "D" is not (asks first).
-  While browsing the Trash itself, "r" restores and "D" empties it,
+  "d" itself never asks either, unless "Confirm before moving to Trash"
+  is turned on under Options (off by default) — "D" always does either
+  way. While browsing the Trash itself, "r" restores and "D" empties it,
   instead of their ordinary meaning — the same two letters, read
   differently in the one place that makes sense. "V" is "v" Paste's own
   bigger sibling too, for symlinks specifically: plain "v" pastes using

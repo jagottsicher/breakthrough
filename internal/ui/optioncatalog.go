@@ -414,6 +414,21 @@ func optionCategories() []optionCategory {
 		{
 			name: "Trash",
 			options: []optionSpec{
+				boolOption("trash_confirm", "Confirm before moving to Trash",
+					"Whether \"d\" (Move to Trash) asks for confirmation first, the same way "+
+						"\"D\" (Remove permanently) always has.\n\n"+
+						"Off (the default) moves straight to the trash without asking — the "+
+						"reversible action here has never needed to ask, unlike Remove. Turning "+
+						"this on adds an extra safety net on top of that for anyone who wants "+
+						"one; \"D\"'s own confirmation is unconditional either way, regardless of "+
+						"this setting.",
+					false,
+					func(r *Root) bool { return r.settings.TrashConfirm },
+					func(r *Root, b bool) {
+						r.settings.TrashConfirm = b
+						r.persistSetting("trash_confirm", strconv.FormatBool(b))
+					},
+				),
 				boolOption("trash_persistent", "Keep trash across sessions",
 					"Where deleted files go.\n\n"+
 						"On (the default) uses a lasting trash under your data directory, so a file "+
@@ -478,6 +493,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MtimeUnix), true
 	case "pager":
 		return s.Pager, true
+	case "trash_confirm":
+		return strconv.FormatBool(s.TrashConfirm), true
 	case "trash_persistent":
 		return strconv.FormatBool(s.TrashPersistent), true
 	case "trash_max_age_days":
