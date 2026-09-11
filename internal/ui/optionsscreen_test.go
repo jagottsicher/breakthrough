@@ -63,6 +63,22 @@ func confirmReset(t *testing.T, r *Root) {
 // Without this, adding a setting to config but forgetting the catalogue
 // would leave it silently uneditable, and a typo in a catalogue key
 // would silently write a key nothing reads.
+// TestOpenOptionsFocusesCategoriesNotSettings pins the user's own
+// explicit request: opening the screen ("oo") lands on "Appearance"
+// selected in the left-hand category list — but keyboard focus stays
+// there, rather than already jumping into its settings on the right the
+// way it used to. Right (or Tab) is what actually moves you in.
+func TestOpenOptionsFocusesCategoriesNotSettings(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	if !r.optionsCategories.HasFocus() {
+		t.Error("opening Options should focus the category list, not the settings table")
+	}
+	if r.optionsTable.HasFocus() {
+		t.Error("opening Options should not already have focus on the settings table")
+	}
+}
+
 func TestOptionCatalogMatchesSettingDocs(t *testing.T) {
 	offered := map[string]bool{}
 	for _, cat := range optionCategories() {
@@ -503,6 +519,154 @@ func TestOptionsCategoryChangeSwapsTheSettingsShown(t *testing.T) {
 	}
 	if _, ok := optionRowByKey(r, "trash_persistent"); !ok {
 		t.Error("the Trash category's settings aren't shown after switching to it")
+	}
+}
+
+// TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory pins the user's
+// own explicit request: the eight Copy & Move settings live grouped
+// under Behavior, with a "Copy & Move" header row of their own, rather
+// than costing their own top-level category in the left-hand list.
+func TestCopyMoveIsASubsectionOfBehaviorNotItsOwnCategory(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+
+	for _, cat := range optionCategories() {
+		if cat.name == "Copy & Move" {
+			t.Fatal("Copy & Move should no longer be its own top-level category")
+		}
+	}
+
+	selectOptionCategory(t, r, "Behavior")
+
+	headerRow := -1
+	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	for i, dr := range rows {
+		if dr.header == "Copy & Move" {
+			headerRow = i
+			break
+		}
+	}
+	if headerRow == -1 {
+		t.Fatal("no \"Copy & Move\" subsection header found under Behavior")
+	}
+	if got := strings.TrimSpace(r.optionsTable.GetCell(headerRow, optionsColLabel).Text); got != "Copy & Move" {
+		t.Errorf("header row label = %q, want %q", got, "Copy & Move")
+	}
+
+	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
+	if !ok {
+		t.Fatal("copy_preserve_attributes not found under Behavior")
+	}
+	if copyRow != headerRow+1 {
+		t.Errorf("copy_preserve_attributes at row %d, want it directly after the header at row %d", copyRow, headerRow+1)
+	}
+}
+
+// mustOptionCategory finds the named category or fails the test — a
+// small helper for tests that need the category value itself (not just
+// to switch the screen to it, see selectOptionCategory).
+func mustOptionCategory(t *testing.T, name string) optionCategory {
+	t.Helper()
+	for _, cat := range optionCategories() {
+		if cat.name == name {
+			return cat
+		}
+	}
+	t.Fatalf("no option category named %q", name)
+	return optionCategory{}
+}
+
+// TestOptionCategoryDisplayRowsInsertsHeaderOnce pins
+// optionCategoryDisplayRows' own contract directly: a header appears
+// exactly once, right before the first option of its own section, not
+// once per option in it.
+func TestOptionCategoryDisplayRowsInsertsHeaderOnce(t *testing.T) {
+	cat := optionCategory{
+		name: "test",
+		options: []optionSpec{
+			{key: "a"},
+			{key: "b", section: "Group"},
+			{key: "c", section: "Group"},
+			{key: "d"},
+		},
+	}
+
+	rows := optionCategoryDisplayRows(cat)
+
+	var headers []string
+	for _, dr := range rows {
+		if dr.header != "" {
+			headers = append(headers, dr.header)
+		}
+	}
+	if len(headers) != 1 || headers[0] != "Group" {
+		t.Fatalf("headers = %v, want exactly one \"Group\" header", headers)
+	}
+	if len(rows) != len(cat.options)+1 {
+		t.Fatalf("got %d display rows, want %d (options) + 1 (header)", len(rows), len(cat.options)+1)
+	}
+	// The header must sit directly before "b", the first option of its
+	// own section — not before "a" (which has no section at all) and
+	// not repeated again before "c" (same section as "b").
+	if rows[0].opt.key != "a" || rows[1].header != "Group" || rows[2].opt.key != "b" ||
+		rows[3].opt.key != "c" || rows[4].opt.key != "d" {
+		t.Fatalf("rows = %+v, want [a, header(Group), b, c, d]", rows)
+	}
+}
+
+// TestOptionAtRowReturnsFalseForHeaderRow pins that a header row has no
+// setting of its own to activate, explain, or click — optionAtRow (and
+// therefore activateOptionRow/showOptionInfo, which both go through it)
+// must report false rather than the option that happens to follow it.
+func TestOptionAtRowReturnsFalseForHeaderRow(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Behavior")
+
+	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
+	if !ok {
+		t.Fatal("copy_preserve_attributes not found under Behavior")
+	}
+	headerRow := copyRow - 1
+
+	if _, ok := r.optionAtRow(headerRow); ok {
+		t.Error("optionAtRow on the header row should return false, not the option right after it")
+	}
+	if _, ok := r.optionAtRow(copyRow); !ok {
+		t.Error("optionAtRow on the row right after the header should still find copy_preserve_attributes")
+	}
+}
+
+// TestOptionsArrowKeysSkipTheSubsectionHeader drives the real
+// tview.Table InputHandler down through Behavior's own settings and
+// pins that the cursor never lands on the "Copy & Move" header row —
+// relying on tview's own documented behavior (verified directly against
+// its source, not assumed) that arrow-key movement skips any cell
+// marked NotSelectable, which renderOptions sets on every cell of a
+// header row.
+func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Behavior")
+	r.app.SetFocus(r.optionsTable)
+
+	headerRow, ok := func() (int, bool) {
+		for i, dr := range optionCategoryDisplayRows(mustOptionCategory(t, "Behavior")) {
+			if dr.header == "Copy & Move" {
+				return i, true
+			}
+		}
+		return 0, false
+	}()
+	if !ok {
+		t.Fatal("no \"Copy & Move\" header found under Behavior")
+	}
+
+	r.optionsTable.Select(0, 0)
+	rowCount := r.optionsTable.GetRowCount()
+	for i := 0; i < rowCount; i++ {
+		r.optionsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+		row, _ := r.optionsTable.GetSelection()
+		if row == headerRow {
+			t.Fatalf("cursor landed on the header row (%d) after %d Down presses", headerRow, i+1)
+		}
 	}
 }
 
