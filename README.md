@@ -97,8 +97,8 @@ terminal.
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go
   back to every new directory starting unfiltered instead.
-- The six nav buttons (Start/Root/Home/Back/Forward/Up) at the very start
-  of the path bar are real, highlighted buttons now — a plain
+- The seven nav buttons (Start/Root/Home/Up/Back/Forward/Reload) at the
+  very start of the path bar are real, highlighted buttons now — a plain
   background-colored square either side of each glyph, with its own
   separator column between one button and the next. Root (`/`) sits right
   next to Start and jumps straight to the filesystem root — the same
