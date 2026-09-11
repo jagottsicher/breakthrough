@@ -404,29 +404,47 @@ func (r *Root) renderOptionCategories() {
 }
 
 // optionDisplayRow is one row of the settings table for a category —
-// either a real, editable setting or a subsection header separating a
-// labeled group of settings from the ones before it (see
-// optionSpec.section's own doc comment). header is non-empty for a
-// header row and empty otherwise; opt/optIndex are only meaningful when
-// header is empty.
+// a real, editable setting, a subsection header separating a labeled
+// group of settings from the ones before it, or a blank spacer row
+// between two such sections (see optionSpec.section's own doc
+// comment). Exactly one of blank/header is set for a non-option row;
+// opt/optIndex are only meaningful when both are false/empty.
 type optionDisplayRow struct {
+	blank    bool
 	header   string
 	opt      optionSpec
 	optIndex int
 }
 
+// isOption reports whether this row is a real, selectable setting
+// rather than a header or a blank spacer — the one check optionAtRow
+// and firstSelectableOptionsRow both need, kept in one place so they
+// can't drift into checking different fields as more non-option row
+// kinds are added.
+func (dr optionDisplayRow) isOption() bool {
+	return !dr.blank && dr.header == ""
+}
+
 // optionCategoryDisplayRows expands cat.options into the settings
-// table's own row list, inserting one header row wherever a run of
-// options' own section differs from the option right before it —
-// exactly once per contiguous run of the same non-empty section, not
-// once per option in it. A category with no sectioned options at all
-// (every options.section == "") produces exactly one display row per
-// option, the original, header-free shape.
+// table's own row list: one header row wherever a run of options' own
+// section differs from the option right before it — exactly once per
+// contiguous run of the same non-empty section, not once per option in
+// it — plus one blank spacer row between two consecutive sections (per
+// the user's own explicit request), never before the first section in
+// the category, since there's nothing above it there to separate from.
+// A category with no sectioned options at all (every option.section ==
+// "") produces exactly one display row per option, the original,
+// header-and-spacer-free shape.
 func optionCategoryDisplayRows(cat optionCategory) []optionDisplayRow {
 	rows := make([]optionDisplayRow, 0, len(cat.options))
+	sawSection := false
 	for i, opt := range cat.options {
 		if opt.section != "" && (i == 0 || cat.options[i-1].section != opt.section) {
+			if sawSection {
+				rows = append(rows, optionDisplayRow{blank: true})
+			}
 			rows = append(rows, optionDisplayRow{header: opt.section})
+			sawSection = true
 		}
 		rows = append(rows, optionDisplayRow{opt: opt, optIndex: i})
 	}
@@ -436,19 +454,23 @@ func optionCategoryDisplayRows(cat optionCategory) []optionDisplayRow {
 // renderOptions fills the right-hand table with the selected category's
 // settings: label, current value, where that value came from, and the
 // info button — plus, wherever optionCategoryDisplayRows calls for one,
-// a subsection header row of its own.
+// a subsection header row (and, between two of them, a blank spacer
+// row) of its own.
 //
-// A header row's own cells are all explicitly SetSelectable(false):
-// tview.Table's own arrow-key movement (see its own forward/backwards
-// helpers, verified directly against tview's source rather than
-// assumed) already skips a NotSelectable cell entirely on its own, so
-// Up/Down never lands the cursor on a header without any extra
-// navigation logic needed here. This relies on the category's own first
-// option always having an empty section (see optionSpec.section's own
-// doc comment) — Select(0, 0), used just below to recover from an
-// out-of-range cursor, sets the cursor directly rather than skipping a
-// non-selectable cell the way the arrow keys do, so row 0 has to be a
-// real option for that fallback to land somewhere sensible.
+// A header or blank row's own cells are all explicitly
+// SetSelectable(false): tview.Table's own arrow-key movement (see its
+// own forward/backwards helpers, verified directly against tview's
+// source rather than assumed) already skips a NotSelectable cell
+// entirely on its own, so Up/Down never lands the cursor on either kind
+// without any extra navigation logic needed here. Select(0, 0), used
+// just below to recover from an out-of-range cursor, sets the cursor
+// directly rather than skipping a non-selectable cell the way the arrow
+// keys do — since a category's first row is a header whenever its very
+// first option carries a section (see optionSpec.section's own doc
+// comment, and the "General" section this app's own Behavior category
+// uses), that fallback goes through firstSelectableOptionsRow instead
+// of a bare Select(0, 0), rather than risk landing the cursor on a
+// header it can never move off of with the arrow keys alone.
 func (r *Root) renderOptions() {
 	r.optionsTable.Clear()
 
@@ -458,6 +480,13 @@ func (r *Root) renderOptions() {
 	}
 
 	for row, dr := range optionCategoryDisplayRows(categories[r.optionsCategory]) {
+		if dr.blank {
+			r.optionsTable.SetCell(row, optionsColLabel, tview.NewTableCell("").SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
+			continue
+		}
 		if dr.header != "" {
 			r.optionsTable.SetCell(row, optionsColLabel,
 				tview.NewTableCell(padRight(dr.header, optionsLabelWidth)).
@@ -507,8 +536,26 @@ func (r *Root) renderOptions() {
 	// Keep the cursor in range after a category switch shortened the
 	// list under it.
 	if row, _ := r.optionsTable.GetSelection(); row >= r.optionsTable.GetRowCount() {
-		r.optionsTable.Select(0, 0)
+		r.optionsTable.Select(r.firstSelectableOptionsRow(), 0)
 	}
+}
+
+// firstSelectableOptionsRow is the first row in the currently selected
+// category that isn't a header or a blank spacer row — 0 for the common
+// case (a category whose first option carries no section at all), the
+// row right after a leading header for one that does (see
+// optionCategoryDisplayRows).
+func (r *Root) firstSelectableOptionsRow() int {
+	cat, ok := r.currentOptionCategory()
+	if !ok {
+		return 0
+	}
+	for row, dr := range optionCategoryDisplayRows(cat) {
+		if dr.isOption() {
+			return row
+		}
+	}
+	return 0
 }
 
 // setOptionsPaneFocused paints one pane's own selected-row highlight for
@@ -620,16 +667,16 @@ func (r *Root) currentOptionCategory() (optionCategory, bool) {
 }
 
 // optionAtRow is the setting shown on one row of the settings table —
-// false for a row out of range, or a subsection header row (see
-// optionCategoryDisplayRows), which has no setting of its own to
-// activate or explain.
+// false for a row out of range, or a subsection header/blank spacer row
+// (see optionCategoryDisplayRows), neither of which has a setting of
+// its own to activate or explain.
 func (r *Root) optionAtRow(row int) (optionSpec, bool) {
 	cat, ok := r.currentOptionCategory()
 	if !ok {
 		return optionSpec{}, false
 	}
 	rows := optionCategoryDisplayRows(cat)
-	if row < 0 || row >= len(rows) || rows[row].header != "" {
+	if row < 0 || row >= len(rows) || !rows[row].isOption() {
 		return optionSpec{}, false
 	}
 	return rows[row].opt, true

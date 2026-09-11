@@ -222,7 +222,11 @@ func optionCategories() []optionCategory {
 		{
 			name: "Behavior",
 			options: []optionSpec{
-				boolOption("restore_tabs", "Restore tabs on start",
+				// "General" — per the user's own explicit request, this
+				// first group gets a section header of its own too, the
+				// same as every group after it, rather than being the one
+				// unlabeled exception at the top.
+				withSection("General", boolOption("restore_tabs", "Restore tabs on start",
 					"Whether the tabs that were open when you last quit are reopened on the next start.\n\n"+
 						"The layout is saved on a clean exit only. Starting breakthrough with an "+
 						"explicit directory (\"breakthrough /some/path\") opens just that instead, "+
@@ -233,8 +237,8 @@ func optionCategories() []optionCategory {
 						r.settings.RestoreTabs = b
 						r.persistSetting("restore_tabs", strconv.FormatBool(b))
 					},
-				),
-				boolOption("split_stacked", "Split view stacked",
+				)),
+				withSection("General", boolOption("split_stacked", "Split view stacked",
 					"How split view (\"s\") divides the window between its two panes.\n\n"+
 						"Off puts them side by side, which suits a wide terminal and keeps every "+
 						"row of both listings visible. On stacks them above each other, which "+
@@ -244,8 +248,8 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.settings.SplitStacked },
 					func(r *Root, b bool) { r.setSplitStacked(b) },
-				),
-				boolOption("mouse_enabled", "Mouse reporting",
+				)),
+				withSection("General", boolOption("mouse_enabled", "Mouse reporting",
 					"Whether clicks and drags work in breakthrough at all.\n\n"+
 						"On (the default) lets you click, drag, and scroll — but it also hands "+
 						"every mouse event to breakthrough instead of your terminal emulator, "+
@@ -256,8 +260,8 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.mouseEnabled },
 					func(r *Root, b bool) { r.setMouseEnabled(b) },
-				),
-				boolOption("filter_persistent", "Filter carries over between directories",
+				)),
+				withSection("General", boolOption("filter_persistent", "Filter carries over between directories",
 					"Whether the filter menu's own text/glob/regex pattern and its size/"+
 						"modified-time toggles stay active when you move to a different directory.\n\n"+
 						"On (the default) keeps browsing with the same filter switched on until "+
@@ -269,7 +273,7 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.settings.FilterPersistent },
 					func(r *Root, b bool) { r.setFilterPersistent(b) },
-				),
+				)),
 				// "Copy & Move" subsection — per the user's own explicit
 				// request, these eight settings belong grouped under
 				// Behavior rather than costing their own top-level
