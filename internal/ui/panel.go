@@ -3150,7 +3150,7 @@ func (p *Panel) previousPath() (string, bool) {
 }
 
 // headerButtons is the fixed definition of the seven nav buttons shown
-// at the start of the header row — Start/Root/Home/Back/Forward/Up/
+// at the start of the header row — Start/Root/Home/Up/Back/Forward/
 // Reload — as one shared slice so buildHeaderSpans (the colored,
 // clickable rendering) and headerButtonPrefix (headerEdit's own
 // plain-text label — see its own doc comment) can never drift out of
@@ -3189,6 +3189,11 @@ func (p *Panel) previousPath() (string, bool) {
 // anyway: that first "/" is plain, unstyled breadcrumb text, no more
 // visually a "button" than any other path segment, easy to never
 // notice as a click target at all.
+//
+// Up sits right after Home rather than after Back/Forward — per the
+// user's own explicit request to reorder it there. The g chord
+// family's own go-to members (gg/gh/gu/gp/gn — see chordFamilies in
+// keymap.go) mirror this same order, per that same request.
 var headerButtons = []struct {
 	glyph  string
 	action headerAction
@@ -3196,9 +3201,9 @@ var headerButtons = []struct {
 	{"∎", actionStart},
 	{"/", actionRoot},
 	{"~", actionHome},
+	{"↑", actionUp},
 	{"<", actionBack},
 	{">", actionForward},
-	{"↑", actionUp},
 	{"⭯", actionReload},
 }
 
@@ -3397,7 +3402,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
 // and moves keyboard focus there. headerEdit's own label (see NewPanel)
-// already reserves the "∎~<>↑⭯ " prefix's own width, so the path text
+// already reserves the "∎/~↑<>⭯ " prefix's own width, so the path text
 // itself lines up with wherever p.header was just showing it — nothing
 // further to do here for that.
 func (p *Panel) openEdit() {
