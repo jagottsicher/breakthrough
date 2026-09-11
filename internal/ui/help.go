@@ -82,7 +82,7 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trash
+                gr / (root) · gb Trashbin
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
@@ -128,15 +128,18 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Paste,
-                  Move to Trash, Properties, and submenus for rarer
-                  actions — tail -f/chown/chmod/sed/Batch rename/Undo
-                  last rename/Remove/Paste following symlinks,
-                  Selection, Tabs & Split). "m" opens the same menu
-                  from the keyboard. Once it's open, "l"/"e"/"r"/"c"/
-                  "x"/"d"/"i" — the same letters those seven already
-                  have on their own — fire that entry directly,
-                  without arrowing down to it first.
+  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Multiply,
+                  Paste, Move to Trash, Properties, and submenus for
+                  rarer actions — tail -f/chown/chmod/sed/Batch
+                  rename/Undo last rename/Remove/Paste following
+                  symlinks, Selection, Tabs & Split). "m" opens the
+                  same menu from the keyboard. Once it's open,
+                  "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
+                  seven already have on their own — fire that entry
+                  directly, without arrowing down to it first. "m"
+                  again ("mm") does too, for Multiply specifically —
+                  the one entry with no plain-key equivalent of its
+                  own to mirror, since it only ever opens from here.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -369,6 +372,56 @@ var helpText = strings.TrimLeft(`
 
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
+
+[::b]Multiply dialog ("mm", or context menu's "Multiply")[::-]
+
+  Creates one or more copies of the selection right beside it, each
+  named by the current strategy — an ordinary Copy underneath (works on
+  a directory just as well as a file), never a Move. Guided, not
+  combined: the Strategy dropdown shows only the fields that strategy
+  actually uses, never all three strategies' own fields at once.
+
+  Target                 Read-only — what this Multiply run is for
+  Strategy               Numbered (default): counts up from 1 until a
+                         free name is found. Fixed suffix text: the
+                         same literal text every time — duplicating the
+                         result again doubles it ("_copy_copy"), rather
+                         than retrying automatically. Date/time: a
+                         timestamp, computed once
+  Separator              Sits between the original name and the
+                         strategy's own suffix — shown for every
+                         strategy
+  Suffix text            "Fixed suffix text"'s own literal suffix —
+                         shown only for that strategy
+  Number padding         Zero-pads "Numbered"'s own number ("_001"
+                         instead of "_1") — shown only for that
+                         strategy
+  Date/time format type  Go format string (default), Strftime-style
+                         Format, or Unix timestamp — a second dropdown,
+                         shown only for the Date/time strategy
+  Date/time format       Go's own reference-time layout or a
+                         strftime-style format, each with its own
+                         independently-edited example text that
+                         survives switching back and forth; disabled
+                         and showing today's real Unix timestamp
+                         instead once "Unix timestamp" above is picked
+  Number of duplicates   How many copies this one run creates, capped
+                         by "Maximum number of duplicates" under
+                         Options
+
+  The suffix always lands after the original name's own *entire* text,
+  extension included, never before it: "archive.tar.gz" duplicates to
+  "archive.tar.gz_1", not "archive.tar_1.gz" or "archive_1.tar.gz" —
+  nothing about a basename counts as more "real" than the rest of it
+  just because it follows a dot. A live Preview line above
+  Cancel/Duplicate shows the exact name the first duplicate would get
+  right now, given every field's current value.
+
+  Whatever's chosen here becomes the new default shown next time (all
+  of the above, under Options → Behavior → Duplicate) — the one
+  setting group in this whole app that adapts itself this way, per its
+  own explicit design. Only on actually pressing "Duplicate": editing a
+  field and then Cancel never touches the sticky default at all.
 
 [::b]Search dialog ("f")[::-]
 
