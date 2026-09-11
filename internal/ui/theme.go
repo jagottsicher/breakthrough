@@ -431,6 +431,49 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedTitleBar.SetBackgroundColor(theme.FocusedBackground)
 	r.sedTitleBar.SetTextColor(theme.Text)
 
+	r.duplicateForm.SetBackgroundColor(theme.AccentBackground)
+	r.duplicateForm.SetLabelColor(theme.Text)
+	r.duplicateForm.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.duplicateForm.SetFieldTextColor(theme.Text)
+	// See themeDuplicateDropDown's own doc comment (duplicate.go) for why
+	// both dropdowns need this explicit call at all: SetFormAttributes
+	// (what the two lines above actually drive, applied fresh every
+	// Draw) only ever reaches DropDown's own fieldStyle, never its
+	// separate focusedStyle, and never its open popup list's own colors
+	// either — a color-scheme switch while Multiply happens to be open
+	// would otherwise leave either dropdown showing stale colors, or the
+	// popup showing tview's own stock palette, indefinitely.
+	// duplicateDateTimeTypeField only exists while the Date/time
+	// strategy is the one currently selected (see renderDuplicateForm).
+	if r.duplicateStrategyField != nil {
+		r.themeDuplicateDropDown(r.duplicateStrategyField)
+	}
+	if r.duplicateDateTimeTypeField != nil {
+		r.themeDuplicateDropDown(r.duplicateDateTimeTypeField)
+	}
+	// The Date/time format field's own disabled ("Unix timestamp") look
+	// is set directly in renderDuplicateDateTimeFields, not by Form's
+	// own generic pass above (which would otherwise fight it back to
+	// the ordinary editable field colors) — refreshed here too, for the
+	// same reason the other two dropdowns are: a color-scheme switch
+	// while it's showing must not leave it in the previous scheme's dim
+	// color indefinitely.
+	if r.duplicateDateTimeFormatField != nil && r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix {
+		r.duplicateDateTimeFormatField.SetFieldTextColor(theme.PlaceholderText)
+		r.duplicateDateTimeFormatField.SetFieldBackgroundColor(theme.AccentBackground)
+	}
+	r.duplicatePreviewView.SetBackgroundColor(theme.AccentBackground)
+	r.duplicatePreviewView.SetTextColor(theme.Text)
+	r.duplicateSpacer.SetBackgroundColor(theme.AccentBackground)
+	r.duplicateButtons.SetBackgroundColor(theme.AccentBackground)
+	styleButton(r.duplicateCancelBtn, theme)
+	styleButton(r.duplicateApplyBtn, theme)
+	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
+	// dialog nothing else ever stacks on top of, the same reasoning
+	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	r.duplicateTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.duplicateTitleBar.SetTextColor(theme.Text)
+
 	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewStatus.SetTextColor(theme.Text)
 	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)

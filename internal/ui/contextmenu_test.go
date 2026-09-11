@@ -67,7 +67,7 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 	openMenuOnRow(t, r, 2) // apple.txt — see fixtureDir
 
 	want := []string{
-		"Look", "Edit", "Rename", "Copy", "Cut", "Move to Trash", "Properties",
+		"Look", "Edit", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
 		menuGroupGlyph + "More actions",
 		menuGroupGlyph + "Selection",
 		menuGroupGlyph + "Tabs & Split",
