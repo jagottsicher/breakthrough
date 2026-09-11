@@ -30,6 +30,20 @@ type MoveOptions struct {
 	// function's own doc comment for exactly when and how it applies
 	// here specifically.
 	Mode OverwriteMode
+	// SkipAttributes/StableSymlinks are CopyOptions' own same-named
+	// fields, passed straight through whenever Move actually falls back
+	// to Copy (see this function's own doc comment: EXDEV, or
+	// ENOTEMPTY/EEXIST with Mode MergeInto) — see their own doc comments
+	// on CopyOptions for the full reasoning. Both are complete no-ops on
+	// Move's own fast os.Rename path: the same inode is reused, so
+	// nothing about its metadata ever changes regardless of
+	// SkipAttributes, and os.Rename never touches an individual symlink
+	// found underneath src at all (it relocates the whole tree as one
+	// atomic operation), so there is nothing for StableSymlinks to
+	// rewrite there either. Both only actually matter once a same-
+	// filesystem move stops being possible.
+	SkipAttributes bool
+	StableSymlinks bool
 	// OnFile, if non-nil, is called once for src itself before
 	// attempting os.Rename — see this function's own doc comment for
 	// why that's the only signal available on Move's own fast path,
@@ -128,7 +142,10 @@ func Move(src, dst string, opts MoveOptions) error {
 		return err
 	}
 
-	copyOpts := CopyOptions{Force: true, Mode: opts.Mode, OnFile: opts.OnFile, OnBytes: opts.OnBytes}
+	copyOpts := CopyOptions{
+		Force: true, Mode: opts.Mode, OnFile: opts.OnFile, OnBytes: opts.OnBytes,
+		SkipAttributes: opts.SkipAttributes, StableSymlinks: opts.StableSymlinks,
+	}
 	if err := Copy(src, dst, copyOpts); err != nil {
 		return err
 	}
@@ -189,6 +206,7 @@ func MoveFollowingSymlinks(src, dst string, opts MoveOptions) error {
 		Force:          opts.Force,
 		Mode:           opts.Mode,
 		FollowSymlinks: true,
+		SkipAttributes: opts.SkipAttributes,
 		OnFile:         opts.OnFile,
 		OnBytes:        opts.OnBytes,
 	}

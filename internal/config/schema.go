@@ -158,6 +158,62 @@ func SettingDocs() []SettingDoc {
 			Summary:     "Reserved for future translations. Parsed but currently has no effect.",
 			Implemented: false,
 		},
+		{
+			Key:         "copy_preserve_attributes",
+			Default:     strconv.FormatBool(d.CopyPreserveAttributes),
+			Kind:        KindBool,
+			Summary:     "Copy jobs preserve the source's permissions/ownership/mtime on the destination.",
+			Implemented: true,
+		},
+		{
+			Key:         "move_preserve_attributes",
+			Default:     strconv.FormatBool(d.MovePreserveAttributes),
+			Kind:        KindBool,
+			Summary:     "Move jobs preserve the source's permissions/ownership/mtime on the destination.",
+			Implemented: true,
+		},
+		{
+			Key:         "copy_follow_symlinks",
+			Default:     strconv.FormatBool(d.CopyFollowSymlinks),
+			Kind:        KindBool,
+			Summary:     "Copy jobs dereference a symlink by default, writing a real copy of its target instead of a new link.",
+			Implemented: true,
+		},
+		{
+			Key:         "move_follow_symlinks",
+			Default:     strconv.FormatBool(d.MoveFollowSymlinks),
+			Kind:        KindBool,
+			Summary:     "Move jobs (cut/paste) dereference a symlink by default, writing a real copy of its target instead of a new link.",
+			Implemented: true,
+		},
+		{
+			Key:         "copy_auto_merge_directories",
+			Default:     strconv.FormatBool(d.CopyAutoMergeDirectories),
+			Kind:        KindBool,
+			Summary:     "Copy jobs resolve a directory-vs-directory paste conflict as a merge automatically, without asking.",
+			Implemented: true,
+		},
+		{
+			Key:         "move_auto_merge_directories",
+			Default:     strconv.FormatBool(d.MoveAutoMergeDirectories),
+			Kind:        KindBool,
+			Summary:     "Move jobs resolve a directory-vs-directory paste conflict as a merge automatically, without asking.",
+			Implemented: true,
+		},
+		{
+			Key:         "copy_stable_symlinks",
+			Default:     strconv.FormatBool(d.CopyStableSymlinks),
+			Kind:        KindBool,
+			Summary:     "Copy jobs rewrite a symlink's target to the new location if it points inside the tree being copied.",
+			Implemented: true,
+		},
+		{
+			Key:         "move_stable_symlinks",
+			Default:     strconv.FormatBool(d.MoveStableSymlinks),
+			Kind:        KindBool,
+			Summary:     "Move jobs rewrite a symlink's target to the new location if it points inside the tree being moved.",
+			Implemented: true,
+		},
 	}
 }
 
