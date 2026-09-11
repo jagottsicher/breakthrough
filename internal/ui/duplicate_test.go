@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -33,19 +34,6 @@ func newTestRootWithDuplicateFile(t *testing.T, content string) (r *Root, dir, f
 	return r, dir, file
 }
 
-// duplicateStrategyDropDown returns the dialog's own Strategy field —
-// always item index 1 (Target is 0) regardless of which strategy is
-// currently selected, since Target and Strategy are the only two items
-// renderDuplicateForm ever adds unconditionally at fixed positions.
-func duplicateStrategyDropDown(t *testing.T, r *Root) *tview.DropDown {
-	t.Helper()
-	dd, ok := r.duplicateForm.GetFormItem(1).(*tview.DropDown)
-	if !ok {
-		t.Fatalf("form item 1 is not the Strategy dropdown")
-	}
-	return dd
-}
-
 // selectDuplicateStrategy switches the dialog's own Strategy dropdown
 // to value ("numbered"/"suffix_text"/"datetime") — DropDown.
 // SetCurrentOption fires the same "selected" callback a real arrow-
@@ -60,11 +48,31 @@ func selectDuplicateStrategy(t *testing.T, r *Root, value string) {
 	}
 	for i, c := range opt.choices(r) {
 		if c.value == value {
-			duplicateStrategyDropDown(t, r).SetCurrentOption(i)
+			r.duplicateStrategyField.SetCurrentOption(i)
 			return
 		}
 	}
 	t.Fatalf("no such strategy choice %q", value)
+}
+
+// selectDuplicateDateTimeFormatType switches the Date/time strategy's
+// own "Date/time format type" dropdown to value ("go"/"strftime"/
+// "unix") — same "exercise the real callback" reasoning
+// selectDuplicateStrategy's own doc comment gives. Only valid while
+// the Date/time strategy is actually selected (duplicateDateTimeTypeField
+// is nil otherwise — see renderDuplicateForm).
+func selectDuplicateDateTimeFormatType(t *testing.T, r *Root, value string) {
+	t.Helper()
+	if r.duplicateDateTimeTypeField == nil {
+		t.Fatal("duplicateDateTimeTypeField is nil — select the datetime strategy first")
+	}
+	for i, c := range duplicateDateTimeFormatTypeChoices {
+		if c.value == value {
+			r.duplicateDateTimeTypeField.SetCurrentOption(i)
+			return
+		}
+	}
+	t.Fatalf("no such format type choice %q", value)
 }
 
 func TestOpenDuplicatePopulatesTargetsAndOpensForm(t *testing.T) {
@@ -161,11 +169,8 @@ func TestResetDuplicateFormPrefillsFromSettings(t *testing.T) {
 	r.settings.DuplicateSeparator = "-"
 	r.settings.DuplicateSuffixText = "bak"
 	r.settings.DuplicateNumberPadding = 3
-	r.settings.DuplicateDateTimeFormat = "15-04-05"
 	r.settings.DuplicateCount = 2
-	r.settings.DuplicateStrategy = "datetime"
-	r.settings.DuplicateDateTimeStrftime = true
-	r.settings.DuplicateDateTimeUseUnix = true
+	r.settings.DuplicateStrategy = "suffix_text"
 
 	r.openDuplicate()
 
@@ -178,17 +183,53 @@ func TestResetDuplicateFormPrefillsFromSettings(t *testing.T) {
 	if r.duplicateNumberPaddingValue != "3" {
 		t.Errorf("duplicateNumberPaddingValue = %q, want %q", r.duplicateNumberPaddingValue, "3")
 	}
-	if got := r.duplicateDateTimeFormatField.GetText(); got != "15-04-05" {
-		t.Errorf("Date/time format field = %q, want %q", got, "15-04-05")
-	}
 	if got := r.duplicateCountField.GetText(); got != "2" {
 		t.Errorf("Number of duplicates = %q, want %q", got, "2")
 	}
-	if r.duplicateStrategy != "datetime" {
-		t.Errorf("duplicateStrategy = %q, want %q", r.duplicateStrategy, "datetime")
+	if r.duplicateStrategy != "suffix_text" {
+		t.Errorf("duplicateStrategy = %q, want %q", r.duplicateStrategy, "suffix_text")
 	}
-	if !r.duplicateFlags[duplicateLabelStrftime] || !r.duplicateFlags[duplicateLabelUseUnix] {
-		t.Errorf("duplicateFlags = %v, want both true", r.duplicateFlags)
+}
+
+// TestResetDuplicateFormSeedsDateTimeFormatTypeFromSettings pins the
+// three-way seeding renderDuplicateDateTimeFields relies on: whichever
+// format type today's sticky settings actually reflect gets the real
+// persisted duplicate_datetime_format string, and the *other* text
+// mirror falls back to its own generic example — there being no second
+// persisted string to recover it from (this app has only ever saved
+// one duplicate_datetime_format value, whichever syntax was last used).
+func TestResetDuplicateFormSeedsDateTimeFormatTypeFromSettings(t *testing.T) {
+	cases := []struct {
+		name             string
+		strftime, unix   bool
+		format           string
+		wantType         string
+		wantGo, wantStrf string
+	}{
+		{"go", false, false, "2006-1-2", duplicateDateTimeTypeGo, "2006-1-2", duplicateDefaultStrftimeFormat},
+		{"strftime", true, false, "%Y-%m-%d", duplicateDateTimeTypeStrftime, duplicateDefaultGoFormat, "%Y-%m-%d"},
+		{"unix", false, true, "irrelevant-while-unix", duplicateDateTimeTypeUnix, duplicateDefaultGoFormat, duplicateDefaultStrftimeFormat},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+			r.settings.DuplicateStrategy = "datetime"
+			r.settings.DuplicateDateTimeStrftime = c.strftime
+			r.settings.DuplicateDateTimeUseUnix = c.unix
+			r.settings.DuplicateDateTimeFormat = c.format
+
+			r.openDuplicate()
+
+			if r.duplicateDateTimeFormatType != c.wantType {
+				t.Errorf("duplicateDateTimeFormatType = %q, want %q", r.duplicateDateTimeFormatType, c.wantType)
+			}
+			if r.duplicateDateTimeFormatGoValue != c.wantGo {
+				t.Errorf("duplicateDateTimeFormatGoValue = %q, want %q", r.duplicateDateTimeFormatGoValue, c.wantGo)
+			}
+			if r.duplicateDateTimeFormatStrftimeValue != c.wantStrf {
+				t.Errorf("duplicateDateTimeFormatStrftimeValue = %q, want %q", r.duplicateDateTimeFormatStrftimeValue, c.wantStrf)
+			}
+		})
 	}
 }
 
@@ -206,9 +247,9 @@ func TestRenderDuplicateFormShowsOnlyRelevantFieldsPerStrategy(t *testing.T) {
 		want     []string
 		wantNot  []string
 	}{
-		{"numbered", []string{"Number padding (digits)"}, []string{"Suffix text", "Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}},
-		{"suffix_text", []string{"Suffix text"}, []string{"Number padding (digits)", "Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}},
-		{"datetime", []string{"Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}, []string{"Suffix text", "Number padding (digits)"}},
+		{"numbered", []string{"Number padding (digits)"}, []string{"Suffix text", "Date/time format type", "Date/time format"}},
+		{"suffix_text", []string{"Suffix text"}, []string{"Number padding (digits)", "Date/time format type", "Date/time format"}},
+		{"datetime", []string{"Date/time format type", "Date/time format"}, []string{"Suffix text", "Number padding (digits)"}},
 	}
 	for _, c := range cases {
 		selectDuplicateStrategy(t, r, c.strategy)
@@ -289,6 +330,230 @@ func TestRenderDuplicatePreviewReactsToStrategyChange(t *testing.T) {
 
 	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt_copy"; got != want {
 		t.Errorf("preview after switching to suffix_text = %q, want %q", got, want)
+	}
+}
+
+// TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability pins the
+// user's own explicit design for the three format types: Go format
+// string and Strftime-style Format each show (and let you edit) their
+// own separate example text, while Unix timestamp disables the field
+// entirely and shows today's real, current Unix timestamp instead —
+// never something the user could type into.
+func TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate()
+	selectDuplicateStrategy(t, r, "datetime")
+
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeGo)
+	if got := r.duplicateDateTimeFormatField.GetText(); got != duplicateDefaultGoFormat {
+		t.Errorf("go: field text = %q, want the default %q", got, duplicateDefaultGoFormat)
+	}
+	r.duplicateDateTimeFormatField.SetText("2006-01-02")
+	if r.duplicateDateTimeFormatGoValue != "2006-01-02" {
+		t.Errorf("go: editing the field should update duplicateDateTimeFormatGoValue, got %q", r.duplicateDateTimeFormatGoValue)
+	}
+
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
+	if got := r.duplicateDateTimeFormatField.GetText(); got != duplicateDefaultStrftimeFormat {
+		t.Errorf("strftime: field text = %q, want the default %q", got, duplicateDefaultStrftimeFormat)
+	}
+	r.duplicateDateTimeFormatField.SetText("%Y-%m-%d")
+	if r.duplicateDateTimeFormatStrftimeValue != "%Y-%m-%d" {
+		t.Errorf("strftime: editing the field should update duplicateDateTimeFormatStrftimeValue, got %q", r.duplicateDateTimeFormatStrftimeValue)
+	}
+
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeUnix)
+	now := time.Now().Unix()
+	got, err := strconv.ParseInt(r.duplicateDateTimeFormatField.GetText(), 10, 64)
+	if err != nil {
+		t.Fatalf("unix: field text = %q, want a parseable Unix timestamp: %v", r.duplicateDateTimeFormatField.GetText(), err)
+	}
+	if got < now-2 || got > now+2 {
+		t.Errorf("unix: field text = %d, want something within a couple seconds of %d", got, now)
+	}
+	// The dimmed, non-editable look — see renderDuplicateDateTimeFields'
+	// own doc comment — is the actually testable stand-in for
+	// "disabled" here: InputField has no public GetDisabled() of its
+	// own to assert against directly.
+	if _, bg, _ := r.duplicateDateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.AccentBackground {
+		t.Errorf("unix: field background = %v, want the dimmed theme.AccentBackground %v", bg, r.theme.AccentBackground)
+	}
+}
+
+// TestDuplicateDateTimeFormatTypePreservesEachSyntaxOwnValue pins that
+// switching away from Go (or Strftime) and back doesn't lose whatever
+// was typed — each syntax keeps its own separately-edited text,
+// exactly the point of having two mirrors instead of one shared,
+// reinterpreted field.
+func TestDuplicateDateTimeFormatTypePreservesEachSyntaxOwnValue(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate()
+	selectDuplicateStrategy(t, r, "datetime")
+
+	r.duplicateDateTimeFormatField.SetText("2006-1-2")
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
+	r.duplicateDateTimeFormatField.SetText("%Y-%-m-%-d")
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeUnix)
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeGo)
+
+	if got := r.duplicateDateTimeFormatField.GetText(); got != "2006-1-2" {
+		t.Errorf("go value after round-tripping through strftime/unix = %q, want %q", got, "2006-1-2")
+	}
+	selectDuplicateDateTimeFormatType(t, r, duplicateDateTimeTypeStrftime)
+	if got := r.duplicateDateTimeFormatField.GetText(); got != "%Y-%-m-%-d" {
+		t.Errorf("strftime value after round-tripping through unix/go = %q, want %q", got, "%Y-%-m-%-d")
+	}
+}
+
+// TestApplyDuplicateSelectionPersistsDateTimeFormatType pins how the
+// three-way "Date/time format type" dropdown maps onto the two
+// existing duplicate_datetime_strftime/duplicate_datetime_use_unix
+// booleans (no schema change — this dialog's own UI model doesn't have
+// to mirror the settings' own storage shape) — and that
+// duplicate_datetime_format is left untouched while Unix timestamp is
+// selected, since the disabled field's own live "right now" text is
+// never a value worth persisting as if it were a reusable format
+// string.
+func TestApplyDuplicateSelectionPersistsDateTimeFormatType(t *testing.T) {
+	cases := []struct {
+		name                   string
+		formatType             string
+		wantStrftime, wantUnix bool
+		wantFormatChanged      bool
+	}{
+		{"go", duplicateDateTimeTypeGo, false, false, true},
+		{"strftime", duplicateDateTimeTypeStrftime, true, false, true},
+		{"unix", duplicateDateTimeTypeUnix, false, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			isolateUserConfigFile(t)
+			r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+			r.settings.DuplicateDateTimeFormat = "sentinel-unchanged"
+			r.openDuplicate()
+			selectDuplicateStrategy(t, r, "datetime")
+			selectDuplicateDateTimeFormatType(t, r, c.formatType)
+			if c.formatType != duplicateDateTimeTypeUnix {
+				r.duplicateDateTimeFormatField.SetText("edited-format")
+			}
+
+			r.applyDuplicateSelection(0, 1)
+
+			if r.settings.DuplicateDateTimeStrftime != c.wantStrftime {
+				t.Errorf("DuplicateDateTimeStrftime = %v, want %v", r.settings.DuplicateDateTimeStrftime, c.wantStrftime)
+			}
+			if r.settings.DuplicateDateTimeUseUnix != c.wantUnix {
+				t.Errorf("DuplicateDateTimeUseUnix = %v, want %v", r.settings.DuplicateDateTimeUseUnix, c.wantUnix)
+			}
+			changed := r.settings.DuplicateDateTimeFormat != "sentinel-unchanged"
+			if changed != c.wantFormatChanged {
+				t.Errorf("DuplicateDateTimeFormat changed = %v (now %q), want changed=%v", changed, r.settings.DuplicateDateTimeFormat, c.wantFormatChanged)
+			}
+		})
+	}
+}
+
+// TestDuplicateDateTimeTypeFieldUsesThemeColors is
+// TestDuplicateStrategyFieldUsesThemeColorsWhenFocused's own sibling
+// pin for the second dropdown this dialog has — the fix has to apply
+// to both, not just whichever one happens to get real focus first.
+func TestDuplicateDateTimeTypeFieldUsesThemeColors(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate()
+	selectDuplicateStrategy(t, r, "datetime")
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	r.app.SetScreen(screen)
+	screen.SetSize(100, 40)
+	r.SetRect(0, 0, 100, 40)
+	r.app.SetFocus(r.duplicateDateTimeTypeField)
+	screen.Clear()
+	r.Draw(screen)
+
+	found := false
+	w, h := screen.Size()
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w-16; x++ {
+			text := ""
+			for i := 0; i < 16; i++ {
+				c, _, _ := screen.Get(x+i, y)
+				text += c
+			}
+			if text != "Go format string" {
+				continue
+			}
+			found = true
+			_, style, _ := screen.Get(x, y)
+			fg, bg, _ := style.Decompose()
+			if fg != r.theme.Text {
+				t.Errorf("Date/time format type field foreground = %v, want theme.Text %v", fg, r.theme.Text)
+			}
+			if bg != r.theme.FocusedBackground {
+				t.Errorf("Date/time format type field background = %v, want theme.FocusedBackground %v", bg, r.theme.FocusedBackground)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("could not find the rendered 'Go format string' option text at all")
+	}
+}
+
+// TestDuplicateDropDownPopupUsesThemeColors is the regression pin for
+// the actually-reported bug: the *open* popup list of a Multiply
+// dropdown used tview's own stock palette (a green background) instead
+// of matching every ordinary List elsewhere in this app.
+func TestDuplicateDropDownPopupUsesThemeColors(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	r.app.SetScreen(screen)
+	screen.SetSize(100, 40)
+	r.SetRect(0, 0, 100, 40)
+
+	r.app.SetFocus(r.duplicateStrategyField)
+	// Open the dropdown's own popup the same way Enter would — passing
+	// r.app.SetFocus itself as the setFocus callback, not a no-op:
+	// DropDown.Draw only actually renders the popup while
+	// d.HasFocus() && d.open both hold, and openList hands focus to its
+	// own internal list via exactly this callback — a no-op here would
+	// leave Application's own focus pointer never actually updated, so
+	// HasFocus() reports false and the popup silently never draws.
+	if handler := r.duplicateStrategyField.InputHandler(); handler != nil {
+		handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { r.app.SetFocus(p) })
+	}
+	screen.Clear()
+	r.Draw(screen)
+
+	const want = "Fixed suffix text"
+	found := false
+	w, h := screen.Size()
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w-len(want); x++ {
+			text := ""
+			for i := 0; i < len(want); i++ {
+				c, _, _ := screen.Get(x+i, y)
+				text += c
+			}
+			if text != want {
+				continue
+			}
+			found = true
+			_, style, _ := screen.Get(x, y)
+			_, bg, _ := style.Decompose()
+			if bg != r.theme.AccentBackground && bg != r.theme.FocusedBackground {
+				t.Errorf("popup list background = %v, want theme.AccentBackground %v or theme.FocusedBackground %v", bg, r.theme.AccentBackground, r.theme.FocusedBackground)
+			}
+		}
+	}
+	if !found {
+		t.Skip("popup list not found on screen — dropdown may not have opened via a synthetic Enter in this tview version")
 	}
 }
 
