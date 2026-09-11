@@ -670,6 +670,120 @@ func TestOptionsArrowKeysSkipTheSubsectionHeader(t *testing.T) {
 	}
 }
 
+// TestOptionCategoryDisplayRowsInsertsBlankRowBetweenSections pins the
+// user's own explicit request: a blank spacer row separates two
+// consecutive sections, but never appears before the very first
+// section in the category — there's nothing above it there to separate
+// from.
+func TestOptionCategoryDisplayRowsInsertsBlankRowBetweenSections(t *testing.T) {
+	cat := optionCategory{
+		name: "test",
+		options: []optionSpec{
+			{key: "a", section: "First"},
+			{key: "b", section: "First"},
+			{key: "c", section: "Second"},
+			{key: "d", section: "Third"},
+		},
+	}
+
+	rows := optionCategoryDisplayRows(cat)
+
+	var got []string
+	for _, dr := range rows {
+		switch {
+		case dr.blank:
+			got = append(got, "blank")
+		case dr.header != "":
+			got = append(got, "header:"+dr.header)
+		default:
+			got = append(got, "opt:"+dr.opt.key)
+		}
+	}
+	want := []string{
+		"header:First", "opt:a", "opt:b",
+		"blank", "header:Second", "opt:c",
+		"blank", "header:Third", "opt:d",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("rows = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+// TestOptionAtRowReturnsFalseForBlankRow is
+// TestOptionAtRowReturnsFalseForHeaderRow's own counterpart for a blank
+// spacer row: it has no setting of its own either, and — since its own
+// zero-value opt.key is "" — must never be confused with a genuine
+// setting that happens to share that empty key.
+func TestOptionAtRowReturnsFalseForBlankRow(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Behavior")
+
+	copyRow, ok := optionRowByKey(r, "copy_preserve_attributes")
+	if !ok {
+		t.Fatal("copy_preserve_attributes not found under Behavior")
+	}
+	blankRow := copyRow - 2 // header sits right before copyRow; the blank spacer, one further back
+
+	rows := optionCategoryDisplayRows(mustOptionCategory(t, "Behavior"))
+	if !rows[blankRow].blank {
+		t.Fatalf("setup: row %d isn't the blank spacer row (got %+v)", blankRow, rows[blankRow])
+	}
+	if _, ok := r.optionAtRow(blankRow); ok {
+		t.Error("optionAtRow on the blank spacer row should return false")
+	}
+}
+
+// TestFirstSelectableOptionsRowSkipsALeadingHeader pins the fix this
+// section/spacer feature needed once "General" gave Behavior's own
+// first row a header of its own: the out-of-range recovery in
+// renderOptions must land on the first real setting, not row 0 itself,
+// once row 0 is a header rather than an option.
+func TestFirstSelectableOptionsRowSkipsALeadingHeader(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Behavior")
+
+	got := r.firstSelectableOptionsRow()
+
+	restoreTabsRow, ok := optionRowByKey(r, "restore_tabs")
+	if !ok {
+		t.Fatal("restore_tabs not found under Behavior")
+	}
+	if got != restoreTabsRow {
+		t.Errorf("firstSelectableOptionsRow = %d, want %d (restore_tabs, right after the \"General\" header)", got, restoreTabsRow)
+	}
+	if opt, ok := r.optionAtRow(got); !ok || opt.key != "restore_tabs" {
+		t.Errorf("row %d isn't a real, selectable option (optionAtRow ok=%v)", got, ok)
+	}
+}
+
+// TestRenderOptionsRecoversFromOutOfRangeCursorOntoARealOption pins the
+// exact scenario firstSelectableOptionsRow exists for: if the cursor
+// somehow points past the end of the currently rendered table (the same
+// "category switch shortened the list" case renderOptions already
+// guards against), the recovery must land on a real, selectable option
+// — not row 0, once row 0 is itself a header (Behavior's own "General").
+func TestRenderOptionsRecoversFromOutOfRangeCursorOntoARealOption(t *testing.T) {
+	r, _ := newOptionsRoot(t)
+	selectOptionCategory(t, r, "Behavior")
+
+	r.optionsTable.Select(9999, 0) // simulate a cursor left over from a longer category
+	r.renderOptions()
+
+	row, _ := r.optionsTable.GetSelection()
+	opt, ok := r.optionAtRow(row)
+	if !ok {
+		t.Fatalf("recovered cursor landed on row %d, which isn't a real option", row)
+	}
+	if opt.key != "restore_tabs" {
+		t.Errorf("recovered cursor = %q, want restore_tabs (the first real option under Behavior)", opt.key)
+	}
+}
+
 // TestClickingACategoryDoesNotCloseTheScreen pins a real reported bug:
 // the screen was registered as an overlay with only the settings table
 // as its widget, so captureOutsideClick — which closes an overlay on any

@@ -80,6 +80,63 @@ func TestMoveSelectionToTrashMovesFileAndListsIt(t *testing.T) {
 	}
 }
 
+// TestMoveSelectionToTrashAsksFirstWhenTrashConfirmIsOn pins the user's
+// own explicit request: with settings.TrashConfirm on, "d" opens the
+// same kind of confirmation dialog "D" always has, rather than moving
+// the file immediately the way it does by default.
+func TestMoveSelectionToTrashAsksFirstWhenTrashConfirmIsOn(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.settings.TrashConfirm = true
+
+	r.moveSelectionToTrash()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q — TrashConfirm should have opened the confirmation dialog", r.activePage, confirmPage)
+	}
+	if _, err := os.Lstat(file); err != nil {
+		t.Fatalf("a.txt should still exist before the confirmation is answered: %v", err)
+	}
+}
+
+// TestMoveSelectionToTrashConfirmedActuallyMoves pins the confirmed half
+// of the same flow: accepting the dialog moves the file to Trash exactly
+// like the unconfirmed default path already does.
+func TestMoveSelectionToTrashConfirmedActuallyMoves(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.settings.TrashConfirm = true
+
+	r.moveSelectionToTrash()
+	r.confirmDialog.SetCurrentItem(0) // deliberately move to "Yes, move to Trash"
+	r.acceptConfirm()
+
+	if _, err := os.Lstat(file); !os.IsNotExist(err) {
+		t.Fatalf("a.txt still exists after a confirmed Move to Trash (err=%v)", err)
+	}
+	trashDir, err := r.trashDir()
+	if err != nil {
+		t.Fatalf("trashDir: %v", err)
+	}
+	items, err := fsops.ListTrash(trashDir)
+	if err != nil || len(items) != 1 || items[0].OriginalPath != file {
+		t.Fatalf("ListTrash = %+v, %v, want exactly one item for %s", items, err, file)
+	}
+}
+
+// TestMoveSelectionToTrashCancelledLeavesFileInPlace pins the other
+// half: declining the confirmation must be a true no-op, the file stays
+// exactly where it was.
+func TestMoveSelectionToTrashCancelledLeavesFileInPlace(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.settings.TrashConfirm = true
+
+	r.moveSelectionToTrash()
+	r.cancelConfirm()
+
+	if _, err := os.Lstat(file); err != nil {
+		t.Fatalf("a.txt should still exist after cancelling: %v", err)
+	}
+}
+
 // TestMoveSelectionToTrashClearsDetailsShowingSameFile pins the user's
 // own explicit request extended to Trash: Details, if it's showing the
 // very entry that just got trashed, must not keep claiming stale data
