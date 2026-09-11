@@ -117,7 +117,7 @@ func contextMenuTree() []menuEntry {
 		// action regardless of whether it currently means anything.
 		{label: "Paste", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboard() }},
 		{label: "Move to Trash", mnemonic: 'd', action: func(r *Root) { r.moveSelectionToTrash() }},
-		{label: "Properties", action: func(r *Root) { r.openProperties() }},
+		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 		{label: "More actions", submenu: []menuEntry{
 			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
@@ -168,7 +168,7 @@ func trashMenuTree() []menuEntry {
 	return []menuEntry{
 		{label: "Restore from Trash", action: func(r *Root) { r.restoreSelectionFromTrash() }},
 		{label: "Empty Trash", action: func(r *Root) { r.openEmptyTrashConfirm() }},
-		{label: "Properties", action: func(r *Root) { r.openProperties() }},
+		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 	}
 }
 
