@@ -142,7 +142,7 @@ terminal.
   Miscellaneous subsection — with a countdown in the status bar and a
   clickable legend in the
   button bar): `g` to jump somewhere (`gg` top,
-  `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
+  `gh` home, `gr` `/`, `gb` Trashbin), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
   format, `zo` split orientation, `zw` swap panes), `o` for Options
   (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
