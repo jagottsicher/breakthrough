@@ -260,15 +260,20 @@ type chordFamily struct {
 func chordFamilies() []chordFamily {
 	return []chordFamily{
 		// Ordered to match the header row's own five nav buttons
-		// (∎~<>↑ — Start/Home/Back/Forward/Up, see buildHeaderSpans),
+		// (∎~↑<> — Start/Home/Up/Back/Forward, see buildHeaderSpans),
 		// per the user's own explicit request to sort this family
-		// properly once it grew past the original four: gg/gh/gp/gn/gu
+		// properly once it grew past the original four: gg/gh/gu/gp/gn
 		// step along the *same* axis those buttons do (start, home, then
 		// three ways to move relative to where you already are), before
 		// gr/gb — jumps to a fixed, unrelated place — close it out.
 		{prefix: 'g', name: "go to", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
+			// Mirrors actionUp's own filepath.Dir(p.path) — see its own
+			// doc comment on why filepath.Dir("/") == "/" (a harmless
+			// no-op at the filesystem root) needs no special-casing here
+			// either.
+			{'u', "Up", func(r *Root) { r.showError(r.panel.navigate(filepath.Dir(r.panel.path))) }},
 			// "p"/"n" (previous/next), not "b"/"f" — "b" was already
 			// spoken for by Trash below, and "back"/"forward" as
 			// abbreviations read no more naturally than "previous"/
@@ -277,11 +282,6 @@ func chordFamilies() []chordFamily {
 			// next") settled it either way.
 			{'p', "Back", func(r *Root) { r.panel.back() }},
 			{'n', "Forward", func(r *Root) { r.panel.forward() }},
-			// Mirrors actionUp's own filepath.Dir(p.path) — see its own
-			// doc comment on why filepath.Dir("/") == "/" (a harmless
-			// no-op at the filesystem root) needs no special-casing here
-			// either.
-			{'u', "Up", func(r *Root) { r.showError(r.panel.navigate(filepath.Dir(r.panel.path))) }},
 			// "/ (root)", not "Root /": a label ending in "/" sat right
 			// against the single-space separator before the next member
 			// (see chordHintBar), reading as if the "/" were part of that

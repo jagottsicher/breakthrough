@@ -44,7 +44,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/a/bb/c", theme)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -53,9 +53,9 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 0, end: 3, action: actionStart},
 		{start: 4, end: 7, action: actionRoot},
 		{start: 8, end: 11, action: actionHome},
-		{start: 12, end: 15, action: actionBack},
-		{start: 16, end: 19, action: actionForward},
-		{start: 20, end: 23, action: actionUp},
+		{start: 12, end: 15, action: actionUp},
+		{start: 16, end: 19, action: actionBack},
+		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
 		{start: 28, end: 29, action: actionNavigate, target: "/"},
 		{start: 29, end: 30, action: actionNavigate, target: "/a"},
@@ -118,7 +118,7 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/", theme)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -143,7 +143,7 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/文档/c", theme)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " <  " + " >  " + " ↑  " + " ⭯  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -152,9 +152,9 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 		{start: 0, end: 3, action: actionStart},
 		{start: 4, end: 7, action: actionRoot},
 		{start: 8, end: 11, action: actionHome},
-		{start: 12, end: 15, action: actionBack},
-		{start: 16, end: 19, action: actionForward},
-		{start: 20, end: 23, action: actionUp},
+		{start: 12, end: 15, action: actionUp},
+		{start: 16, end: 19, action: actionBack},
+		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
 		{start: 28, end: 29, action: actionNavigate, target: "/"},
 		{start: 29, end: 33, action: actionNavigate, target: "/文档"},
@@ -2623,7 +2623,7 @@ func TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode(t *testing.T) {
 // TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
 // real user report that switching the header into edit mode reset the
 // editable path's own start column to 0 instead of lining up with
-// where p.header was already showing it, right after the "∎~<>↑⭯ "
+// where p.header was already showing it, right after the "∎/~↑<>⭯ "
 // buttons. headerEdit's own label (see NewPanel) is what reserves that
 // same width now — there's nothing further for openEdit itself to do
 // per call, so this only needs checking once, right after construction.
