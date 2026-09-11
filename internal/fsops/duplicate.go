@@ -80,16 +80,26 @@ type DuplicateOptions struct {
 }
 
 // ComputeDuplicateName returns the path a duplicate of src should be
-// created at — the same directory and extension, with a new basename
-// built from opts' own separator and strategy. This never touches the
-// filesystem beyond checking whether a candidate path already exists
-// (DuplicateNumbered's own scan); it never creates, moves, or copies
-// anything itself — the caller runs an entirely ordinary Copy(src,
-// result, ...) afterward. fsops.Overlaps never has to be taught
-// anything new for this: src and the computed result are always
-// different paths by construction, so the existing "destination is the
-// same as, or inside, the source" refusal in Copy/Move is neither
-// bypassed nor even relevant here.
+// created at — the same directory, with a new basename built from
+// opts' own separator and strategy appended after src's own *entire*
+// basename, extension included: "archive.tar.gz" duplicates to
+// "archive.tar.gz_1", never "archive.tar_1.gz" or "archive_1.tar.gz".
+// Deliberately not "before the extension" the way a desktop file
+// manager's own "Copy" usually works — per the user's own explicit
+// correction, nothing about a basename is ever treated as somehow more
+// "real" than the rest of it just because it follows the first, or the
+// last, dot; every dot-separated segment (a compound extension,
+// version numbers like "v2", anything) stays exactly where it already
+// was, undisturbed, and the new suffix always lands after all of it.
+//
+// This never touches the filesystem beyond checking whether a
+// candidate path already exists (DuplicateNumbered's own scan); it
+// never creates, moves, or copies anything itself — the caller runs an
+// entirely ordinary Copy(src, result, ...) afterward. fsops.Overlaps
+// never has to be taught anything new for this: src and the computed
+// result are always different paths by construction, so the existing
+// "destination is the same as, or inside, the source" refusal in
+// Copy/Move is neither bypassed nor even relevant here.
 //
 // Each strategy computes exactly one candidate and stops there, except
 // DuplicateNumbered, which is the one shape with an obvious "next" step
@@ -102,11 +112,12 @@ type DuplicateOptions struct {
 //     other conflicting Copy already produces, no special-cased message
 //     needed here. Deliberately no auto-retry loop for either: for
 //     DuplicateSuffixText, running Duplicate a second time on the
-//     result ("xyz_BAK") produces "xyz_BAK_BAK" by applying the exact
-//     same one-shot rule again to the new name, which is the intended
-//     way repeated suffixes ever arise — not an internal loop within a
-//     single call. For DuplicateDateTime, there's no natural "next"
-//     timestamp to fall back on the way there's an obvious next number.
+//     result ("xyz.txt_BAK") produces "xyz.txt_BAK_BAK" by applying the
+//     exact same one-shot rule again to the new name, which is the
+//     intended way repeated suffixes ever arise — not an internal loop
+//     within a single call. For DuplicateDateTime, there's no natural
+//     "next" timestamp to fall back on the way there's an obvious next
+//     number.
 //   - DuplicateNumbered scans upward from 1, returning the first
 //     candidate that doesn't already exist — the ordinary, unsurprising
 //     behavior a "duplicate" feature needs so it keeps working once a
@@ -115,15 +126,13 @@ type DuplicateOptions struct {
 func ComputeDuplicateName(src string, opts DuplicateOptions) (string, error) {
 	dir := filepath.Dir(src)
 	base := filepath.Base(src)
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
 
 	if opts.Strategy != DuplicateNumbered {
 		suffix, err := duplicateSuffix(opts)
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(dir, stem+opts.Separator+suffix+ext), nil
+		return filepath.Join(dir, base+opts.Separator+suffix), nil
 	}
 
 	for n := 1; n <= duplicateNumberedScanLimit; n++ {
@@ -131,7 +140,7 @@ func ComputeDuplicateName(src string, opts DuplicateOptions) (string, error) {
 		if opts.NumberPadding > 0 {
 			numStr = fmt.Sprintf("%0*d", opts.NumberPadding, n)
 		}
-		candidate := filepath.Join(dir, stem+opts.Separator+numStr+ext)
+		candidate := filepath.Join(dir, base+opts.Separator+numStr)
 		if _, err := os.Lstat(candidate); os.IsNotExist(err) {
 			return candidate, nil
 		}

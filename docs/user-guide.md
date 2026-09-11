@@ -427,27 +427,45 @@ Creates one or more copies of the current selection right beside it.
 An ordinary Copy underneath — a directory works just as well as a
 plain file — never a Move; the originals are always left in place.
 
-| Field | Meaning |
-|---|---|
-| Separator | Sits between the original name and whatever the strategy below produces — free-form (`_`, `-`, `.`, ...), `_` by default |
-| Strategy | **Numbered** (default): counts up from 1 until a free name is found — `report_1.txt`, `report_2.txt`, however many already exist. **Fixed suffix text**: the same literal text every time (see "Suffix text" below) — duplicating the *result* again doubles it, `report_copy_copy.txt`, by applying the same one-shot rule a second time, not an automatic retry within one Multiply. **Date/time**: a timestamp, computed once, never retried if it happens to collide |
-| Suffix text | "Fixed suffix text"'s own literal suffix — `copy` by default |
-| Number padding (digits) | Zero-pads "Numbered"'s own number — `3` gives `report_001.txt`, `report_002.txt`, ...; `0` (default) pads nothing |
-| Date/time format | "Date/time"'s own format string — Go's own reference-time layout by default (e.g. `2006-1-2 15:04:05`), or a strftime-style one instead once "Strftime-style format" below is on (e.g. `%Y-%-m-%-d %H:%M:%S`) — both render the same `2026-11-9 23:59:59` |
-| Number of duplicates | How many copies this one run creates — `1` by default, capped by "Maximum number of duplicates" under Options |
-| Strategy: Numbered / Fixed suffix text / Date/time | A separate row below the fields, not a dropdown — activating it cycles to the next strategy in place, the same "activating it is the change" behavior every enum setting in Options already has |
-| Strftime-style format | Toggles which syntax "Date/time format" means, the same "a checkbox picks which syntax the text field means" shape the filter menu's own Glob/Regex toggle already uses |
-| Use Unix timestamp | Bypasses "Date/time format" entirely for a raw Unix timestamp |
+**Guided, not combined**: a **Strategy** dropdown at the top picks
+**Numbered**, **Fixed suffix text**, or **Date/time**, and only that
+one strategy's own fields appear below it — never all three shown
+together, which would read as if every method applied at once when
+only one ever actually does. Switching strategy rebuilds the field
+list but keeps whatever you've already typed into **Separator** and
+**Number of duplicates**, since those two apply to every strategy and
+are never hidden.
 
-A live **Preview** line shows the exact name the *first* duplicate
-would get right now, given every field's current value — real, not a
-guess: it actually checks the filesystem the same way the eventual
-copy will. With more than one target selected, or more than one
-duplicate requested, the preview names only the first one and
-summarizes the rest by count, since the Numbered strategy's own "next"
-name genuinely depends on the previous one already existing on disk,
-which a preview alone can't simulate ahead of time for every one of
-them.
+| Field | Shown for | Meaning |
+|---|---|---|
+| Target | always | Read-only — the file(s) or directory this run is for |
+| Strategy | always | **Numbered** (default): counts up from 1 until a free name is found — `report.txt_1`, `report.txt_2`, however many already exist. **Fixed suffix text**: the same literal text every time (see "Suffix text" below) — duplicating the *result* again doubles it, `report.txt_copy_copy`, by applying the same one-shot rule a second time, not an automatic retry within one Multiply. **Date/time**: a timestamp, computed once, never retried if it happens to collide |
+| Separator | always | Sits between the original name and whatever the strategy produces — free-form (`_`, `-`, `.`, ...), `_` by default |
+| Suffix text | Fixed suffix text | Its own literal suffix — `copy` by default |
+| Number padding (digits) | Numbered | Zero-pads the number — `3` gives `report.txt_001`, `report.txt_002`, ...; `0` (default) pads nothing |
+| Date/time format | Date/time | Its own format string — Go's own reference-time layout by default (e.g. `2006-1-2 15:04:05`), or a strftime-style one instead once "Strftime-style format" below is on (e.g. `%Y-%-m-%-d %H:%M:%S`) — both render the same `2026-11-9 23:59:59` |
+| Strftime-style format | Date/time | Toggles which syntax "Date/time format" means, the same "a checkbox picks which syntax the text field means" shape the filter menu's own Glob/Regex toggle already uses |
+| Use Unix timestamp | Date/time | Bypasses "Date/time format" entirely for a raw Unix timestamp |
+| Number of duplicates | always | How many copies this one run creates — `1` by default, capped by "Maximum number of duplicates" under Options |
+
+The suffix always lands after the original name's own *entire* text,
+extension included, never before it: `archive.tar.gz` duplicates to
+`archive.tar.gz_1`, not `archive.tar_1.gz` or `archive_1.tar.gz` —
+nothing about a basename counts as more "real" than the rest of it
+just because it follows a dot; every dot-separated segment stays
+exactly where it already was.
+
+A live **Preview** line above the buttons shows the exact name the
+*first* duplicate would get right now, given every field's current
+value — real, not a guess: it actually checks the filesystem the same
+way the eventual copy will. With more than one target selected, or
+more than one duplicate requested, the preview names only the first
+one and summarizes the rest by count, since the Numbered strategy's
+own "next" name genuinely depends on the previous one already existing
+on disk, which a preview alone can't simulate ahead of time for every
+one of them. **Cancel** and **Duplicate** sit bottom-left/bottom-right,
+the same as every other confirm/cancel pair in this app (Properties,
+Search, chmod, ...).
 
 **Self-adapting defaults** — the one setting group in this whole app
 that works this way, per explicit design: whatever is chosen here

@@ -377,29 +377,41 @@ var helpText = strings.TrimLeft(`
 
   Creates one or more copies of the selection right beside it, each
   named by the current strategy — an ordinary Copy underneath (works on
-  a directory just as well as a file), never a Move.
+  a directory just as well as a file), never a Move. Guided, not
+  combined: the Strategy dropdown shows only the fields that strategy
+  actually uses, never all three strategies' own fields at once.
 
-  Separator            Sits between the original name and the
-                        strategy's own suffix
-  Strategy             Numbered (default): counts up from 1 until a
-                        free name is found. Fixed suffix text: the
-                        same literal text every time — duplicating the
-                        result again doubles it ("_copy_copy"), rather
-                        than retrying automatically. Date/time: a
-                        timestamp, computed once
-  Suffix text           "Fixed suffix text"'s own literal suffix
-  Number padding        Zero-pads "Numbered"'s own number ("_001"
-                        instead of "_1")
-  Date/time format      "Date/time"'s own format string — Go's
-                        reference-time layout by default, or a
-                        strftime-style one with "Strftime-style
-                        format" below turned on
-  Number of duplicates  How many copies this one run creates, capped
-                        by "Maximum number of duplicates" under
-                        Options
-  Preview               Live — the exact name the first duplicate
-                        would get right now, given every field's
-                        current value
+  Target                Read-only — what this Multiply run is for
+  Strategy              Numbered (default): counts up from 1 until a
+                         free name is found. Fixed suffix text: the
+                         same literal text every time — duplicating the
+                         result again doubles it ("_copy_copy"), rather
+                         than retrying automatically. Date/time: a
+                         timestamp, computed once
+  Separator              Sits between the original name and the
+                         strategy's own suffix — shown for every
+                         strategy
+  Suffix text            "Fixed suffix text"'s own literal suffix —
+                         shown only for that strategy
+  Number padding         Zero-pads "Numbered"'s own number ("_001"
+                         instead of "_1") — shown only for that
+                         strategy
+  Date/time format,      "Date/time"'s own format string (Go's
+  Strftime-style         reference-time layout by default, or a
+  format, Use Unix       strftime-style one with the checkbox turned
+  timestamp              on) plus its two toggles — shown only for
+                         that strategy
+  Number of duplicates   How many copies this one run creates, capped
+                         by "Maximum number of duplicates" under
+                         Options
+
+  The suffix always lands after the original name's own *entire* text,
+  extension included, never before it: "archive.tar.gz" duplicates to
+  "archive.tar.gz_1", not "archive.tar_1.gz" or "archive_1.tar.gz" —
+  nothing about a basename counts as more "real" than the rest of it
+  just because it follows a dot. A live Preview line above
+  Cancel/Duplicate shows the exact name the first duplicate would get
+  right now, given every field's current value.
 
   Whatever's chosen here becomes the new default shown next time (all
   of the above, under Options → Behavior → Duplicate) — the one

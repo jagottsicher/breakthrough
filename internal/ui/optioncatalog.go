@@ -420,11 +420,15 @@ func optionCategories() []optionCategory {
 				// safety bound the dialog itself never offers a field
 				// for, only ever set here.
 				withSection("Duplicate", stringOption("duplicate_separator", "Separator",
-					"Sits between the original name and Duplicate's own suffix — free-form: "+
-						"\"_\", \"-\", \".\" are the obvious choices, but nothing here requires "+
-						"any particular one.\n\n"+
-						"\"_\" by default: \"report.txt\" duplicates to \"report_1.txt\" (with the "+
-						"default \"Numbered\" strategy below).",
+					"Sits between the original name — its extension included, untouched — and "+
+						"Duplicate's own suffix — free-form: \"_\", \"-\", \".\" are the obvious "+
+						"choices, but nothing here requires any particular one.\n\n"+
+						"\"_\" by default: \"report.txt\" duplicates to \"report.txt_1\" (with the "+
+						"default \"Numbered\" strategy below) — always after the *entire* original "+
+						"name, never before an extension: \"archive.tar.gz\" duplicates to "+
+						"\"archive.tar.gz_1\", not \"archive.tar_1.gz\" or \"archive_1.tar.gz\". "+
+						"Nothing about a basename is treated as somehow more \"real\" than the "+
+						"rest of it just because it follows a dot.",
 					func(r *Root) string { return r.settings.DuplicateSeparator },
 					func(r *Root, v string) {
 						r.settings.DuplicateSeparator = v
@@ -434,14 +438,15 @@ func optionCategories() []optionCategory {
 				withSection("Duplicate", optionSpec{
 					key:   "duplicate_strategy",
 					label: "Naming strategy",
-					help: "How Duplicate names a copy.\n\n" +
+					help: "How Duplicate names a copy — always appended after the original " +
+						"name's own entire text, extension included (see \"Separator\" above).\n\n" +
 						"\"Numbered\" (the default) appends an incrementing number, scanning " +
-						"upward from 1 until a free name is found — \"report_1.txt\", then " +
-						"\"report_2.txt\", and so on, however many duplicates already exist.\n\n" +
+						"upward from 1 until a free name is found — \"report.txt_1\", then " +
+						"\"report.txt_2\", and so on, however many duplicates already exist.\n\n" +
 						"\"Fixed suffix text\" appends the same literal text every time (see " +
-						"\"Suffix text\" below) — \"report_copy.txt\". If that already exists, this " +
-						"does not count up: duplicating \"report_copy.txt\" itself produces " +
-						"\"report_copy_copy.txt\", the same rule applied again to the new name — " +
+						"\"Suffix text\" below) — \"report.txt_copy\". If that already exists, this " +
+						"does not count up: duplicating \"report.txt_copy\" itself produces " +
+						"\"report.txt_copy_copy\", the same rule applied again to the new name — " +
 						"not an automatic retry within one Duplicate.\n\n" +
 						"\"Date/time\" appends a timestamp (see the three settings below) — " +
 						"computed once, not retried if it happens to collide.",
@@ -461,7 +466,7 @@ func optionCategories() []optionCategory {
 				withSection("Duplicate", stringOption("duplicate_suffix_text", "Suffix text",
 					"The literal text \"Fixed suffix text\" (see the strategy above) appends — "+
 						"only relevant while that strategy is selected.\n\n"+
-						"\"copy\" by default: \"report.txt\" duplicates to \"report_copy.txt\".",
+						"\"copy\" by default: \"report.txt\" duplicates to \"report.txt_copy\".",
 					func(r *Root) string { return r.settings.DuplicateSuffixText },
 					func(r *Root, v string) {
 						r.settings.DuplicateSuffixText = v
@@ -471,9 +476,9 @@ func optionCategories() []optionCategory {
 				withSection("Duplicate", intOption("duplicate_number_padding", "Number padding (digits)",
 					"How many digits the \"Numbered\" strategy (see above) pads its own number "+
 						"to with leading zeros — only relevant while that strategy is selected.\n\n"+
-						"0 (the default) disables padding entirely: \"report_1.txt\", "+
-						"\"report_2.txt\", ... \"report_10.txt\". Set to, say, 3 for "+
-						"\"report_001.txt\", \"report_002.txt\", ... \"report_010.txt\" instead — "+
+						"0 (the default) disables padding entirely: \"report.txt_1\", "+
+						"\"report.txt_2\", ... \"report.txt_10\". Set to, say, 3 for "+
+						"\"report.txt_001\", \"report.txt_002\", ... \"report.txt_010\" instead — "+
 						"keeps a directory's own listing sorted in numeric order by name even "+
 						"once there are 10 or more duplicates.",
 					func(r *Root) int { return r.settings.DuplicateNumberPadding },
@@ -531,8 +536,8 @@ func optionCategories() []optionCategory {
 				withSection("Duplicate", intOption("duplicate_count", "Number of duplicates",
 					"How many duplicates one Duplicate invocation creates at once — each named "+
 						"in sequence by the strategy above (three \"Numbered\" duplicates of "+
-						"\"report.txt\" become \"report_1.txt\", \"report_2.txt\", "+
-						"\"report_3.txt\" in one go).\n\n"+
+						"\"report.txt\" become \"report.txt_1\", \"report.txt_2\", "+
+						"\"report.txt_3\" in one go).\n\n"+
 						"1 by default — today's exact single-duplicate behavior, unchanged. "+
 						"Capped by \"Maximum number of duplicates\" below.",
 					func(r *Root) int { return r.settings.DuplicateCount },

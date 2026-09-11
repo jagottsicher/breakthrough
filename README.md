@@ -333,18 +333,26 @@ terminal.
   own sort.
 - Multiply (`mm`, or the context menu): creates one or more copies of
   the selection right beside it — a directory works just as well as a
-  file, since it's an ordinary Copy underneath, never a Move. Three
-  naming strategies: Numbered (default, counts up from 1 until a free
-  name is found), Fixed suffix text (the same literal text every time —
-  duplicating the result again doubles it, `report_copy_copy.txt`,
-  rather than retrying automatically), and Date/time (a timestamp,
+  file, since it's an ordinary Copy underneath, never a Move. A guided
+  dialog, not a pile of every option shown at once: a Strategy dropdown
+  picks Numbered (default, counts up from 1 until a free name is
+  found), Fixed suffix text (the same literal text every time —
+  duplicating the result again doubles it, `report.txt_copy_copy`,
+  rather than retrying automatically), or Date/time (a timestamp,
   computed once, in Go's own reference-time layout or a strftime-style
-  format). A live Preview line shows the exact name the first duplicate
-  would get right now, given every field's current value. Whatever's
-  chosen becomes the new default shown next time (Options → Behavior →
-  Duplicate) — the one setting group in this whole app that adapts
-  itself this way — but only once "Duplicate" is actually pressed;
-  Cancel never touches the sticky default.
+  format) — and only that strategy's own fields appear below it. The
+  suffix always lands after the original name's own *entire* text,
+  extension included: `archive.tar.gz` duplicates to
+  `archive.tar.gz_1`, never `archive.tar_1.gz` or `archive_1.tar.gz` —
+  nothing about a basename is treated as more "real" than the rest of
+  it just because it follows a dot. A live Preview line shows the exact
+  name the first duplicate would get right now, given every field's
+  current value; Cancel and Duplicate sit bottom-left/bottom-right, the
+  same as every other dialog's own confirm/cancel pair in this app.
+  Whatever's chosen becomes the new default shown next time (Options →
+  Behavior → Duplicate) — the one setting group in this whole app that
+  adapts itself this way — but only once "Duplicate" is actually
+  pressed; Cancel never touches the sticky default.
 - Sed Replace (`E`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex

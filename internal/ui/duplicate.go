@@ -12,7 +12,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
-// Flag labels for duplicateOptionsList's own two boolean toggles —
+// Flag labels for the Date/time strategy's own two checkboxes —
 // constants rather than repeated literals for the same reason
 // sedFlagOrder's own labels are (see sedreplace.go): a typo in one
 // place can't silently desync display text from the map key that
@@ -40,13 +40,15 @@ func (r *Root) openDuplicate() {
 	r.duplicateTargets = targets
 	r.resetDuplicateForm()
 
-	// height fits duplicateTitleBar's own row (1) plus duplicateContentLayout's
-	// three stacked widgets (duplicateForm's 16, duplicateOptionsList's 3,
-	// duplicateActions' 2 — see newDuplicateContentLayout's own doc comment
-	// for exactly how duplicateForm's own 16 was derived) — checked against
-	// a real render, not guessed; a shorter value silently clipped the
-	// bottom rows, the same lesson openSedReplace's own doc comment records.
-	width, height := 78, 22
+	// height fits duplicateTitleBar's own row (1) plus
+	// duplicateContentLayout's three stacked widgets (duplicateForm's
+	// own worst case — the Date/time strategy's seven items, see
+	// renderDuplicateForm's own doc comment for the exact height this
+	// derives from — duplicatePreviewView's single row, and
+	// duplicateButtons' single row) — checked against a real render, not
+	// guessed; a shorter value silently clipped the bottom rows, the
+	// same lesson openSedReplace's own doc comment records.
+	width, height := 78, 20
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -60,14 +62,13 @@ func (r *Root) openDuplicate() {
 	r.showOverlay(duplicatePage, r.duplicateLayout)
 }
 
-// newDuplicateForm builds the (initially empty) "Multiply" text-field
-// form — called once from NewRoot; resetDuplicateForm populates it
-// fresh on every open, the same reasoning newSedForm's own doc comment
-// gives for Sed Replace: tview.Form doesn't lend itself to being reset
-// in place.
+// newDuplicateForm builds the (initially empty) "Multiply" form — called
+// once from NewRoot; renderDuplicateForm populates it fresh on every
+// open and on every strategy change, the same reasoning newSedForm's
+// own doc comment gives for Sed Replace: tview.Form doesn't lend itself
+// to being reset in place.
 //
-// Deliberately holds only Target/the five text fields/the live preview
-// — no border, matching every other floating widget in this app (see
+// No border, matching every other floating widget in this app (see
 // NewRoot's own comment on menu/quitConfirm/confirmDialog).
 func (r *Root) newDuplicateForm() *tview.Form {
 	f := tview.NewForm()
@@ -81,85 +82,176 @@ func (r *Root) newDuplicateForm() *tview.Form {
 	return f
 }
 
-// resetDuplicateForm rebuilds duplicateForm's fields and
-// duplicateOptionsList's rows fresh for the current r.duplicateTargets
-// — Clear(true) first, the same reasoning resetSedForm's own doc
-// comment gives.
-//
-// Every field starts out prefilled from the current Duplicate defaults
-// (r.settings.Duplicate*) rather than empty — per the user's own design
-// intent that the dialog always show "what would happen right now",
-// not a blank form to fill in from scratch. r.duplicateStrategy is the
-// dialog's own working copy of the enum choice (duplicateOptionsList
-// has no Form field of its own to hold it); duplicateFlags is the same
-// shape for the two booleans. Neither touches r.settings until the
-// user actually confirms (see applyDuplicateSelection) — cycling or
-// toggling one while experimenting, then hitting Cancel, must never
-// silently overwrite the sticky default with a value the user just
-// walked away from.
+// resetDuplicateForm seeds every duplicateXxxValue mirror (see their
+// own doc comment on root.go) from the current Duplicate defaults —
+// per the user's own design intent that the dialog always show "what
+// would happen right now", not a blank form to fill in from scratch —
+// then builds the Form for the first time this open (see
+// renderDuplicateForm).
 func (r *Root) resetDuplicateForm() {
-	r.duplicateForm.Clear(true)
-
-	r.duplicateForm.AddTextView("Target", duplicateTargetsLabel(r.duplicateTargets), 0, 2, true, false)
-
-	r.duplicateSeparatorField = tview.NewInputField().SetLabel("Separator").SetText(r.settings.DuplicateSeparator)
-	r.duplicateSeparatorField.SetChangedFunc(func(string) { r.renderDuplicatePreview() })
-	r.duplicateForm.AddFormItem(r.duplicateSeparatorField)
-
-	r.duplicateSuffixTextField = tview.NewInputField().SetLabel("Suffix text").SetText(r.settings.DuplicateSuffixText)
-	r.duplicateSuffixTextField.SetChangedFunc(func(string) { r.renderDuplicatePreview() })
-	r.duplicateForm.AddFormItem(r.duplicateSuffixTextField)
-
-	r.duplicateNumberPaddingField = tview.NewInputField().
-		SetLabel("Number padding (digits)").
-		SetText(strconv.Itoa(r.settings.DuplicateNumberPadding)).
-		SetAcceptanceFunc(tview.InputFieldInteger)
-	r.duplicateNumberPaddingField.SetChangedFunc(func(string) { r.renderDuplicatePreview() })
-	r.duplicateForm.AddFormItem(r.duplicateNumberPaddingField)
-
-	r.duplicateDateTimeFormatField = tview.NewInputField().SetLabel("Date/time format").SetText(r.settings.DuplicateDateTimeFormat)
-	r.duplicateDateTimeFormatField.SetChangedFunc(func(string) { r.renderDuplicatePreview() })
-	r.duplicateForm.AddFormItem(r.duplicateDateTimeFormatField)
-
-	r.duplicateCountField = tview.NewInputField().
-		SetLabel("Number of duplicates").
-		SetText(strconv.Itoa(r.settings.DuplicateCount)).
-		SetAcceptanceFunc(tview.InputFieldInteger)
-	r.duplicateCountField.SetChangedFunc(func(string) { r.renderDuplicatePreview() })
-	r.duplicateForm.AddFormItem(r.duplicateCountField)
-
-	// SetSize(1, 0) is not cosmetic: a TextView's own GetFieldHeight
-	// returns 0 until SetSize gives it a real one, and Form.Draw
-	// substitutes tview's own DefaultFormFieldHeight (5) for a 0 —
-	// verified directly against tview's own form.go/textview.go, not
-	// guessed, after a real, reproducible bug this exact gap caused:
-	// a five-row-tall Preview item that Form's own box wasn't tall
-	// enough to contain drew its extra rows straight past the box's own
-	// bottom edge and into whatever sat below it (duplicateOptionsList),
-	// erasing rows that had already drawn correctly, but only once
-	// duplicateForm itself actually had focus — tview.Flex.Draw defers a
-	// focused child's own Draw call to the very end specifically so a
-	// focused item draws on top, which here meant "after, not before,
-	// its already-correct sibling" once Preview's own rect started
-	// bleeding past the form. Explicit height 1 exactly matches every
-	// other field here, so this can never recur.
-	r.duplicatePreviewView = tview.NewTextView().SetLabel("Preview").SetDynamicColors(false).SetSize(1, 0)
-	r.duplicateForm.AddFormItem(r.duplicatePreviewView)
-
+	r.duplicateSeparatorValue = r.settings.DuplicateSeparator
 	r.duplicateStrategy = r.settings.DuplicateStrategy
+	r.duplicateSuffixTextValue = r.settings.DuplicateSuffixText
+	r.duplicateNumberPaddingValue = strconv.Itoa(r.settings.DuplicateNumberPadding)
+	r.duplicateDateTimeFormatValue = r.settings.DuplicateDateTimeFormat
+	r.duplicateCountValue = strconv.Itoa(r.settings.DuplicateCount)
 	r.duplicateFlags = map[string]bool{
 		duplicateLabelStrftime: r.settings.DuplicateDateTimeStrftime,
 		duplicateLabelUseUnix:  r.settings.DuplicateDateTimeUseUnix,
 	}
-	r.renderDuplicateOptionsList()
+	r.renderDuplicateForm()
 	r.renderDuplicatePreview()
+}
+
+// renderDuplicateForm (re)builds duplicateForm's own items from
+// scratch: Target, the Strategy dropdown, Separator (used by every
+// strategy, so always shown), then — and only then — whichever fields
+// the CURRENTLY selected strategy actually uses, and finally Number of
+// duplicates. Never all three strategies' own fields at once: showing
+// "Suffix text" while "Numbered" is selected, say, would read as if
+// every method combines, when only one ever actually applies — the
+// exact confusion a guided, strategy-driven form exists to rule out.
+//
+// Called on every open (see resetDuplicateForm) and every time the
+// Strategy dropdown itself changes — Form has no in-place way to
+// show/hide one of its own items, so a full Clear(true)-and-rebuild is
+// the only option, the same reasoning newSedForm's own doc comment
+// gives for why Sed Replace's own form is rebuilt on every open too,
+// just triggered more often here.
+//
+// Every field this builds is seeded from, and writes straight back
+// into, its own plain-string mirror (duplicateSeparatorValue and
+// friends — see their own doc comment on root.go) rather than reading
+// back a widget that may not exist a moment from now: switching
+// strategy destroys and recreates every one of these widgets, but the
+// values they held must survive that unchanged.
+//
+// Field-count worst case (Date/time, the strategy with the most of its
+// own fields): Target (its own AddTextView height 2) + Strategy
+// dropdown (1) + Separator (1) + Date/time format (1) + two checkboxes
+// (1 each) + Number of duplicates (1) — seven items, heights summing
+// to 8, needing an inner height of 8 + 6*itemPadding(1) = 14, plus 1
+// row of border padding top and bottom — 16 in total (verified
+// directly against tview's own Form.Draw, the same derivation
+// newDuplicateContentLayout's own doc comment spells out in full).
+func (r *Root) renderDuplicateForm() {
+	r.duplicateForm.Clear(true)
+	r.duplicateSuffixTextField = nil
+	r.duplicateNumberPaddingField = nil
+	r.duplicateDateTimeFormatField = nil
+
+	r.duplicateForm.AddTextView("Target", duplicateTargetsLabel(r.duplicateTargets), 0, 2, true, false)
+
+	opt, ok := optionSpecByKey("duplicate_strategy")
+	var choices []optionChoice
+	if ok {
+		choices = opt.choices(r)
+	}
+	labels := make([]string, len(choices))
+	currentIndex := 0
+	for i, c := range choices {
+		labels[i] = c.label
+		if c.value == r.duplicateStrategy {
+			currentIndex = i
+		}
+	}
+	r.duplicateStrategyField = tview.NewDropDown().SetLabel("Strategy").SetOptions(labels, func(_ string, index int) {
+		if index < 0 || index >= len(choices) {
+			return
+		}
+		// AddDropDown/SetCurrentOption fires this same callback
+		// synchronously as part of *setting the initial option* below —
+		// verified directly against tview's own dropdown.go, not
+		// assumed — with index equal to currentIndex, i.e. no real
+		// change at all. Without this guard, that first, synthetic call
+		// would rebuild the form again, which recreates this same
+		// dropdown again, which fires the callback again — an infinite
+		// recursion, not just a wasted rebuild.
+		if choices[index].value == r.duplicateStrategy {
+			return
+		}
+		r.duplicateStrategy = choices[index].value
+		r.renderDuplicateForm()
+		r.renderDuplicatePreview()
+	})
+	r.duplicateStrategyField.SetCurrentOption(currentIndex)
+	// A real, reproducible bug this pins down: Form's own generic
+	// per-item theming (SetFieldBackgroundColor/SetFieldTextColor in
+	// applyTheme, applied every Draw via SetFormAttributes) only ever
+	// reaches DropDown.SetFieldStyle — DropDown keeps a *separate*
+	// focusedStyle for "has real focus and is closed" that only
+	// DropDown.SetFocusedStyle itself sets (verified directly against
+	// tview's own dropdown.go, not assumed, after Strategy rendered in
+	// tview's own stock blue-on-white instead of this app's palette
+	// while focused — SetFormAttributes calling SetFieldStyle alone
+	// never touches it at all). Since this is the very first item this
+	// form ever opens with real focus on, focusedStyle is the one that
+	// actually paints on screen far more than fieldStyle does — both
+	// need setting explicitly, here, right after construction, for this
+	// to match every other field regardless of Form's own generic pass.
+	fieldStyle := tcell.StyleDefault.Background(r.theme.FocusedBackground).Foreground(r.theme.Text)
+	r.duplicateStrategyField.SetFieldStyle(fieldStyle)
+	r.duplicateStrategyField.SetFocusedStyle(fieldStyle)
+	r.duplicateForm.AddFormItem(r.duplicateStrategyField)
+
+	r.duplicateSeparatorField = tview.NewInputField().SetLabel("Separator").SetText(r.duplicateSeparatorValue)
+	r.duplicateSeparatorField.SetChangedFunc(func(v string) {
+		r.duplicateSeparatorValue = v
+		r.renderDuplicatePreview()
+	})
+	r.duplicateForm.AddFormItem(r.duplicateSeparatorField)
+
+	switch r.duplicateStrategy {
+	case "suffix_text":
+		r.duplicateSuffixTextField = tview.NewInputField().SetLabel("Suffix text").SetText(r.duplicateSuffixTextValue)
+		r.duplicateSuffixTextField.SetChangedFunc(func(v string) {
+			r.duplicateSuffixTextValue = v
+			r.renderDuplicatePreview()
+		})
+		r.duplicateForm.AddFormItem(r.duplicateSuffixTextField)
+	case "datetime":
+		r.duplicateDateTimeFormatField = tview.NewInputField().SetLabel("Date/time format").SetText(r.duplicateDateTimeFormatValue)
+		r.duplicateDateTimeFormatField.SetChangedFunc(func(v string) {
+			r.duplicateDateTimeFormatValue = v
+			r.renderDuplicatePreview()
+		})
+		r.duplicateForm.AddFormItem(r.duplicateDateTimeFormatField)
+		r.duplicateForm.AddCheckbox(duplicateLabelStrftime, r.duplicateFlags[duplicateLabelStrftime], func(checked bool) {
+			r.duplicateFlags[duplicateLabelStrftime] = checked
+			r.renderDuplicatePreview()
+		})
+		r.duplicateForm.AddCheckbox(duplicateLabelUseUnix, r.duplicateFlags[duplicateLabelUseUnix], func(checked bool) {
+			r.duplicateFlags[duplicateLabelUseUnix] = checked
+			r.renderDuplicatePreview()
+		})
+	default: // "numbered", and any unrecognized value (see cycleOptionChoice's own equivalent fallback)
+		r.duplicateNumberPaddingField = tview.NewInputField().
+			SetLabel("Number padding (digits)").
+			SetText(r.duplicateNumberPaddingValue).
+			SetAcceptanceFunc(tview.InputFieldInteger)
+		r.duplicateNumberPaddingField.SetChangedFunc(func(v string) {
+			r.duplicateNumberPaddingValue = v
+			r.renderDuplicatePreview()
+		})
+		r.duplicateForm.AddFormItem(r.duplicateNumberPaddingField)
+	}
+
+	r.duplicateCountField = tview.NewInputField().
+		SetLabel("Number of duplicates").
+		SetText(r.duplicateCountValue).
+		SetAcceptanceFunc(tview.InputFieldInteger)
+	r.duplicateCountField.SetChangedFunc(func(v string) {
+		r.duplicateCountValue = v
+		r.renderDuplicatePreview()
+	})
+	r.duplicateForm.AddFormItem(r.duplicateCountField)
 }
 
 // duplicateTargetsLabel is the form's own "Target" line — the same
 // shape sedTargetsLabel already has for Sed Replace, just worded for a
 // set of files/directories rather than sed's own "files" (Duplicate
-// works on a directory just as well as a plain file — it's an ordinary
-// Copy underneath, see runDuplicate).
+// works on a directory just as well as a file — it's an ordinary Copy
+// underneath, see runDuplicate).
 func duplicateTargetsLabel(targets []string) string {
 	if len(targets) == 1 {
 		return targets[0]
@@ -167,108 +259,46 @@ func duplicateTargetsLabel(targets []string) string {
 	return fmt.Sprintf("%d selected items", len(targets))
 }
 
-// newDuplicateOptionsList builds duplicateOptionsList once, from
-// NewRoot — a List rather than Form checkboxes/a dropdown, for the same
-// reason sedFlagsList already is one (see newSedForm's own doc
-// comment): a tview.Form can't give one item a background distinct
-// from a real editable field's. Its "Strategy" row doesn't toggle, it
-// cycles through three values in place (see cycleDuplicateStrategy) —
-// the same "activating it is the change" shape cycleOptionChoice
-// already gives the Options screen itself. Repopulated fresh on every
-// open (see resetDuplicateForm) and after every cycle/toggle (see
-// renderDuplicateOptionsList), the same as sedFlagsList's own items.
-func (r *Root) newDuplicateOptionsList() *tview.List {
-	l := tview.NewList().ShowSecondaryText(false)
-	l.SetHighlightFullLine(true)
-	l.SetDoneFunc(r.hideOverlay) // Escape
-	return l
+// newDuplicatePreviewView builds duplicatePreviewView once, from
+// NewRoot — a plain, read-only TextView sibling of duplicateForm, not
+// one of its items (see its own doc comment on root.go for why: a
+// TextView added as a Form item needs an explicit height or tview
+// substitutes a 5-row default, a real bug this shape rules out
+// entirely rather than just remembering to avoid). Its own text is set
+// fresh by renderDuplicatePreview, not here — there is nothing
+// meaningful to show before a real target exists.
+func (r *Root) newDuplicatePreviewView() *tview.TextView {
+	return tview.NewTextView()
 }
 
-// renderDuplicateOptionsList (re)builds duplicateOptionsList's three
-// rows from r.duplicateStrategy/r.duplicateFlags — cheap enough (three
-// rows) to just clear and rebuild on every change rather than updating
-// one row in place, the same choice resetSedForm's own sedFlagsList
-// population already makes.
-func (r *Root) renderDuplicateOptionsList() {
-	r.duplicateOptionsList.Clear()
-	r.duplicateOptionsList.AddItem(r.duplicateStrategyItemText(r.duplicateStrategy), "", 0, r.cycleDuplicateStrategy)
-	for _, label := range []string{duplicateLabelStrftime, duplicateLabelUseUnix} {
-		label := label // capture for the closure below
-		r.duplicateOptionsList.AddItem(duplicateFlagItemText(label, r.duplicateFlags[label]), "", 0, func() { r.toggleDuplicateFlag(label) })
-	}
-}
+// newDuplicateButtons builds duplicateForm's own action row once, from
+// NewRoot — a real Cancel/Duplicate button pair, bottom-left/
+// bottom-right, the same shape newChmodButtons/newSearchButtons/
+// newPropertiesButtons already establish for their own dialogs,
+// per the user's own explicit request that this dialog's buttons match
+// that established look rather than Sed Replace's own vertical
+// two-item List.
+func (r *Root) newDuplicateButtons() *tview.Flex {
+	r.duplicateCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.duplicateApplyBtn = tview.NewButton("Duplicate").SetSelectedFunc(r.runDuplicate)
+	r.duplicateCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.duplicateApplyBtn.SetInputCapture(spaceAlsoActivates(r.runDuplicate))
 
-// duplicateStrategyItemText renders the Strategy row's own label from
-// value ("numbered"/"suffix_text"/"datetime") using the exact same
-// choice labels the Options screen shows for "duplicate_strategy" (see
-// optionSpecByKey) — one shared source for what each value is called,
-// rather than a second copy of the same three labels living here.
-func (r *Root) duplicateStrategyItemText(value string) string {
-	if opt, ok := optionSpecByKey("duplicate_strategy"); ok {
-		for _, c := range opt.choices(r) {
-			if c.value == value {
-				return "Strategy: " + c.label
-			}
+	exitFunc := func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			r.hideOverlay()
 		}
 	}
-	return "Strategy: " + value
-}
+	r.duplicateCancelBtn.SetExitFunc(exitFunc)
+	r.duplicateApplyBtn.SetExitFunc(exitFunc)
 
-// duplicateFlagItemText renders one duplicateOptionsList toggle row —
-// the same outline/filled circle this app already uses for a boolean
-// everywhere else (see checkboxText), matching sedFlagItemText's own
-// shape for Sed Replace's own toggle list.
-func duplicateFlagItemText(label string, checked bool) string {
-	return fmt.Sprintf("%s  %s", checkboxText(checked), label)
-}
-
-// cycleDuplicateStrategy advances r.duplicateStrategy — the dialog's
-// own in-progress choice, not yet r.settings.DuplicateStrategy — to its
-// next value, wrapping around. Reuses "duplicate_strategy"'s own
-// optionSpec.choices (see optionSpecByKey) rather than a second,
-// independently-maintained list of the same three values, the same
-// "can't drift apart" reasoning cycleOptionChoice's own doc comment
-// gives for the Options screen itself.
-func (r *Root) cycleDuplicateStrategy() {
-	opt, ok := optionSpecByKey("duplicate_strategy")
-	if !ok {
-		return
-	}
-	choices := opt.choices(r)
-	if len(choices) == 0 {
-		return
-	}
-	next := 0
-	for i, c := range choices {
-		if c.value == r.duplicateStrategy {
-			next = (i + 1) % len(choices)
-			break
-		}
-	}
-	r.duplicateStrategy = choices[next].value
-	r.renderDuplicateOptionsList()
-	r.renderDuplicatePreview()
-}
-
-// toggleDuplicateFlag flips one of duplicateFlags' two entries and
-// re-renders the row plus the live preview — the same "selectedFunc
-// flips state, then relabels" shape toggleSedFlag already uses.
-func (r *Root) toggleDuplicateFlag(label string) {
-	r.duplicateFlags[label] = !r.duplicateFlags[label]
-	r.renderDuplicateOptionsList()
-	r.renderDuplicatePreview()
-}
-
-// newDuplicateActions builds duplicateForm's own action row once, from
-// NewRoot — the same "a List rather than Form.AddButton, purely for
-// consistency" choice newSedActions already makes.
-func (r *Root) newDuplicateActions() *tview.List {
-	l := tview.NewList().ShowSecondaryText(false)
-	l.SetHighlightFullLine(true)
-	l.AddItem("Duplicate", "", 0, r.runDuplicate)
-	l.AddItem("Cancel", "", 0, r.hideOverlay)
-	l.SetDoneFunc(r.hideOverlay) // Escape
-	return l
+	// Equal proportion (0, 1) each, nothing else, so the two together
+	// fill the whole row edge to edge, split exactly in half — the same
+	// shape newChmodButtons/newSearchButtons/newPropertiesButtons all
+	// already use.
+	return tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.duplicateCancelBtn, 0, 1, false).
+		AddItem(r.duplicateApplyBtn, 0, 1, false)
 }
 
 // newDuplicateLayout wraps duplicateTitleBar (" Multiply ") above
@@ -283,37 +313,37 @@ func (r *Root) newDuplicateLayout() *tview.Flex {
 		AddItem(r.duplicateContentLayout, 0, 1, true)
 }
 
-// newDuplicateContentLayout stacks duplicateForm (Target/Separator/
-// Suffix text/Number padding/Date-time format/Number of duplicates/
-// Preview), duplicateOptionsList (Strategy/the two toggles), and
-// duplicateActions (Duplicate/Cancel) — the same three-widget stack
-// newSedContentLayout already establishes for Sed Replace. Initial
-// focus goes to duplicateForm, for the same "typing works immediately"
-// reasoning newSedContentLayout's own doc comment gives.
+// newDuplicateContentLayout stacks duplicateForm, duplicatePreviewView
+// (its own always-visible row, never a Form item — see its own doc
+// comment on root.go for the real bug that shape rules out), and
+// duplicateButtons — the same three-widget stack newSedContentLayout
+// already establishes for Sed Replace, just with a plain preview row
+// and a button pair instead of a flags list and an actions list.
+//
+// 16 rows for duplicateForm: its own worst case (the Date/time
+// strategy's seven items — Target height 2, five height-1 items) sums
+// to 8 rows of content, plus itemPadding (1 row between every pair of
+// items, i.e. 6 for seven items) plus 2 rows of the Form's own
+// top/bottom border padding — 8 + 6 + 2 = 16 (verified directly against
+// tview's own Form.Draw, not guessed — a shorter value silently drops
+// the last item off the bottom the same way openSedReplace's own doc
+// comment already warns about for its own dialog).
 func (r *Root) newDuplicateContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
-	// 16 rows for duplicateForm's own 7 items (Target's own fieldHeight
-	// 2, six single-row fields/Preview after it), matching tview.Form's
-	// own vertical layout exactly (verified directly against its own
-	// form.go, not guessed — see Form.Draw's per-item y += itemHeight +
-	// itemPadding advance, plus 1 row of border padding top and bottom):
-	// a shorter value silently drops Preview, the very last item, off
-	// the bottom the same way openSedReplace's own doc comment already
-	// warns about for its dialog.
 	layout.AddItem(r.duplicateForm, 16, 0, true)
-	layout.AddItem(r.duplicateOptionsList, 3, 0, false)
-	layout.AddItem(r.duplicateActions, 2, 0, false)
+	layout.AddItem(r.duplicatePreviewView, 1, 0, false)
+	layout.AddItem(r.duplicateButtons, 1, 0, false)
 	return layout
 }
 
 // currentDuplicateOptions builds fsops.DuplicateOptions from the
-// dialog's own current field values — read directly from the widgets
-// and from r.duplicateStrategy/r.duplicateFlags rather than
-// r.settings, since the value actually used for this one computation
-// (a live preview, or a real run) is whatever's currently typed or
-// selected, before applyDuplicateSelection (if it ever even runs —
-// Cancel never touches r.settings at all) has a chance to make it the
-// new default.
+// dialog's own current mirror values (see their own doc comment on
+// root.go) — never from the widgets directly, since a strategy switch
+// destroys and recreates most of them; the mirrors are what survives
+// that. The value actually used for this one computation (a live
+// preview, or a real run) is whatever's currently typed or selected,
+// before applyDuplicateSelection (if it ever even runs — Cancel never
+// touches r.settings at all) has a chance to make it the new default.
 func (r *Root) currentDuplicateOptions(padding int) fsops.DuplicateOptions {
 	strategy := fsops.DuplicateNumbered
 	switch r.duplicateStrategy {
@@ -323,24 +353,26 @@ func (r *Root) currentDuplicateOptions(padding int) fsops.DuplicateOptions {
 		strategy = fsops.DuplicateDateTime
 	}
 	return fsops.DuplicateOptions{
-		Separator:        r.duplicateSeparatorField.GetText(),
+		Separator:        r.duplicateSeparatorValue,
 		Strategy:         strategy,
-		SuffixText:       r.duplicateSuffixTextField.GetText(),
+		SuffixText:       r.duplicateSuffixTextValue,
 		NumberPadding:    padding,
-		DateTimeFormat:   r.duplicateDateTimeFormatField.GetText(),
+		DateTimeFormat:   r.duplicateDateTimeFormatValue,
 		DateTimeStrftime: r.duplicateFlags[duplicateLabelStrftime],
 		DateTimeUseUnix:  r.duplicateFlags[duplicateLabelUseUnix],
 	}
 }
 
-// duplicateNumberPadding parses duplicateNumberPaddingField's own text
-// — a real, on-disk-checked negative value can't occur (the field's own
+// duplicateNumberPadding parses duplicateNumberPaddingValue — a real,
+// negative value can't occur (the field's own
 // SetAcceptanceFunc(tview.InputFieldInteger) never lets a "-" through
-// at all), so the only failure this ever actually sees is an empty
-// field, treated the same as "0" (no padding) rather than an error the
-// user would have to clear before the live preview updates at all.
+// at all while it exists, and it's simply absent while some other
+// strategy is selected), so the only failure this ever actually sees
+// is an empty value, treated the same as "0" (no padding) rather than
+// an error the user would have to clear before the live preview
+// updates at all.
 func (r *Root) duplicateNumberPadding() int {
-	padding, err := strconv.Atoi(strings.TrimSpace(r.duplicateNumberPaddingField.GetText()))
+	padding, err := strconv.Atoi(strings.TrimSpace(r.duplicateNumberPaddingValue))
 	if err != nil || padding < 0 {
 		return 0
 	}
@@ -349,10 +381,10 @@ func (r *Root) duplicateNumberPadding() int {
 
 // renderDuplicatePreview updates duplicatePreviewView with the name
 // the *first* target's own duplicate would actually get right now,
-// given every field's current value — recomputed on every keystroke
-// and every Strategy-row/flag activation, so a typo or an unexpected
-// format string shows up immediately rather than only once "Duplicate"
-// is actually pressed.
+// given every current mirror value — recomputed on every keystroke,
+// every checkbox toggle, and every Strategy change, so a typo or an
+// unexpected format string shows up immediately rather than only once
+// "Duplicate" is actually pressed.
 //
 // Only the first target this was opened for, and only the first of
 // possibly several requested duplicates: fsops.ComputeDuplicateName
@@ -372,29 +404,29 @@ func (r *Root) renderDuplicatePreview() {
 
 	name, err := fsops.ComputeDuplicateName(r.duplicateTargets[0], opts)
 	if err != nil {
-		r.duplicatePreviewView.SetText("(" + err.Error() + ")")
+		r.duplicatePreviewView.SetText("Preview: (" + err.Error() + ")")
 		return
 	}
 
-	text := filepath.Base(name)
+	text := "Preview: " + filepath.Base(name)
 	if len(r.duplicateTargets) > 1 {
 		text += fmt.Sprintf(" (+%d more targets)", len(r.duplicateTargets)-1)
 	}
-	if count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountField.GetText())); err == nil && count > 1 {
+	if count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountValue)); err == nil && count > 1 {
 		text += fmt.Sprintf(", %d in total per target", count)
 	}
 	r.duplicatePreviewView.SetText(text)
 }
 
-// applyDuplicateSelection writes the dialog's own current field values
-// back through the exact same optionSpec.apply functions the Options
-// screen itself calls for every "duplicate_*" key (found by key lookup,
-// see optionSpecByKey) — the one deliberate exception to how every
-// other setting in this app works: whatever gets chosen here becomes
-// the new sticky default for next time, per the user's own explicit
-// request. Reusing these exact functions, rather than writing to
-// r.settings and persisting directly a second time, is what keeps this
-// path and the Options screen's own from ever drifting apart (see
+// applyDuplicateSelection writes the dialog's own current mirror
+// values back through the exact same optionSpec.apply functions the
+// Options screen itself calls for every "duplicate_*" key (found by
+// key lookup, see optionSpecByKey) — the one deliberate exception to
+// how every other setting in this app works: whatever gets chosen here
+// becomes the new sticky default for next time, per the user's own
+// explicit request. Reusing these exact functions, rather than writing
+// to r.settings and persisting directly a second time, is what keeps
+// this path and the Options screen's own from ever drifting apart (see
 // optionSpecByKey's own doc comment).
 //
 // "duplicate_count_max" is deliberately absent — that one is a safety
@@ -406,17 +438,17 @@ func (r *Root) applyDuplicateSelection(padding, count int) {
 			opt.apply(r, value)
 		}
 	}
-	apply("duplicate_separator", r.duplicateSeparatorField.GetText())
+	apply("duplicate_separator", r.duplicateSeparatorValue)
 	apply("duplicate_strategy", r.duplicateStrategy)
-	apply("duplicate_suffix_text", r.duplicateSuffixTextField.GetText())
+	apply("duplicate_suffix_text", r.duplicateSuffixTextValue)
 	apply("duplicate_number_padding", strconv.Itoa(padding))
-	apply("duplicate_datetime_format", r.duplicateDateTimeFormatField.GetText())
+	apply("duplicate_datetime_format", r.duplicateDateTimeFormatValue)
 	apply("duplicate_datetime_strftime", strconv.FormatBool(r.duplicateFlags[duplicateLabelStrftime]))
 	apply("duplicate_datetime_use_unix", strconv.FormatBool(r.duplicateFlags[duplicateLabelUseUnix]))
 	apply("duplicate_count", strconv.Itoa(count))
 }
 
-// runDuplicate is duplicateActions' own "Duplicate": validates the
+// runDuplicate is duplicateButtons' own "Duplicate": validates the
 // count against "duplicate_count_max" (the dialog's own one guard rail
 // — see its own optionSpec help text), writes every field back as the
 // new sticky default (see applyDuplicateSelection), then actually
@@ -438,7 +470,7 @@ func (r *Root) applyDuplicateSelection(padding, count int) {
 // large file or a big count never blocks the UI thread, the same
 // reasoning every other background job in this app already follows.
 func (r *Root) runDuplicate() {
-	count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountField.GetText()))
+	count, err := strconv.Atoi(strings.TrimSpace(r.duplicateCountValue))
 	if err != nil || count < 1 {
 		r.showError(fmt.Errorf("duplicate: \"Number of duplicates\" must be a positive whole number"))
 		return

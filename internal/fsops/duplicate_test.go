@@ -18,7 +18,7 @@ func TestComputeDuplicateNameSuffixText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_BAK.txt")
+	want := filepath.Join(dir, "report.txt_BAK")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -29,13 +29,13 @@ func TestComputeDuplicateNameSuffixText(t *testing.T) {
 // ComputeDuplicateName still returns it rather than looping — the
 // caller's own subsequent Copy is what reports "already exists". A
 // second, separate Duplicate run on that returned name (not exercised
-// by this call at all) is how "report_BAK_BAK.txt" would ever arise —
+// by this call at all) is how "report.txt_BAK_BAK" would ever arise —
 // never a loop inside one call.
 func TestComputeDuplicateNameSuffixTextHasNoAutoRetry(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "report.txt")
 	// The candidate this computes to already exists.
-	if err := os.WriteFile(filepath.Join(dir, "report_BAK.txt"), []byte("already here"), 0o640); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "report.txt_BAK"), []byte("already here"), 0o640); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,7 +45,7 @@ func TestComputeDuplicateNameSuffixTextHasNoAutoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_BAK.txt")
+	want := filepath.Join(dir, "report.txt_BAK")
 	if got != want {
 		t.Errorf("got %q, want %q (the same already-taken candidate, not a retried alternative)", got, want)
 	}
@@ -59,21 +59,21 @@ func TestComputeDuplicateNameNumberedStartsAtOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_1.txt")
+	want := filepath.Join(dir, "report.txt_1")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
 // TestComputeDuplicateNameNumberedScansUntilFree pins the user's own
-// explicit answer: with "report_1.txt" and "report_2.txt" already
+// explicit answer: with "report.txt_1" and "report.txt_2" already
 // taken, this keeps counting rather than failing at the first or second
 // collision.
 func TestComputeDuplicateNameNumberedScansUntilFree(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "report.txt")
 	for _, n := range []string{"1", "2"} {
-		if err := os.WriteFile(filepath.Join(dir, "report_"+n+".txt"), []byte("x"), 0o640); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "report.txt_"+n), []byte("x"), 0o640); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -82,7 +82,7 @@ func TestComputeDuplicateNameNumberedScansUntilFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_3.txt")
+	want := filepath.Join(dir, "report.txt_3")
 	if got != want {
 		t.Errorf("got %q, want %q (should have scanned past the two taken numbers)", got, want)
 	}
@@ -98,7 +98,7 @@ func TestComputeDuplicateNameNumberedPadding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_001.txt")
+	want := filepath.Join(dir, "report.txt_001")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -117,7 +117,7 @@ func TestComputeDuplicateNameNumberedReportsErrorOnceLimitExhausted(t *testing.T
 	dir := t.TempDir()
 	src := filepath.Join(dir, "report.txt")
 	for n := 1; n <= 3; n++ {
-		if err := os.WriteFile(filepath.Join(dir, "report_"+strconv.Itoa(n)+".txt"), []byte("x"), 0o640); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "report.txt_"+strconv.Itoa(n)), []byte("x"), 0o640); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -146,7 +146,7 @@ func TestComputeDuplicateNameDateTimeGoLayoutReproducesTheAgreedExample(t *testi
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_2026-11-9 23:59:59.txt")
+	want := filepath.Join(dir, "report.txt_2026-11-9 23:59:59")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -168,7 +168,7 @@ func TestComputeDuplicateNameDateTimeStrftimeReproducesTheAgreedExample(t *testi
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_2026-11-9 23:59:59.txt")
+	want := filepath.Join(dir, "report.txt_2026-11-9 23:59:59")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -188,37 +188,44 @@ func TestComputeDuplicateNameDateTimeUsesRawUnixTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report_"+strconv.FormatInt(now.Unix(), 10)+".txt")
+	want := filepath.Join(dir, "report.txt_"+strconv.FormatInt(now.Unix(), 10))
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
-// TestComputeDuplicateNamePreservesExtensionAndHandlesNoExtension pins
-// that the suffix always lands right before the extension ("report_BAK
-// .txt", not "report.txt_BAK"), and that a file with no extension at
-// all is handled the same way, with nothing appended after the suffix.
-func TestComputeDuplicateNamePreservesExtensionAndHandlesNoExtension(t *testing.T) {
+// TestComputeDuplicateNameNeverSplitsOffAnyExtension is the regression
+// pin for a real, user-reported bug: an earlier version of this
+// function used filepath.Ext/TrimSuffix to strip src's own last
+// extension before appending the suffix, then re-added it at the very
+// end ("archive.tar_1.gz") — which, for any name with more than one
+// dot, planted the suffix somewhere in the middle rather than at the
+// true end of the name, exactly the "goes to [a] dot instead of the
+// end" behavior the user explicitly rejected. Nothing about a basename
+// is "the real extension" here — every dot-separated segment, and a
+// compound one like ".tar.gz" in particular, stays exactly where it
+// already was, undisturbed, with the new suffix landing after all of
+// it, every time.
+func TestComputeDuplicateNameNeverSplitsOffAnyExtension(t *testing.T) {
 	dir := t.TempDir()
 
-	got, err := ComputeDuplicateName(filepath.Join(dir, "report.txt"), DuplicateOptions{
-		Separator: "_", Strategy: DuplicateSuffixText, SuffixText: "BAK",
-	})
-	if err != nil {
-		t.Fatalf("ComputeDuplicateName: %v", err)
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"archive.tar.gz", "archive.tar.gz_1"},
+		{"my.report.v2.txt", "my.report.v2.txt_1"},
+		{"report.txt", "report.txt_1"},
+		{"README", "README_1"}, // no dot at all — nothing to (mis)split either way
 	}
-	if want := filepath.Join(dir, "report_BAK.txt"); got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-
-	got, err = ComputeDuplicateName(filepath.Join(dir, "README"), DuplicateOptions{
-		Separator: "_", Strategy: DuplicateSuffixText, SuffixText: "BAK",
-	})
-	if err != nil {
-		t.Fatalf("ComputeDuplicateName: %v", err)
-	}
-	if want := filepath.Join(dir, "README_BAK"); got != want {
-		t.Errorf("got %q, want %q", got, want)
+	for _, c := range cases {
+		got, err := ComputeDuplicateName(filepath.Join(dir, c.name), DuplicateOptions{Separator: "_", Strategy: DuplicateNumbered})
+		if err != nil {
+			t.Fatalf("%s: ComputeDuplicateName: %v", c.name, err)
+		}
+		if want := filepath.Join(dir, c.want); got != want {
+			t.Errorf("%s: got %q, want %q", c.name, got, want)
+		}
 	}
 }
 

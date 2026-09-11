@@ -33,6 +33,40 @@ func newTestRootWithDuplicateFile(t *testing.T, content string) (r *Root, dir, f
 	return r, dir, file
 }
 
+// duplicateStrategyDropDown returns the dialog's own Strategy field —
+// always item index 1 (Target is 0) regardless of which strategy is
+// currently selected, since Target and Strategy are the only two items
+// renderDuplicateForm ever adds unconditionally at fixed positions.
+func duplicateStrategyDropDown(t *testing.T, r *Root) *tview.DropDown {
+	t.Helper()
+	dd, ok := r.duplicateForm.GetFormItem(1).(*tview.DropDown)
+	if !ok {
+		t.Fatalf("form item 1 is not the Strategy dropdown")
+	}
+	return dd
+}
+
+// selectDuplicateStrategy switches the dialog's own Strategy dropdown
+// to value ("numbered"/"suffix_text"/"datetime") — DropDown.
+// SetCurrentOption fires the same "selected" callback a real arrow-
+// key-and-Enter or mouse pick would (verified directly against
+// tview's own dropdown.go, not assumed), so this exercises the real
+// renderDuplicateForm rebuild, not a shortcut around it.
+func selectDuplicateStrategy(t *testing.T, r *Root, value string) {
+	t.Helper()
+	opt, ok := optionSpecByKey("duplicate_strategy")
+	if !ok {
+		t.Fatal("no duplicate_strategy optionSpec")
+	}
+	for i, c := range opt.choices(r) {
+		if c.value == value {
+			duplicateStrategyDropDown(t, r).SetCurrentOption(i)
+			return
+		}
+	}
+	t.Fatalf("no such strategy choice %q", value)
+}
+
 func TestOpenDuplicatePopulatesTargetsAndOpensForm(t *testing.T) {
 	r, _, file := newTestRootWithDuplicateFile(t, "hello\n")
 
@@ -44,7 +78,7 @@ func TestOpenDuplicatePopulatesTargetsAndOpensForm(t *testing.T) {
 	if len(r.duplicateTargets) != 1 || r.duplicateTargets[0] != file {
 		t.Fatalf("duplicateTargets = %v, want [%s]", r.duplicateTargets, file)
 	}
-	for _, label := range []string{"Separator", "Suffix text", "Number padding (digits)", "Date/time format", "Number of duplicates", "Preview"} {
+	for _, label := range []string{"Target", "Strategy", "Separator", "Number padding (digits)", "Number of duplicates"} {
 		if r.duplicateForm.GetFormItemByLabel(label) == nil {
 			t.Errorf("form is missing an item labeled %q", label)
 		}
@@ -64,6 +98,61 @@ func TestOpenDuplicateHasATitleBar(t *testing.T) {
 	}
 }
 
+// TestDuplicateStrategyFieldUsesThemeColorsWhenFocused is the
+// regression pin for a real, reported bug: DropDown keeps its own
+// separate focusedStyle that Form's generic per-item theming
+// (SetFieldBackgroundColor/SetFieldTextColor, applied via
+// SetFormAttributes) never reaches — only DropDown.SetFocusedStyle
+// itself does (see renderDuplicateForm's own doc comment) — so without
+// an explicit SetFocusedStyle call, Strategy rendered in tview's own
+// stock blue-on-white instead of this app's own palette while it had
+// real focus, which it does by default the moment the dialog opens
+// (Target, a TextView, never takes it). Verified against a real
+// rendered screen (tcell.SimulationScreen), not just that some setter
+// was called — a plausible fix that silently didn't reach the actually
+// visible style was exactly the first attempt at this.
+func TestDuplicateStrategyFieldUsesThemeColorsWhenFocused(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	r.app.SetScreen(screen) // must run before SetSize: SetScreen re-Init()s an unstarted screen, undoing an earlier SetSize
+	screen.SetSize(100, 40)
+	r.SetRect(0, 0, 100, 40)
+
+	r.openDuplicate()
+	screen.Clear()
+	r.Draw(screen)
+
+	found := false
+	w, h := screen.Size()
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w-8; x++ {
+			text := ""
+			for i := 0; i < 8; i++ {
+				c, _, _ := screen.Get(x+i, y)
+				text += c
+			}
+			if text != "Numbered" {
+				continue
+			}
+			found = true
+			_, style, _ := screen.Get(x, y)
+			fg, bg, _ := style.Decompose()
+			if want := r.theme.Text; fg != want {
+				t.Errorf("Strategy field foreground = %v, want theme.Text %v", fg, want)
+			}
+			if want := r.theme.FocusedBackground; bg != want {
+				t.Errorf("Strategy field background = %v, want theme.FocusedBackground %v", bg, want)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("could not find the rendered 'Numbered' option text at all")
+	}
+}
+
 // TestResetDuplicateFormPrefillsFromSettings pins the user's own design
 // intent: the dialog always starts out showing "what would happen right
 // now" (today's sticky defaults), never a blank form.
@@ -80,17 +169,17 @@ func TestResetDuplicateFormPrefillsFromSettings(t *testing.T) {
 
 	r.openDuplicate()
 
-	if got := r.duplicateSeparatorField.GetText(); got != "-" {
-		t.Errorf("Separator = %q, want %q", got, "-")
+	if r.duplicateSeparatorValue != "-" {
+		t.Errorf("duplicateSeparatorValue = %q, want %q", r.duplicateSeparatorValue, "-")
 	}
-	if got := r.duplicateSuffixTextField.GetText(); got != "bak" {
-		t.Errorf("Suffix text = %q, want %q", got, "bak")
+	if r.duplicateSuffixTextValue != "bak" {
+		t.Errorf("duplicateSuffixTextValue = %q, want %q", r.duplicateSuffixTextValue, "bak")
 	}
-	if got := r.duplicateNumberPaddingField.GetText(); got != "3" {
-		t.Errorf("Number padding = %q, want %q", got, "3")
+	if r.duplicateNumberPaddingValue != "3" {
+		t.Errorf("duplicateNumberPaddingValue = %q, want %q", r.duplicateNumberPaddingValue, "3")
 	}
 	if got := r.duplicateDateTimeFormatField.GetText(); got != "15-04-05" {
-		t.Errorf("Date/time format = %q, want %q", got, "15-04-05")
+		t.Errorf("Date/time format field = %q, want %q", got, "15-04-05")
 	}
 	if got := r.duplicateCountField.GetText(); got != "2" {
 		t.Errorf("Number of duplicates = %q, want %q", got, "2")
@@ -103,56 +192,72 @@ func TestResetDuplicateFormPrefillsFromSettings(t *testing.T) {
 	}
 }
 
-// TestCycleDuplicateStrategyAdvancesThroughAllChoicesAndWraps pins that
-// the Strategy row cycles through exactly the same three choices
-// "duplicate_strategy" itself offers on the Options screen (see
-// optionSpecByKey), in order, wrapping back to the first.
-func TestCycleDuplicateStrategyAdvancesThroughAllChoicesAndWraps(t *testing.T) {
+// TestRenderDuplicateFormShowsOnlyRelevantFieldsPerStrategy pins the
+// core complaint the strategy-driven redesign exists to fix: the form
+// must never show every strategy's own fields combined at once —
+// "Suffix text" has no business being editable while "Numbered" is
+// selected, and vice versa.
+func TestRenderDuplicateFormShowsOnlyRelevantFieldsPerStrategy(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
-	r.openDuplicate()
+	r.openDuplicate() // default strategy: numbered
 
-	want := []string{"suffix_text", "datetime", "numbered"}
-	for i, w := range want {
-		r.cycleDuplicateStrategy()
-		if r.duplicateStrategy != w {
-			t.Fatalf("after cycle %d: duplicateStrategy = %q, want %q", i+1, r.duplicateStrategy, w)
-		}
+	cases := []struct {
+		strategy string
+		want     []string
+		wantNot  []string
+	}{
+		{"numbered", []string{"Number padding (digits)"}, []string{"Suffix text", "Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}},
+		{"suffix_text", []string{"Suffix text"}, []string{"Number padding (digits)", "Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}},
+		{"datetime", []string{"Date/time format", duplicateLabelStrftime, duplicateLabelUseUnix}, []string{"Suffix text", "Number padding (digits)"}},
 	}
-
-	main, _ := r.duplicateOptionsList.GetItemText(0)
-	if main != "Strategy: Numbered" {
-		t.Errorf("duplicateOptionsList row 0 = %q, want %q", main, "Strategy: Numbered")
+	for _, c := range cases {
+		selectDuplicateStrategy(t, r, c.strategy)
+		for _, label := range c.want {
+			if r.duplicateForm.GetFormItemByLabel(label) == nil {
+				t.Errorf("strategy %q: form is missing %q", c.strategy, label)
+			}
+		}
+		for _, label := range c.wantNot {
+			if r.duplicateForm.GetFormItemByLabel(label) != nil {
+				t.Errorf("strategy %q: form should not show %q", c.strategy, label)
+			}
+		}
 	}
 }
 
-func TestToggleDuplicateFlagFlipsStateAndLabel(t *testing.T) {
+// TestRenderDuplicateFormPreservesValuesAcrossStrategySwitch pins that
+// switching strategies rebuilds the Form's own *widgets* without
+// losing any value already typed — Separator and Number of duplicates
+// are shown by every strategy, so their own widgets are destroyed and
+// recreated on every switch too, not just the strategy-specific ones.
+func TestRenderDuplicateFormPreservesValuesAcrossStrategySwitch(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	if r.duplicateFlags[duplicateLabelStrftime] {
-		t.Fatal("setup: Strftime should start off (settings default)")
-	}
+	r.duplicateSeparatorField.SetText("~")
+	r.duplicateCountField.SetText("4")
 
-	r.toggleDuplicateFlag(duplicateLabelStrftime)
+	selectDuplicateStrategy(t, r, "datetime")
 
-	if !r.duplicateFlags[duplicateLabelStrftime] {
-		t.Error("toggleDuplicateFlag should have flipped the flag to true")
+	if got := r.duplicateSeparatorField.GetText(); got != "~" {
+		t.Errorf("Separator after switching strategy = %q, want %q (preserved)", got, "~")
 	}
-	main, _ := r.duplicateOptionsList.GetItemText(1)
-	if want := duplicateFlagItemText(duplicateLabelStrftime, true); main != want {
-		t.Errorf("duplicateOptionsList row 1 = %q, want %q", main, want)
+	if got := r.duplicateCountField.GetText(); got != "4" {
+		t.Errorf("Number of duplicates after switching strategy = %q, want %q (preserved)", got, "4")
 	}
 }
 
 // TestRenderDuplicatePreviewShowsComputedName pins the live preview
 // against a real, on-disk-checked computation — report.txt exists,
-// report_1.txt doesn't, so the default Numbered strategy's own preview
-// must read exactly "report_1.txt".
+// report.txt_1 doesn't, so the default Numbered strategy's own preview
+// must read exactly "Preview: report.txt_1" — always after the
+// *entire* original name, extension included, per the user's own
+// explicit correction (see ComputeDuplicateName's own doc comment).
 func TestRenderDuplicatePreviewShowsComputedName(t *testing.T) {
 	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
 	r.openDuplicate()
 
-	if got, want := r.duplicatePreviewView.GetText(true), "report_1.txt"; got != want {
+	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt_1"; got != want {
 		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
@@ -166,8 +271,43 @@ func TestRenderDuplicatePreviewReactsToSeparatorEdits(t *testing.T) {
 
 	r.duplicateSeparatorField.SetText("-")
 
-	if got, want := r.duplicatePreviewView.GetText(true), "report-1.txt"; got != want {
+	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt-1"; got != want {
 		t.Errorf("preview after editing Separator = %q, want %q", got, want)
+	}
+}
+
+// TestRenderDuplicatePreviewReactsToStrategyChange pins that switching
+// strategy alone (no other field touched) is enough to update the
+// preview — the exact case a real, reported confusion ("aktueller Name
+// wird falsch interpretiert") traced back to when the old design let
+// every strategy's fields sit combined on screen.
+func TestRenderDuplicatePreviewReactsToStrategyChange(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	r.openDuplicate()
+
+	selectDuplicateStrategy(t, r, "suffix_text")
+
+	if got, want := r.duplicatePreviewView.GetText(true), "Preview: report.txt_copy"; got != want {
+		t.Errorf("preview after switching to suffix_text = %q, want %q", got, want)
+	}
+}
+
+// TestRenderDuplicatePreviewNeverSplitsOffAnyExtension is the UI-level
+// pin for the same regression ComputeDuplicateName's own tests already
+// cover: the preview must never insert anything before an extension,
+// or before just the first dot of a compound one.
+func TestRenderDuplicatePreviewNeverSplitsOffAnyExtension(t *testing.T) {
+	r, dir, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	archive := filepath.Join(dir, "archive.tar.gz")
+	if err := os.WriteFile(archive, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.openDuplicate()
+	r.duplicateTargets = []string{archive}
+	r.renderDuplicatePreview()
+
+	if got, want := r.duplicatePreviewView.GetText(true), "Preview: archive.tar.gz_1"; got != want {
+		t.Errorf("preview = %q, want %q", got, want)
 	}
 }
 
@@ -187,7 +327,7 @@ func TestRenderDuplicatePreviewSummarizesMultipleTargetsAndCount(t *testing.T) {
 	r.duplicateCountField.SetText("3")
 
 	got := r.duplicatePreviewView.GetText(true)
-	if !strings.Contains(got, "report_1.txt") {
+	if !strings.Contains(got, "report.txt_1") {
 		t.Errorf("preview = %q, want it to mention the first target's own computed name", got)
 	}
 	if !strings.Contains(got, "+1 more targets") {
@@ -211,11 +351,8 @@ func TestApplyDuplicateSelectionWritesBackSettingsButNotCountMax(t *testing.T) {
 	r.openDuplicate()
 
 	r.duplicateSeparatorField.SetText(".")
-	r.cycleDuplicateStrategy() // numbered -> suffix_text
+	selectDuplicateStrategy(t, r, "suffix_text")
 	r.duplicateSuffixTextField.SetText("bak")
-	r.duplicateDateTimeFormatField.SetText("15-04-05")
-	r.toggleDuplicateFlag(duplicateLabelStrftime)
-	r.toggleDuplicateFlag(duplicateLabelUseUnix)
 
 	r.applyDuplicateSelection(3, 2)
 
@@ -228,12 +365,6 @@ func TestApplyDuplicateSelectionWritesBackSettingsButNotCountMax(t *testing.T) {
 		t.Errorf("DuplicateSuffixText = %q, want %q", r.settings.DuplicateSuffixText, "bak")
 	case r.settings.DuplicateNumberPadding != 3:
 		t.Errorf("DuplicateNumberPadding = %d, want 3", r.settings.DuplicateNumberPadding)
-	case r.settings.DuplicateDateTimeFormat != "15-04-05":
-		t.Errorf("DuplicateDateTimeFormat = %q, want %q", r.settings.DuplicateDateTimeFormat, "15-04-05")
-	case !r.settings.DuplicateDateTimeStrftime:
-		t.Error("DuplicateDateTimeStrftime should be true")
-	case !r.settings.DuplicateDateTimeUseUnix:
-		t.Error("DuplicateDateTimeUseUnix should be true")
 	case r.settings.DuplicateCount != 2:
 		t.Errorf("DuplicateCount = %d, want 2", r.settings.DuplicateCount)
 	case r.settings.DuplicateCountMax != 100:
@@ -287,14 +418,14 @@ func TestPerformDuplicateNumberedCreatesSequentialCopies(t *testing.T) {
 		t.Fatalf("created = %d, want 3", created)
 	}
 	for _, n := range []int{1, 2, 3} {
-		path := filepath.Join(dir, "report_"+strconv.Itoa(n)+".txt")
+		path := filepath.Join(dir, "report.txt_"+strconv.Itoa(n))
 		data, err := os.ReadFile(path)
 		if err != nil {
-			t.Errorf("report_%d.txt: %v", n, err)
+			t.Errorf("report.txt_%d: %v", n, err)
 			continue
 		}
 		if string(data) != "hello\n" {
-			t.Errorf("report_%d.txt content = %q, want %q", n, data, "hello\n")
+			t.Errorf("report.txt_%d content = %q, want %q", n, data, "hello\n")
 		}
 	}
 }
@@ -314,7 +445,7 @@ func TestPerformDuplicateSuffixTextDoesNotRetry(t *testing.T) {
 
 	created, err = performDuplicate([]string{file}, opts, fsops.CopyOptions{}, 1)
 	if err == nil {
-		t.Fatal("second run should have failed: report_copy.txt already exists")
+		t.Fatal("second run should have failed: report.txt_copy already exists")
 	}
 	if created != 0 {
 		t.Errorf("second run created = %d, want 0", created)
@@ -435,7 +566,7 @@ func TestRunDuplicateAppliesSelectionClosesDialogAndCopiesInBackground(t *testin
 	<-done
 	<-done
 
-	for _, name := range []string{"report-1.txt", "report-2.txt"} {
+	for _, name := range []string{"report.txt-1", "report.txt-2"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
