@@ -30,6 +30,7 @@ const (
 	confirmPage     = "confirm"
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
+	duplicatePage   = "duplicate"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -335,6 +336,59 @@ type Root struct {
 	sedPreviewProcessed  int
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
+
+	// duplicateForm/duplicateOptionsList/duplicateActions/duplicateLayout
+	// together make up the "Multiply" dialog (see duplicate.go) — the
+	// same three-widgets-stacked-in-a-Flex shape sedForm/sedFlagsList/
+	// sedActions/sedLayout already establish just above, for the same
+	// reason (see newSedForm's own doc comment): a tview.Form can't give
+	// a toggle or an enum-cycling row a background distinct from a real
+	// editable field's, so both live in duplicateOptionsList (a List)
+	// instead, exactly the way sedFlagsList already holds Sed Replace's
+	// own boolean toggles. duplicateOptionsList's own "Strategy" row is
+	// new relative to that pattern: it doesn't toggle, it cycles through
+	// three values in place, the same "activating it *is* the change"
+	// shape cycleOptionChoice already gives the Options screen itself
+	// (see optionsscreen.go) — reused here by key lookup (see
+	// optionSpecByKey) rather than a second, independent copy of the
+	// same three choices.
+	//
+	// All rebuilt fresh on every open (see resetDuplicateForm), unlike
+	// confirmDialog's shared, repopulated single widget — same reasoning
+	// as sedForm's own doc comment: Form has no equivalent of List's
+	// SetItemText to reset one of its fields in place.
+	// duplicateSeparatorField/duplicateSuffixTextField/
+	// duplicateNumberPaddingField/duplicateDateTimeFormatField/
+	// duplicateCountField are kept directly (their typed values are read
+	// back by runDuplicate/renderDuplicatePreview); duplicatePreviewView
+	// is the live "this is what it'll be called" line, updated on every
+	// keystroke and every Strategy-row/flag activation.
+	// duplicateStrategy is the dialog's own working copy of the
+	// "Strategy" row's current choice ("numbered"/"suffix_text"/
+	// "datetime") — duplicateOptionsList has no Form field of its own to
+	// hold it the way a text field holds its own value. duplicateFlags
+	// holds the two toggles' current state, keyed by their label
+	// constants, the same shape sedFlags already has. Neither is
+	// r.settings itself: both start out copied from it on open (see
+	// resetDuplicateForm) and are only ever written back on confirm (see
+	// applyDuplicateSelection) — Cancel leaves the sticky defaults alone.
+	// duplicateTargets is the file(s) this open is for (see
+	// selectedOrCurrentPaths).
+	duplicateForm                *tview.Form
+	duplicateSeparatorField      *tview.InputField
+	duplicateSuffixTextField     *tview.InputField
+	duplicateNumberPaddingField  *tview.InputField
+	duplicateDateTimeFormatField *tview.InputField
+	duplicateCountField          *tview.InputField
+	duplicatePreviewView         *tview.TextView
+	duplicateStrategy            string
+	duplicateFlags               map[string]bool
+	duplicateOptionsList         *tview.List
+	duplicateActions             *tview.List
+	duplicateTitleBar            *tview.TextView
+	duplicateContentLayout       *tview.Flex
+	duplicateLayout              *tview.Flex
+	duplicateTargets             []string
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
@@ -1138,6 +1192,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sedLayout = r.newSedLayout()
 	r.sedPreviewLayout = r.newSedPreviewLayout()
 
+	// The "Multiply" dialog (see duplicate.go) — same "built once here,
+	// contents rebuilt fresh per open" shape as Sed Replace just above.
+	r.duplicateForm = r.newDuplicateForm()
+	r.duplicateOptionsList = r.newDuplicateOptionsList()
+	r.duplicateActions = r.newDuplicateActions()
+	r.duplicateLayout = r.newDuplicateLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
@@ -1253,6 +1314,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
+	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.

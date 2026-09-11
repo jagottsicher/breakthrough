@@ -13,6 +13,7 @@ material, always matching the version you are actually running.
 - [Tabs](#tabs)
 - [Split view](#split-view)
 - [The context menu](#the-context-menu)
+- [Multiply](#multiply)
 - [Batch rename](#batch-rename)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
@@ -358,6 +359,7 @@ Edit
 Rename
 Copy
 Cut
+Multiply
 Move to Trash
 Properties
 ▸ More actions
@@ -377,7 +379,9 @@ Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing.
+nothing. `m` again (`mm`) fires **Multiply** the same way — the one
+entry here with no plain-key shortcut of its own to mirror, since it
+only ever opens from this menu — see [Multiply](#multiply).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -413,6 +417,44 @@ feature. The hidden-files/size-format/time-format toggles that used to
 live at the bottom of this menu are Options-screen and keyboard-only
 now (`.` and the `z` chord) — they're a view setting for the whole
 panel, not an action on whatever the menu was opened for.
+
+## Multiply
+
+`mm` (`m` opens the context menu, `m` again fires this one directly),
+or the context menu's **Multiply**.
+
+Creates one or more copies of the current selection right beside it.
+An ordinary Copy underneath — a directory works just as well as a
+plain file — never a Move; the originals are always left in place.
+
+| Field | Meaning |
+|---|---|
+| Separator | Sits between the original name and whatever the strategy below produces — free-form (`_`, `-`, `.`, ...), `_` by default |
+| Strategy | **Numbered** (default): counts up from 1 until a free name is found — `report_1.txt`, `report_2.txt`, however many already exist. **Fixed suffix text**: the same literal text every time (see "Suffix text" below) — duplicating the *result* again doubles it, `report_copy_copy.txt`, by applying the same one-shot rule a second time, not an automatic retry within one Multiply. **Date/time**: a timestamp, computed once, never retried if it happens to collide |
+| Suffix text | "Fixed suffix text"'s own literal suffix — `copy` by default |
+| Number padding (digits) | Zero-pads "Numbered"'s own number — `3` gives `report_001.txt`, `report_002.txt`, ...; `0` (default) pads nothing |
+| Date/time format | "Date/time"'s own format string — Go's own reference-time layout by default (e.g. `2006-1-2 15:04:05`), or a strftime-style one instead once "Strftime-style format" below is on (e.g. `%Y-%-m-%-d %H:%M:%S`) — both render the same `2026-11-9 23:59:59` |
+| Number of duplicates | How many copies this one run creates — `1` by default, capped by "Maximum number of duplicates" under Options |
+| Strategy: Numbered / Fixed suffix text / Date/time | A separate row below the fields, not a dropdown — activating it cycles to the next strategy in place, the same "activating it is the change" behavior every enum setting in Options already has |
+| Strftime-style format | Toggles which syntax "Date/time format" means, the same "a checkbox picks which syntax the text field means" shape the filter menu's own Glob/Regex toggle already uses |
+| Use Unix timestamp | Bypasses "Date/time format" entirely for a raw Unix timestamp |
+
+A live **Preview** line shows the exact name the *first* duplicate
+would get right now, given every field's current value — real, not a
+guess: it actually checks the filesystem the same way the eventual
+copy will. With more than one target selected, or more than one
+duplicate requested, the preview names only the first one and
+summarizes the rest by count, since the Numbered strategy's own "next"
+name genuinely depends on the previous one already existing on disk,
+which a preview alone can't simulate ahead of time for every one of
+them.
+
+**Self-adapting defaults** — the one setting group in this whole app
+that works this way, per explicit design: whatever is chosen here
+becomes the new default shown next time, under Options → Behavior →
+Duplicate (see [Settings reference](#settings-reference)). This only
+happens once **Duplicate** is actually pressed; editing a field and
+then **Cancel** never touches the sticky default at all.
 
 ## Batch rename
 
@@ -1062,6 +1104,15 @@ Every key breakthrough recognizes, with its default:
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
 | `trash_quota_percent` | `10` | Keep the trash at or under this share of its filesystem; `0` disables |
+| `duplicate_separator` | `_` | Multiply's own separator between the original name and its suffix |
+| `duplicate_strategy` | `numbered` | Multiply's own naming strategy: `numbered`, `suffix_text`, or `datetime` |
+| `duplicate_suffix_text` | `copy` | Multiply's own literal suffix for the `suffix_text` strategy |
+| `duplicate_number_padding` | `0` | Multiply's own zero-padding width for the `numbered` strategy |
+| `duplicate_datetime_format` | `2006-01-02_15-04-05` | Multiply's own format string for the `datetime` strategy |
+| `duplicate_datetime_strftime` | `false` | Interpret `duplicate_datetime_format` as strftime instead of Go's reference-time layout |
+| `duplicate_datetime_use_unix` | `false` | Multiply's `datetime` strategy appends a raw Unix timestamp instead of a formatted one |
+| `duplicate_count` | `1` | How many duplicates one Multiply run creates at once |
+| `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 
 ## Keyboard reference

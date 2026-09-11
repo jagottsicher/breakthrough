@@ -128,15 +128,18 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Paste,
-                  Move to Trash, Properties, and submenus for rarer
-                  actions — tail -f/chown/chmod/sed/Batch rename/Undo
-                  last rename/Remove/Paste following symlinks,
-                  Selection, Tabs & Split). "m" opens the same menu
-                  from the keyboard. Once it's open, "l"/"e"/"r"/"c"/
-                  "x"/"d"/"i" — the same letters those seven already
-                  have on their own — fire that entry directly,
-                  without arrowing down to it first.
+  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Multiply,
+                  Paste, Move to Trash, Properties, and submenus for
+                  rarer actions — tail -f/chown/chmod/sed/Batch
+                  rename/Undo last rename/Remove/Paste following
+                  symlinks, Selection, Tabs & Split). "m" opens the
+                  same menu from the keyboard. Once it's open,
+                  "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
+                  seven already have on their own — fire that entry
+                  directly, without arrowing down to it first. "m"
+                  again ("mm") does too, for Multiply specifically —
+                  the one entry with no plain-key equivalent of its
+                  own to mirror, since it only ever opens from here.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -369,6 +372,40 @@ var helpText = strings.TrimLeft(`
 
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
+
+[::b]Multiply dialog ("mm", or context menu's "Multiply")[::-]
+
+  Creates one or more copies of the selection right beside it, each
+  named by the current strategy — an ordinary Copy underneath (works on
+  a directory just as well as a file), never a Move.
+
+  Separator            Sits between the original name and the
+                        strategy's own suffix
+  Strategy             Numbered (default): counts up from 1 until a
+                        free name is found. Fixed suffix text: the
+                        same literal text every time — duplicating the
+                        result again doubles it ("_copy_copy"), rather
+                        than retrying automatically. Date/time: a
+                        timestamp, computed once
+  Suffix text           "Fixed suffix text"'s own literal suffix
+  Number padding        Zero-pads "Numbered"'s own number ("_001"
+                        instead of "_1")
+  Date/time format      "Date/time"'s own format string — Go's
+                        reference-time layout by default, or a
+                        strftime-style one with "Strftime-style
+                        format" below turned on
+  Number of duplicates  How many copies this one run creates, capped
+                        by "Maximum number of duplicates" under
+                        Options
+  Preview               Live — the exact name the first duplicate
+                        would get right now, given every field's
+                        current value
+
+  Whatever's chosen here becomes the new default shown next time (all
+  of the above, under Options → Behavior → Duplicate) — the one
+  setting group in this whole app that adapts itself this way, per its
+  own explicit design. Only on actually pressing "Duplicate": editing a
+  field and then Cancel never touches the sticky default at all.
 
 [::b]Search dialog ("f")[::-]
 

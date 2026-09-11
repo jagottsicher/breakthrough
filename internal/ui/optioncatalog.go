@@ -408,14 +408,17 @@ func optionCategories() []optionCategory {
 					},
 				)),
 				// "Duplicate" subsection — per the user's own explicit
-				// request. Unlike every other setting in this app, these
-				// nine are self-adapting: duplicateSelection (root.go)
-				// writes back through these exact same apply functions
-				// whenever a value is actually chosen in the Duplicate
-				// dialog itself, not just here — so whatever was picked
-				// there becomes the new default shown here next time,
-				// "so passt sich das den Vorlieben an" being the user's
-				// own explicit words for it.
+				// request. Unlike every other setting in this app, eight
+				// of these nine are self-adapting: applyDuplicateSelection
+				// (duplicate.go) writes back through these exact same
+				// apply functions whenever the Duplicate dialog itself is
+				// actually confirmed, not just here — so whatever was
+				// chosen there becomes the new default shown here next
+				// time, "so passt sich das den Vorlieben an" being the
+				// user's own explicit words for it. The ninth,
+				// "duplicate_count_max", is deliberately not — it's a
+				// safety bound the dialog itself never offers a field
+				// for, only ever set here.
 				withSection("Duplicate", stringOption("duplicate_separator", "Separator",
 					"Sits between the original name and Duplicate's own suffix — free-form: "+
 						"\"_\", \"-\", \".\" are the obvious choices, but nothing here requires "+
@@ -652,6 +655,28 @@ func optionCategories() []optionCategory {
 			},
 		},
 	}
+}
+
+// optionSpecByKey finds one setting's own optionSpec by its config key,
+// searching every category — used by callers outside optionsscreen.go
+// itself that still want to read/apply/enumerate-choices-for a setting
+// through the exact same path the Options screen uses, rather than
+// duplicating that logic against r.settings directly. The Duplicate
+// dialog (see duplicate.go) is the first such caller: its own
+// "self-adapting defaults" behavior — whatever gets chosen there
+// becomes the new sticky default — reuses these optionSpecs' own apply
+// functions verbatim, so the two persistence paths can never drift
+// apart the way two independent copies of the same switch statement
+// eventually would.
+func optionSpecByKey(key string) (optionSpec, bool) {
+	for _, cat := range optionCategories() {
+		for _, opt := range cat.options {
+			if opt.key == key {
+				return opt, true
+			}
+		}
+	}
+	return optionSpec{}, false
 }
 
 // settingValueByKey reads one setting out of a config.Settings by its
