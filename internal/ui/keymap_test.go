@@ -320,6 +320,24 @@ func TestChordSwapsTheButtonBarAndRestoresIt(t *testing.T) {
 	}
 }
 
+// TestChordTimeoutIsAConfiguredSetting pins that startChord's own
+// deadline actually comes from settings.ChordTimeoutMS, a live setting
+// (see its own doc comment in config/settings.go), rather than the
+// fixed constant chordTimeout used to be before this setting existed —
+// starting a chord with a deliberately distinctive configured timeout
+// must produce a deadline reflecting it, not the old 4-second default.
+func TestChordTimeoutIsAConfiguredSetting(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.settings.ChordTimeoutMS = 60000 // a value nothing else here would produce by coincidence
+
+	root.HandlePlainKey(runeEvent('g'))
+
+	remaining := time.Until(root.chordDeadline)
+	if remaining < 59*time.Second || remaining > 61*time.Second {
+		t.Errorf("chord deadline %v from now, want close to the configured 60s", remaining)
+	}
+}
+
 func TestChordTimeoutCancelsSilently(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.HandlePlainKey(runeEvent('z'))

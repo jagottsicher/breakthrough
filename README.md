@@ -137,8 +137,10 @@ terminal.
   filter box, the path editor, or the command line. No modifier key
   means no terminal/layout/multiplexer to trip over — the same approach
   ranger, nnn, lf and vifm all settled on. Related, rarer actions sit
-  behind a chord (a letter, then one more within about four seconds,
-  with a countdown in the status bar and a clickable legend in the
+  behind a chord (a letter, then one more within about four seconds by
+  default — "Chord timeout (ms)" under Options, Behavior's own
+  Miscellaneous subsection — with a countdown in the status bar and a
+  clickable legend in the
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
