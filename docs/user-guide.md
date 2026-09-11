@@ -56,9 +56,10 @@ wherever both exist: `d` is reversible (the Trash), `D` asks first and
 isn't. Browsing the Trash itself flips two of these to their
 trash-specific meaning: `r` restores instead of renaming, `D` empties
 the whole Trash instead of removing one file. `V` is `v` Paste's own
-bigger sibling too — see [Paste, following
-symlinks](#paste-following-symlinks) — and, like `D`, always asks first
-rather than firing on a single keypress.
+bigger sibling too, for symlinks specifically — see [Paste, following
+symlinks](#paste-following-symlinks) — flipping the configured "Follow
+symlinks" default for one paste, and asking first only when that flip
+is what actually turns dereferencing on.
 
 `h`/`k`/`M` target whichever of Properties/Details is relevant right
 now (Properties first if both are open on the same file), opening the
@@ -620,6 +621,10 @@ own core files, say) needs Overwrite specifically — a merge would
 leave anything an attacker planted there, that the clean source never
 had to begin with, completely untouched.
 
+This whole dialog can be skipped for directory-vs-directory conflicts
+specifically — see [Auto-merge directories](#auto-merge-directories)
+below.
+
 `Up`/`Down` move between the options, `Enter`/`Space` applies the
 highlighted one, `Escape` is the same as the preselected "Skip" — a
 stray keypress can never overwrite anything by accident. Clicking
@@ -786,37 +791,105 @@ already done by the time it started.
 
 ### Paste, following symlinks
 
-Plain Paste (`v`) recreates a symlink as a symlink at the destination —
-the link itself moves or gets copied, never whatever it points to.
+Whether plain Paste (`v`) recreates a symlink as a symlink at the
+destination, or instead replaces it with a real, independent copy of
+whatever it points to, is a configured default — "Follow symlinks"
+under Options, set separately for Copy and Move (`copy_follow_symlinks`/
+`move_follow_symlinks`, both `false` by default). With the default off,
+plain `v` recreates the link itself; the target is never touched. With
+it on, plain `v` dereferences instead — any symlink among the pasted
+items, including one nested somewhere inside a folder being pasted, is
+replaced with a real copy of whatever it resolves to, following a
+multi-hop chain of links if there is one.
+
 `V` (Shift+Paste, or the context menu's "Paste, following symlinks")
-is the dereferencing alternative: any symlink among the pasted items —
-including one nested somewhere inside a folder being pasted — is
-replaced at the destination with a real, independent copy of whatever
-it resolves to, following a multi-hop chain of links if there is one.
+flips that default for this one paste only, without changing the
+setting itself: if the default is off, `V` dereferences for this paste;
+if it's already on, `V` instead recreates the link as a link for this
+one paste, the same as plain `v` would with the setting off.
 
 This works the same way whether the clipboard is holding a Copy or a
-Cut selection. For a Cut, only the *original link itself* is removed
-once its content has safely landed at the destination — never whatever
-it pointed to, no matter how far away that actually lives (a different
-directory, a different filesystem, a network mount like NFS or EFS).
-A real (non-symlink) folder that merely contains a symlink somewhere
-inside it is handled the same careful way: only that nested symlink's
-own entry is ever removed, the target it pointed to is left untouched.
+Cut selection. For a Cut that ends up dereferencing, only the *original
+link itself* is removed once its content has safely landed at the
+destination — never whatever it pointed to, no matter how far away that
+actually lives (a different directory, a different filesystem, a
+network mount like NFS or EFS). A real (non-symlink) folder that merely
+contains a symlink somewhere inside it is handled the same careful way:
+only that nested symlink's own entry is ever removed, the target it
+pointed to is left untouched.
 
 Because dereferencing can turn a small, instant symlink into an
 arbitrarily large copy — and, for a Cut, permanently removes the
-original link — `V` always asks for confirmation first, unlike plain
-`v`. Declining leaves the clipboard and everything on disk exactly as
-it was, ready for an ordinary Paste instead.
+original link — `V` only asks for confirmation first when it's actually
+the thing turning dereferencing on for this paste (the configured
+default was off). Declining leaves the clipboard and everything on disk
+exactly as it was, ready for an ordinary Paste instead. Flipping
+dereferencing back *off* for one paste (the default was already on)
+needs no such confirmation — that's the safer of the two directions, no
+different from an ordinary Paste that was never going to dereference
+anything at all. Turning the setting itself on in Options, so that
+plain `v` dereferences by default, is its own deliberate consent and is
+never asked about again on every single paste after that.
 
-One trade-off worth knowing: `V` always copies an item's full content
-before removing its source, even for a large folder that only contains
-a symlink somewhere deep inside it — there's currently no fast path
-that moves the non-symlink parts of a selection instantly and only
-dereferences the symlinks it actually finds along the way. For the
-common case (dereferencing an actual symlink, or a folder that mostly
-consists of one) this doesn't matter; it's only a real cost for a huge,
-mostly-ordinary folder pasted with `V` by mistake instead of plain `v`.
+One trade-off worth knowing: dereferencing always copies an item's full
+content before removing its source (for a Cut), even for a large folder
+that only contains a symlink somewhere deep inside it — there's
+currently no fast path that moves the non-symlink parts of a selection
+instantly and only dereferences the symlinks it actually finds along
+the way. For the common case (dereferencing an actual symlink, or a
+folder that mostly consists of one) this doesn't matter; it's only a
+real cost for a huge, mostly-ordinary folder pasted this way by mistake.
+
+### Preserve attributes
+
+"Preserve attributes" under Options (`copy_preserve_attributes`/
+`move_preserve_attributes`, both `true` by default, set separately for
+Copy and Move) controls whether a paste carries the source's own
+permissions, ownership, and modification time over to the destination.
+Turning it off leaves the destination at whatever creating it just
+produced instead — its own default permissions (narrowed by your
+umask, the same as any newly created file) and its own real creation
+time.
+
+This has no effect on a same-filesystem Move: that's a single atomic
+rename, the same inode throughout, so its attributes never change
+regardless of the setting. It only matters once a Move falls back to a
+real copy — across filesystems, or when merging into an existing
+directory.
+
+### Auto-merge directories
+
+"Auto-merge directories" under Options (`copy_auto_merge_directories`/
+`move_auto_merge_directories`, both `false` by default, set separately
+for Copy and Move) skips the conflict dialog entirely for a
+directory-vs-directory conflict and resolves it as a merge immediately,
+every time — the same outcome "Merge into existing folder" gives by
+hand (see the table above). A conflict between two files, or a file and
+a directory, always still opens the dialog regardless of this setting,
+since merging has no meaning for either of those shapes.
+
+### Stable symlinks
+
+"Stable symlinks" under Options (`copy_stable_symlinks`/
+`move_stable_symlinks`, both `false` by default, set separately for
+Copy and Move, matching Midnight Commander's own default for the
+equivalent option) rewrites a copied symlink's target to point at its
+new location, if that target lives somewhere inside the very tree being
+copied — rather than keeping the original target string verbatim, the
+default behavior.
+
+Without it, a symlink pointing elsewhere in the tree being copied can
+end up broken once the original source is later moved, renamed, or
+removed: an *absolute* target still points back at the original
+source's own path, which may no longer exist or no longer be what it
+was; a *relative* target that climbs out of the copied root and back in
+by its old name resolves nowhere at all once that root has a different
+name or lives in a different place. A plain relative target that never
+climbs out of the tree being copied (the common case — e.g. a link
+sitting next to its target, or one directory below it via `../`) is
+already unaffected either way, since copying always mirrors the whole
+tree's own structure, keeping such a target correct without any
+rewriting needed.
 
 ## Trash, Remove and Restore
 
@@ -964,6 +1037,14 @@ Every key breakthrough recognizes, with its default:
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
+| `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
+| `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
+| `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |
+| `move_follow_symlinks` | `false` | Move jobs (cut/paste) dereference a symlink by default instead of recreating it as a link |
+| `copy_auto_merge_directories` | `false` | Copy jobs resolve a directory-vs-directory paste conflict as a merge automatically, without asking |
+| `move_auto_merge_directories` | `false` | Move jobs resolve a directory-vs-directory paste conflict as a merge automatically, without asking |
+| `copy_stable_symlinks` | `false` | Copy jobs rewrite a symlink's target to the new location if it points inside the tree being copied |
+| `move_stable_symlinks` | `false` | Move jobs rewrite a symlink's target to the new location if it points inside the tree being moved |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
