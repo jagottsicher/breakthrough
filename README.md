@@ -142,7 +142,7 @@ terminal.
   Miscellaneous subsection — with a countdown in the status bar and a
   clickable legend in the
   button bar): `g` to jump somewhere (`gg` top,
-  `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
+  `gh` home, `gr` `/`, `gb` Trashbin), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
   format, `zo` split orientation, `zw` swap panes), `o` for Options
   (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
@@ -160,8 +160,8 @@ terminal.
   above, a considered trade-off rather than an oversight.
 - A context menu on `m` or right-click, showing only what actually
   applies right now rather than a fixed list of everything it can ever
-  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Paste
-  (Paste only once the clipboard has something in it), Move to Trash,
+  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Multiply,
+  Paste (only once the clipboard has something in it), Move to Trash,
   Properties (editable — name, permissions, click a bit or type the
   octal value directly, owner and group via a scrollable picker of
   every local user/group, modified date and time), plus three `▸`
@@ -178,7 +178,9 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing.
+  entry isn't currently showing does nothing. `m` again (`mm`) does
+  too, for Multiply specifically — the one entry with no plain-key
+  equivalent of its own, since it only ever opens from here.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -329,6 +331,33 @@ terminal.
   time" instead — both, like the Modified column always has, respecting
   the Options overlay's timestamp-vs-formatted toggle and the column's
   own sort.
+- Multiply (`mm`, or the context menu): creates one or more copies of
+  the selection right beside it — a directory works just as well as a
+  file, since it's an ordinary Copy underneath, never a Move. A guided
+  dialog, not a pile of every option shown at once: a Strategy dropdown
+  picks Numbered (default, counts up from 1 until a free name is
+  found), Fixed suffix text (the same literal text every time —
+  duplicating the result again doubles it, `report.txt_copy_copy`,
+  rather than retrying automatically), or Date/time — computed once,
+  with its own second dropdown ("Date/time format type") picking Go
+  format string (default), Strftime-style Format, or Unix timestamp;
+  the format field below it holds each syntax's own independently-
+  edited example text (switching back and forth never loses either
+  one), or — once Unix timestamp is picked — is disabled and shows
+  today's real timestamp instead. Only the current strategy's own
+  fields ever appear at once, never every strategy's combined. The
+  suffix always lands after the original name's own *entire* text,
+  extension included: `archive.tar.gz` duplicates to
+  `archive.tar.gz_1`, never `archive.tar_1.gz` or `archive_1.tar.gz` —
+  nothing about a basename is treated as more "real" than the rest of
+  it just because it follows a dot. A live Preview line shows the exact
+  name the first duplicate would get right now, given every field's
+  current value; Cancel and Duplicate sit bottom-left/bottom-right, the
+  same as every other dialog's own confirm/cancel pair in this app.
+  Whatever's chosen becomes the new default shown next time (Options →
+  Behavior → Duplicate) — the one setting group in this whole app that
+  adapts itself this way — but only once "Duplicate" is actually
+  pressed; Cancel never touches the sticky default.
 - Sed Replace (`E`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex

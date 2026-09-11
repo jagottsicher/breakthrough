@@ -154,6 +154,22 @@ func intOption(key, label, help string, get func(*Root) int, set func(*Root, int
 	}
 }
 
+// stringOption builds a free-text setting — editOptionValue's own
+// default case already accepts arbitrary text for anything that isn't
+// KindInt/KindBool/an enum, so this needs no acceptance-func wiring of
+// its own the way intOption does; it exists purely so a string setting
+// reads the same as every other entry in this file instead of a bare
+// struct literal.
+func stringOption(key, label, help string, get func(*Root) string, set func(*Root, string)) optionSpec {
+	return optionSpec{
+		key:   key,
+		label: label,
+		help:  help,
+		value: get,
+		apply: set,
+	}
+}
+
 // optionCategories is the whole catalogue, in the order the Options
 // screen lists them.
 //
@@ -391,6 +407,157 @@ func optionCategories() []optionCategory {
 						r.persistSetting("move_stable_symlinks", strconv.FormatBool(b))
 					},
 				)),
+				// "Duplicate" subsection — per the user's own explicit
+				// request. Unlike every other setting in this app, eight
+				// of these nine are self-adapting: applyDuplicateSelection
+				// (duplicate.go) writes back through these exact same
+				// apply functions whenever the Duplicate dialog itself is
+				// actually confirmed, not just here — so whatever was
+				// chosen there becomes the new default shown here next
+				// time, "so passt sich das den Vorlieben an" being the
+				// user's own explicit words for it. The ninth,
+				// "duplicate_count_max", is deliberately not — it's a
+				// safety bound the dialog itself never offers a field
+				// for, only ever set here.
+				withSection("Duplicate", stringOption("duplicate_separator", "Separator",
+					"Sits between the original name — its extension included, untouched — and "+
+						"Duplicate's own suffix — free-form: \"_\", \"-\", \".\" are the obvious "+
+						"choices, but nothing here requires any particular one.\n\n"+
+						"\"_\" by default: \"report.txt\" duplicates to \"report.txt_1\" (with the "+
+						"default \"Numbered\" strategy below) — always after the *entire* original "+
+						"name, never before an extension: \"archive.tar.gz\" duplicates to "+
+						"\"archive.tar.gz_1\", not \"archive.tar_1.gz\" or \"archive_1.tar.gz\". "+
+						"Nothing about a basename is treated as somehow more \"real\" than the "+
+						"rest of it just because it follows a dot.",
+					func(r *Root) string { return r.settings.DuplicateSeparator },
+					func(r *Root, v string) {
+						r.settings.DuplicateSeparator = v
+						r.persistSetting("duplicate_separator", v)
+					},
+				)),
+				withSection("Duplicate", optionSpec{
+					key:   "duplicate_strategy",
+					label: "Naming strategy",
+					help: "How Duplicate names a copy — always appended after the original " +
+						"name's own entire text, extension included (see \"Separator\" above).\n\n" +
+						"\"Numbered\" (the default) appends an incrementing number, scanning " +
+						"upward from 1 until a free name is found — \"report.txt_1\", then " +
+						"\"report.txt_2\", and so on, however many duplicates already exist.\n\n" +
+						"\"Fixed suffix text\" appends the same literal text every time (see " +
+						"\"Suffix text\" below) — \"report.txt_copy\". If that already exists, this " +
+						"does not count up: duplicating \"report.txt_copy\" itself produces " +
+						"\"report.txt_copy_copy\", the same rule applied again to the new name — " +
+						"not an automatic retry within one Duplicate.\n\n" +
+						"\"Date/time\" appends a timestamp (see the three settings below) — " +
+						"computed once, not retried if it happens to collide.",
+					value: func(r *Root) string { return r.settings.DuplicateStrategy },
+					apply: func(r *Root, v string) {
+						r.settings.DuplicateStrategy = v
+						r.persistSetting("duplicate_strategy", v)
+					},
+					choices: func(*Root) []optionChoice {
+						return []optionChoice{
+							{value: "numbered", label: "Numbered"},
+							{value: "suffix_text", label: "Fixed suffix text"},
+							{value: "datetime", label: "Date/time"},
+						}
+					},
+				}),
+				withSection("Duplicate", stringOption("duplicate_suffix_text", "Suffix text",
+					"The literal text \"Fixed suffix text\" (see the strategy above) appends — "+
+						"only relevant while that strategy is selected.\n\n"+
+						"\"copy\" by default: \"report.txt\" duplicates to \"report.txt_copy\".",
+					func(r *Root) string { return r.settings.DuplicateSuffixText },
+					func(r *Root, v string) {
+						r.settings.DuplicateSuffixText = v
+						r.persistSetting("duplicate_suffix_text", v)
+					},
+				)),
+				withSection("Duplicate", intOption("duplicate_number_padding", "Number padding (digits)",
+					"How many digits the \"Numbered\" strategy (see above) pads its own number "+
+						"to with leading zeros — only relevant while that strategy is selected.\n\n"+
+						"0 (the default) disables padding entirely: \"report.txt_1\", "+
+						"\"report.txt_2\", ... \"report.txt_10\". Set to, say, 3 for "+
+						"\"report.txt_001\", \"report.txt_002\", ... \"report.txt_010\" instead — "+
+						"keeps a directory's own listing sorted in numeric order by name even "+
+						"once there are 10 or more duplicates.",
+					func(r *Root) int { return r.settings.DuplicateNumberPadding },
+					func(r *Root, n int) {
+						r.settings.DuplicateNumberPadding = n
+						r.persistSetting("duplicate_number_padding", strconv.Itoa(n))
+					},
+				)),
+				withSection("Duplicate", stringOption("duplicate_datetime_format", "Date/time format",
+					"The format string the \"Date/time\" strategy (see above) renders its own "+
+						"timestamp with — only relevant while that strategy is selected, and "+
+						"ignored entirely once \"Use Unix timestamp\" below is on.\n\n"+
+						"Interpreted as Go's own reference-time layout by default, or as a "+
+						"strftime-style format instead once \"Strftime-style format\" below is "+
+						"on — see that setting's own explanation for the exact format string "+
+						"each mode expects to render the same example date and time.",
+					func(r *Root) string { return r.settings.DuplicateDateTimeFormat },
+					func(r *Root, v string) {
+						r.settings.DuplicateDateTimeFormat = v
+						r.persistSetting("duplicate_datetime_format", v)
+					},
+				)),
+				withSection("Duplicate", boolOption("duplicate_datetime_strftime", "Strftime-style format",
+					"How \"Date/time format\" above is interpreted — in the Multiply dialog "+
+						"itself, its own \"Date/time format type\" dropdown picks this (and "+
+						"\"Use Unix timestamp\" below) directly instead of a pair of separate "+
+						"toggles.\n\n"+
+						"Off (the default): Go's own reference-time layout, the format Go's code "+
+						"itself uses internally — e.g. \"2006-1-2 15:04:05\" renders as "+
+						"\"2026-11-9 23:59:59\".\n\n"+
+						"On: a strftime-style format instead, more familiar from date(1)/cron — "+
+						"e.g. \"%Y-%-m-%-d %H:%M:%S\" renders that exact same \"2026-11-9 "+
+						"23:59:59\". Supports %Y %y %m %d %H %I %M %S %p %B %b %A %a %j %Z %z, "+
+						"plus GNU's \"%-\" no-padding variant (%-m, %-d, %-I) for the fields "+
+						"where a leading zero is usually unwanted in a filename — %-H falls back "+
+						"to the padded form regardless, since Go's own layout has no unpadded "+
+						"24-hour token to translate it to.",
+					false,
+					func(r *Root) bool { return r.settings.DuplicateDateTimeStrftime },
+					func(r *Root, b bool) {
+						r.settings.DuplicateDateTimeStrftime = b
+						r.persistSetting("duplicate_datetime_strftime", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Duplicate", boolOption("duplicate_datetime_use_unix", "Use Unix timestamp",
+					"Bypasses \"Date/time format\" above entirely in favor of a raw Unix "+
+						"timestamp (seconds since 1970-01-01 UTC) — for anyone who'd rather not "+
+						"deal with a format string at all. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.DuplicateDateTimeUseUnix },
+					func(r *Root, b bool) {
+						r.settings.DuplicateDateTimeUseUnix = b
+						r.persistSetting("duplicate_datetime_use_unix", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Duplicate", intOption("duplicate_count", "Number of duplicates",
+					"How many duplicates one Duplicate invocation creates at once — each named "+
+						"in sequence by the strategy above (three \"Numbered\" duplicates of "+
+						"\"report.txt\" become \"report.txt_1\", \"report.txt_2\", "+
+						"\"report.txt_3\" in one go).\n\n"+
+						"1 by default — today's exact single-duplicate behavior, unchanged. "+
+						"Capped by \"Maximum number of duplicates\" below.",
+					func(r *Root) int { return r.settings.DuplicateCount },
+					func(r *Root, n int) {
+						r.settings.DuplicateCount = n
+						r.persistSetting("duplicate_count", strconv.Itoa(n))
+					},
+				)),
+				withSection("Duplicate", intOption("duplicate_count_max", "Maximum number of duplicates",
+					"The upper bound \"Number of duplicates\" above can be set to — purely a "+
+						"safety net against an accidental \"ten thousand copies\", not a hard "+
+						"limit: raising this is itself just another config value.\n\n"+
+						"100 by default.",
+					func(r *Root) int { return r.settings.DuplicateCountMax },
+					func(r *Root, n int) {
+						r.settings.DuplicateCountMax = n
+						r.persistSetting("duplicate_count_max", strconv.Itoa(n))
+					},
+				)),
 				// "Miscellaneous" subsection — per the user's own explicit
 				// request, for settings that don't belong to a larger
 				// cluster of their own.
@@ -496,6 +663,28 @@ func optionCategories() []optionCategory {
 	}
 }
 
+// optionSpecByKey finds one setting's own optionSpec by its config key,
+// searching every category — used by callers outside optionsscreen.go
+// itself that still want to read/apply/enumerate-choices-for a setting
+// through the exact same path the Options screen uses, rather than
+// duplicating that logic against r.settings directly. The Duplicate
+// dialog (see duplicate.go) is the first such caller: its own
+// "self-adapting defaults" behavior — whatever gets chosen there
+// becomes the new sticky default — reuses these optionSpecs' own apply
+// functions verbatim, so the two persistence paths can never drift
+// apart the way two independent copies of the same switch statement
+// eventually would.
+func optionSpecByKey(key string) (optionSpec, bool) {
+	for _, cat := range optionCategories() {
+		for _, opt := range cat.options {
+			if opt.key == key {
+				return opt, true
+			}
+		}
+	}
+	return optionSpec{}, false
+}
+
 // settingValueByKey reads one setting out of a config.Settings by its
 // config key, in the same literal form a config file would hold.
 //
@@ -535,6 +724,24 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.FilterPersistent), true
 	case "chord_timeout_ms":
 		return strconv.Itoa(s.ChordTimeoutMS), true
+	case "duplicate_separator":
+		return s.DuplicateSeparator, true
+	case "duplicate_strategy":
+		return s.DuplicateStrategy, true
+	case "duplicate_suffix_text":
+		return s.DuplicateSuffixText, true
+	case "duplicate_number_padding":
+		return strconv.Itoa(s.DuplicateNumberPadding), true
+	case "duplicate_datetime_format":
+		return s.DuplicateDateTimeFormat, true
+	case "duplicate_datetime_strftime":
+		return strconv.FormatBool(s.DuplicateDateTimeStrftime), true
+	case "duplicate_datetime_use_unix":
+		return strconv.FormatBool(s.DuplicateDateTimeUseUnix), true
+	case "duplicate_count":
+		return strconv.Itoa(s.DuplicateCount), true
+	case "duplicate_count_max":
+		return strconv.Itoa(s.DuplicateCountMax), true
 	case "copy_preserve_attributes":
 		return strconv.FormatBool(s.CopyPreserveAttributes), true
 	case "move_preserve_attributes":
