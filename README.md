@@ -195,7 +195,11 @@ terminal.
   whatever was there before — the right choice when "overwrite" needs
   to mean "make this identical to the source", not "patch it"); Merge
   is the explicit alternative, keeping whatever the source doesn't
-  also have. Starting a further Paste while one is already running
+  also have. "Auto-merge directories" under Options (off by default,
+  set separately for Copy and Move) skips this dialog entirely for a
+  directory-vs-directory conflict and merges right away every time —
+  a file-vs-file or file-vs-directory conflict always still asks,
+  since merging has no meaning there. Starting a further Paste while one is already running
   queues it rather than running it alongside the first or replacing
   it outright — shown as "(+N queued)" right in the status bar's own
   progress line — and it starts automatically the moment the one ahead
@@ -247,18 +251,36 @@ terminal.
   within one filesystem usually finishes too fast for any of this to
   show anything at all — expected, not a bug: there's nothing to report
   progress on.
-  `V` (Shift+Paste, or the context menu's "Paste, following symlinks")
-  is the dereferencing sibling of plain Paste: any symlink among the
-  pasted items — including one nested inside a folder being pasted —
-  is replaced at the destination with a real, independent copy of
-  whatever it points to (recursively, through a multi-hop chain too),
-  instead of being recreated as a symlink. Works for both a Copy- and a
-  Cut-marked clipboard alike; for a Cut, only the original link itself
-  is removed afterward — never whatever it pointed to, however far away
-  that actually lives (a different filesystem, a network mount). Always
-  asks for confirmation first, unlike plain `v`: dereferencing can turn
-  a small, instant symlink into an arbitrarily large copy, so this is
-  never a single, undialogued keypress.
+  Plain `v` follows whichever "Follow symlinks" default is set under
+  Options for Copy or Move (off by default, set separately for each):
+  off recreates a symlink as a symlink at the destination, on replaces
+  it — and any symlink nested inside a pasted folder — with a real,
+  independent copy of whatever it points to (recursively, through a
+  multi-hop chain too), instead. `V` (Shift+Paste, or the context
+  menu's "Paste, following symlinks") flips that default for this one
+  paste only, without changing the setting itself. Works for both a
+  Copy- and a Cut-marked clipboard alike; for a Cut, only the original
+  link itself is removed afterward — never whatever it pointed to,
+  however far away that actually lives (a different filesystem, a
+  network mount). `V` only asks for confirmation first when it's
+  actually the thing turning dereferencing on (the configured default
+  was off) — dereferencing can turn a small, instant symlink into an
+  arbitrarily large copy, so activating it is never a single,
+  undialogued keypress; flipping it back off for one paste needs no
+  such confirmation, since that's the safer direction.
+  Two more Copy/Move settings round this out, both under Options and
+  set separately for Copy and Move: "Preserve attributes" (on by
+  default) carries the source's own permissions, ownership, and
+  modification time over to the destination — turning it off leaves
+  the destination at whatever creating it just produced. "Stable
+  symlinks" (off by default, matching Midnight Commander's own default
+  for the equivalent option) rewrites a copied symlink's target to
+  point at its new location if that target lives inside the tree being
+  copied, rather than keeping the original target verbatim — without
+  it, such a link can end up pointing back at the original source (an
+  absolute target) or nowhere at all (a relative target that climbed
+  out of the copied root and back in by its old name) once that source
+  is later moved, renamed, or removed.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
   your own trash — recursively for a directory, no confirmation, since
   that's the reversible action by design. `D`, Ctrl+Entf (best-effort —

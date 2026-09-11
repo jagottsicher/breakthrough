@@ -272,6 +272,119 @@ func optionCategories() []optionCategory {
 			},
 		},
 		{
+			name: "Copy & Move",
+			options: []optionSpec{
+				boolOption("copy_preserve_attributes", "Copy preserves attributes",
+					"Whether a Copy job carries the source's own permissions, ownership and "+
+						"modification time over to the destination.\n\n"+
+						"On (the default) matches what you almost always want. Off leaves the "+
+						"destination at whatever creating it just produced — its own default "+
+						"permissions (narrowed by your umask, same as any new file) and its own "+
+						"real creation time.",
+					false,
+					func(r *Root) bool { return r.settings.CopyPreserveAttributes },
+					func(r *Root, b bool) {
+						r.settings.CopyPreserveAttributes = b
+						r.persistSetting("copy_preserve_attributes", strconv.FormatBool(b))
+					},
+				),
+				boolOption("move_preserve_attributes", "Move preserves attributes",
+					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
+						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
+						"the same inode throughout, so its attributes never change regardless of "+
+						"this setting. It only matters once a move falls back to a real copy — "+
+						"across filesystems, or merging into an existing directory.",
+					false,
+					func(r *Root) bool { return r.settings.MovePreserveAttributes },
+					func(r *Root, b bool) {
+						r.settings.MovePreserveAttributes = b
+						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
+					},
+				),
+				boolOption("copy_follow_symlinks", "Copy follows symlinks",
+					"The default a Copy paste (\"v\") uses when the selection includes a "+
+						"symlink: dereference it, writing a real copy of whatever it points to, "+
+						"instead of a new symlink pointing at the same place.\n\n"+
+						"Off (the default) copies the link itself. Pressing \"V\" instead of \"v\" "+
+						"flips this once, for that one paste only, without changing this setting.\n\n"+
+						"Worth leaving off: dereferencing can silently pull in far more data than "+
+						"the size shown in the panel (a link to a large file or an entire "+
+						"directory tree), and it can't be undone back into \"just a link\" "+
+						"afterward.",
+					false,
+					func(r *Root) bool { return r.settings.CopyFollowSymlinks },
+					func(r *Root, b bool) {
+						r.settings.CopyFollowSymlinks = b
+						r.persistSetting("copy_follow_symlinks", strconv.FormatBool(b))
+					},
+				),
+				boolOption("move_follow_symlinks", "Move follows symlinks",
+					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
+						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
+						"paste the same way.",
+					false,
+					func(r *Root) bool { return r.settings.MoveFollowSymlinks },
+					func(r *Root, b bool) {
+						r.settings.MoveFollowSymlinks = b
+						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
+					},
+				),
+				boolOption("copy_auto_merge_directories", "Copy auto-merges directories",
+					"Whether a Copy paste that runs into a directory already existing at the "+
+						"destination combines the two automatically, without asking.\n\n"+
+						"Only ever applies when both sides are directories — a conflict between two "+
+						"files, or a file and a directory, always still asks, since \"merge\" has no "+
+						"meaning there. Off (the default) shows the usual conflict dialog every "+
+						"time, so a paste job never silently starts combining directory contents.",
+					false,
+					func(r *Root) bool { return r.settings.CopyAutoMergeDirectories },
+					func(r *Root, b bool) {
+						r.settings.CopyAutoMergeDirectories = b
+						r.persistSetting("copy_auto_merge_directories", strconv.FormatBool(b))
+					},
+				),
+				boolOption("move_auto_merge_directories", "Move auto-merges directories",
+					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
+					false,
+					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
+					func(r *Root, b bool) {
+						r.settings.MoveAutoMergeDirectories = b
+						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
+					},
+				),
+				boolOption("copy_stable_symlinks", "Copy keeps symlinks stable",
+					"Whether a symlink whose target lives inside the tree being copied gets "+
+						"that target rewritten to point at the corresponding new location, instead "+
+						"of keeping the original target verbatim.\n\n"+
+						"Off (the default) copies the link's target exactly as it was. Left as is, "+
+						"a link pointing elsewhere in the very tree being copied can end up "+
+						"pointing back at the original source (an absolute target) or resolving "+
+						"nowhere at all (a relative target that climbed out of the copied root and "+
+						"back in by its old name) once that source is later moved, renamed or "+
+						"removed.",
+					false,
+					func(r *Root) bool { return r.settings.CopyStableSymlinks },
+					func(r *Root, b bool) {
+						r.settings.CopyStableSymlinks = b
+						r.persistSetting("copy_stable_symlinks", strconv.FormatBool(b))
+					},
+				),
+				boolOption("move_stable_symlinks", "Move keeps symlinks stable",
+					"Move's own counterpart to \"Copy keeps symlinks stable\". Has no effect on a "+
+						"same-filesystem move (the fast path never touches an individual symlink at "+
+						"all) or on a move with \"Follow symlinks\" on (nothing survives as a link "+
+						"to rewrite) — it only matters once a move falls back to a real, "+
+						"link-preserving copy.",
+					false,
+					func(r *Root) bool { return r.settings.MoveStableSymlinks },
+					func(r *Root, b bool) {
+						r.settings.MoveStableSymlinks = b
+						r.persistSetting("move_stable_symlinks", strconv.FormatBool(b))
+					},
+				),
+			},
+		},
+		{
 			name: "Trash",
 			options: []optionSpec{
 				boolOption("trash_persistent", "Keep trash across sessions",
@@ -352,6 +465,22 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MouseEnabled), true
 	case "filter_persistent":
 		return strconv.FormatBool(s.FilterPersistent), true
+	case "copy_preserve_attributes":
+		return strconv.FormatBool(s.CopyPreserveAttributes), true
+	case "move_preserve_attributes":
+		return strconv.FormatBool(s.MovePreserveAttributes), true
+	case "copy_follow_symlinks":
+		return strconv.FormatBool(s.CopyFollowSymlinks), true
+	case "move_follow_symlinks":
+		return strconv.FormatBool(s.MoveFollowSymlinks), true
+	case "copy_auto_merge_directories":
+		return strconv.FormatBool(s.CopyAutoMergeDirectories), true
+	case "move_auto_merge_directories":
+		return strconv.FormatBool(s.MoveAutoMergeDirectories), true
+	case "copy_stable_symlinks":
+		return strconv.FormatBool(s.CopyStableSymlinks), true
+	case "move_stable_symlinks":
+		return strconv.FormatBool(s.MoveStableSymlinks), true
 	}
 	return "", false
 }
