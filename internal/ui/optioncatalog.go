@@ -222,7 +222,11 @@ func optionCategories() []optionCategory {
 		{
 			name: "Behavior",
 			options: []optionSpec{
-				boolOption("restore_tabs", "Restore tabs on start",
+				// "General" — per the user's own explicit request, this
+				// first group gets a section header of its own too, the
+				// same as every group after it, rather than being the one
+				// unlabeled exception at the top.
+				withSection("General", boolOption("restore_tabs", "Restore tabs on start",
 					"Whether the tabs that were open when you last quit are reopened on the next start.\n\n"+
 						"The layout is saved on a clean exit only. Starting breakthrough with an "+
 						"explicit directory (\"breakthrough /some/path\") opens just that instead, "+
@@ -233,8 +237,8 @@ func optionCategories() []optionCategory {
 						r.settings.RestoreTabs = b
 						r.persistSetting("restore_tabs", strconv.FormatBool(b))
 					},
-				),
-				boolOption("split_stacked", "Split view stacked",
+				)),
+				withSection("General", boolOption("split_stacked", "Split view stacked",
 					"How split view (\"s\") divides the window between its two panes.\n\n"+
 						"Off puts them side by side, which suits a wide terminal and keeps every "+
 						"row of both listings visible. On stacks them above each other, which "+
@@ -244,8 +248,8 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.settings.SplitStacked },
 					func(r *Root, b bool) { r.setSplitStacked(b) },
-				),
-				boolOption("mouse_enabled", "Mouse reporting",
+				)),
+				withSection("General", boolOption("mouse_enabled", "Mouse reporting",
 					"Whether clicks and drags work in breakthrough at all.\n\n"+
 						"On (the default) lets you click, drag, and scroll — but it also hands "+
 						"every mouse event to breakthrough instead of your terminal emulator, "+
@@ -256,8 +260,8 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.mouseEnabled },
 					func(r *Root, b bool) { r.setMouseEnabled(b) },
-				),
-				boolOption("filter_persistent", "Filter carries over between directories",
+				)),
+				withSection("General", boolOption("filter_persistent", "Filter carries over between directories",
 					"Whether the filter menu's own text/glob/regex pattern and its size/"+
 						"modified-time toggles stay active when you move to a different directory.\n\n"+
 						"On (the default) keeps browsing with the same filter switched on until "+
@@ -269,7 +273,7 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.settings.FilterPersistent },
 					func(r *Root, b bool) { r.setFilterPersistent(b) },
-				),
+				)),
 				// "Copy & Move" subsection — per the user's own explicit
 				// request, these eight settings belong grouped under
 				// Behavior rather than costing their own top-level
@@ -290,19 +294,9 @@ func optionCategories() []optionCategory {
 						r.persistSetting("copy_preserve_attributes", strconv.FormatBool(b))
 					},
 				)),
-				withSection("Copy & Move", boolOption("move_preserve_attributes", "Move preserves attributes",
-					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
-						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
-						"the same inode throughout, so its attributes never change regardless of "+
-						"this setting. It only matters once a move falls back to a real copy — "+
-						"across filesystems, or merging into an existing directory.",
-					false,
-					func(r *Root) bool { return r.settings.MovePreserveAttributes },
-					func(r *Root, b bool) {
-						r.settings.MovePreserveAttributes = b
-						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
-					},
-				)),
+				// Grouped Copy-then-Move (all four Copy settings, then
+				// all four Move ones) rather than alternating pairs —
+				// per the user's own explicit request.
 				withSection("Copy & Move", boolOption("copy_follow_symlinks", "Copy follows symlinks",
 					"The default a Copy paste (\"v\") uses when the selection includes a "+
 						"symlink: dereference it, writing a real copy of whatever it points to, "+
@@ -320,17 +314,6 @@ func optionCategories() []optionCategory {
 						r.persistSetting("copy_follow_symlinks", strconv.FormatBool(b))
 					},
 				)),
-				withSection("Copy & Move", boolOption("move_follow_symlinks", "Move follows symlinks",
-					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
-						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
-						"paste the same way.",
-					false,
-					func(r *Root) bool { return r.settings.MoveFollowSymlinks },
-					func(r *Root, b bool) {
-						r.settings.MoveFollowSymlinks = b
-						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
-					},
-				)),
 				withSection("Copy & Move", boolOption("copy_auto_merge_directories", "Copy auto-merges directories",
 					"Whether a Copy paste that runs into a directory already existing at the "+
 						"destination combines the two automatically, without asking.\n\n"+
@@ -343,15 +326,6 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) {
 						r.settings.CopyAutoMergeDirectories = b
 						r.persistSetting("copy_auto_merge_directories", strconv.FormatBool(b))
-					},
-				)),
-				withSection("Copy & Move", boolOption("move_auto_merge_directories", "Move auto-merges directories",
-					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
-					false,
-					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
-					func(r *Root, b bool) {
-						r.settings.MoveAutoMergeDirectories = b
-						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
 					},
 				)),
 				withSection("Copy & Move", boolOption("copy_stable_symlinks", "Copy keeps symlinks stable",
@@ -371,6 +345,39 @@ func optionCategories() []optionCategory {
 						r.persistSetting("copy_stable_symlinks", strconv.FormatBool(b))
 					},
 				)),
+				withSection("Copy & Move", boolOption("move_preserve_attributes", "Move preserves attributes",
+					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
+						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
+						"the same inode throughout, so its attributes never change regardless of "+
+						"this setting. It only matters once a move falls back to a real copy — "+
+						"across filesystems, or merging into an existing directory.",
+					false,
+					func(r *Root) bool { return r.settings.MovePreserveAttributes },
+					func(r *Root, b bool) {
+						r.settings.MovePreserveAttributes = b
+						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Copy & Move", boolOption("move_follow_symlinks", "Move follows symlinks",
+					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
+						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
+						"paste the same way.",
+					false,
+					func(r *Root) bool { return r.settings.MoveFollowSymlinks },
+					func(r *Root, b bool) {
+						r.settings.MoveFollowSymlinks = b
+						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Copy & Move", boolOption("move_auto_merge_directories", "Move auto-merges directories",
+					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
+					false,
+					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
+					func(r *Root, b bool) {
+						r.settings.MoveAutoMergeDirectories = b
+						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
+					},
+				)),
 				withSection("Copy & Move", boolOption("move_stable_symlinks", "Move keeps symlinks stable",
 					"Move's own counterpart to \"Copy keeps symlinks stable\". Has no effect on a "+
 						"same-filesystem move (the fast path never touches an individual symlink at "+
@@ -382,6 +389,23 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) {
 						r.settings.MoveStableSymlinks = b
 						r.persistSetting("move_stable_symlinks", strconv.FormatBool(b))
+					},
+				)),
+				// "Miscellaneous" subsection — per the user's own explicit
+				// request, for settings that don't belong to a larger
+				// cluster of their own.
+				withSection("Miscellaneous", intOption("chord_timeout_ms", "Chord timeout (ms)",
+					"How long, in milliseconds, a chord's second key (gg, oo, po, zr, ...) "+
+						"stays live for once the first key is pressed.\n\n"+
+						"4000 (four seconds) by default — long enough to actually read the "+
+						"button bar's own legend for the chord's members first, short enough "+
+						"that an abandoned chord doesn't sit waiting indefinitely for a "+
+						"keystroke that might arrive minutes later and mean something "+
+						"completely different by then.",
+					func(r *Root) int { return r.settings.ChordTimeoutMS },
+					func(r *Root, n int) {
+						r.settings.ChordTimeoutMS = n
+						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
 					},
 				)),
 			},
@@ -414,6 +438,21 @@ func optionCategories() []optionCategory {
 		{
 			name: "Trash",
 			options: []optionSpec{
+				boolOption("trash_confirm", "Confirm before moving to Trash",
+					"Whether \"d\" (Move to Trash) asks for confirmation first, the same way "+
+						"\"D\" (Remove permanently) always has.\n\n"+
+						"Off (the default) moves straight to the trash without asking — the "+
+						"reversible action here has never needed to ask, unlike Remove. Turning "+
+						"this on adds an extra safety net on top of that for anyone who wants "+
+						"one; \"D\"'s own confirmation is unconditional either way, regardless of "+
+						"this setting.",
+					false,
+					func(r *Root) bool { return r.settings.TrashConfirm },
+					func(r *Root, b bool) {
+						r.settings.TrashConfirm = b
+						r.persistSetting("trash_confirm", strconv.FormatBool(b))
+					},
+				),
 				boolOption("trash_persistent", "Keep trash across sessions",
 					"Where deleted files go.\n\n"+
 						"On (the default) uses a lasting trash under your data directory, so a file "+
@@ -478,6 +517,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MtimeUnix), true
 	case "pager":
 		return s.Pager, true
+	case "trash_confirm":
+		return strconv.FormatBool(s.TrashConfirm), true
 	case "trash_persistent":
 		return strconv.FormatBool(s.TrashPersistent), true
 	case "trash_max_age_days":
@@ -492,6 +533,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MouseEnabled), true
 	case "filter_persistent":
 		return strconv.FormatBool(s.FilterPersistent), true
+	case "chord_timeout_ms":
+		return strconv.Itoa(s.ChordTimeoutMS), true
 	case "copy_preserve_attributes":
 		return strconv.FormatBool(s.CopyPreserveAttributes), true
 	case "move_preserve_attributes":

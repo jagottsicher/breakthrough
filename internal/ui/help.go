@@ -57,7 +57,9 @@ var helpText = strings.TrimLeft(`
 
   A capital letter is the bigger sibling of its own lowercase one where
   both exist: "d" is reversible (the Trash), "D" is not (asks first).
-  While browsing the Trash itself, "r" restores and "D" empties it,
+  "d" itself never asks either, unless "Confirm before moving to Trash"
+  is turned on under Options (off by default) — "D" always does either
+  way. While browsing the Trash itself, "r" restores and "D" empties it,
   instead of their ordinary meaning — the same two letters, read
   differently in the one place that makes sense. "V" is "v" Paste's own
   bigger sibling too, for symlinks specifically: plain "v" pastes using
@@ -75,7 +77,9 @@ var helpText = strings.TrimLeft(`
 
   Chords — a letter, then within about four seconds one more (see the
   status bar's own shrinking countdown while one is pending, and the
-  button bar for what the second key can be):
+  button bar for what the second key can be). That timeout itself is
+  "Chord timeout (ms)" under Options (Behavior, Miscellaneous),
+  4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trash
@@ -124,15 +128,15 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, tail -f, Properties,
-                  Select all/Deselect all/Select +/Select -, Copy, Cut,
-                  Paste, chown, chmod, sed, Batch rename, Undo last
-                  rename, Move to Trash, Remove, Go to Trash, Restore
-                  from Trash, Empty Trash, New tab, Close tab, Switch
-                  tab..., Split view, Split above/below, Ping (test),
-                  grep*, zgrep*, du*, df*, and three toggles: hidden
-                  files, size format, modified-time format — *planned,
-                  not built yet)
+  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Paste,
+                  Move to Trash, Properties, and submenus for rarer
+                  actions — tail -f/chown/chmod/sed/Batch rename/Undo
+                  last rename/Remove/Paste following symlinks,
+                  Selection, Tabs & Split). "m" opens the same menu
+                  from the keyboard. Once it's open, "l"/"e"/"r"/"c"/
+                  "x"/"d"/"i" — the same letters those seven already
+                  have on their own — fire that entry directly,
+                  without arrowing down to it first.
 
 [::b]Details sidebar ("I")[::-]
 

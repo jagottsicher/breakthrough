@@ -137,8 +137,10 @@ terminal.
   filter box, the path editor, or the command line. No modifier key
   means no terminal/layout/multiplexer to trip over — the same approach
   ranger, nnn, lf and vifm all settled on. Related, rarer actions sit
-  behind a chord (a letter, then one more within about four seconds,
-  with a countdown in the status bar and a clickable legend in the
+  behind a chord (a letter, then one more within about four seconds by
+  default — "Chord timeout (ms)" under Options, Behavior's own
+  Miscellaneous subsection — with a countdown in the status bar and a
+  clickable legend in the
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trash), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
@@ -172,7 +174,11 @@ terminal.
   the last two only once a split actually exists). `◂ Back`, `Escape`,
   or Left arrow step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
-  Properties, since almost nothing else still applies there.
+  Properties, since almost nothing else still applies there. Once open,
+  `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
+  Cut/Move to Trash/Properties already have on their own — fire that
+  entry directly, without arrowing down to it first; one whose own
+  entry isn't currently showing does nothing.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -282,17 +288,19 @@ terminal.
   out of the copied root and back in by its old name) once that source
   is later moved, renamed, or removed.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
-  your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
-  terminal-dependent; `D` is always the reliable one), or the context
-  menu's "Remove" permanently deletes instead (a file like `rm`, a
-  directory recursively like `rm -rf`, empty or not), always behind a
-  confirmation dialog with Cancel preselected — a single stray keypress
-  can never confirm it by itself. "Go to Trash" (the `g` chord's own
-  `gb`) jumps straight into it without needing to
+  your own trash — recursively for a directory, no confirmation by
+  default, since that's the reversible action by design ("Confirm
+  before moving to Trash" under Options, off by default, asks first
+  anyway for anyone who wants that extra safety net). `D`, Ctrl+Entf
+  (best-effort — terminal-dependent; `D` is always the reliable one),
+  or the context menu's "Remove" permanently deletes instead (a file
+  like `rm`, a directory recursively like `rm -rf`, empty or not),
+  always behind a confirmation dialog with Cancel preselected — a
+  single stray keypress can never confirm it by itself. "Go to Trash"
+  (the `g` chord's own `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
-  "Empty Trash" (`D`, same confirmation) round
-  it out. Restoring something whose original path now has an unrelated
+  "Empty Trash" (`D`, same confirmation) round it out. Restoring
+  something whose original path now has an unrelated
   file sitting on it — recreated after the original was trashed, say —
   opens the exact same conflict dialog a Paste collision already does
   (Overwrite/Skip and their "for all" and "if newer"/"if not empty"

@@ -124,10 +124,24 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "chord_timeout_ms",
+			Default:     strconv.Itoa(d.ChordTimeoutMS),
+			Kind:        KindInt,
+			Summary:     "How long, in milliseconds, a chord's second key (gg, oo, ...) stays live for.",
+			Implemented: true,
+		},
+		{
 			Key:         "pager",
 			Default:     d.Pager,
 			Kind:        KindEnum,
 			Summary:     `How "Look" renders a file: "builtin" or "external" (bat/less/$PAGER/more).`,
+			Implemented: true,
+		},
+		{
+			Key:         "trash_confirm",
+			Default:     strconv.FormatBool(d.TrashConfirm),
+			Kind:        KindBool,
+			Summary:     "Ask for confirmation before Move to Trash, the same way Remove permanently always has.",
 			Implemented: true,
 		},
 		{
