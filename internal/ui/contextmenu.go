@@ -58,6 +58,22 @@ type menuEntry struct {
 	// startup and only ever relabelled in place could.
 	visible func(r *Root) bool
 
+	// mnemonic, if set, is a plain-letter shortcut for this entry while
+	// the menu holding it is open (see captureContextMenuKey) — per the
+	// user's own explicit request: "m" (Context menu) opens the menu
+	// exactly as it always has, and once it's open, the same letter each
+	// of these actions already has as its own single-key equivalent in
+	// the primary keyboard layer (see plainCommands in keymap.go) fires
+	// it directly, without needing to arrow down to it first. Deliberately
+	// the plain-key layer's own letter for each action, not the entry's
+	// own first letter — "Copy" and "Cut" would otherwise collide on "C",
+	// and "Move to Trash" would misleadingly suggest "M" (already "m"
+	// itself, the menu's own key) rather than its real letter, "d". 0
+	// (the zero rune) for every entry with no such shortcut, which is
+	// most of them — this is for the handful the user singled out
+	// explicitly, not a rule every entry has to have an opinion on.
+	mnemonic rune
+
 	action  func(r *Root)
 	submenu []menuEntry
 }
@@ -91,17 +107,17 @@ func contextMenuTree() []menuEntry {
 		// same read-only, no-side-effects action Enter on a plain file
 		// already tries too (see Panel.activateRow), so it's also this
 		// menu's own most-likely-wanted default.
-		{label: "Look", action: func(r *Root) { r.lookCurrentEntry() }},
-		{label: "Edit", visible: menuTargetIsFile, action: func(r *Root) { r.editCurrentEntry() }},
-		{label: "Rename", action: func(r *Root) { r.openRename() }},
-		{label: "Copy", action: func(r *Root) { r.copyToClipboard() }},
-		{label: "Cut", action: func(r *Root) { r.cutToClipboard() }},
+		{label: "Look", mnemonic: 'l', action: func(r *Root) { r.lookCurrentEntry() }},
+		{label: "Edit", visible: menuTargetIsFile, mnemonic: 'e', action: func(r *Root) { r.editCurrentEntry() }},
+		{label: "Rename", mnemonic: 'r', action: func(r *Root) { r.openRename() }},
+		{label: "Copy", mnemonic: 'c', action: func(r *Root) { r.copyToClipboard() }},
+		{label: "Cut", mnemonic: 'x', action: func(r *Root) { r.cutToClipboard() }},
 		// Only once there's actually something to paste — per the user's
 		// own explicit request that the menu stop always showing every
 		// action regardless of whether it currently means anything.
 		{label: "Paste", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboard() }},
-		{label: "Move to Trash", action: func(r *Root) { r.moveSelectionToTrash() }},
-		{label: "Properties", action: func(r *Root) { r.openProperties() }},
+		{label: "Move to Trash", mnemonic: 'd', action: func(r *Root) { r.moveSelectionToTrash() }},
+		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 		{label: "More actions", submenu: []menuEntry{
 			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
@@ -152,7 +168,7 @@ func trashMenuTree() []menuEntry {
 	return []menuEntry{
 		{label: "Restore from Trash", action: func(r *Root) { r.restoreSelectionFromTrash() }},
 		{label: "Empty Trash", action: func(r *Root) { r.openEmptyTrashConfirm() }},
-		{label: "Properties", action: func(r *Root) { r.openProperties() }},
+		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 	}
 }
 
@@ -263,13 +279,22 @@ func (r *Root) closeMenuOrGoBack() {
 }
 
 // captureContextMenuKey adds Left/Backspace as a second way back out of
-// a submenu, alongside Escape and clicking/selecting "◂ Back" — tview's
-// own List binds Left to shifting its horizontal scroll offset, harmless
-// and unused for labels this short, so intercepting it here only changes
-// behavior while a submenu is actually showing; at the top level (where
-// there's nothing to go back to) every key reaches List's own default
-// handling exactly as before.
+// a submenu, alongside Escape and clicking/selecting "◂ Back", and — at
+// any level — a plain letter matching one of the currently visible
+// entries' own mnemonic (see menuEntry.mnemonic) fires that entry
+// directly, the same as arrowing to it and pressing Enter would.
+//
+// Left/Backspace: tview's own List binds Left to shifting its
+// horizontal scroll offset, harmless and unused for labels this short,
+// so intercepting it here only changes behavior while a submenu is
+// actually showing; at the top level (where there's nothing to go back
+// to) it reaches List's own default handling exactly as before.
 func (r *Root) captureContextMenuKey(event *tcell.EventKey) *tcell.EventKey {
+	if entry, ok := r.menuMnemonicEntry(event); ok {
+		entry.action(r)
+		return nil
+	}
+
 	if r.menuInSubmenu == nil {
 		return event
 	}
@@ -279,6 +304,30 @@ func (r *Root) captureContextMenuKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return event
+}
+
+// menuMnemonicEntry finds the currently visible entry, in whichever
+// menu (top level or a drilled-into submenu) is showing right now,
+// whose own mnemonic matches event — a plain, unmodified rune key, and
+// only ever a leaf (menuEntry.action set): none of the entries this
+// exists for today have a submenu of their own, and a mnemonic firing a
+// submenu's own action field (nil, for a group) would do nothing
+// useful anyway.
+func (r *Root) menuMnemonicEntry(event *tcell.EventKey) (menuEntry, bool) {
+	if event.Key() != tcell.KeyRune || event.Modifiers()&(tcell.ModCtrl|tcell.ModAlt) != 0 {
+		return menuEntry{}, false
+	}
+	key := event.Rune()
+	for _, entry := range r.currentMenuTree() {
+		if entry.mnemonic != key || entry.action == nil {
+			continue
+		}
+		if entry.visible != nil && !entry.visible(r) {
+			continue
+		}
+		return entry, true
+	}
+	return menuEntry{}, false
 }
 
 // resizeContextMenu sizes and positions menuLayout for whatever r.menu

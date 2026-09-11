@@ -389,3 +389,109 @@ func TestContextMenuCopyPasteRoundTrip(t *testing.T) {
 		t.Errorf("apple.txt should have been pasted into %s: %v", dst, err)
 	}
 }
+
+// TestContextMenuMnemonicFiresMatchingEntry pins the user's own
+// explicit request: once the menu is open, the same letter each of
+// Look/Edit/Rename/Copy/Cut/Move to Trash already has as its own
+// single-key equivalent in the primary keyboard layer (see plainCommands
+// in keymap.go) fires that same action directly, without arrowing down
+// to it first.
+func TestContextMenuMnemonicFiresMatchingEntry(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone), func(tview.Primitive) {})
+
+	if len(r.clipboard) == 0 {
+		t.Error("'c' should have fired Copy directly, the same as selecting it with Enter")
+	}
+}
+
+// TestContextMenuMnemonicMoveToTrashActuallyMoves is the same pin as
+// above, but for "d" specifically, checked against a real, end-to-end
+// effect rather than just the clipboard: not just that some method got
+// called, but that the file is actually gone from its original
+// location.
+func TestContextMenuMnemonicMoveToTrashActuallyMoves(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	target := filepath.Join(dir, "apple.txt")
+	r.panel.focusRow(2) // moveSelectionToTrash reads the panel's own cursor, not r.target
+	openMenuOnRow(t, r, 2)
+
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone), func(tview.Primitive) {})
+
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("'d' should have moved apple.txt to Trash, stat err = %v", err)
+	}
+}
+
+// TestContextMenuMnemonicOpensPropertiesInBothMenus pins "i" — the same
+// letter Properties already has as its own single-key equivalent — for
+// both the ordinary top-level menu and the Trash's own shorter one,
+// where Properties is the one entry the two share.
+func TestContextMenuMnemonicOpensPropertiesInBothMenus(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'i', tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != propertiesPage {
+		t.Errorf("'i' should have opened Properties from the ordinary menu, activePage = %q", r.activePage)
+	}
+}
+
+// TestContextMenuMnemonicIgnoresHiddenEntry pins the other half: a
+// mnemonic whose own entry isn't currently visible (Edit, for a
+// directory) must not fire at all — captureContextMenuKey passes the
+// key through untouched, exactly as if no mnemonic existed here for it.
+func TestContextMenuMnemonicIgnoresHiddenEntry(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 1) // app-data/ — a directory (see fixtureDir), Edit hidden here
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)
+	if got := r.captureContextMenuKey(event); got != event {
+		t.Error("captureContextMenuKey should pass an unmatched mnemonic through untouched")
+	}
+}
+
+// TestContextMenuMnemonicIgnoresCtrlAndAltModified pins that a mnemonic
+// only fires for a bare, unmodified letter — the same guard
+// acceptsPlainKeyCommand's own dispatch already applies for the primary
+// keyboard layer, so Ctrl+C (a terminal-wide interrupt everywhere else
+// in this app) is never silently reinterpreted as "Copy" just because
+// the menu happens to be open.
+func TestContextMenuMnemonicIgnoresCtrlAndAltModified(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModCtrl)
+	if got := r.captureContextMenuKey(event); got != event {
+		t.Error("Ctrl+c should pass through untouched, not fire the Copy mnemonic")
+	}
+	if len(r.clipboard) != 0 {
+		t.Error("Ctrl+c must not have fired Copy")
+	}
+}

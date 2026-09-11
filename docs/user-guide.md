@@ -70,9 +70,10 @@ itself is open, rather than being blocked the way every other plain
 letter correctly is once an overlay has focus.
 
 **Chords** cover the rarer, related actions — one letter, then within
-about four seconds one more. The status bar shows a small countdown
-(`g▆`, shrinking) while one is pending, and the button bar becomes that
-chord's own legend:
+about four seconds one more (`chord_timeout_ms` under Options, Behavior's
+own Miscellaneous subsection, `4000` by default). The status bar shows a
+small countdown (`g▆`, shrinking) while one is pending, and the button
+bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
@@ -370,6 +371,13 @@ means anything there. **Paste** only appears once Copy or Cut has
 actually put something in the clipboard. Inside "Tabs & Split",
 **Split orientation** and **Swap panes** only show up once a split is
 actually active — there's nothing to orient or swap before that.
+
+Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
+**Look**/**Edit**/**Rename**/**Copy**/**Cut**/**Move to Trash**/
+**Properties** already have as their own single-key shortcuts — fire
+that entry directly, without arrowing down to it first. A letter whose
+own entry isn't currently showing (`e` for a directory, say) does
+nothing.
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -894,8 +902,11 @@ rewriting needed.
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a
-directory, without a confirmation, because it is the reversible action
-by design.
+directory, without a confirmation by default, because it is the
+reversible action by design. "Confirm before moving to Trash" under
+Options (`trash_confirm`, off by default) asks first anyway, the same
+way `D` always does, for anyone who wants that extra safety net
+regardless.
 
 `D` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
 instead, always behind a confirmation with Cancel preselected, so a
@@ -1037,6 +1048,7 @@ Every key breakthrough recognizes, with its default:
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
+| `chord_timeout_ms` | `4000` | How long, in milliseconds, a chord's second key stays live for |
 | `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
 | `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
 | `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |
@@ -1046,6 +1058,7 @@ Every key breakthrough recognizes, with its default:
 | `copy_stable_symlinks` | `false` | Copy jobs rewrite a symlink's target to the new location if it points inside the tree being copied |
 | `move_stable_symlinks` | `false` | Move jobs rewrite a symlink's target to the new location if it points inside the tree being moved |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
+| `trash_confirm` | `false` | Ask for confirmation before Move to Trash, the same way Remove permanently always has |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
 | `trash_quota_percent` | `10` | Keep the trash at or under this share of its filesystem; `0` disables |

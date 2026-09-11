@@ -86,6 +86,14 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     time handling color_scheme already gets (an unrecognized scheme
 //     slug just falls back to Default via FindColorScheme, rather than
 //     Load itself rejecting it).
+//   - trash_confirm: whether "Move to Trash" ("d") asks for confirmation
+//     first, the same way "D" (Remove permanently) always has. false by
+//     default, matching this app's own long-standing distinction between
+//     the two: "d" is the reversible action by design, precisely the one
+//     that's never needed to ask, while "D" is the one that isn't and
+//     always has. Turning this on doesn't blur that line, it just adds
+//     an extra safety net on top of it for anyone who wants one — "D"'s
+//     own confirmation is unconditional either way.
 //   - trash_persistent: whether "Move to Trash" (see internal/fsops'
 //     MoveToTrash and internal/session's TrashDir) uses the persistent,
 //     user-area trash (true, the default) or the session-scoped one
@@ -148,6 +156,16 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     new directory starts unfiltered, which suits someone who filters
 //     one listing at a time and finds a lingering filter more confusing
 //     than useful once they've moved on to somewhere else.
+//   - chord_timeout_ms: how long, in milliseconds, a chord's second key
+//     stays live for (see internal/ui's own chordTimeout doc comment —
+//     4000 by default, the same value that was a hardcoded constant
+//     before this setting existed, chosen there as long enough to
+//     actually read the button bar's own legend first but short enough
+//     that an abandoned chord doesn't sit waiting indefinitely). In
+//     milliseconds rather than seconds since a value that short is
+//     exactly where sub-second precision matters — someone who finds
+//     4000ms slightly too generous has no way to ask for 2500ms if this
+//     only accepted whole seconds.
 //   - copy_preserve_attributes, move_preserve_attributes: whether a Copy
 //     or Move job preserves the source's own permissions/ownership/mtime
 //     on the destination (see internal/fsops' CopyOptions/MoveOptions'
@@ -196,6 +214,7 @@ type Settings struct {
 	SizeBytes         bool
 	MtimeUnix         bool
 	Pager             string
+	TrashConfirm      bool
 	TrashPersistent   bool
 	TrashMaxAgeDays   int
 	TrashQuotaPercent int
@@ -203,6 +222,7 @@ type Settings struct {
 	SplitStacked      bool
 	MouseEnabled      bool
 	FilterPersistent  bool
+	ChordTimeoutMS    int
 
 	CopyPreserveAttributes   bool
 	MovePreserveAttributes   bool
@@ -227,6 +247,7 @@ func DefaultSettings() Settings {
 		SizeBytes:         false,
 		MtimeUnix:         false,
 		Pager:             "builtin",
+		TrashConfirm:      false,
 		TrashPersistent:   true,
 		TrashMaxAgeDays:   30,
 		TrashQuotaPercent: 10,
@@ -234,6 +255,7 @@ func DefaultSettings() Settings {
 		SplitStacked:      false,
 		MouseEnabled:      true,
 		FilterPersistent:  true,
+		ChordTimeoutMS:    4000,
 
 		CopyPreserveAttributes:   true,
 		MovePreserveAttributes:   true,
@@ -281,6 +303,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.MtimeUnix)
 	case "pager":
 		s.Pager = value
+	case "trash_confirm":
+		return parseBool(&s.TrashConfirm)
 	case "trash_persistent":
 		return parseBool(&s.TrashPersistent)
 	case "trash_max_age_days":
@@ -295,6 +319,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.MouseEnabled)
 	case "filter_persistent":
 		return parseBool(&s.FilterPersistent)
+	case "chord_timeout_ms":
+		return parseInt(&s.ChordTimeoutMS)
 	case "copy_preserve_attributes":
 		return parseBool(&s.CopyPreserveAttributes)
 	case "move_preserve_attributes":
