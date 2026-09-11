@@ -282,17 +282,19 @@ terminal.
   out of the copied root and back in by its old name) once that source
   is later moved, renamed, or removed.
 - Move to Trash / Remove: `d` or Entf moves the current selection to
-  your own trash — recursively for a directory, no confirmation, since
-  that's the reversible action by design. `D`, Ctrl+Entf (best-effort —
-  terminal-dependent; `D` is always the reliable one), or the context
-  menu's "Remove" permanently deletes instead (a file like `rm`, a
-  directory recursively like `rm -rf`, empty or not), always behind a
-  confirmation dialog with Cancel preselected — a single stray keypress
-  can never confirm it by itself. "Go to Trash" (the `g` chord's own
-  `gb`) jumps straight into it without needing to
+  your own trash — recursively for a directory, no confirmation by
+  default, since that's the reversible action by design ("Confirm
+  before moving to Trash" under Options, off by default, asks first
+  anyway for anyone who wants that extra safety net). `D`, Ctrl+Entf
+  (best-effort — terminal-dependent; `D` is always the reliable one),
+  or the context menu's "Remove" permanently deletes instead (a file
+  like `rm`, a directory recursively like `rm -rf`, empty or not),
+  always behind a confirmation dialog with Cancel preselected — a
+  single stray keypress can never confirm it by itself. "Go to Trash"
+  (the `g` chord's own `gb`) jumps straight into it without needing to
   know its path; "Restore from Trash" (`r`, while browsing it) and
-  "Empty Trash" (`D`, same confirmation) round
-  it out. Restoring something whose original path now has an unrelated
+  "Empty Trash" (`D`, same confirmation) round it out. Restoring
+  something whose original path now has an unrelated
   file sitting on it — recreated after the original was trashed, say —
   opens the exact same conflict dialog a Paste collision already does
   (Overwrite/Skip and their "for all" and "if newer"/"if not empty"

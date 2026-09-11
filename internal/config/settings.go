@@ -86,6 +86,14 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     time handling color_scheme already gets (an unrecognized scheme
 //     slug just falls back to Default via FindColorScheme, rather than
 //     Load itself rejecting it).
+//   - trash_confirm: whether "Move to Trash" ("d") asks for confirmation
+//     first, the same way "D" (Remove permanently) always has. false by
+//     default, matching this app's own long-standing distinction between
+//     the two: "d" is the reversible action by design, precisely the one
+//     that's never needed to ask, while "D" is the one that isn't and
+//     always has. Turning this on doesn't blur that line, it just adds
+//     an extra safety net on top of it for anyone who wants one — "D"'s
+//     own confirmation is unconditional either way.
 //   - trash_persistent: whether "Move to Trash" (see internal/fsops'
 //     MoveToTrash and internal/session's TrashDir) uses the persistent,
 //     user-area trash (true, the default) or the session-scoped one
@@ -196,6 +204,7 @@ type Settings struct {
 	SizeBytes         bool
 	MtimeUnix         bool
 	Pager             string
+	TrashConfirm      bool
 	TrashPersistent   bool
 	TrashMaxAgeDays   int
 	TrashQuotaPercent int
@@ -227,6 +236,7 @@ func DefaultSettings() Settings {
 		SizeBytes:         false,
 		MtimeUnix:         false,
 		Pager:             "builtin",
+		TrashConfirm:      false,
 		TrashPersistent:   true,
 		TrashMaxAgeDays:   30,
 		TrashQuotaPercent: 10,
@@ -281,6 +291,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.MtimeUnix)
 	case "pager":
 		s.Pager = value
+	case "trash_confirm":
+		return parseBool(&s.TrashConfirm)
 	case "trash_persistent":
 		return parseBool(&s.TrashPersistent)
 	case "trash_max_age_days":

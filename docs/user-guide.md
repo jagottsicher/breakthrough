@@ -894,8 +894,11 @@ rewriting needed.
 ## Trash, Remove and Restore
 
 `Delete` moves the selection to your trash — recursively for a
-directory, without a confirmation, because it is the reversible action
-by design.
+directory, without a confirmation by default, because it is the
+reversible action by design. "Confirm before moving to Trash" under
+Options (`trash_confirm`, off by default) asks first anyway, the same
+way `D` always does, for anyone who wants that extra safety net
+regardless.
 
 `D` (or `Ctrl`+`Delete`, terminal permitting) permanently deletes
 instead, always behind a confirmation with Cancel preselected, so a
@@ -1046,6 +1049,7 @@ Every key breakthrough recognizes, with its default:
 | `copy_stable_symlinks` | `false` | Copy jobs rewrite a symlink's target to the new location if it points inside the tree being copied |
 | `move_stable_symlinks` | `false` | Move jobs rewrite a symlink's target to the new location if it points inside the tree being moved |
 | `pager` | `builtin` | How Look renders a file: `builtin` or `external` |
+| `trash_confirm` | `false` | Ask for confirmation before Move to Trash, the same way Remove permanently always has |
 | `trash_persistent` | `true` | Keep trashed files across login sessions |
 | `trash_max_age_days` | `30` | Remove trashed items older than this at startup; `0` disables |
 | `trash_quota_percent` | `10` | Keep the trash at or under this share of its filesystem; `0` disables |
