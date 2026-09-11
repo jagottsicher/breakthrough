@@ -131,6 +131,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "trash_confirm",
+			Default:     strconv.FormatBool(d.TrashConfirm),
+			Kind:        KindBool,
+			Summary:     "Ask for confirmation before Move to Trash, the same way Remove permanently always has.",
+			Implemented: true,
+		},
+		{
 			Key:         "trash_persistent",
 			Default:     strconv.FormatBool(d.TrashPersistent),
 			Kind:        KindBool,
