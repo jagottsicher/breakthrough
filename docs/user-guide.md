@@ -443,9 +443,8 @@ are never hidden.
 | Separator | always | Sits between the original name and whatever the strategy produces — free-form (`_`, `-`, `.`, ...), `_` by default |
 | Suffix text | Fixed suffix text | Its own literal suffix — `copy` by default |
 | Number padding (digits) | Numbered | Zero-pads the number — `3` gives `report.txt_001`, `report.txt_002`, ...; `0` (default) pads nothing |
-| Date/time format | Date/time | Its own format string — Go's own reference-time layout by default (e.g. `2006-1-2 15:04:05`), or a strftime-style one instead once "Strftime-style format" below is on (e.g. `%Y-%-m-%-d %H:%M:%S`) — both render the same `2026-11-9 23:59:59` |
-| Strftime-style format | Date/time | Toggles which syntax "Date/time format" means, the same "a checkbox picks which syntax the text field means" shape the filter menu's own Glob/Regex toggle already uses |
-| Use Unix timestamp | Date/time | Bypasses "Date/time format" entirely for a raw Unix timestamp |
+| Date/time format type | Date/time | A second dropdown: **Go format string** (default), **Strftime-style Format**, or **Unix timestamp** — picks how the field right below it behaves |
+| Date/time format | Date/time | Go's own reference-time layout (e.g. `2006-1-2 15:04:05`) or a strftime-style format (e.g. `%Y-%-m-%-d %H:%M:%S`) — both render the same `2026-11-9 23:59:59` — each with its own independently-edited example text, so switching the type above and back never loses either one. Once "Unix timestamp" is picked, this field is disabled and shows today's real Unix timestamp instead |
 | Number of duplicates | always | How many copies this one run creates — `1` by default, capped by "Maximum number of duplicates" under Options |
 
 The suffix always lands after the original name's own *entire* text,

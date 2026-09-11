@@ -338,9 +338,14 @@ terminal.
   picks Numbered (default, counts up from 1 until a free name is
   found), Fixed suffix text (the same literal text every time —
   duplicating the result again doubles it, `report.txt_copy_copy`,
-  rather than retrying automatically), or Date/time (a timestamp,
-  computed once, in Go's own reference-time layout or a strftime-style
-  format) — and only that strategy's own fields appear below it. The
+  rather than retrying automatically), or Date/time — computed once,
+  with its own second dropdown ("Date/time format type") picking Go
+  format string (default), Strftime-style Format, or Unix timestamp;
+  the format field below it holds each syntax's own independently-
+  edited example text (switching back and forth never loses either
+  one), or — once Unix timestamp is picked — is disabled and shows
+  today's real timestamp instead. Only the current strategy's own
+  fields ever appear at once, never every strategy's combined. The
   suffix always lands after the original name's own *entire* text,
   extension included: `archive.tar.gz` duplicates to
   `archive.tar.gz_1`, never `archive.tar_1.gz` or `archive_1.tar.gz` —
