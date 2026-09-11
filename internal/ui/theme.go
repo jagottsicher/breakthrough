@@ -431,6 +431,34 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedTitleBar.SetBackgroundColor(theme.FocusedBackground)
 	r.sedTitleBar.SetTextColor(theme.Text)
 
+	r.duplicateForm.SetBackgroundColor(theme.AccentBackground)
+	r.duplicateForm.SetLabelColor(theme.Text)
+	r.duplicateForm.SetFieldBackgroundColor(theme.FocusedBackground)
+	r.duplicateForm.SetFieldTextColor(theme.Text)
+	if r.duplicateStrategyField != nil {
+		// See renderDuplicateForm's own doc comment on this exact call:
+		// SetFormAttributes (what the two lines above actually drive,
+		// applied fresh every Draw) only ever reaches DropDown's own
+		// fieldStyle, never its separate focusedStyle — a color-scheme
+		// switch while Multiply happens to be open would otherwise leave
+		// Strategy showing the *previous* scheme's colors indefinitely
+		// while focused, the one part of this dialog SetFormAttributes's
+		// own generic pass can't fix on its own.
+		fieldStyle := tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text)
+		r.duplicateStrategyField.SetFieldStyle(fieldStyle)
+		r.duplicateStrategyField.SetFocusedStyle(fieldStyle)
+	}
+	r.duplicatePreviewView.SetBackgroundColor(theme.AccentBackground)
+	r.duplicatePreviewView.SetTextColor(theme.Text)
+	r.duplicateButtons.SetBackgroundColor(theme.AccentBackground)
+	styleButton(r.duplicateCancelBtn, theme)
+	styleButton(r.duplicateApplyBtn, theme)
+	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
+	// dialog nothing else ever stacks on top of, the same reasoning
+	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
+	r.duplicateTitleBar.SetBackgroundColor(theme.FocusedBackground)
+	r.duplicateTitleBar.SetTextColor(theme.Text)
+
 	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
 	r.sedPreviewStatus.SetTextColor(theme.Text)
 	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
