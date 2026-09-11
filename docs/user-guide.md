@@ -77,7 +77,7 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trash |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
