@@ -161,6 +161,53 @@ func TestDuplicateStrategyFieldUsesThemeColorsWhenFocused(t *testing.T) {
 	}
 }
 
+// TestDuplicatePlainFieldsUseEditableBackground pins the user's own
+// explicit request: Multiply's plain text fields (Separator, Number of
+// duplicates, ...) should look like Properties' own "editable" fields
+// (theme.EditableBackground), not share the dropdowns' own
+// FocusedBackground the way they used to.
+func TestDuplicatePlainFieldsUseEditableBackground(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	r.app.SetScreen(screen)
+	screen.SetSize(100, 40)
+	r.SetRect(0, 0, 100, 40)
+
+	r.openDuplicate()
+	screen.Clear()
+	r.Draw(screen)
+
+	const want = "_" // Separator's own default value
+	found := false
+	w, h := screen.Size()
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w; x++ {
+			c, _, _ := screen.Get(x, y)
+			if c != want {
+				continue
+			}
+			// Separator's own row: label "Separator" ends well before
+			// this column on every other row containing "_", so a
+			// direct hit is enough — no other row shows a bare "_".
+			found = true
+			_, style, _ := screen.Get(x, y)
+			fg, bg, _ := style.Decompose()
+			if fg != r.theme.Text {
+				t.Errorf("Separator field foreground = %v, want theme.Text %v", fg, r.theme.Text)
+			}
+			if bg != r.theme.EditableBackground {
+				t.Errorf("Separator field background = %v, want theme.EditableBackground %v", bg, r.theme.EditableBackground)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("could not find the rendered Separator value ('_') at all")
+	}
+}
+
 // TestResetDuplicateFormPrefillsFromSettings pins the user's own design
 // intent: the dialog always starts out showing "what would happen right
 // now" (today's sticky defaults), never a blank form.
@@ -371,12 +418,75 @@ func TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability(t *testing.T) {
 	if got < now-2 || got > now+2 {
 		t.Errorf("unix: field text = %d, want something within a couple seconds of %d", got, now)
 	}
-	// The dimmed, non-editable look — see renderDuplicateDateTimeFields'
-	// own doc comment — is the actually testable stand-in for
-	// "disabled" here: InputField has no public GetDisabled() of its
-	// own to assert against directly.
-	if _, bg, _ := r.duplicateDateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.AccentBackground {
-		t.Errorf("unix: field background = %v, want the dimmed theme.AccentBackground %v", bg, r.theme.AccentBackground)
+	// The dimmed, non-editable look comes from SetDisabled(true) alone
+	// skipping the field's own background fill (see
+	// renderDuplicateDateTimeFields' own doc comment for the exact
+	// mechanism, verified directly against tview's own textarea.go) —
+	// checked here against a real rendered screen, not
+	// GetFieldStyle(): that reflects the InputField's own textStyle,
+	// which Form's generic per-item theming overwrites on every single
+	// Draw regardless of disabled state (a real, easy trap this test
+	// fell into once already — GetFieldStyle() briefly happened to
+	// agree before any Draw call ever ran).
+	requireDuplicateDateTimeFormatFieldLooksDisabled(t, r)
+}
+
+// requireDuplicateDateTimeFormatFieldLooksDisabled renders a real
+// screen and confirms the Date/time format field's own value cell
+// shows Form's base AccentBackground (the disabled fill-skip — see
+// renderDuplicateDateTimeFields' own doc comment), not the vivid
+// EditableBackground every enabled field around it shows.
+func requireDuplicateDateTimeFormatFieldLooksDisabled(t *testing.T, r *Root) {
+	t.Helper()
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	r.app.SetScreen(screen)
+	screen.SetSize(100, 40)
+	r.SetRect(0, 0, 100, 40)
+	screen.Clear()
+	r.Draw(screen)
+
+	const label = "Date/time format"
+	const windowLen = len(label) + len(" type") // enough to always capture "type" in full, not just "typ" — a real off-by-one this test caught itself on once already
+	found := false
+	w, h := screen.Size()
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w-windowLen; x++ {
+			text := ""
+			for i := 0; i < windowLen; i++ {
+				c, _, _ := screen.Get(x+i, y)
+				text += c
+			}
+			// Matches the plain "Date/time format" label row, not
+			// "Date/time format type" a few rows above it — the only
+			// other label starting with the same text.
+			if !strings.HasPrefix(text, label) || strings.Contains(text, "type") {
+				continue
+			}
+			found = true
+			// The value column starts right after the widest label in
+			// this form ("Date/time format type") plus one space —
+			// walk forward from the match to the first non-space
+			// column to land on it regardless of the exact offset.
+			vx := x + len(label)
+			for vx < w {
+				c, _, _ := screen.Get(vx, y)
+				if c != " " && c != "" {
+					break
+				}
+				vx++
+			}
+			_, style, _ := screen.Get(vx, y)
+			_, bg, _ := style.Decompose()
+			if bg != r.theme.AccentBackground {
+				t.Errorf("Date/time format value cell background = %v, want the disabled fill-skip's theme.AccentBackground %v", bg, r.theme.AccentBackground)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("could not find the rendered 'Date/time format' label row at all")
 	}
 }
 
