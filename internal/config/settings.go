@@ -166,6 +166,45 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     exactly where sub-second precision matters — someone who finds
 //     4000ms slightly too generous has no way to ask for 2500ms if this
 //     only accepted whole seconds.
+//   - duplicate_separator, duplicate_strategy, duplicate_suffix_text,
+//     duplicate_number_padding, duplicate_datetime_format,
+//     duplicate_datetime_strftime, duplicate_datetime_use_unix,
+//     duplicate_count, duplicate_count_max: Duplicate's own naming and
+//     quantity defaults (see internal/fsops.ComputeDuplicateName for the
+//     naming logic itself, and internal/ui's own duplicateSelection for
+//     where these are actually read). Deliberately self-adapting, per
+//     the user's own explicit request, unlike every other setting in
+//     this app: whatever is chosen in the Duplicate dialog itself is
+//     written back here as the new default for next time, not just a
+//     one-off override for that single run — "so passt sich das den
+//     Vorlieben an" were the user's own words for it. duplicate_strategy
+//     is "suffix_text", "numbered", or "datetime" (default "numbered" —
+//     the one strategy that never needs a word or a format string
+//     chosen up front, so it's the least surprising thing to land on
+//     before anyone has customized anything). duplicate_separator
+//     defaults to "_". duplicate_suffix_text (used only by
+//     "suffix_text") defaults to "copy". duplicate_number_padding (used
+//     only by "numbered") defaults to 0, meaning no zero-padding at
+//     all. duplicate_datetime_format/duplicate_datetime_strftime (used
+//     only by "datetime", and only when duplicate_datetime_use_unix is
+//     false) are a format string plus a toggle for how it's
+//     interpreted — Go's own reference-time layout by default
+//     (duplicate_datetime_strftime = false; format defaults to
+//     "2006-01-02_15-04-05") or, with the toggle on, a strftime-style
+//     format instead (see internal/fsops.strftimeToGoLayout for exactly
+//     which %-specifiers that mode supports) — the same
+//     "checkbox picks which syntax the text field means" shape the
+//     filter menu's own Glob/Regex toggle already uses, per the user's
+//     own explicit request to follow that precedent here too.
+//     duplicate_datetime_use_unix, off by default, bypasses the format
+//     string entirely in favor of a raw Unix timestamp, for anyone who'd
+//     rather not deal with a format string at all. duplicate_count is
+//     how many numbered/timestamped/suffixed duplicates one invocation
+//     creates at once (default 1, today's exact single-duplicate
+//     behavior, unchanged); duplicate_count_max caps how high
+//     duplicate_count itself can be set to, default 100, purely to
+//     guard against an accidental "ten thousand copies" — raising the
+//     cap is itself just another config value, never a hard limit.
 //   - copy_preserve_attributes, move_preserve_attributes: whether a Copy
 //     or Move job preserves the source's own permissions/ownership/mtime
 //     on the destination (see internal/fsops' CopyOptions/MoveOptions'
@@ -224,6 +263,16 @@ type Settings struct {
 	FilterPersistent  bool
 	ChordTimeoutMS    int
 
+	DuplicateSeparator        string
+	DuplicateStrategy         string
+	DuplicateSuffixText       string
+	DuplicateNumberPadding    int
+	DuplicateDateTimeFormat   string
+	DuplicateDateTimeStrftime bool
+	DuplicateDateTimeUseUnix  bool
+	DuplicateCount            int
+	DuplicateCountMax         int
+
 	CopyPreserveAttributes   bool
 	MovePreserveAttributes   bool
 	CopyFollowSymlinks       bool
@@ -256,6 +305,16 @@ func DefaultSettings() Settings {
 		MouseEnabled:      true,
 		FilterPersistent:  true,
 		ChordTimeoutMS:    4000,
+
+		DuplicateSeparator:        "_",
+		DuplicateStrategy:         "numbered",
+		DuplicateSuffixText:       "copy",
+		DuplicateNumberPadding:    0,
+		DuplicateDateTimeFormat:   "2006-01-02_15-04-05",
+		DuplicateDateTimeStrftime: false,
+		DuplicateDateTimeUseUnix:  false,
+		DuplicateCount:            1,
+		DuplicateCountMax:         100,
 
 		CopyPreserveAttributes:   true,
 		MovePreserveAttributes:   true,
@@ -321,6 +380,24 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.FilterPersistent)
 	case "chord_timeout_ms":
 		return parseInt(&s.ChordTimeoutMS)
+	case "duplicate_separator":
+		s.DuplicateSeparator = value
+	case "duplicate_strategy":
+		s.DuplicateStrategy = value
+	case "duplicate_suffix_text":
+		s.DuplicateSuffixText = value
+	case "duplicate_number_padding":
+		return parseInt(&s.DuplicateNumberPadding)
+	case "duplicate_datetime_format":
+		s.DuplicateDateTimeFormat = value
+	case "duplicate_datetime_strftime":
+		return parseBool(&s.DuplicateDateTimeStrftime)
+	case "duplicate_datetime_use_unix":
+		return parseBool(&s.DuplicateDateTimeUseUnix)
+	case "duplicate_count":
+		return parseInt(&s.DuplicateCount)
+	case "duplicate_count_max":
+		return parseInt(&s.DuplicateCountMax)
 	case "copy_preserve_attributes":
 		return parseBool(&s.CopyPreserveAttributes)
 	case "move_preserve_attributes":
