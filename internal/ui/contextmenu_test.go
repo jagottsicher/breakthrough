@@ -435,6 +435,26 @@ func TestContextMenuMnemonicMoveToTrashActuallyMoves(t *testing.T) {
 	}
 }
 
+// TestContextMenuMnemonicOpensPropertiesInBothMenus pins "i" — the same
+// letter Properties already has as its own single-key equivalent — for
+// both the ordinary top-level menu and the Trash's own shorter one,
+// where Properties is the one entry the two share.
+func TestContextMenuMnemonicOpensPropertiesInBothMenus(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'i', tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != propertiesPage {
+		t.Errorf("'i' should have opened Properties from the ordinary menu, activePage = %q", r.activePage)
+	}
+}
+
 // TestContextMenuMnemonicIgnoresHiddenEntry pins the other half: a
 // mnemonic whose own entry isn't currently visible (Edit, for a
 // directory) must not fire at all — captureContextMenuKey passes the
