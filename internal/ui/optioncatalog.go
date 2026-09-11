@@ -294,19 +294,9 @@ func optionCategories() []optionCategory {
 						r.persistSetting("copy_preserve_attributes", strconv.FormatBool(b))
 					},
 				)),
-				withSection("Copy & Move", boolOption("move_preserve_attributes", "Move preserves attributes",
-					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
-						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
-						"the same inode throughout, so its attributes never change regardless of "+
-						"this setting. It only matters once a move falls back to a real copy — "+
-						"across filesystems, or merging into an existing directory.",
-					false,
-					func(r *Root) bool { return r.settings.MovePreserveAttributes },
-					func(r *Root, b bool) {
-						r.settings.MovePreserveAttributes = b
-						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
-					},
-				)),
+				// Grouped Copy-then-Move (all four Copy settings, then
+				// all four Move ones) rather than alternating pairs —
+				// per the user's own explicit request.
 				withSection("Copy & Move", boolOption("copy_follow_symlinks", "Copy follows symlinks",
 					"The default a Copy paste (\"v\") uses when the selection includes a "+
 						"symlink: dereference it, writing a real copy of whatever it points to, "+
@@ -324,17 +314,6 @@ func optionCategories() []optionCategory {
 						r.persistSetting("copy_follow_symlinks", strconv.FormatBool(b))
 					},
 				)),
-				withSection("Copy & Move", boolOption("move_follow_symlinks", "Move follows symlinks",
-					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
-						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
-						"paste the same way.",
-					false,
-					func(r *Root) bool { return r.settings.MoveFollowSymlinks },
-					func(r *Root, b bool) {
-						r.settings.MoveFollowSymlinks = b
-						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
-					},
-				)),
 				withSection("Copy & Move", boolOption("copy_auto_merge_directories", "Copy auto-merges directories",
 					"Whether a Copy paste that runs into a directory already existing at the "+
 						"destination combines the two automatically, without asking.\n\n"+
@@ -347,15 +326,6 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) {
 						r.settings.CopyAutoMergeDirectories = b
 						r.persistSetting("copy_auto_merge_directories", strconv.FormatBool(b))
-					},
-				)),
-				withSection("Copy & Move", boolOption("move_auto_merge_directories", "Move auto-merges directories",
-					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
-					false,
-					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
-					func(r *Root, b bool) {
-						r.settings.MoveAutoMergeDirectories = b
-						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
 					},
 				)),
 				withSection("Copy & Move", boolOption("copy_stable_symlinks", "Copy keeps symlinks stable",
@@ -373,6 +343,39 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) {
 						r.settings.CopyStableSymlinks = b
 						r.persistSetting("copy_stable_symlinks", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Copy & Move", boolOption("move_preserve_attributes", "Move preserves attributes",
+					"Move's own counterpart to \"Copy preserves attributes\".\n\n"+
+						"Has no effect on a same-filesystem move: that's a single atomic rename, "+
+						"the same inode throughout, so its attributes never change regardless of "+
+						"this setting. It only matters once a move falls back to a real copy — "+
+						"across filesystems, or merging into an existing directory.",
+					false,
+					func(r *Root) bool { return r.settings.MovePreserveAttributes },
+					func(r *Root, b bool) {
+						r.settings.MovePreserveAttributes = b
+						r.persistSetting("move_preserve_attributes", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Copy & Move", boolOption("move_follow_symlinks", "Move follows symlinks",
+					"Move's own counterpart to \"Copy follows symlinks\" — the default a Cut "+
+						"paste (\"v\" after \"x\") uses, with \"V\" flipping it once for that one "+
+						"paste the same way.",
+					false,
+					func(r *Root) bool { return r.settings.MoveFollowSymlinks },
+					func(r *Root, b bool) {
+						r.settings.MoveFollowSymlinks = b
+						r.persistSetting("move_follow_symlinks", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Copy & Move", boolOption("move_auto_merge_directories", "Move auto-merges directories",
+					"Move's own counterpart to \"Copy auto-merges directories\", for a Cut paste.",
+					false,
+					func(r *Root) bool { return r.settings.MoveAutoMergeDirectories },
+					func(r *Root, b bool) {
+						r.settings.MoveAutoMergeDirectories = b
+						r.persistSetting("move_auto_merge_directories", strconv.FormatBool(b))
 					},
 				)),
 				withSection("Copy & Move", boolOption("move_stable_symlinks", "Move keeps symlinks stable",
