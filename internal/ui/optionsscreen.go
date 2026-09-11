@@ -365,12 +365,15 @@ func (r *Root) openOptions() {
 	// captureOutsideClick closes an overlay on any click outside the
 	// widget it was shown with, so registering only the table made a
 	// click on the categories — or the buttons, or the title bar — count
-	// as "outside" and shut the screen (a real report). Focus still
-	// starts on the table, via the restore callback, exactly the way
+	// as "outside" and shut the screen (a real report). Focus starts on
+	// the category list, via the restore callback, exactly the way
 	// Properties already registers its own full layout and then focuses
-	// a field inside it.
+	// a field inside it — per the user's own explicit request: opening
+	// the screen should land on "Appearance" selected on the left, not
+	// already inside its settings on the right, so Right/Tab is what
+	// actually moves you in rather than starting there automatically.
 	r.showOverlayWithRestore(optionsPage, r.optionsLayout, func() {
-		r.app.SetFocus(r.optionsTable)
+		r.app.SetFocus(r.optionsCategories)
 	})
 }
 
@@ -400,9 +403,52 @@ func (r *Root) renderOptionCategories() {
 	})
 }
 
+// optionDisplayRow is one row of the settings table for a category —
+// either a real, editable setting or a subsection header separating a
+// labeled group of settings from the ones before it (see
+// optionSpec.section's own doc comment). header is non-empty for a
+// header row and empty otherwise; opt/optIndex are only meaningful when
+// header is empty.
+type optionDisplayRow struct {
+	header   string
+	opt      optionSpec
+	optIndex int
+}
+
+// optionCategoryDisplayRows expands cat.options into the settings
+// table's own row list, inserting one header row wherever a run of
+// options' own section differs from the option right before it —
+// exactly once per contiguous run of the same non-empty section, not
+// once per option in it. A category with no sectioned options at all
+// (every options.section == "") produces exactly one display row per
+// option, the original, header-free shape.
+func optionCategoryDisplayRows(cat optionCategory) []optionDisplayRow {
+	rows := make([]optionDisplayRow, 0, len(cat.options))
+	for i, opt := range cat.options {
+		if opt.section != "" && (i == 0 || cat.options[i-1].section != opt.section) {
+			rows = append(rows, optionDisplayRow{header: opt.section})
+		}
+		rows = append(rows, optionDisplayRow{opt: opt, optIndex: i})
+	}
+	return rows
+}
+
 // renderOptions fills the right-hand table with the selected category's
 // settings: label, current value, where that value came from, and the
-// info button.
+// info button — plus, wherever optionCategoryDisplayRows calls for one,
+// a subsection header row of its own.
+//
+// A header row's own cells are all explicitly SetSelectable(false):
+// tview.Table's own arrow-key movement (see its own forward/backwards
+// helpers, verified directly against tview's source rather than
+// assumed) already skips a NotSelectable cell entirely on its own, so
+// Up/Down never lands the cursor on a header without any extra
+// navigation logic needed here. This relies on the category's own first
+// option always having an empty section (see optionSpec.section's own
+// doc comment) — Select(0, 0), used just below to recover from an
+// out-of-range cursor, sets the cursor directly rather than skipping a
+// non-selectable cell the way the arrow keys do, so row 0 has to be a
+// real option for that fallback to land somewhere sensible.
 func (r *Root) renderOptions() {
 	r.optionsTable.Clear()
 
@@ -411,7 +457,20 @@ func (r *Root) renderOptions() {
 		return
 	}
 
-	for row, opt := range categories[r.optionsCategory].options {
+	for row, dr := range optionCategoryDisplayRows(categories[r.optionsCategory]) {
+		if dr.header != "" {
+			r.optionsTable.SetCell(row, optionsColLabel,
+				tview.NewTableCell(padRight(dr.header, optionsLabelWidth)).
+					SetTextColor(r.theme.PlaceholderText).
+					SetAttributes(tcell.AttrBold).
+					SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColValue, tview.NewTableCell("").SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColDefault, tview.NewTableCell("").SetSelectable(false))
+			r.optionsTable.SetCell(row, optionsColInfo, tview.NewTableCell("").SetSelectable(false))
+			continue
+		}
+
+		opt := dr.opt
 		// The label column is given a generous fixed width rather than
 		// being left to size itself: without it the value column starts
 		// at a different place in every category, and switching
@@ -560,13 +619,20 @@ func (r *Root) currentOptionCategory() (optionCategory, bool) {
 	return categories[r.optionsCategory], true
 }
 
-// optionAtRow is the setting shown on one row of the settings table.
+// optionAtRow is the setting shown on one row of the settings table —
+// false for a row out of range, or a subsection header row (see
+// optionCategoryDisplayRows), which has no setting of its own to
+// activate or explain.
 func (r *Root) optionAtRow(row int) (optionSpec, bool) {
 	cat, ok := r.currentOptionCategory()
-	if !ok || row < 0 || row >= len(cat.options) {
+	if !ok {
 		return optionSpec{}, false
 	}
-	return cat.options[row], true
+	rows := optionCategoryDisplayRows(cat)
+	if row < 0 || row >= len(rows) || rows[row].header != "" {
+		return optionSpec{}, false
+	}
+	return rows[row].opt, true
 }
 
 // activateOptionRow is Enter (or a click) on a setting: change its
