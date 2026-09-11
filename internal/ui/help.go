@@ -134,9 +134,9 @@ var helpText = strings.TrimLeft(`
                   last rename/Remove/Paste following symlinks,
                   Selection, Tabs & Split). "m" opens the same menu
                   from the keyboard. Once it's open, "l"/"e"/"r"/"c"/
-                  "x"/"d" — the same letters those six already have on
-                  their own — fire that entry directly, without
-                  arrowing down to it first.
+                  "x"/"d"/"i" — the same letters those seven already
+                  have on their own — fire that entry directly,
+                  without arrowing down to it first.
 
 [::b]Details sidebar ("I")[::-]
 
