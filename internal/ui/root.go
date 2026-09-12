@@ -1697,6 +1697,9 @@ func (r *Root) hideOverlay() {
 	top := r.overlayStack[len(r.overlayStack)-1]
 	r.overlayStack = r.overlayStack[:len(r.overlayStack)-1]
 	r.HidePage(top.page)
+	if top.page == contextMenuPage {
+		r.refreshButtonBar()
+	}
 
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
@@ -1726,12 +1729,16 @@ func (r *Root) hideOverlay() {
 // way — showOverlay's own tail end (pushOverlay) sets focus correctly
 // once, for whatever it opens next.
 func (r *Root) closeAllOverlays() {
+	wasContextMenu := r.activePage == contextMenuPage
 	for _, f := range r.overlayStack {
 		r.HidePage(f.page)
 	}
 	r.overlayStack = nil
 	r.activePage = ""
 	r.activeWidget = nil
+	if wasContextMenu {
+		r.refreshButtonBar()
+	}
 }
 
 // captureOutsideClick keeps the panel underneath an open overlay inert:
@@ -1811,6 +1818,13 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	x, y := event.Position()
 	if primitiveContains(r.activeWidget, x, y) {
 		return action, event // event landed on the open overlay itself
+	}
+
+	if r.activePage == contextMenuPage && action == tview.MouseLeftClick {
+		if span, ok := r.buttonBarActionAt(x, y); ok && span.run != nil {
+			span.run(r)
+			return tview.MouseConsumed, nil
+		}
 	}
 
 	if r.activePage == propertiesPage && action == tview.MouseLeftClick {
@@ -2379,6 +2393,7 @@ func (r *Root) showMenu(x, y int) {
 	r.resizeContextMenu(x, y)
 	r.menu.SetCurrentItem(0)
 	r.showOverlay(contextMenuPage, r.menu)
+	r.refreshContextMenuHint()
 }
 
 // toggleHidden is the "." key's own action: flips whether dotfile
@@ -2525,6 +2540,7 @@ func newPlainTitleBar(text string) *tview.TextView {
 func (r *Root) closeMenu() {
 	r.menuInSubmenu = nil
 	r.hideOverlay()
+	r.refreshButtonBar()
 }
 
 // openRename is the context menu's "Rename" action. Rather than a prompt
