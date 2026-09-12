@@ -375,8 +375,8 @@ func TestDuplicateDateTimeFormatTypeSwapsExampleAndEditability(t *testing.T) {
 	// own doc comment — is the actually testable stand-in for
 	// "disabled" here: InputField has no public GetDisabled() of its
 	// own to assert against directly.
-	if _, bg, _ := r.duplicateDateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.AccentBackground {
-		t.Errorf("unix: field background = %v, want the dimmed theme.AccentBackground %v", bg, r.theme.AccentBackground)
+	if _, bg, _ := r.duplicateDateTimeFormatField.GetFieldStyle().Decompose(); bg != r.theme.InputDisabledBackground {
+		t.Errorf("unix: field background = %v, want theme.InputDisabledBackground %v", bg, r.theme.InputDisabledBackground)
 	}
 }
 
@@ -547,8 +547,8 @@ func TestDuplicateDropDownPopupUsesThemeColors(t *testing.T) {
 			found = true
 			_, style, _ := screen.Get(x, y)
 			_, bg, _ := style.Decompose()
-			if bg != r.theme.AccentBackground && bg != r.theme.FocusedBackground {
-				t.Errorf("popup list background = %v, want theme.AccentBackground %v or theme.FocusedBackground %v", bg, r.theme.AccentBackground, r.theme.FocusedBackground)
+			if bg != r.theme.PopupBackground && bg != r.theme.SelectionBackground {
+				t.Errorf("popup list background = %v, want theme.PopupBackground %v or theme.SelectionBackground %v", bg, r.theme.PopupBackground, r.theme.SelectionBackground)
 			}
 		}
 	}

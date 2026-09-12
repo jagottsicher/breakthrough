@@ -66,10 +66,10 @@ func (r *Root) newDetailsSidebarView() *tview.TextView {
 	v.SetDynamicColors(true)
 	v.SetWrap(true)
 	v.SetBorderPadding(0, 0, 1, 1)
-	v.SetBackgroundColor(r.theme.AccentBackground)
+	v.SetBackgroundColor(r.theme.SurfaceBackground)
 	v.SetMouseCapture(r.captureDetailsSidebarMouse)
-	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.FocusedBackground) })
-	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.EditableBackground) })
+	v.SetFocusFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.InputFocusedBackground) })
+	v.SetBlurFunc(func() { r.detailsTitleBar.SetBackgroundColor(r.theme.InputBackground) })
 	return v
 }
 
@@ -91,7 +91,7 @@ func (r *Root) newDetailsSidebarView() *tview.TextView {
 func (r *Root) newDetailsTitleBar() *tview.TextView {
 	bar := tview.NewTextView()
 	bar.SetWrap(false)
-	bar.SetBackgroundColor(r.theme.EditableBackground)
+	bar.SetBackgroundColor(r.theme.InputBackground)
 	bar.SetMouseCapture(r.captureDetailsTitleBarMouse)
 	return bar
 }

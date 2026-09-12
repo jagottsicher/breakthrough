@@ -534,7 +534,15 @@ color is either a `#rrggbb` hex value or a
 [W3C color name](https://pkg.go.dev/github.com/gdamore/tcell/v2#pkg-variables)
 (e.g. `"darkslategray"`). See
 [`examples/colorschemes/solarized.json`](examples/colorschemes/solarized.json)
-for every field a scheme can set.
+for every field a scheme can set. The semantic UI roles are
+`surface_background` for normal content, `popup_background` for menus and
+dropdowns, `input_background`/`input_focused_background`/
+`input_disabled_background` for input states, `selection_background` for
+selected rows, and `button_background`/`button_focused_background` for
+buttons. `text_color`, `muted_text_color`, and `border_color` provide the
+corresponding foreground and chrome roles. The older `accent_background`,
+`focused_background`, `editable_background`, `text`, and `placeholder_text`
+fields remain supported as compatibility fallbacks for existing schemes.
 
 ## Installing
 
