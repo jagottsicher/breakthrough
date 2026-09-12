@@ -108,9 +108,9 @@ func (sb *searchBuilder) newline() {
 // to be appended, i.e. the index it's about to occupy).
 func (sb *searchBuilder) focusTag(idx int) (tag, reset string) {
 	if idx == sb.root.searchFocusedIdx {
-		return fmt.Sprintf("[:%s:b]", colorTag(sb.root.theme.FocusedBackground)), "[:-:-]"
+		return fmt.Sprintf("[:%s:b]", colorTag(sb.root.theme.InputFocusedBackground)), "[:-:-]"
 	}
-	return fmt.Sprintf("[:%s]", colorTag(sb.root.theme.EditableBackground)), "[:-]"
+	return fmt.Sprintf("[:%s]", colorTag(sb.root.theme.InputBackground)), "[:-]"
 }
 
 // dimTag is the "not applicable right now" style — Ignored dirs'
@@ -132,7 +132,7 @@ const dimTag = "[gray]"
 // dimmed field/value, so per the user's own explicit request it reads a
 // shade brighter than dimTag rather than sharing its color.
 func (sb *searchBuilder) hintText(s string) {
-	sb.tag(fmt.Sprintf("[%s]", colorTag(sb.root.theme.PlaceholderText)))
+	sb.tag(fmt.Sprintf("[%s]", colorTag(sb.root.theme.MutedTextColor)))
 	sb.text(s)
 	sb.tag("[-]")
 }

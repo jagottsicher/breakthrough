@@ -572,11 +572,11 @@ func (r *Root) firstSelectableOptionsRow() int {
 // the widget explicitly rather than checking both: see the wiring in
 // newOptionsScreen for why either shortcut would be wrong.
 func (r *Root) setOptionsPaneFocused(pane tview.Primitive, focused bool) {
-	background := r.theme.EditableBackground
+	background := r.theme.InputBackground
 	if focused {
-		background = r.theme.FocusedBackground
+		background = r.theme.SelectionBackground
 	}
-	style := tcell.StyleDefault.Background(background).Foreground(r.theme.Text)
+	style := tcell.StyleDefault.Background(background).Foreground(r.theme.TextColor)
 
 	switch p := pane.(type) {
 	case *tview.List:
