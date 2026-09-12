@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -50,6 +51,31 @@ func openMenuOnRow(t *testing.T, r *Root, row int) {
 	r.target = ref.path
 	r.targetRow = row
 	r.showMenu(0, 0)
+}
+
+func TestContextMenuShowsMnemonicHintWithoutStartingChord(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2)
+
+	if r.pendingChord != 0 {
+		t.Fatalf("context menu opened with pending chord %q", r.pendingChord)
+	}
+	if got := r.chordIndicatorText(); got != "" {
+		t.Fatalf("context menu started a chord countdown: %q", got)
+	}
+	for _, want := range []string{"Menu:", "Look", "Rename", "Copy", "Multiply", "Properties"} {
+		if !strings.Contains(r.buttonBar.GetText(true), want) {
+			t.Errorf("button bar hint = %q, want it to contain %q", r.buttonBar.GetText(true), want)
+		}
+	}
+
+	r.closeMenu()
+	if strings.Contains(r.buttonBar.GetText(true), "Menu:") {
+		t.Errorf("button bar still shows context-menu hint after close: %q", r.buttonBar.GetText(true))
+	}
 }
 
 // TestContextMenuTopLevelForAFile pins the top-level structure for the
