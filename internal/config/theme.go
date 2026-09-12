@@ -39,7 +39,13 @@ type Theme struct {
 	// AccentBackground colors header bars, dialogs, and other floating
 	// chrome — this app's one "everything not otherwise specified"
 	// background.
-	AccentBackground string `json:"accent_background"`
+	AccentBackground        string `json:"accent_background"`
+	SurfaceBackground       string `json:"surface_background"`
+	PopupBackground         string `json:"popup_background"`
+	InputBackground         string `json:"input_background"`
+	InputFocusedBackground  string `json:"input_focused_background"`
+	InputDisabledBackground string `json:"input_disabled_background"`
+	SelectionBackground     string `json:"selection_background"`
 	// ButtonBackground is every real button's own base look (Cancel/
 	// Save/Apply/Select/Find, the filter's regex-mode toggle, ...) —
 	// per the user's own explicit request, a lighter turquoise than
@@ -54,7 +60,8 @@ type Theme struct {
 	// switches to FocusedBackground instead, the same "petrol means
 	// this currently has real keyboard focus" convention every other
 	// focusable element in this app already follows.
-	ButtonBackground string `json:"button_background"`
+	ButtonBackground        string `json:"button_background"`
+	ButtonFocusedBackground string `json:"button_focused_background"`
 	// FocusedBackground highlights whichever field currently has
 	// keyboard focus in the Properties overlay, a list's currently
 	// selected item, and the panel's own currently selected row while it
@@ -135,13 +142,16 @@ type Theme struct {
 
 	// Text is this app's one primary foreground color, used almost
 	// everywhere text is drawn.
-	Text string `json:"text"`
+	Text      string `json:"text"`
+	TextColor string `json:"text_color"`
 	// EditableBackground is Properties' own "editable but not currently
 	// focused" field background — every field's plain look before
 	// FocusedBackground sets the one under keyboard focus apart from it.
 	EditableBackground string `json:"editable_background"`
 	// PlaceholderText colors the filter field's placeholder text.
 	PlaceholderText string `json:"placeholder_text"`
+	MutedTextColor  string `json:"muted_text_color"`
+	BorderColor     string `json:"border_color"`
 
 	// EntryNormal, EntryExecutable, and EntryError color a panel row's
 	// name by what kind of entry it is (see entryColor in internal/ui).
@@ -211,12 +221,19 @@ type Theme struct {
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
 // — what internal/ui actually applies to widgets (see Theme.Resolve).
 type ResolvedTheme struct {
-	PanelBackground     tcell.Color
-	AccentBackground    tcell.Color
-	ButtonBackground    tcell.Color
-	FocusedBackground   tcell.Color
-	ErrorBackground     tcell.Color
-	DirectoryBackground tcell.Color
+	PanelBackground         tcell.Color
+	AccentBackground        tcell.Color
+	SurfaceBackground       tcell.Color
+	PopupBackground         tcell.Color
+	InputBackground         tcell.Color
+	InputFocusedBackground  tcell.Color
+	InputDisabledBackground tcell.Color
+	SelectionBackground     tcell.Color
+	ButtonBackground        tcell.Color
+	ButtonFocusedBackground tcell.Color
+	FocusedBackground       tcell.Color
+	ErrorBackground         tcell.Color
+	DirectoryBackground     tcell.Color
 
 	ClipboardCopyBackground tcell.Color
 	ClipboardCutBackground  tcell.Color
@@ -246,8 +263,11 @@ type ResolvedTheme struct {
 	ClipboardCutBackgroundInactive  tcell.Color
 
 	Text               tcell.Color
+	TextColor          tcell.Color
 	EditableBackground tcell.Color
 	PlaceholderText    tcell.Color
+	MutedTextColor     tcell.Color
+	BorderColor        tcell.Color
 
 	EntryNormal     tcell.Color
 	EntryExecutable tcell.Color
@@ -269,19 +289,29 @@ func DefaultTheme() Theme {
 	return Theme{
 		Name: "Default",
 
-		PanelBackground:     "#1c3232",
-		AccentBackground:    "darkslategray",
-		ButtonBackground:    "lightseagreen",
-		FocusedBackground:   "darkcyan",
-		ErrorBackground:     "darkred",
-		DirectoryBackground: "darkgoldenrod",
+		PanelBackground:         "#1c3232",
+		AccentBackground:        "darkslategray",
+		SurfaceBackground:       "darkslategray",
+		PopupBackground:         "#263f3f",
+		InputBackground:         "slategray",
+		InputFocusedBackground:  "darkcyan",
+		InputDisabledBackground: "#334747",
+		SelectionBackground:     "darkcyan",
+		ButtonBackground:        "lightseagreen",
+		ButtonFocusedBackground: "darkcyan",
+		FocusedBackground:       "darkcyan",
+		ErrorBackground:         "darkred",
+		DirectoryBackground:     "darkgoldenrod",
 
 		ClipboardCopyBackground: "#8a8aa0", // a slightly bluish-tinted gray — see this field's own doc comment for the matched pair this and ClipboardCutBackground deliberately form
 		ClipboardCutBackground:  "#a08a8a", // a slightly pinkish-tinted gray — same base gray, same offset, just on red instead of blue — see this field's own doc comment
 
 		Text:               "white",
+		TextColor:          "white",
 		EditableBackground: "slategray",
 		PlaceholderText:    "lightgray",
+		MutedTextColor:     "lightgray",
+		BorderColor:        "#537070",
 
 		EntryNormal:     "white",
 		EntryExecutable: "green",
@@ -313,6 +343,15 @@ func (t Theme) Resolve() ResolvedTheme {
 		}
 		return tcell.GetColor(fallback)
 	}
+	resolveRole := func(primary, legacy, fallback string) tcell.Color {
+		if c := tcell.GetColor(primary); c != tcell.ColorDefault {
+			return c
+		}
+		if c := tcell.GetColor(legacy); c != tcell.ColorDefault {
+			return c
+		}
+		return tcell.GetColor(fallback)
+	}
 	copyBg := resolve(t.ClipboardCopyBackground, def.ClipboardCopyBackground)
 	cutBg := resolve(t.ClipboardCutBackground, def.ClipboardCutBackground)
 	// The Inactive pair's own "fallback" isn't a fixed default-theme
@@ -333,12 +372,19 @@ func (t Theme) Resolve() ResolvedTheme {
 		cutBgInactive = c
 	}
 	return ResolvedTheme{
-		PanelBackground:     resolve(t.PanelBackground, def.PanelBackground),
-		AccentBackground:    resolve(t.AccentBackground, def.AccentBackground),
-		ButtonBackground:    resolve(t.ButtonBackground, def.ButtonBackground),
-		FocusedBackground:   resolve(t.FocusedBackground, def.FocusedBackground),
-		ErrorBackground:     resolve(t.ErrorBackground, def.ErrorBackground),
-		DirectoryBackground: resolve(t.DirectoryBackground, def.DirectoryBackground),
+		PanelBackground:         resolve(t.PanelBackground, def.PanelBackground),
+		AccentBackground:        resolve(t.AccentBackground, def.AccentBackground),
+		SurfaceBackground:       resolveRole(t.SurfaceBackground, t.AccentBackground, def.SurfaceBackground),
+		PopupBackground:         resolveRole(t.PopupBackground, t.AccentBackground, def.PopupBackground),
+		InputBackground:         resolveRole(t.InputBackground, t.EditableBackground, def.InputBackground),
+		InputFocusedBackground:  resolveRole(t.InputFocusedBackground, t.FocusedBackground, def.InputFocusedBackground),
+		InputDisabledBackground: resolve(t.InputDisabledBackground, def.InputDisabledBackground),
+		SelectionBackground:     resolveRole(t.SelectionBackground, t.FocusedBackground, def.SelectionBackground),
+		ButtonBackground:        resolve(t.ButtonBackground, def.ButtonBackground),
+		ButtonFocusedBackground: resolveRole(t.ButtonFocusedBackground, t.FocusedBackground, def.ButtonFocusedBackground),
+		FocusedBackground:       resolve(t.FocusedBackground, def.FocusedBackground),
+		ErrorBackground:         resolve(t.ErrorBackground, def.ErrorBackground),
+		DirectoryBackground:     resolve(t.DirectoryBackground, def.DirectoryBackground),
 
 		ClipboardCopyBackground:         copyBg,
 		ClipboardCutBackground:          cutBg,
@@ -346,8 +392,11 @@ func (t Theme) Resolve() ResolvedTheme {
 		ClipboardCutBackgroundInactive:  cutBgInactive,
 
 		Text:               resolve(t.Text, def.Text),
+		TextColor:          resolveRole(t.TextColor, t.Text, def.TextColor),
 		EditableBackground: resolve(t.EditableBackground, def.EditableBackground),
 		PlaceholderText:    resolve(t.PlaceholderText, def.PlaceholderText),
+		MutedTextColor:     resolveRole(t.MutedTextColor, t.PlaceholderText, def.MutedTextColor),
+		BorderColor:        resolve(t.BorderColor, def.BorderColor),
 
 		EntryNormal:     resolve(t.EntryNormal, def.EntryNormal),
 		EntryExecutable: resolve(t.EntryExecutable, def.EntryExecutable),
