@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // The context menu: a single registry (contextMenuTree/trashMenuTree),
@@ -243,6 +247,60 @@ func (r *Root) renderContextMenu() {
 	}
 
 	r.renderContextMenuTitle()
+	if r.activePage == contextMenuPage {
+		r.refreshContextMenuHint()
+	}
+}
+
+// contextMenuHintBar renders the visible menu mnemonics in the button bar.
+// It is only a legend: opening the context menu never enters chord mode, so
+// there is no pending key, deadline, or countdown to expire while the menu is
+// being navigated with arrows and Enter.
+func (r *Root) contextMenuHintBar() (text string, spans []buttonBarSpan) {
+	var b strings.Builder
+	col := 0
+	write := func(s string) {
+		b.WriteString(s)
+		col += tview.TaggedStringWidth(s)
+	}
+
+	write("Menu: ")
+	keyBG := colorTag(r.theme.ButtonBackground)
+	first := true
+	for _, entry := range r.currentMenuTree() {
+		if entry.mnemonic == 0 || entry.action == nil {
+			continue
+		}
+		if entry.visible != nil && !entry.visible(r) {
+			continue
+		}
+		if !first {
+			write(" ")
+		}
+		first = false
+		start := col
+		write(fmt.Sprintf("[:%s:] %c [-:-:-]%s", keyBG, entry.mnemonic, entry.resolvedLabel(r)))
+		menuEntry := entry
+		spans = append(spans, buttonBarSpan{
+			startCol: start,
+			endCol:   col,
+			key:      menuEntry.mnemonic,
+			run: func(r *Root) {
+				menuEntry.action(r)
+			},
+		})
+	}
+
+	return b.String(), spans
+}
+
+// refreshContextMenuHint replaces the ordinary button bar with the current
+// menu level's mnemonic legend. The menu itself remains the focus target, so
+// arrow-key navigation is unaffected.
+func (r *Root) refreshContextMenuHint() {
+	text, spans := r.contextMenuHintBar()
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
 }
 
 // renderContextMenuTitle keeps the menu's own title bar naming where you
