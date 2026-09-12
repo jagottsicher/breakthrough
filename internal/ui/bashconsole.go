@@ -94,7 +94,7 @@ func (r *Root) expandBashConsole() {
 	// title bar defaults to — per the user's own explicit request that
 	// every panel's own title bar (not just tool windows'/Details') show
 	// this same active/inactive distinction.
-	r.bashHint.SetBackgroundColor(r.theme.FocusedBackground)
+	r.bashHint.SetBackgroundColor(r.theme.InputFocusedBackground)
 }
 
 // collapseBashConsole is expandBashConsole's counterpart, wired as
@@ -113,7 +113,7 @@ func (r *Root) collapseBashConsole() {
 	r.mainLayout.ResizeItem(r.bashConsole, 1, 0)
 	r.bashConsole.ResizeItem(r.bashHint, 0, 0)
 	r.bashConsole.ResizeItem(r.bashLine, 1, 0)
-	r.bashHint.SetBackgroundColor(r.theme.EditableBackground) // not visible while collapsed, but correct if expanded again without a live theme switch in between
+	r.bashHint.SetBackgroundColor(r.theme.InputBackground) // not visible while collapsed, but correct if expanded again without a live theme switch in between
 }
 
 // captureBashLineKey handles everything bashLine's own default TextArea

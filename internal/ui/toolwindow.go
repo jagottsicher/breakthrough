@@ -91,15 +91,15 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	tw.titleBar = tview.NewTextView()
 	tw.titleBar.SetWrap(false)
 	tw.titleBar.SetText(" " + title + " ")
-	tw.titleBar.SetBackgroundColor(root.theme.EditableBackground)
+	tw.titleBar.SetBackgroundColor(root.theme.InputBackground)
 	// The colored bar itself is what shows which window currently has
 	// real keyboard focus, per the user's own explicit request:
 	// FocusedBackground (a dark cyan/"petrol" tone) while focused,
 	// EditableBackground (the lighter slate gray) while it isn't — the
 	// same two-state scheme Details' own title bar uses (see
 	// detailssidebar.go's newDetailsTitleBar).
-	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.FocusedBackground) })
-	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.EditableBackground) })
+	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputFocusedBackground) })
+	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputBackground) })
 
 	tw.content = tview.NewTextView()
 	tw.content.SetDynamicColors(true) // needed for appendStatus's own style tags
@@ -138,7 +138,7 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// for its own content area, independent of the title bar's own
 	// separate focus-dependent EditableBackground/FocusedBackground pair
 	// (see above).
-	tw.content.SetBackgroundColor(root.theme.AccentBackground)
+	tw.content.SetBackgroundColor(root.theme.SurfaceBackground)
 
 	return tw
 }
