@@ -89,9 +89,9 @@ func (r *Root) filterMenuAnchor() (right, y int) {
 // clears its own hasFocus flag, so HasFocus() would lie specifically
 // there.
 func filterMenuRowStyle(row *tview.TextView, theme config.ResolvedTheme, focused bool) {
-	bg := theme.AccentBackground
+	bg := theme.SurfaceBackground
 	if focused {
-		bg = theme.FocusedBackground
+		bg = theme.SelectionBackground
 	}
 	row.SetBackgroundColor(bg)
 }
