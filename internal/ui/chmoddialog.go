@@ -295,9 +295,9 @@ func (cb *chmodBuilder) padTo(target int) {
 // keyboard focus.
 func (cb *chmodBuilder) focusTag(field chmodField) (tag, reset string) {
 	if field == cb.root.focusedChmodField() {
-		return fmt.Sprintf("[:%s:b]", colorTag(cb.root.theme.FocusedBackground)), "[:-:-]"
+		return fmt.Sprintf("[:%s:b]", colorTag(cb.root.theme.InputFocusedBackground)), "[:-:-]"
 	}
-	return fmt.Sprintf("[:%s]", colorTag(cb.root.theme.EditableBackground)), "[:-]"
+	return fmt.Sprintf("[:%s]", colorTag(cb.root.theme.InputBackground)), "[:-]"
 }
 
 // octalValue writes mode as a highlighted, clickable/editable 4-digit
