@@ -853,10 +853,10 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 // after p.theme changes, from applyTheme (a live color-scheme switch).
 func (p *Panel) paintStaticChrome() {
 	p.table.SetBackgroundColor(p.theme.PanelBackground)
-	p.columnHeader.SetBackgroundColor(p.theme.AccentBackground)
+	p.columnHeader.SetBackgroundColor(p.theme.SurfaceBackground)
 
-	p.header.SetTextColor(p.theme.Text)
-	p.header.SetBackgroundColor(p.theme.AccentBackground)
+	p.header.SetTextColor(p.theme.TextColor)
+	p.header.SetBackgroundColor(p.theme.SurfaceBackground)
 
 	// filterMenuBtn's own "Nx" prefix (and the padding filling out
 	// whatever's left of filterMenuBtnWidth — see renderFilterMenuBtn)
@@ -865,7 +865,7 @@ func (p *Panel) paintStaticChrome() {
 	// tview's own uninitialized default (plain black), a real,
 	// user-reported mismatch against the rest of the header row right
 	// beside it.
-	p.filterMenuBtn.SetBackgroundColor(p.theme.AccentBackground)
+	p.filterMenuBtn.SetBackgroundColor(p.theme.SurfaceBackground)
 
 	// FocusedBackground, not AccentBackground: like propertiesEditField/
 	// chmodEditField/searchEditField, headerEdit only ever exists on
@@ -875,10 +875,8 @@ func (p *Panel) paintStaticChrome() {
 	// it's always the "currently active input" color, per the user's own
 	// explicit request that every input field in the app follow the same
 	// active/inactive/grayed-out convention consistently.
-	p.headerEdit.SetFieldBackgroundColor(p.theme.FocusedBackground)
-	p.headerEdit.SetBackgroundColor(p.theme.FocusedBackground)
-	p.headerEdit.SetFieldTextColor(p.theme.Text)
-	p.headerEdit.SetLabelColor(p.theme.Text)
+	styleInput(p.headerEdit, p.theme, true)
+	p.headerEdit.SetLabelColor(p.theme.TextColor)
 
 	styleButton(p.filterRegexBtn, p.theme)
 	styleButton(p.detailsExpandBtn, p.theme)
@@ -939,11 +937,11 @@ func (p *Panel) paintStaticChrome() {
 // Table.Draw's own selected-cell branch), so there's nothing to gain by
 // touching more than this one.
 func (p *Panel) setSelectionStyle(focused bool) {
-	bg := p.theme.EditableBackground
+	bg := p.theme.InputBackground
 	if focused {
-		bg = p.theme.FocusedBackground
+		bg = p.theme.SelectionBackground
 	}
-	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.Text))
+	p.table.SetSelectedStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.TextColor))
 
 	row, _ := p.table.GetSelection()
 	if ref, ok := p.rowRef(row); ok {
@@ -967,14 +965,14 @@ func (p *Panel) setSelectionStyle(focused bool) {
 // why filterField needs a SetDrawFunc at all rather than the
 // SetFocusFunc/SetBlurFunc pair every other widget here uses.
 func (p *Panel) setFilterFieldStyle(focused bool) {
-	bg := p.theme.EditableBackground
+	bg := p.theme.InputBackground
 	if focused {
-		bg = p.theme.FocusedBackground
+		bg = p.theme.InputFocusedBackground
 	}
-	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.PlaceholderText))
+	p.filterField.SetPlaceholderStyle(tcell.StyleDefault.Background(bg).Foreground(p.theme.MutedTextColor))
 	p.filterField.SetFieldBackgroundColor(bg)
 	p.filterField.SetBackgroundColor(bg)
-	p.filterField.SetFieldTextColor(p.theme.Text)
+	p.filterField.SetFieldTextColor(p.theme.TextColor)
 }
 
 // applyTheme switches the panel to theme live: every already-built

@@ -1667,9 +1667,9 @@ func (r *Root) pushOverlay(page string, widget tview.Primitive, restore func()) 
 func (r *Root) updateOverlayTitleBarColors() {
 	set := func(bar *tview.TextView, page string) {
 		if r.activePage == page {
-			bar.SetBackgroundColor(r.theme.FocusedBackground)
+			bar.SetBackgroundColor(r.theme.InputFocusedBackground)
 		} else {
-			bar.SetBackgroundColor(r.theme.EditableBackground)
+			bar.SetBackgroundColor(r.theme.InputBackground)
 		}
 	}
 	set(r.propertiesTitleBar, propertiesPage)

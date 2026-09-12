@@ -318,8 +318,7 @@ func (r *Root) renderDuplicateDateTimeFields() {
 	case duplicateDateTimeTypeUnix:
 		r.duplicateDateTimeFormatField.SetText(strconv.FormatInt(time.Now().Unix(), 10))
 		r.duplicateDateTimeFormatField.SetDisabled(true)
-		r.duplicateDateTimeFormatField.SetFieldTextColor(r.theme.PlaceholderText)
-		r.duplicateDateTimeFormatField.SetFieldBackgroundColor(r.theme.AccentBackground)
+		styleDisabledInput(r.duplicateDateTimeFormatField, r.theme)
 	case duplicateDateTimeTypeStrftime:
 		r.duplicateDateTimeFormatField.SetText(r.duplicateDateTimeFormatStrftimeValue)
 		r.duplicateDateTimeFormatField.SetChangedFunc(func(v string) {
@@ -353,13 +352,7 @@ func (r *Root) renderDuplicateDateTimeFields() {
 // styleList's own SetSelectedStyle/SetMainTextColor/
 // SetBackgroundColor already do.
 func (r *Root) themeDuplicateDropDown(dd *tview.DropDown) {
-	fieldStyle := tcell.StyleDefault.Background(r.theme.FocusedBackground).Foreground(r.theme.Text)
-	dd.SetFieldStyle(fieldStyle)
-	dd.SetFocusedStyle(fieldStyle)
-	dd.SetListStyles(
-		tcell.StyleDefault.Background(r.theme.AccentBackground).Foreground(r.theme.Text),
-		tcell.StyleDefault.Background(r.theme.FocusedBackground).Foreground(r.theme.Text),
-	)
+	styleDropDown(dd, r.theme)
 }
 
 // duplicateTargetsLabel is the form's own "Target" line — the same

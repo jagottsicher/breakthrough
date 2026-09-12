@@ -626,7 +626,7 @@ func (r *Root) newHelpView() *tview.TextView {
 func (r *Root) newHelpTitleBar() *tview.TextView {
 	bar := tview.NewTextView()
 	bar.SetWrap(false)
-	bar.SetBackgroundColor(r.theme.EditableBackground)
+	bar.SetBackgroundColor(r.theme.InputBackground)
 	bar.SetMouseCapture(r.captureHelpTitleBarMouse)
 	return bar
 }
