@@ -212,7 +212,7 @@ func (p *Panel) refreshTabStrip() {
 		return // not built yet (a Panel mid-construction) — nothing to draw on
 	}
 
-	text, spans := renderTabStrip(p.tabCount, p.tabActive, p.theme.Text, p.theme.FocusedBackground)
+	text, spans := renderTabStrip(p.tabCount, p.tabActive, p.theme.TextColor, p.theme.SelectionBackground)
 
 	// headerTabStripGap columns of lead-in before the first glyph, drawn
 	// as plain spaces in the strip's own text rather than a separate
@@ -282,6 +282,6 @@ func (p *Panel) styleTabStrip(theme config.ResolvedTheme) {
 	if p.tabStrip == nil {
 		return
 	}
-	p.tabStrip.SetTextColor(theme.Text)
+	p.tabStrip.SetTextColor(theme.TextColor)
 	p.tabStrip.SetBackgroundColor(theme.AccentBackground)
 }

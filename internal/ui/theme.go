@@ -166,15 +166,11 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// headerEdit's own comment gives above, per the user's own explicit
 	// request that every input field in the app follow this same
 	// convention consistently.
-	r.rename.SetFieldBackgroundColor(theme.FocusedBackground)
-	r.rename.SetBackgroundColor(theme.FocusedBackground)
-	r.rename.SetLabelColor(theme.Text)
-	r.rename.SetFieldTextColor(theme.Text)
+	styleInput(r.rename, theme, true)
+	r.rename.SetLabelColor(theme.TextColor)
 
-	r.prompt.SetFieldBackgroundColor(theme.FocusedBackground)
-	r.prompt.SetBackgroundColor(theme.FocusedBackground)
-	r.prompt.SetLabelColor(theme.Text)
-	r.prompt.SetFieldTextColor(theme.Text)
+	styleInput(r.prompt, theme, true)
+	r.prompt.SetLabelColor(theme.TextColor)
 
 	// FocusedBackground, fixed rather than active/inactive-dependent the
 	// way propertiesTitleBar/menuTitleBar are (see updateOverlayTitleBarColors):
@@ -183,12 +179,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// of the way Properties/Menu/Help can be — the same reasoning
 	// optionsTitleBar's own fixed FocusedBackground already follows.
 	styleList(r.quitConfirm, theme)
-	r.quitConfirmTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.quitConfirmTitleBar.SetTextColor(theme.Text)
+	r.quitConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.quitConfirmTitleBar.SetTextColor(theme.TextColor)
 
 	styleList(r.confirmDialog, theme)
-	r.confirmDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.confirmDialogTitleBar.SetTextColor(theme.Text)
+	r.confirmDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.confirmDialogTitleBar.SetTextColor(theme.TextColor)
 
 	// styleList(r.pasteConflictDialog, ...) and the title bar's own
 	// coloring were both simply missing before — unlike every other List
@@ -198,8 +194,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// of, the same reasoning quitConfirm/confirmDialog's own (still
 	// title-bar-less on this branch) styling already follows.
 	styleList(r.pasteConflictDialog, theme)
-	r.pasteConflictDialogTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.pasteConflictDialogTitleBar.SetTextColor(theme.Text)
+	r.pasteConflictDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.pasteConflictDialogTitleBar.SetTextColor(theme.TextColor)
 
 	styleList(r.picker, theme)
 
@@ -216,18 +212,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// expandBashConsole/collapseBashConsole) rather than resetting to
 	// one fixed color unconditionally, the same live-color-scheme-switch
 	// hazard detailsTitleBar's own comment below documents.
-	r.bashLine.SetBackgroundColor(theme.AccentBackground)
-	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.Text).Background(theme.AccentBackground))
+	r.bashLine.SetBackgroundColor(theme.SurfaceBackground)
+	r.bashLine.SetTextStyle(tcell.StyleDefault.Foreground(theme.TextColor).Background(theme.SurfaceBackground))
 	if r.bashLine.HasFocus() {
-		r.bashHint.SetBackgroundColor(theme.FocusedBackground)
+		r.bashHint.SetBackgroundColor(theme.InputFocusedBackground)
 	} else {
-		r.bashHint.SetBackgroundColor(theme.EditableBackground)
+		r.bashHint.SetBackgroundColor(theme.InputBackground)
 	}
-	r.bashHint.SetTextColor(theme.PlaceholderText) // a dimmer hint, not primary content — same role PlaceholderText already has elsewhere
-	r.buttonBar.SetBackgroundColor(theme.AccentBackground)
-	r.buttonBar.SetTextColor(theme.Text)
-	r.statusBar.SetBackgroundColor(theme.AccentBackground)
-	r.statusBar.SetTextColor(theme.Text)
+	r.bashHint.SetTextColor(theme.MutedTextColor)
+	r.buttonBar.SetBackgroundColor(theme.SurfaceBackground)
+	r.buttonBar.SetTextColor(theme.TextColor)
+	r.statusBar.SetBackgroundColor(theme.SurfaceBackground)
+	r.statusBar.SetTextColor(theme.TextColor)
 
 	// AccentBackground: the shared, constant "normal panel background"
 	// every panel floating over the main one now uses (toolWindow/
@@ -237,12 +233,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// updateOverlayTitleBarColors below instead, since it now depends on
 	// whether Properties is the currently active overlay — see its own
 	// doc comment.
-	r.propertiesText.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesEditField.SetFieldBackgroundColor(theme.FocusedBackground)
-	r.propertiesEditField.SetBackgroundColor(theme.FocusedBackground)
-	r.propertiesEditField.SetFieldTextColor(theme.Text)
-	r.propertiesButtons.SetBackgroundColor(theme.AccentBackground)
-	r.propertiesTitleBar.SetTextColor(theme.Text)
+	r.propertiesText.SetBackgroundColor(theme.SurfaceBackground)
+	styleInput(r.propertiesEditField, theme, true)
+	r.propertiesButtons.SetBackgroundColor(theme.SurfaceBackground)
+	r.propertiesTitleBar.SetTextColor(theme.TextColor)
 	styleButton(r.propertiesCancelBtn, theme)
 	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
@@ -253,23 +247,21 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.optionsCategories != nil {
 		styleList(r.optionsCategories, theme)
 
-		r.optionsLayout.SetBackgroundColor(theme.AccentBackground)
-		r.optionsButtons.SetBackgroundColor(theme.AccentBackground)
+		r.optionsLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.optionsButtons.SetBackgroundColor(theme.SurfaceBackground)
 
-		r.optionsTitleBar.SetBackgroundColor(theme.FocusedBackground)
-		r.optionsTitleBar.SetTextColor(theme.Text)
-		r.optionsHint.SetBackgroundColor(theme.EditableBackground)
-		r.optionsHint.SetTextColor(theme.Text)
+		r.optionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.optionsTitleBar.SetTextColor(theme.TextColor)
+		r.optionsHint.SetBackgroundColor(theme.InputBackground)
+		r.optionsHint.SetTextColor(theme.MutedTextColor)
 
-		r.optionsTable.SetBackgroundColor(theme.AccentBackground)
+		r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
 
-		r.optionsInfo.SetBackgroundColor(theme.EditableBackground)
-		r.optionsInfo.SetTextColor(theme.Text)
+		r.optionsInfo.SetBackgroundColor(theme.InputBackground)
+		r.optionsInfo.SetTextColor(theme.TextColor)
 
-		r.optionsInput.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.optionsInput.SetBackgroundColor(theme.FocusedBackground)
-		r.optionsInput.SetFieldTextColor(theme.Text)
-		r.optionsInput.SetLabelColor(theme.Text)
+		styleInput(r.optionsInput, theme, true)
+		r.optionsInput.SetLabelColor(theme.TextColor)
 
 		for _, b := range r.optionsButtonList() {
 			styleButton(b, theme)
@@ -297,23 +289,21 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	if r.batchRenameStepsList != nil {
 		styleList(r.batchRenameStepsList, theme)
 
-		r.batchRenameLayout.SetBackgroundColor(theme.AccentBackground)
-		r.batchRenameButtons.SetBackgroundColor(theme.AccentBackground)
+		r.batchRenameLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameButtons.SetBackgroundColor(theme.SurfaceBackground)
 
-		r.batchRenameTitleBar.SetBackgroundColor(theme.FocusedBackground)
-		r.batchRenameTitleBar.SetTextColor(theme.Text)
-		r.batchRenameHint.SetBackgroundColor(theme.EditableBackground)
-		r.batchRenameHint.SetTextColor(theme.Text)
+		r.batchRenameTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.batchRenameTitleBar.SetTextColor(theme.TextColor)
+		r.batchRenameHint.SetBackgroundColor(theme.InputBackground)
+		r.batchRenameHint.SetTextColor(theme.MutedTextColor)
 
-		r.batchRenameFieldsTable.SetBackgroundColor(theme.AccentBackground)
-		r.batchRenamePreviewTable.SetBackgroundColor(theme.AccentBackground)
-		r.batchRenameStatus.SetBackgroundColor(theme.AccentBackground)
-		r.batchRenameStatus.SetTextColor(theme.Text)
+		r.batchRenameFieldsTable.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameStatus.SetTextColor(theme.TextColor)
 
-		r.batchRenameInput.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.batchRenameInput.SetBackgroundColor(theme.FocusedBackground)
-		r.batchRenameInput.SetFieldTextColor(theme.Text)
-		r.batchRenameInput.SetLabelColor(theme.Text)
+		styleInput(r.batchRenameInput, theme, true)
+		r.batchRenameInput.SetLabelColor(theme.TextColor)
 
 		for _, b := range r.batchRenameButtonList() {
 			styleButton(b, theme)
@@ -332,53 +322,49 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.searchTop != nil {
-		r.searchTop.SetBackgroundColor(theme.AccentBackground)
-		r.searchLeft.SetBackgroundColor(theme.AccentBackground)
-		r.searchRight.SetBackgroundColor(theme.AccentBackground)
-		r.searchEditField.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.searchEditField.SetBackgroundColor(theme.FocusedBackground)
-		r.searchEditField.SetFieldTextColor(theme.Text)
-		r.searchButtons.SetBackgroundColor(theme.AccentBackground)
+		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
+		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
+		r.searchRight.SetBackgroundColor(theme.SurfaceBackground)
+		styleInput(r.searchEditField, theme, true)
+		r.searchButtons.SetBackgroundColor(theme.SurfaceBackground)
 		styleButton(r.searchCancelBtn, theme)
 		styleButton(r.searchSearchBtn, theme)
 		// FocusedBackground, fixed — Search is a single-layer, always-modal
 		// dialog nothing else ever stacks on top of, the same reasoning
 		// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-		r.searchTitleBar.SetBackgroundColor(theme.FocusedBackground)
-		r.searchTitleBar.SetTextColor(theme.Text)
+		r.searchTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.searchTitleBar.SetTextColor(theme.TextColor)
 		r.rerenderSearchDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
 	if r.chmodText != nil {
-		r.chmodText.SetBackgroundColor(theme.AccentBackground)
-		r.chmodEditField.SetFieldBackgroundColor(theme.FocusedBackground)
-		r.chmodEditField.SetBackgroundColor(theme.FocusedBackground)
-		r.chmodEditField.SetFieldTextColor(theme.Text)
-		r.chmodButtons.SetBackgroundColor(theme.AccentBackground)
+		r.chmodText.SetBackgroundColor(theme.SurfaceBackground)
+		styleInput(r.chmodEditField, theme, true)
+		r.chmodButtons.SetBackgroundColor(theme.SurfaceBackground)
 		// FocusedBackground, fixed — chmod is a single-layer, always-modal
 		// dialog nothing else ever stacks on top of, the same reasoning
 		// optionsTitleBar's own fixed FocusedBackground already follows
 		// (see confirmDialogTitleBar/quitConfirmTitleBar just above for
 		// the identical choice on the same grounds).
-		r.chmodTitleBar.SetBackgroundColor(theme.FocusedBackground)
-		r.chmodTitleBar.SetTextColor(theme.Text)
+		r.chmodTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.chmodTitleBar.SetTextColor(theme.TextColor)
 		styleButton(r.chmodCancelBtn, theme)
 		styleButton(r.chmodApplyBtn, theme)
 		r.rerenderChmodDialog() // repaints focusTag/dimTag's own style tags with the new theme
 	}
 
 	if r.dirPicker != nil {
-		r.dirPicker.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerHeader.SetBackgroundColor(theme.AccentBackground)
-		r.dirPickerHeader.SetTextColor(theme.Text)
+		r.dirPicker.SetBackgroundColor(theme.SurfaceBackground)
+		r.dirPickerHeader.SetBackgroundColor(theme.SurfaceBackground)
+		r.dirPickerHeader.SetTextColor(theme.TextColor)
 		styleList(r.dirPickerList, theme)
 		styleButton(r.dirPickerSelectBtn, theme)
 		styleButton(r.dirPickerCancelBtn, theme)
 	}
 
 	if r.helpView != nil {
-		r.helpView.SetBackgroundColor(theme.AccentBackground)
-		r.helpView.SetTextColor(theme.Text)
+		r.helpView.SetBackgroundColor(theme.SurfaceBackground)
+		r.helpView.SetTextColor(theme.TextColor)
 	}
 	if r.helpTitleBar != nil {
 		// Background is set via updateOverlayTitleBarColors above
@@ -388,8 +374,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.viewerView != nil {
-		r.viewerView.SetBackgroundColor(theme.AccentBackground)
-		r.viewerView.SetTextColor(theme.Text)
+		r.viewerView.SetBackgroundColor(theme.SurfaceBackground)
+		r.viewerView.SetTextColor(theme.TextColor)
 	}
 
 	if r.detailsSidebar != nil {
@@ -418,23 +404,23 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.detailsTitleBar.SetTextColor(theme.Text)
 	}
 
-	r.sedForm.SetBackgroundColor(theme.AccentBackground)
-	r.sedForm.SetLabelColor(theme.Text)
-	r.sedForm.SetFieldBackgroundColor(theme.FocusedBackground)
-	r.sedForm.SetFieldTextColor(theme.Text)
+	r.sedForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.sedForm.SetLabelColor(theme.TextColor)
+	r.sedForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.sedForm.SetFieldTextColor(theme.TextColor)
 	styleList(r.sedFlagsList, theme)
 	styleList(r.sedActions, theme)
 	// FocusedBackground, fixed — Sed Replace/Preview are single-layer,
 	// always-modal dialogs nothing else ever stacks on top of, the same
 	// reasoning confirmDialogTitleBar/quitConfirmTitleBar/chmodTitleBar
 	// already follow.
-	r.sedTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.sedTitleBar.SetTextColor(theme.Text)
+	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sedTitleBar.SetTextColor(theme.TextColor)
 
-	r.duplicateForm.SetBackgroundColor(theme.AccentBackground)
-	r.duplicateForm.SetLabelColor(theme.Text)
-	r.duplicateForm.SetFieldBackgroundColor(theme.FocusedBackground)
-	r.duplicateForm.SetFieldTextColor(theme.Text)
+	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicateForm.SetLabelColor(theme.TextColor)
+	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.duplicateForm.SetFieldTextColor(theme.TextColor)
 	// See themeDuplicateDropDown's own doc comment (duplicate.go) for why
 	// both dropdowns need this explicit call at all: SetFormAttributes
 	// (what the two lines above actually drive, applied fresh every
@@ -459,36 +445,35 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// while it's showing must not leave it in the previous scheme's dim
 	// color indefinitely.
 	if r.duplicateDateTimeFormatField != nil && r.duplicateDateTimeFormatType == duplicateDateTimeTypeUnix {
-		r.duplicateDateTimeFormatField.SetFieldTextColor(theme.PlaceholderText)
-		r.duplicateDateTimeFormatField.SetFieldBackgroundColor(theme.AccentBackground)
+		styleDisabledInput(r.duplicateDateTimeFormatField, theme)
 	}
-	r.duplicatePreviewView.SetBackgroundColor(theme.AccentBackground)
-	r.duplicatePreviewView.SetTextColor(theme.Text)
-	r.duplicateSpacer.SetBackgroundColor(theme.AccentBackground)
-	r.duplicateButtons.SetBackgroundColor(theme.AccentBackground)
+	r.duplicatePreviewView.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicatePreviewView.SetTextColor(theme.TextColor)
+	r.duplicateSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.duplicateButtons.SetBackgroundColor(theme.SurfaceBackground)
 	styleButton(r.duplicateCancelBtn, theme)
 	styleButton(r.duplicateApplyBtn, theme)
 	// FocusedBackground, fixed — Multiply is a single-layer, always-modal
 	// dialog nothing else ever stacks on top of, the same reasoning
 	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
-	r.duplicateTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.duplicateTitleBar.SetTextColor(theme.Text)
+	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.duplicateTitleBar.SetTextColor(theme.TextColor)
 
-	r.sedPreviewStatus.SetBackgroundColor(theme.AccentBackground)
-	r.sedPreviewStatus.SetTextColor(theme.Text)
-	r.sedPreviewTable.SetBackgroundColor(theme.AccentBackground)
+	r.sedPreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.sedPreviewStatus.SetTextColor(theme.TextColor)
+	r.sedPreviewTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.sedPreviewTable.SetSelectedStyle(tcell.StyleDefault.
-		Background(theme.FocusedBackground).
-		Foreground(theme.Text))
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 	styleList(r.sedPreviewActions, theme)
-	r.sedPreviewTitleBar.SetBackgroundColor(theme.FocusedBackground)
-	r.sedPreviewTitleBar.SetTextColor(theme.Text)
+	r.sedPreviewTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sedPreviewTitleBar.SetTextColor(theme.TextColor)
 
-	r.tabSwitcher.SetBackgroundColor(theme.AccentBackground)
+	r.tabSwitcher.SetBackgroundColor(theme.SurfaceBackground)
 	r.tabSwitcher.SetSelectedStyle(tcell.StyleDefault.
-		Background(theme.FocusedBackground).
-		Foreground(theme.Text))
-	r.tabSwitcherTitleBar.SetBackgroundColor(theme.AccentBackground)
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	r.tabSwitcherTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.tabSwitcherTitleBar.SetTextColor(theme.Text)
 
 	// AccentBackground, the same as tabSwitcherTitleBar just above, not
@@ -496,7 +481,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// title bar (confirmDialog/chmod/Sed Replace/Search, ...) uses: this
 	// is a small dropdown anchored under a header button, closer in
 	// spirit to the tab switcher than to a full dialog.
-	r.filterMenuTitleBar.SetBackgroundColor(theme.AccentBackground)
+	r.filterMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.filterMenuTitleBar.SetTextColor(theme.Text)
 
 	// Every tab, not just the visible one: a color scheme is as global as
@@ -526,7 +511,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 // actually reach the screen.
 func styleButton(b *tview.Button, theme config.ResolvedTheme) {
 	b.SetStyle(tcell.StyleDefault.Background(theme.ButtonBackground).Foreground(theme.Text))
-	b.SetActivatedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
+	b.SetActivatedStyle(tcell.StyleDefault.Background(theme.ButtonFocusedBackground).Foreground(theme.Text))
 }
 
 // styleList applies this app's own list look — AccentBackground overall,
@@ -540,7 +525,43 @@ func styleButton(b *tview.Button, theme config.ResolvedTheme) {
 // — the same real, previously-unnoticed gap styleButton's own doc
 // comment documents for buttons, just for List instead of Button.
 func styleList(l *tview.List, theme config.ResolvedTheme) {
-	l.SetBackgroundColor(theme.AccentBackground)
+	l.SetBackgroundColor(theme.SurfaceBackground)
 	l.SetMainTextColor(theme.Text)
-	l.SetSelectedStyle(tcell.StyleDefault.Background(theme.FocusedBackground).Foreground(theme.Text))
+	l.SetSelectedStyle(tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.Text))
+}
+
+// styleInput applies the shared normal/focused input contract. tview keeps
+// placeholder styling separate from the field style, so all three are set
+// here rather than being left to each dialog to interpret independently.
+func styleInput(field *tview.InputField, theme config.ResolvedTheme, focused bool) {
+	background := theme.InputBackground
+	if focused {
+		background = theme.InputFocusedBackground
+	}
+	field.SetFieldBackgroundColor(background)
+	field.SetBackgroundColor(background)
+	field.SetFieldTextColor(theme.TextColor)
+	field.SetPlaceholderStyle(tcell.StyleDefault.Background(background).Foreground(theme.MutedTextColor))
+}
+
+// styleDisabledInput gives disabled fields a distinct, readable state rather
+// than treating them as ordinary inputs with a dimmed foreground only.
+func styleDisabledInput(field *tview.InputField, theme config.ResolvedTheme) {
+	field.SetFieldBackgroundColor(theme.InputDisabledBackground)
+	field.SetBackgroundColor(theme.InputDisabledBackground)
+	field.SetFieldTextColor(theme.MutedTextColor)
+	field.SetPlaceholderStyle(tcell.StyleDefault.Background(theme.InputDisabledBackground).Foreground(theme.MutedTextColor))
+}
+
+// styleDropDown keeps the closed field and its popup list on the same palette
+// as every other input and list in the application.
+func styleDropDown(dropdown *tview.DropDown, theme config.ResolvedTheme) {
+	normal := tcell.StyleDefault.Background(theme.InputBackground).Foreground(theme.TextColor)
+	focused := tcell.StyleDefault.Background(theme.InputFocusedBackground).Foreground(theme.TextColor)
+	dropdown.SetFieldStyle(normal)
+	dropdown.SetFocusedStyle(focused)
+	dropdown.SetListStyles(
+		tcell.StyleDefault.Background(theme.PopupBackground).Foreground(theme.TextColor),
+		tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.TextColor),
+	)
 }

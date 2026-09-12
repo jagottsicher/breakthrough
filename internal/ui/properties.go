@@ -220,9 +220,9 @@ func (pb *propertiesBuilder) field(label, value string) {
 // recognizing the same names tcell.GetColor does.
 func (pb *propertiesBuilder) focusTag(field, focused propertyField) (tag, reset string) {
 	if field == focused {
-		return fmt.Sprintf("[:%s:b]", colorTag(pb.theme.FocusedBackground)), "[:-:-]"
+		return fmt.Sprintf("[:%s:b]", colorTag(pb.theme.InputFocusedBackground)), "[:-:-]"
 	}
-	return fmt.Sprintf("[:%s]", colorTag(pb.theme.EditableBackground)), "[:-]"
+	return fmt.Sprintf("[:%s]", colorTag(pb.theme.InputBackground)), "[:-]"
 }
 
 // editableField writes one "Label: value" line with value highlighted

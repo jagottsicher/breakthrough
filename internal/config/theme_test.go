@@ -13,12 +13,14 @@ func TestDefaultThemeResolvesAllFieldsToValidColors(t *testing.T) {
 	fields := map[string]tcell.Color{
 		"PanelBackground":         resolved.PanelBackground,
 		"ButtonBackground":        resolved.ButtonBackground,
+		"ButtonFocusedBackground": resolved.ButtonFocusedBackground,
 		"AccentBackground":        resolved.AccentBackground,
 		"FocusedBackground":       resolved.FocusedBackground,
 		"ErrorBackground":         resolved.ErrorBackground,
 		"ClipboardCopyBackground": resolved.ClipboardCopyBackground,
 		"ClipboardCutBackground":  resolved.ClipboardCutBackground,
 		"Text":                    resolved.Text,
+		"TextColor":               resolved.TextColor,
 		"EditableBackground":      resolved.EditableBackground,
 		"PlaceholderText":         resolved.PlaceholderText,
 		"EntryNormal":             resolved.EntryNormal,
@@ -110,6 +112,33 @@ func TestThemeResolveAcceptsHexColors(t *testing.T) {
 	resolved := th.Resolve()
 	if want := tcell.GetColor("#112233"); resolved.AccentBackground != want {
 		t.Errorf("AccentBackground = %v, want %v", resolved.AccentBackground, want)
+	}
+}
+
+func TestThemeResolveMapsLegacyFieldsToSemanticRoles(t *testing.T) {
+	resolved := (Theme{
+		AccentBackground:   "#112233",
+		FocusedBackground:  "#223344",
+		EditableBackground: "#334455",
+		Text:               "#445566",
+		PlaceholderText:    "#556677",
+		ButtonBackground:   "#667788",
+	}).Resolve()
+
+	checks := map[string][2]tcell.Color{
+		"SurfaceBackground":       {resolved.SurfaceBackground, tcell.GetColor("#112233")},
+		"PopupBackground":         {resolved.PopupBackground, tcell.GetColor("#112233")},
+		"InputBackground":         {resolved.InputBackground, tcell.GetColor("#334455")},
+		"InputFocusedBackground":  {resolved.InputFocusedBackground, tcell.GetColor("#223344")},
+		"SelectionBackground":     {resolved.SelectionBackground, tcell.GetColor("#223344")},
+		"ButtonFocusedBackground": {resolved.ButtonFocusedBackground, tcell.GetColor("#223344")},
+		"TextColor":               {resolved.TextColor, tcell.GetColor("#445566")},
+		"MutedTextColor":          {resolved.MutedTextColor, tcell.GetColor("#556677")},
+	}
+	for name, pair := range checks {
+		if pair[0] != pair[1] {
+			t.Errorf("%s = %v, want legacy alias value %v", name, pair[0], pair[1])
+		}
 	}
 }
 

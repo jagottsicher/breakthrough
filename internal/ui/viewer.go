@@ -196,7 +196,7 @@ func (r *Root) showBuiltinLook(path string) {
 		// wholesale any more.
 		text := renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
 		if result.Truncated {
-			text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.PlaceholderText))
+			text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.MutedTextColor))
 		}
 		r.viewerView.SetText(text)
 
@@ -357,7 +357,7 @@ func (r *Root) renderPDFPageContent(innerWidth, innerHeight int) {
 	case result.Kind == viewer.KindText:
 		content = tview.Escape(result.Content)
 		if r.viewerPDFMode == viewer.PDFViewAuto {
-			content += fmt.Sprintf("\n\n[%s]— %s[-]", colorTag(r.theme.PlaceholderText), viewer.PDFTextFallbackNotice)
+			content += fmt.Sprintf("\n\n[%s]— %s[-]", colorTag(r.theme.MutedTextColor), viewer.PDFTextFallbackNotice)
 		}
 	default: // viewer.KindUnsupported
 		message := result.Reason
