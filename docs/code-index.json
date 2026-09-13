@@ -258,8 +258,8 @@
     },
     {
       "path": "internal/contextindex/index.go",
-      "size": 8303,
-      "sha256": "37d06bd7788b7f22514d3ab1b333923f3307a75a005e636fba48cb385c8da6fe"
+      "size": 8320,
+      "sha256": "f21a574d3ea7b7c433e6cf824ee845cc2100ad95d839f55f9cdd4c92b9c67598"
     },
     {
       "path": "internal/contextindex/index_test.go",
@@ -22341,5 +22341,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "20dac4dcfa5efe95b5fa73f918f35f074e6c13f87e76830b5b668bde0813fb85"
+  "merkle_root": "3a6cf413d2e0b99ae495d116d58c1165cb7ef006f25ec4ad90f03419314851bb"
 }
