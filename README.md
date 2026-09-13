@@ -499,6 +499,14 @@ tool windows are what's planned next — see
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
 
+## Architecture
+
+The current package and function relationships are shown in the generated
+callgraph below. It is regenerated with `go-callvis` for changes merged into
+`develop` and for tagged releases.
+
+![breakthrough callgraph](docs/images/callgraph.svg)
+
 ## Color schemes
 
 breakthrough ships with one built-in scheme ("Default") and reads

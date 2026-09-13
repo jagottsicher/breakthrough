@@ -28,6 +28,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Regenerate callgraph
+        run: |
+          go install github.com/ofabry/go-callvis@v0.7.2-0.20251130120951-67a26605
+          "$(go env GOPATH)/bin/go-callvis" \
+            -focus github.com/jagottsicher/breakthrough/cmd/breakthrough \
+            -file docs/images/callgraph \
+            -rankdir TB \
+            ./...
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
