@@ -687,6 +687,9 @@ uninstall instructions.
   uninstalling, and troubleshooting.
 - **[docs/whitepaper.md](docs/whitepaper.md)** — the concept and the
   reasoning behind the project.
+- **[docs/code-index.json](docs/code-index.json)** — a generated,
+  deterministic source index with file hashes, a Merkle root, Go package
+  imports, and declared symbols for tooling and architecture work.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — local setup and the branch
   workflow.
 
