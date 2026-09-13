@@ -28,6 +28,20 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Regenerate callgraph
+        run: |
+          callvis_dir="$(mktemp -d)"
+          git clone --depth 1 https://github.com/ofabry/go-callvis.git "$callvis_dir/go-callvis"
+          cd "$callvis_dir/go-callvis"
+          go get golang.org/x/tools@v0.49.0
+          go install .
+          cd "$GITHUB_WORKSPACE"
+          "$(go env GOPATH)/bin/go-callvis" \
+            -focus github.com/jagottsicher/breakthrough/cmd/breakthrough \
+            -file docs/images/callgraph \
+            -rankdir TB \
+            ./...
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
