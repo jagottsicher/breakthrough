@@ -271,7 +271,7 @@ func excludedDirectory(path string) bool {
 		return true
 	}
 	for _, component := range strings.Split(path, "/") {
-		if component == ".git" || component == ".cache" || component == "vendor" || component == "node_modules" {
+		if component == ".git" || component == ".cache" || component == ".claude" || component == "vendor" || component == "node_modules" {
 			return true
 		}
 	}
