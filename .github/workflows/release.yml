@@ -42,6 +42,9 @@ jobs:
             -rankdir TB \
             ./...
 
+      - name: Regenerate context index
+        run: go run ./cmd/gen-context-index -root . -output docs/code-index.json
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

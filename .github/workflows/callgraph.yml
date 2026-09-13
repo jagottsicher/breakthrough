@@ -39,3 +39,9 @@ jobs:
 
       - name: Verify committed callgraph
         run: git diff --exit-code -- docs/images/callgraph.svg
+
+      - name: Regenerate context index
+        run: go run ./cmd/gen-context-index -root . -output docs/code-index.json
+
+      - name: Verify committed context index
+        run: git diff --exit-code -- docs/code-index.json
