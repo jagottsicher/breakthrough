@@ -2,11 +2,6 @@
   "version": 1,
   "files": [
     {
-      "path": ".claude/settings.local.json",
-      "size": 3632,
-      "sha256": "55b179664cc106d302c7bcf97b38f2a8418e3344dd0e06bc52b6175f290073f1"
-    },
-    {
       "path": ".github/FUNDING.yml",
       "size": 778,
       "sha256": "4761ef67a07242e3ecf5a31529cf90f9216a8588311a68ec7a4a479e0e97b45b"
@@ -263,8 +258,8 @@
     },
     {
       "path": "internal/contextindex/index.go",
-      "size": 8218,
-      "sha256": "ec928adf188e0506b36bd7c46245202570c8a454f4b1cb55afa633b3ed6fd3aa"
+      "size": 8244,
+      "sha256": "b7264c2d51c93fa3c61bfc420b56342162eb12d69cd9c104c87decc00afc517e"
     },
     {
       "path": "internal/contextindex/index_test.go",
@@ -22346,5 +22341,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "102355805d9a248d49eb9390501ba7baccaff755faa657b7fa17966380ad79d3"
+  "merkle_root": "4ea899a4bff555774e36ebbef753c6aa71b222248fe2536910be82a3f8049c83"
 }
