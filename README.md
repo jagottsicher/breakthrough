@@ -46,7 +46,7 @@ terminal.
   mount point, or `..` itself — gets its own name highlighted dark
   yellow (just the name, not the trailing `/` or a symlink's `-> target`
   arrow), so folders stand out from plain files at a glance. Beyond
-  that, a name's own text color also tells them apart: green for
+  that, a name's own text color also tells them apart: dark green for
   executable, red for a broken symlink, a darker red for anything the
   current user can't actually read (checked with a real permission
   check, not just Mode's bits — a `/proc` entry included), cyan for a

@@ -253,7 +253,7 @@ cleared and re-enabled, size/modified-time switched off and cleared),
 so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
-for anything `Enter` navigates into, green for executable, red for a
+for anything `Enter` navigates into, dark green for executable, red for a
 broken symlink, darker red for something you can't read, cyan for a
 symlink to a file, orange for a socket/FIFO/device, magenta for a
 recognized archive, dim gray for a dotfile.
