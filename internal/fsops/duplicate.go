@@ -61,7 +61,7 @@ type DuplicateOptions struct {
 	// DateTimeFormat is a format string for DuplicateDateTime,
 	// interpreted as a Go reference-time layout (the default) or, with
 	// DateTimeStrftime, as a strftime-style format — see
-	// strftimeToGoLayout's own doc comment for exactly which
+	// StrftimeToGoLayout's own doc comment for exactly which
 	// specifiers that second mode supports. Ignored entirely when
 	// DateTimeUseUnix is set.
 	DateTimeFormat   string
@@ -169,7 +169,7 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 		layout := opts.DateTimeFormat
 		if opts.DateTimeStrftime {
 			var err error
-			layout, err = strftimeToGoLayout(opts.DateTimeFormat)
+			layout, err = StrftimeToGoLayout(opts.DateTimeFormat)
 			if err != nil {
 				return "", err
 			}
@@ -180,11 +180,12 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 	}
 }
 
-// strftimeToGoLayout translates a commonly-used subset of strftime's
+// StrftimeToGoLayout translates a commonly-used subset of strftime's
 // own %-directives into Go's reference-time layout equivalent — just
-// enough for a duplicate's own date/time suffix, not the full strftime
-// specification: no locale-dependent %c/%x/%X, no week-number fields,
-// nothing beyond the directives below.
+// enough for a duplicate's own date/time suffix (and, since it's
+// exported, Batch Rename's own {date} token — see internal/batchrename),
+// not the full strftime specification: no locale-dependent %c/%x/%X,
+// no week-number fields, nothing beyond the directives below.
 //
 // GNU's "%-" no-padding variant (e.g. "%-d" instead of "%d") is
 // supported for every field where Go itself has a distinct unpadded
@@ -195,7 +196,7 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 // regardless ("05", never "5") — a cosmetic gap in Go's own layout
 // system, not something worth writing custom formatting code to work
 // around for one digit.
-func strftimeToGoLayout(format string) (string, error) {
+func StrftimeToGoLayout(format string) (string, error) {
 	var b strings.Builder
 	i := 0
 	for i < len(format) {
@@ -228,7 +229,7 @@ func strftimeToGoLayout(format string) (string, error) {
 	return b.String(), nil
 }
 
-// strftimeLayout is strftimeToGoLayout's own per-specifier lookup,
+// strftimeLayout is StrftimeToGoLayout's own per-specifier lookup,
 // split out so its own table is easy to scan and extend on its own.
 func strftimeLayout(spec byte, noPad bool) (string, bool) {
 	switch spec {
@@ -247,7 +248,7 @@ func strftimeLayout(spec byte, noPad bool) (string, bool) {
 		}
 		return "02", true
 	case 'H':
-		return "15", true // see strftimeToGoLayout's own doc comment: no unpadded 24h token exists in Go
+		return "15", true // see StrftimeToGoLayout's own doc comment: no unpadded 24h token exists in Go
 	case 'I':
 		if noPad {
 			return "3", true

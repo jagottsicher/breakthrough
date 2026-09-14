@@ -126,10 +126,13 @@ func Plan(paths []string, rules Rules) PlanResult {
 		dir := filepath.Dir(p)
 		name := filepath.Base(p)
 
-		info, statErr := os.Lstat(p)
-		isDir := statErr == nil && info.IsDir()
+		in := Input{Name: name, Index: i, Parent: filepath.Base(dir)}
+		if info, statErr := os.Lstat(p); statErr == nil {
+			in.IsDir = info.IsDir()
+			in.ModTime = info.ModTime()
+		}
 
-		newName, err := Rename(rules, Input{Name: name, IsDir: isDir, Index: i})
+		newName, err := Rename(rules, in)
 		switch {
 		case err != nil:
 			result.Problems = append(result.Problems, Problem{Path: p, Reason: err.Error()})
