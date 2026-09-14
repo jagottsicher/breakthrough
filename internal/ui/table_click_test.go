@@ -394,6 +394,159 @@ func TestRightDragReversalUntogglesRowsLeftBehind(t *testing.T) {
 	}
 }
 
+// shiftArrow sends a Shift+Up (down=false) or Shift+Down (down=true) key
+// event straight through captureTableKey — the same function tview
+// invokes via Panel.table.SetInputCapture, and the same direct-call
+// style existing Escape-key tests already use.
+func shiftArrow(root *Root, down bool) {
+	key := tcell.KeyUp
+	if down {
+		key = tcell.KeyDown
+	}
+	root.panel.captureTableKey(tcell.NewEventKey(key, 0, tcell.ModShift))
+}
+
+// TestShiftDownSelectsRange is Shift+Up/Down's own counterpart to
+// TestRightDragSelectsRange: holding Shift and pressing Down three times
+// from row 1 should select exactly rows 1 through 4 — the keyboard
+// equivalent of a right-button drag over the same range, both built on
+// the same applyDragDelta.
+func TestShiftDownSelectsRange(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+	root.panel.focusRow(1)
+
+	shiftArrow(root, true)
+	shiftArrow(root, true)
+	shiftArrow(root, true)
+
+	wantSelected := map[int]bool{0: false, 1: true, 2: true, 3: true, 4: true}
+	for row, want := range wantSelected {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if got := root.panel.selected[ref.path]; got != want {
+			t.Errorf("row %d (%s): selected = %v, want %v", row, ref.name, got, want)
+		}
+	}
+	if got, _ := root.panel.table.GetSelection(); got != 4 {
+		t.Errorf("cursor after three Shift+Down presses = %d, want 4", got)
+	}
+}
+
+// TestShiftUpShrinksAndReversesRange is Shift+Up/Down's own counterpart
+// to TestRightDragReversalUntogglesRowsLeftBehind: having extended down
+// to row 4, reversing direction with Shift+Up must shrink the selection
+// back from the far end — not just add more checked rows on top — the
+// same reversal a held-down right-button drag already supports, since
+// both go through the same applyDragDelta with a fixed anchor.
+func TestShiftUpShrinksAndReversesRange(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+	root.panel.focusRow(1)
+
+	shiftArrow(root, true) // row 1 -> 2
+	shiftArrow(root, true) // row 2 -> 3
+	shiftArrow(root, true) // row 3 -> 4
+
+	ref4, _ := root.panel.rowRef(4)
+	if !root.panel.selected[ref4.path] {
+		t.Fatal("setup: row 4 should be checked after reaching it")
+	}
+
+	shiftArrow(root, false) // row 4 -> 3
+	shiftArrow(root, false) // row 3 -> 2
+
+	want := map[int]bool{1: true, 2: true, 3: false, 4: false}
+	for row, wantChecked := range want {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if got := root.panel.selected[ref.path]; got != wantChecked {
+			t.Errorf("row %d: selected = %v, want %v", row, got, wantChecked)
+		}
+	}
+	if got, _ := root.panel.table.GetSelection(); got != 2 {
+		t.Errorf("cursor after reversing back to row 2 = %d, want 2", got)
+	}
+}
+
+// TestPlainArrowEndsShiftSelectSession checks that a plain (non-Shift)
+// arrow key ends a Shift+Up/Down session, so a later Shift+Up/Down
+// anchors fresh at wherever the cursor now sits, instead of silently
+// resuming the old, by-then-stale anchor/current-row pair.
+func TestPlainArrowEndsShiftSelectSession(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+	root.panel.focusRow(1)
+
+	shiftArrow(root, true) // Shift+Down: rows 1-2 checked, cursor on row 2
+
+	// Two plain, unmodified Downs: row 3, then row 4 — through the
+	// table's real InputHandler, not captureTableKey alone, since a
+	// plain arrow's actual movement is the table's own default handling
+	// that captureTableKey merely lets through unconsumed. Neither
+	// should touch a checkbox — the actual point of this test is that
+	// both must also end the shift-select session, not quietly keep
+	// treating row 1 as the anchor and row 2 as "where it left off".
+	handleKey := root.panel.table.InputHandler()
+	handleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	handleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	if got, _ := root.panel.table.GetSelection(); got != 4 {
+		t.Fatalf("setup: cursor after two plain Downs = %d, want 4", got)
+	}
+
+	shiftArrow(root, false) // Shift+Up: row 4 -> 3
+
+	// A fresh anchor at row 4 immediately checks row 4 itself, then the
+	// move to row 3 checks that too — rows 1/2 are untouched leftovers
+	// from the first session. A stale anchor at row 1 (the bug this
+	// pins) would instead extend the *old* range to row 3 and never
+	// touch row 4 at all, since row 4 was only ever reached by a plain
+	// move the session never saw.
+	want := map[int]bool{1: true, 2: true, 3: true, 4: true}
+	for row, wantChecked := range want {
+		ref, ok := root.panel.rowRef(row)
+		if !ok {
+			t.Fatalf("row %d: no rowRef", row)
+		}
+		if got := root.panel.selected[ref.path]; got != wantChecked {
+			t.Errorf("row %d: selected = %v, want %v", row, got, wantChecked)
+		}
+	}
+	if got, _ := root.panel.table.GetSelection(); got != 3 {
+		t.Errorf("cursor after Shift+Up = %d, want 3", got)
+	}
+}
+
+// TestShiftSelectClampsAtTableEdges checks that Shift+Up at row 0 and
+// Shift+Down at the last row move neither the cursor out of bounds nor
+// panic — captureTableKey clamps the target row itself, the same way
+// focusRowClamped does elsewhere.
+func TestShiftSelectClampsAtTableEdges(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	root.panel.focusRow(0)
+	shiftArrow(root, false) // Shift+Up at the very top: nothing above row 0
+	if got, _ := root.panel.table.GetSelection(); got != 0 {
+		t.Errorf("cursor after Shift+Up at row 0 = %d, want 0 (clamped)", got)
+	}
+
+	last := root.panel.table.GetRowCount() - 1
+	root.panel.focusRow(last)
+	shiftArrow(root, true) // Shift+Down at the very bottom: nothing below the last row
+	if got, _ := root.panel.table.GetSelection(); got != last {
+		t.Errorf("cursor after Shift+Down at the last row = %d, want %d (clamped)", got, last)
+	}
+}
+
 // TestRightClickWithoutDragOpensMenu is the control case for
 // TestRightDragSelectsRange: a right press and release at the *same* row
 // must still behave like a plain right-click (open the menu, no range

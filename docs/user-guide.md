@@ -1163,6 +1163,7 @@ already open; `Ctrl`+`Delete` regardless of terminal support).
 |---|---|---|
 | `Enter` | Open a directory, or Look at a file | |
 | `Space` | Select / deselect | |
+| `Shift`+`Up`/`Down` | Extend or shrink a range selection from wherever the cursor sat when Shift was first pressed; a plain `Up`/`Down` afterwards ends it | right-button drag |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
 | `Delete` | Move to Trash | `d` |
 | `Ctrl`+`Delete` | Remove permanently (asks first), best-effort depending on terminal | `D` (always reliable) |
