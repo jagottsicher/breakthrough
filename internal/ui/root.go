@@ -2885,6 +2885,19 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // conflict-resolving shape); a no-op if nothing was ever copied/cut,
 // same as before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
+	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {
+		// Cut has nothing to remove afterward — there's no writing back
+		// into a read-only archive to make the "move" half of it real —
+		// so it's refused outright here rather than silently behaving
+		// like Copy instead (see this feature's own scope note: marking
+		// and copying out is all archive browsing ever supports).
+		if r.clipboardCut {
+			r.showError(fmt.Errorf("cut isn't supported for items inside an archive — use Copy instead"))
+			return
+		}
+		r.extractClipboardArchive(archivePath, members, dir)
+		return
+	}
 	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "")
 }
 
@@ -2910,6 +2923,10 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 // activatePropertyField), but not here, where nothing should be left
 // showing underneath it.
 func (r *Root) openChown() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	r.hideOverlay()
 	target := r.target
 

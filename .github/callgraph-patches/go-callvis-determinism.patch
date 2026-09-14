@@ -1,0 +1,99 @@
+diff --git a/dot.go b/dot.go
+index 87145d7..acd27c9 100644
+--- a/dot.go
++++ b/dot.go
+@@ -8,6 +8,7 @@ import (
+ 	"os"
+ 	"os/exec"
+ 	"path/filepath"
++	"sort"
+ 	"strings"
+ 	"text/template"
+ )
+@@ -71,6 +72,21 @@ type dotCluster struct {
+ 	Attrs    dotAttrs
+ }
+ 
++// sortClusterNodes sorts c's own Nodes slice, and recurses into every
++// nested sub-cluster (grouping by package/type populates c.Clusters, one
++// level per group). c.Clusters itself is a map, but text/template's range
++// already visits map keys in sorted order, so only each level's Nodes
++// slice -- populated in non-deterministic callgraph traversal order --
++// needs sorting here.
++func sortClusterNodes(c *dotCluster) {
++	sort.Slice(c.Nodes, func(i, j int) bool {
++		return c.Nodes[i].ID < c.Nodes[j].ID
++	})
++	for _, sub := range c.Clusters {
++		sortClusterNodes(sub)
++	}
++}
++
+ func NewDotCluster(id string) *dotCluster {
+ 	return &dotCluster{
+ 		ID:       id,
+@@ -108,6 +124,9 @@ func (p dotAttrs) List() []string {
+ 	for k, v := range p {
+ 		l = append(l, fmt.Sprintf("%s=%q", k, v))
+ 	}
++	// p is a map, so its iteration order is randomized; sort so the
++	// rendered attribute list is stable for a fixed set of attributes.
++	sort.Strings(l)
+ 	return l
+ }
+ 
+diff --git a/output.go b/output.go
+index d4e5713..d0af99d 100644
+--- a/output.go
++++ b/output.go
+@@ -6,6 +6,7 @@ import (
+ 	"go/build"
+ 	"go/types"
+ 	"path/filepath"
++	"sort"
+ 	"strings"
+ 
+ 	"golang.org/x/tools/go/callgraph"
+@@ -449,8 +450,17 @@ func printOutput(
+ 		return nil, err
+ 	}
+ 
+-	// get edges form edgeMap
+-	for _, e := range edgeMap {
++	// get edges form edgeMap. Iterate in sorted key order rather than the
++	// map's own randomized order, since the "calling [...]" lines appended
++	// to each node's tooltip below must accumulate in a fixed sequence for
++	// a fixed source tree.
++	edgeKeys := make([]string, 0, len(edgeMap))
++	for key := range edgeMap {
++		edgeKeys = append(edgeKeys, key)
++	}
++	sort.Strings(edgeKeys)
++	for _, key := range edgeKeys {
++		e := edgeMap[key]
+ 		e.From.Attrs["tooltip"] = fmt.Sprintf(
+ 			"%s\n%s",
+ 			e.From.Attrs["tooltip"],
+@@ -462,6 +472,22 @@ func printOutput(
+ 	logf("%d/%d nodes", len(nodeMap), len(cg.Nodes))
+ 	logf("%d/%d edges", len(edges), count)
+ 
++	// callgraph.GraphVisitEdges walks callgraph.Graph.Nodes, a map, so the
++	// order nodes and edges were discovered in varies between otherwise
++	// identical runs. Sort both by their rendered ID before handing them to
++	// the dot template so the generated .dot/.svg is byte-for-byte
++	// reproducible for a fixed source tree. Grouping (the "-group" flag,
++	// "pkg" by default) puts most nodes into per-package sub-clusters
++	// rather than the top-level cluster, so every level needs sorting, not
++	// just the top one.
++	sortClusterNodes(cluster)
++	sort.Slice(edges, func(i, j int) bool {
++		if edges[i].From.ID != edges[j].From.ID {
++			return edges[i].From.ID < edges[j].From.ID
++		}
++		return edges[i].To.ID < edges[j].To.ID
++	})
++
+ 	title := ""
+ 	if mainPkg != nil && mainPkg.Pkg != nil {
+ 		title = mainPkg.Pkg.Path()
