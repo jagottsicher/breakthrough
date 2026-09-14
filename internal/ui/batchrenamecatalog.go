@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 )
@@ -166,6 +167,17 @@ func enumField(label, help string, choices func(r *Root) []batchRenameChoice, ge
 	}
 }
 
+// templateCheatsheet is the Template field's own help line: every
+// token the step expands, read straight from batchrename.TemplateTokens
+// so the two can't drift apart.
+func templateCheatsheet() string {
+	parts := make([]string, 0, len(batchrename.TemplateTokens))
+	for _, tok := range batchrename.TemplateTokens {
+		parts = append(parts, tok.Token+" "+tok.Meaning)
+	}
+	return "Rebuilds the name from a pattern; empty = off. Tokens: " + strings.Join(parts, " · ") + "."
+}
+
 // batchRenameSteps is the whole pipeline, in the fixed order it's
 // actually applied (see batchrename's own package doc) — the left-hand
 // "tabs" list is exactly this list's own names, in this order.
@@ -212,6 +224,24 @@ func batchRenameSteps() []batchRenameStep {
 					"How many characters to drop from the end of the name, extension excluded. A count longer than the name just empties it (and is flagged in the preview).",
 					func(r *Root) int { return r.batchRenameRules.TrimBack },
 					func(r *Root, v int) { r.batchRenameRules.TrimBack = v }),
+			},
+		},
+		{
+			name:   "Template",
+			active: func(rules batchrename.Rules) bool { return rules.Template != "" },
+			fields: []batchRenameField{
+				stringField("Template",
+					templateCheatsheet(),
+					func(r *Root) string { return r.batchRenameRules.Template },
+					func(r *Root, v string) { r.batchRenameRules.Template = v }),
+				stringField("Date format (for {date})",
+					"How {date} prints the file's modification time. A Go layout (2006-01-02 15:04) or, with the switch below, strftime (%Y-%m-%d %H:%M). Empty: 2006-01-02.",
+					func(r *Root) string { return r.batchRenameRules.DateFormat },
+					func(r *Root, v string) { r.batchRenameRules.DateFormat = v }),
+				boolField("Date format uses strftime (%Y, %m, %d...)",
+					"On: read \"Date format\" as a strftime pattern, the same %-directives Duplicate/Multiply accept. Off: Go's reference-time layout (Mon Jan 2 15:04:05 2006).",
+					func(r *Root) bool { return r.batchRenameRules.DateStrftime },
+					func(r *Root, v bool) { r.batchRenameRules.DateStrftime = v }),
 			},
 		},
 		{

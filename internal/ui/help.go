@@ -300,7 +300,7 @@ var helpText = strings.TrimLeft(`
   c / C             Jump to the next / previous conflict
 
   The steps always run in this order: Search & Replace, Case, Trim,
-  Numbering, Extension — a step left at its default setting does
+  Template, Numbering, Extension — a step left at its default setting does
   nothing, there's no separate on/off switch to also set; a ● in front
   of a step's name means it currently changes something. A line under
   the settings explains whichever setting is selected. Search &
@@ -322,6 +322,14 @@ var helpText = strings.TrimLeft(`
   steps" clears the whole pipeline without closing the screen; "Undo
   last rename" (context menu, right below "Batch rename") reverses
   whatever the last confirmed rename actually did.
+
+  Template rebuilds the name from a pattern: {name} (as it stands after
+  the steps before it), {ext}, {counter} (Numbering's own counter),
+  {parent} (the folder's name) and {date} (modification date, printed
+  per "Date format" — a Go layout, or strftime with the switch on, the
+  same choice Duplicate offers). "{parent}_{date}_{counter}" turns
+  IMG_0042.JPG into Holiday_2026-03-09_001.JPG. Anything else in the
+  pattern is literal.
 
   Numbering counts in the order the preview shows — "Count in" picks
   that order (as listed, by name, by modification time), "Reversed"

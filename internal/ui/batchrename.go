@@ -53,11 +53,12 @@ const (
 	batchRenamePresetSubdir = "rename-presets"
 
 	// batchRenameFieldHelpHeight is the live per-field help line under
-	// the fields table (see batchRenameField.help): two rows, so the
-	// longest help text still fits at the narrower widths the preview
-	// pane gets on a small terminal, plus one blank row separating it
-	// from the preview table's own header.
-	batchRenameFieldHelpHeight = 3
+	// the fields table (see batchRenameField.help): three rows, so the
+	// longest help text (the Template step's token cheat sheet) still
+	// fits at the narrower widths the preview pane gets on a small
+	// terminal, plus one blank row separating it from the preview
+	// table's own header.
+	batchRenameFieldHelpHeight = 4
 
 	// batchRenameActiveMark/batchRenameInactiveMark prefix each step in
 	// the left-hand list (see renderBatchRenameStepsList) — a filled

@@ -191,7 +191,7 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     interpreted — Go's own reference-time layout by default
 //     (duplicate_datetime_strftime = false; format defaults to
 //     "2006-01-02_15-04-05") or, with the toggle on, a strftime-style
-//     format instead (see internal/fsops.strftimeToGoLayout for exactly
+//     format instead (see internal/fsops.StrftimeToGoLayout for exactly
 //     which %-specifiers that mode supports) — the same
 //     "checkbox picks which syntax the text field means" shape the
 //     filter menu's own Glob/Regex toggle already uses, per the user's
