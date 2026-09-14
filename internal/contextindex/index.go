@@ -101,6 +101,14 @@ func Build(root string, options Options) (Index, error) {
 		if !entry.Type().IsRegular() {
 			return nil
 		}
+		// A git worktree (or a submodule checkout) has ".git" as a plain file
+		// rather than a directory, so the entry.IsDir() branch above never
+		// sees it; without this check it would be indexed like any other
+		// regular file, making the index depend on how the tree was checked
+		// out instead of just its content.
+		if rel == ".git" {
+			return nil
+		}
 		if _, skip := excluded[rel]; skip || excludedDirectory(filepath.Dir(rel)) {
 			return nil
 		}
