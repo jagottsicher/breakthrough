@@ -33,6 +33,18 @@ jobs:
           callvis_dir="$(mktemp -d)"
           git clone --depth 1 https://github.com/ofabry/go-callvis.git "$callvis_dir/go-callvis"
           cd "$callvis_dir/go-callvis"
+          # go-callvis walks callgraph.Graph.Nodes (a map) and collects
+          # dotAttrs into another map without sorting either, so the
+          # generated .dot/.svg is not reproducible between two otherwise
+          # identical runs -- see .github/callgraph-patches/go-callvis-determinism.patch
+          # for the full explanation (the same fix callgraph.yml already
+          # applies before its own build of the tool). Without this, a
+          # release build regenerates a callgraph.svg that can differ
+          # from the one actually committed for this tag, which
+          # GoReleaser then refuses to run against ("git is in a dirty
+          # state") -- a real, previously-hit failure, not a hypothetical
+          # one.
+          git apply "$GITHUB_WORKSPACE/.github/callgraph-patches/go-callvis-determinism.patch"
           go get golang.org/x/tools@v0.49.0
           go install .
           cd "$GITHUB_WORKSPACE"
