@@ -313,8 +313,8 @@
     },
     {
       "path": "internal/config/theme.go",
-      "size": 28062,
-      "sha256": "f41ddd023a0af6f955f55686e342329d39cd0a7eb7b8703f499f3fe3aee122c5"
+      "size": 28058,
+      "sha256": "62955659611e98441337c673b862a47d04431879826113cdd50ff8a362001cb5"
     },
     {
       "path": "internal/config/theme_test.go",
@@ -23906,5 +23906,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "8ff8eee7c3d2c26e275d4c8a51782b3fb2d0dcea20965fc2c9f105007726d497"
+  "merkle_root": "accee71df80140ccdce5e5f00a96326a9eab66f030f7f58d0807b4e089ec6eff"
 }
