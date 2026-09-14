@@ -30,6 +30,32 @@ func TestBuildIndexesFilesPackagesSymbolsAndImports(t *testing.T) {
 	}
 }
 
+func TestBuildSkipsGitEntryWhenItIsAPlainFile(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.test/app\n")
+	mustWrite(t, filepath.Join(root, "README.md"), "context\n")
+	// A git worktree (or a submodule checkout) has ".git" as a plain file
+	// pointing at the real git directory elsewhere, not a directory itself.
+	// The indexer must skip it exactly like the ordinary ".git" directory a
+	// regular clone has, or the index picks up an untracked, environment-
+	// specific entry and a Merkle root that depends on where the worktree
+	// happens to live on disk.
+	mustWrite(t, filepath.Join(root, ".git"), "gitdir: /some/other/path/.git/worktrees/example\n")
+
+	index, err := Build(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range index.Files {
+		if file.Path == ".git" {
+			t.Fatalf("expected .git to be excluded, got it indexed: %#v", file)
+		}
+	}
+	if len(index.Files) != 2 {
+		t.Fatalf("expected only go.mod and README.md to be indexed, got %#v", index.Files)
+	}
+}
+
 func TestMerkleRootChangesWithFileContent(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "go.mod"), "module example.test/app\n")
