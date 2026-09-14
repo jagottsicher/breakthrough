@@ -486,18 +486,36 @@ terminal.
   switch a given page between rendered-image and extracted-text view
   on demand — handy since a text-heavy page rendered as an image
   downsamples into illegible mush at any realistic terminal size.
+- Archive browsing: `Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`,
+  or `.tar.xz` file opens a browsable listing of its own contents right
+  in the panel, exactly like a real directory — `..` steps back out to
+  the real one it lives in. Mark entries with `Space` and Copy (`c`)
+  them out to a real destination with Paste (`v`), nested folders and
+  all. Read-only otherwise, by design: renaming, editing, chmod/chown,
+  Cut, and Move to Trash/Remove are all refused while browsing inside
+  one. An archive found *inside* another is never opened this way
+  automatically — it stays a plain file, extracted whole if you copy it
+  out.
 
 ## Status
 
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
-Sed Replace, Batch rename, and a full Options screen covering every
-setting breakthrough recognizes. Progress bars for long-running file
-operations, archive handling, and a set of built-in networking/hardware
+archive browsing, Sed Replace, Batch rename, and a full Options screen
+covering every setting breakthrough recognizes. Progress bars for
+long-running file operations and a set of built-in networking/hardware
 tool windows are what's planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
+
+## Architecture
+
+The current package and function relationships are shown in the generated
+callgraph below. It is regenerated with `go-callvis` for changes merged into
+`develop` and for tagged releases.
+
+![breakthrough callgraph](docs/images/callgraph.svg)
 
 ## Color schemes
 
@@ -679,6 +697,9 @@ uninstall instructions.
   uninstalling, and troubleshooting.
 - **[docs/whitepaper.md](docs/whitepaper.md)** — the concept and the
   reasoning behind the project.
+- **[docs/code-index.json](docs/code-index.json)** — a generated,
+  deterministic source index with file hashes, a Merkle root, Go package
+  imports, and declared symbols for tooling and architecture work.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — local setup and the branch
   workflow.
 
