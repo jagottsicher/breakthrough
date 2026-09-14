@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -195,6 +196,12 @@ func TestDuplicatePlainFieldsUseEditableBackground(t *testing.T) {
 			found = true
 			_, style, _ := screen.Get(x, y)
 			fg, bg, _ := style.Decompose()
+			var row string
+			for rx := 0; rx < w; rx++ {
+				rc, _, _ := screen.Get(rx, y)
+				row += rc
+			}
+			t.Logf("DIAGNOSTIC hit at x=%d y=%d row=%q theme.AccentBackground=%v theme.EditableBackground=%v theme.FocusedBackground=%v got bg=%v GOOS=%s GOARCH=%s", x, y, row, r.theme.AccentBackground, r.theme.EditableBackground, r.theme.FocusedBackground, bg, runtime.GOOS, runtime.GOARCH)
 			if fg != r.theme.Text {
 				t.Errorf("Separator field foreground = %v, want theme.Text %v", fg, r.theme.Text)
 			}
