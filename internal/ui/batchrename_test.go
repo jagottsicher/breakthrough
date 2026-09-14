@@ -283,3 +283,91 @@ func TestUndoLastBatchRenameWithNothingToUndoShowsANotice(t *testing.T) {
 func tcellMouseEventAt(x, y int) *tcell.EventMouse {
 	return tcell.NewEventMouse(x, y, tcell.Button1, tcell.ModNone)
 }
+
+func TestBatchRenameStepMarksFollowTheRules(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+
+	main, _ := r.batchRenameStepsList.GetItemText(0)
+	if main != batchRenameInactiveMark+"Search & Replace" {
+		t.Fatalf("fresh Search & Replace item = %q, want it unmarked", main)
+	}
+
+	// Typing a Find value through the field's own apply func is what a
+	// user does — the mark must follow without a full rebuild.
+	f, _ := r.batchRenameFieldAtRow(0)
+	f.apply(r, "apple")
+
+	main, _ = r.batchRenameStepsList.GetItemText(0)
+	if main != batchRenameActiveMark+"Search & Replace" {
+		t.Errorf("Search & Replace item after Find set = %q, want it marked active", main)
+	}
+	if cur := r.batchRenameStepsList.GetCurrentItem(); cur != 0 {
+		t.Errorf("re-marking moved the list selection to %d", cur)
+	}
+
+	r.resetBatchRenameSteps()
+	main, _ = r.batchRenameStepsList.GetItemText(0)
+	if main != batchRenameInactiveMark+"Search & Replace" {
+		t.Errorf("Search & Replace item after reset = %q, want it unmarked again", main)
+	}
+}
+
+func TestBatchRenameFieldHelpFollowsTheSelectedRow(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+
+	fields := batchRenameSteps()[0].fields
+	if got := r.batchRenameFieldHelp.GetText(true); got != fields[0].help {
+		t.Errorf("help on open = %q, want the first field's own %q", got, fields[0].help)
+	}
+
+	r.batchRenameFieldsTable.Select(2, 0) // Regex
+	if got := r.batchRenameFieldHelp.GetText(true); got != fields[2].help {
+		t.Errorf("help after selecting row 2 = %q, want %q", got, fields[2].help)
+	}
+
+	selectBatchRenameStep(t, r, "Trim")
+	trim := batchRenameSteps()[2].fields
+	if got := r.batchRenameFieldHelp.GetText(true); got != trim[0].help && got != trim[1].help {
+		t.Errorf("help after switching to Trim = %q, want one of Trim's own field helps", got)
+	}
+}
+
+func TestEveryBatchRenameFieldHasHelpText(t *testing.T) {
+	for _, step := range batchRenameSteps() {
+		if step.active == nil {
+			t.Errorf("step %q has no active func", step.name)
+		}
+		for _, f := range step.fields {
+			if f.help == "" {
+				t.Errorf("field %q of step %q has no help text", f.label, step.name)
+			}
+		}
+	}
+}
+
+func TestBatchRenamePreviewLeavesAFolderExtensionAloneUnlessAsked(t *testing.T) {
+	r, dir := newBatchRenameRoot(t)
+	if err := os.Mkdir(filepath.Join(dir, "my.project"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r.batchRenameTargets = []string{filepath.Join(dir, "my.project"), filepath.Join(dir, "apple.txt")}
+	r.batchRenameRules.ExtensionMode = batchrename.ExtensionUpper
+	r.renderBatchRenamePreview()
+
+	if len(r.batchRenamePendingChanges) != 1 || filepath.Base(r.batchRenamePendingChanges[0].To) != "apple.TXT" {
+		t.Fatalf("pending = %+v, want only apple.txt -> apple.TXT", r.batchRenamePendingChanges)
+	}
+
+	selectBatchRenameStep(t, r, "Extension")
+	r.activateBatchRenameFieldRow(2) // "Treat folder names as having extensions too"
+	if !r.batchRenameRules.ExtensionOnDirs {
+		t.Fatal("ExtensionOnDirs should be on after toggling its row")
+	}
+	names := make(map[string]bool)
+	for _, c := range r.batchRenamePendingChanges {
+		names[filepath.Base(c.To)] = true
+	}
+	if !names["my.PROJECT"] || !names["apple.TXT"] {
+		t.Errorf("pending after opting folders in = %v, want both my.PROJECT and apple.TXT", names)
+	}
+}
