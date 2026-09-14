@@ -78,8 +78,8 @@
     },
     {
       "path": "README.md",
-      "size": 43212,
-      "sha256": "75dd8d8ac0622debfa422da499bf2c58f8f954fdbc8383590bbdda75a714e289"
+      "size": 43217,
+      "sha256": "3a4a28123d261d33bb4c5a6f0221cf7fd718b62b129eb5a40992fd5365041751"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -143,8 +143,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 66597,
-      "sha256": "cc8a57d379fb1bc4a484594b3dc5af5190123a7303e99394afb96c641264a8b8"
+      "size": 66602,
+      "sha256": "1c78e47e19bd23b4103a2bea4be39b4fee341afda24a82ca8c1d7bda1dafb357"
     },
     {
       "path": "docs/whitepaper.md",
@@ -293,8 +293,8 @@
     },
     {
       "path": "internal/config/theme.go",
-      "size": 27909,
-      "sha256": "fc0b6623049b8de117672a8c6bfdf5bc25a2a6a03915b99e565b7dac7b8ee188"
+      "size": 28062,
+      "sha256": "f41ddd023a0af6f955f55686e342329d39cd0a7eb7b8703f499f3fe3aee122c5"
     },
     {
       "path": "internal/config/theme_test.go",
@@ -23300,5 +23300,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "b29e3402f6c9c4af5fd9c05f6e06e831f14f4b4435bade363c38b7aa162c347a"
+  "merkle_root": "8d6f8e348e615bf7270611f0c91cf4ebdf41f8144bda3936e7fd1e2bb122ef15"
 }
