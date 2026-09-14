@@ -22,3 +22,9 @@ github-token.txt
 # the .deb/.rpm packages ship, regenerated fresh on every release)
 dist/
 .goreleaser-generated/
+
+# go-callvis writes this raw Graphviz source next to the checked-in
+# callgraph.svg. Only the rendered SVG is a canonical, committed artifact;
+# the intermediate .gv file is regenerated every time and never meant to
+# be tracked.
+docs/images/callgraph.gv
