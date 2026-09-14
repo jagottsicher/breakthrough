@@ -393,10 +393,16 @@ terminal.
   that makes it work, through a temporary name where needed. Case-only
   renames work on case-insensitive filesystems too, regex replacements
   accept `$1` or sed-style `\1`, and a folder's name is never split at
-  its dot unless you ask. Nothing is written until Rename is confirmed,
-  and "Undo last rename" reverses the whole batch afterwards. See
-  [docs/user-guide.md](docs/user-guide.md#batch-rename) for the step
-  reference.
+  its dot unless you ask. In the preview, `Space` skips a row (it's
+  neither renamed nor numbered), `u`/`d` arrange the numbering order by
+  hand, `n`/`p` and `c`/`C` jump between changes and conflicts;
+  Numbering can also count by name or by modification time, forwards
+  or reversed. A whole pipeline can be saved as a named preset and
+  loaded back later — plain JSON files under
+  `~/.config/breakthrough/rename-presets/`. Nothing is written until
+  Rename is confirmed, and "Undo last rename" reverses the whole batch
+  afterwards. See [docs/user-guide.md](docs/user-guide.md#batch-rename)
+  for the step reference.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
