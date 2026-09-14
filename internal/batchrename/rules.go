@@ -36,6 +36,21 @@ const (
 	NumberSuffix
 )
 
+// NumberOrder is the "Numbering" step's own choice of which file gets
+// which number — see Rules.NumberOrder.
+type NumberOrder int
+
+const (
+	// OrderAsListed counts in the order the caller hands the paths over
+	// (see Ordered) — the preview's own order, which the user can
+	// rearrange by hand.
+	OrderAsListed NumberOrder = iota
+	// OrderByName counts in case-insensitive name order.
+	OrderByName
+	// OrderByModTime counts oldest-first by modification time.
+	OrderByModTime
+)
+
 // ExtensionMode is the "Extension" step's own choice of transform —
 // see Rules.
 type ExtensionMode int
@@ -55,37 +70,45 @@ const (
 // own fields, all at once, since the pipeline's order is fixed rather
 // than something the user assembles themselves (see the package doc).
 // The zero Rules is a complete no-op: Rename returns every name
-// unchanged.
+// unchanged. The json tags are the on-disk shape of a preset (see
+// preset.go) — snake_case keys, enums by their spelling (see enums.go).
 type Rules struct {
 	// Find/Replace/Regex back step 1 — Search & replace. Find == ""
 	// means "do nothing"; Replace is only ever consulted when Find
 	// isn't empty.
-	Find    string
-	Replace string
-	Regex   bool
+	Find    string `json:"find"`
+	Replace string `json:"replace"`
+	Regex   bool   `json:"regex"`
 
 	// Case backs step 2.
-	Case CaseMode
+	Case CaseMode `json:"case"`
 
 	// TrimFront/TrimBack back step 3 — how many characters (runes, not
 	// bytes) to drop from the front and back of the base name.
-	TrimFront int
-	TrimBack  int
+	TrimFront int `json:"trim_front"`
+	TrimBack  int `json:"trim_back"`
 
 	// NumberPosition/NumberStart/NumberStep/NumberDigits back step 4.
 	// NumberStart is the first counter value handed out (to the file at
 	// index 0 — see Rename); NumberStep is added per index after that.
 	// NumberDigits is the minimum width the counter is zero-padded to.
-	NumberPosition NumberPosition
-	NumberStart    int
-	NumberStep     int
-	NumberDigits   int
+	NumberPosition NumberPosition `json:"number_position"`
+	NumberStart    int            `json:"number_start"`
+	NumberStep     int            `json:"number_step"`
+	NumberDigits   int            `json:"number_digits"`
+
+	// NumberOrder/NumberReversed decide which file is index 0, 1, 2...
+	// — see Ordered, which is where they take effect; Rename itself only
+	// ever sees the resulting Input.Index. Reversed flips whichever
+	// order NumberOrder picked, so "by name, reversed" is Z to A.
+	NumberOrder    NumberOrder `json:"number_order"`
+	NumberReversed bool        `json:"number_reversed"`
 
 	// ExtensionMode/ExtensionValue back step 5. ExtensionValue is only
 	// consulted when ExtensionMode is ExtensionSetTo — a leading "."
 	// on it is optional, Rename accepts either.
-	ExtensionMode  ExtensionMode
-	ExtensionValue string
+	ExtensionMode  ExtensionMode `json:"extension_mode"`
+	ExtensionValue string        `json:"extension_value"`
 
 	// ExtensionOnDirs decides whether a *directory* in the batch is
 	// split into base + extension at all. Off (the default), a
@@ -95,7 +118,7 @@ type Rules struct {
 	// touches what looks like one. The same default Total Commander's
 	// own Multi-Rename Tool uses for directories. On, a directory is
 	// treated exactly like a file.
-	ExtensionOnDirs bool
+	ExtensionOnDirs bool `json:"extension_on_dirs"`
 }
 
 // Input is everything Rename needs to know about one entry of the
