@@ -307,6 +307,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		styleInput(r.batchRenameInput, theme, true)
 		r.batchRenameInput.SetLabelColor(theme.TextColor)
 
+		styleList(r.batchRenamePresetList, theme)
+		r.batchRenamePresetTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.batchRenamePresetTitleBar.SetTextColor(theme.TextColor)
+
 		for _, b := range r.batchRenameButtonList() {
 			styleButton(b, theme)
 		}

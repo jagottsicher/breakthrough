@@ -436,6 +436,15 @@ type Root struct {
 	// computed (see renderBatchRenamePreview); batchRenameUndo is what
 	// confirmApplyBatchRename most recently actually applied, kept
 	// around only until undoLastBatchRename consumes it.
+	//
+	// batchRenameTargets is kept in the order the preview shows — the
+	// user can rearrange it by hand from the preview (see
+	// moveBatchRenamePreviewRow), which is what "as listed" numbering
+	// counts against. batchRenameExcluded marks targets the user has
+	// unticked in the preview: still listed, but left out of Plan (and
+	// so out of the numbering) entirely. batchRenamePresetDir is where
+	// saved presets live (see batchrename.SavePreset) — a field rather
+	// than a constant so tests can point it somewhere disposable.
 	batchRenameLayout         *tview.Flex
 	batchRenameTitleBar       *tview.TextView
 	batchRenameHint           *tview.TextView
@@ -446,12 +455,19 @@ type Root struct {
 	batchRenameStatus         *tview.TextView
 	batchRenameButtons        *tview.Flex
 	batchRenameApplyBtn       *tview.Button
+	batchRenameSavePresetBtn  *tview.Button
+	batchRenameLoadPresetBtn  *tview.Button
 	batchRenameResetBtn       *tview.Button
 	batchRenameCancelBtn      *tview.Button
 	batchRenameInput          *tview.InputField
+	batchRenamePresetList     *tview.List
+	batchRenamePresetTitleBar *tview.TextView
+	batchRenamePresetLayout   *tview.Flex
+	batchRenamePresetDir      string
 	batchRenameStep           int
 	batchRenameRules          batchrename.Rules
 	batchRenameTargets        []string
+	batchRenameExcluded       map[string]bool
 	batchRenamePendingChanges []batchrename.Change
 	batchRenameUndo           []batchrename.Change
 
@@ -1354,6 +1370,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// just below gives.
 	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
 	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
+	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
@@ -2675,7 +2692,7 @@ func (r *Root) clipboardTargets() []string {
 // "D"/Ctrl+Delete, "E" — see keymap.go/cmd/breakthrough), which never
 // goes through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
-	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
+	if paths := r.panel.SelectedPathsInDisplayOrder(); len(paths) > 0 {
 		return paths
 	}
 	if _, path, ok := r.panel.CurrentRowPath(); ok {
