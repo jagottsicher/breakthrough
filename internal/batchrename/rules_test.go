@@ -27,7 +27,7 @@ func TestSplitNameHandlesTheCommonShapes(t *testing.T) {
 }
 
 func TestRenameIsANoOpAtTheZeroValue(t *testing.T) {
-	got, err := Rename(Rules{}, "Report Final.TXT", 0)
+	got, err := Rename(Rules{}, Input{Name: "Report Final.TXT", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestRenameIsANoOpAtTheZeroValue(t *testing.T) {
 
 func TestFindReplacePlain(t *testing.T) {
 	rules := Rules{Find: "vacation", Replace: "trip"}
-	got, err := Rename(rules, "vacation photo.jpg", 0)
+	got, err := Rename(rules, Input{Name: "vacation photo.jpg", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestFindReplacePlain(t *testing.T) {
 
 func TestFindReplaceDoesNotTouchTheExtension(t *testing.T) {
 	rules := Rules{Find: "jpg", Replace: "png"}
-	got, err := Rename(rules, "vacation.jpg", 0)
+	got, err := Rename(rules, Input{Name: "vacation.jpg", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestFindReplaceDoesNotTouchTheExtension(t *testing.T) {
 
 func TestFindReplaceRegex(t *testing.T) {
 	rules := Rules{Find: `(\d+)`, Replace: "[$1]", Regex: true}
-	got, err := Rename(rules, "img42.jpg", 0)
+	got, err := Rename(rules, Input{Name: "img42.jpg", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestFindReplaceRegex(t *testing.T) {
 
 func TestFindReplaceInvalidRegexFails(t *testing.T) {
 	rules := Rules{Find: `(unclosed`, Regex: true}
-	if _, err := Rename(rules, "a.txt", 0); err == nil {
+	if _, err := Rename(rules, Input{Name: "a.txt", Index: 0}); err == nil {
 		t.Fatal("expected an error for an invalid regex, got nil")
 	}
 }
@@ -92,7 +92,7 @@ func TestCaseTransforms(t *testing.T) {
 		{CaseSentence, "123 report.txt", "123 Report.txt"},
 	}
 	for _, c := range cases {
-		got, err := Rename(Rules{Case: c.mode}, c.name, 0)
+		got, err := Rename(Rules{Case: c.mode}, Input{Name: c.name, Index: 0})
 		if err != nil {
 			t.Fatalf("Rename: %v", err)
 		}
@@ -103,7 +103,7 @@ func TestCaseTransforms(t *testing.T) {
 }
 
 func TestCaseLeavesTheExtensionAlone(t *testing.T) {
-	got, err := Rename(Rules{Case: CaseUpper}, "report.PDF", 0)
+	got, err := Rename(Rules{Case: CaseUpper}, Input{Name: "report.PDF", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestTrim(t *testing.T) {
 		{99, 0, "abc.txt", ".txt"},
 	}
 	for _, c := range cases {
-		got, err := Rename(Rules{TrimFront: c.front, TrimBack: c.back}, c.name, 0)
+		got, err := Rename(Rules{TrimFront: c.front, TrimBack: c.back}, Input{Name: c.name})
 		if err != nil {
 			t.Fatalf("Rename: %v", err)
 		}
@@ -137,7 +137,7 @@ func TestTrim(t *testing.T) {
 }
 
 func TestTrimTreatsANegativeCountAsZero(t *testing.T) {
-	got, err := Rename(Rules{TrimFront: -3, TrimBack: -1}, "report.txt", 0)
+	got, err := Rename(Rules{TrimFront: -3, TrimBack: -1}, Input{Name: "report.txt"})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestTrimIsRuneAware(t *testing.T) {
 	// "café" is 4 runes but 5 bytes (é is 2 bytes in UTF-8) — trimming
 	// one character off the back must drop the é whole, not a stray byte
 	// of it.
-	got, err := Rename(Rules{TrimBack: 1}, "café.txt", 0)
+	got, err := Rename(Rules{TrimBack: 1}, Input{Name: "café.txt", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestTrimIsRuneAware(t *testing.T) {
 func TestNumbering(t *testing.T) {
 	rules := Rules{NumberPosition: NumberSuffix, NumberStart: 1, NumberStep: 1, NumberDigits: 3}
 	for i, want := range []string{"photo-001.jpg", "photo-002.jpg", "photo-003.jpg"} {
-		got, err := Rename(rules, "photo.jpg", i)
+		got, err := Rename(rules, Input{Name: "photo.jpg", Index: i})
 		if err != nil {
 			t.Fatalf("Rename: %v", err)
 		}
@@ -174,7 +174,7 @@ func TestNumbering(t *testing.T) {
 
 func TestNumberingPrefix(t *testing.T) {
 	rules := Rules{NumberPosition: NumberPrefix, NumberStart: 10, NumberStep: 5, NumberDigits: 2}
-	got, err := Rename(rules, "photo.jpg", 2) // 10 + 2*5 = 20
+	got, err := Rename(rules, Input{Name: "photo.jpg", Index: 2}) // 10 + 2*5 = 20
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestNumberingPrefix(t *testing.T) {
 
 func TestNumberingWidensPastItsOwnDigitsRatherThanTruncating(t *testing.T) {
 	rules := Rules{NumberPosition: NumberSuffix, NumberStart: 99, NumberStep: 1, NumberDigits: 2}
-	got, err := Rename(rules, "photo.jpg", 1) // 100, wider than 2 digits
+	got, err := Rename(rules, Input{Name: "photo.jpg", Index: 1}) // 100, wider than 2 digits
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestExtensionTransforms(t *testing.T) {
 	}
 	for _, c := range cases {
 		rules := Rules{ExtensionMode: c.mode, ExtensionValue: c.value}
-		got, err := Rename(rules, c.name, 0)
+		got, err := Rename(rules, Input{Name: c.name, Index: 0})
 		if err != nil {
 			t.Fatalf("Rename: %v", err)
 		}
@@ -221,7 +221,7 @@ func TestExtensionTransforms(t *testing.T) {
 }
 
 func TestExtensionSetToOnAnExtensionlessFileAddsOne(t *testing.T) {
-	got, err := Rename(Rules{ExtensionMode: ExtensionSetTo, ExtensionValue: "txt"}, "README", 0)
+	got, err := Rename(Rules{ExtensionMode: ExtensionSetTo, ExtensionValue: "txt"}, Input{Name: "README"})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestStepsComposeInTheDocumentedOrder(t *testing.T) {
 		NumberPosition: NumberSuffix, NumberStart: 1, NumberDigits: 2,
 		ExtensionMode: ExtensionLower,
 	}
-	got, err := Rename(rules, "vacation.JPG", 0)
+	got, err := Rename(rules, Input{Name: "vacation.JPG", Index: 0})
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
