@@ -43,6 +43,20 @@ const (
 	// against a real render, the same way sedLayout's own fixed height
 	// was (see openSedReplace).
 	batchRenameFieldsHeight = 6
+
+	// batchRenameFieldHelpHeight is the live per-field help line under
+	// the fields table (see batchRenameField.help): two rows, so the
+	// longest help text still fits at the narrower widths the preview
+	// pane gets on a small terminal, plus one blank row separating it
+	// from the preview table's own header.
+	batchRenameFieldHelpHeight = 3
+
+	// batchRenameActiveMark/batchRenameInactiveMark prefix each step in
+	// the left-hand list (see renderBatchRenameStepsList) — a filled
+	// glyph for a step that currently changes something, the same width
+	// in blanks otherwise, so the names stay aligned either way.
+	batchRenameActiveMark   = "● "
+	batchRenameInactiveMark = "  "
 )
 
 // newBatchRenameScreen builds the whole screen once, at startup — the
@@ -63,6 +77,15 @@ func (r *Root) newBatchRenameScreen() {
 	r.batchRenameFieldsTable.SetSelectable(true, false) // whole rows: one field per row
 	r.batchRenameFieldsTable.SetSelectedFunc(func(row, _ int) { r.activateBatchRenameFieldRow(row) })
 	r.batchRenameFieldsTable.SetMouseCapture(r.captureBatchRenameFieldsMouse)
+	r.batchRenameFieldsTable.SetSelectionChangedFunc(func(row, _ int) { r.renderBatchRenameFieldHelp(row) })
+
+	// The live help line for whichever field is selected above (see
+	// batchRenameField.help) — a TextView so a longer sentence wraps
+	// instead of being cut off at the pane's width.
+	r.batchRenameFieldHelp = tview.NewTextView()
+	r.batchRenameFieldHelp.SetWrap(true)
+	r.batchRenameFieldHelp.SetWordWrap(true)
+	r.batchRenameFieldHelp.SetBorderPadding(0, 0, 2, 1)
 
 	r.batchRenamePreviewTable = tview.NewTable()
 	r.batchRenamePreviewTable.SetBorders(false)
@@ -76,6 +99,7 @@ func (r *Root) newBatchRenameScreen() {
 
 	rightPane := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.batchRenameFieldsTable, batchRenameFieldsHeight, 0, true).
+		AddItem(r.batchRenameFieldHelp, batchRenameFieldHelpHeight, 0, false).
 		AddItem(r.batchRenamePreviewTable, 0, 1, false).
 		AddItem(r.batchRenameStatus, 1, 0, false).
 		AddItem(r.batchRenameButtons, 1, 0, false)
@@ -328,13 +352,51 @@ func (r *Root) renderBatchRenameStepsList() {
 	r.batchRenameStepsList.SetChangedFunc(nil)
 	r.batchRenameStepsList.Clear()
 	for _, step := range batchRenameSteps() {
-		r.batchRenameStepsList.AddItem(step.name, "", 0, nil)
+		r.batchRenameStepsList.AddItem(batchRenameStepLabel(step, r.batchRenameRules), "", 0, nil)
 	}
 	r.batchRenameStepsList.SetCurrentItem(r.batchRenameStep)
 	r.batchRenameStepsList.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.batchRenameStep = index
 		r.renderBatchRenameFields()
 	})
+}
+
+// batchRenameStepLabel is a step's list entry: its name, prefixed with
+// batchRenameActiveMark while it actually changes something under
+// rules (see batchRenameStep.active), the same width in blanks
+// otherwise — so which parts of the pipeline are in play is readable
+// from the list alone.
+func batchRenameStepLabel(step batchRenameStep, rules batchrename.Rules) string {
+	if step.active != nil && step.active(rules) {
+		return batchRenameActiveMark + step.name
+	}
+	return batchRenameInactiveMark + step.name
+}
+
+// refreshBatchRenameStepMarks re-labels the left-hand list in place so
+// each step's active mark tracks the rules as they're edited — in
+// place rather than a full rebuild, so neither the list's selection
+// nor its changed func fire from a mere value edit on the right.
+func (r *Root) refreshBatchRenameStepMarks() {
+	for i, step := range batchRenameSteps() {
+		if i >= r.batchRenameStepsList.GetItemCount() {
+			break
+		}
+		r.batchRenameStepsList.SetItemText(i, batchRenameStepLabel(step, r.batchRenameRules), "")
+	}
+}
+
+// renderBatchRenameFieldHelp shows the help text of the field on row
+// of the fields table (see batchRenameField.help) — called on every
+// selection change there, and by renderBatchRenameFields for whatever
+// row ends up selected after a rebuild.
+func (r *Root) renderBatchRenameFieldHelp(row int) {
+	f, ok := r.batchRenameFieldAtRow(row)
+	if !ok {
+		r.batchRenameFieldHelp.SetText("")
+		return
+	}
+	r.batchRenameFieldHelp.SetText(f.help)
 }
 
 // currentBatchRenameStep is the step the left-hand list currently has
@@ -359,13 +421,15 @@ func (r *Root) batchRenameFieldAtRow(row int) (batchRenameField, bool) {
 
 // renderBatchRenameFields fills the right-hand table with the selected
 // step's own fields: label and current value — no info column, unlike
-// Options' own table, since this first version has no per-field help
-// text to show (see the package doc's own scope note).
+// Options' own table; the per-field explanation lives in the help line
+// under the table instead (see renderBatchRenameFieldHelp), always
+// visible for whichever row is selected.
 func (r *Root) renderBatchRenameFields() {
 	r.batchRenameFieldsTable.Clear()
 
 	step, ok := r.currentBatchRenameStep()
 	if !ok {
+		r.renderBatchRenameFieldHelp(-1)
 		return
 	}
 	for row, f := range step.fields {
@@ -382,6 +446,8 @@ func (r *Root) renderBatchRenameFields() {
 	if row, _ := r.batchRenameFieldsTable.GetSelection(); row >= r.batchRenameFieldsTable.GetRowCount() {
 		r.batchRenameFieldsTable.Select(0, 0)
 	}
+	row, _ := r.batchRenameFieldsTable.GetSelection()
+	r.renderBatchRenameFieldHelp(row)
 }
 
 // batchRenameFieldDisplay renders one field's current value the way the
@@ -490,6 +556,11 @@ func (r *Root) editBatchRenameField(f batchRenameField) {
 // before pressing Rename, per the user's own explicit request for "a
 // proper preview".
 func (r *Root) renderBatchRenamePreview() {
+	// Every field edit lands here (see the builders in
+	// batchrenamecatalog.go), so this is also where the step marks on
+	// the left get to follow the rules.
+	r.refreshBatchRenameStepMarks()
+
 	r.batchRenamePreviewTable.Clear()
 
 	header := func(col int, text string) {
