@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -263,8 +264,28 @@ type Panel struct {
 	columnHeader *tview.Table
 	table        *tview.Table
 
-	// path is the absolute path currently shown.
+	// path is the absolute path currently shown — a real directory, or,
+	// while browsing into an archive (see archivepanel.go), a composite
+	// "path" formed by treating the archive file itself as if it were a
+	// directory: /real/dir/backup.zip/sub/dir. filepath.Dir/Join/Base
+	// all operate on this exactly like any other string, which is what
+	// lets ".." and entering a further subdirectory work unchanged —
+	// resolveArchiveState is what tells the two apart when it matters.
 	path string
+
+	// archivePath is the real, on-disk archive file currently being
+	// browsed into — "" whenever path is an ordinary real directory.
+	// archiveEntries is that same archive's own full, flat member
+	// listing (see archive.List), cached here so moving between two
+	// directories inside the *same* archive doesn't re-open and re-read
+	// it (a real cost for a tar: unlike zip, it has no separate index,
+	// so listing it at all means reading the whole compressed stream
+	// through once) — only entering a different archive, or leaving
+	// this one, replaces it. Both reset together, always in the same
+	// load() call that sets path to something no longer under this
+	// archive at all (see resolveArchiveState).
+	archivePath    string
+	archiveEntries []archive.Entry
 
 	// selected holds the absolute paths currently checked in the checkbox
 	// column. Reset on every successful load() — selection is scoped to
@@ -1060,8 +1081,24 @@ func (p *Panel) load(dir string) error {
 	if err != nil {
 		return err
 	}
+	if p.leavingArchive(abs) {
+		p.archivePath = ""
+		p.archiveEntries = nil
+	}
 
-	entries, err := fsops.ListDir(abs)
+	// resolveArchiveState (see its own doc comment) is what lets
+	// activateRow's plain p.navigate(ref.path) — unchanged from
+	// entering a real directory — also dive into a recognized archive
+	// file, or a subdirectory already inside one: load() itself is the
+	// one place that has to know the difference, everything upstream of
+	// it (navigate, the ".." row, Root's tab/history plumbing) just
+	// keeps treating abs as an ordinary path.
+	var entries []fsops.Entry
+	if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+		entries, err = p.loadArchiveEntries(archivePath, internalDir)
+	} else {
+		entries, err = fsops.ListDir(abs)
+	}
 	if err != nil {
 		return err
 	}
@@ -2852,6 +2889,20 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		return true
 	}
 	if !ref.isDir {
+		// A recognized archive file (zip, tar and its .gz/.bz2/.xz
+		// variants), only while browsing a real directory — p.archivePath
+		// empty — not one already found *inside* another archive: nested
+		// archives are deliberately never entered automatically (see
+		// resolveArchiveState's own doc comment on archivePath/
+		// archiveEntries, and this feature's own top-level doc comment in
+		// archivepanel.go), so such a member stays a plain, non-
+		// navigable file here, same as any other.
+		if p.archivePath == "" {
+			if _, ok := archive.Classify(ref.path); ok {
+				p.reportError(p.navigate(ref.path))
+				return true
+			}
+		}
 		if p.onOpenFile != nil { // ".." is always isDir true, so this is always a real file
 			p.onOpenFile()
 		}

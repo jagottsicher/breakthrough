@@ -219,6 +219,15 @@ func (r *Root) copyCurrentSelection() {
 }
 
 func (r *Root) cutCurrentSelection() {
+	// Cut has nothing to remove afterward — see pasteInto's own doc
+	// comment for the same reasoning at the other end of a Cut. Blocked
+	// here too, not just there, so the clipboard indicator never shows
+	// "Cut: N files" for something a later Paste would then have to
+	// refuse outright.
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	if row, path, ok := r.panel.CurrentRowPath(); ok {
 		r.target, r.targetRow = path, row
 	}
