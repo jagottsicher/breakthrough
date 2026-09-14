@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // CaseMode is the "Case" step's own choice of transform — see Rules.
@@ -88,10 +91,25 @@ type Rules struct {
 	TrimFront int `json:"trim_front"`
 	TrimBack  int `json:"trim_back"`
 
-	// NumberPosition/NumberStart/NumberStep/NumberDigits back step 4.
+	// Template backs step 4 — an optional pattern the base name is
+	// rebuilt from, with {name}, {ext}, {counter}, {parent} and {date}
+	// tokens (see applyTemplate for what each expands to). "" means "do
+	// nothing"; a template without any token replaces every name with
+	// the same literal text, which Plan then reports as the collisions
+	// it is. DateFormat is what {date} prints the modification time as
+	// — a Go reference-time layout, or with DateStrftime a strftime
+	// format (the same choice Duplicate/Multiply offer, and the same
+	// translator: fsops.StrftimeToGoLayout); "" means templateDateDefault.
+	Template     string `json:"template"`
+	DateFormat   string `json:"date_format"`
+	DateStrftime bool   `json:"date_strftime"`
+
+	// NumberPosition/NumberStart/NumberStep/NumberDigits back step 5.
 	// NumberStart is the first counter value handed out (to the file at
 	// index 0 — see Rename); NumberStep is added per index after that.
 	// NumberDigits is the minimum width the counter is zero-padded to.
+	// The Template step's {counter} token prints this same counter, so
+	// Start/Step/Digits apply to it too, whatever NumberPosition says.
 	NumberPosition NumberPosition `json:"number_position"`
 	NumberStart    int            `json:"number_start"`
 	NumberStep     int            `json:"number_step"`
@@ -104,7 +122,7 @@ type Rules struct {
 	NumberOrder    NumberOrder `json:"number_order"`
 	NumberReversed bool        `json:"number_reversed"`
 
-	// ExtensionMode/ExtensionValue back step 5. ExtensionValue is only
+	// ExtensionMode/ExtensionValue back step 6. ExtensionValue is only
 	// consulted when ExtensionMode is ExtensionSetTo — a leading "."
 	// on it is optional, Rename accepts either.
 	ExtensionMode  ExtensionMode `json:"extension_mode"`
@@ -123,13 +141,18 @@ type Rules struct {
 
 // Input is everything Rename needs to know about one entry of the
 // batch beyond Rules itself — its current name, whether it's a
-// directory (see Rules.ExtensionOnDirs), and its own position within
-// the batch (0-based, in whatever order the caller is iterating — see
-// Plan), consulted only by the numbering step.
+// directory (see Rules.ExtensionOnDirs), its own position within the
+// batch (0-based, in whatever order the caller is iterating — see
+// Plan), consulted by the numbering step and the {counter} token, and
+// the two things only the Template step's tokens ever look at: the
+// name of the directory it sits in ({parent}) and its modification
+// time ({date}).
 type Input struct {
-	Name  string
-	IsDir bool
-	Index int
+	Name    string
+	IsDir   bool
+	Index   int
+	Parent  string
+	ModTime time.Time
 }
 
 // numberSeparator joins an inserted counter to the rest of the base
@@ -295,16 +318,68 @@ func applyTrim(base string, front, back int) string {
 	return string(runes)
 }
 
-// applyNumbering is step 4. index is the file's own position within
-// the batch (see Rename) — NumberStart plus index*NumberStep, zero-
-// padded to NumberDigits and joined with numberSeparator. NumberStep
-// of 0 counts as 1 (an unset field, not a deliberate "every file gets
-// the same number"); NumberDigits below 1 counts as 1.
-func applyNumbering(base string, rules Rules, index int) string {
-	if rules.NumberPosition == NumberNone {
-		return base
-	}
+// templateDateDefault is what {date} prints when Rules.DateFormat is
+// empty: ISO 8601's own date, which sorts correctly as text and has no
+// characters a filename would mind.
+const templateDateDefault = "2006-01-02"
 
+// TemplateTokens lists every token applyTemplate expands, with a short
+// description each — the UI's own cheat sheet reads from this rather
+// than keeping a second copy that would drift.
+var TemplateTokens = []struct{ Token, Meaning string }{
+	{"{name}", "the name after the steps above"},
+	{"{ext}", "the extension, without its dot"},
+	{"{counter}", "Numbering's counter (Start/Step/Digits apply)"},
+	{"{parent}", "the folder's name"},
+	{"{date}", "the modification date, per \"Date format\""},
+}
+
+// applyTemplate is step 4. An empty Template is a no-op; otherwise the
+// base name is replaced by Template with each token expanded (see
+// TemplateTokens). Anything that isn't a known token — including an
+// unknown "{something}" — is copied through literally, so a name that
+// legitimately contains braces survives. Returns an error only when
+// DateFormat is a strftime format that can't be translated (see
+// fsops.StrftimeToGoLayout); a Go layout can't fail, it just prints
+// whatever it says.
+func applyTemplate(base, ext string, rules Rules, in Input) (string, error) {
+	if rules.Template == "" {
+		return base, nil
+	}
+	date := ""
+	if strings.Contains(rules.Template, "{date}") {
+		layout := rules.DateFormat
+		if layout == "" {
+			layout = templateDateDefault
+			if rules.DateStrftime {
+				layout = "%Y-%m-%d"
+			}
+		}
+		if rules.DateStrftime {
+			var err error
+			if layout, err = fsops.StrftimeToGoLayout(layout); err != nil {
+				return "", fmt.Errorf("date format: %w", err)
+			}
+		}
+		date = in.ModTime.Format(layout)
+	}
+	replacer := strings.NewReplacer(
+		"{name}", base,
+		"{ext}", strings.TrimPrefix(ext, "."),
+		"{counter}", counterText(rules, in.Index),
+		"{parent}", in.Parent,
+		"{date}", date,
+	)
+	return replacer.Replace(rules.Template), nil
+}
+
+// counterText is the numbering counter for the file at index —
+// NumberStart plus index*NumberStep, zero-padded to NumberDigits —
+// shared by the Numbering step and the Template step's {counter}
+// token, so the two never disagree about what number a file has.
+// NumberStep of 0 counts as 1 (an unset field, not a deliberate "every
+// file gets the same number"); NumberDigits below 1 counts as 1.
+func counterText(rules Rules, index int) string {
 	step := rules.NumberStep
 	if step == 0 {
 		step = 1
@@ -313,8 +388,18 @@ func applyNumbering(base string, rules Rules, index int) string {
 	if digits < 1 {
 		digits = 1
 	}
+	return fmt.Sprintf("%0*d", digits, rules.NumberStart+index*step)
+}
 
-	counter := fmt.Sprintf("%0*d", digits, rules.NumberStart+index*step)
+// applyNumbering is step 5. index is the file's own position within
+// the batch (see Rename) — the counter (see counterText) joined with
+// numberSeparator on whichever side NumberPosition says.
+func applyNumbering(base string, rules Rules, index int) string {
+	if rules.NumberPosition == NumberNone {
+		return base
+	}
+
+	counter := counterText(rules, index)
 	switch rules.NumberPosition {
 	case NumberPrefix:
 		return counter + numberSeparator + base
@@ -325,7 +410,7 @@ func applyNumbering(base string, rules Rules, index int) string {
 	}
 }
 
-// applyExtension is step 5 — acts on the extension split off by
+// applyExtension is step 6 — acts on the extension split off by
 // splitName, never on the base name the other four steps work on.
 func applyExtension(ext string, rules Rules) string {
 	switch rules.ExtensionMode {
@@ -356,7 +441,8 @@ func applyExtension(ext string, rules Rules) string {
 // Extension step has nothing to act on.
 //
 // Returns an error only when Regex is set and Find isn't a valid Go
-// regexp — every other step always succeeds.
+// regexp, or the Template step's strftime date format can't be
+// translated — every other step always succeeds.
 func Rename(rules Rules, in Input) (string, error) {
 	base, ext := in.Name, ""
 	if !in.IsDir || rules.ExtensionOnDirs {
@@ -369,6 +455,10 @@ func Rename(rules Rules, in Input) (string, error) {
 	}
 	base = applyCase(base, rules.Case)
 	base = applyTrim(base, rules.TrimFront, rules.TrimBack)
+	base, err = applyTemplate(base, ext, rules, in)
+	if err != nil {
+		return "", err
+	}
 	base = applyNumbering(base, rules, in.Index)
 	if !in.IsDir || rules.ExtensionOnDirs {
 		ext = applyExtension(ext, rules)

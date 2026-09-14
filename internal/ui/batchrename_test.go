@@ -578,3 +578,25 @@ func TestBatchRenamePresetPickerDeletesAfterAsking(t *testing.T) {
 		t.Errorf("picker item 0 after deleting = %q, want the empty placeholder", name)
 	}
 }
+
+func TestBatchRenameTemplateStepRebuildsNamesLive(t *testing.T) {
+	r, dir := newBatchRenameRoot(t)
+	selectBatchRenameStep(t, r, "Template")
+
+	f, _ := r.batchRenameFieldAtRow(0)
+	if !strings.Contains(f.help, "{counter}") || !strings.Contains(f.help, "{parent}") {
+		t.Errorf("Template help should list the tokens, got %q", f.help)
+	}
+	f.apply(r, "{parent}_{counter}_{name}")
+
+	if len(r.batchRenamePendingChanges) != 2 {
+		t.Fatalf("pending = %+v, want both files rebuilt", r.batchRenamePendingChanges)
+	}
+	want := filepath.Base(dir) + "_0_apple.txt"
+	if got := filepath.Base(r.batchRenamePendingChanges[0].To); got != want {
+		t.Errorf("first new name = %q, want %q", got, want)
+	}
+	if main, _ := r.batchRenameStepsList.GetItemText(3); main != batchRenameActiveMark+"Template" {
+		t.Errorf("Template item = %q, want it marked active", main)
+	}
+}
