@@ -511,10 +511,11 @@ under the settings explains whichever setting is selected.
 | **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `${1}` or sed-style `\1` for captured groups |
 | **Case** | Unchanged / UPPERCASE / lowercase / Title Case / Sentence case | Title Case treats a run of letters *and digits* as one word, so `v2` stays `V2` |
 | **Trim** | characters off the front, off the back | Counted in characters, not bytes, so accented and non-Latin names are never cut mid-character |
+| **Template** | Template, Date format, Date format uses strftime | Off while empty. Rebuilds the name from a pattern: `{name}` (as it stands after the three steps above), `{ext}` (without the dot), `{counter}` (Numbering's counter — Start/Step/Digits apply even with Position = None), `{parent}` (the folder's name), `{date}` (modification date). Anything else is literal; unknown `{...}` stays as typed. `{date}` prints per "Date format": a Go layout (`2006-01-02 15:04`) or, with the switch on, strftime (`%Y-%m-%d`) — the same choice and the same directives as Duplicate/Multiply; empty means `2006-01-02` |
 | **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits, Count in, Reversed | Zero-padded to Digits, joined with `-`. "Count in" picks which file gets the first number — as listed in the preview (the panel's own order, rearrangeable with `u`/`d`), by name, or by modification time (oldest first) — and "Reversed" flips that. Skipped rows don't take a number. A number wider than Digits is never truncated |
 | **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to…, Treat folder names as having extensions too | "Set to…" uses the field below it; a leading dot is optional. Folders are off by default: `my.project` is one name with no extension, so no step ever splits it at the dot — switch the last setting on to treat folders like files |
 
-Steps 1–4 only ever touch the name; step 5 only ever touches the
+Steps 1–5 only ever touch the name; step 6 only ever touches the
 extension. So a Case transform can't quietly rewrite `.JPG`, and a
 Search & Replace for `jpg` won't reach into it either — use the
 Extension step for that.

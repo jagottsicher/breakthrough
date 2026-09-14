@@ -230,24 +230,24 @@ func TestComputeDuplicateNameNeverSplitsOffAnyExtension(t *testing.T) {
 }
 
 func TestStrftimeToGoLayoutUnsupportedSpecifierErrors(t *testing.T) {
-	if _, err := strftimeToGoLayout("%Q"); err == nil {
+	if _, err := StrftimeToGoLayout("%Q"); err == nil {
 		t.Error("expected an error for an unsupported specifier")
 	}
 }
 
 func TestStrftimeToGoLayoutDanglingPercentErrors(t *testing.T) {
-	if _, err := strftimeToGoLayout("%Y-%"); err == nil {
+	if _, err := StrftimeToGoLayout("%Y-%"); err == nil {
 		t.Error("expected an error for a dangling %% at the end")
 	}
-	if _, err := strftimeToGoLayout("%Y-%-"); err == nil {
+	if _, err := StrftimeToGoLayout("%Y-%-"); err == nil {
 		t.Error("expected an error for a dangling %%- at the end")
 	}
 }
 
 func TestStrftimeToGoLayoutLiteralPercentEscape(t *testing.T) {
-	got, err := strftimeToGoLayout("100%%")
+	got, err := StrftimeToGoLayout("100%%")
 	if err != nil {
-		t.Fatalf("strftimeToGoLayout: %v", err)
+		t.Fatalf("StrftimeToGoLayout: %v", err)
 	}
 	if got != "100%" {
 		t.Errorf("got %q, want %q", got, "100%")

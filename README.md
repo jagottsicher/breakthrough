@@ -375,7 +375,10 @@ terminal.
 - Batch rename (context menu): renames a whole selection through a fixed
   pipeline of steps — Search & Replace (literal or regex), Case
   (UPPER/lower/Title/Sentence), Trim (drop N characters off either end),
-  Numbering (a zero-padded counter as prefix or suffix), and Extension
+  Template (rebuild the name from `{name}`, `{ext}`, `{counter}`,
+  `{parent}` and `{date}` tokens — `{parent}_{date}_{counter}` turns
+  `IMG_0042.JPG` into `Holiday_2026-03-09_001.JPG`), Numbering (a
+  zero-padded counter as prefix or suffix), and Extension
   (lower/upper/remove/replace) — with the steps listed down the left and
   the selected one's own settings on the right. A step left alone does
   nothing; there is no separate on/off switch to also remember. Search &
