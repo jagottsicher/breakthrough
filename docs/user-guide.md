@@ -489,6 +489,15 @@ on the right, and the preview underneath.
 | `Tab` / `Shift`+`Tab` | cycle steps → settings → preview → buttons |
 | `Escape` | close without renaming anything |
 
+In the preview itself:
+
+| Key | Action |
+|---|---|
+| `Space` (or a click on the `●`) | skip this row / take it back in — a skipped file is neither renamed nor counted by Numbering |
+| `u` / `d` | move this row up / down — arranges the numbering order by hand ("Count in" switches to "As listed") |
+| `n` / `p` | jump to the next / previous row that changes |
+| `c` / `C` | jump to the next / previous conflict |
+
 ### The steps
 
 They always run in this order, and a step left at its default does
@@ -502,7 +511,7 @@ under the settings explains whichever setting is selected.
 | **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `${1}` or sed-style `\1` for captured groups |
 | **Case** | Unchanged / UPPERCASE / lowercase / Title Case / Sentence case | Title Case treats a run of letters *and digits* as one word, so `v2` stays `V2` |
 | **Trim** | characters off the front, off the back | Counted in characters, not bytes, so accented and non-Latin names are never cut mid-character |
-| **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits | Zero-padded to Digits, joined with `-`. Counts in the order the preview lists the files. A number wider than Digits is never truncated |
+| **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits, Count in, Reversed | Zero-padded to Digits, joined with `-`. "Count in" picks which file gets the first number — as listed in the preview (the panel's own order, rearrangeable with `u`/`d`), by name, or by modification time (oldest first) — and "Reversed" flips that. Skipped rows don't take a number. A number wider than Digits is never truncated |
 | **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to…, Treat folder names as having extensions too | "Set to…" uses the field below it; a leading dot is optional. Folders are off by default: `my.project` is one name with no extension, so no step ever splits it at the dot — switch the last setting on to treat folders like files |
 
 Steps 1–4 only ever touch the name; step 5 only ever touches the
@@ -540,6 +549,21 @@ Two things that look like conflicts but aren't:
 - **Case-only renames.** `Readme.TXT` → `readme.txt` works even on a
   filesystem that ignores case (macOS, Windows shares), where the new
   name technically "already exists" — because it's the same file.
+
+### Presets
+
+A pipeline worth building once is worth keeping: **Save preset…** stores
+every step's settings under a name, **Load preset…** lists what's saved
+(`Enter` loads one, replacing the current settings; `d` deletes one after
+asking). Saving under an existing name asks before replacing it.
+
+Presets are plain JSON files, one per preset, in
+`~/.config/breakthrough/rename-presets/` (`$XDG_CONFIG_HOME/breakthrough/rename-presets/`
+if that variable is set) — readable, diffable, and easy to copy to another
+machine or drop into version control. Enum settings are stored by name
+(`"case": "title"`, `"number_order": "by-mtime"`), not by number; a file
+that names something unknown is skipped with an error and doesn't take the
+other presets down with it.
 
 ### Applying and undoing
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -369,5 +370,211 @@ func TestBatchRenamePreviewLeavesAFolderExtensionAloneUnlessAsked(t *testing.T) 
 	}
 	if !names["my.PROJECT"] || !names["apple.TXT"] {
 		t.Errorf("pending after opting folders in = %v, want both my.PROJECT and apple.TXT", names)
+	}
+}
+
+// key sends one key event straight into a primitive's input handler,
+// the way the tests above already do for the confirm dialog.
+func key(p tview.Primitive, k tcell.Key, r rune) {
+	p.InputHandler()(tcell.NewEventKey(k, r, tcell.ModNone), func(tview.Primitive) {})
+}
+
+func TestBatchRenameTargetsFollowThePanelDisplayOrder(t *testing.T) {
+	r, dir := newBatchRenameRoot(t)
+	r.closeBatchRename()
+
+	// Descending by name: the display order is then the *reverse* of the
+	// order the selection was made in, which no accidental map-iteration
+	// order (a rotation of insertion order at best) can reproduce.
+	r.panel.setSortKey(sortByName) // already the key: flips to descending (and reloads, dropping the selection)
+	if !r.panel.sortDescending {
+		t.Fatal("expected the panel to be sorted descending now")
+	}
+	// Selected bottom-up on purpose, so insertion order into the
+	// selection set is the exact reverse of what's on screen.
+	for _, pattern := range []string{"apple*", "apricot*", "banana*"} {
+		if _, err := r.panel.selectByPattern(pattern, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.openBatchRename()
+
+	want := []string{filepath.Join(dir, "banana.txt"), filepath.Join(dir, "apricot.txt"), filepath.Join(dir, "apple.txt")}
+	if len(r.batchRenameTargets) != len(want) {
+		t.Fatalf("targets = %v, want %v", r.batchRenameTargets, want)
+	}
+	for i := range want {
+		if r.batchRenameTargets[i] != want[i] {
+			t.Fatalf("targets = %v, want the panel's own top-to-bottom order %v", r.batchRenameTargets, want)
+		}
+	}
+}
+
+func TestBatchRenamePreviewSpaceSkipsARowAndItsNumber(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenameRules.NumberPosition = batchrename.NumberPrefix
+	r.batchRenameRules.NumberStart = 1
+	r.renderBatchRenamePreview()
+
+	r.batchRenamePreviewTable.Select(1, 0) // apple.txt
+	key(r.batchRenamePreviewTable, tcell.KeyRune, ' ')
+
+	if len(r.batchRenamePendingChanges) != 1 || filepath.Base(r.batchRenamePendingChanges[0].To) != "1-apricot.txt" {
+		t.Errorf("pending after skipping apple = %+v, want only apricot, numbered 1 (not 2)", r.batchRenamePendingChanges)
+	}
+	if got := r.batchRenamePreviewTable.GetCell(1, 3).Text; got != "(skipped)" {
+		t.Errorf("row 1 note = %q, want (skipped)", got)
+	}
+	if got := r.batchRenameStatus.GetText(false); !strings.Contains(got, "1 skipped") {
+		t.Errorf("status = %q, want it to count 1 skipped", got)
+	}
+
+	key(r.batchRenamePreviewTable, tcell.KeyRune, ' ')
+	if len(r.batchRenamePendingChanges) != 2 {
+		t.Errorf("pending after ticking apple back = %+v, want both again", r.batchRenamePendingChanges)
+	}
+}
+
+func TestBatchRenamePreviewMoveRowFreezesOrderAsListed(t *testing.T) {
+	r, dir := newBatchRenameRoot(t)
+	r.batchRenameRules.NumberOrder = batchrename.OrderByName
+	r.batchRenameRules.NumberReversed = true // shown: apricot, apple
+	r.renderBatchRenamePreview()
+	if got := r.batchRenamePreviewTable.GetCell(1, 1).Text; got != "apricot.txt" {
+		t.Fatalf("row 1 under by-name reversed = %q, want apricot.txt", got)
+	}
+
+	r.batchRenamePreviewTable.Select(1, 0)
+	key(r.batchRenamePreviewTable, tcell.KeyRune, 'd')
+
+	if r.batchRenameRules.NumberOrder != batchrename.OrderAsListed || r.batchRenameRules.NumberReversed {
+		t.Errorf("moving a row should switch to as-listed, unreversed; got %v reversed=%v", r.batchRenameRules.NumberOrder, r.batchRenameRules.NumberReversed)
+	}
+	want := []string{filepath.Join(dir, "apple.txt"), filepath.Join(dir, "apricot.txt")}
+	for i := range want {
+		if r.batchRenameTargets[i] != want[i] {
+			t.Fatalf("targets after moving apricot down = %v, want %v", r.batchRenameTargets, want)
+		}
+	}
+	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+		t.Errorf("cursor should follow the moved row to 2, got %d", row)
+	}
+}
+
+func TestBatchRenamePreviewJumpKeysFindChangesAndConflicts(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenameRules.Find = "apricot"
+	r.batchRenameRules.Replace = "banana" // collides with the unselected banana.txt on disk
+	r.renderBatchRenamePreview()
+
+	r.batchRenamePreviewTable.Select(1, 0) // apple: unchanged
+	key(r.batchRenamePreviewTable, tcell.KeyRune, 'c')
+	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+		t.Errorf("c should jump to the conflict on row 2, got %d", row)
+	}
+
+	r.batchRenameRules.Replace = "cherry"
+	r.renderBatchRenamePreview()
+	r.batchRenamePreviewTable.Select(2, 0)
+	key(r.batchRenamePreviewTable, tcell.KeyRune, 'n')
+	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+		t.Errorf("n from the only change should wrap back to itself (row 2), got %d", row)
+	}
+	r.batchRenamePreviewTable.Select(1, 0)
+	key(r.batchRenamePreviewTable, tcell.KeyRune, 'p')
+	if row, _ := r.batchRenamePreviewTable.GetSelection(); row != 2 {
+		t.Errorf("p from row 1 should wrap to the change on row 2, got %d", row)
+	}
+}
+
+func TestBatchRenameSavePresetThenLoadRestoresTheRules(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenamePresetDir = filepath.Join(t.TempDir(), "rename-presets")
+	r.batchRenameRules.Find = "IMG_"
+	r.batchRenameRules.Case = batchrename.CaseLower
+	r.batchRenameRules.NumberOrder = batchrename.OrderByModTime
+
+	r.openBatchRenameSavePreset()
+	if r.activePage != batchRenameInputPage {
+		t.Fatalf("activePage = %q, want the name input", r.activePage)
+	}
+	r.batchRenameInput.SetText("camera")
+	key(r.batchRenameInput, tcell.KeyEnter, 0)
+
+	if !batchrename.PresetExists(r.batchRenamePresetDir, "camera") {
+		t.Fatal("preset file should exist after saving")
+	}
+	if got := r.batchRenameStatus.GetText(false); !strings.Contains(got, `"camera" saved`) {
+		t.Errorf("status = %q, want a saved notice", got)
+	}
+
+	r.resetBatchRenameSteps()
+	r.openBatchRenamePresetPicker()
+	if r.activePage != batchRenamePresetPage {
+		t.Fatalf("activePage = %q, want the preset picker", r.activePage)
+	}
+	if name, _ := r.batchRenamePresetList.GetItemText(0); name != "camera" {
+		t.Fatalf("picker item 0 = %q, want camera", name)
+	}
+	key(r.batchRenamePresetList, tcell.KeyEnter, 0)
+
+	if r.batchRenameRules.Find != "IMG_" || r.batchRenameRules.Case != batchrename.CaseLower || r.batchRenameRules.NumberOrder != batchrename.OrderByModTime {
+		t.Errorf("rules after loading = %+v, want the saved ones back", r.batchRenameRules)
+	}
+	if r.activePage != batchRenamePage {
+		t.Errorf("activePage = %q, want back on the screen", r.activePage)
+	}
+}
+
+func TestBatchRenameSavePresetOverAnExistingNameAsksFirst(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenamePresetDir = t.TempDir()
+	if err := batchrename.SavePreset(r.batchRenamePresetDir, "old", batchrename.Rules{Find: "before"}); err != nil {
+		t.Fatal(err)
+	}
+	r.batchRenameRules.Find = "after"
+
+	r.openBatchRenameSavePreset()
+	r.batchRenameInput.SetText("old")
+	key(r.batchRenameInput, tcell.KeyEnter, 0)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the replace confirmation", r.activePage)
+	}
+	presets, _ := batchrename.LoadPresets(r.batchRenamePresetDir)
+	if presets[0].Rules.Find != "before" {
+		t.Fatal("preset was replaced before the question was answered")
+	}
+
+	r.confirmDialog.SetCurrentItem(0)
+	key(r.confirmDialog, tcell.KeyEnter, 0)
+	presets, _ = batchrename.LoadPresets(r.batchRenamePresetDir)
+	if presets[0].Rules.Find != "after" {
+		t.Errorf("preset after confirming = %+v, want Find=after", presets[0].Rules)
+	}
+}
+
+func TestBatchRenamePresetPickerDeletesAfterAsking(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenamePresetDir = t.TempDir()
+	if err := batchrename.SavePreset(r.batchRenamePresetDir, "gone", batchrename.Rules{}); err != nil {
+		t.Fatal(err)
+	}
+
+	r.openBatchRenamePresetPicker()
+	key(r.batchRenamePresetList, tcell.KeyRune, 'd')
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the delete confirmation", r.activePage)
+	}
+	r.confirmDialog.SetCurrentItem(0)
+	key(r.confirmDialog, tcell.KeyEnter, 0)
+
+	if batchrename.PresetExists(r.batchRenamePresetDir, "gone") {
+		t.Error("preset should be deleted after confirming")
+	}
+	if r.activePage != batchRenamePresetPage {
+		t.Errorf("activePage = %q, want the picker still open (rebuilt)", r.activePage)
+	}
+	if name, _ := r.batchRenamePresetList.GetItemText(0); name != "(no presets saved yet)" {
+		t.Errorf("picker item 0 after deleting = %q, want the empty placeholder", name)
 	}
 }

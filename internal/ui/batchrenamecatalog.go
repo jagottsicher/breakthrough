@@ -61,121 +61,45 @@ type batchRenameStep struct {
 	active func(rules batchrename.Rules) bool
 }
 
-// caseModeValues/parseCaseMode/numberPositionValues/
-// parseNumberPosition/extensionModeValues/parseExtensionMode convert
-// batchrename's own small int-backed enums to and from the plain
-// strings batchRenameField's value()/apply() (and the shared enum-cycle
-// logic they share with optionSpec's — see cycleBatchRenameChoice) deal
-// in, the same string-keyed convention the config package's own enums
-// (color_scheme, pager) already use.
-
-func caseModeValue(m batchrename.CaseMode) string {
-	switch m {
-	case batchrename.CaseUpper:
-		return "upper"
-	case batchrename.CaseLower:
-		return "lower"
-	case batchrename.CaseTitle:
-		return "title"
-	case batchrename.CaseSentence:
-		return "sentence"
-	default:
-		return "none"
-	}
-}
-
-func parseCaseMode(v string) batchrename.CaseMode {
-	switch v {
-	case "upper":
-		return batchrename.CaseUpper
-	case "lower":
-		return batchrename.CaseLower
-	case "title":
-		return batchrename.CaseTitle
-	case "sentence":
-		return batchrename.CaseSentence
-	default:
-		return batchrename.CaseNone
-	}
-}
+// The enum fields below store and cycle batchrename's own spellings of
+// each choice (CaseMode.String and friends — see batchrename/enums.go,
+// the same strings a preset file uses), and only add the label shown
+// for each. A parse error can't happen here: every value offered comes
+// from the same table it's parsed against.
 
 func caseModeChoices(*Root) []batchRenameChoice {
 	return []batchRenameChoice{
-		{"none", "Unchanged"},
-		{"upper", "UPPERCASE"},
-		{"lower", "lowercase"},
-		{"title", "Title Case"},
-		{"sentence", "Sentence case"},
-	}
-}
-
-func numberPositionValue(p batchrename.NumberPosition) string {
-	switch p {
-	case batchrename.NumberPrefix:
-		return "prefix"
-	case batchrename.NumberSuffix:
-		return "suffix"
-	default:
-		return "none"
-	}
-}
-
-func parseNumberPosition(v string) batchrename.NumberPosition {
-	switch v {
-	case "prefix":
-		return batchrename.NumberPrefix
-	case "suffix":
-		return batchrename.NumberSuffix
-	default:
-		return batchrename.NumberNone
+		{batchrename.CaseNone.String(), "Unchanged"},
+		{batchrename.CaseUpper.String(), "UPPERCASE"},
+		{batchrename.CaseLower.String(), "lowercase"},
+		{batchrename.CaseTitle.String(), "Title Case"},
+		{batchrename.CaseSentence.String(), "Sentence case"},
 	}
 }
 
 func numberPositionChoices(*Root) []batchRenameChoice {
 	return []batchRenameChoice{
-		{"none", "None"},
-		{"prefix", "Prefix"},
-		{"suffix", "Suffix"},
+		{batchrename.NumberNone.String(), "None"},
+		{batchrename.NumberPrefix.String(), "Prefix"},
+		{batchrename.NumberSuffix.String(), "Suffix"},
 	}
 }
 
-func extensionModeValue(m batchrename.ExtensionMode) string {
-	switch m {
-	case batchrename.ExtensionLower:
-		return "lower"
-	case batchrename.ExtensionUpper:
-		return "upper"
-	case batchrename.ExtensionRemove:
-		return "remove"
-	case batchrename.ExtensionSetTo:
-		return "set"
-	default:
-		return "keep"
-	}
-}
-
-func parseExtensionMode(v string) batchrename.ExtensionMode {
-	switch v {
-	case "lower":
-		return batchrename.ExtensionLower
-	case "upper":
-		return batchrename.ExtensionUpper
-	case "remove":
-		return batchrename.ExtensionRemove
-	case "set":
-		return batchrename.ExtensionSetTo
-	default:
-		return batchrename.ExtensionKeep
+func numberOrderChoices(*Root) []batchRenameChoice {
+	return []batchRenameChoice{
+		{batchrename.OrderAsListed.String(), "As listed in the preview"},
+		{batchrename.OrderByName.String(), "By name"},
+		{batchrename.OrderByModTime.String(), "By modification time (oldest first)"},
 	}
 }
 
 func extensionModeChoices(*Root) []batchRenameChoice {
 	return []batchRenameChoice{
-		{"keep", "Keep"},
-		{"lower", "lowercase"},
-		{"upper", "UPPERCASE"},
-		{"remove", "Remove"},
-		{"set", "Set to..."},
+		{batchrename.ExtensionKeep.String(), "Keep"},
+		{batchrename.ExtensionLower.String(), "lowercase"},
+		{batchrename.ExtensionUpper.String(), "UPPERCASE"},
+		{batchrename.ExtensionRemove.String(), "Remove"},
+		{batchrename.ExtensionSetTo.String(), "Set to..."},
 	}
 }
 
@@ -272,8 +196,8 @@ func batchRenameSteps() []batchRenameStep {
 				enumField("Change case to",
 					"Applies to the name only, never the extension (see the Extension step for that). Title Case capitalizes each word; Sentence case only the first letter.",
 					caseModeChoices,
-					func(r *Root) string { return caseModeValue(r.batchRenameRules.Case) },
-					func(r *Root, v string) { r.batchRenameRules.Case = parseCaseMode(v) }),
+					func(r *Root) string { return r.batchRenameRules.Case.String() },
+					func(r *Root, v string) { r.batchRenameRules.Case, _ = batchrename.ParseCaseMode(v) }),
 			},
 		},
 		{
@@ -295,10 +219,10 @@ func batchRenameSteps() []batchRenameStep {
 			active: func(rules batchrename.Rules) bool { return rules.NumberPosition != batchrename.NumberNone },
 			fields: []batchRenameField{
 				enumField("Position",
-					"Where the counter goes: in front of the name (\"01-name\") or after it (\"name-01\"). Files are numbered in the order they're listed in the preview.",
+					"Where the counter goes: in front of the name (\"01-name\") or after it (\"name-01\"). Which file gets which number is \"Count in\" below.",
 					numberPositionChoices,
-					func(r *Root) string { return numberPositionValue(r.batchRenameRules.NumberPosition) },
-					func(r *Root, v string) { r.batchRenameRules.NumberPosition = parseNumberPosition(v) }),
+					func(r *Root) string { return r.batchRenameRules.NumberPosition.String() },
+					func(r *Root, v string) { r.batchRenameRules.NumberPosition, _ = batchrename.ParseNumberPosition(v) }),
 				intField("Start at",
 					"The number the first file gets.",
 					func(r *Root) int { return r.batchRenameRules.NumberStart },
@@ -311,6 +235,15 @@ func batchRenameSteps() []batchRenameStep {
 					"Minimum width of the counter, padded with leading zeros: 3 gives 001, 002, ... A number that needs more digits simply gets them.",
 					func(r *Root) int { return r.batchRenameRules.NumberDigits },
 					func(r *Root, v int) { r.batchRenameRules.NumberDigits = v }),
+				enumField("Count in",
+					"Which file gets the first number. \"As listed\" is the preview's own order — move rows there with u/d to arrange it by hand.",
+					numberOrderChoices,
+					func(r *Root) string { return r.batchRenameRules.NumberOrder.String() },
+					func(r *Root, v string) { r.batchRenameRules.NumberOrder, _ = batchrename.ParseNumberOrder(v) }),
+				boolField("Reversed",
+					"Count from the other end of whatever order is picked above: Z to A, newest first, or the preview bottom-up.",
+					func(r *Root) bool { return r.batchRenameRules.NumberReversed },
+					func(r *Root, v bool) { r.batchRenameRules.NumberReversed = v }),
 			},
 		},
 		{
@@ -322,8 +255,8 @@ func batchRenameSteps() []batchRenameStep {
 				enumField("Extension",
 					"What happens to the part after the last dot. \"Set to...\" replaces it with the value below. Dotfiles like .bashrc have no extension.",
 					extensionModeChoices,
-					func(r *Root) string { return extensionModeValue(r.batchRenameRules.ExtensionMode) },
-					func(r *Root, v string) { r.batchRenameRules.ExtensionMode = parseExtensionMode(v) }),
+					func(r *Root) string { return r.batchRenameRules.ExtensionMode.String() },
+					func(r *Root, v string) { r.batchRenameRules.ExtensionMode, _ = batchrename.ParseExtensionMode(v) }),
 				stringField("Set to (used by \"Set to...\" above)",
 					"The new extension, with or without a leading dot. Empty removes the extension.",
 					func(r *Root) string { return r.batchRenameRules.ExtensionValue },

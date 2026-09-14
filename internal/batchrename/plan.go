@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 )
 
 // Change is one file Plan proposes to rename: its current full path
@@ -31,11 +34,57 @@ type PlanResult struct {
 	Problems []Problem
 }
 
+// Ordered returns paths in the order the numbering step should count
+// them under rules — see Rules.NumberOrder: as given, by name
+// (case-insensitive, ties broken case-sensitively so the result is
+// stable), or oldest-first by modification time (a path that can't be
+// stat'ed sorts as the zero time, i.e. first); NumberReversed then flips
+// whichever of those was picked. Never modifies paths itself.
+//
+// Deliberately a separate step from Plan rather than something Plan does
+// internally: a caller showing a preview wants to display *every* path
+// in this order — including ones it then leaves out of Plan (see
+// internal/ui's own excluded rows) — so the order has to be computable
+// over the full list, not just the ones being renamed.
+func Ordered(paths []string, rules Rules) []string {
+	out := make([]string, len(paths))
+	copy(out, paths)
+
+	switch rules.NumberOrder {
+	case OrderByName:
+		sort.SliceStable(out, func(i, j int) bool {
+			a, b := filepath.Base(out[i]), filepath.Base(out[j])
+			if la, lb := strings.ToLower(a), strings.ToLower(b); la != lb {
+				return la < lb
+			}
+			return a < b
+		})
+	case OrderByModTime:
+		mtime := make(map[string]time.Time, len(out))
+		for _, p := range out {
+			if info, err := os.Lstat(p); err == nil {
+				mtime[p] = info.ModTime()
+			}
+		}
+		sort.SliceStable(out, func(i, j int) bool {
+			return mtime[out[i]].Before(mtime[out[j]])
+		})
+	}
+
+	if rules.NumberReversed {
+		for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+			out[i], out[j] = out[j], out[i]
+		}
+	}
+	return out
+}
+
 // Plan computes what Rules would do to each of paths, in the order
 // given — that order is also what the numbering step (see
 // applyNumbering) counts against, so callers should pass paths in
-// whatever order they're actually showing them (see internal/ui's own
-// sorted selection), not an arbitrary one.
+// whatever order they're actually showing them, i.e. run them through
+// Ordered first (see its own doc comment for why Plan doesn't do that
+// itself).
 //
 // A path whose name doesn't change at all under Rules is left out of
 // both Changes and Problems — the same "only report what's actually

@@ -291,6 +291,14 @@ var helpText = strings.TrimLeft(`
                     and the buttons underneath them
   Escape            Close without renaming anything
 
+  In the preview:
+  Space             Skip this row (or take it back in) — a skipped
+                    file isn't renamed and doesn't take a number
+  u / d             Move this row up / down: the numbering order, by
+                    hand ("Count in" switches to "As listed")
+  n / p             Jump to the next / previous row that changes
+  c / C             Jump to the next / previous conflict
+
   The steps always run in this order: Search & Replace, Case, Trim,
   Numbering, Extension — a step left at its default setting does
   nothing, there's no separate on/off switch to also set; a ● in front
@@ -314,6 +322,16 @@ var helpText = strings.TrimLeft(`
   steps" clears the whole pipeline without closing the screen; "Undo
   last rename" (context menu, right below "Batch rename") reverses
   whatever the last confirmed rename actually did.
+
+  Numbering counts in the order the preview shows — "Count in" picks
+  that order (as listed, by name, by modification time), "Reversed"
+  flips it, and u/d in the preview arrange it by hand.
+
+  "Save preset..." keeps the whole pipeline under a name; "Load
+  preset..." lists the saved ones (Enter loads, d deletes after
+  asking). Presets are plain JSON files, one per preset, under
+  ~/.config/breakthrough/rename-presets/ (or $XDG_CONFIG_HOME) — easy
+  to copy to another machine or keep in version control.
 
 [::b]Tabs[::-]
 

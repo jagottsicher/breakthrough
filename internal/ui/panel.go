@@ -2706,6 +2706,37 @@ func (p *Panel) SelectedPaths() []string {
 	return paths
 }
 
+// SelectedPathsInDisplayOrder is SelectedPaths in the order the rows
+// are actually shown — top to bottom under the current sort — rather
+// than the selection map's own arbitrary one. For a caller where order
+// carries meaning (Batch Rename's numbering counts "as listed"), the
+// map order would silently hand out numbers at random. A selected path
+// that's no longer on screen (filtered out since it was ticked) is
+// appended after the visible ones, so nothing selected is lost.
+func (p *Panel) SelectedPathsInDisplayOrder() []string {
+	paths := make([]string, 0, len(p.selected))
+	seen := make(map[string]bool, len(p.selected))
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !p.selected[ref.path] || seen[ref.path] {
+			continue
+		}
+		seen[ref.path] = true
+		paths = append(paths, ref.path)
+	}
+	if len(paths) < len(p.selected) {
+		var rest []string
+		for path := range p.selected {
+			if !seen[path] {
+				rest = append(rest, path)
+			}
+		}
+		sort.Strings(rest)
+		paths = append(paths, rest...)
+	}
+	return paths
+}
+
 // captureTableKey handles the keys the table needs beyond its built-in
 // navigation: Space toggles the checkbox on the currently selected row,
 // the same action a click on that row's checkbox performs; Shift+Up/
