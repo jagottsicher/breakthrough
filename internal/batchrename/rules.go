@@ -86,6 +86,27 @@ type Rules struct {
 	// on it is optional, Rename accepts either.
 	ExtensionMode  ExtensionMode
 	ExtensionValue string
+
+	// ExtensionOnDirs decides whether a *directory* in the batch is
+	// split into base + extension at all. Off (the default), a
+	// directory's whole name is its base name — "my.project" is a folder
+	// called "my.project", not a nameless folder with a ".project"
+	// extension — so neither the Extension step nor anything else ever
+	// touches what looks like one. The same default Total Commander's
+	// own Multi-Rename Tool uses for directories. On, a directory is
+	// treated exactly like a file.
+	ExtensionOnDirs bool
+}
+
+// Input is everything Rename needs to know about one entry of the
+// batch beyond Rules itself — its current name, whether it's a
+// directory (see Rules.ExtensionOnDirs), and its own position within
+// the batch (0-based, in whatever order the caller is iterating — see
+// Plan), consulted only by the numbering step.
+type Input struct {
+	Name  string
+	IsDir bool
+	Index int
 }
 
 // numberSeparator joins an inserted counter to the rest of the base
@@ -120,6 +141,13 @@ func splitName(name string) (base, ext string) {
 // applyFindReplace is step 1. An empty Find is a no-op (see Rules'
 // own doc comment); otherwise it's a plain, case-sensitive substring
 // replace, or a Go regexp.Regexp match/replace when Regex is set.
+//
+// In Regex mode, Replace may refer back to capture groups: Go's own
+// "$1"/"${name}" forms work as-is (regexp.ReplaceAllString expands
+// them), and the "\1" form sed, Perl, and Total Commander's own tool
+// all use is accepted too — see backrefsToGo — so whichever habit
+// someone brings along just works, rather than one of the two silently
+// inserting literal text.
 func applyFindReplace(base string, rules Rules) (string, error) {
 	if rules.Find == "" {
 		return base, nil
@@ -131,7 +159,34 @@ func applyFindReplace(base string, rules Rules) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("search pattern: %w", err)
 	}
-	return re.ReplaceAllString(base, rules.Replace), nil
+	return re.ReplaceAllString(base, backrefsToGo(rules.Replace)), nil
+}
+
+// backrefsToGo rewrites sed-style "\1".."\9" back-references in a
+// replacement string into the "${1}" form Go's regexp expands —
+// braced, not bare "$1", so a digit right after the group number
+// ("\1" followed by "0" in the text) can't be misread as group 10.
+// Everything else, including a literal "$" (which Go would otherwise
+// also treat as the start of a reference — "$$" is its escape), is
+// left exactly as typed: this only ever adds the one spelling Go
+// lacks, it doesn't try to second-guess the rest.
+func backrefsToGo(replace string) string {
+	if !strings.Contains(replace, `\`) {
+		return replace
+	}
+	var b strings.Builder
+	for i := 0; i < len(replace); i++ {
+		c := replace[i]
+		if c == '\\' && i+1 < len(replace) && replace[i+1] >= '1' && replace[i+1] <= '9' {
+			b.WriteString("${")
+			b.WriteByte(replace[i+1])
+			b.WriteString("}")
+			i++
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // applyCase is step 2.
@@ -268,16 +323,22 @@ func applyExtension(ext string, rules Rules) string {
 	}
 }
 
-// Rename computes the new base+extension name is renamed to, applying
-// every step in Rules' own fixed order (see the package doc). index is
-// this file's own position within the batch it's part of (0-based, in
-// whatever order the caller is iterating — see Plan), consulted only
-// by the numbering step.
+// Rename computes the new name in.Name is renamed to, applying every
+// step in Rules' own fixed order (see the package doc). See Input for
+// what else about the entry it consults.
+//
+// A directory is never split into base + extension unless
+// Rules.ExtensionOnDirs asks for it (see its own doc comment) — its
+// whole name goes through the base-name steps as one piece, and the
+// Extension step has nothing to act on.
 //
 // Returns an error only when Regex is set and Find isn't a valid Go
 // regexp — every other step always succeeds.
-func Rename(rules Rules, name string, index int) (string, error) {
-	base, ext := splitName(name)
+func Rename(rules Rules, in Input) (string, error) {
+	base, ext := in.Name, ""
+	if !in.IsDir || rules.ExtensionOnDirs {
+		base, ext = splitName(in.Name)
+	}
 
 	base, err := applyFindReplace(base, rules)
 	if err != nil {
@@ -285,8 +346,10 @@ func Rename(rules Rules, name string, index int) (string, error) {
 	}
 	base = applyCase(base, rules.Case)
 	base = applyTrim(base, rules.TrimFront, rules.TrimBack)
-	base = applyNumbering(base, rules, index)
-	ext = applyExtension(ext, rules)
+	base = applyNumbering(base, rules, in.Index)
+	if !in.IsDir || rules.ExtensionOnDirs {
+		ext = applyExtension(ext, rules)
+	}
 
 	return base + ext, nil
 }

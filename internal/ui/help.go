@@ -293,18 +293,27 @@ var helpText = strings.TrimLeft(`
 
   The steps always run in this order: Search & Replace, Case, Trim,
   Numbering, Extension — a step left at its default setting does
-  nothing, there's no separate on/off switch to also set. Search &
+  nothing, there's no separate on/off switch to also set; a ● in front
+  of a step's name means it currently changes something. A line under
+  the settings explains whichever setting is selected. Search &
   Replace and Case only ever touch the name, never the extension;
-  Extension only ever touches the extension.
+  Extension only ever touches the extension. With "Regex" on, the
+  replacement may use $1 / ${1} / \1 for capture groups. A folder's
+  name is never split at its last dot unless "Treat folder names as
+  having extensions too" is on — "my.project" stays "my.project".
 
   The preview shows every selected file, changed or not: an unchanged
-  name is dimmed, a conflict (would collide with another renamed file,
-  or with something already on disk) is shown in red with why, right
-  where it's about to happen — nothing is written until "Rename" is
-  pressed and confirmed. "Reset all steps" clears the whole pipeline
-  without closing the screen; "Undo last rename" (context menu, right
-  below "Batch rename") reverses whatever the last confirmed rename
-  actually did.
+  name is dimmed, a conflict (would collide with something that isn't
+  moving out of the way, on disk or in the same batch) is shown in
+  red with why, right where it's about to happen — nothing is written
+  until "Rename" is pressed and confirmed. A rename *chain* is fine:
+  if 2.txt becomes 3.txt while 1.txt becomes 2.txt (or two names swap
+  outright), the renames run in the order that makes it work, through
+  a temporary name where needed. A rename that only changes letter
+  case is fine too, even where the filesystem ignores case. "Reset all
+  steps" clears the whole pipeline without closing the screen; "Undo
+  last rename" (context menu, right below "Batch rename") reverses
+  whatever the last confirmed rename actually did.
 
 [::b]Tabs[::-]
 

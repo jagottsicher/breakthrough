@@ -383,11 +383,18 @@ terminal.
   Extension only ever touches the extension, so a case transform can't
   quietly rewrite `.JPG` behind your back. The whole selection is
   previewed live, old name beside new, updated on every keystroke rather
-  than behind a "Preview" button — unchanged rows dimmed, and any
-  collision (two files landing on the same new name, or a name already
-  taken on disk) shown in red with the reason, right where it would
-  happen. Nothing is written until Rename is confirmed, and "Undo last
-  rename" reverses the whole batch afterwards. See
+  than behind a "Preview" button — unchanged rows dimmed, a `●` beside
+  each step that currently changes something, a help line explaining
+  the selected setting, and any collision (two files landing on the
+  same new name, or a name already taken by something that isn't moving
+  out of the way) shown in red with the reason, right where it would
+  happen. A rename *chain* (`1.txt`→`2.txt` while `2.txt`→`3.txt`, or
+  an outright swap) is not a collision: the renames run in the order
+  that makes it work, through a temporary name where needed. Case-only
+  renames work on case-insensitive filesystems too, regex replacements
+  accept `$1` or sed-style `\1`, and a folder's name is never split at
+  its dot unless you ask. Nothing is written until Rename is confirmed,
+  and "Undo last rename" reverses the whole batch afterwards. See
   [docs/user-guide.md](docs/user-guide.md#batch-rename) for the step
   reference.
 - Three rows below the panel, each with its own job. First, a real

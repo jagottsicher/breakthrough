@@ -492,15 +492,18 @@ on the right, and the preview underneath.
 ### The steps
 
 They always run in this order, and a step left at its default does
-nothing — there is no separate on/off switch to also set.
+nothing — there is no separate on/off switch to also set. A `●` in front
+of a step's name in the list means it currently changes something, so
+the shape of the whole pipeline is readable at a glance. A help line
+under the settings explains whichever setting is selected.
 
 | Step | Settings | Notes |
 |---|---|---|
-| **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `$2`, … for captured groups |
+| **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `${1}` or sed-style `\1` for captured groups |
 | **Case** | Unchanged / UPPERCASE / lowercase / Title Case / Sentence case | Title Case treats a run of letters *and digits* as one word, so `v2` stays `V2` |
 | **Trim** | characters off the front, off the back | Counted in characters, not bytes, so accented and non-Latin names are never cut mid-character |
 | **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits | Zero-padded to Digits, joined with `-`. Counts in the order the preview lists the files. A number wider than Digits is never truncated |
-| **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to… | "Set to…" uses the field below it; a leading dot is optional |
+| **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to…, Treat folder names as having extensions too | "Set to…" uses the field below it; a leading dot is optional. Folders are off by default: `my.project` is one name with no extension, so no step ever splits it at the dot — switch the last setting on to treat folders like files |
 
 Steps 1–4 only ever touch the name; step 5 only ever touches the
 extension. So a Case transform can't quietly rewrite `.JPG`, and a
@@ -520,11 +523,23 @@ renaming has no file contents to read and nothing to wait for.
 - **Changed** rows show the new name in full color.
 - **Unchanged** rows are dimmed and marked `(unchanged)`.
 - **Conflicts** are red, with the reason: either two files in the batch
-  would land on the same new name, or the new name is already taken on
-  disk. Conflicting files are simply left out of the rename — the rest
-  still goes through.
+  would land on the same new name, or the new name is already taken by
+  something that isn't moving out of the way. Conflicting files are
+  simply left out of the rename — the rest still goes through.
 
 The status line underneath counts all three.
+
+Two things that look like conflicts but aren't:
+
+- **Rename chains.** Trimming `1-a.txt`, `2-a.txt` and numbering them
+  from 2 turns `1-a.txt` into `2-a.txt` — a name that exists, but whose
+  owner is itself becoming `3-a.txt`. That's allowed: the renames run in
+  whatever order makes it work (here `2-a.txt` moves first), and a chain
+  that closes into a swap goes through a temporary name in the same
+  directory. Only a destination that *stays* occupied is a real conflict.
+- **Case-only renames.** `Readme.TXT` → `readme.txt` works even on a
+  filesystem that ignores case (macOS, Windows shares), where the new
+  name technically "already exists" — because it's the same file.
 
 ### Applying and undoing
 

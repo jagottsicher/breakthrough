@@ -298,6 +298,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.batchRenameHint.SetTextColor(theme.MutedTextColor)
 
 		r.batchRenameFieldsTable.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
 		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetTextColor(theme.TextColor)

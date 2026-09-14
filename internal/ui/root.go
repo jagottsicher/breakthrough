@@ -441,6 +441,7 @@ type Root struct {
 	batchRenameHint           *tview.TextView
 	batchRenameStepsList      *tview.List
 	batchRenameFieldsTable    *tview.Table
+	batchRenameFieldHelp      *tview.TextView
 	batchRenamePreviewTable   *tview.Table
 	batchRenameStatus         *tview.TextView
 	batchRenameButtons        *tview.Flex
