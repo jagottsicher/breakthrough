@@ -123,8 +123,23 @@ var helpText = strings.TrimLeft(`
                   first), best-effort depending on your terminal — same
                   as "D" regardless, which always works
   Enter           Open the selected directory, or try Look on a file —
-                  double-clicking a name does the same either way
+                  double-clicking a name does the same either way. A
+                  zip/tar/tar.gz/tar.bz2/tar.xz file opens into a
+                  browsable listing of its own contents instead, right
+                  here in the panel — navigate it exactly like a real
+                  directory (".." steps back out), mark entries with
+                  Space and Copy ("c") them out to a real destination
+                  with Paste ("v"). Read-only otherwise: renaming,
+                  editing, chmod/chown, Cut, and Trash/Remove are all
+                  refused while browsing inside one. An archive found
+                  *inside* another archive is never opened this way
+                  automatically — it stays a plain, copyable file.
   Space           Select/deselect the selected file
+  Shift+Up/Down   Extend or shrink a range selection from wherever the
+                  cursor sat when Shift was first pressed — the keyboard
+                  equivalent of a right-button drag across rows; a plain
+                  Up/Down afterwards ends the range, so the next
+                  Shift+Up/Down starts a fresh one from there
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again

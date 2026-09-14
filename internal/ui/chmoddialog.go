@@ -976,6 +976,10 @@ func (r *Root) chmodSpanAt(row, col int) (chmodSpan, bool) {
 // leftover state from whatever the *previous* session was doing,
 // regardless of how that session ended.
 func (r *Root) openChmod() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return

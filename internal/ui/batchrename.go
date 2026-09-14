@@ -281,6 +281,10 @@ func (r *Root) captureBatchRenameFieldsMouse(action tview.MouseAction, event *tc
 // having to re-enter a pipeline that was actually meant for the files
 // it was built against.
 func (r *Root) openBatchRename() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return

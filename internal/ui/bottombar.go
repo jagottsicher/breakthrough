@@ -797,6 +797,10 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 // cursor is currently on. A no-op on the ".." row or an empty panel
 // (Panel.CurrentRowPath's ok=false).
 func (r *Root) editCurrentEntry() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	_, path, ok := r.panel.CurrentRowPath()
 	if !ok {
 		return
@@ -809,6 +813,10 @@ func (r *Root) editCurrentEntry() {
 // Root.openRename), targeting whichever entry the table's cursor is
 // currently on instead of a right-clicked one.
 func (r *Root) renameCurrentEntry() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	row, path, ok := r.panel.CurrentRowPath()
 	if !ok {
 		return

@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -263,8 +264,28 @@ type Panel struct {
 	columnHeader *tview.Table
 	table        *tview.Table
 
-	// path is the absolute path currently shown.
+	// path is the absolute path currently shown — a real directory, or,
+	// while browsing into an archive (see archivepanel.go), a composite
+	// "path" formed by treating the archive file itself as if it were a
+	// directory: /real/dir/backup.zip/sub/dir. filepath.Dir/Join/Base
+	// all operate on this exactly like any other string, which is what
+	// lets ".." and entering a further subdirectory work unchanged —
+	// resolveArchiveState is what tells the two apart when it matters.
 	path string
+
+	// archivePath is the real, on-disk archive file currently being
+	// browsed into — "" whenever path is an ordinary real directory.
+	// archiveEntries is that same archive's own full, flat member
+	// listing (see archive.List), cached here so moving between two
+	// directories inside the *same* archive doesn't re-open and re-read
+	// it (a real cost for a tar: unlike zip, it has no separate index,
+	// so listing it at all means reading the whole compressed stream
+	// through once) — only entering a different archive, or leaving
+	// this one, replaces it. Both reset together, always in the same
+	// load() call that sets path to something no longer under this
+	// archive at all (see resolveArchiveState).
+	archivePath    string
+	archiveEntries []archive.Entry
 
 	// selected holds the absolute paths currently checked in the checkbox
 	// column. Reset on every successful load() — selection is scoped to
@@ -441,6 +462,31 @@ type Panel struct {
 	// happened.
 	lastNameClickRow  int
 	lastNameClickTime time.Time
+
+	// shiftSelectAnchorRow/shiftSelectCurrentRow/shiftSelecting track a
+	// Shift+Up/Down range-selection in progress — the keyboard
+	// counterpart to Root's dragStartRow/dragCurrentRow/dragMoved/
+	// dragging (see Root.advanceDrag), built on the very same
+	// applyDragDelta primitive, just driven by captureTableKey instead
+	// of a mouse capture.
+	//
+	// shiftSelectAnchorRow is the row the cursor sat on right before the
+	// first Shift+Up/Down of the session, and never changes for as long
+	// as Shift stays effectively "held" across consecutive presses;
+	// shiftSelectCurrentRow is where the toggled range currently ends,
+	// so advanceShiftSelect only has to toggle what changed membership
+	// since the last press (see applyDragDelta's own doc comment) —
+	// including "moving back past the anchor reverses which side grows",
+	// the same reversal a right-button drag already supports. Reset (see
+	// endShiftSelect) on load() and on any key that isn't itself a
+	// Shift+Up/Down, so a later Shift+Up/Down always starts a fresh
+	// range from wherever the cursor happens to sit by then, rather than
+	// silently resuming an old anchor a plain move has already left
+	// behind — a rebuilt table's row indices mean something new anyway,
+	// the same reasoning lastNameClickRow's reset above already follows.
+	shiftSelectAnchorRow  int
+	shiftSelectCurrentRow int
+	shiftSelecting        bool
 
 	// onRenameGesture reports the click-pause-click rename gesture once
 	// handleNameClick recognizes it — Root wires this to renameRow, its
@@ -1035,8 +1081,24 @@ func (p *Panel) load(dir string) error {
 	if err != nil {
 		return err
 	}
+	if p.leavingArchive(abs) {
+		p.archivePath = ""
+		p.archiveEntries = nil
+	}
 
-	entries, err := fsops.ListDir(abs)
+	// resolveArchiveState (see its own doc comment) is what lets
+	// activateRow's plain p.navigate(ref.path) — unchanged from
+	// entering a real directory — also dive into a recognized archive
+	// file, or a subdirectory already inside one: load() itself is the
+	// one place that has to know the difference, everything upstream of
+	// it (navigate, the ".." row, Root's tab/history plumbing) just
+	// keeps treating abs as an ordinary path.
+	var entries []fsops.Entry
+	if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+		entries, err = p.loadArchiveEntries(archivePath, internalDir)
+	} else {
+		entries, err = fsops.ListDir(abs)
+	}
 	if err != nil {
 		return err
 	}
@@ -1106,6 +1168,7 @@ func (p *Panel) load(dir string) error {
 	p.table.Clear()
 	p.selected = make(map[string]bool)
 	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
+	p.endShiftSelect()
 	p.path = abs
 
 	text, spans := buildHeaderSpans(abs, p.theme)
@@ -1228,6 +1291,7 @@ func (p *Panel) showSearchResults() {
 	p.searchEntries = nil
 	p.selected = make(map[string]bool) // selection scoped to what's on screen, same rule load() already follows for a real directory
 	p.lastNameClickRow = -1            // see its own doc comment: a rebuilt table's row indices mean something new
+	p.endShiftSelect()
 	p.table.Clear()
 	p.buildColumnHeader()
 }
@@ -2642,9 +2706,17 @@ func (p *Panel) SelectedPaths() []string {
 	return paths
 }
 
-// captureTableKey handles the one key the table needs beyond its built-in
+// captureTableKey handles the keys the table needs beyond its built-in
 // navigation: Space toggles the checkbox on the currently selected row,
-// the same action a click on that row's checkbox performs.
+// the same action a click on that row's checkbox performs; Shift+Up/
+// Down extends or shrinks a range-selection from wherever the cursor
+// sat when Shift was first pressed, the keyboard equivalent of a
+// right-button drag across rows (see advanceShiftSelect).
+//
+// Every other key ends any Shift+Up/Down session in progress (see
+// endShiftSelect) before falling through to the table's own default
+// handling — including a *plain* Up/Down, which must not silently keep
+// extending an old range from a session Shift was released after.
 func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
 		row, _ := p.table.GetSelection()
@@ -2655,6 +2727,23 @@ func (p *Panel) captureTableKey(event *tcell.EventKey) *tcell.EventKey {
 		p.onSearchEscape()
 		return nil
 	}
+	if event.Modifiers()&tcell.ModShift != 0 && (event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown) {
+		delta := 1
+		if event.Key() == tcell.KeyUp {
+			delta = -1
+		}
+		row := p.currentRow() + delta
+		if lastRow := p.table.GetRowCount() - 1; row > lastRow {
+			row = lastRow
+		}
+		if row < 0 {
+			row = 0
+		}
+		p.advanceShiftSelect(row)
+		p.focusRow(row)
+		return nil
+	}
+	p.endShiftSelect()
 	return event
 }
 
@@ -2800,6 +2889,20 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		return true
 	}
 	if !ref.isDir {
+		// A recognized archive file (zip, tar and its .gz/.bz2/.xz
+		// variants), only while browsing a real directory — p.archivePath
+		// empty — not one already found *inside* another archive: nested
+		// archives are deliberately never entered automatically (see
+		// resolveArchiveState's own doc comment on archivePath/
+		// archiveEntries, and this feature's own top-level doc comment in
+		// archivepanel.go), so such a member stays a plain, non-
+		// navigable file here, same as any other.
+		if p.archivePath == "" {
+			if _, ok := archive.Classify(ref.path); ok {
+				p.reportError(p.navigate(ref.path))
+				return true
+			}
+		}
 		if p.onOpenFile != nil { // ".." is always isDir true, so this is always a real file
 			p.onOpenFile()
 		}
@@ -2920,6 +3023,36 @@ func (p *Panel) applyDragDelta(start, from, to int) {
 	}
 }
 
+// advanceShiftSelect is applyDragDelta's own caller, Root.advanceDrag's
+// keyboard counterpart: row is the cursor's new row after a Shift+Up/
+// Down just moved it by one (see captureTableKey). Unlike a mouse
+// press, a keypress is never ambiguous about whether anything moved —
+// there's no dragMoved-style deferral here — so the very first
+// Shift+Up/Down of a session immediately brings the anchor row (wherever
+// the cursor sat right before it) into the selection together with the
+// row just moved onto.
+func (p *Panel) advanceShiftSelect(row int) {
+	if !p.shiftSelecting {
+		p.shiftSelectAnchorRow = p.currentRow()
+		p.shiftSelectCurrentRow = p.shiftSelectAnchorRow
+		p.shiftSelecting = true
+		p.toggleCheckbox(p.shiftSelectAnchorRow)
+	}
+	if row != p.shiftSelectCurrentRow {
+		p.applyDragDelta(p.shiftSelectAnchorRow, p.shiftSelectCurrentRow, row)
+	}
+	p.shiftSelectCurrentRow = row
+}
+
+// endShiftSelect ends any Shift+Up/Down range-selection session in
+// progress, so a later Shift+Up/Down starts a fresh one anchored
+// wherever the cursor sits by then — see shiftSelecting's own doc
+// comment for why this runs on every non-Shift+Up/Down key and on
+// load().
+func (p *Panel) endShiftSelect() {
+	p.shiftSelecting = false
+}
+
 // currentRow returns the table's own current cursor row (see
 // tview.Table.GetSelection) — an opaque number here, never re-resolved
 // against a row's own identity, used purely to freeze it away (see
@@ -3000,6 +3133,7 @@ func (p *Panel) restoreHistoryEntry(entry historyEntry) error {
 		p.searchEntries = append([]searchResultEntry(nil), entry.searchEntries...)
 		p.selected = make(map[string]bool)
 		p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
+		p.endShiftSelect()
 		p.table.Clear()
 		p.buildColumnHeader()
 		p.renderSearchEntries()

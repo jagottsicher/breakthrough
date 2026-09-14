@@ -68,6 +68,10 @@ func (r *Root) inTrash() bool {
 // instead of relabeling it (see buildButtonBar) — this redirect is what
 // still fires if Entf gets pressed out of habit regardless.
 func (r *Root) moveSelectionToTrash() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	if r.inTrash() {
 		r.openRemoveConfirm()
 		return
@@ -169,6 +173,10 @@ func (r *Root) openTrash() {
 // wording the message concretely for one file, one directory (with its
 // real item count), or several targets at once.
 func (r *Root) openRemoveConfirm() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return

@@ -36,6 +36,10 @@ var sedFlagOrder = []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseIn
 // to real sed rather than reimplementing its regex/scripting engine,
 // and why it never uses sed's own -i.
 func (r *Root) openSedReplace() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return

@@ -1163,12 +1163,23 @@ already open; `Ctrl`+`Delete` regardless of terminal support).
 |---|---|---|
 | `Enter` | Open a directory, or Look at a file | |
 | `Space` | Select / deselect | |
+| `Shift`+`Up`/`Down` | Extend or shrink a range selection from wherever the cursor sat when Shift was first pressed; a plain `Up`/`Down` afterwards ends it | right-button drag |
 | `Tab` | Cycle focus: panes, Details sidebar, tool windows | |
 | `Delete` | Move to Trash | `d` |
 | `Ctrl`+`Delete` | Remove permanently (asks first), best-effort depending on terminal | `D` (always reliable) |
 | `Ctrl`+`1`…`0`, `Alt`+`1`…`0` | Jump to a tab | |
 | `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
+
+`Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`, or `.tar.xz` file
+opens a browsable listing of its own contents right here in the panel,
+instead of Look — navigate it exactly like a real directory (`..` steps
+back out to the real one it lives in), mark entries with `Space`, and
+Copy (`c`) them out to a real destination with Paste (`v`). Browsing
+inside one is read-only otherwise: renaming, editing, chmod/chown, Cut,
+and Move to Trash/Remove are all refused there. An archive found
+*inside* another archive is never opened this way automatically — it
+stays a plain, copyable file, extracted whole if you copy it out.
 
 Click, pause, click again on an already-selected name renames it. The
 pause is deliberately generous — about a second — so an unhurried second
