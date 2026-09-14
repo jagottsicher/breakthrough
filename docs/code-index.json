@@ -28,8 +28,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "size": 1710,
-      "sha256": "871ff79b10f459ffe0a08656a1127ab0b1e8c808b58ac0f3e78615ab2ce4d67b"
+      "size": 2549,
+      "sha256": "70890a35b93c60d220cdec02763e456f5e9c2028be54eec8de3992d8a1ae5202"
     },
     {
       "path": ".github/workflows/test-linux-arm.yml",
@@ -23072,5 +23072,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "4fae935daba5fe3bdb2338e5f87f62a779482ac7916d8261261b7d1e51cf2b66"
+  "merkle_root": "122e2cd771af4d5ecb5ff6cedcdd4c26dffab58deef830568b79979271723362"
 }
