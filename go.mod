@@ -7,6 +7,7 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/rivo/tview v0.42.0
+	github.com/ulikunitz/xz v0.5.16
 	golang.org/x/crypto v0.55.0
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
