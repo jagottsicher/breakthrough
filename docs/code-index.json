@@ -63,13 +63,18 @@
     },
     {
       "path": "CONTRIBUTING.md",
-      "size": 1768,
-      "sha256": "1d7a463c9cf49f1438375d5a120e3795279f3e58e02cb5178e4667d985f4c9af"
+      "size": 2294,
+      "sha256": "ce240f76184f4b27741fac0602402697b7e6794429c9e2fb4bc8639cadcc91b7"
     },
     {
       "path": "LICENSE",
       "size": 11358,
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "Makefile",
+      "size": 1450,
+      "sha256": "e9058d8493f297480a979649e9ed0aa88bd4ea10eacfc0c2f2e4ea6d7f87afe6"
     },
     {
       "path": "NOTICE",
@@ -29033,5 +29038,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "d6d6dfbce29507493717d2528620e36f48bb95fb4c43ce53fae42adcc416ac49"
+  "merkle_root": "8ebc5998140edebfe0234c597e66075c12fad60df065321d7261de56bef000eb"
 }
