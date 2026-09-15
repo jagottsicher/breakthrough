@@ -543,6 +543,27 @@ type Root struct {
 	rsyncContentLayout    *tview.Flex
 	rsyncLayout           *tview.Flex
 
+	// rsyncSourceDefault/rsyncDestinationDefault record exactly what
+	// defaultRsyncSource/defaultRsyncDestination prefilled
+	// rsyncSourceField/rsyncDestinationField with when the dialog was
+	// last opened — see rsyncFieldDefault's own doc comment on why:
+	// currentRsyncJob needs this to tell "field still reads exactly
+	// what a connected panel was defaulted to, so its own port travels
+	// through to the real rsync invocation too" apart from "user typed
+	// something else since, treat as plain text with no knowable port".
+	// rsyncHintView is a single always-reserved row beneath
+	// rsyncPreviewView for the one thing the preview line itself has no
+	// room for: a visible warning when both Source and Destination
+	// resolve to a remote host, since rsync -e ssh always relays
+	// through this machine rather than transferring directly
+	// server-to-server. Blank whenever that doesn't apply, rather than
+	// a conditionally-hidden row — see newRsyncContentLayout's own doc
+	// comment on why a fixed row budget is simpler than resizing the
+	// dialog live.
+	rsyncSourceDefault      rsyncFieldDefault
+	rsyncDestinationDefault rsyncFieldDefault
+	rsyncHintView           *tview.TextView
+
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
 	// Options screen already establishes (batchRenameStepsList plays
@@ -1466,6 +1487,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rsyncForm = r.newRsyncForm()
 	r.rsyncFlagsList = r.newRsyncFlagsList()
 	r.rsyncPreviewView = r.newRsyncPreviewView()
+	r.rsyncHintView = r.newRsyncHintView()
 	r.rsyncSpacer = tview.NewBox()
 	r.rsyncButtons = r.newRsyncButtons()
 	r.rsyncLayout = r.newRsyncLayout()

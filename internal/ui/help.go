@@ -476,9 +476,20 @@ var helpText = strings.TrimLeft(`
   the current selection's single entry (or the panel's own directory
   with nothing selected) and, if a split view is open, Destination
   pre-filled from the other pane — the one case where "the other
-  side" is unambiguous. Either field also accepts a typed
-  "user@host:path" for a remote endpoint, exactly as rsync itself
-  would expect.
+  side" is unambiguous. If the tab a field defaults from is currently
+  connected via the Connect dialog, that field opens already showing
+  "user@host:path" instead of a bare local one, and the connection's
+  own port (when it isn't the default 22) travels through to a real
+  -e 'ssh -p PORT' flag automatically — lost again the moment the
+  field is edited to anything other than exactly what was filled in,
+  since there's no way to know a non-default port from typed text
+  alone. Either field also accepts a typed "user@host:path" for a
+  remote endpoint never connected to at all, exactly as rsync itself
+  would expect. Syncing between two remote endpoints at once shows a
+  warning line beneath the preview: rsync -e ssh has no server-to-
+  server transfer mode of its own, so every byte still relays through
+  this machine over two separate ssh connections, never directly
+  between the two remote hosts.
 
   The toggle "Copy the folder's contents in (not the folder itself)"
   turns rsync's own classic, easy-to-get-wrong trailing-slash-on-
