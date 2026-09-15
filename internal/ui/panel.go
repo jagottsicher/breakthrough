@@ -1186,6 +1186,22 @@ func (p *Panel) load(dir string) error {
 	if parent := filepath.Dir(abs); parent != abs {
 		p.addRow(row, rowRef{path: parent, name: "..", isDir: true, checkable: false, entryType: fsops.TypeDir})
 		row++
+	} else {
+		// The real filesystem root has no parent to go "up" to (see the
+		// ".." branch above — filepath.Dir("/") is "/" itself), so there
+		// used to be no leading row here at all. Show "/" itself instead,
+		// selecting it the ordinary way (cursor/click, not a name-based
+		// special case): Details ("I") shows System Info specifically
+		// when *this* row is the current selection (see
+		// Root.showingSystemInfo, which just compares against this row's
+		// own path — "/" — like it would for any other entry), never
+		// merely for being somewhere under "/" — the surrounding
+		// directory's real entries (etc, home, usr, ...) get their own
+		// ordinary per-file Details exactly like anywhere else.
+		// checkable: false for the same reason ".." is: not a file
+		// operation target.
+		p.addRow(row, rowRef{path: abs, name: "/", isDir: true, checkable: false, entryType: fsops.TypeDir})
+		row++
 	}
 	for _, e := range entries {
 		entryPath := filepath.Join(abs, e.Name)
@@ -1993,7 +2009,11 @@ func (p *Panel) setRowCells(row int, ref rowRef, focused bool) {
 	// can protect it: a trailing "/" or " -> target" says what kind of
 	// entry this is, which a shortened name alone no longer does.
 	suffix := ""
-	if ref.entryType == fsops.TypeDir {
+	if ref.entryType == fsops.TypeDir && ref.name != "/" {
+		// ref.name != "/": the real filesystem root's own self-row (see
+		// Panel.load's own doc comment on it) is already named "/" in
+		// full — appending the ordinary directory suffix on top would
+		// print "//" instead.
 		suffix = "/"
 	}
 	if ref.linkTarget != "" {
