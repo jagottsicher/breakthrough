@@ -181,6 +181,7 @@ func plainCommands() []plainCommand {
 		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
 		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
+		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
 		{key: '-', label: "Deselect by pattern", action: func(r *Root) { r.openSelectMinus() }},
