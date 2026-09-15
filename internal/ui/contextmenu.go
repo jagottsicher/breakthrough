@@ -138,6 +138,7 @@ func contextMenuTree() []menuEntry {
 			{label: "sed", action: func(r *Root) { r.openSedReplace() }},
 			{label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 			{label: "Undo last rename", action: func(r *Root) { r.undoLastBatchRename() }},
+			{label: "Compare", action: func(r *Root) { r.openCompare() }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the
