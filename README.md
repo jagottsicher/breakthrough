@@ -545,19 +545,13 @@ terminal.
   remote filesystem exactly like a local one — same columns, same
   sorting, same navigation, and Details/status-bar Disk+Inodes/System
   Info at "/" all describe the *remote* machine, not this one. Rename,
-  chmod (including its recursive dirs/files options), and Copy/Cut/
-  Paste all work against a remote target too — including moving a file
-  between two directories on the same connection, which goes through a
-  single rename rather than downloading and re-uploading it. Deletion
-  works exactly like it does locally too: "d" moves the target into a
-  hidden `.breakthrough-trash` directory right at the connection's own
-  account root (one rename, no data transferred, just as reversible as
-  the local trash), "D" still means permanently delete, and "gb"/
-  Restore/Empty Trash all follow whichever panel — local or remote —
-  is currently active; a remote Restore refuses rather than overwriting
-  on a conflict instead of the local dialog's richer choice, and the
-  remote trash isn't pruned automatically the way the local one is.
-  Look and Edit stage a real local temp copy
+  permanent delete, chmod (including its recursive dirs/files options),
+  and Copy/Cut/Paste all work against a remote target too — including
+  moving a file between two directories on the same connection, which
+  goes through a single rename rather than downloading and re-uploading
+  it; "d" (Move to Trash) explains why it switches straight to a
+  permanent-delete confirmation instead, since a remote session has no
+  trash to move into. Look and Edit stage a real local temp copy
   behind the scenes and hand it to the ordinary built-in viewer/
   external pager/$VISUAL/$EDITOR unchanged — Edit only uploads it back
   if it actually changed. Opening a zip/tar that itself lives on a
