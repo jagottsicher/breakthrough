@@ -336,6 +336,10 @@ func (r *Root) openBatchRename() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return

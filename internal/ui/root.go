@@ -33,6 +33,11 @@ const (
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
 	duplicatePage   = "duplicate"
+	// The three remote-connection dialogs (see connectdialog.go,
+	// hostkeyconfirm.go, connectionmenu.go).
+	connectDialogPage  = "connect-dialog"
+	hostKeyConfirmPage = "host-key-confirm"
+	connectionMenuPage = "connection-menu"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -338,6 +343,47 @@ type Root struct {
 	sedPreviewProcessed  int
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
+
+	// connectForm/connectActions/connectLayout make up the "Connect"
+	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
+	// User/Password), so it's built once here rather than rebuilt fresh
+	// per open the way Sed Replace's own variable field set is (see
+	// newSedForm's own doc comment on that distinction). connectStatus
+	// is the one-line area below the form showing either an in-progress
+	// "Connecting…" animation or the last attempt's own error, in
+	// place, without closing the dialog.
+	connectForm          *tview.Form
+	connectHostField     *tview.InputField
+	connectPortField     *tview.InputField
+	connectUserField     *tview.InputField
+	connectPasswordField *tview.InputField
+	connectStatus        *tview.TextView
+	connectActions       *tview.List
+	connectTitleBar      *tview.TextView
+	connectLayout        *tview.Flex
+	connectCancel        context.CancelFunc
+	connectAnimFrame     int
+
+	// hostKeyConfirmDialog/Layout is the trust-on-first-use prompt a
+	// Dial attempt can raise mid-connection (see hostkeyconfirm.go's
+	// own askHostKeyTrust) — hostKeyConfirmResponse is the single-use
+	// channel that call is currently blocked reading from, nil whenever
+	// none is (there's ever only one in flight at a time, since a
+	// second Dial can't start until runConnect's own goroutine for the
+	// first one has already returned).
+	hostKeyConfirmTitleBar *tview.TextView
+	hostKeyConfirmDialog   *tview.List
+	hostKeyConfirmLayout   *tview.Flex
+	hostKeyConfirmResponse chan bool
+
+	// connectionMenuList/Layout is the dropdown the header's own "@"
+	// button (or the "gc" chord) opens — see connectionmenu.go.
+	// Rebuilt fresh on every open (see renderConnectionMenu), the same
+	// "which panel is active, and what history says, can both have
+	// changed since last time" reasoning renderFilterMenu's own doc
+	// comment already gives for its dropdown.
+	connectionMenuList   *tview.List
+	connectionMenuLayout *tview.Flex
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -1316,6 +1362,22 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The "Connect" dialog and its own host-key trust prompt (see
+	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
+	// once here the same way Sed Replace's own form is (see
+	// newConnectForm's own doc comment).
+	r.connectForm = r.newConnectForm()
+	r.connectActions = r.newConnectActions()
+	r.connectLayout = r.newConnectLayout()
+	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
+	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
+
+	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
+	// on every open (see renderConnectionMenu), the same as the filter
+	// menu's own dropdown.
+	r.connectionMenuList = r.newConnectionMenuList()
+	r.connectionMenuLayout = r.newConnectionMenuLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
@@ -1462,6 +1524,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
+	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
+	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
@@ -1563,6 +1628,12 @@ func (r *Root) wirePanel(panel *Panel) {
 	// "closure captures r, not this specific panel" shape
 	// onOpenTabSwitcher above already uses.
 	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
+
+	// The header row's own "@" button opens the connection dropdown
+	// (see Panel.onOpenConnectionMenu/buildHeaderSpans' own doc
+	// comments and Root.openConnectionMenu) — same "closure captures r,
+	// not this specific panel" shape as onOpenFilterMenu just above.
+	panel.onOpenConnectionMenu = func() { r.openConnectionMenu() }
 
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
@@ -2781,13 +2852,29 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // copyToClipboard is the context menu's "Copy": remembers the current
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
+//
+// Refused outright for a remote panel — unlike archive browsing (see
+// errNotSupportedInArchive), which still allows copying *out* of an
+// archive, the clipboard has no way to record which filesystem a path
+// belongs to (see Panel.isRemote's own doc comment), so a remote path
+// must never enter it at all, not even to be blocked later at Paste.
 func (r *Root) copyToClipboard() {
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
-// the targets (removing them from here) instead of copying them.
+// the targets (removing them from here) instead of copying them. See
+// copyToClipboard's own doc comment for why a remote panel refuses this
+// the same way.
 func (r *Root) cutToClipboard() {
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	r.setClipboard(r.clipboardTargets(), true)
 }
 
@@ -2980,6 +3067,15 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // conflict-resolving shape); a no-op if nothing was ever copied/cut,
 // same as before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
+	if r.panel.isRemote() {
+		// copyToClipboard/cutToClipboard already refuse a remote
+		// *source* outright (see their own doc comments) — this is the
+		// other half: a remote *destination*, which needs its own guard
+		// here regardless, since the clipboard's own contents in that
+		// case are still perfectly ordinary local paths.
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {
 		// Cut has nothing to remove afterward — there's no writing back
 		// into a read-only archive to make the "move" half of it real —
@@ -3020,6 +3116,10 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 func (r *Root) openChown() {
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
+		return
+	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
 		return
 	}
 	r.hideOverlay()

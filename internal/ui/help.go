@@ -83,7 +83,7 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin
+                gr / (root) · gb Trashbin · gc Connect…
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload

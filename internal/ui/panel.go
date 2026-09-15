@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -3358,6 +3359,28 @@ func (p *Panel) disconnectRemote() error {
 	p.pushHistoryEntry(historyEntry{path: p.path})
 	return nil
 }
+
+// isRemote reports whether p is currently attached to a remote session
+// — the same "browsing-mode gate" role inArchiveView already has for
+// archive browsing, and checked at exactly the same call sites for
+// exactly the same reason: rename, edit, chmod/chown, Copy/Cut/Paste,
+// Move to Trash/Remove, Compare, Batch Rename, and Sed Replace all
+// eventually make a real fsops call against a plain path string, which
+// would silently target the wrong filesystem (this machine's, not
+// remote's own) if any of them ran here unguarded — there's no
+// mechanism yet for the clipboard, batch rename, or any of the rest to
+// know a path belongs to a remote session rather than this one. Only
+// browsing, viewing, and disconnecting are supported against a remote
+// session so far (see remote's own doc comment on the struct).
+func (p *Panel) isRemote() bool {
+	return p.remote != nil
+}
+
+// errNotSupportedRemote is what every action guarded by isRemote
+// reports instead of proceeding — one shared message, the same
+// convention errNotSupportedInArchive already establishes for its own,
+// structurally identical guard.
+var errNotSupportedRemote = errors.New("not supported yet for a remote connection — browsing and viewing work, everything that changes files doesn't yet")
 
 // reportError hands err to whoever is displaying errors, if anyone is.
 // A nil error is ignored, so callers can pass a result through directly.
