@@ -45,6 +45,7 @@ var helpText = strings.TrimLeft(`
                                                    +/- Select/deselect
                                                        by pattern
   B   Batch rename       E  Sed Replace           G   Go to last row
+  C   Compare
   q   Quit                ? This help              :  Bash command line
 
   h/k/M target whichever of Properties/Details is relevant (Properties
@@ -340,6 +341,36 @@ var helpText = strings.TrimLeft(`
   asking). Presets are plain JSON files, one per preset, under
   ~/.config/breakthrough/rename-presets/ (or $XDG_CONFIG_HOME) — easy
   to copy to another machine or keep in version control.
+
+[::b]Compare ("C")[::-]
+
+  Answers "are these the same, and if not, what's different" — for
+  two files, or two whole directory trees. Needs exactly two things to
+  compare: mark two entries (in either order — they're compared in
+  the order they're listed), or open split view ("s") and put the
+  cursor on one entry in each pane, nothing marked at all.
+
+  Two files opens a small overlay: size and modification time side by
+  side, with an immediate verdict — "Different" the moment sizes
+  disagree, "Probably identical" when size and time both agree,
+  "Uncertain" when only the size does (same size, different time is a
+  real, common case: touched, re-saved, or copied without preserving
+  timestamps — this heuristic genuinely can't tell). "Compute hash"
+  settles it for certain (SHA-256, cancellable, the same progress
+  animation Properties' own hashing shows); "Show diff" opens a real
+  line-by-line comparison through the system's own diff(1) in the
+  Look pager (red/green, the same as any other diff), disabled for a
+  binary pair or when diff(1) isn't installed.
+
+  Two directories opens a full screen: every path that differs, plus
+  every path that exists on only one side — a directory that's
+  one-sided is shown once, never descended into, so an old untouched
+  backup folder is one row, not thousands. Identical rows are hidden
+  by default ("i" shows them too). "m" switches between the same
+  quick size+time check the file overlay uses and a real hash
+  comparison, re-scanning either way. Enter on a differing text pair
+  opens the same diff view as above; "c" copies a one-sided item
+  across to the other side, after asking.
 
 [::b]Tabs[::-]
 

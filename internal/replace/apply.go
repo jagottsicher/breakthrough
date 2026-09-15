@@ -2,6 +2,8 @@ package replace
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -18,17 +20,39 @@ type FileChange struct {
 // file, to decide whether something looks like binary content.
 const binarySniffLen = 8000
 
-// looksBinary reports whether data contains a NUL byte in its first
+// LooksBinary reports whether data contains a NUL byte in its first
 // binarySniffLen bytes — the same heuristic grep -I uses to decide what
 // counts as text. Running sed against a real binary file could corrupt
 // it unpredictably, so Preview skips anything this reports true for
-// entirely rather than attempting it.
-func looksBinary(data []byte) bool {
+// entirely rather than attempting it. Exported so internal/compare can
+// ask the identical question before offering a text diff, rather than
+// growing a second, possibly-drifting binary sniff of its own.
+func LooksBinary(data []byte) bool {
 	n := len(data)
 	if n > binarySniffLen {
 		n = binarySniffLen
 	}
 	return bytes.IndexByte(data[:n], 0) >= 0
+}
+
+// LooksBinaryFile is LooksBinary against a file on disk — reads only
+// the leading binarySniffLen bytes, not the whole file: unlike Preview
+// (which needs the full content anyway to run sed against it), a
+// caller just deciding "should I offer a diff for this pair" has no
+// other reason to pull a possibly large file into memory at all.
+func LooksBinaryFile(path string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = f.Close() }()
+
+	buf := make([]byte, binarySniffLen)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return false, err
+	}
+	return LooksBinary(buf[:n]), nil
 }
 
 // Preview runs script (see BuildScript) against each of paths and
@@ -71,7 +95,7 @@ func Preview(paths []string, script string, extendedRegex bool, onProgress func(
 			skipped[path] = readErr.Error()
 			continue
 		}
-		if looksBinary(before) {
+		if LooksBinary(before) {
 			skipped[path] = "looks like a binary file"
 			continue
 		}

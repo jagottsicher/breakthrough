@@ -15,6 +15,7 @@ material, always matching the version you are actually running.
 - [The context menu](#the-context-menu)
 - [Multiply](#multiply)
 - [Batch rename](#batch-rename)
+- [Compare](#compare)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -50,7 +51,7 @@ dialog open.
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
-| `?` | This help | `:` | Bash command line | | |
+| `?` | This help | `:` | Bash command line | `C` | Compare |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
@@ -575,6 +576,64 @@ Afterwards, the context menu's **"Undo last rename"** reverses the
 entire batch in one go — one level deep, cleared once used. Renaming
 never crosses filesystems (a new name always lands in the same
 directory), so there is no partial-move case to recover from.
+
+## Compare
+
+`C` answers "are these two things the same, and if not, what's
+different" — for two files, or two whole directory trees. Reached from
+the file panel (`C`) or the context menu's **"More actions" → "Compare"**.
+
+### Picking what to compare
+
+Needs exactly two things, gathered from whatever's already on screen —
+no separate picker dialog:
+
+- **Two entries marked** (checkbox, either order) in the current panel.
+- **Split view** (`s`), nothing marked at all: the cursor position in
+  each pane stands in for the two things.
+
+Anything else — fewer than two marked and no split — is refused with a
+message explaining which of the two to do instead. A file compared
+against a directory is refused the same way; compare two files, or two
+directories.
+
+### Two files
+
+A small overlay: size and modification time side by side, with an
+immediate verdict from the same "quick check" heuristic `rsync`'s own
+default sync mode uses —
+
+- **Different** the moment sizes disagree.
+- **Probably identical** when size *and* modification time both agree.
+- **Uncertain** when only the size does. Same size, different time is a
+  real, common case (touched, re-saved, copied without preserving
+  timestamps) that this heuristic genuinely can't resolve on its own.
+
+**Compute hash** settles it for certain — SHA-256, cancellable, the same
+progress animation Properties' own hashing shows — and always wins over
+the heuristic once it has run. **Show diff** opens a real line-by-line
+comparison through the system's own `diff(1)` in the Look pager (colored
+exactly like any other diff), disabled for a binary pair or when
+`diff(1)` isn't installed.
+
+### Two directories
+
+A full screen listing every path that differs, plus every path that
+exists on only one side. A directory that's one-sided is shown once,
+never descended into — an old, untouched backup folder is one row, not
+thousands of them.
+
+| Key | Action |
+|---|---|
+| `Enter` | open a differing text pair in the diff view |
+| `c` | copy the selected one-sided item to the other side, after asking |
+| `m` | switch between the quick size+time check and a real hash comparison, and re-scan |
+| `i` | show/hide rows that compared identical (hidden by default) |
+| `Esc` | close |
+
+The status line tallies how many rows differ, are one-sided, uncertain,
+identical, or errored (a permission-denied directory along the way, for
+instance — reported, not fatal to the rest of the walk).
 
 ## Sed Replace
 

@@ -14,6 +14,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/replace"
@@ -470,6 +471,59 @@ type Root struct {
 	batchRenameExcluded       map[string]bool
 	batchRenamePendingChanges []batchrename.Change
 	batchRenameUndo           []batchrename.Change
+
+	// The Compare feature (see compare.go): file-vs-file is a compact
+	// overlay (comparePage) much like Properties; directory-vs-directory
+	// is a full screen (compareTreePage), a Table plus a status line and
+	// buttons underneath — the same list-plus-status-plus-buttons shape
+	// Batch Rename's own preview already establishes. Both share one
+	// unified-diff pager overlay (compareDiffPage) for a text pair's
+	// actual line-by-line content, rather than each keeping its own.
+	//
+	// compareA/compareB are the file-vs-file overlay's own two targets;
+	// compareHashCancel/compareHashRunning back its on-demand hash
+	// computation, the same context.WithCancel + bool pair Properties'
+	// own hashCancel/hashInProgress already establish (see
+	// computeHashes) — deliberately not shared with Properties' fields
+	// themselves, since the two can legitimately be open, and hashing
+	// different targets, at the same time (Compare is not modal).
+	//
+	// compareTreeEntries is Walk's own last full result, kept so the
+	// table can be re-rendered (e.g. toggling "show identical") without
+	// re-walking the filesystem; compareTreeCancel/compareTreeRunning
+	// mirror compareHashCancel/compareHashRunning for the walk itself.
+	compareLayout      *tview.Flex
+	compareTitleBar    *tview.TextView
+	compareHeader      *tview.TextView
+	compareVerdict     *tview.TextView
+	compareButtons     *tview.Flex
+	compareHashBtn     *tview.Button
+	compareDiffBtn     *tview.Button
+	compareCloseBtn    *tview.Button
+	compareA, compareB string
+	compareHashes      map[string]string // path -> SHA-256, the one digest Compare ever needs for a verdict
+	compareHashCancel  context.CancelFunc
+	compareHashRunning bool
+	compareHashAnim    int
+
+	compareTreeLayout        *tview.Flex
+	compareTreeTitleBar      *tview.TextView
+	compareTreeHint          *tview.TextView
+	compareTreeTable         *tview.Table
+	compareTreeStatus        *tview.TextView
+	compareTreeButtons       *tview.Flex
+	compareTreeModeBtn       *tview.Button
+	compareTreeShowSameBtn   *tview.Button
+	compareTreeCloseBtn      *tview.Button
+	compareTreeA             string
+	compareTreeB             string
+	compareTreeMode          compare.Mode
+	compareTreeShowIdentical bool
+	compareTreeEntries       []compare.Entry
+	compareTreeStats         compare.Stats
+	compareTreeCancel        context.CancelFunc
+	compareTreeRunning       bool
+	compareTreeAnim          int
 
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -1254,6 +1308,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// rebuilt per open (see openBatchRename).
 	r.newBatchRenameScreen()
 
+	// The Compare screens (see compare.go) — file-vs-file overlay and
+	// directory-vs-directory full screen, built once here the same way.
+	// A text diff (see compare.UnifiedDiff) is shown through the
+	// existing Look pager instead of a screen of its own — see
+	// openCompareDiff's own doc comment for why that's not corner-
+	// cutting but the actually simpler, more capable choice.
+	r.newCompareScreens()
+
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
 	// prompt/propertiesEditField already use.
@@ -1371,6 +1433,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
 	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
 	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
+	r.AddPage(comparePage, r.compareLayout, false, false)
+	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
