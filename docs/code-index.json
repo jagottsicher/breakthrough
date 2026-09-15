@@ -82,11 +82,6 @@
       "sha256": "4990943e2dd80e4184078e280caaa88ebf67b53ee524608bbd0067a489bf1e41"
     },
     {
-      "path": "bin/breakthrough",
-      "size": 18947879,
-      "sha256": "84c7ea1990cd82c77e991dc2d6754a6114d96c1917488464a2c43d79d7357f8a"
-    },
-    {
       "path": "cmd/breakthrough/debug.go",
       "size": 2981,
       "sha256": "647a9963a0e05f643193f6cc8e36086c5beb46396b83b9939848d478622eba71"
@@ -373,13 +368,13 @@
     },
     {
       "path": "internal/contextindex/index.go",
-      "size": 8679,
-      "sha256": "ce106cf5c1024d589d9e343f7c2354e4a0c07f78c19c8c0682f5da9f5f2e87b8"
+      "size": 9346,
+      "sha256": "9ba2a0b21e64802c99e3266c41fec19cae3018664870d60e285cf2908f5cf23c"
     },
     {
       "path": "internal/contextindex/index_test.go",
-      "size": 4407,
-      "sha256": "698dd018cd519c18db5c4cf000f3dd860f9d1524fc98a4351e788ad4b6f3845a"
+      "size": 5466,
+      "sha256": "18c0ff9f6941d4607d58670871ded406327c1e7472493b2ca7ba5ba5c2951f2c"
     },
     {
       "path": "internal/filterexpr/doc.go",
@@ -4857,14 +4852,14 @@
       "file": "internal/contextindex/index.go",
       "name": "fileSHA256",
       "kind": "function",
-      "line": 289
+      "line": 301
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index.go",
       "name": "merkleRoot",
       "kind": "function",
-      "line": 298
+      "line": 310
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
@@ -4883,44 +4878,51 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
+      "name": "TestBuildSkipsRootLevelBinDirectory",
+      "kind": "function",
+      "line": 66
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
+      "file": "internal/contextindex/index_test.go",
       "name": "TestMerkleRootChangesWithFileContent",
       "kind": "function",
-      "line": 59
+      "line": 86
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
       "name": "TestWriteProducesStableJSON",
       "kind": "function",
-      "line": 84
+      "line": 111
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
       "name": "mustWrite",
       "kind": "function",
-      "line": 104
+      "line": 131
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
       "name": "hasSymbol",
       "kind": "function",
-      "line": 114
+      "line": 141
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
       "name": "findPackage",
       "kind": "function",
-      "line": 123
+      "line": 150
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/contextindex",
       "file": "internal/contextindex/index_test.go",
       "name": "contains",
       "kind": "function",
-      "line": 132
+      "line": 159
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/filterexpr",
@@ -28489,5 +28491,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "08ad4934a15ec1589f7c25902008d73099c0d78e1f3a73e4e64de039c83d7d71"
+  "merkle_root": "6ada94e7879abb025f88e7ff66309756931144e7dc11c115e26b7473c5d2f0ec"
 }
