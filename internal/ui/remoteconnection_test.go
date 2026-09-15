@@ -1,10 +1,15 @@
 package ui
 
 import (
-	"errors"
+	"bytes"
+	"fmt"
 	"io"
+	"os"
+	"path"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -13,37 +18,191 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
-// fakeRemoteClient is a minimal, in-memory remotefs.Client double —
-// Panel's own remote-wiring tests need something to attach as p.remote,
-// but exercising a real SFTP round trip belongs to internal/remotefs's
-// own test suite (see its testserver_test.go), not here: this package
-// only needs to prove Panel branches correctly on *whether* p.remote is
-// set, not that a real wire protocol works.
+// fakeRemoteClient is an in-memory, stateful remotefs.Client double —
+// Panel's own remote-wiring tests need something to attach as p.remote
+// that actually behaves like a small filesystem (rename/remove/chmod/
+// read/write all really mutate it), not just a stub that returns
+// canned errors; exercising a real SFTP wire round trip belongs to
+// internal/remotefs's own test suite (see its testserver_test.go), not
+// here.
+//
+// entries maps a directory path to its own children, Lstat-shaped —
+// the same shape ListDir itself already returns. content holds file
+// bytes by full path, for Open/Create. Both are plain maps, not
+// goroutine-safe: fine here since every test using this runs on a
+// single goroutine, the same assumption panel_test.go's own fixtures
+// already make.
 type fakeRemoteClient struct {
 	root    string
 	entries map[string][]fsops.Entry
+	content map[string][]byte
 	closed  bool
+
+	// diskUsage/diskUsageErr let a test control exactly what
+	// DiskUsage returns, the same "canned, test-controlled result"
+	// shape this fake already gives every other Client method its own
+	// behavior through — real filesystem block/inode counts have no
+	// meaningful default here.
+	diskUsage    fsops.DiskUsage
+	diskUsageErr error
 }
 
 var _ remotefs.Client = (*fakeRemoteClient)(nil)
 
 func (f *fakeRemoteClient) Root() string { return f.root }
-func (f *fakeRemoteClient) ListDir(path string) ([]fsops.Entry, error) {
-	return f.entries[path], nil
+
+// ListDir sorts its own result the same way the real SFTPClient.ListDir
+// does (directories first, then case-insensitive name — see its own
+// doc comment on why) rather than just returning entries in whatever
+// order they were inserted into this fake: a test relying on a
+// specific row's own index (focusRow, CurrentRowPath, ...) should see
+// the exact same order the real client would actually produce.
+func (f *fakeRemoteClient) ListDir(dir string) ([]fsops.Entry, error) {
+	children, ok := f.entries[dir]
+	if !ok {
+		return nil, fmt.Errorf("fakeRemoteClient: no such directory: %s", dir)
+	}
+	sorted := append([]fsops.Entry(nil), children...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].IsDir != sorted[j].IsDir {
+			return sorted[i].IsDir
+		}
+		return strings.ToLower(sorted[i].Name) < strings.ToLower(sorted[j].Name)
+	})
+	return sorted, nil
 }
-func (f *fakeRemoteClient) Stat(path string) (fsops.Entry, error) {
-	return fsops.Entry{}, errors.New("fakeRemoteClient: Stat not implemented")
+
+func (f *fakeRemoteClient) findEntry(p string) (dir string, index int, ok bool) {
+	dir = path.Dir(p)
+	name := path.Base(p)
+	for i, e := range f.entries[dir] {
+		if e.Name == name {
+			return dir, i, true
+		}
+	}
+	return dir, -1, false
 }
-func (f *fakeRemoteClient) Open(string) (io.ReadCloser, error) {
-	return nil, errors.New("fakeRemoteClient: Open not implemented")
+
+// Lstat and Stat are identical here: this fake never models a symlink
+// (see fakeSymlinkEntry, used by tests that specifically need one),
+// so there's nothing for a real Stat's own symlink-following to differ
+// on.
+func (f *fakeRemoteClient) Lstat(p string) (fsops.Entry, error) { return f.Stat(p) }
+
+func (f *fakeRemoteClient) Stat(p string) (fsops.Entry, error) {
+	dir, i, ok := f.findEntry(p)
+	if !ok {
+		return fsops.Entry{}, fmt.Errorf("fakeRemoteClient: no such file: %s", p)
+	}
+	return f.entries[dir][i], nil
 }
-func (f *fakeRemoteClient) Create(string) (io.WriteCloser, error) {
-	return nil, errors.New("fakeRemoteClient: Create not implemented")
+
+func (f *fakeRemoteClient) Open(p string) (io.ReadCloser, error) {
+	data, ok := f.content[p]
+	if !ok {
+		return nil, fmt.Errorf("fakeRemoteClient: no such file: %s", p)
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
-func (f *fakeRemoteClient) Mkdir(string) error           { return nil }
-func (f *fakeRemoteClient) Remove(string) error          { return nil }
-func (f *fakeRemoteClient) RemoveDirectory(string) error { return nil }
-func (f *fakeRemoteClient) Rename(string, string) error  { return nil }
+
+// fakeRemoteWriteCloser buffers Write calls and commits them to the
+// owning fake's own content map only on Close — the same "content
+// isn't real until the writer is closed" contract a real SFTP upload
+// has, since a caller can Write in several chunks before ever calling
+// Close.
+type fakeRemoteWriteCloser struct {
+	client *fakeRemoteClient
+	path   string
+	buf    bytes.Buffer
+}
+
+func (w *fakeRemoteWriteCloser) Write(p []byte) (int, error) { return w.buf.Write(p) }
+func (w *fakeRemoteWriteCloser) Close() error {
+	if w.client.content == nil {
+		w.client.content = map[string][]byte{}
+	}
+	w.client.content[w.path] = append([]byte(nil), w.buf.Bytes()...)
+	if _, _, ok := w.client.findEntry(w.path); !ok {
+		dir := path.Dir(w.path)
+		w.client.entries[dir] = append(w.client.entries[dir], fsops.Entry{Name: path.Base(w.path), Type: fsops.TypeFile})
+	}
+	return nil
+}
+
+func (f *fakeRemoteClient) Create(p string) (io.WriteCloser, error) {
+	return &fakeRemoteWriteCloser{client: f, path: p}, nil
+}
+
+func (f *fakeRemoteClient) Mkdir(p string) error {
+	if _, ok := f.entries[p]; ok {
+		return fmt.Errorf("fakeRemoteClient: already exists: %s", p)
+	}
+	dir := path.Dir(p)
+	f.entries[dir] = append(f.entries[dir], fsops.Entry{Name: path.Base(p), Type: fsops.TypeDir, IsDir: true})
+	f.entries[p] = nil // an empty, but now-listable, directory
+	return nil
+}
+
+func (f *fakeRemoteClient) Remove(p string) error {
+	dir, i, ok := f.findEntry(p)
+	if !ok {
+		return fmt.Errorf("fakeRemoteClient: no such file: %s", p)
+	}
+	f.entries[dir] = append(f.entries[dir][:i], f.entries[dir][i+1:]...)
+	delete(f.content, p)
+	return nil
+}
+
+func (f *fakeRemoteClient) RemoveDirectory(p string) error {
+	if children := f.entries[p]; len(children) > 0 {
+		return fmt.Errorf("fakeRemoteClient: directory not empty: %s", p)
+	}
+	dir, i, ok := f.findEntry(p)
+	if !ok {
+		return fmt.Errorf("fakeRemoteClient: no such directory: %s", p)
+	}
+	f.entries[dir] = append(f.entries[dir][:i], f.entries[dir][i+1:]...)
+	delete(f.entries, p)
+	return nil
+}
+
+func (f *fakeRemoteClient) Rename(oldPath, newPath string) error {
+	if _, _, ok := f.findEntry(newPath); ok {
+		return fmt.Errorf("fakeRemoteClient: already exists: %s", newPath)
+	}
+	dir, i, ok := f.findEntry(oldPath)
+	if !ok {
+		return fmt.Errorf("fakeRemoteClient: no such file: %s", oldPath)
+	}
+	entry := f.entries[dir][i]
+	entry.Name = path.Base(newPath)
+	f.entries[dir] = append(f.entries[dir][:i], f.entries[dir][i+1:]...)
+	newDir := path.Dir(newPath)
+	f.entries[newDir] = append(f.entries[newDir], entry)
+	if data, ok := f.content[oldPath]; ok {
+		f.content[newPath] = data
+		delete(f.content, oldPath)
+	}
+	if children, ok := f.entries[oldPath]; ok {
+		f.entries[newPath] = children
+		delete(f.entries, oldPath)
+	}
+	return nil
+}
+
+func (f *fakeRemoteClient) Chmod(p string, mode os.FileMode) error {
+	dir, i, ok := f.findEntry(p)
+	if !ok {
+		return fmt.Errorf("fakeRemoteClient: no such file: %s", p)
+	}
+	f.entries[dir][i].Mode = mode
+	return nil
+}
+
+func (f *fakeRemoteClient) DiskUsage(p string) (fsops.DiskUsage, error) {
+	return f.diskUsage, f.diskUsageErr
+}
+
 func (f *fakeRemoteClient) Close() error {
 	f.closed = true
 	return nil
@@ -165,7 +324,7 @@ func TestLoadUsesTheRemoteClientWhenConnected(t *testing.T) {
 			names = append(names, ref.name)
 		}
 	}
-	if strings.Join(names, ",") != "a.txt,sub" {
+	if strings.Join(names, ",") != "sub,a.txt" { // directories sort before files (see ListDir's own doc comment)
 		t.Errorf("listed names = %v, want the fake remote client's own entries, not the local directory's", names)
 	}
 }
@@ -196,6 +355,14 @@ func TestActionHomeUsesTheRemoteRootWhenConnected(t *testing.T) {
 func TestBuildHeaderSpansColorsTheConnectionButtonByState(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 
+	// Pinned to one of the glow's own "at rest" instants (see
+	// TestConnectionGlowColorAtRestEqualsTheBaseColor) so the connected
+	// color is deterministically exactly theme.EntryExecutable, not
+	// whatever the wall clock happens to be mid-breath right now.
+	old := connectionGlowNow
+	connectionGlowNow = func() time.Time { return time.UnixMilli(0) }
+	defer func() { connectionGlowNow = old }()
+
 	localText, _ := buildHeaderSpans("/", theme, false)
 	connectedText, _ := buildHeaderSpans("/", theme, true)
 
@@ -210,5 +377,54 @@ func TestBuildHeaderSpansColorsTheConnectionButtonByState(t *testing.T) {
 	}
 	if strings.Contains(connectedText, mutedTag) {
 		t.Errorf("connected header text %q still contains the muted color tag", connectedText)
+	}
+}
+
+// TestRefreshActivePanelHeaderGlowUpdatesTheConnectedHeaderColor pins
+// StartClock's own once-a-second call to this: the header's own text
+// must actually change as the glow's phase advances, not just get
+// rewritten with the same color every tick.
+func TestRefreshActivePanelHeaderGlowUpdatesTheConnectedHeaderColor(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	client := fakeConnectedClient()
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	old := connectionGlowNow
+	defer func() { connectionGlowNow = old }()
+
+	connectionGlowNow = func() time.Time { return time.UnixMilli(0) } // rest
+	r.refreshActivePanelHeaderGlow()
+	rest := r.panel.header.GetText(false)
+
+	connectionGlowNow = func() time.Time { return time.UnixMilli(1500) } // brightest
+	r.refreshActivePanelHeaderGlow()
+	bright := r.panel.header.GetText(false)
+
+	if rest == bright {
+		t.Error("refreshActivePanelHeaderGlow produced identical header text at the glow's resting and brightest points")
+	}
+}
+
+// TestRefreshActivePanelHeaderGlowDoesNothingForALocalPanel confirms
+// the no-op guard: a plain local panel's header must never be
+// rewritten by this once-a-second call at all.
+func TestRefreshActivePanelHeaderGlowDoesNothingForALocalPanel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	before := r.panel.header.GetText(true)
+
+	r.refreshActivePanelHeaderGlow()
+
+	if got := r.panel.header.GetText(true); got != before {
+		t.Errorf("header text changed for a local panel: %q -> %q", before, got)
 	}
 }

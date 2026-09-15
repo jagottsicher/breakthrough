@@ -220,17 +220,15 @@ func (r *Root) copyCurrentSelection() {
 }
 
 func (r *Root) cutCurrentSelection() {
-	// Cut has nothing to remove afterward — see pasteInto's own doc
-	// comment for the same reasoning at the other end of a Cut. Blocked
-	// here too, not just there, so the clipboard indicator never shows
-	// "Cut: N files" for something a later Paste would then have to
-	// refuse outright.
+	// Cut has nothing to remove afterward inside a read-only archive —
+	// see pasteInto's own doc comment for the same reasoning at the
+	// other end of a Cut. Blocked here too, not just there, so the
+	// clipboard indicator never shows "Cut: N files" for something a
+	// later Paste would then have to refuse outright. No such guard for
+	// a remote panel anymore: remotepaste.go's own engine handles a Cut
+	// landing on, or coming from, a remote connection the same as Copy.
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
-		return
-	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
 		return
 	}
 	if row, path, ok := r.panel.CurrentRowPath(); ok {
