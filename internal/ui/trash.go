@@ -34,15 +34,24 @@ func (r *Root) reloadPanel(precedingErr error) {
 	}
 }
 
-// inTrash reports whether the panel is currently browsing the current
-// trash's own files/ subdirectory (see openTrash) — the one place
+// inTrash reports whether the panel is currently browsing its own
+// current trash's files/ subdirectory (see openTrash) — the one place
 // Restore actually makes sense. Used by buildButtonBar to swap Trashbin
 // for Restore and hide Trash entirely, and by moveSelectionToTrash to
 // redirect an already-trashed selection to Remove instead of trying to
 // trash it a second time. False, not an error to report, if the trash
 // directory can't be resolved at all — the same "nothing special going
 // on" reading buildButtonBar's own no-error-surfacing callers need.
+//
+// Remote-aware: a remote panel's own trash lives at
+// remoteTrashFilesDir(remote) instead of the local trashDir this
+// checks otherwise — every existing caller gets that for free just by
+// going through this one shared check, rather than each needing its
+// own remote branch.
 func (r *Root) inTrash() bool {
+	if remote := r.panel.remote; remote != nil {
+		return r.panel.path == remoteTrashFilesDir(remote)
+	}
 	dir, err := r.trashDir()
 	if err != nil {
 		return false
@@ -58,7 +67,10 @@ func (r *Root) inTrash() bool {
 // anyway, for anyone who wants that extra safety net regardless. A
 // directory goes in whole, recursively, the same way a plain move
 // always has — there is nothing to warn about since nothing is actually
-// being destroyed yet, confirmed or not.
+// being destroyed yet, confirmed or not. Works the same way against a
+// remote connection's own trash (see remotetrash.go) as it does
+// locally — Client.Rename makes the move itself just as cheap, a
+// single request with no data transfer either way.
 //
 // Redirects to openRemoveConfirm instead when r.inTrash(): an item
 // that's already in the trash has nowhere sensible left to be "moved to
@@ -74,31 +86,6 @@ func (r *Root) moveSelectionToTrash() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if remote := r.panel.remote; remote != nil {
-		// A remote session has no trash of its own to move into — no
-		// hidden per-session directory on that host, no restore
-		// mechanism to browse it back out of. Remove ("D") is the only
-		// deletion this project offers for a remote panel; redirect
-		// there instead of just refusing outright, the same redirect
-		// r.inTrash() already does just below for the local, already-
-		// in-the-trash case.
-		//
-		// Called directly here, with explainNoTrash set, rather than
-		// going through the shared openRemoveConfirm() — unlike "D",
-		// which already asks to permanently delete and needs no further
-		// explanation, "d" is the one key whose whole point elsewhere in
-		// this app is "reversible, no need to think twice"; silently
-		// switching that same key to something irreversible without
-		// saying why would be a real, easy-to-miss trap for exactly the
-		// muscle memory this project otherwise goes out of its way to
-		// support (see this method's own doc comment above).
-		targets := r.selectedOrCurrentPaths()
-		if len(targets) == 0 {
-			return
-		}
-		r.openRemoveConfirmRemote(remote, targets, true)
-		return
-	}
 	if r.inTrash() {
 		r.openRemoveConfirm()
 		return
@@ -109,13 +96,15 @@ func (r *Root) moveSelectionToTrash() {
 		return
 	}
 
+	move := func() { r.reallyMoveToTrash(targets) }
+	if remote := r.panel.remote; remote != nil {
+		move = func() { r.reallyMoveToTrashRemote(remote, targets) }
+	}
 	if r.settings.TrashConfirm {
-		r.openConfirm(moveToTrashConfirmMessage(targets), "Yes, move to Trash", func() {
-			r.reallyMoveToTrash(targets)
-		})
+		r.openConfirm(moveToTrashConfirmMessage(targets), "Yes, move to Trash", move)
 		return
 	}
-	r.reallyMoveToTrash(targets)
+	move()
 }
 
 // reallyMoveToTrash is moveSelectionToTrash's own actual work, split out
@@ -143,6 +132,21 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 			// selected)" (see refreshDetailsIfShowing's own doc comment)
 			// is the more honest answer once the entry Details was
 			// showing simply isn't at src any more.
+			r.refreshDetailsIfShowing(src, "")
+		}
+	}
+	r.panel.deselectAll()
+	r.reloadPanel(firstErr)
+}
+
+// reallyMoveToTrashRemote is reallyMoveToTrash's own remote
+// counterpart — see moveToTrashRemote for the actual move.
+func (r *Root) reallyMoveToTrashRemote(remote remotefs.Client, targets []string) {
+	var firstErr error
+	for _, src := range targets {
+		if err := moveToTrashRemote(remote, src); err != nil && firstErr == nil {
+			firstErr = err
+		} else if err == nil {
 			r.refreshDetailsIfShowing(src, "")
 		}
 	}
@@ -184,6 +188,12 @@ func moveToTrashConfirmSingleMessage(target string) string {
 // explicit request that visiting the trash not be invisible to
 // Back/Forward the way it used to be, unlike a real directory.
 func (r *Root) openTrash() {
+	if remote := r.panel.remote; remote != nil {
+		if err := r.panel.navigate(remoteTrashFilesDir(remote)); err != nil {
+			r.showError(err)
+		}
+		return
+	}
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
@@ -209,10 +219,7 @@ func (r *Root) openRemoveConfirm() {
 		return
 	}
 	if remote := r.panel.remote; remote != nil {
-		// explainNoTrash false: "D" already means "permanently delete",
-		// nothing here to explain away — unlike "d"'s own redirect (see
-		// moveSelectionToTrash), which passes true instead.
-		r.openRemoveConfirmRemote(remote, targets, false)
+		r.openRemoveConfirmRemote(remote, targets)
 		return
 	}
 	r.openPurgeConfirm(removeConfirmMessage(targets), func() {
@@ -230,17 +237,11 @@ func (r *Root) openRemoveConfirm() {
 }
 
 // openRemoveConfirmRemote is openRemoveConfirm's own remote-panel half
-// — a remote session has no trash to move into (see
-// moveSelectionToTrash's own doc comment on why "d" redirects here
-// too), so Remove is the only deletion this project offers for it, and
-// it's exactly as irreversible here as it already is locally.
-//
-// explainNoTrash prepends a short "why" clause to the question — set
-// by moveSelectionToTrash's own redirect (where landing here at all is
-// the surprise worth explaining, since "d" means something reversible
-// everywhere else in this app), left off by openRemoveConfirm's own
-// remote branch (where "D" already means "permanently delete" and
-// needs no further explanation).
+// — "D" means permanently delete a remote target exactly the way it
+// already does locally, no redirect or extra explanation needed (see
+// moveSelectionToTrash for "d"'s own, reversible remote counterpart,
+// which now moves into the connection's own trash instead of landing
+// here).
 //
 // The confirmation message deliberately skips removeConfirmMessage's
 // own "and N items inside it" item count for a directory: that count
@@ -249,15 +250,12 @@ func (r *Root) openRemoveConfirm() {
 // out (harmless, just a plainer message) or, worse, silently count
 // whatever happens to exist at the same path string on this machine
 // instead, a wrong number in the one place a wrong number matters most.
-func (r *Root) openRemoveConfirmRemote(remote remotefs.Client, targets []string, explainNoTrash bool) {
+func (r *Root) openRemoveConfirmRemote(remote remotefs.Client, targets []string) {
 	what := fmt.Sprintf("%d selected items", len(targets))
 	if len(targets) == 1 {
 		what = fmt.Sprintf("%q", path.Base(targets[0]))
 	}
 	message := fmt.Sprintf("Permanently delete %s?", what)
-	if explainNoTrash {
-		message = fmt.Sprintf("A remote connection has no trash to move %s into — permanently delete instead?", what)
-	}
 	r.openPurgeConfirm(message, func() {
 		var firstErr error
 		for _, target := range targets {
@@ -328,6 +326,10 @@ func removeConfirmSingleMessage(target string) string {
 // doc comment) — the exact same mechanism an ordinary Cut+Paste already
 // relies on for this, not a gap specific to Restore.
 func (r *Root) restoreSelectionFromTrash() {
+	if remote := r.panel.remote; remote != nil {
+		r.restoreSelectionFromRemoteTrash(remote)
+		return
+	}
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
@@ -368,10 +370,66 @@ func (r *Root) restoreSelectionFromTrash() {
 	r.startPaste(items, true, "", false, dests, dir)
 }
 
+// restoreSelectionFromRemoteTrash is restoreSelectionFromTrash's own
+// remote counterpart — see remotetrash.go's own package doc comment
+// on why this is a plain Rename per item rather than routing through
+// the same rich, conflict-resolving Paste machinery the local version
+// above does.
+func (r *Root) restoreSelectionFromRemoteTrash(remote remotefs.Client) {
+	filesDir := remoteTrashFilesDir(remote)
+	if r.panel.path != filesDir {
+		r.showError(fmt.Errorf("restore only works while viewing the trash (%s)", filesDir))
+		return
+	}
+
+	trashItems, err := listRemoteTrash(remote)
+	if err != nil {
+		r.showError(err)
+		return
+	}
+	targets := r.selectedOrCurrentPaths()
+	if len(targets) == 0 {
+		return
+	}
+
+	byPath := make(map[string]remoteTrashItem, len(trashItems))
+	for _, item := range trashItems {
+		byPath[item.Path(remote)] = item
+	}
+
+	var firstErr error
+	for _, target := range targets {
+		item, ok := byPath[target]
+		if !ok {
+			continue
+		}
+		if err := restoreFromRemoteTrash(remote, item); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	r.panel.deselectAll()
+	r.reloadPanel(firstErr)
+}
+
 // openEmptyTrashConfirm is the context menu's "Empty Trash" — same
 // Cancel-preselected confirmation as Remove, since it's equally
 // irreversible.
 func (r *Root) openEmptyTrashConfirm() {
+	if remote := r.panel.remote; remote != nil {
+		items, err := listRemoteTrash(remote)
+		if err != nil {
+			r.showError(err)
+			return
+		}
+		if len(items) == 0 {
+			return
+		}
+		r.openPurgeConfirm(fmt.Sprintf("Permanently empty the remote trash (%d items)?", len(items)), func() {
+			r.reloadPanel(emptyRemoteTrash(remote))
+		})
+		return
+	}
+
 	dir, err := r.trashDir()
 	if err != nil {
 		r.showError(err)
@@ -610,13 +668,17 @@ func trashPruneMessage(result fsops.PruneTrashResult) string {
 
 // describeTrashRows is Root's own Panel.onDescribeRows (see its own doc
 // comment) — wired once in NewRoot. Reports isTrashDir true exactly
-// when dir is the current trash's own files/ subdirectory (the same
-// check inTrash makes against r.panel.path, just against whatever
+// when dir is p's own current trash's own files/ subdirectory (the
+// same check inTrash makes against r.panel.path, just against whatever
 // directory load() is about to render instead — load() itself hasn't
-// updated r.panel.path yet by the time this runs), regardless of
-// whether ListTrash finds anything in it: a brand-new, empty trash is
-// still "the trash" as far as the Modified column's own label is
-// concerned.
+// updated p.path yet by the time this runs), regardless of whether
+// ListTrash finds anything in it: a brand-new, empty trash is still
+// "the trash" as far as the Modified column's own label is concerned.
+//
+// Dispatches on p's own remote state, not r.panel's — p is whichever
+// Panel is actually being loaded (see onDescribeRows' own doc comment
+// on why that distinction matters), which can be a different, remote
+// connection than whatever panel is currently active.
 //
 // A ListTrash failure (or the trash directory failing to resolve at
 // all) degrades to isTrashDir false, nil descriptions rather than an
@@ -624,7 +686,11 @@ func trashPruneMessage(result fsops.PruneTrashResult) string {
 // row-description hook thinks, and falling back to the raw on-disk
 // name/mtime is no worse than what browsing the trash always showed
 // before this existed.
-func (r *Root) describeTrashRows(dir string) (map[string]rowDescription, bool) {
+func (r *Root) describeTrashRows(p *Panel, dir string) (map[string]rowDescription, bool) {
+	if remote := p.remote; remote != nil {
+		return describeRemoteTrashRows(remote, dir)
+	}
+
 	trashDir, err := r.trashDir()
 	if err != nil {
 		return nil, false

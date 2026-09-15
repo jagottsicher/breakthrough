@@ -959,17 +959,23 @@ own staged copy sticks around for as long as Look stays open, since
 page turns keep reading from it on demand; everything else is removed
 the moment its content is rendered.
 
-Rename (`r`), permanent delete (`d`/`D` — see below), chmod (the `p`
-chord's own `pm`, including its recursive dirs/files options), and
-Copy/Cut/Paste all work against a remote target the same way they do
-locally. `d` ("Move to Trash") redirects straight to the same
-permanent-delete confirmation `D` already uses instead: a remote
-session has no trash of its own to move into — the confirmation itself
-says so ("A remote connection has no trash to move … into — permanently
-delete instead?"), since `d` means something reversible everywhere
-else in this app and silently switching that to a permanent delete
-would otherwise be an easy trap. `D` skips that explanation: it
-already means "permanently delete" on its own. Paste dispatches by
+Rename (`r`), chmod (the `p` chord's own `pm`, including its recursive
+dirs/files options), and Copy/Cut/Paste all work against a remote
+target the same way they do locally. So does deletion: `d` ("Move to
+Trash") moves the target into a hidden `.breakthrough-trash` directory
+right at the connection's own account root — a single rename on the
+server's own filesystem, no data transferred either way, so it's just
+as cheap and just as reversible as the local trash. `D` ("Remove")
+still means permanently delete, exactly as it does locally, with no
+trash involved either way. `gb` (go to Trash) opens the *current*
+panel's own trash, local or remote; Restore and Empty Trash work
+against whichever one that is too — a remote Restore is a plain rename
+back to the original path, refusing rather than overwriting if
+something new already sits there, not the richer conflict dialog a
+local Restore offers. One thing the remote trash deliberately doesn't
+have yet: automatic age/quota-based cleanup at startup, since that
+would mean reconnecting to every remote host ever used just to check —
+it fills up until emptied by hand. Paste dispatches by
 which side (or both) is remote: uploading, downloading, or copying/
 moving between two remote directories all work, including across two
 different connections at once; a move where both ends are the exact

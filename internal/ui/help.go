@@ -211,11 +211,16 @@ var helpText = strings.TrimLeft(`
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal,
-  no prompt, for one that changed. Browsing, rename, permanent delete,
-  chmod, and Copy/Cut/Paste all work once connected ("d" redirects
-  straight to the same permanent-delete confirmation "D" uses — no
-  remote trash exists to move into instead; a same-connection move
-  renames instead of downloading and re-uploading). Look and Edit
+  no prompt, for one that changed. Browsing, rename, chmod, and
+  Copy/Cut/Paste all work once connected (a same-connection move
+  renames instead of downloading and re-uploading). Deletion works
+  like it does locally too: "d" moves the target into a hidden
+  ".breakthrough-trash" at the connection's own account root (one
+  rename, reversible, just like the local trash), "D" is still a
+  permanent delete, and "gb"/Restore/Empty Trash follow whichever
+  panel is active — a remote Restore refuses on a conflict rather than
+  offering the local dialog's richer choice, and there's no automatic
+  age/quota cleanup for it yet. Look and Edit
   stage a real local temp copy behind the scenes for the ordinary
   built-in viewer/external pager/$VISUAL/$EDITOR to use unchanged —
   Edit only uploads it back if it actually changed. Opening a zip/tar

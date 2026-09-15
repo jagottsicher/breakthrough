@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -209,49 +208,71 @@ func TestOpenRemoveConfirmOnARemotePanelDeletesADirectoryRecursively(t *testing.
 	}
 }
 
-// TestMoveSelectionToTrashOnARemotePanelRedirectsToRemove pins "d"'s
-// own remote behavior: there's no remote trash to move into (see
-// moveSelectionToTrash's own doc comment), so it goes straight to the
-// same permanent-delete confirmation "D" already uses.
-func TestMoveSelectionToTrashOnARemotePanelRedirectsToRemove(t *testing.T) {
+// TestMoveSelectionToTrashOnARemotePanelMovesIntoTheRemoteTrash pins
+// "d"'s own current remote behavior: a remote connection has its own
+// trash now (see remotetrash.go), so "d" moves the target there —
+// reversible, no confirmation by default, exactly like the local case
+// — rather than the permanent delete it used to redirect to before
+// that existed.
+func TestMoveSelectionToTrashOnARemotePanelMovesIntoTheRemoteTrash(t *testing.T) {
+	r := newTestRemoteRoot(t) // cursor on /remote/b.txt
+	client := r.panel.remote.(*fakeRemoteClient)
+
+	r.moveSelectionToTrash()
+
+	if r.activePage == confirmPage {
+		t.Fatal("moveSelectionToTrash opened a confirmation dialog despite TrashConfirm being off by default")
+	}
+	if _, err := client.Stat("/remote/b.txt"); err == nil {
+		t.Error("b.txt still exists at its original path after being moved to the remote trash")
+	}
+	items, err := listRemoteTrash(client)
+	if err != nil {
+		t.Fatalf("listRemoteTrash: %v", err)
+	}
+	if len(items) != 1 || items[0].OriginalPath != "/remote/b.txt" {
+		t.Errorf("remote trash contents = %+v, want exactly one item for /remote/b.txt", items)
+	}
+}
+
+// TestMoveSelectionToTrashOnARemotePanelAsksFirstWhenTrashConfirmIsOn
+// mirrors the identical local behavior: settings.TrashConfirm, off by
+// default, still gates the move behind a confirmation for anyone who
+// turned it on, remote or not.
+func TestMoveSelectionToTrashOnARemotePanelAsksFirstWhenTrashConfirmIsOn(t *testing.T) {
 	r := newTestRemoteRoot(t)
+	r.settings.TrashConfirm = true
 
 	r.moveSelectionToTrash()
 
 	if r.activePage != confirmPage {
-		t.Fatalf("activePage = %q, want moveSelectionToTrash to redirect to the Remove confirmation on a remote panel", r.activePage)
+		t.Fatalf("activePage = %q, want a confirmation dialog with TrashConfirm on", r.activePage)
 	}
 }
 
-// TestMoveSelectionToTrashOnARemotePanelExplainsWhyThereIsNoTrash pins
-// the user's own explicit request: "d" ordinarily means something
-// reversible everywhere else in this app, so silently switching it to
-// a permanent delete on a remote panel needs its own "why", not just
-// the plain question "D" already asks unprompted.
-func TestMoveSelectionToTrashOnARemotePanelExplainsWhyThereIsNoTrash(t *testing.T) {
+// TestMoveSelectionToTrashOnAnAlreadyTrashedRemoteItemRedirectsToRemove
+// mirrors the local inTrash() redirect: an item already sitting in the
+// remote trash has nowhere sensible left to be "moved to trash" a
+// second time, so "d" means Remove there instead, exactly like
+// browsing the local trash already does.
+func TestMoveSelectionToTrashOnAnAlreadyTrashedRemoteItemRedirectsToRemove(t *testing.T) {
 	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	if err := moveToTrashRemote(client, "/remote/b.txt"); err != nil {
+		t.Fatalf("moveToTrashRemote: %v", err)
+	}
+	if err := r.panel.load(remoteTrashFilesDir(client)); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	r.panel.focusRow(1)
+	if row, path, ok := r.panel.CurrentRowPath(); ok {
+		r.target, r.targetRow = path, row
+	}
 
 	r.moveSelectionToTrash()
 
-	got := r.confirmDialogTitleBar.GetText(true)
-	if !strings.Contains(got, "no trash") {
-		t.Errorf("confirm message = %q, want it to explain that a remote connection has no trash", got)
-	}
-}
-
-// TestOpenRemoveConfirmOnARemotePanelDoesNotExplainTrash is the
-// negative case: "D" already means "permanently delete" on its own,
-// local or remote — repeating an explanation of why there's no trash
-// here would just be confusing noise on a key that was never about
-// reversibility in the first place.
-func TestOpenRemoveConfirmOnARemotePanelDoesNotExplainTrash(t *testing.T) {
-	r := newTestRemoteRoot(t)
-
-	r.openRemoveConfirm()
-
-	got := r.confirmDialogTitleBar.GetText(true)
-	if strings.Contains(got, "no trash") {
-		t.Errorf("confirm message = %q, want the plain permanent-delete question, no trash explanation", got)
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want moveSelectionToTrash to redirect to the Remove confirmation for an already-trashed item", r.activePage)
 	}
 }
 

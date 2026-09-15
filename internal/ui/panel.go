@@ -595,7 +595,16 @@ type Panel struct {
 	// (see load's own doc comment on why). Left nil for a Panel that
 	// doesn't need this (returns a nil map, isTrashDir false, same as
 	// what's returned when this itself is nil).
-	onDescribeRows func(dir string) (descriptions map[string]rowDescription, isTrashDir bool)
+	//
+	// Takes the describing Panel itself, not just dir: describeTrashRows
+	// needs to know whether *this* panel (not necessarily r.panel, the
+	// currently active one — a background tab can load() too, e.g.
+	// finishRemotePaste reloading whichever tab a transfer was headed
+	// for) is remote, to tell a local trash listing apart from a remote
+	// connection's own — a real, easy-to-miss mismatch a plain
+	// Root-level r.panel.remote check would get wrong for exactly that
+	// background-tab case.
+	onDescribeRows func(p *Panel, dir string) (descriptions map[string]rowDescription, isTrashDir bool)
 
 	// inTrashView mirrors onDescribeRows' own isTrashDir return from the
 	// most recent load() — buildColumnHeader reads this to label the
@@ -1218,7 +1227,7 @@ func (p *Panel) load(dir string) error {
 	var describeRows map[string]rowDescription
 	p.inTrashView = false
 	if p.onDescribeRows != nil {
-		describeRows, p.inTrashView = p.onDescribeRows(abs)
+		describeRows, p.inTrashView = p.onDescribeRows(p, abs)
 	}
 	for i, e := range entries {
 		if d, ok := describeRows[filepath.Join(abs, e.Name)]; ok {
