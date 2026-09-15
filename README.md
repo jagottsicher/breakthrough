@@ -515,12 +515,13 @@ terminal.
   question, while a host whose key *changed* is always rejected
   outright, no prompt, no bypass. Once connected, the panel browses the
   remote filesystem exactly like a local one — same columns, same
-  sorting, same navigation. This first release covers browsing and
-  viewing only: everything that changes files (rename, edit, chmod/
-  chown, Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, Sed
-  Replace) is refused with a clear message on a remote panel for now.
-  See [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp)
-  for the full picture.
+  sorting, same navigation — and Rename, permanent delete, and chmod
+  (including its recursive dirs/files options) all work against a
+  remote target too. Still refused with a clear message for now: Edit,
+  chown, Copy/Cut/Paste, Compare, Batch rename, Sed Replace, and
+  Properties as a whole. See
+  [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp) for
+  the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Options screen (the `o` chord's
   own `oo`) — no restart needed, and the pick is remembered for next

@@ -819,13 +819,17 @@ breathing green glow while connected.
 
 The dropdown lists, in order: **Disconnect** (only once this panel is
 actually connected to something), **New connection…**, then recent
-history — most recently used first, colored the same way the button
-itself is: green for the connection currently active in this panel,
-red for one whose last attempt failed, plain otherwise. Selecting a
-history entry reopens the Connect dialog prefilled from it and
-immediately retries — nothing about *how* it authenticated is ever
+history — most recently used first, colored by state: bright green for
+the connection currently active in this panel, a dimmer green for one
+that has connected successfully before but isn't active right now, red
+for one whose last attempt failed. Selecting a history entry (anywhere
+but its own trailing "✕") reopens the Connect dialog prefilled from it
+and immediately retries — nothing about *how* it authenticated is ever
 remembered (see Authentication below), so a connection that needs a
 typed password will stop there with the dialog open, ready for it.
+Every history row ends with a small "✕" — click it (or press `x` or
+Delete while that row is highlighted) to drop just that one entry out
+of history, without ever connecting to it.
 
 **New connection…** opens a small form: Host, Port (blank means 22),
 User (blank means this machine's own local username, the same
@@ -871,14 +875,24 @@ local one: same columns, same sorting, the Home button (`~`) goes to
 the remote account's own home directory instead of this machine's.
 Viewing a file (Look, `l`) works the same way too.
 
-Everything that changes files does not yet: Rename, Edit, chmod/chown,
-Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, and Sed Replace
-all refuse outright with a clear message on a remote panel, rather
-than risking a real filesystem call landing on the wrong machine — none
-of them currently have any way to know a path belongs to a remote
-session rather than this one. Disconnecting (from the dropdown) closes
-the session and returns the panel to browsing this machine's own home
-directory.
+Rename (`r`), permanent delete (`d`/`D` — see below), and chmod (the
+`p` chord's own `pm`, including its recursive dirs/files options) all
+work against a remote target the same way they do locally. `d` ("Move
+to Trash") redirects straight to the same permanent-delete confirmation
+`D` already uses instead: a remote session has no trash of its own to
+move into.
+
+Everything else that changes files does not yet: Edit, chown,
+Copy/Cut/Paste, Compare, Batch rename, Sed Replace, and Properties as a
+whole (its own Save button combines Name/Permissions with Owner/Group
+and Modified/hash into one action, and only some of those are
+remote-aware yet) all refuse outright with a clear message on a remote
+panel — chown specifically because there's no remote user/group
+database to resolve a typed name against, the rest because they'd need
+either a real remote command-execution channel or a streamed
+byte-range read this project doesn't have yet. Disconnecting (from the
+dropdown) closes the session and returns the panel to browsing this
+machine's own home directory.
 
 ## Properties
 

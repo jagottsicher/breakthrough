@@ -18,6 +18,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -388,6 +389,15 @@ type Root struct {
 	// comment already gives for its dropdown.
 	connectionMenuList   *tview.List
 	connectionMenuLayout *tview.Flex
+
+	// connectionMenuHistoryRows maps a row index in connectionMenuList
+	// to the Connection that row represents — populated fresh by
+	// renderConnectionMenu on every open, read by
+	// captureConnectionMenuMouse/removeHighlightedConnectionHistory to
+	// know which entry a click on its own "✕" or the "x" key should
+	// actually remove. Never populated for "New connection…"/
+	// "Disconnect", which aren't history rows at all.
+	connectionMenuHistoryRows map[int]remotefs.Connection
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own

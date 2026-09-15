@@ -94,3 +94,49 @@ func TestRecordAttemptTrimsHistoryToTheMaxEntryCount(t *testing.T) {
 		t.Errorf("entries[0].Port = %d, want %d (the most recent one)", entries[0].Port, historyMaxEntries+5)
 	}
 }
+
+func TestRemoveFromHistoryDropsExactlyThatOneEntry(t *testing.T) {
+	withTestConfigHome(t)
+	a := Connection{Host: "a.example.com", User: "jens"}
+	b := Connection{Host: "b.example.com", User: "jens"}
+	if err := RecordAttempt(a, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(b, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	if err := RemoveFromHistory(a); err != nil {
+		t.Fatalf("RemoveFromHistory: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Host != "b.example.com" {
+		t.Errorf("entries = %+v, want only b.example.com left", entries)
+	}
+}
+
+// TestRemoveFromHistoryOnAnEntryThatWasNeverThereIsANoOp matches every
+// other read/write in this file's own "absence isn't an error"
+// contract (see LoadHistory's own doc comment).
+func TestRemoveFromHistoryOnAnEntryThatWasNeverThereIsANoOp(t *testing.T) {
+	withTestConfigHome(t)
+	if err := RecordAttempt(Connection{Host: "a.example.com"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	if err := RemoveFromHistory(Connection{Host: "never-connected.example.com"}); err != nil {
+		t.Fatalf("RemoveFromHistory: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("len(entries) = %d, want the unrelated entry left untouched", len(entries))
+	}
+}

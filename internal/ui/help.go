@@ -201,15 +201,18 @@ var helpText = strings.TrimLeft(`
   The "@" button right before the path (or "gc") opens a dropdown to
   browse another machine over SFTP — muted for a local panel, a slow
   breathing green glow once connected. New connection…/Disconnect plus
-  recent history,
-  colored red for one whose last attempt failed. Auth tries an
-  ssh-agent, then ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if
-  unencrypted, then a typed password; host keys are checked against
-  ~/.ssh/known_hosts, with a trust-on-first-use prompt for an unknown
-  one and an outright refusal, no prompt, for one that changed.
-  Browsing and viewing work once connected; everything that changes
-  files (rename, edit, chmod/chown, Copy/Cut/Paste, Trash/Remove,
-  Compare, Batch rename, Sed Replace) refuses outright for now.
+  recent history (bright green = active here, dimmer green = worked
+  before, red = last attempt failed; "x"/Delete or its own trailing
+  "✕" drops one entry out of history). Auth tries an ssh-agent, then
+  ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
+  password; host keys are checked against ~/.ssh/known_hosts, with a
+  trust-on-first-use prompt for an unknown one and an outright refusal,
+  no prompt, for one that changed. Browsing, viewing, rename,
+  permanent delete, and chmod all work once connected ("d" redirects
+  straight to the same permanent-delete confirmation "D" uses — no
+  remote trash exists to move into instead); Edit, chown, Copy/Cut/
+  Paste, Compare, Batch rename, Sed Replace, and Properties as a whole
+  still refuse outright for now.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in

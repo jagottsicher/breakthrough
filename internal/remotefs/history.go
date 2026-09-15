@@ -108,3 +108,23 @@ func RecordAttempt(conn Connection, failed bool) error {
 	}
 	return SaveHistory(entries)
 }
+
+// RemoveFromHistory drops conn out of the persisted history entirely —
+// the connection dropdown's own "✕" per entry (see internal/ui's
+// connectionmenu.go), for dropping a stale or unwanted entry without
+// ever having to connect to it again first. A no-op, not an error, if
+// conn isn't in the history at all — the same "absence isn't an
+// error" contract every other read/write here already follows.
+func RemoveFromHistory(conn Connection) error {
+	entries, err := LoadHistory()
+	if err != nil {
+		return err
+	}
+	kept := entries[:0]
+	for _, e := range entries {
+		if !e.Equal(conn) {
+			kept = append(kept, e)
+		}
+	}
+	return SaveHistory(kept)
+}
