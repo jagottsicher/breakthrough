@@ -240,8 +240,10 @@ func TestFetchReportsConflicts(t *testing.T) {
 	// cleanly for some *other* reason fails with a clear message
 	// instead of the oblique "Conflicts = 0, want 1" this one first
 	// surfaced as.
-	if err := exec.Command("git", "-c", "merge.ff=false", "-C", dir, "merge", "-q", "other").Run(); err == nil {
-		t.Fatal("setup: expected the merge to conflict, but it succeeded cleanly")
+	mergeCmd := exec.Command("git", "-c", "merge.ff=false", "-C", dir, "merge", "-q", "other")
+	mergeOut, mergeErr := mergeCmd.CombinedOutput()
+	if mergeErr == nil {
+		t.Fatalf("setup: expected the merge to conflict, but it succeeded cleanly, output:\n%s", mergeOut)
 	}
 
 	st, inRepo, err := Fetch(context.Background(), dir)
@@ -252,7 +254,14 @@ func TestFetchReportsConflicts(t *testing.T) {
 		t.Fatal("expected inRepo = true")
 	}
 	if st.Conflicts != 1 {
-		t.Errorf("Conflicts = %d, want 1", st.Conflicts)
+		// Diagnostic dump, not part of the normal assertion: this
+		// exact test intermittently disagreed with itself across CI
+		// runners during development (the merge command above genuinely
+		// failing, yet the conflict not showing up here) for a reason
+		// never fully pinned down locally — see the raw command output
+		// and status text if it happens again.
+		raw, _ := exec.Command("git", "-C", dir, "status", "--porcelain=v2", "--branch").CombinedOutput()
+		t.Errorf("Conflicts = %d, want 1\nmerge output:\n%s\nraw git status:\n%s", st.Conflicts, mergeOut, raw)
 	}
 }
 

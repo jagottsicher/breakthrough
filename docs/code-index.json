@@ -593,8 +593,8 @@
     },
     {
       "path": "internal/gitstatus/gitstatus_test.go",
-      "size": 8993,
-      "sha256": "6b3b0559c02f99b4aa90539b14bfae45ec0d344d30593a5963517898460effc1"
+      "size": 10367,
+      "sha256": "65fdb259e33e2ab125cf301c049a96a567e006eb71fb25b488b5f016f14704b1"
     },
     {
       "path": "internal/replace/apply.go",
@@ -6873,21 +6873,21 @@
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnARepositoryWithNoCommitsYet",
       "kind": "function",
-      "line": 247
+      "line": 268
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnADetachedHead",
       "kind": "function",
-      "line": 263
+      "line": 284
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestShortOID",
       "kind": "function",
-      "line": 292
+      "line": 313
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/replace",
@@ -25658,5 +25658,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "8c1f94e50fda63a7d610c5af8de892b2bc30ae2cad8401d693b7b92fc08408b4"
+  "merkle_root": "2a97bd430c0f3879e011d4bf3b69258bbd0645df174bf2aa71f93706e9f59b2d"
 }
