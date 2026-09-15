@@ -180,6 +180,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "show_git_status",
+			Default:     strconv.FormatBool(d.ShowGitStatus),
+			Kind:        KindBool,
+			Summary:     "Show git status (branch, changes, ahead/behind) in the status bar and the Details sidebar.",
+			Implemented: true,
+		},
+		{
 			Key:         "duplicate_separator",
 			Default:     d.DuplicateSeparator,
 			Kind:        KindString,

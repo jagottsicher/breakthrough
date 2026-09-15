@@ -17,6 +17,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -606,6 +607,18 @@ type Root struct {
 	detailsPreviewCancel context.CancelFunc
 	detailsHashBytesRead atomic.Int64
 	detailsHashRowStart  int
+
+	// detailsGitStatus is the current target's own git status (see
+	// gitstatus.go) — nil until a background fetch actually confirms
+	// the selected directory is part of a git working tree (or while
+	// the setting is off, or the target isn't a directory at all).
+	// detailsGitCancel stops that fetch the same way detailsPreviewCancel
+	// stops an image/PDF preview load, for the identical reason: this
+	// runs on every cursor movement over a directory, not on a
+	// deliberate keypress, so a debounce and cancellation both matter
+	// (see startDetailsGitStatus).
+	detailsGitStatus *gitstatus.Status
+	detailsGitCancel context.CancelFunc
 
 	// detailsDirSize/InProgress/AnimFrame/Cancel/RowStart are the
 	// directory-size counterpart to detailsHashes/InProgress/AnimFrame/

@@ -494,9 +494,11 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
 	r.cancelDetailsPreview()
+	r.cancelDetailsGitStatus()
 	r.detailsDirSize = nil
 	r.detailsDirSizeMeasured = ""
 	r.detailsMetadataState = ""
+	r.detailsGitStatus = nil
 	r.detailsTarget = path
 	// Adopts Properties' own result immediately if it's already open on
 	// this exact file and has one (see propertiesHashesFor's own doc
@@ -543,6 +545,7 @@ func (r *Root) loadDetailsTarget(path string) {
 	}
 	r.renderDetailsSidebar()
 	r.startDetailsPreview(path)
+	r.startDetailsGitStatus(path)
 
 	// A new target always starts showing from its own top — not
 	// wherever the previous one happened to be scrolled to (see
@@ -860,6 +863,18 @@ func (r *Root) renderDetailsSidebar() {
 	}
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))
+
+	// Git status (see gitstatus.go): only ever for a directory, and
+	// only once startDetailsGitStatus has actually confirmed it's part
+	// of a git working tree — nil the rest of the time (not a
+	// directory, the setting is off, no git on $PATH, outside any
+	// repository, or the background fetch hasn't landed yet), in which
+	// case this section simply doesn't exist, the same "one less
+	// segment" convention every other optional piece of this sidebar
+	// already follows.
+	if isDirish(r.detailsStat) && r.detailsGitStatus != nil {
+		writeSection(gitStatusText(*r.detailsGitStatus, r.theme))
+	}
 
 	switch {
 	case !isDirish(r.detailsStat):
