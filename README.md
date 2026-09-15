@@ -482,11 +482,13 @@ terminal.
   clock. Every one of those seven segments can be switched off on its
   own from Options → Status bar. See
   [docs/user-guide.md](docs/user-guide.md#status-bar) for the full
-  breakdown. The Details sidebar (`I`) shows a much fuller version of
-  this same overview — plus memory, swap, open file handles, mounted
-  filesystems, process count, network interfaces and logged-in
-  sessions, in the same colors and green/orange/red scale — whenever
-  the current tab is browsing the real filesystem root ("/"). See
+  breakdown. The real filesystem root shows a selectable "/" row in
+  place of the usual `..`; selecting it and opening the Details
+  sidebar (`I`) shows a much fuller version of this same overview —
+  plus memory, swap, open file handles, mounted filesystems, process
+  count, network interfaces and logged-in sessions, in the same colors
+  and green/orange/red scale — while every other entry under "/" still
+  gets its own ordinary per-file Details. See
   [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
   full field list.
 - Color schemes: JSON files under `colorschemes/` in either config tier

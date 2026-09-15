@@ -54,18 +54,24 @@ var (
 )
 
 // showingSystemInfo reports whether Details should show System Info
-// instead of a per-file stat block right now — exactly the current
-// tab's own browsed directory being the real filesystem root, per the
-// user's own explicit trigger ("wenn man mit I das Infofenster
-// aufmacht und mit dem aktuellen Tab im Root Verzeichnis ist"),
-// regardless of which row happens to be highlighted there: the point
-// is an overview of the machine itself, not of whichever top-level
-// entry the cursor landed on. Never true while browsing inside a
-// virtual archive listing (see Panel.archivePath) — that path is
-// always nested under a real directory, never literally "/", so no
-// special-casing is needed there.
+// instead of a per-file stat block right now — the currently selected
+// row being "/" itself, exactly the way it would be any other single
+// entry: Panel.load synthesizes a selectable "/" row in place of the
+// usual ".." at the real filesystem root (there's no parent to go "up"
+// to there — see its own doc comment), and detailsTarget is always
+// whatever that selection's own path is (see loadDetailsTarget).
+//
+// Deliberately not "the browsed directory is '/'" any more — an
+// earlier version of this worked that way, which made every other
+// top-level entry (etc, home, usr, ...) permanently unreachable from
+// Details while at "/", since System Info always won regardless of
+// the cursor; per the user's own explicit correction, only selecting
+// "/" itself should. Never true while browsing inside a virtual
+// archive listing (see Panel.archivePath) — that path is always
+// nested under a real directory, never literally "/", so no special-
+// casing is needed there.
 func (r *Root) showingSystemInfo() bool {
-	return r.panel.path == "/"
+	return r.detailsTarget == "/"
 }
 
 // coloredStatLine renders one "Label: value" line the same fixed
