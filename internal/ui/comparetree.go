@@ -167,6 +167,27 @@ func (r *Root) closeCompareTree() {
 	r.hideOverlay()
 }
 
+// resetCompareTreeScrollPosition puts the table's own cursor and
+// scroll back to row 1 (row 0 is the header) — not wherever they
+// happened to be left from a previous comparison, since the table
+// widget itself is shared (see newCompareTreeScreen) and neither
+// Table.Clear() nor renderCompareTree ever resets either one on its
+// own. Called once real results have actually landed (see
+// runCompareTreeWalk's own completion callback), not right when the
+// screen opens (openCompareTree): the "Comparing…" placeholder shown
+// until then is a single row anyway, so there's nothing yet to have
+// scrolled away from — and not from a mere re-render like toggling
+// show-identical either, which shouldn't yank the view out from under
+// someone reviewing a specific row over data that hasn't actually
+// changed. Per the user's own explicit request that a fresh comparison
+// always start showing its own top — the same reset Batch Rename's own
+// preview already does on open (see its own Select(1, 0) in
+// openBatchRename).
+func (r *Root) resetCompareTreeScrollPosition() {
+	r.compareTreeTable.Select(1, 0)
+	r.compareTreeTable.ScrollToBeginning()
+}
+
 // runCompareTreeWalk runs compare.Walk on a background goroutine —
 // the same context.WithCancel + safeGo + QueueUpdateDraw shape
 // computeHashes (properties.go) and computeCompareHash (compare.go)
@@ -210,6 +231,7 @@ func (r *Root) runCompareTreeWalk() {
 				r.showError(fmt.Errorf("compare: %w", err))
 			}
 			r.renderCompareTree()
+			r.resetCompareTreeScrollPosition()
 		})
 	})
 }

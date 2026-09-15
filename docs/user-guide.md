@@ -729,14 +729,18 @@ it closed first — pressing `h` there fills in Properties' own hash
 section instead of Details', so it never fills in a window you can't
 see.
 
-### System Info (while the current tab is at "/")
+### System Info (selecting "/" itself)
 
-Browsing the real filesystem root replaces the whole per-file view
-above with an overview of the machine itself instead — regardless of
-which entry happens to be selected there, since there's no single file
-worth describing at that point. The title bar switches to "System
-Info" to match, and switches back to "Details" the moment you navigate
-anywhere else.
+The real filesystem root shows a selectable "/" row of its own, in
+place of the usual `..` (there's no parent to go "up" to there).
+Selecting that row and opening Details replaces the whole per-file
+view above with an overview of the machine itself instead. Every
+other entry under "/" (`etc`, `home`, `usr`, ...) still gets its own
+ordinary per-file Details exactly like anywhere else — System Info is
+only ever for the "/" row itself, never for merely being somewhere
+under it. The title bar switches to "System Info" to match, and
+switches back to "Details" the instant the selection moves off that
+row.
 
 | Field | Source | Color |
 |---|---|---|
