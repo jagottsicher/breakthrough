@@ -19,6 +19,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
@@ -216,6 +217,13 @@ type Panel struct {
 	filterMenuBtn    *tview.TextView
 	onOpenFilterMenu func()
 
+	// onOpenConnectionMenu is Root's own wiring for the header's
+	// connection button (see buildHeaderSpans/actionOpenConnectionMenu,
+	// and Root.openConnectionMenu in connectionmenu.go) — Panel has no
+	// direct reference to Root, the same reason onOpenFilterMenu/
+	// onExpandDetails both exist.
+	onOpenConnectionMenu func()
+
 	// detailsExpandBtn sits right after filterMenuBtn in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
@@ -272,6 +280,30 @@ type Panel struct {
 	// lets ".." and entering a further subdirectory work unchanged —
 	// resolveArchiveState is what tells the two apart when it matters.
 	path string
+
+	// remote is nil for an ordinary local panel; set, path is a POSIX
+	// path against remote's own filesystem instead of this machine's —
+	// load()'s own ListDir call branches on this, and every other
+	// fsops-touching operation this project's own file-operation
+	// screens offer is scoped to a local panel only for now (see
+	// internal/remotefs's own package doc for why SFTP is the only
+	// remote protocol this covers so far). remoteConn is remote's own
+	// connection identity, purely for display (the header's connection
+	// button, see buildHeaderSpans) and for recording history (see
+	// remotefs.RecordAttempt) — never consulted to decide behavior.
+	//
+	// Each tab owns a whole real *Panel (see tabs.go's own doc
+	// comment), so this — like every other field here — is already
+	// correctly scoped per tab without anything further: connecting one
+	// tab to a remote host never affects any other tab's own panel.
+	//
+	// connectRemote/disconnectRemote both reset history to a single
+	// fresh entry rather than trying to carry it across the switch —
+	// mixing a local path and a remote one in the same back/forward
+	// stack would mean navigate() can no longer tell which filesystem a
+	// given history entry even belongs to.
+	remote     remotefs.Client
+	remoteConn remotefs.Connection
 
 	// archivePath is the real, on-disk archive file currently being
 	// browsed into — "" whenever path is an ordinary real directory.
@@ -544,14 +576,15 @@ type rowDescription struct {
 type headerAction int
 
 const (
-	actionNavigate headerAction = iota // go to target
-	actionStart                        // go to the directory breakthrough was launched from
-	actionRoot                         // go to the filesystem root ("/")
-	actionHome                         // go to the user's home directory
-	actionBack                         // step back in history
-	actionForward                      // step forward in history
-	actionUp                           // go up one level (the parent directory)
-	actionReload                       // re-read the current directory from disk
+	actionNavigate           headerAction = iota // go to target
+	actionStart                                  // go to the directory breakthrough was launched from
+	actionRoot                                   // go to the filesystem root ("/")
+	actionHome                                   // go to the user's home directory
+	actionBack                                   // step back in history
+	actionForward                                // step forward in history
+	actionUp                                     // go up one level (the parent directory)
+	actionReload                                 // re-read the current directory from disk
+	actionOpenConnectionMenu                     // open the connection dropdown (see connectionmenu.go)
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -1092,12 +1125,20 @@ func (p *Panel) load(dir string) error {
 	// file, or a subdirectory already inside one: load() itself is the
 	// one place that has to know the difference, everything upstream of
 	// it (navigate, the ".." row, Root's tab/history plumbing) just
-	// keeps treating abs as an ordinary path.
+	// keeps treating abs as an ordinary path. A connected panel skips
+	// this branch entirely: browsing into an archive that itself lives
+	// on a remote host isn't supported yet (see remote's own doc
+	// comment on the struct).
 	var entries []fsops.Entry
-	if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
-		entries, err = p.loadArchiveEntries(archivePath, internalDir)
-	} else {
-		entries, err = fsops.ListDir(abs)
+	switch {
+	case p.remote != nil:
+		entries, err = p.remote.ListDir(abs)
+	default:
+		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+			entries, err = p.loadArchiveEntries(archivePath, internalDir)
+		} else {
+			entries, err = fsops.ListDir(abs)
+		}
 	}
 	if err != nil {
 		return err
@@ -1171,7 +1212,7 @@ func (p *Panel) load(dir string) error {
 	p.endShiftSelect()
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs, p.theme)
+	text, spans := buildHeaderSpans(abs, p.theme, p.remote != nil)
 	p.header.SetText(text)
 	p.headerSpans = spans
 	p.renderFilterMenuBtn()
@@ -1406,7 +1447,7 @@ func (p *Panel) setSearchStatus(text string) {
 	prefix := text + separator
 	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
 
-	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme)
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme, p.remote != nil)
 	p.header.SetText(prefix + breadcrumbText)
 
 	spans := make([]headerSpan, len(breadcrumbSpans))
@@ -3265,6 +3306,59 @@ func (p *Panel) navigateAndSelect(target string) error {
 	return nil
 }
 
+// connectRemote attaches client — already dialed and authenticated,
+// see remotefs.Dial — to p as conn's own session, replacing whatever
+// local or previously-remote state this tab had, and navigates to
+// client's own Root(). History resets to a single fresh entry rather
+// than trying to carry the old one across: mixing a path from the
+// filesystem being left behind into the new session's own
+// back/forward stack would leave navigate() with no way to tell which
+// Client a given historyEntry even belongs to (see the struct's own
+// doc comment on remote/remoteConn).
+//
+// The connection attempt itself — remotefs.Dial, any credential
+// prompting, remotefs.RecordAttempt — is entirely the caller's own
+// responsibility (see connectdialog.go); this only ever runs once
+// that has already succeeded.
+func (p *Panel) connectRemote(client remotefs.Client, conn remotefs.Connection) error {
+	if p.remote != nil {
+		_ = p.remote.Close()
+	}
+	p.remote = client
+	p.remoteConn = conn
+	p.history = nil
+	if err := p.load(client.Root()); err != nil {
+		return err
+	}
+	p.pushHistoryEntry(historyEntry{path: p.path})
+	return nil
+}
+
+// disconnectRemote closes the active remote session, if any, and
+// returns this tab to browsing the local machine at the user's own
+// home directory — the same "somewhere sane, not wherever the remote
+// session happened to leave off" landing spot a freshly opened tab
+// already starts from (see actionHome). A no-op if this tab was never
+// connected to begin with.
+func (p *Panel) disconnectRemote() error {
+	if p.remote == nil {
+		return nil
+	}
+	_ = p.remote.Close()
+	p.remote = nil
+	p.remoteConn = remotefs.Connection{}
+	p.history = nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/"
+	}
+	if err := p.load(home); err != nil {
+		return err
+	}
+	p.pushHistoryEntry(historyEntry{path: p.path})
+	return nil
+}
+
 // reportError hands err to whoever is displaying errors, if anyone is.
 // A nil error is ignored, so callers can pass a result through directly.
 func (p *Panel) reportError(err error) {
@@ -3397,6 +3491,19 @@ var headerButtons = []struct {
 // gap between two distinct buttons rather than part of either one.
 const headerButtonSeparator = " "
 
+// connectionButtonGlyph is the header's own connection-status button —
+// the "dropdown directly before the folder name" the user asked for
+// (see connectionmenu.go/connectdialog.go for the rest of that
+// feature) — always this exact one glyph regardless of connection
+// state, so its column width never changes and headerButtonPrefix
+// never needs to account for more than one fixed width here (only the
+// color varies — see buildHeaderSpans). "@" rather than a
+// server/plug-style pictograph: it's the one character already
+// universally understood as "user at host" (as in `ssh user@host`
+// itself), renders identically on every terminal (plain ASCII, unlike
+// most pictographs), and needs no legend of its own.
+const connectionButtonGlyph = "@"
+
 // headerButtonPrefix is the plain-text form of the six nav buttons
 // plus their separators — see buildHeaderSpans for the colored,
 // clickable version actually drawn in the header. Reused by
@@ -3414,6 +3521,7 @@ var headerButtonPrefix = func() string {
 	for _, btn := range headerButtons {
 		b.WriteString(" " + btn.glyph + " " + headerButtonSeparator)
 	}
+	b.WriteString(" " + connectionButtonGlyph + " " + headerButtonSeparator)
 	return b.String()
 }()
 
@@ -3443,7 +3551,7 @@ var headerButtonPrefix = func() string {
 // between two buttons, or in empty space after the path) is handled by
 // captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, spans []headerSpan) {
+func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
@@ -3456,6 +3564,24 @@ func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, span
 		b.WriteString(headerButtonSeparator)
 		col++
 	}
+
+	// The connection button: same padded-button shape as the seven
+	// above, but its own foreground color (not just the shared
+	// ButtonBackground) carries the state — muted for a plain local
+	// panel, the same "healthy" green username/git-status/disk-percent
+	// already use elsewhere in this app once a remote session is
+	// attached (see internal/ui's own bottombar.go/gitstatus.go for
+	// that established color convention).
+	connColor := theme.MutedTextColor
+	if connected {
+		connColor = theme.EntryExecutable
+	}
+	connStart := col
+	fmt.Fprintf(&b, "[%s:%s:] %s [-:-:-]", colorTag(connColor), keyBG, connectionButtonGlyph)
+	col += 1 + tview.TaggedStringWidth(connectionButtonGlyph) + 1
+	spans = append(spans, headerSpan{start: connStart, end: col, action: actionOpenConnectionMenu})
+	b.WriteString(headerButtonSeparator)
+	col++
 
 	rootStart := col
 	b.WriteString("/")
@@ -3543,12 +3669,23 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// discoverable as a click target in the first place.
 		p.reportError(p.navigate("/"))
 	case actionHome:
+		// A connected panel's own "home" is the remote account's own
+		// home directory (Root(), fixed for the session's whole
+		// lifetime — see Client's own doc comment), not this machine's.
+		if p.remote != nil {
+			p.reportError(p.navigate(p.remote.Root()))
+			return
+		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			p.reportError(err)
 			return
 		}
 		p.reportError(p.navigate(home))
+	case actionOpenConnectionMenu:
+		if p.onOpenConnectionMenu != nil {
+			p.onOpenConnectionMenu()
+		}
 	case actionBack:
 		p.back()
 	case actionForward:
