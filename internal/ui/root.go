@@ -395,9 +395,20 @@ type Root struct {
 	// renderConnectionMenu on every open, read by
 	// captureConnectionMenuMouse/removeHighlightedConnectionHistory to
 	// know which entry a click on its own "✕" or the "x" key should
-	// actually remove. Never populated for "New connection…"/
-	// "Disconnect", which aren't history rows at all.
+	// actually remove. Never populated for "New connection…", which
+	// isn't a history row at all.
 	connectionMenuHistoryRows map[int]remotefs.Connection
+
+	// connectionMenuActiveRow is the row within connectionMenuList
+	// (history rows only — see connectionMenuHistoryRows) that
+	// represents the active panel's own current connection, or -1 if
+	// the panel isn't connected at all — populated fresh by
+	// renderConnectionMenu alongside connectionMenuHistoryRows. There
+	// used to be a whole separate "Disconnect (...)" list item for
+	// this instead of a per-row glyph; the user asked for the glyph
+	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
+	// already established rather than a dedicated row of its own.
+	connectionMenuActiveRow int
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -1039,6 +1050,16 @@ type Root struct {
 	// when true.
 	clipboard    []string
 	clipboardCut bool
+
+	// clipboardSourceClient is nil for an ordinary local Copy/Cut, or
+	// the remote Client clipboard's own paths belong to otherwise — set
+	// alongside clipboard itself (see copyToClipboard/cutToClipboard),
+	// since every path on the clipboard always comes from the one
+	// panel that was active at that moment, never a mix of two. Read by
+	// pasteInto to decide whether a plain local paste (unchanged from
+	// before remote connections existed at all) or remotepaste.go's own
+	// transfer engine applies.
+	clipboardSourceClient remotefs.Client
 
 	// clipboardDirs/clipboardFiles tally how many of clipboard's own
 	// paths are directories vs plain files (see clipboardCounts) — for
@@ -2873,43 +2894,43 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
 //
-// Refused outright for a remote panel — unlike archive browsing (see
-// errNotSupportedInArchive), which still allows copying *out* of an
-// archive, the clipboard has no way to record which filesystem a path
-// belongs to (see Panel.isRemote's own doc comment), so a remote path
-// must never enter it at all, not even to be blocked later at Paste.
+// clipboardSourceClient records which filesystem those targets belong
+// to (nil for local) — every path on the clipboard always comes from
+// whichever one panel was active just now, never a mix of two, so a
+// single field alongside the paths themselves is enough for pasteInto
+// to later dispatch correctly regardless of which side, if either, of
+// the eventual Paste is remote.
 func (r *Root) copyToClipboard() {
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
-// the targets (removing them from here) instead of copying them. See
-// copyToClipboard's own doc comment for why a remote panel refuses this
-// the same way.
+// the targets (removing them from here) instead of copying them.
 func (r *Root) cutToClipboard() {
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), true)
 }
 
 // setClipboard is copyToClipboard/cutToClipboard's own shared body,
 // also used by finishPasteJob (pasteconflict.go) to clear the
-// clipboard once a clean Cut+Paste has fully landed — every place
-// clipboard/clipboardCut actually change goes through here, so the
-// dependent state (clipboardDirs/clipboardFiles, every open tab's own
-// row highlighting, the status bar's own indicator) can never drift
-// out of sync with them by only being updated from some of the call
-// sites.
+// clipboard once a clean Cut+Paste has fully landed (clearing also
+// resets clipboardSourceClient back to nil there, via the same call —
+// see its own call site) — every place clipboard/clipboardCut actually
+// change goes through here, so the dependent state
+// (clipboardDirs/clipboardFiles, every open tab's own row highlighting,
+// the status bar's own indicator) can never drift out of sync with
+// them by only being updated from some of the call sites.
 func (r *Root) setClipboard(paths []string, cut bool) {
+	if len(paths) == 0 {
+		// Clearing (finishPasteJob's own call): nothing left on the
+		// clipboard means no source for it either, regardless of
+		// whatever copyToClipboard/cutToClipboard last set it to.
+		r.clipboardSourceClient = nil
+	}
 	r.clipboard = paths
 	r.clipboardCut = cut
-	r.clipboardDirs, r.clipboardFiles = clipboardCounts(paths)
+	r.clipboardDirs, r.clipboardFiles = clipboardCounts(r.clipboardSourceClient, paths)
 	r.syncClipboardHighlight()
 	r.refreshStatusBar()
 }
@@ -2938,13 +2959,23 @@ func (r *Root) syncClipboardHighlight() {
 // place this app's own "no silent errors" guardrail needs to reach —
 // the paste itself, when it actually runs, is where a genuinely
 // missing source file gets reported (see pasteconflict.go).
-func clipboardCounts(paths []string) (dirs, files int) {
+func clipboardCounts(client remotefs.Client, paths []string) (dirs, files int) {
 	for _, path := range paths {
-		info, err := fsops.Stat(path)
-		if err != nil {
-			continue
+		var isDir bool
+		if client != nil {
+			entry, err := client.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = entry.IsDir
+		} else {
+			info, err := fsops.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = isDirish(info)
 		}
-		if isDirish(info) {
+		if isDir {
 			dirs++
 		} else {
 			files++
@@ -3087,13 +3118,16 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // conflict-resolving shape); a no-op if nothing was ever copied/cut,
 // same as before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
-	if r.panel.isRemote() {
-		// copyToClipboard/cutToClipboard already refuse a remote
-		// *source* outright (see their own doc comments) — this is the
-		// other half: a remote *destination*, which needs its own guard
-		// here regardless, since the clipboard's own contents in that
-		// case are still perfectly ordinary local paths.
-		r.showError(errNotSupportedRemote)
+	if r.clipboardSourceClient != nil || r.panel.remote != nil {
+		// remotepaste.go's own engine, once either side of the paste is
+		// remote — never mixed with the archive-extraction or local
+		// startPaste paths below, both of which assume a real local
+		// path throughout.
+		if followSymlinks {
+			r.showError(fmt.Errorf("pasting while following symlinks isn't supported yet for a remote connection — use plain Paste instead"))
+			return
+		}
+		r.startRemotePaste(r.clipboard, r.clipboardSourceClient, r.clipboardCut, r.panel.remote, dir)
 		return
 	}
 	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {

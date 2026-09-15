@@ -504,9 +504,11 @@ terminal.
   green breathing glow (never a flat, static color) once connected, so
   a live connection reads as visibly alive at a glance — opening a
   dropdown (also reachable via the `g` chord's
-  own `gc`) with New connection…, Disconnect once one's active, and
-  recent history colored the same way (red for one that last failed).
-  Connecting dials in the background with a live progress line;
+  own `gc`) with New connection… and recent history colored the same
+  way (red for one that last failed); the active entry's own row
+  carries a trailing `⏏` (or the "e" key) to disconnect, right next to
+  the `✕` (or "x"/Delete) every row already has to drop it out of
+  history. Connecting dials in the background with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
   password as the last resort. Host keys are checked against the real

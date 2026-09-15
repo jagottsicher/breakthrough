@@ -817,19 +817,21 @@ for browsing a directory tree on another machine over SFTP, exactly the
 way SSH itself already reaches it. Muted while a panel is local, a slow
 breathing green glow while connected.
 
-The dropdown lists, in order: **Disconnect** (only once this panel is
-actually connected to something), **New connection…**, then recent
+The dropdown lists, in order: **New connection…**, then recent
 history — most recently used first, colored by state: bright green for
 the connection currently active in this panel, a dimmer green for one
 that has connected successfully before but isn't active right now, red
 for one whose last attempt failed. Selecting a history entry (anywhere
-but its own trailing "✕") reopens the Connect dialog prefilled from it
-and immediately retries — nothing about *how* it authenticated is ever
-remembered (see Authentication below), so a connection that needs a
-typed password will stop there with the dialog open, ready for it.
+but its own trailing glyphs) reopens the Connect dialog prefilled from
+it and immediately retries — nothing about *how* it authenticated is
+ever remembered (see Authentication below), so a connection that needs
+a typed password will stop there with the dialog open, ready for it.
 Every history row ends with a small "✕" — click it (or press `x` or
 Delete while that row is highlighted) to drop just that one entry out
-of history, without ever connecting to it.
+of history, without ever connecting to it. The one row that's this
+panel's own active connection additionally carries a leading "⏏" right
+before it — click it (or press `e` while that row is highlighted) to
+disconnect; there's no separate "Disconnect" row anymore.
 
 **New connection…** opens a small form: Host, Port (blank means 22),
 User (blank means this machine's own local username, the same
@@ -890,9 +892,10 @@ remote-aware yet) all refuse outright with a clear message on a remote
 panel — chown specifically because there's no remote user/group
 database to resolve a typed name against, the rest because they'd need
 either a real remote command-execution channel or a streamed
-byte-range read this project doesn't have yet. Disconnecting (from the
-dropdown) closes the session and returns the panel to browsing this
-machine's own home directory.
+byte-range read this project doesn't have yet. Disconnecting (the
+active row's own "⏏" in the dropdown, or `e` while it's highlighted)
+closes the session and returns the panel to browsing this machine's
+own home directory.
 
 ## Properties
 

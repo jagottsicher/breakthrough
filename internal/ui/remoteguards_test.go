@@ -73,10 +73,6 @@ func TestActionsRefuseARemoteConnection(t *testing.T) {
 		{"openBatchRename", func(r *Root) { r.openBatchRename() }},
 		{"editCurrentEntry", func(r *Root) { r.editCurrentEntry() }},
 		{"openCompare", func(r *Root) { r.openCompare() }},
-		{"cutCurrentSelection", func(r *Root) { r.cutCurrentSelection() }},
-		{"copyToClipboard", func(r *Root) { r.copyToClipboard() }},
-		{"cutToClipboard", func(r *Root) { r.cutToClipboard() }},
-		{"pasteInto", func(r *Root) { r.pasteInto(r.panel.path, false) }},
 		{"openChown", func(r *Root) { r.openChown() }},
 		{"openSedReplace", func(r *Root) { r.openSedReplace() }},
 		{"openProperties", func(r *Root) { r.openProperties() }},
@@ -85,6 +81,26 @@ func TestActionsRefuseARemoteConnection(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			assertRefusedAsRemote(t, c.name, c.action)
 		})
+	}
+}
+
+// TestPasteFollowingSymlinksRefusesOnARemotePanel pins the one Paste
+// variant that genuinely still refuses once either side of a paste is
+// remote — see pasteInto's own doc comment — distinct from plain Copy/
+// Cut/Paste, which remotepaste.go now handles like any other target
+// (see TestCopyThenPasteUploadsToARemotePanel and friends in
+// remotepaste_test.go).
+func TestPasteFollowingSymlinksRefusesOnARemotePanel(t *testing.T) {
+	r := newTestRemoteRoot(t)
+
+	r.pasteInto(r.panel.path, true)
+
+	if r.activePage != errorPage {
+		t.Fatalf("expected an error overlay, activePage = %q", r.activePage)
+	}
+	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
+	if !strings.Contains(got, "following symlinks") || !strings.Contains(got, "remote") {
+		t.Errorf("error text = %q, want it to mention following symlinks not being supported remotely", got)
 	}
 }
 

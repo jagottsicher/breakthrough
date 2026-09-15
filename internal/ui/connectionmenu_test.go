@@ -39,22 +39,39 @@ func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) 
 	}
 }
 
-func TestRenderConnectionMenuOnAConnectedPanelOffersDisconnectFirst(t *testing.T) {
+// TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry
+// pins the fact that there's no longer a dedicated "Disconnect (...)"
+// row of its own — disconnecting instead happens via
+// connectionHistoryEjectGlyph on the active connection's own history
+// row (see TestPressingEOnTheActiveConnectionRowDisconnects/
+// TestClickingTheEjectGlyphDisconnectsTheActiveConnection).
+func TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
-	client := fakeConnectedClient()
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
-	if err := r.panel.connectRemote(client, conn); err != nil {
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
 		t.Fatalf("connectRemote: %v", err)
 	}
 
 	r.renderConnectionMenu()
 
 	texts := itemTexts(r.connectionMenuList)
-	if len(texts) == 0 || !strings.Contains(texts[0], "Disconnect") || !strings.Contains(texts[0], conn.Label()) {
-		t.Fatalf("items[0] = %q, want a \"Disconnect (...)\" row naming the active connection", texts[0])
+	if len(texts) != 2 {
+		t.Fatalf("items = %v, want exactly \"New connection…\" plus one history row for the active connection", texts)
 	}
-	if !strings.Contains(texts[1], "New connection") {
-		t.Errorf("items[1] = %q, want \"New connection…\" right after Disconnect", texts[1])
+	if !strings.Contains(texts[0], "New connection") {
+		t.Errorf("items[0] = %q, want \"New connection…\" first — no separate \"Disconnect\" row anymore", texts[0])
+	}
+	if !strings.Contains(texts[1], conn.Label()) {
+		t.Errorf("items[1] = %q, want the active connection's own history row", texts[1])
+	}
+	if !strings.Contains(texts[1], connectionHistoryEjectGlyph) {
+		t.Errorf("items[1] = %q, want the active connection's row to carry the eject glyph", texts[1])
+	}
+	if r.connectionMenuActiveRow != 1 {
+		t.Errorf("connectionMenuActiveRow = %d, want 1", r.connectionMenuActiveRow)
 	}
 }
 
@@ -106,7 +123,7 @@ func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 
 	var line string
 	for _, text := range itemTexts(r.connectionMenuList) {
-		if strings.Contains(text, conn.Label()) && !strings.Contains(text, "Disconnect") {
+		if strings.Contains(text, conn.Label()) {
 			line = text
 		}
 	}
@@ -264,6 +281,86 @@ func TestClickingTheRestOfAHistoryRowDoesNotRemoveIt(t *testing.T) {
 	}
 	if len(history) != 1 {
 		t.Errorf("history = %+v, want the entry left untouched by a click elsewhere on the row", history)
+	}
+}
+
+func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openConnectionMenu()
+	r.connectionMenuList.SetCurrentItem(r.connectionMenuActiveRow)
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
+
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume the \"e\" keypress on the active row")
+	}
+	if r.panel.remote != nil {
+		t.Error("panel is still connected after pressing \"e\" on its own active row")
+	}
+}
+
+// TestPressingEOnANonActiveHistoryRowDoesNothing pins that "e" is only
+// ever wired to the one row wearing connectionHistoryEjectGlyph — an
+// ordinary history row that merely happens to be highlighted must not
+// disconnect whatever the currently active panel is doing elsewhere.
+func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.openConnectionMenu()
+	row := historyRowFor(t, r, conn)
+	r.connectionMenuList.SetCurrentItem(row)
+
+	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
+
+	if got == nil {
+		t.Error("captureConnectionMenuKey consumed \"e\" on a row that isn't the active connection")
+	}
+}
+
+// TestClickingTheEjectGlyphDisconnectsTheActiveConnection pins the
+// mouse equivalent of TestPressingEOnTheActiveConnectionRowDisconnects
+// — the small "⏏" this project's own doc comments compare to a USB
+// drive's own eject icon, replacing what used to be a whole separate
+// "Disconnect (...)" list item (see
+// TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry).
+func TestClickingTheEjectGlyphDisconnectsTheActiveConnection(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.renderConnectionMenu()
+	r.connectionMenuList.SetRect(0, 0, 40, r.connectionMenuList.GetItemCount())
+	row := r.connectionMenuActiveRow
+
+	rectX, rectY, _, _ := r.connectionMenuList.GetInnerRect()
+	mainText, _ := r.connectionMenuList.GetItemText(row)
+	textWidth := tview.TaggedStringWidth(mainText)
+	removeGlyphWidth := tview.TaggedStringWidth(connectionHistoryRemoveGlyph)
+	ejectGlyphWidth := tview.TaggedStringWidth(connectionHistoryEjectGlyph)
+	ejectStart := rectX + textWidth - removeGlyphWidth - 2 - ejectGlyphWidth // squarely on the "⏏" glyph itself
+	y := rectY + row
+
+	action, event := r.captureConnectionMenuMouse(tview.MouseLeftClick, tcell.NewEventMouse(ejectStart, y, tcell.Button1, 0))
+
+	if event != nil || action != tview.MouseConsumed {
+		t.Error("clicking the eject glyph did not consume the event")
+	}
+	if r.panel.remote != nil {
+		t.Error("panel is still connected after clicking the eject glyph")
 	}
 }
 
