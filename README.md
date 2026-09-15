@@ -471,11 +471,18 @@ terminal.
   Hidden-files/size-format/mtime-format toggles are remembered across
   restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
-  current user, disk and inode usage for the directory on screen, the
-  running kernel (`uname -r`), uptime and load average where the
-  platform exposes them (Linux's own `/proc/uptime` and
-  `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong),
-  and a clock.
+  current user (green, red while running as root), disk space
+  (`free/total`) and inode usage (`used/total`) for the directory on
+  screen — each with its own fixed color and a green/orange/red
+  percentage (under 80% / 80%+ / 90%+) — the running kernel (`uname -r`),
+  uptime and load average where the platform exposes them (Linux's own
+  `/proc/uptime` and `/proc/loadavg` — quietly omitted elsewhere rather
+  than shown wrong; load's own three numbers are colored against this
+  machine's core count, not as raw, meaningless-alone figures), and a
+  clock. Every one of those seven segments can be switched off on its
+  own from Options → Status bar. See
+  [docs/user-guide.md](docs/user-guide.md#status-bar) for the full
+  breakdown.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Options screen (the `o` chord's
   own `oo`) — no restart needed, and the pick is remembered for next

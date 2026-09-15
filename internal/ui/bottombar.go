@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,31 @@ func currentUsername() string {
 		return u.Username
 	}
 	return os.Getenv("USER")
+}
+
+// isRoot reports whether this process is running as root — a var,
+// not a plain func, so a test can substitute it rather than actually
+// needing to run as root or in a container that fakes it (the same
+// substitution shape hashFile already uses for the same reason).
+// Checked via the effective UID rather than currentUsername() ==
+// "root": what actually governs whether a stray Remove or Move to
+// Trash can touch files you don't own is the UID, not whatever name
+// happens to be attached to it.
+var isRoot = func() bool { return os.Geteuid() == 0 }
+
+// usernameText colors name green — the same "healthy/normal" role
+// theme.EntryExecutable already carries elsewhere in this app — or,
+// while running as root, red (theme.EntryError): a highlighted
+// reminder that everything the current session does runs with no
+// permission checks at all, the one username value where that's
+// worth calling out at a glance rather than leaving it to blend in
+// with the rest of the status bar.
+func usernameText(name string, theme config.ResolvedTheme) string {
+	color := theme.EntryExecutable
+	if isRoot() {
+		color = theme.EntryError
+	}
+	return wrapColor(color, name)
 }
 
 // refreshStatusBar rebuilds and redraws the (purely informational, no
@@ -290,27 +316,48 @@ func (r *Root) buildStatusBar() string {
 		}
 	}
 
-	write(r.currentUser)
-	sep()
-	write(mouseStatusText(r.mouseEnabled))
-	sep()
-	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
-		write(diskUsageText(u, r.theme))
-		sep()
-		write(inodeUsageText(u, r.theme))
-		sep()
-	}
-	if k := kernelVersionText(); k != "" {
-		write(k)
+	// Every segment from here on is independently toggle-able (Options
+	// → Status bar — see optioncatalog.go), per the user's own explicit
+	// request: someone who never looks at load average, say, gets to
+	// stop it taking up room on an already busy line without losing
+	// anything else here.
+	if r.settings.StatusBarShowUsername {
+		write(usernameText(r.currentUser, r.theme))
 		sep()
 	}
-	if up, ok := uptimeText(); ok {
-		write(up)
+	if r.settings.StatusBarShowMouse {
+		write(mouseStatusText(r.mouseEnabled))
 		sep()
 	}
-	if load, ok := loadAverageText(); ok {
-		write(load)
-		sep()
+	if r.settings.StatusBarShowDisk || r.settings.StatusBarShowInodes {
+		if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
+			if r.settings.StatusBarShowDisk {
+				write(diskUsageText(u, r.theme))
+				sep()
+			}
+			if r.settings.StatusBarShowInodes {
+				write(inodeUsageText(u, r.theme))
+				sep()
+			}
+		}
+	}
+	if r.settings.StatusBarShowKernel {
+		if k := kernelVersionText(); k != "" {
+			write(wrapColor(statusKernelColor, k))
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowUptime {
+		if up, ok := uptimeText(); ok {
+			write(wrapColor(statusUptimeColor, up))
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowLoad {
+		if load, ok := loadAverageText(r.theme); ok {
+			write(load)
+			sep()
+		}
 	}
 	write(clockText())
 
@@ -640,7 +687,16 @@ func formatUptime(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", hours, minutes)
 }
 
-func loadAverageText() (string, bool) {
+// loadAverageText renders /proc/loadavg's own 1/5/15-minute figures,
+// each individually colored against this machine's own core count
+// (runtime.NumCPU) via the same green/orange/red scale
+// percentStatusColor uses for a plain percentage — a load of "2.0" is
+// idle on 16 cores and badly overloaded on 2, so the raw number alone
+// (this bar's previous behavior) told a sysadmin nothing without
+// mentally dividing by nproc themselves first. "load" itself is
+// wrapped in statusLoadColor throughout, same as every other
+// segment's own fixed base color.
+func loadAverageText(theme config.ResolvedTheme) (string, bool) {
 	data, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
 		return "", false
@@ -649,58 +705,127 @@ func loadAverageText() (string, bool) {
 	if len(fields) < 3 {
 		return "", false
 	}
-	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
+	cores := runtime.NumCPU()
+	numbers := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		v, err := strconv.ParseFloat(fields[i], 64)
+		if err != nil {
+			return "", false
+		}
+		numbers[i] = wrapColor(loadNumberColor(v, cores, theme), fields[i])
+	}
+	return fmt.Sprintf("%s %s", wrapColor(statusLoadColor, "load"), strings.Join(numbers, " ")), true
 }
 
-// diskUsageWarnColor is the color a usage percentage should stand out
-// in — warn.CriticalText at 90% or more, warn.WarningText at 80% or
-// more, tcell.ColorDefault (no warning, leave the surrounding text's
-// own color alone) otherwise — the two thresholds the user asked for,
-// shared by both the disk-space and the inode percentage. Reads its two
-// "stand out" colors from the active theme (see
-// config.Theme.WarningText/CriticalText's own doc comment) rather than
-// a hardcoded tcell.ColorOrange/tcell.ColorRed, so a scheme that already
-// leans orange or red elsewhere can still make this specific warning
-// legible against it.
-func diskUsageWarnColor(percent int, warn config.ResolvedTheme) tcell.Color {
+// loadNumberColor is percentStatusColor's own three-band scale, just
+// against a load-average-relative-to-core-count ratio instead of a
+// plain percentage: at or above 1 core's worth of load per core is
+// treated the same as 90%+ (theme.CriticalText — every core's already
+// fully busy), 70% of that as the 80%+ warning band, below that as
+// healthy. cores below 1 (shouldn't happen, but division needs a
+// floor) is treated as 1.
+func loadNumberColor(load float64, cores int, theme config.ResolvedTheme) tcell.Color {
+	if cores < 1 {
+		cores = 1
+	}
+	ratio := load / float64(cores)
+	switch {
+	case ratio >= 1.0:
+		return theme.CriticalText
+	case ratio >= 0.7:
+		return theme.WarningText
+	default:
+		return theme.EntryExecutable
+	}
+}
+
+// statusDiskColor/statusInodeColor/statusKernelColor/statusUptimeColor/
+// statusLoadColor are each status-bar segment's own distinguishing
+// color — the user's own explicit request that every segment stand
+// apart from its neighbors at a glance, "in a color of your choosing"
+// rather than a configurable one: fixed literals, not new theme roles,
+// since nothing here needs to vary by color scheme the way a warning
+// or a file-type color does. Chosen to read clearly against this
+// app's own dark default panel background while staying visually
+// distinct from the semantic green/orange/red scale below (warn/
+// critical/healthy), which every one of these segments still layers
+// on top of for its own numbers.
+var (
+	statusDiskColor   = tcell.GetColor("#4da6ff") // a clear blue: storage
+	statusInodeColor  = tcell.GetColor("#b285f0") // violet: a related but distinct filesystem stat
+	statusKernelColor = tcell.GetColor("#d8c06a") // muted gold: static system info
+	statusUptimeColor = tcell.GetColor("#4fd6b5") // teal: time-since-boot
+	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
+)
+
+// wrapColor renders text in color as a self-contained tview markup
+// span — starts with an explicit foreground tag, ends by resetting to
+// the widget's own configured text color ("[-]", not a second
+// explicit color, so this keeps looking right under every color
+// scheme — see Root.applyTheme). Used wherever a whole segment gets
+// one fixed color with nothing color-sensitive immediately following
+// it in the same breath; coloredPercentIn below is the one case that
+// specifically needs to NOT reset to the widget default partway
+// through a segment.
+func wrapColor(color tcell.Color, text string) string {
+	return fmt.Sprintf("[%s]%s[-]", colorTag(color), text)
+}
+
+// coloredPercentIn renders "N%" in warnColor, then switches straight
+// back to base rather than resetting to the widget's own default
+// color the way wrapColor's trailing "[-]" would — base is whatever
+// color the rest of that segment (the text on either side of the
+// percentage, e.g. diskUsageText's own closing parenthesis) is
+// already in, so the percentage is the only part of the segment that
+// ever visibly changes color.
+func coloredPercentIn(percent int, warnColor, base tcell.Color) string {
+	return fmt.Sprintf("[%s]%d%%[%s]", colorTag(warnColor), percent, colorTag(base))
+}
+
+// percentStatusColor is the color a usage percentage should stand out
+// in: theme.CriticalText at 90% or more, theme.WarningText at 80% or
+// more, theme.EntryExecutable (this app's own established "healthy"
+// green, the same role a file's executable bit already renders in)
+// below that — three explicit bands, per the user's own explicit
+// request, rather than the "elevated only" two this used to have.
+// Reads its colors from the active theme (see
+// config.Theme.WarningText/CriticalText/EntryExecutable's own doc
+// comments) rather than hardcoded tcell constants, so a scheme that
+// already leans orange, red, or green elsewhere still stays legible
+// against this specific warning.
+func percentStatusColor(percent int, theme config.ResolvedTheme) tcell.Color {
 	switch {
 	case percent >= 90:
-		return warn.CriticalText
+		return theme.CriticalText
 	case percent >= 80:
-		return warn.WarningText
+		return theme.WarningText
 	default:
-		return tcell.ColorDefault
+		return theme.EntryExecutable
 	}
 }
 
-// formatUsagePercent renders percent as "N%", wrapped in a foreground-
-// only tview color tag (see colorTag — the same "#rrggbb", not a color
-// name, so it round-trips exactly through tview's own tag parser) once
-// diskUsageWarnColor says it should stand out — "[-]" resets just the
-// foreground back to the status bar's own configured text color
-// afterward, not a hardcoded one, so this still looks right under
-// every color scheme (see Root.applyTheme).
-func formatUsagePercent(percent int, theme config.ResolvedTheme) string {
-	color := diskUsageWarnColor(percent, theme)
-	if color == tcell.ColorDefault {
-		return fmt.Sprintf("%d%%", percent)
-	}
-	return fmt.Sprintf("[%s]%d%%[-]", colorTag(color), percent)
-}
-
-// diskUsageText and inodeUsageText render one labeled "Label X used, Y
-// free (Z%)" status-bar segment each — explicit "used"/"free" labels
-// (not just two bare numbers) precisely because the user reported the
-// previous, unlabeled df dump as unreadable ("man weiß gar nicht was
-// die heißen sollen"), and explicit used *and* free numbers for
-// inodes specifically, per the user's own request, rather than just a
-// percentage.
+// diskUsageText and inodeUsageText render one status-bar segment each,
+// its own base color throughout except for the percentage — which
+// always stands out via percentStatusColor's three-band scheme, on
+// top of whichever base color surrounds it (see coloredPercentIn).
+//
+// Disk asks "how much room is left" (free/total — the number a
+// sysadmin checks before starting something large); Inodes asks "how
+// many have I used up" (used/total — inode exhaustion is the failure
+// mode that actually matters, and it creeps up from zero, not down
+// from the total) — deliberately the opposite direction from each
+// other, per the user's own explicit examples, not an inconsistency
+// to "fix".
 func diskUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
-	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent, theme))
+	total := u.UsedBytes + u.AvailBytes
+	percent := coloredPercentIn(u.UsePercent, percentStatusColor(u.UsePercent, theme), statusDiskColor)
+	return fmt.Sprintf("[%s]Disk free %s/%s (%s)[-]", colorTag(statusDiskColor), humanSize(u.AvailBytes), humanSize(total), percent)
 }
 
 func inodeUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
-	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent, theme))
+	total := u.UsedInodes + u.AvailInodes
+	percent := coloredPercentIn(u.InodePercent, percentStatusColor(u.InodePercent, theme), statusInodeColor)
+	return fmt.Sprintf("[%s]Inodes used %s/%s (%s)[-]", colorTag(statusInodeColor), humanCount(u.UsedInodes), humanCount(total), percent)
 }
 
 // humanCount renders n the same way humanSize renders a byte count

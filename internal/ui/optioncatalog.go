@@ -111,6 +111,24 @@ func withSection(section string, opt optionSpec) optionSpec {
 	return opt
 }
 
+// statusBarSegmentOption builds one Status bar toggle: like
+// boolOption, but always persists under key and refreshes the status
+// bar immediately on top of whatever get/set actually flips — a
+// toggle that visibly changes something the moment it's pressed,
+// same as every other Options toggle, rather than needing a restart
+// or a manual reload to show up. Every one of these seven is a plain
+// "show this segment or don't" bool with no side effect beyond the
+// status bar's own next render, so this one small wrapper replaces
+// what would otherwise be seven near-identical persist+refresh set
+// closures.
+func statusBarSegmentOption(key, label, help string, get func(*Root) bool, set func(*Root, bool)) optionSpec {
+	return boolOption(key, label, help, false, get, func(r *Root, b bool) {
+		set(r, b)
+		r.persistSetting(key, strconv.FormatBool(b))
+		r.refreshStatusBar()
+	})
+}
+
 // boolOption builds the common case: a true/false setting read from and
 // written through a pair of accessors.
 func boolOption(key, label, help string, restartHint bool, get func(*Root) bool, set func(*Root, bool)) optionSpec {
@@ -232,6 +250,58 @@ func optionCategories() []optionCategory {
 					false,
 					func(r *Root) bool { return r.panel.mtimeUnix },
 					func(r *Root, b bool) { r.setMtimeUnix(b) },
+				),
+			},
+		},
+		{
+			name: "Status bar",
+			options: []optionSpec{
+				statusBarSegmentOption("status_bar_show_username", "Username",
+					"Whether the current username shows in the status bar — colored "+
+						"green normally, red while running as root.",
+					func(r *Root) bool { return r.settings.StatusBarShowUsername },
+					func(r *Root, b bool) { r.settings.StatusBarShowUsername = b },
+				),
+				statusBarSegmentOption("status_bar_show_mouse", "Mouse status",
+					"Whether \"Mouse on\"/\"Mouse off\" shows in the status bar. This is "+
+						"purely display — it doesn't affect mouse reporting itself, see the "+
+						"\"om\" chord or mouse_enabled above for that.",
+					func(r *Root) bool { return r.settings.StatusBarShowMouse },
+					func(r *Root, b bool) { r.settings.StatusBarShowMouse = b },
+				),
+				statusBarSegmentOption("status_bar_show_disk", "Disk space",
+					"Whether free/total disk space for the current directory's own "+
+						"filesystem shows in the status bar, with the percentage used "+
+						"colored green/orange/red below 80% / 80-89% / 90%+.",
+					func(r *Root) bool { return r.settings.StatusBarShowDisk },
+					func(r *Root, b bool) { r.settings.StatusBarShowDisk = b },
+				),
+				statusBarSegmentOption("status_bar_show_inodes", "Inode usage",
+					"Whether used/total inode count for the current directory's own "+
+						"filesystem shows in the status bar, with the same green/orange/red "+
+						"scale as disk space.",
+					func(r *Root) bool { return r.settings.StatusBarShowInodes },
+					func(r *Root, b bool) { r.settings.StatusBarShowInodes = b },
+				),
+				statusBarSegmentOption("status_bar_show_kernel", "Kernel version",
+					"Whether the running kernel version (\"uname -r\") shows in the status bar.",
+					func(r *Root) bool { return r.settings.StatusBarShowKernel },
+					func(r *Root, b bool) { r.settings.StatusBarShowKernel = b },
+				),
+				statusBarSegmentOption("status_bar_show_uptime", "Uptime",
+					"Whether system uptime shows in the status bar, where the platform "+
+						"exposes it (Linux's own /proc/uptime; quietly omitted elsewhere).",
+					func(r *Root) bool { return r.settings.StatusBarShowUptime },
+					func(r *Root, b bool) { r.settings.StatusBarShowUptime = b },
+				),
+				statusBarSegmentOption("status_bar_show_load", "Load average",
+					"Whether the 1/5/15-minute load average shows in the status bar, "+
+						"where the platform exposes it (Linux's own /proc/loadavg). Each "+
+						"number is colored against this machine's own core count: green "+
+						"below 70% of a core-worth of load per core, orange from 70%, red "+
+						"at or above one core's worth of load per core.",
+					func(r *Root) bool { return r.settings.StatusBarShowLoad },
+					func(r *Root, b bool) { r.settings.StatusBarShowLoad = b },
 				),
 			},
 		},
@@ -724,6 +794,20 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.FilterPersistent), true
 	case "chord_timeout_ms":
 		return strconv.Itoa(s.ChordTimeoutMS), true
+	case "status_bar_show_username":
+		return strconv.FormatBool(s.StatusBarShowUsername), true
+	case "status_bar_show_mouse":
+		return strconv.FormatBool(s.StatusBarShowMouse), true
+	case "status_bar_show_disk":
+		return strconv.FormatBool(s.StatusBarShowDisk), true
+	case "status_bar_show_inodes":
+		return strconv.FormatBool(s.StatusBarShowInodes), true
+	case "status_bar_show_kernel":
+		return strconv.FormatBool(s.StatusBarShowKernel), true
+	case "status_bar_show_uptime":
+		return strconv.FormatBool(s.StatusBarShowUptime), true
+	case "status_bar_show_load":
+		return strconv.FormatBool(s.StatusBarShowLoad), true
 	case "duplicate_separator":
 		return s.DuplicateSeparator, true
 	case "duplicate_strategy":

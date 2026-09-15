@@ -263,6 +263,14 @@ type Settings struct {
 	FilterPersistent  bool
 	ChordTimeoutMS    int
 
+	StatusBarShowUsername bool
+	StatusBarShowMouse    bool
+	StatusBarShowDisk     bool
+	StatusBarShowInodes   bool
+	StatusBarShowKernel   bool
+	StatusBarShowUptime   bool
+	StatusBarShowLoad     bool
+
 	DuplicateSeparator        string
 	DuplicateStrategy         string
 	DuplicateSuffixText       string
@@ -305,6 +313,14 @@ func DefaultSettings() Settings {
 		MouseEnabled:      true,
 		FilterPersistent:  true,
 		ChordTimeoutMS:    4000,
+
+		StatusBarShowUsername: true,
+		StatusBarShowMouse:    true,
+		StatusBarShowDisk:     true,
+		StatusBarShowInodes:   true,
+		StatusBarShowKernel:   true,
+		StatusBarShowUptime:   true,
+		StatusBarShowLoad:     true,
 
 		DuplicateSeparator:        "_",
 		DuplicateStrategy:         "numbered",
@@ -380,6 +396,20 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.FilterPersistent)
 	case "chord_timeout_ms":
 		return parseInt(&s.ChordTimeoutMS)
+	case "status_bar_show_username":
+		return parseBool(&s.StatusBarShowUsername)
+	case "status_bar_show_mouse":
+		return parseBool(&s.StatusBarShowMouse)
+	case "status_bar_show_disk":
+		return parseBool(&s.StatusBarShowDisk)
+	case "status_bar_show_inodes":
+		return parseBool(&s.StatusBarShowInodes)
+	case "status_bar_show_kernel":
+		return parseBool(&s.StatusBarShowKernel)
+	case "status_bar_show_uptime":
+		return parseBool(&s.StatusBarShowUptime)
+	case "status_bar_show_load":
+		return parseBool(&s.StatusBarShowLoad)
 	case "duplicate_separator":
 		s.DuplicateSeparator = value
 	case "duplicate_strategy":
