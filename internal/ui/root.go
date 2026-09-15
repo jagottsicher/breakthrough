@@ -34,6 +34,7 @@ const (
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
 	duplicatePage   = "duplicate"
+	rsyncPage       = "rsync"
 	// The three remote-connection dialogs (see connectdialog.go,
 	// hostkeyconfirm.go, connectionmenu.go).
 	connectDialogPage  = "connect-dialog"
@@ -501,6 +502,35 @@ type Root struct {
 	duplicateContentLayout               *tview.Flex
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
+
+	// The "Rsync" dialog (see rsync.go) — source/destination and the
+	// free-text Excludes/Extra flags fields live in rsyncForm; the five
+	// boolean toggles (Copy contents/Archive/Compress/Delete/Dry run)
+	// live in rsyncFlagsList instead, the same List-with-a-relabeling-
+	// glyph shape newSedFlagsList's own doc comment explains (a
+	// tview.Form checkbox can never keep a background different from a
+	// real text field's own). rsyncPreviewView is its own always-
+	// visible sibling row below the Form, never a Form item — the same
+	// "living outside the Form rules out a whole real bug class" reason
+	// duplicatePreviewView's own doc comment gives. rsyncButtons is a
+	// real Cancel/Run button pair, the current established shape for a
+	// dialog's own action row (see duplicateButtons' own doc comment),
+	// not Sed Replace's older vertical-List actions.
+	rsyncForm             *tview.Form
+	rsyncSourceField      *tview.InputField
+	rsyncDestinationField *tview.InputField
+	rsyncExcludesField    *tview.InputField
+	rsyncExtraArgsField   *tview.InputField
+	rsyncFlagsList        *tview.List
+	rsyncFlags            map[string]bool
+	rsyncPreviewView      *tview.TextView
+	rsyncSpacer           *tview.Box
+	rsyncCancelBtn        *tview.Button
+	rsyncRunBtn           *tview.Button
+	rsyncButtons          *tview.Flex
+	rsyncTitleBar         *tview.TextView
+	rsyncContentLayout    *tview.Flex
+	rsyncLayout           *tview.Flex
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
@@ -1419,6 +1449,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The "Rsync" dialog (see rsync.go) — same "built once here,
+	// contents rebuilt fresh per open" shape as Multiply just above.
+	r.rsyncForm = r.newRsyncForm()
+	r.rsyncFlagsList = r.newRsyncFlagsList()
+	r.rsyncPreviewView = r.newRsyncPreviewView()
+	r.rsyncSpacer = tview.NewBox()
+	r.rsyncButtons = r.newRsyncButtons()
+	r.rsyncLayout = r.newRsyncLayout()
+
 	// The "Connect" dialog and its own host-key trust prompt (see
 	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
 	// once here the same way Sed Replace's own form is (see
@@ -1560,6 +1599,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.

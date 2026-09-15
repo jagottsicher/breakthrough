@@ -45,7 +45,7 @@ var helpText = strings.TrimLeft(`
                                                    +/- Select/deselect
                                                        by pattern
   B   Batch rename       E  Sed Replace           G   Go to last row
-  C   Compare
+  C   Compare            R  Rsync
   q   Quit                ? This help              :  Bash command line
 
   h/k/M target whichever of Properties/Details is relevant (Properties
@@ -463,6 +463,45 @@ var helpText = strings.TrimLeft(`
   comparison, re-scanning either way. Enter on a differing text pair
   opens the same diff view as above; "c" copies a one-sided item
   across to the other side, after asking.
+
+[::b]Rsync ("R")[::-]
+
+  Builds and runs a real rsync(1) command — the actual system binary,
+  not a reimplementation — for anything too big or too fussy to trust
+  to Copy/Paste: a huge tree, a flaky link worth resuming, a job that
+  needs --delete or an exclude list. Opens with Source pre-filled from
+  the current selection's single entry (or the panel's own directory
+  with nothing selected) and, if a split view is open, Destination
+  pre-filled from the other pane — the one case where "the other
+  side" is unambiguous. Either field also accepts a typed
+  "user@host:path" for a remote endpoint, exactly as rsync itself
+  would expect.
+
+  The toggle "Copy the folder's contents in (not the folder itself)"
+  turns rsync's own classic, easy-to-get-wrong trailing-slash-on-
+  source ambiguity into one explicit, named choice instead of a typo
+  risk. Off by default — the source folder itself lands inside the
+  destination, matching how this app's own Copy/Paste already
+  behaves; switching it on copies only what's inside the source
+  folder, into the destination directly.
+
+  Further toggles: Archive mode (-a, permissions/times/symlinks
+  preserved — on by default), Compress data in transit (-z), Delete
+  extraneous files from the destination (--delete — the one flag here
+  that can permanently remove files at the destination, so it's shown
+  in warning color the moment it's on, both in the toggle row and in
+  the live preview below), and Dry run (-n, shows what would happen
+  without changing anything). Exclude takes comma-separated patterns,
+  each becoming its own --exclude=...; Extra flags appends any further
+  raw rsync flags verbatim, for anything the toggles above don't cover.
+
+  The exact command about to run is shown live underneath, updating on
+  every keystroke and every toggle — never a guess, always the literal
+  shell-quoted command line. "Run" suspends breakthrough the same way
+  Edit or the bash command line already do and hands the real terminal
+  to rsync, so its own --info=progress2 live progress renders exactly
+  as it would from a shell; breakthrough resumes and reloads the panel
+  once it exits.
 
 [::b]Tabs[::-]
 

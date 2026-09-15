@@ -168,7 +168,7 @@ terminal.
   submenus that replace the list in place when chosen (Windows
   Explorer's own cascading-menu idea, without needing room to open
   beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
-  Batch rename, Undo last rename, Compare, Remove), "Selection" (Select
+  Batch rename, Undo last rename, Compare, Rsync, Remove), "Selection" (Select
   all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
@@ -420,6 +420,22 @@ terminal.
   switch between the quick check and a real hash, and to copy a
   one-sided item across after asking. See
   [docs/user-guide.md](docs/user-guide.md#compare) for the details.
+- Rsync (`R`, or the context menu): a real `rsync(1)` invocation, built
+  from a small dialog rather than typed by hand — Source/Destination
+  (pre-filled from the current selection or panel, and the split
+  view's own other pane where one's open), Archive/Compress/Delete/Dry
+  run as a toggle list, and — the one choice this dialog makes
+  impossible to get wrong by accident — an explicit "Copy the folder's
+  contents in (not the folder itself)" switch, instead of leaving that
+  distinction to whether a trailing "/" happened to be typed on the
+  source path the way a bare `rsync` invocation always has. A live
+  preview line shows the exact command that would run, `--delete`
+  called out in its own warning color the moment it's turned on, right
+  up until "Run" hands it to a real `rsync` process with the real
+  terminal attached — the same way the embedded bash line already runs
+  anything that benefits from one, so `--info=progress2`'s own live
+  progress line renders correctly. See
+  [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
