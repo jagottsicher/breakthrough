@@ -1,18 +1,20 @@
 package ui
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // System Info: what Details (see detailssidebar.go, showingSystemInfo)
@@ -94,9 +96,15 @@ func coloredStatLine(color tcell.Color, label, value string) string {
 func (r *Root) systemInfoText() string {
 	var groups [][]string
 
-	groups = append(groups, systemInfoIdentityLines())
-	groups = append(groups, r.systemInfoHealthLines())
-	groups = append(groups, systemInfoCountLines())
+	if remote := r.panel.remote; remote != nil {
+		groups = append(groups, remoteSystemInfoIdentityLines(remote))
+		groups = append(groups, r.remoteSystemInfoHealthLines(remote))
+		groups = append(groups, remoteSystemInfoCountLines(remote))
+	} else {
+		groups = append(groups, systemInfoIdentityLines())
+		groups = append(groups, r.systemInfoHealthLines())
+		groups = append(groups, systemInfoCountLines())
+	}
 
 	var paragraphs []string
 	for _, g := range groups {
@@ -155,7 +163,7 @@ func (r *Root) systemInfoHealthLines() []string {
 	if total, used, ok := swapUsageBytes(); ok {
 		lines = append(lines, swapLine(theme, total, used))
 	}
-	if u, ok := fsops.FetchDiskUsage("/"); ok {
+	if u, ok := diskUsageFor(r.panel); ok {
 		lines = append(lines, coloredStatLine(statusDiskColor, "Disk", usagePhrase("free", u.AvailBytes, u.UsedBytes+u.AvailBytes, theme, statusDiskColor)))
 		lines = append(lines, coloredStatLine(statusInodeColor, "Inodes", usageCountPhrase("used", u.UsedInodes, u.UsedInodes+u.AvailInodes, theme, statusInodeColor)))
 	}
@@ -187,6 +195,189 @@ func systemInfoCountLines() []string {
 	if n, ok := loggedInSessions(); ok {
 		lines = append(lines, coloredStatLine(systemInfoCountColor, "Sessions", strconv.Itoa(n)))
 	}
+	return lines
+}
+
+// remoteReadFile reads the whole of a small remote file through a
+// connected Client — every remote System Info source below is a
+// single /proc or /etc file, exactly the same kind of thing every
+// local source here already reads via os.ReadFile, just over the
+// connection instead. "" and ok=false for absence, permission, or
+// anything else, matching the "quietly one less line" convention
+// every local source here already follows for a platform that simply
+// doesn't have a given file.
+func remoteReadFile(client remotefs.Client, path string) (string, bool) {
+	f, err := client.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
+// parseProcVersionKernel extracts the kernel release token from
+// /proc/version's own "Linux version X.Y.Z-foo (builder@host) (gcc
+// ...) #1 SMP ..." line — the remote counterpart to kernelVersionText's
+// own `uname -r` (bottombar.go): there's no command-execution channel
+// to a remote host here, but the exact same information already sits
+// in this one file on every real Linux kernel, so no exec channel is
+// needed for this particular fact.
+func parseProcVersionKernel(data string) string {
+	fields := strings.Fields(data)
+	for i, f := range fields {
+		if f == "version" && i+1 < len(fields) {
+			return fields[i+1]
+		}
+	}
+	return ""
+}
+
+// remoteSystemInfoIdentityLines is systemInfoIdentityLines' own remote
+// counterpart — every fact it shows turns out to already be a plain
+// file on any real Linux host (/proc/sys/kernel/hostname, /etc/os-
+// release, /proc/version, /proc/cpuinfo), so a connected Client's own
+// Open is all this needs; no remote command-execution channel required.
+// Architecture (uname -m locally) has no equally reliable file-based
+// source and is left out here entirely, the same "one less line"
+// treatment every other genuinely unavailable local source already
+// gets.
+func remoteSystemInfoIdentityLines(client remotefs.Client) []string {
+	var lines []string
+	add := func(label, value string) {
+		if value != "" {
+			lines = append(lines, coloredStatLine(systemInfoIdentityColor, label, value))
+		}
+	}
+
+	if data, ok := remoteReadFile(client, "/proc/sys/kernel/hostname"); ok {
+		add("Host", strings.TrimSpace(data))
+	}
+	if data, ok := remoteReadFile(client, "/etc/os-release"); ok {
+		add("OS", parseOSReleasePrettyName(data))
+	}
+	if data, ok := remoteReadFile(client, "/proc/version"); ok {
+		if k := parseProcVersionKernel(data); k != "" {
+			// See systemInfoIdentityLines' own doc comment on why
+			// Kernel keeps statusKernelColor rather than this block's
+			// own identity color.
+			lines = append(lines, coloredStatLine(statusKernelColor, "Kernel", k))
+		}
+	}
+	if data, ok := remoteReadFile(client, "/proc/cpuinfo"); ok {
+		cores := countCPUInfoProcessors(data)
+		if model := parseCPUModelName(data); model != "" || cores > 0 {
+			add("CPU", formatCPUText(model, cores))
+		}
+	}
+	return lines
+}
+
+// remoteSystemInfoHealthLines is systemInfoHealthLines' own remote
+// counterpart — Uptime/Load/Memory/Swap all come from the exact same
+// /proc files their local versions already parse (see
+// parseMemInfoKB/memoryUsageBytesFrom/swapUsageBytesFrom), just read
+// over the connection; Disk/Inodes go through diskUsageFor, which
+// already dispatches to the connected Client's own DiskUsage. Open
+// files (locally /proc/sys/fs/file-nr) is included too — it's just as
+// much a plain file remotely as it is locally.
+func (r *Root) remoteSystemInfoHealthLines(client remotefs.Client) []string {
+	theme := r.theme
+	var lines []string
+
+	if data, ok := remoteReadFile(client, "/proc/uptime"); ok {
+		if fields := strings.Fields(data); len(fields) > 0 {
+			if seconds, err := strconv.ParseFloat(fields[0], 64); err == nil {
+				lines = append(lines, coloredStatLine(statusUptimeColor, "Uptime", formatUptime(time.Duration(seconds*float64(time.Second)))))
+			}
+		}
+	}
+
+	cores := 0
+	if cpuinfo, ok := remoteReadFile(client, "/proc/cpuinfo"); ok {
+		cores = countCPUInfoProcessors(cpuinfo)
+	}
+	if data, ok := remoteReadFile(client, "/proc/loadavg"); ok {
+		if fields := strings.Fields(data); len(fields) >= 3 {
+			numbers := make([]string, 3)
+			allParsed := true
+			for i := 0; i < 3; i++ {
+				v, err := strconv.ParseFloat(fields[i], 64)
+				if err != nil {
+					allParsed = false
+					break
+				}
+				numbers[i] = wrapColor(loadNumberColor(v, cores, theme), fields[i])
+			}
+			if allParsed {
+				lines = append(lines, coloredStatLine(statusLoadColor, "Load", strings.Join(numbers, " ")))
+			}
+		}
+	}
+
+	if data, ok := remoteReadFile(client, "/proc/meminfo"); ok {
+		m := parseMemInfoKB(data)
+		if total, used, ok := memoryUsageBytesFrom(m); ok {
+			lines = append(lines, coloredStatLine(systemInfoMemoryColor, "Memory", usagePhrase("used", used, total, theme, systemInfoMemoryColor)))
+		}
+		if total, used, ok := swapUsageBytesFrom(m); ok {
+			lines = append(lines, swapLine(theme, total, used))
+		}
+	}
+
+	if u, ok := diskUsageFor(r.panel); ok {
+		lines = append(lines, coloredStatLine(statusDiskColor, "Disk", usagePhrase("free", u.AvailBytes, u.UsedBytes+u.AvailBytes, theme, statusDiskColor)))
+		lines = append(lines, coloredStatLine(statusInodeColor, "Inodes", usageCountPhrase("used", u.UsedInodes, u.UsedInodes+u.AvailInodes, theme, statusInodeColor)))
+	}
+
+	if data, ok := remoteReadFile(client, "/proc/sys/fs/file-nr"); ok {
+		if allocated, max, ok := parseOpenFileHandles(data); ok {
+			lines = append(lines, openFilesLine(theme, allocated, max))
+		}
+	}
+
+	return lines
+}
+
+// remoteSystemInfoCountLines is systemInfoCountLines' own remote
+// counterpart. Sessions (locally the `who` command) is left out
+// entirely: unlike everything else in this block, it has no file-
+// based source at all — it genuinely needs a command-execution
+// channel to the remote host, which this project doesn't have (the
+// same limitation Edit/Compare/Sed Replace already refuse remotely
+// over — see remoteops.go's own package doc comment).
+func remoteSystemInfoCountLines(client remotefs.Client) []string {
+	var lines []string
+
+	if data, ok := remoteReadFile(client, "/proc/mounts"); ok {
+		lines = append(lines, coloredStatLine(systemInfoCountColor, "Mounted fs", strconv.Itoa(countNonEmptyLines(data))))
+	}
+
+	if entries, err := client.ListDir("/proc"); err == nil {
+		n := 0
+		for _, e := range entries {
+			if e.Type != fsops.TypeDir {
+				continue
+			}
+			if _, err := strconv.Atoi(e.Name); err == nil {
+				n++
+			}
+		}
+		lines = append(lines, coloredStatLine(systemInfoCountColor, "Processes", strconv.Itoa(n)))
+	}
+
+	if data, ok := remoteReadFile(client, "/proc/net/dev"); ok {
+		ifaces := parseNetworkInterfaces(data)
+		value := strconv.Itoa(len(ifaces))
+		if len(ifaces) > 0 {
+			value = fmt.Sprintf("%d (%s)", len(ifaces), strings.Join(ifaces, ", "))
+		}
+		lines = append(lines, coloredStatLine(systemInfoCountColor, "Network", value))
+	}
+
 	return lines
 }
 
@@ -270,7 +461,17 @@ func osReleaseText() string {
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	return parseOSReleasePrettyName(string(data))
+}
+
+// parseOSReleasePrettyName extracts os-release's own PRETTY_NAME field
+// — split out of osReleaseText so the identical parsing also serves a
+// remote connection's own /etc/os-release (see
+// remoteSystemInfoIdentityLines): the file itself is read differently
+// (Client.Open vs os.ReadFile), but its content means the same thing
+// either way.
+func parseOSReleasePrettyName(data string) string {
+	for _, line := range strings.Split(data, "\n") {
 		if v, ok := strings.CutPrefix(line, "PRETTY_NAME="); ok {
 			return strings.Trim(v, `"`)
 		}
@@ -284,12 +485,22 @@ func osReleaseText() string {
 // targets) — shown even without a model name, since the core count
 // alone is still useful and needs no /proc access at all.
 func cpuText() string {
-	cores := runtime.NumCPU()
+	return formatCPUText(cpuModelName(), runtime.NumCPU())
+}
+
+// formatCPUText renders a CPU model name plus its logical core count —
+// split out of cpuText so the identical formatting also serves a
+// remote host's own core count (see remoteSystemInfoIdentityLines),
+// which has to come from counting /proc/cpuinfo's own "processor"
+// lines (see countCPUInfoProcessors) rather than runtime.NumCPU(),
+// which only ever answers for the machine breakthrough itself is
+// running on.
+func formatCPUText(model string, cores int) string {
 	unit := "cores"
 	if cores == 1 {
 		unit = "core"
 	}
-	if model := cpuModelName(); model != "" {
+	if model != "" {
 		return fmt.Sprintf("%s (%d %s)", model, cores, unit)
 	}
 	return fmt.Sprintf("%d %s", cores, unit)
@@ -301,19 +512,37 @@ func cpuText() string {
 // field itself doesn't (some ARM/RISC-V listings use different field
 // names entirely — quietly omitted rather than guessed at).
 func cpuModelName() string {
-	f, err := os.Open("/proc/cpuinfo")
+	data, err := os.ReadFile("/proc/cpuinfo")
 	if err != nil {
 		return ""
 	}
-	defer func() { _ = f.Close() }()
+	return parseCPUModelName(string(data))
+}
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		if v, ok := strings.CutPrefix(scanner.Text(), "model name"); ok {
+// parseCPUModelName is cpuModelName's own parsing half, split out for
+// the same remote-reuse reason parseOSReleasePrettyName is.
+func parseCPUModelName(data string) string {
+	for _, line := range strings.Split(data, "\n") {
+		if v, ok := strings.CutPrefix(line, "model name"); ok {
 			return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(v), ":"))
 		}
 	}
 	return ""
+}
+
+// countCPUInfoProcessors counts /proc/cpuinfo's own "processor" lines
+// — one per logical core, the standard portable way to count them from
+// this file alone — the remote counterpart to runtime.NumCPU(), which
+// only ever answers for this machine, never the one on the other end
+// of a connection.
+func countCPUInfoProcessors(data string) int {
+	n := 0
+	for _, line := range strings.Split(data, "\n") {
+		if strings.HasPrefix(line, "processor") {
+			n++
+		}
+	}
+	return n
 }
 
 // memInfoKB reads /proc/meminfo into a field-name → kB map — every
@@ -325,8 +554,16 @@ func memInfoKB() (map[string]int64, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseMemInfoKB(string(data)), nil
+}
+
+// parseMemInfoKB is memInfoKB's own parsing half, split out so the
+// identical field-name → kB map also serves a remote /proc/meminfo
+// (see remoteSystemInfoHealthLines) — the same remote-reuse reason
+// parseOSReleasePrettyName/parseCPUModelName already give.
+func parseMemInfoKB(data string) map[string]int64 {
 	m := make(map[string]int64)
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(data, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
@@ -338,7 +575,7 @@ func memInfoKB() (map[string]int64, error) {
 		}
 		m[name] = value
 	}
-	return m, nil
+	return m
 }
 
 // memoryUsageBytes is RAM total/used, in bytes, from /proc/meminfo —
@@ -354,6 +591,13 @@ func memoryUsageBytes() (total, used int64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
+	return memoryUsageBytesFrom(m)
+}
+
+// memoryUsageBytesFrom is memoryUsageBytes' own computation half,
+// split out so it also serves a remote /proc/meminfo's own already-
+// parsed map (see remoteSystemInfoHealthLines).
+func memoryUsageBytesFrom(m map[string]int64) (total, used int64, ok bool) {
 	totalKB, hasTotal := m["MemTotal"]
 	if !hasTotal {
 		return 0, 0, false
@@ -379,6 +623,12 @@ func swapUsageBytes() (total, used int64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
+	return swapUsageBytesFrom(m)
+}
+
+// swapUsageBytesFrom is swapUsageBytes' own computation half, split
+// out for the identical remote-reuse reason memoryUsageBytesFrom is.
+func swapUsageBytesFrom(m map[string]int64) (total, used int64, ok bool) {
 	totalKB, hasTotal := m["SwapTotal"]
 	if !hasTotal {
 		return 0, 0, false
@@ -414,7 +664,14 @@ func openFileHandles() (allocated, max int64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	fields := strings.Fields(string(data))
+	return parseOpenFileHandles(string(data))
+}
+
+// parseOpenFileHandles is openFileHandles' own parsing half, split out
+// for the identical remote-reuse reason parseOSReleasePrettyName is
+// (see remoteSystemInfoHealthLines).
+func parseOpenFileHandles(data string) (allocated, max int64, ok bool) {
+	fields := strings.Fields(data)
 	if len(fields) < 3 {
 		return 0, 0, false
 	}
@@ -466,7 +723,14 @@ func networkInterfaces() ([]string, bool) {
 	if err != nil {
 		return nil, false
 	}
-	lines := strings.Split(string(data), "\n")
+	return parseNetworkInterfaces(string(data)), true
+}
+
+// parseNetworkInterfaces is networkInterfaces' own parsing half, split
+// out for the identical remote-reuse reason parseOSReleasePrettyName
+// is (see remoteSystemInfoCountLines).
+func parseNetworkInterfaces(data string) []string {
+	lines := strings.Split(data, "\n")
 	var ifaces []string
 	for i, line := range lines {
 		if i < 2 {
@@ -486,7 +750,7 @@ func networkInterfaces() ([]string, bool) {
 		}
 		ifaces = append(ifaces, name)
 	}
-	return ifaces, true
+	return ifaces
 }
 
 // loggedInSessions shells out to who(1) (POSIX-standard, present on

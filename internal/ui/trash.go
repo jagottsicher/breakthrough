@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/session"
 )
 
@@ -72,8 +74,29 @@ func (r *Root) moveSelectionToTrash() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
+	if remote := r.panel.remote; remote != nil {
+		// A remote session has no trash of its own to move into — no
+		// hidden per-session directory on that host, no restore
+		// mechanism to browse it back out of. Remove ("D") is the only
+		// deletion this project offers for a remote panel; redirect
+		// there instead of just refusing outright, the same redirect
+		// r.inTrash() already does just below for the local, already-
+		// in-the-trash case.
+		//
+		// Called directly here, with explainNoTrash set, rather than
+		// going through the shared openRemoveConfirm() — unlike "D",
+		// which already asks to permanently delete and needs no further
+		// explanation, "d" is the one key whose whole point elsewhere in
+		// this app is "reversible, no need to think twice"; silently
+		// switching that same key to something irreversible without
+		// saying why would be a real, easy-to-miss trap for exactly the
+		// muscle memory this project otherwise goes out of its way to
+		// support (see this method's own doc comment above).
+		targets := r.selectedOrCurrentPaths()
+		if len(targets) == 0 {
+			return
+		}
+		r.openRemoveConfirmRemote(remote, targets, true)
 		return
 	}
 	if r.inTrash() {
@@ -181,12 +204,15 @@ func (r *Root) openRemoveConfirm() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
+		return
+	}
+	if remote := r.panel.remote; remote != nil {
+		// explainNoTrash false: "D" already means "permanently delete",
+		// nothing here to explain away — unlike "d"'s own redirect (see
+		// moveSelectionToTrash), which passes true instead.
+		r.openRemoveConfirmRemote(remote, targets, false)
 		return
 	}
 	r.openPurgeConfirm(removeConfirmMessage(targets), func() {
@@ -196,6 +222,56 @@ func (r *Root) openRemoveConfirm() {
 				firstErr = err
 			} else if err == nil {
 				r.refreshDetailsIfShowing(target, "") // permanently gone — see refreshDetailsIfShowing's own doc comment
+			}
+		}
+		r.panel.deselectAll()
+		r.reloadPanel(firstErr)
+	})
+}
+
+// openRemoveConfirmRemote is openRemoveConfirm's own remote-panel half
+// — a remote session has no trash to move into (see
+// moveSelectionToTrash's own doc comment on why "d" redirects here
+// too), so Remove is the only deletion this project offers for it, and
+// it's exactly as irreversible here as it already is locally.
+//
+// explainNoTrash prepends a short "why" clause to the question — set
+// by moveSelectionToTrash's own redirect (where landing here at all is
+// the surprise worth explaining, since "d" means something reversible
+// everywhere else in this app), left off by openRemoveConfirm's own
+// remote branch (where "D" already means "permanently delete" and
+// needs no further explanation).
+//
+// The confirmation message deliberately skips removeConfirmMessage's
+// own "and N items inside it" item count for a directory: that count
+// comes from fsops.CountEntries, a local filesystem walk that has no
+// way to answer for a remote path — asking it here would either error
+// out (harmless, just a plainer message) or, worse, silently count
+// whatever happens to exist at the same path string on this machine
+// instead, a wrong number in the one place a wrong number matters most.
+func (r *Root) openRemoveConfirmRemote(remote remotefs.Client, targets []string, explainNoTrash bool) {
+	what := fmt.Sprintf("%d selected items", len(targets))
+	if len(targets) == 1 {
+		what = fmt.Sprintf("%q", path.Base(targets[0]))
+	}
+	message := fmt.Sprintf("Permanently delete %s?", what)
+	if explainNoTrash {
+		message = fmt.Sprintf("A remote connection has no trash to move %s into — permanently delete instead?", what)
+	}
+	r.openPurgeConfirm(message, func() {
+		var firstErr error
+		for _, target := range targets {
+			entry, err := remote.Lstat(target)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			if err := removeRemoteRecursive(remote, target, entry.Type == fsops.TypeDir); err != nil && firstErr == nil {
+				firstErr = err
+			} else if err == nil {
+				r.refreshDetailsIfShowing(target, "")
 			}
 		}
 		r.panel.deselectAll()

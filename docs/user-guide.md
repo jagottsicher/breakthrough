@@ -179,8 +179,11 @@ links there too, but as a plain, easy-to-miss character; Root gives
 that same destination a proper, styled button of its own.
 
 Right after Reload, one more button — `@` — sits directly before the
-path itself: muted for an ordinary local panel, green once connected
-to a remote host. Clicking it (or the `g` chord's own `gc`) opens the
+path itself: muted for an ordinary local panel, a slow green breathing
+glow — brightening and dimming on a roughly three-second cycle, never a
+flat, unmoving color — once connected to a remote host, so a live
+connection is unmistakably visible at a glance rather than just another
+static indicator. Clicking it (or the `g` chord's own `gc`) opens the
 connection dropdown — see [Remote connections
 (SFTP)](#remote-connections-sftp) below for the whole feature.
 
@@ -811,20 +814,34 @@ closes it.
 The `@` button right before the path itself (see [The path
 bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
 for browsing a directory tree on another machine over SFTP, exactly the
-way SSH itself already reaches it. Muted while a panel is local, green
-once connected.
+way SSH itself already reaches it. Muted while a panel is local; once
+connected it pulses gently toward a lighter green and back, never
+dipping darker than its resting color — a settled, alive connection,
+not a "still trying to reach it" search light.
 
-The dropdown lists, in order: **Disconnect** (only once this panel is
-actually connected to something), **New connection…**, then recent
-history — most recently used first, colored the same way the button
-itself is: green for the connection currently active in this panel,
-red for one whose last attempt failed, plain otherwise. Selecting a
-history entry reopens the Connect dialog prefilled from it and
-immediately retries — nothing about *how* it authenticated is ever
-remembered (see Authentication below), so a connection that needs a
-typed password will stop there with the dialog open, ready for it.
+The dropdown itself is a table, styled like the tab switcher: each row
+is its own set of clickable cells rather than markup-colored text
+glued into one string. It lists, in order: **+ New connection**, then
+recent history — most recently used first, colored by state: bright
+green for the connection currently active in this panel, a matte,
+dimmer green for one that has connected successfully before but isn't
+active right now, red for one that used to connect and just failed. A
+connection that has *never* once succeeded isn't added to history at
+all, even after a failed attempt — an entry that could only ever show
+up red isn't a useful "reconnect to this" shortcut, just clutter.
+Selecting a history entry (anywhere but its own trailing cells)
+reopens the Connect dialog prefilled from it and immediately retries —
+nothing about *how* it authenticated is ever remembered (see
+Authentication below), so a connection that needs a typed password
+will stop there with the dialog open, ready for it. Every history row
+ends with a small "✕" cell — click it (or press `x` or Delete while
+that row is highlighted) to drop just that one entry out of history,
+without ever connecting to it. The one row that's this panel's own
+active connection additionally carries a leading "⏏" cell — click it
+(or press `e` while that row is highlighted) to disconnect; there's no
+separate "Disconnect" row anymore.
 
-**New connection…** opens a small form: Host, Port (blank means 22),
+**+ New connection** opens a small form: Host, Port (blank means 22),
 User (blank means this machine's own local username, the same
 assumption a bare `ssh host` already makes), and Password — tried only
 as a last resort, see below. Connecting runs in the background with a
@@ -866,16 +883,81 @@ offered for.
 Once connected, the panel browses the remote filesystem exactly like a
 local one: same columns, same sorting, the Home button (`~`) goes to
 the remote account's own home directory instead of this machine's.
-Viewing a file (Look, `l`) works the same way too.
 
-Everything that changes files does not yet: Rename, Edit, chmod/chown,
-Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, and Sed Replace
-all refuse outright with a clear message on a remote panel, rather
-than risking a real filesystem call landing on the wrong machine — none
-of them currently have any way to know a path belongs to a remote
-session rather than this one. Disconnecting (from the dropdown) closes
-the session and returns the panel to browsing this machine's own home
-directory.
+Look (`l`) and Edit (`e`) both stage the file into a real local temp
+copy first (there's no other way to hand it to the built-in viewer, an
+external pager, or `$VISUAL`/`$EDITOR` — none of them have any notion
+of a remote connection) and remove that copy again once they're done
+with it. Edit specifically only uploads it back if it actually
+changed, compared by its own mtime and size, not a second full read —
+opening a file, looking at it, and closing the editor without
+touching anything never writes back to the remote copy at all. A PDF's
+own staged copy sticks around for as long as Look stays open, since
+page turns keep reading from it on demand; everything else is removed
+the moment its content is rendered.
+
+Rename (`r`), permanent delete (`d`/`D` — see below), chmod (the `p`
+chord's own `pm`, including its recursive dirs/files options), and
+Copy/Cut/Paste all work against a remote target the same way they do
+locally. `d` ("Move to Trash") redirects straight to the same
+permanent-delete confirmation `D` already uses instead: a remote
+session has no trash of its own to move into — the confirmation itself
+says so ("A remote connection has no trash to move … into — permanently
+delete instead?"), since `d` means something reversible everywhere
+else in this app and silently switching that to a permanent delete
+would otherwise be an easy trap. `D` skips that explanation: it
+already means "permanently delete" on its own. Paste dispatches by
+which side (or both) is remote: uploading, downloading, or copying/
+moving between two remote directories all work, including across two
+different connections at once; a move where both ends are the exact
+same live connection goes through a single rename on the server's own
+filesystem rather than downloading and re-uploading the whole file.
+Conflicts are handled more simply than a local Paste's own dialog: an
+existing destination is always left alone rather than offering to
+overwrite/rename/skip, and a symlink anywhere in a copied tree is
+skipped outright rather than followed or recreated on the other end
+("following symlinks" isn't offered as a Paste option at all here).
+
+Details (`i`/`I`), the status bar's own Disk/Inodes segment, and
+System Info at the remote's own "/" all describe *that* machine now,
+not this one — Details through the same Stat call every other
+per-file view already needs, Disk/Inodes through the
+`statvfs@openssh.com` SFTP extension every real OpenSSH server
+supports, and System Info by reading straight from the remote's own
+`/proc`/`/etc/os-release` over the same connection (no separate
+command-execution channel needed for any of that) — except logged-in
+sessions, which does need one and is simply left off remotely, the
+same "one less line" treatment a source this project can't reach at
+all already gets elsewhere.
+
+Opening a zip/tar/... that itself lives on a remote connection
+downloads it into a local temp copy first — there's no way around
+that: a zip's own central directory sits at the end of the file
+regardless of where it lives, so browsing one means having the whole
+thing local either way. Below **Confirm before downloading archives
+over** (Options → Remote connections, a size typed as e.g. "10MB",
+"500KB", or "1GB" — 10MB by default), that download just happens on
+its own, the same proactively-transparent way every other remote
+operation here already works; at or above it, a confirmation names the
+real size first, so a large archive over a slow link can't turn one
+Enter keypress into an unexpected, unwarned multi-minute wait.
+Everything about browsing it afterward — navigating in and out,
+Copy'ing a member to a real destination — works the same as a local
+archive, with one exception: a member marked *inside* a remote archive
+can't be Copied back out again yet (Paste explains this rather than
+failing with a raw connection error) — download the whole archive
+somewhere real first, then extract from it locally instead.
+
+Everything else that changes files does not yet: chown, Compare, Batch
+rename, Sed Replace, and Properties as a whole (its own Save button
+combines Name/Permissions with Owner/Group and Modified/hash into one
+action, and only some of those are remote-aware yet) all refuse
+outright with a clear message — chown specifically because there's no
+remote user/group database to resolve a typed name against, the rest
+because they'd need a real remote command-execution channel this
+project doesn't have. Disconnecting (the active row's own "⏏" in the
+dropdown, or `e` while it's highlighted) closes the session and
+returns the panel to browsing this machine's own home directory.
 
 ## Properties
 
@@ -1424,6 +1506,7 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count` | `1` | How many duplicates one Multiply run creates at once |
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
+| `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
 
 ## Keyboard reference
 

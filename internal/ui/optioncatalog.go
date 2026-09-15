@@ -741,6 +741,33 @@ func optionCategories() []optionCategory {
 				),
 			},
 		},
+		{
+			name: "Remote connections",
+			options: []optionSpec{
+				stringOption("remote_archive_confirm_size", "Confirm before downloading archives over",
+					"Opening a zip/tar/... that lives on a remote SFTP connection has to download "+
+						"it whole first — there's no way to browse one without the whole thing "+
+						"local, the same as a zip's own central directory always sitting at the "+
+						"end of the file regardless of where it lives.\n\n"+
+						"Below this size, that download just happens on its own, the same "+
+						"proactively-transparent way every other remote operation already works. "+
+						"At or above it, a confirmation names the real size first, so a large "+
+						"archive over a slow link can't turn one keypress into an unexpected, "+
+						"unwarned multi-minute wait.\n\n"+
+						`Type a size with a unit — "10MB", "500KB", "1GB" — or a bare number of `+
+						"bytes. 10MB by default.",
+					func(r *Root) string { return config.FormatByteSize(r.settings.RemoteArchiveConfirmSize) },
+					func(r *Root, v string) {
+						n, err := config.ParseByteSize(v)
+						if err != nil {
+							return // see boolOption's own equivalent guard: ignore, don't guess
+						}
+						r.settings.RemoteArchiveConfirmSize = n
+						r.persistSetting("remote_archive_confirm_size", config.FormatByteSize(n))
+					},
+				),
+			},
+		},
 	}
 }
 
@@ -855,6 +882,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.CopyStableSymlinks), true
 	case "move_stable_symlinks":
 		return strconv.FormatBool(s.MoveStableSymlinks), true
+	case "remote_archive_confirm_size":
+		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
 	}
 	return "", false
 }

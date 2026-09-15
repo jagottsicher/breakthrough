@@ -18,6 +18,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -344,21 +345,25 @@ type Root struct {
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
 
-	// connectForm/connectActions/connectLayout make up the "Connect"
+	// connectForm/connectButtons/connectLayout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
 	// User/Password), so it's built once here rather than rebuilt fresh
 	// per open the way Sed Replace's own variable field set is (see
 	// newSedForm's own doc comment on that distinction). connectStatus
 	// is the one-line area below the form showing either an in-progress
 	// "Connecting…" animation or the last attempt's own error, in
-	// place, without closing the dialog.
+	// place, without closing the dialog. connectCancelBtn/
+	// connectConnectBtn are a real button pair (see newConnectButtons'
+	// own doc comment for why, not a List).
 	connectForm          *tview.Form
 	connectHostField     *tview.InputField
 	connectPortField     *tview.InputField
 	connectUserField     *tview.InputField
 	connectPasswordField *tview.InputField
 	connectStatus        *tview.TextView
-	connectActions       *tview.List
+	connectCancelBtn     *tview.Button
+	connectConnectBtn    *tview.Button
+	connectButtons       *tview.Flex
 	connectTitleBar      *tview.TextView
 	connectLayout        *tview.Flex
 	connectCancel        context.CancelFunc
@@ -376,14 +381,41 @@ type Root struct {
 	hostKeyConfirmLayout   *tview.Flex
 	hostKeyConfirmResponse chan bool
 
-	// connectionMenuList/Layout is the dropdown the header's own "@"
-	// button (or the "gc" chord) opens — see connectionmenu.go.
-	// Rebuilt fresh on every open (see renderConnectionMenu), the same
-	// "which panel is active, and what history says, can both have
-	// changed since last time" reasoning renderFilterMenu's own doc
-	// comment already gives for its dropdown.
-	connectionMenuList   *tview.List
-	connectionMenuLayout *tview.Flex
+	// connectionMenuTable/TitleBar/Layout is the dropdown the header's
+	// own "@" button (or the "gc" chord) opens — see connectionmenu.go.
+	// A Table, styled and shaped after the tab switcher (see
+	// tabswitcher.go's own doc comment): a title bar above it, one
+	// column for the label and one real, independently selectable and
+	// clickable cell per row for each of its own small actions (eject,
+	// remove), rather than markup-colored text and manual mouse-column
+	// math baked into a plain List — the same per-cell-not-per-string
+	// shape the user's own explicit request to match the tabs list's
+	// look asked for. Rebuilt fresh on every open (see
+	// renderConnectionMenu), the same "which panel is active, and what
+	// history says, can both have changed since last time" reasoning
+	// renderFilterMenu's own doc comment already gives for its dropdown.
+	connectionMenuTable    *tview.Table
+	connectionMenuTitleBar *tview.TextView
+	connectionMenuLayout   *tview.Flex
+
+	// connectionMenuHistoryRows maps a row index in connectionMenuTable
+	// to the Connection that row represents — populated fresh by
+	// renderConnectionMenu on every open, read by
+	// activateConnectionMenuCell/removeConnectionHistoryRow to know
+	// which entry a given row actually is. Never populated for "New
+	// connection…", which isn't a history row at all.
+	connectionMenuHistoryRows map[int]remotefs.Connection
+
+	// connectionMenuActiveRow is the row within connectionMenuTable
+	// (history rows only — see connectionMenuHistoryRows) that
+	// represents the active panel's own current connection, or -1 if
+	// the panel isn't connected at all — populated fresh by
+	// renderConnectionMenu alongside connectionMenuHistoryRows. There
+	// used to be a whole separate "Disconnect (...)" list item for
+	// this instead of a per-row glyph; the user asked for the glyph
+	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
+	// already established rather than a dedicated row of its own.
+	connectionMenuActiveRow int
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -713,6 +745,21 @@ type Root struct {
 	viewerPDFPageCount int
 	viewerPDFMode      viewer.PDFViewMode
 
+	// viewerRemoteTempFile is the local temp file Look downloaded a
+	// remote PDF into (see downloadRemoteToTemp/openRemoteLook in
+	// remotestage.go), kept around only for as long as that PDF's own
+	// page turns (turnPDFPage) still need to read from it — "" whenever
+	// Look isn't currently showing a remote-staged PDF. A plain remote
+	// text/image Look never sets this at all: its whole content is
+	// already read into r.viewerView by the time showBuiltinLook
+	// returns, so its own temp file is removed immediately afterward
+	// instead of kept around for nothing (see openRemoteLook's own doc
+	// comment). Cleaned up via cleanupViewerRemoteTempFile, called both
+	// from hideOverlay (the viewer overlay actually closing) and from
+	// showBuiltinLook's own top-of-function reset (a new Look opened
+	// without closing the previous remote PDF's overlay first).
+	viewerRemoteTempFile string
+
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
 	// and, later, the planned Copy-to/Move-to target navigation.
@@ -1025,6 +1072,16 @@ type Root struct {
 	// when true.
 	clipboard    []string
 	clipboardCut bool
+
+	// clipboardSourceClient is nil for an ordinary local Copy/Cut, or
+	// the remote Client clipboard's own paths belong to otherwise — set
+	// alongside clipboard itself (see copyToClipboard/cutToClipboard),
+	// since every path on the clipboard always comes from the one
+	// panel that was active at that moment, never a mix of two. Read by
+	// pasteInto to decide whether a plain local paste (unchanged from
+	// before remote connections existed at all) or remotepaste.go's own
+	// transfer engine applies.
+	clipboardSourceClient remotefs.Client
 
 	// clipboardDirs/clipboardFiles tally how many of clipboard's own
 	// paths are directories vs plain files (see clipboardCounts) — for
@@ -1367,7 +1424,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// once here the same way Sed Replace's own form is (see
 	// newConnectForm's own doc comment).
 	r.connectForm = r.newConnectForm()
-	r.connectActions = r.newConnectActions()
+	r.connectButtons = r.newConnectButtons()
 	r.connectLayout = r.newConnectLayout()
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
@@ -1375,7 +1432,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
-	r.connectionMenuList = r.newConnectionMenuList()
+	r.connectionMenuTable = r.newConnectionMenuTable()
+	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
 	// The Batch Rename screen (see batchrename.go) — built once here,
@@ -1609,6 +1667,13 @@ func (r *Root) wirePanel(panel *Panel) {
 	// they already navigate into a directory (see Panel.onOpenFile's
 	// own doc comment) — per the user's own explicit request.
 	panel.onOpenFile = r.openLook
+
+	// Entering a remote archive (see Panel.onEnterRemoteArchive's own
+	// doc comment) needs a real download first — genuinely async, with
+	// a possible confirm dialog in between — which is why this can't
+	// just be another branch inside Panel.navigate/load the way a
+	// local archive's own near-instant entry already is.
+	panel.onEnterRemoteArchive = r.enterRemoteArchive
 
 	// The header row's own "<" button expands the Details sidebar (see
 	// Panel.onExpandDetails/detailsExpandBtn's own doc comments) —
@@ -1865,6 +1930,14 @@ func (r *Root) hideOverlay() {
 	r.HidePage(top.page)
 	if top.page == contextMenuPage {
 		r.refreshButtonBar()
+	}
+	if top.page == viewerPage {
+		// A remote PDF's own staged temp file (see openRemoteLook) has
+		// to outlive every page turn while Look stays open — this is
+		// the one point every way of actually closing it (Escape,
+		// Enter/Tab/Backtab, a click outside, Ctrl+C) funnels through,
+		// so it's also the one point cleanup can't be missed from.
+		r.cleanupViewerRemoteTempFile()
 	}
 
 	if len(r.overlayStack) == 0 {
@@ -2746,7 +2819,13 @@ func (r *Root) finishRename(key tcell.Key) {
 		return
 	}
 
-	newPath, err := fsops.Rename(r.target, newName)
+	var newPath string
+	var err error
+	if remote := r.panel.remote; remote != nil {
+		newPath, err = renameRemote(remote, r.target, newName)
+	} else {
+		newPath, err = fsops.Rename(r.target, newName)
+	}
 	if err != nil {
 		r.showError(err)
 		return
@@ -2853,43 +2932,43 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
 //
-// Refused outright for a remote panel — unlike archive browsing (see
-// errNotSupportedInArchive), which still allows copying *out* of an
-// archive, the clipboard has no way to record which filesystem a path
-// belongs to (see Panel.isRemote's own doc comment), so a remote path
-// must never enter it at all, not even to be blocked later at Paste.
+// clipboardSourceClient records which filesystem those targets belong
+// to (nil for local) — every path on the clipboard always comes from
+// whichever one panel was active just now, never a mix of two, so a
+// single field alongside the paths themselves is enough for pasteInto
+// to later dispatch correctly regardless of which side, if either, of
+// the eventual Paste is remote.
 func (r *Root) copyToClipboard() {
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
-// the targets (removing them from here) instead of copying them. See
-// copyToClipboard's own doc comment for why a remote panel refuses this
-// the same way.
+// the targets (removing them from here) instead of copying them.
 func (r *Root) cutToClipboard() {
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), true)
 }
 
 // setClipboard is copyToClipboard/cutToClipboard's own shared body,
 // also used by finishPasteJob (pasteconflict.go) to clear the
-// clipboard once a clean Cut+Paste has fully landed — every place
-// clipboard/clipboardCut actually change goes through here, so the
-// dependent state (clipboardDirs/clipboardFiles, every open tab's own
-// row highlighting, the status bar's own indicator) can never drift
-// out of sync with them by only being updated from some of the call
-// sites.
+// clipboard once a clean Cut+Paste has fully landed (clearing also
+// resets clipboardSourceClient back to nil there, via the same call —
+// see its own call site) — every place clipboard/clipboardCut actually
+// change goes through here, so the dependent state
+// (clipboardDirs/clipboardFiles, every open tab's own row highlighting,
+// the status bar's own indicator) can never drift out of sync with
+// them by only being updated from some of the call sites.
 func (r *Root) setClipboard(paths []string, cut bool) {
+	if len(paths) == 0 {
+		// Clearing (finishPasteJob's own call): nothing left on the
+		// clipboard means no source for it either, regardless of
+		// whatever copyToClipboard/cutToClipboard last set it to.
+		r.clipboardSourceClient = nil
+	}
 	r.clipboard = paths
 	r.clipboardCut = cut
-	r.clipboardDirs, r.clipboardFiles = clipboardCounts(paths)
+	r.clipboardDirs, r.clipboardFiles = clipboardCounts(r.clipboardSourceClient, paths)
 	r.syncClipboardHighlight()
 	r.refreshStatusBar()
 }
@@ -2918,13 +2997,23 @@ func (r *Root) syncClipboardHighlight() {
 // place this app's own "no silent errors" guardrail needs to reach —
 // the paste itself, when it actually runs, is where a genuinely
 // missing source file gets reported (see pasteconflict.go).
-func clipboardCounts(paths []string) (dirs, files int) {
+func clipboardCounts(client remotefs.Client, paths []string) (dirs, files int) {
 	for _, path := range paths {
-		info, err := fsops.Stat(path)
-		if err != nil {
-			continue
+		var isDir bool
+		if client != nil {
+			entry, err := client.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = entry.IsDir
+		} else {
+			info, err := fsops.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = isDirish(info)
 		}
-		if isDirish(info) {
+		if isDir {
 			dirs++
 		} else {
 			files++
@@ -3067,13 +3156,27 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // conflict-resolving shape); a no-op if nothing was ever copied/cut,
 // same as before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
-	if r.panel.isRemote() {
-		// copyToClipboard/cutToClipboard already refuse a remote
-		// *source* outright (see their own doc comments) — this is the
-		// other half: a remote *destination*, which needs its own guard
-		// here regardless, since the clipboard's own contents in that
-		// case are still perfectly ordinary local paths.
-		r.showError(errNotSupportedRemote)
+	if r.clipboardSourceClient != nil || r.panel.remote != nil {
+		// remotepaste.go's own engine, once either side of the paste is
+		// remote — never mixed with the archive-extraction or local
+		// startPaste paths below, both of which assume a real local
+		// path throughout.
+		if r.remoteArchiveMemberOrigin(r.clipboard) {
+			// A marked member inside a remote-staged archive still on
+			// screen somewhere (see remoteArchiveMemberOrigin's own doc
+			// comment) — its clipboard path is a purely virtual
+			// "archive/member" string our own UI constructs, not a real
+			// path remote.Open could ever resolve, so startRemotePaste
+			// below would otherwise fail with a confusing raw SFTP
+			// "no such file" instead of a real explanation.
+			r.showError(fmt.Errorf("copying a member out of a remote archive isn't supported yet — download the whole archive elsewhere first, then extract it locally"))
+			return
+		}
+		if followSymlinks {
+			r.showError(fmt.Errorf("pasting while following symlinks isn't supported yet for a remote connection — use plain Paste instead"))
+			return
+		}
+		r.startRemotePaste(r.clipboard, r.clipboardSourceClient, r.clipboardCut, r.panel.remote, dir)
 		return
 	}
 	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {
