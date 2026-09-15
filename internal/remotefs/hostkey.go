@@ -20,7 +20,15 @@ import (
 // connection. Never called for a host whose key *changed* — see
 // hostKeyCallback's own doc comment for why that case is always
 // rejected outright, with no prompt and no bypass.
-type HostKeyPrompt func(hostname string, key ssh.PublicKey) (accept bool, err error)
+//
+// keyType/fingerprint (ssh.PublicKey's own Type() and
+// ssh.FingerprintSHA256(key), computed once here) are passed as plain
+// strings rather than the ssh.PublicKey itself, deliberately: a UI
+// layer implementing this only ever needs to display them, and
+// keeping the ssh package's own types out of that signature means
+// nothing above internal/remotefs needs to import it just to show a
+// confirmation dialog.
+type HostKeyPrompt func(hostname, keyType, fingerprint string) (accept bool, err error)
 
 // DefaultKnownHostsFile is where Dial reads/appends trusted host keys
 // unless told otherwise — the exact same file and line format
@@ -70,7 +78,7 @@ func hostKeyCallback(path string, prompt HostKeyPrompt) (ssh.HostKeyCallback, er
 		if prompt == nil {
 			return verifyErr
 		}
-		accept, promptErr := prompt(hostname, key)
+		accept, promptErr := prompt(hostname, key.Type(), ssh.FingerprintSHA256(key))
 		if promptErr != nil {
 			return promptErr
 		}

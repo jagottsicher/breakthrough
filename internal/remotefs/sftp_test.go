@@ -25,7 +25,7 @@ import (
 // there is no real host identity worth verifying here; a real Dial
 // call from the UI layer always goes through the TOFU-and-persist
 // hostkey.go path instead (see hostkey_test.go for that).
-func noPromptHostKeyCallback(string, ssh.PublicKey) (bool, error) { return true, nil }
+func noPromptHostKeyCallback(string, string, string) (bool, error) { return true, nil }
 
 // passwordServerConfig builds a *ssh.ServerConfig that accepts exactly
 // one user/password pair — the simplest auth a test server can offer,

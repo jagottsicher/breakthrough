@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // testRemoteAddr stands in for the real net.Addr a live TCP connection
@@ -35,7 +33,7 @@ func TestHostKeyCallbackAcceptsAnUnknownHostViaPromptAndPersistsIt(t *testing.T)
 	_, pub := newTestKeyPair(t)
 
 	promptCalls := 0
-	prompt := func(hostname string, key ssh.PublicKey) (bool, error) {
+	prompt := func(hostname, keyType, fingerprint string) (bool, error) {
 		promptCalls++
 		return true, nil
 	}
@@ -56,7 +54,7 @@ func TestHostKeyCallbackAcceptsAnUnknownHostViaPromptAndPersistsIt(t *testing.T)
 	// accepted key was actually persisted, not just accepted in
 	// memory for this one call.
 	secondPromptCalls := 0
-	cb2, err := hostKeyCallback(path, func(string, ssh.PublicKey) (bool, error) {
+	cb2, err := hostKeyCallback(path, func(string, string, string) (bool, error) {
 		secondPromptCalls++
 		return true, nil
 	})
@@ -75,7 +73,7 @@ func TestHostKeyCallbackDeclinesAnUnknownHostViaPrompt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "known_hosts")
 	_, pub := newTestKeyPair(t)
 
-	cb, err := hostKeyCallback(path, func(string, ssh.PublicKey) (bool, error) {
+	cb, err := hostKeyCallback(path, func(string, string, string) (bool, error) {
 		return false, nil
 	})
 	if err != nil {
@@ -99,7 +97,7 @@ func TestHostKeyCallbackPropagatesAPromptError(t *testing.T) {
 	_, pub := newTestKeyPair(t)
 	wantErr := errors.New("boom")
 
-	cb, err := hostKeyCallback(path, func(string, ssh.PublicKey) (bool, error) {
+	cb, err := hostKeyCallback(path, func(string, string, string) (bool, error) {
 		return false, wantErr
 	})
 	if err != nil {
@@ -115,7 +113,7 @@ func TestHostKeyCallbackRejectsAChangedKeyWithoutEverPrompting(t *testing.T) {
 	_, firstKey := newTestKeyPair(t)
 	_, secondKey := newTestKeyPair(t)
 
-	cb, err := hostKeyCallback(path, func(string, ssh.PublicKey) (bool, error) { return true, nil })
+	cb, err := hostKeyCallback(path, func(string, string, string) (bool, error) { return true, nil })
 	if err != nil {
 		t.Fatalf("hostKeyCallback: %v", err)
 	}
@@ -124,7 +122,7 @@ func TestHostKeyCallbackRejectsAChangedKeyWithoutEverPrompting(t *testing.T) {
 	}
 
 	promptCalls := 0
-	cb2, err := hostKeyCallback(path, func(string, ssh.PublicKey) (bool, error) {
+	cb2, err := hostKeyCallback(path, func(string, string, string) (bool, error) {
 		promptCalls++
 		return true, nil // would wrongly accept the MITM key if this ever ran
 	})
