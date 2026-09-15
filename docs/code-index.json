@@ -78,8 +78,8 @@
     },
     {
       "path": "README.md",
-      "size": 44756,
-      "sha256": "b7b9552ad54c70426704dbf3633f018d4739f08316246f5031fc1dbb9507dbbd"
+      "size": 45223,
+      "sha256": "07cebe5c71b8b0372a11584062d02159a666cacd36087c4843a0af24caad436f"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -143,8 +143,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 71103,
-      "sha256": "5ef8f35e0cb078c7b326c028e59f73d5f722efbd7a9ae92c3e57baf6e1ec41fb"
+      "size": 73975,
+      "sha256": "63b258c562ab767e5713c4e240f759eb194828b73cf2742b0a566e88a137fcd9"
     },
     {
       "path": "docs/whitepaper.md",
@@ -328,8 +328,8 @@
     },
     {
       "path": "internal/config/schema.go",
-      "size": 13316,
-      "sha256": "255bef0afe7bd30e1ce5da30b3d3d40728d778e8faae6c280366ca86958d5b1c"
+      "size": 15021,
+      "sha256": "121a4415b552f194597e7bf65884b5eef8704e845fb3e715b359488d2050d113"
     },
     {
       "path": "internal/config/schema_test.go",
@@ -338,8 +338,8 @@
     },
     {
       "path": "internal/config/settings.go",
-      "size": 26398,
-      "sha256": "5f4068150bb6852d2612ff1a632e165a34d0a6a3769600f4bd7b6a7a3461c590"
+      "size": 27332,
+      "sha256": "d40daaf58ed5e86a304617d2cfd3aa739a4efbb233e7b236d5c9743aabd04315"
     },
     {
       "path": "internal/config/settings_test.go",
@@ -773,13 +773,13 @@
     },
     {
       "path": "internal/ui/bottombar.go",
-      "size": 44975,
-      "sha256": "fa627c0409cf4d0f298e71b147747c68131dde80a3444828264d7b26013dace0"
+      "size": 50874,
+      "sha256": "b8dde6c4dde20cf7fdeb8cee1c0e14c82cde755c9fb1dcda8cc4685429286847"
     },
     {
       "path": "internal/ui/bottombar_test.go",
-      "size": 56896,
-      "sha256": "4c70102e8cfcfca29a0f3009b89d69595d7b1d63a89c5a341a708be54916f5e4"
+      "size": 61302,
+      "sha256": "0661cc3a7e461e214444416288342ca50e0cac7dc980b3ca77026d78a79dd083"
     },
     {
       "path": "internal/ui/chmoddialog.go",
@@ -903,8 +903,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 42762,
-      "sha256": "cedad86424d36fc57e0c38bcbcade5811895abfc009b0b4632b6ca21913fc1f4"
+      "size": 43830,
+      "sha256": "9872d44cf0cd6995ccd082860dfecbfb800ac549b0e338967bd72c68119bfdf2"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -943,8 +943,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 36129,
-      "sha256": "532443d9ed27a37b6e30528f644f73cb1b2248526112f5b12d01731cf8cd6572"
+      "size": 40456,
+      "sha256": "103e449d93396015232c8087637c9a331d89e114930f868cc3fb50753c1e3a65"
     },
     {
       "path": "internal/ui/options.go",
@@ -3931,21 +3931,21 @@
       "file": "internal/config/schema.go",
       "name": "FindSettingDoc",
       "kind": "function",
-      "line": 299
+      "line": 348
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/schema.go",
       "name": "defaultFileHeader",
       "kind": "const",
-      "line": 320
+      "line": 369
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/schema.go",
       "name": "DefaultFileTemplate",
       "kind": "function",
-      "line": 348
+      "line": 397
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -4015,7 +4015,7 @@
       "file": "internal/config/settings.go",
       "name": "DefaultSettings",
       "kind": "function",
-      "line": 291
+      "line": 299
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -4023,56 +4023,56 @@
       "name": "apply",
       "kind": "method",
       "receiver": "*Settings",
-      "line": 335
+      "line": 351
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "Load",
       "kind": "function",
-      "line": 435
+      "line": 465
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "sortedKeys",
       "kind": "function",
-      "line": 443
+      "line": 473
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "SetKey",
       "kind": "function",
-      "line": 460
+      "line": 490
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "UnsetKey",
       "kind": "function",
-      "line": 508
+      "line": 538
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "EnsureUserFile",
       "kind": "function",
-      "line": 542
+      "line": 572
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "readConfigLines",
       "kind": "function",
-      "line": 557
+      "line": 587
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "writeConfigLines",
       "kind": "function",
-      "line": 579
+      "line": 609
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -9591,7 +9591,7 @@
       "file": "internal/ui/bottombar.go",
       "name": "buttonBarSpan",
       "kind": "type",
-      "line": 35
+      "line": 36
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9599,14 +9599,28 @@
       "name": "newBottomBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 57
+      "line": 58
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "currentUsername",
       "kind": "function",
-      "line": 80
+      "line": 81
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "isRoot",
+      "kind": "var",
+      "line": 96
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "usernameText",
+      "kind": "function",
+      "line": 105
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9614,7 +9628,7 @@
       "name": "refreshStatusBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 93
+      "line": 119
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9622,7 +9636,7 @@
       "name": "refreshButtonBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 103
+      "line": 129
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9630,21 +9644,21 @@
       "name": "buildButtonBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 125
+      "line": 151
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "buttonSpec",
       "kind": "type",
-      "line": 126
+      "line": 152
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "hideUnhideLabel",
       "kind": "function",
-      "line": 229
+      "line": 255
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9652,161 +9666,210 @@
       "name": "buildStatusBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 245
+      "line": 271
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "clipboardIndicatorText",
       "kind": "function",
-      "line": 333
+      "line": 380
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pluralCount",
       "kind": "function",
-      "line": 355
+      "line": 402
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteProgressBarWidth",
       "kind": "const",
-      "line": 367
+      "line": 414
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteDualBarLit",
       "kind": "const",
-      "line": 377
+      "line": 424
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteDualBarDim",
       "kind": "const",
-      "line": 378
+      "line": 425
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteDualBar",
       "kind": "function",
-      "line": 395
+      "line": 442
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "clampFrac",
       "kind": "function",
-      "line": 419
+      "line": 466
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteBytesColumn",
       "kind": "function",
-      "line": 441
+      "line": 488
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteETA",
       "kind": "function",
-      "line": 458
+      "line": 505
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "formatETA",
       "kind": "function",
-      "line": 472
+      "line": 519
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "pasteProgressText",
       "kind": "function",
-      "line": 520
+      "line": 567
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "mouseStatusText",
       "kind": "function",
-      "line": 581
+      "line": 628
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "kernelVersionText",
       "kind": "function",
-      "line": 594
+      "line": 641
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "uptimeText",
       "kind": "function",
-      "line": 612
+      "line": 659
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "formatUptime",
       "kind": "function",
-      "line": 632
+      "line": 679
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "loadAverageText",
       "kind": "function",
-      "line": 643
+      "line": 699
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
-      "name": "diskUsageWarnColor",
+      "name": "loadNumberColor",
       "kind": "function",
-      "line": 665
+      "line": 727
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
-      "name": "formatUsagePercent",
+      "name": "statusDiskColor",
+      "kind": "var",
+      "line": 754
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "statusInodeColor",
+      "kind": "var",
+      "line": 755
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "statusKernelColor",
+      "kind": "var",
+      "line": 756
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "statusUptimeColor",
+      "kind": "var",
+      "line": 757
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "statusLoadColor",
+      "kind": "var",
+      "line": 758
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "wrapColor",
       "kind": "function",
-      "line": 683
+      "line": 770
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "coloredPercentIn",
+      "kind": "function",
+      "line": 781
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar.go",
+      "name": "percentStatusColor",
+      "kind": "function",
+      "line": 796
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "diskUsageText",
       "kind": "function",
-      "line": 698
+      "line": 819
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "inodeUsageText",
       "kind": "function",
-      "line": 702
+      "line": 825
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "humanCount",
       "kind": "function",
-      "line": 711
+      "line": 836
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "clockText",
       "kind": "function",
-      "line": 727
+      "line": 852
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9814,7 +9877,7 @@
       "name": "buttonBarActionAt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 738
+      "line": 863
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9822,7 +9885,7 @@
       "name": "captureButtonBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 771
+      "line": 896
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9830,7 +9893,7 @@
       "name": "editCurrentEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 799
+      "line": 924
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9838,7 +9901,7 @@
       "name": "renameCurrentEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 815
+      "line": 940
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9846,7 +9909,7 @@
       "name": "renameRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 836
+      "line": 961
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9854,7 +9917,7 @@
       "name": "acceptsGlobalShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 874
+      "line": 999
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9862,7 +9925,7 @@
       "name": "AcceptsGlobalShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 893
+      "line": 1018
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9870,7 +9933,7 @@
       "name": "BashLineHasFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 908
+      "line": 1033
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9878,7 +9941,7 @@
       "name": "EditShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 923
+      "line": 1048
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9886,7 +9949,7 @@
       "name": "RenameShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 929
+      "line": 1054
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9894,7 +9957,7 @@
       "name": "ToggleHiddenShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 935
+      "line": 1060
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9902,7 +9965,7 @@
       "name": "OptionsShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 941
+      "line": 1066
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9910,21 +9973,21 @@
       "name": "SearchShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 947
+      "line": 1072
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "editorCommand",
       "kind": "function",
-      "line": 964
+      "line": 1089
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar.go",
       "name": "selectedEditor",
       "kind": "function",
-      "line": 992
+      "line": 1117
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9932,7 +9995,7 @@
       "name": "runEditor",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1044
+      "line": 1169
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -9940,483 +10003,504 @@
       "name": "StartClock",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1080
+      "line": 1205
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestMain",
       "kind": "function",
-      "line": 55
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "isolateUserConfigFile",
       "kind": "function",
-      "line": 78
+      "line": 79
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestEditorCommandPrecedence",
       "kind": "function",
-      "line": 92
+      "line": 93
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestEditorCommandPrefersSelectedEditorOverFallback",
       "kind": "function",
-      "line": 115
+      "line": 116
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestSelectedEditorParsesRealFileFormat",
       "kind": "function",
-      "line": 135
+      "line": 136
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestSelectedEditorMissingFileIsEmpty",
       "kind": "function",
-      "line": 145
+      "line": 146
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "writeSelectedEditor",
       "kind": "function",
-      "line": 155
+      "line": 156
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestUserShellFallback",
       "kind": "function",
-      "line": 163
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestCurrentUsername",
       "kind": "function",
-      "line": 175
+      "line": 176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestClockTextFormat",
       "kind": "function",
-      "line": 187
+      "line": 188
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
-      "name": "TestDiskUsageWarnColor",
+      "name": "TestPercentStatusColor",
       "kind": "function",
-      "line": 201
+      "line": 202
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
-      "name": "TestFormatUsagePercentColorsAboveThresholds",
+      "name": "TestColoredPercentInSwitchesBackToBaseNotTheWidgetDefault",
       "kind": "function",
-      "line": 221
+      "line": 222
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
-      "name": "TestHumanCount",
+      "name": "TestUsernameTextColorsGreenNormallyRedAsRoot",
       "kind": "function",
-      "line": 232
+      "line": 234
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
-      "name": "TestDiskUsageTextAndInodeUsageTextAreLabeled",
+      "name": "TestLoadNumberColorScalesByCoreCount",
       "kind": "function",
       "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
+      "name": "TestHumanCount",
+      "kind": "function",
+      "line": 269
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar_test.go",
+      "name": "TestDiskUsageTextIsFreeOverTotalInodeUsageTextIsUsedOverTotal",
+      "kind": "function",
+      "line": 292
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar_test.go",
       "name": "TestKernelVersionTextMatchesUnameR",
       "kind": "function",
-      "line": 261
+      "line": 313
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestUptimeAndLoadAverageTextOnLinux",
       "kind": "function",
-      "line": 276
+      "line": 328
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestFormatUptime",
       "kind": "function",
-      "line": 288
+      "line": 345
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "requireCommand",
       "kind": "function",
-      "line": 305
+      "line": 362
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "renderedTextAt",
       "kind": "function",
-      "line": 321
+      "line": 378
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBuildButtonBarSpansLocateButtons",
       "kind": "function",
-      "line": 348
+      "line": 405
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBuildButtonBarShowsChordCascades",
       "kind": "function",
-      "line": 401
+      "line": 458
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "buttonLabelFor",
       "kind": "function",
-      "line": 435
+      "line": 492
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestButtonBarHideUnhideLabelTracksShowHidden",
       "kind": "function",
-      "line": 450
+      "line": 507
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestButtonBarStaysTheSameInsideTrash",
       "kind": "function",
-      "line": 477
+      "line": 534
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBuildStatusBarContainsUserNoButtons",
       "kind": "function",
-      "line": 502
+      "line": 559
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/bottombar_test.go",
+      "name": "TestBuildStatusBarEachSegmentToggleHidesOnlyThatSegment",
+      "kind": "function",
+      "line": 582
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestClampFrac",
       "kind": "function",
-      "line": 524
+      "line": 636
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteDualBar",
       "kind": "function",
-      "line": 545
+      "line": 657
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteBytesColumn",
       "kind": "function",
-      "line": 577
+      "line": 689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteETA",
       "kind": "function",
-      "line": 589
+      "line": 701
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestFormatETA",
       "kind": "function",
-      "line": 612
+      "line": 724
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteProgressText",
       "kind": "function",
-      "line": 635
+      "line": 747
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteProgressTextOmitsByteBasedPartsUntilTheScanFinishes",
       "kind": "function",
-      "line": 666
+      "line": 778
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteProgressTextShowsByteProgressOnceScanned",
       "kind": "function",
-      "line": 683
+      "line": 795
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero",
       "kind": "function",
-      "line": 707
+      "line": 819
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestClipboardIndicatorText",
       "kind": "function",
-      "line": 724
+      "line": 836
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser",
       "kind": "function",
-      "line": 752
+      "line": 864
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBuildStatusBarPrefersPasteProgressOverClipboardIndicator",
       "kind": "function",
-      "line": 784
+      "line": 896
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "clickButtonBar",
       "kind": "function",
-      "line": 807
+      "line": 919
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPlainKeyEditRunsEditAction",
       "kind": "function",
-      "line": 834
+      "line": 946
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestCaptureButtonBarMouseTrashClickMovesFileToTrash",
       "kind": "function",
-      "line": 861
+      "line": 973
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestRunEditorSkipsReloadWhileSearchResultsShowing",
       "kind": "function",
-      "line": 905
+      "line": 1017
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestCaptureButtonBarMouseMenuClickOpensTheContextMenu",
       "kind": "function",
-      "line": 934
+      "line": 1046
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestCaptureButtonBarMouseHiddenClickTogglesShowHidden",
       "kind": "function",
-      "line": 961
+      "line": 1073
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "buttonBarSpanFor",
       "kind": "function",
-      "line": 982
+      "line": 1094
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestAcceptsGlobalShortcutGuards",
       "kind": "function",
-      "line": 995
+      "line": 1107
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestToggleHiddenShortcutRespectsGuard",
       "kind": "function",
-      "line": 1022
+      "line": 1134
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestRenameShortcutTargetsCurrentRow",
       "kind": "function",
-      "line": 1046
+      "line": 1158
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPropertiesShortcutTargetsCurrentRow",
       "kind": "function",
-      "line": 1075
+      "line": 1187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPropertiesShortcutRespectsGuard",
       "kind": "function",
-      "line": 1102
+      "line": 1214
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPanelOnLoadRefreshesStatusBar",
       "kind": "function",
-      "line": 1120
+      "line": 1232
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "isolateHistoryFile",
       "kind": "function",
-      "line": 1148
+      "line": 1260
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBashLineRunsThroughRunBashCommand",
       "kind": "function",
-      "line": 1153
+      "line": 1265
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestRunBashCommandEmptyIsNoop",
       "kind": "function",
-      "line": 1176
+      "line": 1288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestParseCdCommand",
       "kind": "function",
-      "line": 1194
+      "line": 1306
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestRunShellCommandCdNavigatesPanelDirectly",
       "kind": "function",
-      "line": 1231
+      "line": 1343
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestChangeDirectoryBareGoesHome",
       "kind": "function",
-      "line": 1256
+      "line": 1368
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestChangeDirectoryDashGoesToPreviousPath",
       "kind": "function",
-      "line": 1277
+      "line": 1389
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestChangeDirectoryDashWithNoHistoryErrors",
       "kind": "function",
-      "line": 1299
+      "line": 1411
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestPanelPreviousPath",
       "kind": "function",
-      "line": 1313
+      "line": 1425
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestRunShellCommandRecordsHistory",
       "kind": "function",
-      "line": 1337
+      "line": 1449
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBashHistoryUpDownNavigation",
       "kind": "function",
-      "line": 1369
+      "line": 1481
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestBashHistoryDownWithNoHistoryIsNoop",
       "kind": "function",
-      "line": 1413
+      "line": 1525
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestHistoryFilePathPrefersHISTFILE",
       "kind": "function",
-      "line": 1429
+      "line": 1541
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestHistoryFilePathFallsBackToBashHistory",
       "kind": "function",
-      "line": 1436
+      "line": 1548
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestLoadBashHistorySkipsTimestampComments",
       "kind": "function",
-      "line": 1454
+      "line": 1566
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestLoadBashHistoryMissingFileIsEmpty",
       "kind": "function",
-      "line": 1473
+      "line": 1585
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestAppendBashHistoryThenLoadRoundTrips",
       "kind": "function",
-      "line": 1480
+      "line": 1592
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bottombar_test.go",
       "name": "TestNewRootLoadsExistingHistory",
       "kind": "function",
-      "line": 1507
+      "line": 1619
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14034,14 +14118,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -14058,7 +14142,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 651
+      "line": 671
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14066,7 +14150,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 674
+      "line": 694
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14074,7 +14158,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 691
+      "line": 711
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14082,7 +14166,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 707
+      "line": 727
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14090,7 +14174,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 727
+      "line": 747
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14098,7 +14182,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 743
+      "line": 763
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14106,7 +14190,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 769
+      "line": 789
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14114,7 +14198,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 799
+      "line": 819
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14122,7 +14206,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 817
+      "line": 837
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14770,44 +14854,51 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
+      "name": "statusBarSegmentOption",
+      "kind": "function",
+      "line": 124
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/optioncatalog.go",
       "name": "boolOption",
       "kind": "function",
-      "line": 116
+      "line": 134
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "intOption",
       "kind": "function",
-      "line": 141
+      "line": 159
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "stringOption",
       "kind": "function",
-      "line": 163
+      "line": 181
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "optionCategories",
       "kind": "function",
-      "line": 186
+      "line": 204
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "optionSpecByKey",
       "kind": "function",
-      "line": 677
+      "line": 747
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "settingValueByKey",
       "kind": "function",
-      "line": 695
+      "line": 765
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -20507,14 +20598,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 25
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 25
     },
@@ -24924,5 +25015,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "0cf9b2995d615e87a63ca609ac5966bc5ac752beaaecc7f44d60b0e126c8646a"
+  "merkle_root": "93e8cb1ab1d8cdf4d1554e5c519d0858fa8b3e1d5015304c3049fb04076fb7e8"
 }
