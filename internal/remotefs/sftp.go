@@ -183,12 +183,21 @@ func (c *SFTPClient) Stat(p string) (fsops.Entry, error) {
 	return adaptResolvedEntry(fi), nil
 }
 
+func (c *SFTPClient) Lstat(p string) (fsops.Entry, error) {
+	fi, err := c.sftp.Lstat(p) // never follows a symlink, same contract as fsops.Info's own Lstat basis
+	if err != nil {
+		return fsops.Entry{}, err
+	}
+	return c.adaptLstatEntry(p, fi), nil
+}
+
 func (c *SFTPClient) Open(p string) (io.ReadCloser, error)    { return c.sftp.Open(p) }
 func (c *SFTPClient) Create(p string) (io.WriteCloser, error) { return c.sftp.Create(p) }
 func (c *SFTPClient) Mkdir(p string) error                    { return c.sftp.Mkdir(p) }
 func (c *SFTPClient) Remove(p string) error                   { return c.sftp.Remove(p) }
 func (c *SFTPClient) RemoveDirectory(p string) error          { return c.sftp.RemoveDirectory(p) }
 func (c *SFTPClient) Rename(oldPath, newPath string) error    { return c.sftp.Rename(oldPath, newPath) }
+func (c *SFTPClient) Chmod(p string, mode os.FileMode) error  { return c.sftp.Chmod(p, mode) }
 
 func (c *SFTPClient) Close() error {
 	sftpErr := c.sftp.Close()

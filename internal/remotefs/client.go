@@ -3,6 +3,7 @@ package remotefs
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
@@ -26,6 +27,14 @@ type Client interface {
 	// Stat describes a single path, following a symlink to its target
 	// exactly like fsops.Stat's own local, non-Lstat contract.
 	Stat(path string) (fsops.Entry, error)
+
+	// Lstat describes a single path *without* following a symlink —
+	// the same Lstat-not-Stat distinction this project's own local
+	// delete/copy code already depends on to correctly treat a symlink
+	// as itself, never silently recurse into whatever directory it
+	// happens to point at (see fsops.PurgeCompletely's own os.Lstat
+	// call for the local equivalent of exactly this).
+	Lstat(path string) (fsops.Entry, error)
 
 	// Open returns a streaming reader over a remote file's content —
 	// viewing, previewing, or copying it to the local machine all read
@@ -56,6 +65,12 @@ type Client interface {
 	// Remove first, exactly as this project's own local move/rename
 	// code already does.
 	Rename(oldPath, newPath string) error
+
+	// Chmod sets a path's own permission bits — only the low 12 bits of
+	// mode (the standard rwxrwxrwx + setuid/setgid/sticky bits) are
+	// meaningful over SFTP; any other bits in mode are ignored the same
+	// way os.Chmod's own doc comment already says they are locally.
+	Chmod(path string, mode os.FileMode) error
 
 	// Close ends the underlying connection. Safe to call more than
 	// once; a Client is unusable afterward.

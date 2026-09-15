@@ -975,10 +975,6 @@ func (r *Root) renameCurrentEntry() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
 	row, path, ok := r.panel.CurrentRowPath()
 	if !ok {
 		return

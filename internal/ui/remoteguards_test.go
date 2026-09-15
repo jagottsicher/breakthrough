@@ -72,8 +72,6 @@ func TestActionsRefuseARemoteConnection(t *testing.T) {
 	}{
 		{"openBatchRename", func(r *Root) { r.openBatchRename() }},
 		{"editCurrentEntry", func(r *Root) { r.editCurrentEntry() }},
-		{"renameCurrentEntry", func(r *Root) { r.renameCurrentEntry() }},
-		{"openChmod", func(r *Root) { r.openChmod() }},
 		{"openCompare", func(r *Root) { r.openCompare() }},
 		{"cutCurrentSelection", func(r *Root) { r.cutCurrentSelection() }},
 		{"copyToClipboard", func(r *Root) { r.copyToClipboard() }},
@@ -81,8 +79,7 @@ func TestActionsRefuseARemoteConnection(t *testing.T) {
 		{"pasteInto", func(r *Root) { r.pasteInto(r.panel.path, false) }},
 		{"openChown", func(r *Root) { r.openChown() }},
 		{"openSedReplace", func(r *Root) { r.openSedReplace() }},
-		{"moveSelectionToTrash", func(r *Root) { r.moveSelectionToTrash() }},
-		{"openRemoveConfirm", func(r *Root) { r.openRemoveConfirm() }},
+		{"openProperties", func(r *Root) { r.openProperties() }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

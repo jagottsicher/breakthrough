@@ -101,6 +101,17 @@ func (r *Root) renderConnectionMenu() {
 // otherwise left in the dropdown's own default color. Per the user's
 // own explicit request that both the current connection and any failed
 // one be visually distinguishable at a glance.
+// connectionHistorySuccessBlend darkens theme.EntryExecutable for a
+// history entry that connected successfully last time but isn't the
+// one this panel is attached to right now — still unambiguously
+// green (never falling back to the dropdown's own plain, uncolored
+// text, which read as "unknown/never tried" rather than "this one
+// works"), just a visibly dimmer shade than the currently active
+// entry's own full-brightness green, per the user's own explicit
+// report that a cleanly closed connection showing in plain white was
+// indistinguishable from one that had simply never been tried.
+const connectionHistorySuccessBlend = 0.45
+
 func (r *Root) connectionHistoryLabel(panel *Panel, entry remotefs.HistoryEntry) string {
 	label := entry.Label()
 	switch {
@@ -109,7 +120,8 @@ func (r *Root) connectionHistoryLabel(panel *Panel, entry remotefs.HistoryEntry)
 	case entry.LastFailed:
 		return "[" + colorTag(r.theme.CriticalText) + "]" + label + "[-]"
 	default:
-		return label
+		successColor := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
+		return "[" + colorTag(successColor) + "]" + label + "[-]"
 	}
 }
 

@@ -116,3 +116,42 @@ func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 		t.Errorf("active connection's history row %q does not carry the connected color tag", line)
 	}
 }
+
+// TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen
+// pins the user's own explicit report: a connection that isn't
+// currently active, isn't the last-failed one either, must still read
+// as green (just a dimmer shade — see connectionHistorySuccessBlend's
+// own doc comment) — never the dropdown's own plain, uncolored text,
+// which reads as "unknown" rather than "this one has worked before".
+func TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	// Deliberately never connected in this panel — this exercises the
+	// "succeeded before, not active right now" branch specifically,
+	// not the "currently active" one.
+
+	r.renderConnectionMenu()
+
+	var line string
+	for _, text := range itemTexts(r.connectionMenuList) {
+		if strings.Contains(text, conn.Label()) {
+			line = text
+		}
+	}
+	if line == "" {
+		t.Fatal("history row for the successful connection not found")
+	}
+	if strings.Contains(line, colorTag(r.theme.EntryExecutable)) {
+		t.Error("an inactive entry carries the full-brightness connected color tag, want a dimmer shade")
+	}
+	if strings.Contains(line, colorTag(r.theme.CriticalText)) {
+		t.Error("a successful entry carries the failed/critical color tag")
+	}
+	wantColor := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
+	if !strings.Contains(line, colorTag(wantColor)) {
+		t.Errorf("row %q does not carry the expected muted-green color tag %q", line, colorTag(wantColor))
+	}
+}

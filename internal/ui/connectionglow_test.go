@@ -17,22 +17,24 @@ func TestConnectionGlowColorIsMutedWhenNotConnectedRegardlessOfTime(t *testing.T
 	}
 }
 
-// TestConnectionGlowColorAtItsDimmestPointEqualsTheBaseColor pins the
-// exact instant within connectionGlowPeriod where the sine wave's own
-// brightness term bottoms out at 0 — sin(2*pi*0.75) = -1, so
-// brightness = (1-1)/2 = 0 and blendTowardWhite is a no-op. 2250ms is
-// 0.75 of a 3-second period.
-func TestConnectionGlowColorAtItsDimmestPointEqualsTheBaseColor(t *testing.T) {
+// TestConnectionGlowColorAtRestEqualsTheBaseColor pins the two
+// instants within connectionGlowPeriod where the sine wave itself is
+// exactly 0 (phase 0 and phase 0.5 of a 3-second period — 0ms and
+// 1500ms) — brightness 0 means blendToward's own fraction is 0 on
+// either branch, a no-op either way.
+func TestConnectionGlowColorAtRestEqualsTheBaseColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	got := connectionGlowColor(theme, true, time.UnixMilli(2250))
-	if got != theme.EntryExecutable {
-		t.Errorf("connectionGlowColor at its dimmest = %v, want theme.EntryExecutable unblended", got)
+	for _, ms := range []int64{0, 1500} {
+		got := connectionGlowColor(theme, true, time.UnixMilli(ms))
+		if got != theme.EntryExecutable {
+			t.Errorf("connectionGlowColor at %dms = %v, want theme.EntryExecutable unblended", ms, got)
+		}
 	}
 }
 
 // TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor pins
-// the opposite extreme: sin(2*pi*0.25) = 1, brightness = 1, the
-// brightest point of the cycle — 750ms is 0.25 of a 3-second period.
+// the brightest point of the cycle: sin(2*pi*0.25) = 1 — 750ms is 0.25
+// of a 3-second period.
 func TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	base := theme.EntryExecutable
@@ -48,6 +50,28 @@ func TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor(t *testing.T
 	}
 }
 
+// TestConnectionGlowColorAtItsDimmestIsDarkerThanTheBaseColor is the
+// opposite extreme: sin(2*pi*0.75) = -1 — 2250ms is 0.75 of a
+// 3-second period. Per the user's own explicit report that the
+// original, brighten-only design was invisible on their own terminal
+// (almost certainly a non-truecolor one, where every step of a
+// narrower swing quantized down to the same nearest palette color),
+// the glow now swings below the base color too, not just above it.
+func TestConnectionGlowColorAtItsDimmestIsDarkerThanTheBaseColor(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	base := theme.EntryExecutable
+	dim := connectionGlowColor(theme, true, time.UnixMilli(2250))
+
+	br, bg, bb := base.RGB()
+	dr, dg, db := dim.RGB()
+	if dr > br || dg > bg || db > bb {
+		t.Errorf("dimmest color %v is not darker than the base color %v in every channel", dim, base)
+	}
+	if dim == base {
+		t.Error("dimmest color equals the base color unchanged — the glow isn't actually animating")
+	}
+}
+
 // TestConnectionGlowColorIsPeriodic confirms the breathing motion
 // actually repeats every connectionGlowPeriod rather than drifting.
 func TestConnectionGlowColorIsPeriodic(t *testing.T) {
@@ -59,29 +83,29 @@ func TestConnectionGlowColorIsPeriodic(t *testing.T) {
 	}
 }
 
-func TestBlendTowardWhiteAtZeroReturnsTheColorUnchanged(t *testing.T) {
+func TestBlendTowardAtZeroReturnsTheColorUnchanged(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	if got := blendTowardWhite(theme.EntryExecutable, 0); got != theme.EntryExecutable {
-		t.Errorf("blendTowardWhite(c, 0) = %v, want c unchanged", got)
+	if got := blendToward(theme.EntryExecutable, colorWhite, 0); got != theme.EntryExecutable {
+		t.Errorf("blendToward(c, white, 0) = %v, want c unchanged", got)
 	}
 }
 
-func TestBlendTowardWhiteAtOneReturnsPureWhite(t *testing.T) {
+func TestBlendTowardAtOneReturnsExactlyTheTarget(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	got := blendTowardWhite(theme.EntryExecutable, 1)
-	r, g, b := got.RGB()
-	if r != 255 || g != 255 || b != 255 {
-		t.Errorf("blendTowardWhite(c, 1) = %v, want pure white", got)
+	if got := blendToward(theme.EntryExecutable, colorWhite, 1); got != colorWhite {
+		t.Errorf("blendToward(c, white, 1) = %v, want pure white", got)
+	}
+	if got := blendToward(theme.EntryExecutable, colorBlack, 1); got != colorBlack {
+		t.Errorf("blendToward(c, black, 1) = %v, want pure black", got)
 	}
 }
 
-func TestBlendTowardWhiteClampsOutOfRangeFractions(t *testing.T) {
+func TestBlendTowardClampsOutOfRangeFractions(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	if got, want := blendTowardWhite(theme.EntryExecutable, -1), theme.EntryExecutable; got != want {
-		t.Errorf("blendTowardWhite(c, -1) = %v, want c unchanged (clamped to 0)", got)
+	if got, want := blendToward(theme.EntryExecutable, colorWhite, -1), theme.EntryExecutable; got != want {
+		t.Errorf("blendToward(c, white, -1) = %v, want c unchanged (clamped to 0)", got)
 	}
-	r, g, b := blendTowardWhite(theme.EntryExecutable, 2).RGB()
-	if r != 255 || g != 255 || b != 255 {
-		t.Error("blendTowardWhite(c, 2) did not clamp to pure white")
+	if got := blendToward(theme.EntryExecutable, colorWhite, 2); got != colorWhite {
+		t.Error("blendToward(c, white, 2) did not clamp to the target")
 	}
 }

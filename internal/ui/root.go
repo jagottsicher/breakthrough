@@ -2750,7 +2750,13 @@ func (r *Root) finishRename(key tcell.Key) {
 		return
 	}
 
-	newPath, err := fsops.Rename(r.target, newName)
+	var newPath string
+	var err error
+	if remote := r.panel.remote; remote != nil {
+		newPath, err = renameRemote(remote, r.target, newName)
+	} else {
+		newPath, err = fsops.Rename(r.target, newName)
+	}
 	if err != nil {
 		r.showError(err)
 		return

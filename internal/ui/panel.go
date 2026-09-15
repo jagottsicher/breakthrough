@@ -3535,51 +3535,74 @@ const connectionButtonGlyph = "@"
 // live connection's glow animates against).
 var connectionGlowNow = time.Now
 
-// connectionGlowPeriod/connectionGlowPeakBlend shape the header's own
-// "@" button while connected: a slow, continuous brighten-then-dim
+// connectionGlowPeriod/connectionGlowPeakBlend/connectionGlowValleyBlend
+// shape the header's own "@" button while connected: a slow, continuous
 // breathing motion around theme.EntryExecutable — never a hard on/off
-// blink — one full cycle every connectionGlowPeriod, peaking at
-// connectionGlowPeakBlend blended toward white. Sampled once per
-// second (see Root.refreshActivePanelHeaderGlow, driven by the same
-// ticker StartClock's own clock/System Info refresh already uses), not
-// its own faster ticker: a three-second period still reads clearly at
-// one sample a second, and adding a second background ticker just for
+// blink — one full cycle every connectionGlowPeriod, swinging all the
+// way from connectionGlowValleyBlend toward black up to
+// connectionGlowPeakBlend toward white. Deliberately a wide swing in
+// both directions, not just a light brighten off the base color: a
+// narrower one first shipped, and on at least one real terminal (a
+// non-truecolor one, almost certainly — see this constant's own
+// history) every step of it quantized down to the exact same nearest
+// terminal color, making the whole animation invisible despite the
+// underlying math being correct; a full dark-to-light swing still
+// crosses several distinct terminal colors even under a coarse 256- or
+// 16-color palette. Sampled once per second (see
+// Root.refreshActivePanelHeaderGlow, driven by the same ticker
+// StartClock's own clock/System Info refresh already uses), not its
+// own faster ticker: a three-second period still reads clearly at one
+// sample a second, and adding a second background ticker just for
 // this would cost a further goroutine and redraw cadence for a purely
 // cosmetic effect.
 const (
-	connectionGlowPeriod    = 3 * time.Second
-	connectionGlowPeakBlend = 0.55
+	connectionGlowPeriod      = 3 * time.Second
+	connectionGlowPeakBlend   = 0.85
+	connectionGlowValleyBlend = 0.6
 )
 
 // connectionGlowColor is the header's own connection-button color for
 // this instant: theme.MutedTextColor while local (nothing to animate),
-// or theme.EntryExecutable breathing toward white and back while
-// connected. The breathing motion is a sine wave, not a linear ramp,
-// so it eases through both the brightest and dimmest points rather
-// than visibly reversing direction with a sharp corner there.
+// or theme.EntryExecutable breathing between a dark and a light variant
+// of itself while connected. The breathing motion is a sine wave, not
+// a linear ramp, so it eases through both the brightest and dimmest
+// points rather than visibly reversing direction with a sharp corner
+// there.
 func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Time) tcell.Color {
 	if !connected {
 		return theme.MutedTextColor
 	}
 	period := connectionGlowPeriod.Seconds()
 	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
-	brightness := (1 + math.Sin(2*math.Pi*phase)) / 2 // 0 (dimmest) .. 1 (brightest)
-	return blendTowardWhite(theme.EntryExecutable, brightness*connectionGlowPeakBlend)
+	brightness := math.Sin(2 * math.Pi * phase) // -1 (dimmest) .. +1 (brightest)
+	if brightness >= 0 {
+		return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
+	}
+	return blendToward(theme.EntryExecutable, colorBlack, -brightness*connectionGlowValleyBlend)
 }
 
-// blendTowardWhite mixes c toward pure white by fraction t (0 = c
-// itself, 1 = white), clamped to [0, 1] so a caller's own math (a sine
-// wave's rounding, say) can never overshoot into an invalid color.
-func blendTowardWhite(c tcell.Color, t float64) tcell.Color {
+// colorWhite/colorBlack are blendToward's own two endpoints — named
+// rather than written inline at each call site, since "toward white"/
+// "toward black" is the whole point of picking one over the other.
+var (
+	colorWhite = tcell.NewRGBColor(255, 255, 255)
+	colorBlack = tcell.NewRGBColor(0, 0, 0)
+)
+
+// blendToward mixes c toward target by fraction t (0 = c itself, 1 =
+// target), clamped to [0, 1] so a caller's own math (a sine wave's
+// rounding, say) can never overshoot into an invalid color.
+func blendToward(c, target tcell.Color, t float64) tcell.Color {
 	switch {
 	case t < 0:
 		t = 0
 	case t > 1:
 		t = 1
 	}
-	r, g, b := c.RGB()
-	lerp := func(x int32) int32 { return x + int32(float64(255-x)*t) }
-	return tcell.NewRGBColor(lerp(r), lerp(g), lerp(b))
+	cr, cg, cb := c.RGB()
+	tr, tg, tb := target.RGB()
+	lerp := func(from, to int32) int32 { return from + int32(float64(to-from)*t) }
+	return tcell.NewRGBColor(lerp(cr, tr), lerp(cg, tg), lerp(cb, tb))
 }
 
 // headerButtonPrefix is the plain-text form of the six nav buttons
