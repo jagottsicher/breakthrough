@@ -16,6 +16,7 @@ material, always matching the version you are actually running.
 - [Multiply](#multiply)
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
+- [Rsync](#rsync)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -54,6 +55,7 @@ dialog open.
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
 | `?` | This help | `:` | Bash command line | `C` | Compare |
+| `R` | Rsync | | | | |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
@@ -646,6 +648,67 @@ The status line tallies how many rows differ, are one-sided, uncertain,
 identical, or errored (a permission-denied directory along the way, for
 instance — reported, not fatal to the rest of the walk).
 
+## Rsync
+
+`R`, or the context menu's **"More actions" → "Rsync"**. Builds a real
+`rsync(1)` invocation from a small dialog, rather than typing one by
+hand — never reimplements any of rsync's own transfer logic, the same
+"shell out to the real tool" approach this app already takes for
+`du`/`df`/`grep`/`sed`/`find`.
+
+### The dialog
+
+- **Source** defaults to the single currently selected item, or the
+  active panel's own directory if nothing (or more than one thing) is
+  marked.
+- **Destination** defaults to split view's own other pane, when one is
+  open — the one case where "the other side" is unambiguous — and is
+  otherwise left blank on purpose: guessing a destination for a
+  command that can permanently delete files (see `--delete` below) is
+  worse than asking. Both fields accept a plain local path, or a
+  `user@host:path`/`host:path` remote one exactly the way a real
+  `rsync` or `ssh` command line would.
+- **Copy the folder's contents in (not the folder itself)** is the one
+  choice this dialog makes explicit rather than implicit: real `rsync`
+  decides this from whether the *source* path ends in a trailing
+  `/` — `rsync -a src/ dst/` copies `src`'s own children into `dst`,
+  while `rsync -a src dst/` creates `dst/src` instead. A single,
+  easy-to-miss character silently deciding between two very different
+  outcomes is exactly the kind of trap this toggle exists to remove —
+  off by default, matching how this app's own ordinary Copy/Paste
+  already behaves (a new folder inside the destination, not a
+  content-merge).
+- **Archive mode** (`-a`, on by default), **Compress** (`-z`),
+  **Delete extraneous files from destination** (`--delete`, off by
+  default — the one flag here that can permanently remove files that
+  no longer exist in Source), and **Dry run** (`-n`, report what would
+  happen, change nothing) are each their own toggle row.
+- **Exclude** takes one or more comma-separated patterns
+  (`--exclude=PATTERN`, one per entry). **Extra flags** is a free-text
+  escape hatch for anything else real rsync understands — spliced into
+  the real command exactly as typed, the same "hand it to a real shell,
+  don't re-parse shell syntax by hand" principle Edit's own
+  `$VISUAL`/`$EDITOR` invocation already follows.
+
+A live preview line always shows the exact command that would actually
+run, updated on every keystroke and every toggle — `--delete` in its
+own warning color the moment it's on, so it never blends into the rest
+of the line unnoticed.
+
+### Running it
+
+**Run** hands the previewed command to a real `rsync` process with the
+real terminal attached — the same way the embedded bash line already
+runs anything that benefits from a directly attached terminal rather
+than a background task, since `--info=progress2`'s own live,
+carriage-return-driven progress line needs one to render correctly.
+Press Esc once it's done to return to breakthrough; the panel reloads
+automatically. Source and Destination are both required — Run refuses
+outright, before ever reaching a real shell, if either is empty (an
+empty, unquoted shell argument doesn't produce a plain "missing
+argument" error the way you'd expect — it silently vanishes from the
+argument list instead, shifting everything after it).
+
 ## Sed Replace
 
 `E`, or the context menu's "sed". Runs a real `sed(1)`
@@ -943,10 +1006,17 @@ real size first, so a large archive over a slow link can't turn one
 Enter keypress into an unexpected, unwarned multi-minute wait.
 Everything about browsing it afterward — navigating in and out,
 Copy'ing a member to a real destination — works the same as a local
-archive, with one exception: a member marked *inside* a remote archive
-can't be Copied back out again yet (Paste explains this rather than
-failing with a raw connection error) — download the whole archive
-somewhere real first, then extract from it locally instead.
+archive, member-marked-inside-a-remote-archive case included: the
+local temp copy already downloaded to browse it is right there, so
+Copy'ing a marked member back out just extracts from that same copy,
+exactly like a local archive would. Pasting into a real local
+directory extracts straight there; pasting into another remote
+directory (same connection or a different one) extracts into a
+throwaway local temp directory first and uploads the result, the same
+way an ordinary local-source Paste to a remote destination already
+does. Cut is refused either way, same as for a local archive member —
+there's no writing back into a read-only archive to make the "move"
+half of it real.
 
 Everything else that changes files does not yet: chown, Compare, Batch
 rename, Sed Replace, and Properties as a whole (its own Save button

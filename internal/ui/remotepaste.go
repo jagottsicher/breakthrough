@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -292,6 +293,78 @@ func (r *Root) finishRemotePaste(panel *Panel, succeeded int, skipped []transfer
 		r.showError(panel.load(panel.path))
 	}
 	r.showError(remotePasteSummaryError(succeeded, skipped, firstErr))
+}
+
+// startRemoteArchiveExtraction is pasteInto's own action once
+// Root.remoteArchiveExtractionFor has confirmed the clipboard names
+// members inside a remote-staged archive and the destination is
+// itself a remote directory — archive.Extract only ever writes to a
+// real local directory, so this extracts into a fresh local temp
+// directory first and then uploads each of the resulting top-level
+// items (named exactly as archive.Extract's own doc comment
+// describes: destDir/<member's own base name>) the same way an
+// ordinary local-source Paste to a remote destination already uploads
+// a real local tree (copyTransferItem) — no second, bespoke upload
+// path. Reports through finishRemotePaste, the same as any other
+// remote-aware paste; move is always false here, since Cut is already
+// refused for an archive member before this is ever reached (see
+// pasteInto).
+func (r *Root) startRemoteArchiveExtraction(archiveLocalPath string, members []archive.Entry, destClient remotefs.Client, destDir string) {
+	panel := r.panel
+	r.safeGo("archive extract", nil, func() {
+		succeeded, skipped, firstErr := runRemoteArchiveExtraction(archiveLocalPath, members, destClient, destDir)
+		r.app.QueueUpdateDraw(func() {
+			r.finishRemotePaste(panel, succeeded, skipped, firstErr, false)
+		})
+	})
+}
+
+// runRemoteArchiveExtraction is startRemoteArchiveExtraction's own
+// synchronous core, split out the same directly-testable way every
+// other remote transfer's own core function in this file already is:
+// archive.Extract into a throwaway local temp directory (removed
+// again once every item's own upload has been attempted, success or
+// not), then copyTransferItem uploads each of its own top-level
+// results in turn, the same as any other local-source tree headed to
+// a remote destination.
+func runRemoteArchiveExtraction(archiveLocalPath string, members []archive.Entry, destClient remotefs.Client, destDir string) (succeeded int, skipped []transferSkip, firstErr error) {
+	tempDir, err := os.MkdirTemp("", "breakthrough-archive-extract-*")
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	if err := archive.Extract(archiveLocalPath, members, tempDir); err != nil {
+		return 0, nil, fmt.Errorf("extract from %s: %w", archiveLocalPath, err)
+	}
+
+	src := transferSide{client: nil}
+	dest := transferSide{client: destClient}
+	seen := make(map[string]bool, len(members))
+	for _, m := range members {
+		name := path.Base(path.Clean(m.Path))
+		if seen[name] {
+			// Several marked members sharing one common top-level
+			// ancestor (e.g. a directory plus one of its own already-
+			// included descendants) already land in the same uploaded
+			// tree the first time around — nothing left for a repeat to
+			// do.
+			continue
+		}
+		seen[name] = true
+
+		itemSkipped, err := copyTransferItem(src, dest, src.join(tempDir, name), dest.join(destDir, name), &skipped)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", name, err)
+			}
+			continue
+		}
+		if !itemSkipped {
+			succeeded++
+		}
+	}
+	return succeeded, skipped, firstErr
 }
 
 // removeTransferSource deletes item outright once it's been
