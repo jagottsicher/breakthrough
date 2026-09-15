@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"path"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -146,6 +148,15 @@ func dialSSHContext(ctx context.Context, addr string, config *ssh.ClientConfig) 
 
 func (c *SFTPClient) Root() string { return c.root }
 
+// ListDir sorts its own result — directories before files, then
+// case-insensitive name — before returning, the exact same order
+// fsops.ListDir's own local implementation already sorts by. This
+// isn't just cosmetic: Panel.applySortPreference (internal/ui/panel.go)
+// assumes its own input already arrives grouped this way and only
+// re-sorts *within* each group for every sort mode other than plain
+// Name — an unsorted remote listing broke that precondition entirely,
+// interleaving directories and files at random (a real, user-reported
+// bug) rather than merely sorting each of the two groups differently.
 func (c *SFTPClient) ListDir(dir string) ([]fsops.Entry, error) {
 	infos, err := c.sftp.ReadDir(dir)
 	if err != nil {
@@ -155,6 +166,12 @@ func (c *SFTPClient) ListDir(dir string) ([]fsops.Entry, error) {
 	for _, fi := range infos {
 		entries = append(entries, c.adaptLstatEntry(path.Join(dir, fi.Name()), fi))
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDir != entries[j].IsDir {
+			return entries[i].IsDir // directories before files
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	})
 	return entries, nil
 }
 

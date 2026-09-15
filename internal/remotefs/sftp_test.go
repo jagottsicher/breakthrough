@@ -10,7 +10,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,6 +105,57 @@ func TestDialWithPasswordAuthListsAndReadsFiles(t *testing.T) {
 	}
 	if string(content) != "hello, remote world" {
 		t.Errorf("content = %q, want %q", content, "hello, remote world")
+	}
+}
+
+// TestListDirSortsDirectoriesFirstThenCaseInsensitiveName pins a real,
+// user-reported bug: SSH_FXP_READDIR returns entries in whatever order
+// the remote server's own filesystem happens to store them, not
+// sorted — and internal/ui's own Panel.applySortPreference assumes its
+// input already arrives directories-first (see ListDir's own doc
+// comment for exactly why), the same precondition fsops.ListDir's
+// local implementation already guarantees. Deliberately creates
+// entries in an order that would expose the bug immediately if this
+// sort were ever removed (a directory created *after* a file that
+// sorts earlier by name, and vice versa).
+func TestListDirSortsDirectoriesFirstThenCaseInsensitiveName(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"z.txt", "B_dir", "a.txt", "A_dir"} {
+		full := filepath.Join(dir, name)
+		if strings.HasSuffix(name, "_dir") {
+			if err := os.Mkdir(full, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.WriteFile(full, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	addr := startTestSFTPServer(t, passwordServerConfig("tester", "s3cret"))
+	client, err := Dial(context.Background(), DialOptions{
+		Connection: Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth: AuthOptions{
+			IdentityFiles: []string{},
+			Password:      func() (string, error) { return "s3cret", nil },
+		},
+		HostKeyPrompt: noPromptHostKeyCallback,
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	entries, err := client.ListDir(dir)
+	if err != nil {
+		t.Fatalf("ListDir: %v", err)
+	}
+	var got []string
+	for _, e := range entries {
+		got = append(got, e.Name)
+	}
+	want := []string{"A_dir", "B_dir", "a.txt", "z.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListDir order = %v, want %v (directories first, then case-insensitive name)", got, want)
 	}
 }
 
