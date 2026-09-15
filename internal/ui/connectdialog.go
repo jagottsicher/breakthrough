@@ -37,7 +37,13 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 	r.connectPasswordField.SetText("")
 	r.setConnectStatus("", r.theme.Text)
 
-	width, height := 64, 9
+	// height covers connectTitleBar's own row plus connectLayout's three
+	// stacked pieces (connectForm's own 9, see newConnectLayout's own
+	// doc comment on why; connectStatus's 1; connectActions' 2) —
+	// checked against a real render, not guessed; a shorter value
+	// silently clipped the bottom rows (see openSedReplace's own
+	// identical comment on its own dialog).
+	width, height := 64, 13
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -72,9 +78,40 @@ func (r *Root) newConnectForm() *tview.Form {
 	f.AddFormItem(r.connectPortField)
 	r.connectUserField = tview.NewInputField().SetLabel("User")
 	f.AddFormItem(r.connectUserField)
-	r.connectPasswordField = tview.NewInputField().SetLabel("Password (only tried if key/agent auth doesn't apply)")
+	// A short label, deliberately: tview.Form sizes the shared label
+	// column to its widest field's own label, so a long explanatory one
+	// here would squeeze every other field's input area too — the
+	// explanation instead lives in the placeholder text, only visible
+	// (as intended) once the field itself has real width to show it in.
+	r.connectPasswordField = tview.NewInputField().SetLabel("Password")
+	r.connectPasswordField.SetPlaceholder("only tried if key/agent auth doesn't apply")
 	r.connectPasswordField.SetMaskCharacter('*')
 	f.AddFormItem(r.connectPasswordField)
+
+	// Tab/Enter on the form's own last field would otherwise just wrap
+	// back to its first one instead of ever reaching connectActions:
+	// verified directly against tview's own form.go, not guessed —
+	// Form.Focus unconditionally calls item.SetFinishedFunc on every
+	// item whenever the form itself gains focus, silently overwriting
+	// any SetDoneFunc set here beforehand, so the only place left to
+	// actually intercept Tab is a SetInputCapture, which runs before an
+	// item's own native handling at all. Enter goes one step further
+	// and submits the form outright, the same "last field, Enter
+	// submits" convenience a real login form has — the same reasoning
+	// this is only wired on the *last* field: every other field's own
+	// Tab/Enter already does the right thing (move to the next field)
+	// via the form's own default handling.
+	r.connectPasswordField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.connectActions)
+			return nil
+		case tcell.KeyEnter:
+			r.runConnect()
+			return nil
+		}
+		return event
+	})
 
 	return f
 }
@@ -85,6 +122,17 @@ func (r *Root) newConnectActions() *tview.List {
 	l.AddItem("Connect", "", 0, r.runConnect)
 	l.AddItem("Cancel", "", 0, r.cancelConnect)
 	l.SetDoneFunc(r.cancelConnect) // Escape
+	// Backtab out of the list's own first item returns to the form,
+	// symmetric with connectPasswordField's own forward Tab into here
+	// (see newConnectForm's own doc comment on why plain SetDoneFunc
+	// alone can't do this either direction).
+	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyBacktab {
+			r.app.SetFocus(r.connectForm)
+			return nil
+		}
+		return event
+	})
 	return l
 }
 
@@ -96,8 +144,15 @@ func (r *Root) newConnectActions() *tview.List {
 func (r *Root) newConnectLayout() *tview.Flex {
 	r.connectTitleBar = newPlainTitleBar("Connect")
 	r.connectStatus = tview.NewTextView().SetDynamicColors(true)
+	// 9 rows for connectForm: tview.NewForm() reserves a 1-row border
+	// padding top and bottom of its own (SetBorderPadding(1,1,1,1),
+	// independent of whether a visible border line is drawn at all —
+	// verified directly against tview's own form.go, not guessed, after
+	// a real render silently clipped the fourth field otherwise) on top
+	// of its own four one-row fields plus itemPadding's default 1-row
+	// gap between each: 2 (padding) + 4 (fields) + 3 (gaps) = 9.
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.connectForm, 8, 0, true).
+		AddItem(r.connectForm, 9, 0, true).
 		AddItem(r.connectStatus, 1, 0, false).
 		AddItem(r.connectActions, 2, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
