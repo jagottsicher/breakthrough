@@ -16,6 +16,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -974,12 +975,12 @@ func (r *Root) editCurrentEntry() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
 	_, path, ok := r.panel.CurrentRowPath()
 	if !ok {
+		return
+	}
+	if remote := r.panel.remote; remote != nil {
+		r.editRemoteEntry(remote, path)
 		return
 	}
 	r.runEditor(path, 0)
@@ -1219,6 +1220,24 @@ func selectedEditor() string {
 // editor for the next match" flow this exists for. Editing a real row
 // still refreshes the real directory afterward, unchanged.
 func (r *Root) runEditor(path string, line int) {
+	if err := r.runEditorProcess(path, line); err != nil {
+		r.showError(fmt.Errorf("edit %s: %w", path, err))
+		return
+	}
+	if r.panel.searchMode {
+		return
+	}
+	r.showError(r.panel.load(r.panel.path))
+}
+
+// runEditorProcess is runEditor's own subprocess mechanics, split out
+// so editRemoteEntry can run the exact same editor invocation against
+// a locally staged copy of a remote file without inheriting runEditor's
+// own reload postamble — reloading r.panel.path (a remote directory)
+// makes sense there too, but only *after* deciding whether the edit
+// actually needs uploading back first, not unconditionally the moment
+// the editor process exits.
+func (r *Root) runEditorProcess(path string, line int) error {
 	var runErr error
 	r.app.Suspend(func() {
 		script := editorCommand() + ` "$@"`
@@ -1231,15 +1250,68 @@ func (r *Root) runEditor(path string, line int) {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
 	})
+	return runErr
+}
 
-	if runErr != nil {
-		r.showError(fmt.Errorf("edit %s: %w", path, runErr))
+// editRemoteEntry is editCurrentEntry's own remote-panel half: stages
+// remotePath into a local temp file (see downloadRemoteToTemp — the
+// same staging openRemoteLook already uses for Look), runs the
+// configured editor against that local copy exactly like runEditor
+// already does for a real local file, and uploads the result back over
+// the connection only if the editor actually changed it.
+//
+// "Changed" is decided by the temp file's own mtime and size before vs.
+// after the editor ran, not by re-reading and hashing both copies: an
+// editor that rewrites a file unchanged still updates its own mtime on
+// save (even vim's :wq does, with no edits made at all), the same
+// signal a real sync tool already keys off — and it costs one os.Stat
+// each time rather than a second full read of a file that might be
+// large. Nothing is ever uploaded, and the remote copy is never
+// touched at all, if the editor made no change or exited with an
+// error.
+func (r *Root) editRemoteEntry(remote remotefs.Client, remotePath string) {
+	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+	if err != nil {
+		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
 		return
 	}
-	if r.panel.searchMode {
+	defer cleanup()
+
+	before, err := os.Stat(localPath)
+	if err != nil {
+		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
 		return
 	}
-	r.showError(r.panel.load(r.panel.path))
+
+	if err := r.runEditorProcess(localPath, 0); err != nil {
+		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
+		return
+	}
+
+	r.showError(r.finishRemoteEdit(remote, remotePath, localPath, before))
+}
+
+// finishRemoteEdit is editRemoteEntry's own upload-if-changed decision
+// — split out from it so a test can drive the "did the editor actually
+// change anything" compare directly against a real temp file it
+// controls, without needing runEditorProcess's own app.Suspend (a
+// deliberate no-op outside a real, already-Run() terminal session —
+// see tview's own Application.Suspend, which bails out before ever
+// invoking its callback when a.screen is still nil) to have done
+// anything at all.
+func (r *Root) finishRemoteEdit(remote remotefs.Client, remotePath, localPath string, before os.FileInfo) error {
+	after, err := os.Stat(localPath)
+	if err != nil {
+		return err
+	}
+	if after.ModTime().Equal(before.ModTime()) && after.Size() == before.Size() {
+		return nil // the editor made no change — nothing to upload, remote copy untouched
+	}
+
+	if err := copyTransferFile(transferSide{}, transferSide{client: remote}, localPath, remotePath); err != nil {
+		return fmt.Errorf("uploading changes back to %s: %w", remotePath, err)
+	}
+	return r.panel.load(r.panel.path)
 }
 
 // StartClock begins refreshing the status bar's clock display once a

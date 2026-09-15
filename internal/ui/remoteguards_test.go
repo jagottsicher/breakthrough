@@ -71,7 +71,6 @@ func TestActionsRefuseARemoteConnection(t *testing.T) {
 		action func(r *Root)
 	}{
 		{"openBatchRename", func(r *Root) { r.openBatchRename() }},
-		{"editCurrentEntry", func(r *Root) { r.editCurrentEntry() }},
 		{"openCompare", func(r *Root) { r.openCompare() }},
 		{"openChown", func(r *Root) { r.openChown() }},
 		{"openSedReplace", func(r *Root) { r.openSedReplace() }},

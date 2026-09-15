@@ -2,14 +2,18 @@
 // operations (rename, permanent delete, chmod) that don't need the
 // full async/progress/conflict machinery remotepaste.go's own transfer
 // engine does — see this project's own phased rollout: Phase 1
-// (browsing, viewing) shipped first; this is Phase 2, filling in
-// rename/delete/chmod/copy-cut-paste for a remote panel. Still
+// (browsing, viewing) shipped first; Phase 2 filled in rename/delete/
+// chmod/copy-cut-paste for a remote panel; Edit and Look (see
+// bottombar.go's own editRemoteEntry and viewer.go's own
+// openRemoteLook) stage a local temp copy through remotestage.go's own
+// downloadRemoteToTemp instead of refusing outright, the same way a
+// remote zip/tar now does too (see archivepanel.go). Still
 // deliberately not covered: chown (no remote user/group database to
 // resolve a typed name against — see openChown's own doc comment on
 // why even the *local* text fallback only works because the local
 // account database is right there), Compare, Batch rename, Sed
-// Replace, Edit, and Properties as a whole (see openProperties's own
-// doc comment) — each still refuses outright via isRemote's own guard,
+// Replace, and Properties as a whole (see openProperties's own doc
+// comment) — each still refuses outright via isRemote's own guard,
 // unchanged from Phase 1.
 package ui
 
