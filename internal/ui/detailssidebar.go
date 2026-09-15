@@ -108,7 +108,10 @@ func (r *Root) newDetailsTitleBar() *tview.TextView {
 // just once at showDetailsSidebar time the way Help's own
 // (non-resizing) title bar only needs.
 func (r *Root) renderDetailsTitleBar(width int) {
-	const label = " Details "
+	label := " Details "
+	if r.showingSystemInfo() {
+		label = " System Info "
+	}
 	closeCol := toolWindowCloseButtonCol(0, width)
 	padding := closeCol - len(label)
 	if padding < 0 {
@@ -505,6 +508,31 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.detailsStatErr = nil
 	r.detailsImage = nil
 	r.detailsPDFPageCount = 0
+
+	// The title bar ("Details" vs. "System Info") depends on
+	// showingSystemInfo(), which can only ever change between one
+	// loadDetailsTarget call and the next (navigating in or out of
+	// "/") — but renderDetailsTitleBar itself is otherwise only ever
+	// re-run on a live terminal resize (see repositionDetailsSidebar's
+	// own doc comment), so without this call here the title would
+	// keep showing whatever it said the last time the sidebar was
+	// resized, regardless of which of the two it should say now — a
+	// real, observed bug caught by actually navigating in and out of
+	// "/" with Details open, not just by reading the code.
+	r.repositionDetailsSidebar()
+
+	// System Info (see systeminfo.go) replaces the whole per-file flow
+	// below rather than augmenting it: at "/" there's no single
+	// selected entry worth stat'ing/previewing/hashing regardless of
+	// which row the cursor happens to sit on, so none of that work —
+	// including a real stat(2) call per row as the cursor moves — is
+	// even attempted here.
+	if r.showingSystemInfo() {
+		r.renderDetailsSidebar()
+		r.detailsSidebar.ScrollToBeginning()
+		return
+	}
+
 	if path != "" {
 		// Only the stat block synchronously: one syscall, and it is what
 		// the sidebar shows first anyway, so it should be on screen
@@ -718,6 +746,16 @@ func (r *Root) renderDetailsSidebar() {
 	r.detailsHashRowStart = -1
 	r.detailsDirSizeRowStart = -1
 
+	if r.showingSystemInfo() {
+		// No click zones of its own (every RowStart above is left at
+		// -1): System Info has nothing to compute on demand the way a
+		// file's hash or a directory's du -hs total does — see
+		// systeminfo.go's own doc comment on why nothing here needs a
+		// background computation at all.
+		r.detailsSidebar.SetText(r.systemInfoText())
+		return
+	}
+
 	if r.detailsTarget == "" {
 		r.detailsSidebar.SetText("(nothing selected)")
 		return
@@ -889,7 +927,13 @@ func (r *Root) renderDetailsSidebar() {
 // once (Details isn't modal — see newDetailsSidebarView's own doc
 // comment — so it can stay open behind Properties).
 func (r *Root) computeDetailsHashes() {
-	if r.detailsTarget == "" || isDirish(r.detailsStat) || r.detailsHashInProgress {
+	// showingSystemInfo() first: detailsTarget/detailsStat still hold
+	// whatever the highlighted row's own path was (loadDetailsTarget
+	// never clears them for System Info, just skips stat'ing it — see
+	// its own doc comment), which would otherwise pass isDirish's zero-
+	// value check and hash a real directory here despite nothing on
+	// screen ever offering to.
+	if r.showingSystemInfo() || r.detailsTarget == "" || isDirish(r.detailsStat) || r.detailsHashInProgress {
 		return
 	}
 
