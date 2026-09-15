@@ -198,6 +198,18 @@ var helpText = strings.TrimLeft(`
   already uses, so holding an arrow key down through a long list of
   directories costs nothing.
 
+  The "@" button right before the path (or "gc") opens a dropdown to
+  browse another machine over SFTP — muted for a local panel, green
+  once connected. New connection…/Disconnect plus recent history,
+  colored red for one whose last attempt failed. Auth tries an
+  ssh-agent, then ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if
+  unencrypted, then a typed password; host keys are checked against
+  ~/.ssh/known_hosts, with a trust-on-first-use prompt for an unknown
+  one and an outright refusal, no prompt, for one that changed.
+  Browsing and viewing work once connected; everything that changes
+  files (rename, edit, chmod/chown, Copy/Cut/Paste, Trash/Remove,
+  Compare, Batch rename, Sed Replace) refuses outright for now.
+
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
       both at once if both are open on the same file, however it was
