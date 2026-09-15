@@ -17,14 +17,15 @@ func TestConnectionGlowColorIsMutedWhenNotConnectedRegardlessOfTime(t *testing.T
 	}
 }
 
-// TestConnectionGlowColorAtRestEqualsTheBaseColor pins the two
-// instants within connectionGlowPeriod where the sine wave itself is
-// exactly 0 (phase 0 and phase 0.5 of a 3-second period — 0ms and
-// 1500ms) — brightness 0 means blendToward's own fraction is 0 on
-// either branch, a no-op either way.
+// TestConnectionGlowColorAtRestEqualsTheBaseColor pins the one instant
+// within connectionGlowPeriod where (1-cos(x))/2 is exactly 0 — phase
+// 0 of a 3-second period, i.e. 0ms (and, equivalently, a full period
+// later). Unlike the two-rest-point sine this replaced, there is now
+// only one rest point per cycle — the halfway point is the peak
+// instead (see TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor).
 func TestConnectionGlowColorAtRestEqualsTheBaseColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	for _, ms := range []int64{0, 1500} {
+	for _, ms := range []int64{0, connectionGlowPeriod.Milliseconds()} {
 		got := connectionGlowColor(theme, true, time.UnixMilli(ms))
 		if got != theme.EntryExecutable {
 			t.Errorf("connectionGlowColor at %dms = %v, want theme.EntryExecutable unblended", ms, got)
@@ -33,12 +34,12 @@ func TestConnectionGlowColorAtRestEqualsTheBaseColor(t *testing.T) {
 }
 
 // TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor pins
-// the brightest point of the cycle: sin(2*pi*0.25) = 1 — 750ms is 0.25
-// of a 3-second period.
+// the brightest point of the cycle: (1-cos(pi))/2 = 1 at phase 0.5 —
+// 1500ms is half of a 3-second period.
 func TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	base := theme.EntryExecutable
-	bright := connectionGlowColor(theme, true, time.UnixMilli(750))
+	bright := connectionGlowColor(theme, true, time.UnixMilli(1500))
 
 	br, bg, bb := base.RGB()
 	pr, pg, pb := bright.RGB()
@@ -50,25 +51,24 @@ func TestConnectionGlowColorAtItsBrightestIsLighterThanTheBaseColor(t *testing.T
 	}
 }
 
-// TestConnectionGlowColorAtItsDimmestIsDarkerThanTheBaseColor is the
-// opposite extreme: sin(2*pi*0.75) = -1 — 2250ms is 0.75 of a
-// 3-second period. Per the user's own explicit report that the
-// original, brighten-only design was invisible on their own terminal
-// (almost certainly a non-truecolor one, where every step of a
-// narrower swing quantized down to the same nearest palette color),
-// the glow now swings below the base color too, not just above it.
-func TestConnectionGlowColorAtItsDimmestIsDarkerThanTheBaseColor(t *testing.T) {
+// TestConnectionGlowColorNeverDipsBelowTheBaseColor pins the user's
+// own explicit correction: a connected glow that darkens toward black
+// on part of its cycle reads as a modem/router's own "still searching
+// for a signal" light, not a settled, already-alive connection — so
+// the color at every phase of the cycle must be at least as bright as
+// the base color in every channel, never a darker shade of it.
+func TestConnectionGlowColorNeverDipsBelowTheBaseColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	base := theme.EntryExecutable
-	dim := connectionGlowColor(theme, true, time.UnixMilli(2250))
-
 	br, bg, bb := base.RGB()
-	dr, dg, db := dim.RGB()
-	if dr > br || dg > bg || db > bb {
-		t.Errorf("dimmest color %v is not darker than the base color %v in every channel", dim, base)
-	}
-	if dim == base {
-		t.Error("dimmest color equals the base color unchanged — the glow isn't actually animating")
+
+	period := connectionGlowPeriod.Milliseconds()
+	for ms := int64(0); ms < period; ms += 50 {
+		got := connectionGlowColor(theme, true, time.UnixMilli(ms))
+		gr, gg, gb := got.RGB()
+		if gr < br || gg < bg || gb < bb {
+			t.Fatalf("connectionGlowColor at %dms = %v is darker than the base color %v in at least one channel", ms, got, base)
+		}
 	}
 }
 

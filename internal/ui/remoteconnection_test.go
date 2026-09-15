@@ -37,6 +37,14 @@ type fakeRemoteClient struct {
 	entries map[string][]fsops.Entry
 	content map[string][]byte
 	closed  bool
+
+	// diskUsage/diskUsageErr let a test control exactly what
+	// DiskUsage returns, the same "canned, test-controlled result"
+	// shape this fake already gives every other Client method its own
+	// behavior through — real filesystem block/inode counts have no
+	// meaningful default here.
+	diskUsage    fsops.DiskUsage
+	diskUsageErr error
 }
 
 var _ remotefs.Client = (*fakeRemoteClient)(nil)
@@ -189,6 +197,10 @@ func (f *fakeRemoteClient) Chmod(p string, mode os.FileMode) error {
 	}
 	f.entries[dir][i].Mode = mode
 	return nil
+}
+
+func (f *fakeRemoteClient) DiskUsage(p string) (fsops.DiskUsage, error) {
+	return f.diskUsage, f.diskUsageErr
 }
 
 func (f *fakeRemoteClient) Close() error {
@@ -386,16 +398,16 @@ func TestRefreshActivePanelHeaderGlowUpdatesTheConnectedHeaderColor(t *testing.T
 	old := connectionGlowNow
 	defer func() { connectionGlowNow = old }()
 
-	connectionGlowNow = func() time.Time { return time.UnixMilli(2250) } // dimmest
+	connectionGlowNow = func() time.Time { return time.UnixMilli(0) } // rest
 	r.refreshActivePanelHeaderGlow()
-	dim := r.panel.header.GetText(false)
+	rest := r.panel.header.GetText(false)
 
-	connectionGlowNow = func() time.Time { return time.UnixMilli(750) } // brightest
+	connectionGlowNow = func() time.Time { return time.UnixMilli(1500) } // brightest
 	r.refreshActivePanelHeaderGlow()
 	bright := r.panel.header.GetText(false)
 
-	if dim == bright {
-		t.Error("refreshActivePanelHeaderGlow produced identical header text at the glow's dimmest and brightest points")
+	if rest == bright {
+		t.Error("refreshActivePanelHeaderGlow produced identical header text at the glow's resting and brightest points")
 	}
 }
 

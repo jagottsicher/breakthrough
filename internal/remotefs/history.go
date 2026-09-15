@@ -86,27 +86,45 @@ func SaveHistory(entries []HistoryEntry) error {
 // RecordAttempt loads the current history, moves conn to the front
 // (or inserts it) with today's outcome, trims it back down to
 // historyMaxEntries, and saves it — the single read-modify-write a
-// connection attempt (successful or not) performs, so the dropdown's
-// own "most recent on top, failed ones in red" behavior stays correct
-// without every caller re-implementing this sequence by hand.
+// connection attempt performs, so the dropdown's own "most recent on
+// top, failed ones in red" behavior stays correct without every caller
+// re-implementing this sequence by hand.
+//
+// A failing attempt on a connection that was never in history before
+// is not added at all, per the user's own explicit request: an entry
+// that has never once worked is only ever going to show up red, which
+// is clutter, not a useful "reconnect to this" shortcut — the whole
+// point of the dropdown's history section. A failing attempt on a
+// connection that *did* work before is the opposite case, and still
+// updates it as usual: "this used to work and just failed" is exactly
+// the signal LastFailed/the dropdown's red coloring exists to surface,
+// and losing that by dropping the entry instead would hide a real
+// regression a sysadmin actively wants to notice.
 func RecordAttempt(conn Connection, failed bool) error {
 	entries, err := LoadHistory()
 	if err != nil {
 		return err
 	}
 
+	var existed bool
 	kept := entries[:0]
 	for _, e := range entries {
-		if !e.Equal(conn) {
-			kept = append(kept, e)
+		if e.Equal(conn) {
+			existed = true
+			continue
 		}
+		kept = append(kept, e)
 	}
-	entries = append([]HistoryEntry{{Connection: conn, LastUsed: time.Now(), LastFailed: failed}}, kept...)
 
-	if len(entries) > historyMaxEntries {
-		entries = entries[:historyMaxEntries]
+	if failed && !existed {
+		return nil
 	}
-	return SaveHistory(entries)
+
+	updated := append([]HistoryEntry{{Connection: conn, LastUsed: time.Now(), LastFailed: failed}}, kept...)
+	if len(updated) > historyMaxEntries {
+		updated = updated[:historyMaxEntries]
+	}
+	return SaveHistory(updated)
 }
 
 // RemoveFromHistory drops conn out of the persisted history entirely —

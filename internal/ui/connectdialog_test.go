@@ -192,12 +192,16 @@ func TestFinishConnectOnFailureShowsTheErrorAndKeepsTheDialogOpen(t *testing.T) 
 		t.Errorf("status = %q, want it to show the Dial error", r.connectStatus.GetText(true))
 	}
 
+	// conn has never connected successfully before, so this failure
+	// must not create a history entry at all (see RecordAttempt's own
+	// doc comment) — an entry that's only ever going to show up red is
+	// clutter, not a useful "reconnect to this" shortcut.
 	history, err := remotefs.LoadHistory()
 	if err != nil {
 		t.Fatalf("LoadHistory: %v", err)
 	}
-	if len(history) != 1 || !history[0].LastFailed {
-		t.Errorf("history = %+v, want one failed entry", history)
+	if len(history) != 0 {
+		t.Errorf("history = %+v, want a brand-new connection's failed attempt left out of history", history)
 	}
 }
 

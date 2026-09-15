@@ -17,6 +17,13 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
+// connectionMenuNewConnectionLabel is row 0's own label — the exact
+// "space, +, two spaces, label" shape tabswitcher.go's own
+// tabSwitcherNewRowLabel already establishes for "New tab", per the
+// user's own explicit request that the two read as the same kind of
+// row wherever they appear.
+const connectionMenuNewConnectionLabel = " +  New connection"
+
 // Column indices within the connection menu table — the same
 // label/action-cell/action-cell shape tabswitcher.go's own
 // tabSwitcherCol* constants already establish for an identical reason:
@@ -78,7 +85,7 @@ func (r *Root) renderConnectionMenu() {
 	r.connectionMenuActiveRow = -1
 
 	table.SetCell(0, connectionMenuColLabel,
-		tview.NewTableCell("New connection…").
+		tview.NewTableCell(connectionMenuNewConnectionLabel).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
 			SetClickedFunc(r.clickConnectionMenuCell(0, connectionMenuColLabel)))
@@ -318,16 +325,24 @@ func (r *Root) connectionMenuSize() (width, height int) {
 	return width, rows + 1
 }
 
-// connectionHistorySuccessBlend darkens theme.EntryExecutable for a
-// history entry that connected successfully last time but isn't the
-// one this panel is attached to right now — still unambiguously
-// green (never falling back to the dropdown's own plain, uncolored
-// text, which read as "unknown/never tried" rather than "this one
-// works"), just a visibly dimmer shade than the currently active
-// entry's own full-brightness green, per the user's own explicit
-// report that a cleanly closed connection showing in plain white was
-// indistinguishable from one that had simply never been tried.
-const connectionHistorySuccessBlend = 0.45
+// connectionHistorySuccessBlend blends theme.EntryExecutable toward
+// theme.MutedTextColor for a history entry that connected successfully
+// last time but isn't the one this panel is attached to right now —
+// still unambiguously green (never falling back to the dropdown's own
+// plain, uncolored text, which read as "unknown/never tried" rather
+// than "this one works"), just a matte, muted shade next to the
+// currently active entry's own full-brightness green, per the user's
+// own explicit report that a cleanly closed connection showing in
+// plain white was indistinguishable from one that had simply never
+// been tried.
+//
+// Toward the theme's own muted gray, not toward black: two earlier
+// attempts (0.45, then 0.22, both toward black) still read as too
+// dark rather than matte — darkening a color and desaturating it are
+// different operations, and "matte" specifically asked for the
+// second, which blending toward a mid-brightness gray delivers without
+// also dimming it the way black inevitably does.
+const connectionHistorySuccessBlend = 0.5
 
 // connectionHistoryRemoveGlyph is the small "✕" every history row's
 // own remove cell carries (see renderConnectionMenu), per the user's
@@ -370,6 +385,6 @@ func connectionHistoryColor(theme config.ResolvedTheme, isActive, lastFailed boo
 	case lastFailed:
 		return theme.CriticalText
 	default:
-		return blendToward(theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
+		return blendToward(theme.EntryExecutable, theme.MutedTextColor, connectionHistorySuccessBlend)
 	}
 }

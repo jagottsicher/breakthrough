@@ -3535,20 +3535,23 @@ const connectionButtonGlyph = "@"
 // live connection's glow animates against).
 var connectionGlowNow = time.Now
 
-// connectionGlowPeriod/connectionGlowPeakBlend/connectionGlowValleyBlend
-// shape the header's own "@" button while connected: a slow, continuous
-// breathing motion around theme.EntryExecutable — never a hard on/off
-// blink — one full cycle every connectionGlowPeriod, swinging all the
-// way from connectionGlowValleyBlend toward black up to
-// connectionGlowPeakBlend toward white. Deliberately a wide swing in
-// both directions, not just a light brighten off the base color: a
-// narrower one first shipped, and on at least one real terminal (a
-// non-truecolor one, almost certainly — see this constant's own
-// history) every step of it quantized down to the exact same nearest
-// terminal color, making the whole animation invisible despite the
-// underlying math being correct; a full dark-to-light swing still
-// crosses several distinct terminal colors even under a coarse 256- or
-// 16-color palette. Sampled once per second (see
+// connectionGlowPeriod/connectionGlowPeakBlend shape the header's own
+// "@" button while connected: a slow, single pulse toward
+// theme.EntryExecutable's own lighter self and back to rest, once every
+// connectionGlowPeriod — never dipping below the base color at all.
+//
+// Deliberately one-directional (brighten only, resting exactly at the
+// base color rather than swinging past it toward black): an earlier
+// design also darkened on the other half of the cycle, which read, per
+// the user's own explicit report, as a "still trying to connect"
+// searching-for-signal pulse rather than a settled, already-connected
+// one — dipping toward black is what a modem/router's own "no link
+// yet" light does, not what a steady, healthy connection should look
+// like. The earlier all-the-way-to-black swing existed to survive a
+// non-truecolor terminal's color quantization (see this constant's own
+// git history); connectionGlowPeakBlend alone is still wide enough for
+// that — the point being fixed here is which direction the swing goes
+// in, not how far. Sampled once per second (see
 // Root.refreshActivePanelHeaderGlow, driven by the same ticker
 // StartClock's own clock/System Info refresh already uses), not its
 // own faster ticker: a three-second period still reads clearly at one
@@ -3556,29 +3559,29 @@ var connectionGlowNow = time.Now
 // this would cost a further goroutine and redraw cadence for a purely
 // cosmetic effect.
 const (
-	connectionGlowPeriod      = 3 * time.Second
-	connectionGlowPeakBlend   = 0.85
-	connectionGlowValleyBlend = 0.6
+	connectionGlowPeriod    = 3 * time.Second
+	connectionGlowPeakBlend = 0.85
 )
 
 // connectionGlowColor is the header's own connection-button color for
 // this instant: theme.MutedTextColor while local (nothing to animate),
-// or theme.EntryExecutable breathing between a dark and a light variant
-// of itself while connected. The breathing motion is a sine wave, not
-// a linear ramp, so it eases through both the brightest and dimmest
-// points rather than visibly reversing direction with a sharp corner
-// there.
+// or theme.EntryExecutable easing up to a lighter variant of itself and
+// back while connected. (1-cos(x))/2 rather than a plain sine: it
+// stays non-negative throughout, so the color only ever brightens off
+// the base and returns to it — exactly the "resting, connected, alive"
+// pulse this is meant to read as (see this file's own doc comment on
+// connectionGlowPeriod for why never dipping below the base color at
+// all is the point) — while still easing smoothly through both the
+// rest point and the peak rather than reversing direction with a sharp
+// corner at either one.
 func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Time) tcell.Color {
 	if !connected {
 		return theme.MutedTextColor
 	}
 	period := connectionGlowPeriod.Seconds()
 	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
-	brightness := math.Sin(2 * math.Pi * phase) // -1 (dimmest) .. +1 (brightest)
-	if brightness >= 0 {
-		return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
-	}
-	return blendToward(theme.EntryExecutable, colorBlack, -brightness*connectionGlowValleyBlend)
+	brightness := (1 - math.Cos(2*math.Pi*phase)) / 2 // 0 (rest) .. 1 (peak) .. 0 (rest)
+	return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
 }
 
 // colorWhite/colorBlack are blendToward's own two endpoints — named

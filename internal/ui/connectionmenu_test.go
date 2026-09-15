@@ -96,6 +96,13 @@ func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	ok := remotefs.Connection{Host: "ok.example.com", User: "tester"}
 	failed := remotefs.Connection{Host: "failed.example.com", User: "tester"}
+	// failed must have connected successfully at least once before a
+	// later failure will still keep it in history (see RecordAttempt's
+	// own doc comment: a brand-new connection that fails right away is
+	// never added at all).
+	if err := remotefs.RecordAttempt(failed, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
 	if err := remotefs.RecordAttempt(failed, true); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
@@ -173,7 +180,7 @@ func TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen(t *test
 	if got == r.theme.CriticalText {
 		t.Error("a successful entry carries the failed/critical color")
 	}
-	want := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
+	want := blendToward(r.theme.EntryExecutable, r.theme.MutedTextColor, connectionHistorySuccessBlend)
 	if got != want {
 		t.Errorf("row color = %v, want the muted-green blend %v", got, want)
 	}
