@@ -229,6 +229,10 @@ func (r *Root) cutCurrentSelection() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	if row, path, ok := r.panel.CurrentRowPath(); ok {
 		r.target, r.targetRow = path, row
 	}
@@ -303,6 +307,14 @@ func chordFamilies() []chordFamily {
 			// ("gr / (root)" — see help.go).
 			{'r', "/ (root)", func(r *Root) { r.showError(r.panel.navigate("/")) }},
 			{'b', "Trashbin", func(r *Root) { r.openTrash() }},
+			// "Connect…" closes the family out, after gr/gb rather than
+			// among gh/gu/gp/gn: it doesn't navigate anywhere by itself,
+			// it opens the connection dropdown (see connectionmenu.go),
+			// the same "go to a whole further place" role gr/gb already
+			// have, just via a dialog instead of an instant jump — the
+			// header's own "@" button (see buildHeaderSpans) is this
+			// same action's mouse equivalent.
+			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},

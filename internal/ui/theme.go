@@ -423,6 +423,21 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sedTitleBar.SetTextColor(theme.TextColor)
 
+	r.connectForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectForm.SetLabelColor(theme.TextColor)
+	r.connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.connectForm.SetFieldTextColor(theme.TextColor)
+	r.connectStatus.SetBackgroundColor(theme.SurfaceBackground)
+	styleList(r.connectActions, theme)
+	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.connectTitleBar.SetTextColor(theme.TextColor)
+
+	styleList(r.hostKeyConfirmDialog, theme)
+	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.hostKeyConfirmTitleBar.SetTextColor(theme.TextColor)
+
+	styleList(r.connectionMenuList, theme)
+
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.duplicateForm.SetLabelColor(theme.TextColor)
 	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)

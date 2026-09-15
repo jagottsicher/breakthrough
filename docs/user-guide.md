@@ -20,6 +20,7 @@ material, always matching the version you are actually running.
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
+- [Remote connections (SFTP)](#remote-connections-sftp)
 - [Properties](#properties)
 - [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
@@ -80,7 +81,7 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
@@ -176,6 +177,12 @@ glyph's own single column. Root (`/`) sits right after Start and jumps
 to the filesystem root — the breadcrumb's own leading "/" already
 links there too, but as a plain, easy-to-miss character; Root gives
 that same destination a proper, styled button of its own.
+
+Right after Reload, one more button — `@` — sits directly before the
+path itself: muted for an ordinary local panel, green once connected
+to a remote host. Clicking it (or the `g` chord's own `gc`) opens the
+connection dropdown — see [Remote connections
+(SFTP)](#remote-connections-sftp) below for the whole feature.
 
 ### Filtering
 
@@ -798,6 +805,77 @@ running. Only the stat block is read synchronously — one syscall, and
 it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
+
+## Remote connections (SFTP)
+
+The `@` button right before the path itself (see [The path
+bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
+for browsing a directory tree on another machine over SFTP, exactly the
+way SSH itself already reaches it. Muted while a panel is local, green
+once connected.
+
+The dropdown lists, in order: **Disconnect** (only once this panel is
+actually connected to something), **New connection…**, then recent
+history — most recently used first, colored the same way the button
+itself is: green for the connection currently active in this panel,
+red for one whose last attempt failed, plain otherwise. Selecting a
+history entry reopens the Connect dialog prefilled from it and
+immediately retries — nothing about *how* it authenticated is ever
+remembered (see Authentication below), so a connection that needs a
+typed password will stop there with the dialog open, ready for it.
+
+**New connection…** opens a small form: Host, Port (blank means 22),
+User (blank means this machine's own local username, the same
+assumption a bare `ssh host` already makes), and Password — tried only
+as a last resort, see below. Connecting runs in the background with a
+"Connecting…" progress line in place of the buttons; Enter in the
+Password field submits the form outright, the same as clicking
+Connect.
+
+### Authentication
+
+Tried in this order, the same as a real `ssh` client:
+
+1. A running `ssh-agent` (`$SSH_AUTH_SOCK`), if any keys are loaded.
+2. The conventional default identity files, in this order:
+   `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` — whichever exist and are
+   unencrypted. An *encrypted* default key without a running agent
+   holding it isn't usable here yet — this first release doesn't ask
+   for a key's own passphrase inline, only for the account's password
+   itself (the next step).
+3. The Connect form's own Password field, if anything was typed into
+   it.
+
+### Host keys
+
+Checked against the real `~/.ssh/known_hosts` — the exact same file
+and format `ssh`/`scp`/`sftp` themselves already read and write, so a
+host trusted from a terminal session is trusted here too, and vice
+versa. A host whose key isn't in there yet raises its own prompt —
+"Unknown host key for `host` (`type` `fingerprint`) — trust it and
+connect?" — the same trust-on-first-use question a real `ssh` client
+asks interactively; accepting appends it to `known_hosts` so it's only
+ever asked once per host. A host whose key has *changed* since it was
+last trusted is always rejected outright instead, with no prompt and
+no way to bypass it — that's exactly the shape a machine-in-the-middle
+attack produces, not something a "trust anyway" button should ever be
+offered for.
+
+### What works so far, and what doesn't yet
+
+Once connected, the panel browses the remote filesystem exactly like a
+local one: same columns, same sorting, the Home button (`~`) goes to
+the remote account's own home directory instead of this machine's.
+Viewing a file (Look, `l`) works the same way too.
+
+Everything that changes files does not yet: Rename, Edit, chmod/chown,
+Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, and Sed Replace
+all refuse outright with a clear message on a remote panel, rather
+than risking a real filesystem call landing on the wrong machine — none
+of them currently have any way to know a path belongs to a remote
+session rather than this one. Disconnecting (from the dropdown) closes
+the session and returns the panel to browsing this machine's own home
+directory.
 
 ## Properties
 

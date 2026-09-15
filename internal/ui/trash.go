@@ -72,6 +72,10 @@ func (r *Root) moveSelectionToTrash() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	if r.inTrash() {
 		r.openRemoveConfirm()
 		return
@@ -175,6 +179,10 @@ func (r *Root) openTrash() {
 func (r *Root) openRemoveConfirm() {
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
+		return
+	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
 		return
 	}
 	targets := r.selectedOrCurrentPaths()
