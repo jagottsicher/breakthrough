@@ -34,6 +34,7 @@ const (
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
 	duplicatePage   = "duplicate"
+	rsyncPage       = "rsync"
 	// The three remote-connection dialogs (see connectdialog.go,
 	// hostkeyconfirm.go, connectionmenu.go).
 	connectDialogPage  = "connect-dialog"
@@ -501,6 +502,35 @@ type Root struct {
 	duplicateContentLayout               *tview.Flex
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
+
+	// The "Rsync" dialog (see rsync.go) — source/destination and the
+	// free-text Excludes/Extra flags fields live in rsyncForm; the five
+	// boolean toggles (Copy contents/Archive/Compress/Delete/Dry run)
+	// live in rsyncFlagsList instead, the same List-with-a-relabeling-
+	// glyph shape newSedFlagsList's own doc comment explains (a
+	// tview.Form checkbox can never keep a background different from a
+	// real text field's own). rsyncPreviewView is its own always-
+	// visible sibling row below the Form, never a Form item — the same
+	// "living outside the Form rules out a whole real bug class" reason
+	// duplicatePreviewView's own doc comment gives. rsyncButtons is a
+	// real Cancel/Run button pair, the current established shape for a
+	// dialog's own action row (see duplicateButtons' own doc comment),
+	// not Sed Replace's older vertical-List actions.
+	rsyncForm             *tview.Form
+	rsyncSourceField      *tview.InputField
+	rsyncDestinationField *tview.InputField
+	rsyncExcludesField    *tview.InputField
+	rsyncExtraArgsField   *tview.InputField
+	rsyncFlagsList        *tview.List
+	rsyncFlags            map[string]bool
+	rsyncPreviewView      *tview.TextView
+	rsyncSpacer           *tview.Box
+	rsyncCancelBtn        *tview.Button
+	rsyncRunBtn           *tview.Button
+	rsyncButtons          *tview.Flex
+	rsyncTitleBar         *tview.TextView
+	rsyncContentLayout    *tview.Flex
+	rsyncLayout           *tview.Flex
 
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
@@ -1419,6 +1449,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The "Rsync" dialog (see rsync.go) — same "built once here,
+	// contents rebuilt fresh per open" shape as Multiply just above.
+	r.rsyncForm = r.newRsyncForm()
+	r.rsyncFlagsList = r.newRsyncFlagsList()
+	r.rsyncPreviewView = r.newRsyncPreviewView()
+	r.rsyncSpacer = tview.NewBox()
+	r.rsyncButtons = r.newRsyncButtons()
+	r.rsyncLayout = r.newRsyncLayout()
+
 	// The "Connect" dialog and its own host-key trust prompt (see
 	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
 	// once here the same way Sed Replace's own form is (see
@@ -1560,6 +1599,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.
@@ -3158,18 +3198,28 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
 	if r.clipboardSourceClient != nil || r.panel.remote != nil {
 		// remotepaste.go's own engine, once either side of the paste is
-		// remote — never mixed with the archive-extraction or local
-		// startPaste paths below, both of which assume a real local
-		// path throughout.
-		if r.remoteArchiveMemberOrigin(r.clipboard) {
+		// remote — never mixed with the local startPaste path below,
+		// which assumes a real local path throughout.
+		if archiveLocalPath, members, ok := r.remoteArchiveExtractionFor(r.clipboard); ok {
 			// A marked member inside a remote-staged archive still on
-			// screen somewhere (see remoteArchiveMemberOrigin's own doc
+			// screen somewhere (see remoteArchiveExtractionFor's own doc
 			// comment) — its clipboard path is a purely virtual
 			// "archive/member" string our own UI constructs, not a real
 			// path remote.Open could ever resolve, so startRemotePaste
 			// below would otherwise fail with a confusing raw SFTP
-			// "no such file" instead of a real explanation.
-			r.showError(fmt.Errorf("copying a member out of a remote archive isn't supported yet — download the whole archive elsewhere first, then extract it locally"))
+			// "no such file" instead of actually extracting it from the
+			// local temp copy already sitting on disk. Cut has nothing
+			// to remove afterward, same as archiveExtractionFor's own
+			// identical local-archive refusal.
+			if r.clipboardCut {
+				r.showError(fmt.Errorf("cut isn't supported for items inside an archive — use Copy instead"))
+				return
+			}
+			if r.panel.remote == nil {
+				r.extractClipboardArchive(archiveLocalPath, members, dir)
+				return
+			}
+			r.startRemoteArchiveExtraction(archiveLocalPath, members, r.panel.remote, dir)
 			return
 		}
 		if followSymlinks {

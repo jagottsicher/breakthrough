@@ -14,6 +14,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -122,35 +123,65 @@ func (r *Root) finishRemoteArchiveDownload(panel *Panel, remote remotefs.Client,
 	}
 }
 
-// remoteArchiveMemberOrigin reports whether paths (the clipboard's own
-// contents, at Paste time) were copied from inside a remote-staged
-// archive that's still open in some tab right now — checked by
-// scanning every open tab for one whose own archiveRemoteClient is
-// set and whose archivePath is a prefix of paths[0], the same "the
-// first entry decides for the whole marked selection" assumption
-// archiveExtractionFor's own doc comment already makes for the
-// identical local case.
+// remoteArchiveExtractionFor is archiveExtractionFor's own remote
+// counterpart, for pasteInto's identical "is this an archive
+// extraction, or an ordinary paste" branch whenever either side of a
+// paste is remote. It can't work from paths[0] alone via
+// splitArchivePath's own os.Stat climb the way the local version
+// does — a remote archive's virtual "archive/member" clipboard path
+// was never a real local path to stat in the first place — so it
+// instead scans every open tab for one whose own archiveRemoteClient
+// is set and whose archivePath is a prefix of paths[0] (the same scan
+// this function's own predecessor, remoteArchiveMemberOrigin, used
+// back when this could only ever refuse the paste), and reads the
+// archive's real member listing from that tab's own already-
+// downloaded archiveLocalPath instead of the (unopenable) remote
+// archivePath itself.
 //
-// Extracting a member back out of a remote archive isn't supported
-// yet: unlike a local one, archive.Extract's own path-based API has no
-// way to be handed the local temp copy a live Panel happens to be
-// holding onto instead of the member's own purely virtual
-// "archive/member" clipboard path, which resolves to nothing
-// remote.Open could ever open. Left for a later round — see this
-// function's own caller in pasteInto for the refusal message shown in
-// its place.
-func (r *Root) remoteArchiveMemberOrigin(paths []string) bool {
+// Returns that local temp copy's own path, not archivePath — it's
+// what archive.List/archive.Extract actually need to read real bytes
+// from. Member resolution mirrors archiveExtractionFor's own logic
+// exactly (an exact listed entry, or a synthesized directory Entry for
+// one only ever implied by its own descendants), just keyed off
+// archivePath as the shared prefix every clipboard entry here is
+// stripped against instead of splitArchivePath's own return value.
+func (r *Root) remoteArchiveExtractionFor(paths []string) (archiveLocalPath string, members []archive.Entry, ok bool) {
 	if len(paths) == 0 {
-		return false
+		return "", nil, false
 	}
-	found := false
+	var source *Panel
 	r.forEachTab(func(p *Panel) {
-		if found || p.archiveRemoteClient == nil || p.archivePath == "" {
+		if source != nil || p.archiveRemoteClient == nil || p.archivePath == "" {
 			return
 		}
 		if paths[0] == p.archivePath || strings.HasPrefix(paths[0], p.archivePath+"/") {
-			found = true
+			source = p
 		}
 	})
-	return found
+	if source == nil {
+		return "", nil, false
+	}
+
+	listed, err := archive.List(source.archiveLocalPath)
+	if err != nil {
+		return "", nil, false
+	}
+	byPath := make(map[string]archive.Entry, len(listed))
+	for _, e := range listed {
+		byPath[e.Path] = e
+	}
+	for _, p := range paths {
+		internal, ok := strings.CutPrefix(p, source.archivePath+"/")
+		if !ok {
+			continue
+		}
+		if e, found := byPath[internal]; found {
+			members = append(members, e)
+			continue
+		}
+		if hasDescendant(listed, internal) {
+			members = append(members, archive.Entry{Path: internal, IsDir: true})
+		}
+	}
+	return source.archiveLocalPath, members, true
 }
