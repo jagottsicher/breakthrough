@@ -15,6 +15,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
@@ -72,24 +74,77 @@ func (r *Root) openRsync() {
 	r.showOverlay(rsyncPage, r.rsyncLayout)
 }
 
-// defaultRsyncSource is openRsync's own Source default — see its
-// doc comment for the reasoning.
-func (r *Root) defaultRsyncSource() string {
+// defaultRsyncSource is openRsync's own Source default — see its doc
+// comment for the reasoning. Remote-aware: if the active panel is
+// currently connected, the result is rendered as rsync's own
+// "user@host:path" syntax instead of a bare local path, with that
+// connection tracked alongside it (see rsyncFieldDefault) so its own
+// port travels through to the real rsync invocation too, per the
+// user's own explicit request that Rsync learn about a tab's already-
+// established connection instead of asking Host/User/Port a second
+// time by hand.
+func (r *Root) defaultRsyncSource() rsyncFieldDefault {
 	paths := r.panel.SelectedPathsInDisplayOrder()
+	path := r.panel.path
 	if len(paths) == 1 {
-		return paths[0]
+		path = paths[0]
 	}
-	return r.panel.path
+	return rsyncFieldDefaultFor(r.panel, path)
 }
 
 // defaultRsyncDestination is openRsync's own Destination default —
-// see its doc comment for the reasoning.
-func (r *Root) defaultRsyncDestination() string {
+// see its doc comment for the reasoning. Remote-aware the same way
+// defaultRsyncSource is, against the split partner's own panel instead
+// of r.panel.
+func (r *Root) defaultRsyncDestination() rsyncFieldDefault {
 	idx, ok := r.splitPartner()
 	if !ok {
-		return ""
+		return rsyncFieldDefault{}
 	}
-	return r.tabs[idx].path
+	partner := r.tabs[idx]
+	return rsyncFieldDefaultFor(partner, partner.path)
+}
+
+// rsyncFieldDefault records exactly what defaultRsyncSource/
+// defaultRsyncDestination prefilled one field with, so currentRsyncJob
+// can later tell "the field still reads exactly what was defaulted
+// from a connected panel, so that connection's own Host/Port/User
+// travel through to the real rsync invocation too" apart from "the
+// user has since typed something else, treat it as plain rsync remote
+// syntax (or a local path) with no way to know a non-default port from
+// text alone" — the same limitation rsync.Endpoint's own Port field
+// doc comment already gives for why its compact "host:path" form has
+// no room to carry one, and exactly why a bare `ssh host` typed by
+// hand doesn't magically know a non-standard port either.
+type rsyncFieldDefault struct {
+	text string               // the exact string put into the field
+	conn *remotefs.Connection // nil if this default was a local path
+	path string               // the bare path portion; meaningful only when conn != nil
+}
+
+// rsyncFieldDefaultFor builds one field's own default from panel: its
+// current connection (if any) rendered as rsync's own "[user@]host:path"
+// syntax via rsync.Endpoint.String — reused rather than reimplemented,
+// so this can never drift from what Job.Command/Args actually produce
+// — or path unchanged for a local panel.
+func rsyncFieldDefaultFor(panel *Panel, path string) rsyncFieldDefault {
+	if panel.remote == nil {
+		return rsyncFieldDefault{text: path}
+	}
+	conn := panel.remoteConn
+	text := rsync.Endpoint{Host: conn.Host, User: conn.User, Path: path}.String()
+	return rsyncFieldDefault{text: text, conn: &conn, path: path}
+}
+
+// endpoint reconstructs the real rsync.Endpoint fieldText should
+// become right now — see rsyncFieldDefault's own doc comment for the
+// exact-match reasoning.
+func (d rsyncFieldDefault) endpoint(fieldText string) rsync.Endpoint {
+	fieldText = strings.TrimSpace(fieldText)
+	if d.conn != nil && fieldText == d.text {
+		return rsync.Endpoint{Host: d.conn.Host, Port: d.conn.Port, User: d.conn.User, Path: d.path}
+	}
+	return rsync.Endpoint{Path: fieldText}
 }
 
 // newRsyncForm builds the (initially empty) Source/Destination/
@@ -126,13 +181,15 @@ func (r *Root) newRsyncForm() *tview.Form {
 func (r *Root) resetRsyncForm() {
 	r.rsyncForm.Clear(true)
 
+	r.rsyncSourceDefault = r.defaultRsyncSource()
 	r.rsyncSourceField = tview.NewInputField().SetLabel("Source")
-	r.rsyncSourceField.SetText(r.defaultRsyncSource())
+	r.rsyncSourceField.SetText(r.rsyncSourceDefault.text)
 	r.rsyncSourceField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
 	r.rsyncForm.AddFormItem(r.rsyncSourceField)
 
+	r.rsyncDestinationDefault = r.defaultRsyncDestination()
 	r.rsyncDestinationField = tview.NewInputField().SetLabel("Destination")
-	r.rsyncDestinationField.SetText(r.defaultRsyncDestination())
+	r.rsyncDestinationField.SetText(r.rsyncDestinationDefault.text)
 	r.rsyncDestinationField.SetChangedFunc(func(string) { r.renderRsyncPreview() })
 	r.rsyncForm.AddFormItem(r.rsyncDestinationField)
 
@@ -237,6 +294,16 @@ func (r *Root) newRsyncPreviewView() *tview.TextView {
 	return v
 }
 
+// newRsyncHintView builds rsyncHintView once — see its own doc comment
+// on the Root struct for what it's for and why it's always present,
+// just blank when there's nothing to say.
+func (r *Root) newRsyncHintView() *tview.TextView {
+	v := tview.NewTextView()
+	v.SetBorderPadding(0, 0, 1, 0)
+	v.SetDynamicColors(true)
+	return v
+}
+
 // newRsyncButtons builds rsyncForm's own action row once, from
 // NewRoot — a real Cancel/Run button pair, the same established shape
 // newDuplicateButtons/newChmodButtons/newSearchButtons already use for
@@ -293,7 +360,7 @@ func (r *Root) newRsyncLayout() *tview.Flex {
 // newRsyncContentLayout stacks rsyncForm, rsyncFlagsList,
 // rsyncPreviewView (its own always-visible row, never a Form item —
 // see this file's own doc comment on root.go for the real bug that
-// shape rules out), rsyncSpacer, and rsyncButtons.
+// shape rules out), rsyncHintView, rsyncSpacer, and rsyncButtons.
 //
 // 6 rows for rsyncForm: four fields (height 1 each) plus itemPadding
 // (1 row between each pair, i.e. 3) plus 2 rows of the Form's own top/
@@ -302,11 +369,20 @@ func (r *Root) newRsyncLayout() *tview.Flex {
 // verification) rather than derived from the formula alone, the same
 // "check, don't just compute" discipline every dialog height in this
 // app's own history already had to learn the hard way at least once.
+//
+// rsyncHintView is a fixed extra row, always reserved, rather than a
+// row that only appears when there's actually a remote→remote hint to
+// show: a dialog whose own total height silently changes depending on
+// what Source/Destination happen to resolve to right now is a worse
+// surprise than one blank row most of the time — openRsync's own fixed
+// height already has enough slack below the sum of these fixed rows to
+// absorb it (checked directly, not assumed).
 func (r *Root) newRsyncContentLayout() *tview.Flex {
 	layout := tview.NewFlex().SetDirection(tview.FlexRow)
 	layout.AddItem(r.rsyncForm, 9, 0, true)
 	layout.AddItem(r.rsyncFlagsList, 5, 0, false)
 	layout.AddItem(r.rsyncPreviewView, 2, 0, false)
+	layout.AddItem(r.rsyncHintView, 1, 0, false)
 	layout.AddItem(r.rsyncSpacer, 1, 0, false)
 	layout.AddItem(r.rsyncButtons, 1, 0, false)
 	return layout
@@ -317,18 +393,17 @@ func (r *Root) newRsyncContentLayout() *tview.Flex {
 // and the job actually run on "Run" can never disagree about what's
 // about to happen.
 //
-// Source/Destination are parsed as plain local paths for now — a
-// typed "user@host:path" is passed straight through as Endpoint.Path
-// on a local (Host == "") Endpoint, which happens to still produce the
-// exact same argument rsync itself would expect, since Endpoint.String
-// only ever adds its own "user@host:" prefix when Host is actually
-// set. A future round can offer picking a currently-connected remote
-// tab directly instead of typing its address by hand.
+// Source/Destination go through rsyncSourceDefault/
+// rsyncDestinationDefault's own endpoint method: still exactly what
+// was defaulted from a connected panel, so its Host/Port/User travel
+// through too, or plain rsync remote syntax (or a local path) for
+// anything the user has since typed by hand — see rsyncFieldDefault's
+// own doc comment.
 func (r *Root) currentRsyncJob() rsync.Job {
 	excludes := splitRsyncExcludes(r.rsyncExcludesField.GetText())
 	return rsync.Job{
-		Source:       rsync.Endpoint{Path: strings.TrimSpace(r.rsyncSourceField.GetText())},
-		Destination:  rsync.Endpoint{Path: strings.TrimSpace(r.rsyncDestinationField.GetText())},
+		Source:       r.rsyncSourceDefault.endpoint(r.rsyncSourceField.GetText()),
+		Destination:  r.rsyncDestinationDefault.endpoint(r.rsyncDestinationField.GetText()),
 		CopyContents: r.rsyncFlags[rsyncLabelCopyContents],
 		Archive:      r.rsyncFlags[rsyncLabelArchive],
 		Compress:     r.rsyncFlags[rsyncLabelCompress],
@@ -360,7 +435,8 @@ func splitRsyncExcludes(text string) []string {
 // and every flag toggle, so a change is always reflected before "Run"
 // is ever pressed, the same "never run something consequential
 // without showing what it is first" principle this project already
-// applies to the remote-archive confirm dialog.
+// applies to the remote-archive confirm dialog. Also refreshes
+// rsyncHintView (see its own doc comment).
 //
 // --delete is called out in the theme's own warning color when it's
 // on: the one flag here that turns a sync into "also remove whatever
@@ -376,6 +452,47 @@ func (r *Root) renderRsyncPreview() {
 		command = strings.Replace(command, "'--delete'", "["+colorTag(r.theme.WarningText)+"]'--delete'[-]", 1)
 	}
 	r.rsyncPreviewView.SetText(command)
+	r.rsyncHintView.SetText(rsyncRelayHint(job, r.theme))
+}
+
+// rsyncRelayHint is a one-line, warning-colored notice shown only when
+// both Source and Destination resolve to a remote host — "" (nothing
+// shown) for every other combination. rsync -e ssh has no server-to-
+// server transfer mode of its own: every byte still flows through
+// this machine over two separate ssh connections, never directly
+// between the two remote hosts, exactly the "surprisingly slow over a
+// weak local link" trap the user's own notes on this feature call out
+// — worth saying up front, not discovered only once a sync already
+// feels unexpectedly slow.
+func rsyncRelayHint(job rsync.Job, theme config.ResolvedTheme) string {
+	if !rsyncEndpointIsRemote(job.Source) || !rsyncEndpointIsRemote(job.Destination) {
+		return ""
+	}
+	return fmt.Sprintf("[%s]⚠ remote→remote is relayed through this machine, not directly between hosts[-]", colorTag(theme.WarningText))
+}
+
+// rsyncEndpointIsRemote reports whether e names a remote rsync
+// endpoint — either because Host is already set (a live connection
+// this project itself resolved it from, see rsyncFieldDefault), or
+// because its own Path looks like rsync's own "[user@]host:path"
+// remote syntax on its own merits. That second case matters on its
+// own: typing a remote address straight in — syncing to a third host
+// never connected to via the Connect dialog at all — is a genuinely
+// common way to use Rsync, and the relay warning below should still
+// catch it. The heuristic is rsync(1)'s own real disambiguation rule
+// between a remote spec and a local path containing a literal ":"
+// somewhere inside it, not a guess: a colon before the first "/" names
+// a host, one that doesn't is just part of an ordinary local path.
+func rsyncEndpointIsRemote(e rsync.Endpoint) bool {
+	if e.IsRemote() {
+		return true
+	}
+	colon := strings.IndexByte(e.Path, ':')
+	if colon < 0 {
+		return false
+	}
+	slash := strings.IndexByte(e.Path, '/')
+	return slash < 0 || colon < slash
 }
 
 // runRsync is the "Run" button's action: hands currentRsyncJob's own
