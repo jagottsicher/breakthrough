@@ -1668,6 +1668,13 @@ func (r *Root) wirePanel(panel *Panel) {
 	// own doc comment) — per the user's own explicit request.
 	panel.onOpenFile = r.openLook
 
+	// Entering a remote archive (see Panel.onEnterRemoteArchive's own
+	// doc comment) needs a real download first — genuinely async, with
+	// a possible confirm dialog in between — which is why this can't
+	// just be another branch inside Panel.navigate/load the way a
+	// local archive's own near-instant entry already is.
+	panel.onEnterRemoteArchive = r.enterRemoteArchive
+
 	// The header row's own "<" button expands the Details sidebar (see
 	// Panel.onExpandDetails/detailsExpandBtn's own doc comments) —
 	// showDetailsSidebar directly, not the toggle: this button only
@@ -3154,6 +3161,17 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 		// remote — never mixed with the archive-extraction or local
 		// startPaste paths below, both of which assume a real local
 		// path throughout.
+		if r.remoteArchiveMemberOrigin(r.clipboard) {
+			// A marked member inside a remote-staged archive still on
+			// screen somewhere (see remoteArchiveMemberOrigin's own doc
+			// comment) — its clipboard path is a purely virtual
+			// "archive/member" string our own UI constructs, not a real
+			// path remote.Open could ever resolve, so startRemotePaste
+			// below would otherwise fail with a confusing raw SFTP
+			// "no such file" instead of a real explanation.
+			r.showError(fmt.Errorf("copying a member out of a remote archive isn't supported yet — download the whole archive elsewhere first, then extract it locally"))
+			return
+		}
 		if followSymlinks {
 			r.showError(fmt.Errorf("pasting while following symlinks isn't supported yet for a remote connection — use plain Paste instead"))
 			return

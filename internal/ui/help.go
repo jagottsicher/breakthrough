@@ -211,16 +211,23 @@ var helpText = strings.TrimLeft(`
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal,
-  no prompt, for one that changed. Browsing, viewing, rename,
-  permanent delete, chmod, and Copy/Cut/Paste all work once connected
-  ("d" redirects straight to the same permanent-delete confirmation
-  "D" uses — no remote trash exists to move into instead; a same-
-  connection move renames instead of downloading and re-uploading).
-  Details, status-bar Disk/Inodes, and System Info at "/" all describe
-  the remote machine, not this one, once connected. Edit, chown,
-  Compare, Batch rename, Sed Replace, Properties as a whole, and
-  opening a zip/tar archive that lives on the connection still refuse
-  outright for now.
+  no prompt, for one that changed. Browsing, rename, permanent delete,
+  chmod, and Copy/Cut/Paste all work once connected ("d" redirects
+  straight to the same permanent-delete confirmation "D" uses — no
+  remote trash exists to move into instead; a same-connection move
+  renames instead of downloading and re-uploading). Look and Edit
+  stage a real local temp copy behind the scenes for the ordinary
+  built-in viewer/external pager/$VISUAL/$EDITOR to use unchanged —
+  Edit only uploads it back if it actually changed. Opening a zip/tar
+  that lives on the connection downloads and browses it the same
+  transparent way, asking first above a configurable size (Options ->
+  Remote connections, e.g. "10MB") — Copy'ing a member back out of one
+  isn't supported yet, download the whole archive elsewhere and
+  extract locally instead. Details, status-bar Disk/Inodes, and System
+  Info at "/" all
+  describe the remote machine, not this one, once connected. chown,
+  Compare, Batch rename, Sed Replace, and Properties as a whole still
+  refuse outright for now.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in

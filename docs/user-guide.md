@@ -883,7 +883,18 @@ offered for.
 Once connected, the panel browses the remote filesystem exactly like a
 local one: same columns, same sorting, the Home button (`~`) goes to
 the remote account's own home directory instead of this machine's.
-Viewing a file (Look, `l`) works the same way too.
+
+Look (`l`) and Edit (`e`) both stage the file into a real local temp
+copy first (there's no other way to hand it to the built-in viewer, an
+external pager, or `$VISUAL`/`$EDITOR` — none of them have any notion
+of a remote connection) and remove that copy again once they're done
+with it. Edit specifically only uploads it back if it actually
+changed, compared by its own mtime and size, not a second full read —
+opening a file, looking at it, and closing the editor without
+touching anything never writes back to the remote copy at all. A PDF's
+own staged copy sticks around for as long as Look stays open, since
+page turns keep reading from it on demand; everything else is removed
+the moment its content is rendered.
 
 Rename (`r`), permanent delete (`d`/`D` — see below), chmod (the `p`
 chord's own `pm`, including its recursive dirs/files options), and
@@ -919,19 +930,34 @@ sessions, which does need one and is simply left off remotely, the
 same "one less line" treatment a source this project can't reach at
 all already gets elsewhere.
 
-Everything else that changes files does not yet: Edit, chown, Compare,
-Batch rename, Sed Replace, Properties as a whole (its own Save button
+Opening a zip/tar/... that itself lives on a remote connection
+downloads it into a local temp copy first — there's no way around
+that: a zip's own central directory sits at the end of the file
+regardless of where it lives, so browsing one means having the whole
+thing local either way. Below **Confirm before downloading archives
+over** (Options → Remote connections, a size typed as e.g. "10MB",
+"500KB", or "1GB" — 10MB by default), that download just happens on
+its own, the same proactively-transparent way every other remote
+operation here already works; at or above it, a confirmation names the
+real size first, so a large archive over a slow link can't turn one
+Enter keypress into an unexpected, unwarned multi-minute wait.
+Everything about browsing it afterward — navigating in and out,
+Copy'ing a member to a real destination — works the same as a local
+archive, with one exception: a member marked *inside* a remote archive
+can't be Copied back out again yet (Paste explains this rather than
+failing with a raw connection error) — download the whole archive
+somewhere real first, then extract from it locally instead.
+
+Everything else that changes files does not yet: chown, Compare, Batch
+rename, Sed Replace, and Properties as a whole (its own Save button
 combines Name/Permissions with Owner/Group and Modified/hash into one
-action, and only some of those are remote-aware yet), and browsing
-into a zip/tar archive that itself lives on a remote connection, all
-refuse outright with a clear message — chown specifically because
-there's no remote user/group database to resolve a typed name
-against, archive browsing because it needs random-access reads this
-project doesn't stream over a connection yet, the rest because they'd
-need a real remote command-execution channel this project doesn't
-have. Disconnecting (the active row's own "⏏" in the dropdown, or `e`
-while it's highlighted) closes the session and returns the panel to
-browsing this machine's own home directory.
+action, and only some of those are remote-aware yet) all refuse
+outright with a clear message — chown specifically because there's no
+remote user/group database to resolve a typed name against, the rest
+because they'd need a real remote command-execution channel this
+project doesn't have. Disconnecting (the active row's own "⏏" in the
+dropdown, or `e` while it's highlighted) closes the session and
+returns the panel to browsing this machine's own home directory.
 
 ## Properties
 
@@ -1480,6 +1506,7 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count` | `1` | How many duplicates one Multiply run creates at once |
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
+| `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
 
 ## Keyboard reference
 

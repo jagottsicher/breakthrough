@@ -533,9 +533,18 @@ terminal.
   and Copy/Cut/Paste all work against a remote target too — including
   moving a file between two directories on the same connection, which
   goes through a single rename rather than downloading and re-uploading
-  it. Still refused with a clear message for now: Edit, chown, Compare,
-  Batch rename, Sed Replace, Properties as a whole, and browsing into a
-  zip/tar archive that itself lives on a remote connection. See
+  it; "d" (Move to Trash) explains why it switches straight to a
+  permanent-delete confirmation instead, since a remote session has no
+  trash to move into. Look and Edit stage a real local temp copy
+  behind the scenes and hand it to the ordinary built-in viewer/
+  external pager/$VISUAL/$EDITOR unchanged — Edit only uploads it back
+  if it actually changed. Opening a zip/tar that itself lives on a
+  remote connection downloads and browses it the same transparent way;
+  above a configurable size (Options → Remote connections, KB/MB/GB,
+  10MB by default) it asks first, naming the real size. Still refused
+  with a clear message for now: chown, Compare, Batch rename, Sed
+  Replace, Properties as a whole, and copying a member back *out* of a
+  remote archive. See
   [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp) for
   the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier

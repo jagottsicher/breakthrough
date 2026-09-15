@@ -321,6 +321,28 @@ type Panel struct {
 	archivePath    string
 	archiveEntries []archive.Entry
 
+	// archiveLocalPath/archiveRemoteClient are set only while archivePath
+	// itself actually names a *remote* archive — archivePath still holds
+	// the real remote path (what's shown in the header/breadcrumb and
+	// used for the virtual "inside the archive" navigation, exactly as
+	// it always has), while archiveLocalPath is the local, downloaded
+	// temp copy archive.List/archive.Children/archive.Extract actually
+	// read bytes from (see archiveReadPath) — neither of those has any
+	// notion of a remotefs.Client, only ever a real path on this
+	// machine. archiveRemoteClient records which connection it came
+	// from, both to know this archive session *is* remote at all
+	// (archiveLocalPath alone being non-empty would already imply it,
+	// but naming the client explicitly reads clearer at every call site
+	// than inferring it from "some other field happens to be set") and
+	// for enterRemoteArchive's own re-entry check when navigating
+	// between two remote archives back to back. Both reset to their
+	// zero value in the exact same places archivePath/archiveEntries
+	// already are (see leavingArchive) — cleaning up archiveLocalPath's
+	// own temp file first, unlike those two, since nothing else ever
+	// removes it.
+	archiveLocalPath    string
+	archiveRemoteClient remotefs.Client
+
 	// selected holds the absolute paths currently checked in the checkbox
 	// column. Reset on every successful load() — selection is scoped to
 	// the directory currently on screen, not carried across navigation,
@@ -542,6 +564,21 @@ type Panel struct {
 	// already has. Left nil the same as onRenameGesture if nothing's
 	// wired it up.
 	onOpenFile func()
+
+	// onEnterRemoteArchive reports activateRow landing on a recognized
+	// archive file (see archive.Classify) while this Panel is connected
+	// remotely — Root wires this to enterRemoteArchive, which stats the
+	// real remote size, downloads it (asking first above
+	// remote_archive_confirm_size — see config.Settings' own doc
+	// comment), and only then actually navigates in. Never fires for a
+	// local archive, which enters directly through the ordinary
+	// p.navigate path instead — see activateRow's own dispatch. No path
+	// parameter, the same "cursor's already on the right row" shape
+	// onOpenFile already has. Left nil the same as onOpenFile if
+	// nothing's wired it up (e.g. a test constructing a Panel directly
+	// — those exercise enterRemoteArchive itself, or the lower-level
+	// pieces it calls, rather than depending on this callback firing).
+	onEnterRemoteArchive func()
 
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
@@ -1119,6 +1156,15 @@ func (p *Panel) load(dir string) error {
 	if p.leavingArchive(abs) {
 		p.archivePath = ""
 		p.archiveEntries = nil
+		if p.archiveLocalPath != "" {
+			// The downloaded temp copy a remote archive was staged into
+			// (see enterRemoteArchive) — nothing else ever removes it,
+			// unlike archivePath/archiveEntries, which are just in-memory
+			// state with nothing on disk to clean up.
+			_ = os.Remove(p.archiveLocalPath)
+			p.archiveLocalPath = ""
+		}
+		p.archiveRemoteClient = nil
 	}
 
 	// resolveArchiveState (see its own doc comment) is what lets
@@ -1127,14 +1173,20 @@ func (p *Panel) load(dir string) error {
 	// file, or a subdirectory already inside one: load() itself is the
 	// one place that has to know the difference, everything upstream of
 	// it (navigate, the ".." row, Root's tab/history plumbing) just
-	// keeps treating abs as an ordinary path. A connected panel skips
-	// this branch entirely: browsing into an archive that itself lives
-	// on a remote host isn't supported yet (see remote's own doc
-	// comment on the struct).
+	// keeps treating abs as an ordinary path. resolveRemoteArchiveState
+	// is that same idea's remote-panel counterpart (see its own doc
+	// comment on why it's narrower) — a connected panel can still browse
+	// into a recognized archive file, just always by way of
+	// enterRemoteArchive's own real download first (see
+	// Panel.onEnterRemoteArchive), never cold from this switch alone.
 	var entries []fsops.Entry
 	switch {
 	case p.remote != nil:
-		entries, err = p.remote.ListDir(abs)
+		if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
+			entries, err = p.loadArchiveEntries(archivePath, internalDir)
+		} else {
+			entries, err = p.remote.ListDir(abs)
+		}
 	default:
 		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
 			entries, err = p.loadArchiveEntries(archivePath, internalDir)
@@ -2993,6 +3045,12 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		// navigable file here, same as any other.
 		if p.archivePath == "" {
 			if _, ok := archive.Classify(ref.path); ok {
+				if p.remote != nil {
+					if p.onEnterRemoteArchive != nil {
+						p.onEnterRemoteArchive()
+					}
+					return true
+				}
 				p.reportError(p.navigate(ref.path))
 				return true
 			}
