@@ -639,7 +639,15 @@ func mouseStatusText(enabled bool) string {
 // uname isn't available (e.g. some minimal containers) — the status bar
 // just shows one less segment then.
 func kernelVersionText() string {
-	out, err := exec.Command("uname", "-r").Output()
+	return unameField("-r")
+}
+
+// unameField runs `uname flag` and returns its trimmed output, "" if
+// uname itself isn't available — kernelVersionText's own shape,
+// generalized once systeminfo.go needed a second field ("-m", the
+// machine architecture) from the exact same tool.
+func unameField(flag string) string {
+	out, err := exec.Command("uname", flag).Output()
 	if err != nil {
 		return ""
 	}
@@ -697,6 +705,21 @@ func formatUptime(d time.Duration) string {
 // wrapped in statusLoadColor throughout, same as every other
 // segment's own fixed base color.
 func loadAverageText(theme config.ResolvedTheme) (string, bool) {
+	numbers, ok := coloredLoadNumbers(theme)
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s %s", wrapColor(statusLoadColor, "load"), numbers), true
+}
+
+// coloredLoadNumbers reads /proc/loadavg's own three figures, each
+// individually colored via loadNumberColor against this machine's own
+// core count — the shared core of loadAverageText above (which adds
+// its own leading "load" label, for the status bar) and System Info's
+// own load line (systeminfo.go, which has a "Load:" label of its own
+// already — repeating the word there too would just read as "Load:
+// load 1.32 ...").
+func coloredLoadNumbers(theme config.ResolvedTheme) (string, bool) {
 	data, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
 		return "", false
@@ -714,7 +737,7 @@ func loadAverageText(theme config.ResolvedTheme) (string, bool) {
 		}
 		numbers[i] = wrapColor(loadNumberColor(v, cores, theme), fields[i])
 	}
-	return fmt.Sprintf("%s %s", wrapColor(statusLoadColor, "load"), strings.Join(numbers, " ")), true
+	return strings.Join(numbers, " "), true
 }
 
 // loadNumberColor is percentStatusColor's own three-band scale, just
@@ -1211,6 +1234,15 @@ func (r *Root) StartClock() (stop func()) {
 			case <-ticker.C:
 				r.app.QueueUpdateDraw(func() {
 					r.refreshStatusBar()
+					// System Info (see systeminfo.go) shows the same
+					// kind of live figures (uptime, load, memory, ...)
+					// the status bar itself does — same ticker, same
+					// reasoning, so it never sits there showing a
+					// minute-old load average while Details stays open
+					// at "/".
+					if r.detailsSidebarVisible && r.showingSystemInfo() {
+						r.renderDetailsSidebar()
+					}
 				})
 			case <-done:
 				ticker.Stop()

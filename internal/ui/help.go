@@ -166,6 +166,23 @@ var helpText = strings.TrimLeft(`
   (right after the tab strip) expands it the same way "I" does; once
   open, the ">" button in its own top-right corner collapses it again.
 
+  While the current tab is browsing the real filesystem root ("/"),
+  the sidebar shows "System Info" instead — an overview of the machine
+  itself, regardless of which entry happens to be selected there,
+  since there's no more useful single file to describe at that point.
+  Host/OS/kernel/architecture/CPU, uptime/load/memory/swap/disk/
+  inodes/open file handles (colored green/orange/red under 80% / from
+  80% / from 90%, same as the status bar's own scale — see its own
+  help section above), and plain counts (mounted filesystems,
+  processes, network interfaces, logged-in sessions) — everything a
+  standard Linux install already exposes via /proc, os-release, or a
+  POSIX command (uname, who) already installed everywhere, nothing
+  needing an extra tool (no CPU temperature, for instance — unlike
+  everything else here, it has no such universal source). Refreshes
+  once a second, the same ticker the status bar's own clock uses, so
+  it never sits there showing a minute-old load average. Reverts to
+  the normal per-file view the moment you navigate anywhere else.
+
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
       both at once if both are open on the same file, however it was

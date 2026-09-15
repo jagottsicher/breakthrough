@@ -709,6 +709,8 @@ through the real `tail -f`.
 tab strip. A live, read-only panel on the right that follows the
 cursor.
 
+### Per-file view
+
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
 
@@ -726,6 +728,43 @@ working while Properties is open on the same file, rather than needing
 it closed first — pressing `h` there fills in Properties' own hash
 section instead of Details', so it never fills in a window you can't
 see.
+
+### System Info (while the current tab is at "/")
+
+Browsing the real filesystem root replaces the whole per-file view
+above with an overview of the machine itself instead — regardless of
+which entry happens to be selected there, since there's no single file
+worth describing at that point. The title bar switches to "System
+Info" to match, and switches back to "Details" the moment you navigate
+anywhere else.
+
+| Field | Source | Color |
+|---|---|---|
+| Host, OS, Architecture, CPU | `os.Hostname`, `/etc/os-release`, `uname -m`, `/proc/cpuinfo` + core count | Amber |
+| Kernel | `uname -r` | Gold — the same color it has in the status bar |
+| Uptime | `/proc/uptime` | Teal — same as the status bar |
+| Load | `/proc/loadavg`, each number scaled against this machine's own core count | Slate blue label, numbers green/orange/red |
+| Memory, Swap | `/proc/meminfo` (`MemTotal`/`MemAvailable`, `SwapTotal`/`SwapFree`) | Rose / terracotta, percentage green/orange/red |
+| Disk, Inodes | the root filesystem's own usage (same source as the status bar) | Blue / violet — same as the status bar |
+| Open files | `/proc/sys/fs/file-nr` (allocated vs. `fs.file-max`) | Cyan, percentage green/orange/red |
+| Mounted filesystems, Processes, Network interfaces, Logged-in sessions | `/proc/mounts`, `/proc` PIDs, `/proc/net/dev`, `who` | Muted blue-grey (plain counts, no threshold) |
+
+Every percentage here — memory, swap, disk, inodes, open files, and
+each of the three load numbers — follows the exact same scale the
+status bar uses: green under 80%, orange from 80%, red from 90%. Load
+average has no percentage of its own to work with, so it's scaled
+against `runtime.NumCPU()` instead — a load of 2 is idle on a 16-core
+machine and badly overloaded on a 2-core one.
+
+Deliberately nothing that needs a package installed beyond what this
+app already assumes elsewhere (`uname`, `who`) — which is exactly why
+there's no CPU temperature: unlike everything above, it has no such
+universal built-in source (that needs `lm-sensors` or a vendor tool,
+neither ever assumed present). A field whose source doesn't exist on
+this platform (anything without `/proc`, or without a given command)
+is quietly left out of its own line, same as the status bar's own
+kernel/uptime/load segments. Refreshes once a second, the same ticker
+the status bar's own clock uses.
 
 Images and PDFs get an inline preview with its own click zone for
 fullscreen. Previews load in the background and only once the cursor has
