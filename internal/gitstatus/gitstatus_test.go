@@ -228,9 +228,21 @@ func TestFetchReportsConflicts(t *testing.T) {
 	runGit(t, dir, "commit", "-q", "-am", "main change")
 
 	// Expected to fail with a real conflict left in the working tree --
-	// exactly the state being tested for, not a setup error.
-	mergeCmd := exec.Command("git", "-C", dir, "merge", "-q", "other")
-	_ = mergeCmd.Run()
+	// exactly the state being tested for, not a setup error. "-c
+	// merge.ff=false" overrides any global merge.ff a CI runner's own
+	// git config might set (a real, observed CI failure otherwise: a
+	// runner with merge.ff=only refuses the whole merge outright
+	// -- "Not possible to fast-forward, aborting" -- leaving main
+	// completely untouched and the working tree clean, so Fetch
+	// afterward correctly reported 0 conflicts for what was actually a
+	// no-op here, not a bug in Fetch itself). Asserted below rather
+	// than just ignored, so a future case where the merge succeeds
+	// cleanly for some *other* reason fails with a clear message
+	// instead of the oblique "Conflicts = 0, want 1" this one first
+	// surfaced as.
+	if err := exec.Command("git", "-c", "merge.ff=false", "-C", dir, "merge", "-q", "other").Run(); err == nil {
+		t.Fatal("setup: expected the merge to conflict, but it succeeded cleanly")
+	}
 
 	st, inRepo, err := Fetch(context.Background(), dir)
 	if err != nil {
