@@ -185,6 +185,19 @@ var helpText = strings.TrimLeft(`
   once a second, the same ticker the status bar's own clock uses, so
   it never sits there showing a minute-old load average.
 
+  Selecting a real directory that's part of a git repository (any
+  directory inside one, not just its own root) adds a git status
+  section right below the stat block — the same "git:(branch)
+  ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts" line and
+  green/orange/red coloring the status bar's own git segment already
+  shows (see above), just for whichever directory is currently
+  selected rather than the one the panel itself is showing. Nothing
+  shown for a plain file, or outside a git repository. Fetched a
+  moment after the cursor actually stops on a directory, the same
+  cursor-rests-briefly-first debounce the image/PDF preview above
+  already uses, so holding an arrow key down through a long list of
+  directories costs nothing.
+
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
       both at once if both are open on the same file, however it was
@@ -240,9 +253,10 @@ var helpText = strings.TrimLeft(`
   Left to right, whatever's actually staged or in flight (a pending
   chord's countdown, a running Paste's progress, or the clipboard's own
   contents), then: username (green, red while running as root), Mouse
-  on/off, disk space, inode usage, kernel version, uptime, load average,
-  and a clock. Disk and inode usage, kernel, uptime and load each have
-  their own fixed color so they stand out from one another at a glance.
+  on/off, disk space, inode usage, git status, kernel version, uptime,
+  load average, and a clock. Disk and inode usage, git, kernel, uptime
+  and load each have their own fixed color so they stand out from one
+  another at a glance.
 
   Disk space reads "free/total" — how much room is left; inode usage
   reads "used/total" — how many you've used up, since that's the
@@ -252,7 +266,15 @@ var helpText = strings.TrimLeft(`
   own core count (a load of 2 is idle on 16 cores, overloaded on 2)
   rather than as a raw, meaningless-on-its-own number.
 
-  Every one of these seven segments can be turned off individually —
+  Git status ("git:(branch) ⇡ahead ⇣behind +staged !unstaged
+  ?untracked =conflicts", the same phrasing several zsh prompt themes
+  already use) shows only while the current directory is actually part
+  of a git repository — quietly nothing otherwise. Green while clean,
+  orange the moment anything's staged, unstaged, or untracked, red the
+  instant there's a real merge conflict; a figure that's zero is left
+  out entirely rather than shown as "+0".
+
+  Every one of these eight segments can be turned off individually —
   see "oo" → Status bar below.
 
 [::b]Options screen ("oo")[::-]

@@ -729,6 +729,25 @@ it closed first — pressing `h` there fills in Properties' own hash
 section instead of Details', so it never fills in a window you can't
 see.
 
+### Git status
+
+Selecting a real directory that's part of a git repository (any
+directory inside one, not just its own root — git itself resolves
+that the same way `git status` typed there directly would) adds its
+own section right below the stat block: the same `git:(branch)
+⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` line and
+green/orange/red coloring the [status bar's own git
+segment](#status-bar) shows, just for whichever directory is currently
+selected rather than the one the panel itself is showing. Nothing
+shown for a plain file — this is directory-only — or outside a git
+repository, or with the `show_git_status` setting off.
+
+Fetched a moment after the cursor actually stops on a directory (the
+same short debounce the image/PDF preview above uses), and cancelled
+outright the instant the cursor moves on, so holding an arrow key down
+through a long list of directories never queues up one `git status`
+invocation per row.
+
 ### System Info (selecting "/" itself)
 
 The real filesystem root shows a selectable "/" row of its own, in
@@ -1187,7 +1206,7 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 The bottom line, purely informational — nothing on it is clickable.
 Left to right: whatever's actually staged or in flight (a chord
 countdown, a running Paste's progress, or the clipboard's own contents
-— see [Copy, Cut and Paste](#copy-cut-and-paste)), then seven segments,
+— see [Copy, Cut and Paste](#copy-cut-and-paste)), then eight segments,
 each independently switchable off (see [Options and
 configuration](#options-and-configuration) below), and finally a clock.
 
@@ -1197,6 +1216,7 @@ configuration](#options-and-configuration) below), and finally a clock.
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `Disk free <free>/<total> (<percent>%)` for the current directory's own filesystem | Blue, percentage green/orange/red |
 | Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem | Violet, percentage green/orange/red |
+| Git status | `git:(branch) ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` for the current directory, only while it's part of a git repository | Green (clean) / orange (dirty) / red (conflicts) |
 | Kernel version | `uname -r`'s own output | Gold |
 | Uptime | `up <days> <HH:MM>` (Linux's own `/proc/uptime`) | Teal |
 | Load average | The 1/5/15-minute load average (Linux's own `/proc/loadavg`) | Slate blue label, each number green/orange/red |
@@ -1218,6 +1238,13 @@ doing that division yourself.
 Kernel version, uptime, and load average are quietly omitted on a
 platform that doesn't expose them (anything without `/proc/uptime` or
 `/proc/loadavg`, or without `uname` at all) rather than shown wrong.
+Git status is likewise omitted entirely outside a git repository, or
+without `git` itself on `$PATH` — its phrasing ("git:(branch)") is the
+same one several popular zsh prompt themes already use, and it drops
+each figure that's zero rather than padding the line with "+0"s. A
+figure that's zero across the board (a totally clean tree with an
+up-to-date upstream, or no upstream at all) shows as just the branch
+name on its own.
 
 ## Options and configuration
 
@@ -1295,6 +1322,7 @@ Every key breakthrough recognizes, with its default:
 | `status_bar_show_kernel` | `true` | Show the running kernel version (`uname -r`) in the status bar |
 | `status_bar_show_uptime` | `true` | Show system uptime in the status bar, where the platform exposes it |
 | `status_bar_show_load` | `true` | Show the 1/5/15-minute load average in the status bar, where the platform exposes it |
+| `show_git_status` | `true` | Show git status (branch, changes, ahead/behind) in the status bar and the Details sidebar |
 | `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
 | `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
 | `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |

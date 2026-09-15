@@ -303,6 +303,17 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.settings.StatusBarShowLoad },
 					func(r *Root, b bool) { r.settings.StatusBarShowLoad = b },
 				),
+				statusBarSegmentOption("show_git_status", "Git status",
+					"Whether the current directory's own git branch and working-tree "+
+						"state show up — both in the status bar, and as its own section "+
+						"in the Details sidebar (\"I\") when a directory that's part of a "+
+						"git repository is selected there. Colored green when clean, "+
+						"orange with anything uncommitted (staged, unstaged, or "+
+						"untracked), red the moment there's a real merge conflict. "+
+						"Quietly shows nothing outside a git repository.",
+					func(r *Root) bool { return r.settings.ShowGitStatus },
+					func(r *Root, b bool) { r.settings.ShowGitStatus = b },
+				),
 			},
 		},
 		{
@@ -808,6 +819,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.StatusBarShowUptime), true
 	case "status_bar_show_load":
 		return strconv.FormatBool(s.StatusBarShowLoad), true
+	case "show_git_status":
+		return strconv.FormatBool(s.ShowGitStatus), true
 	case "duplicate_separator":
 		return s.DuplicateSeparator, true
 	case "duplicate_strategy":

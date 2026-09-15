@@ -270,6 +270,7 @@ type Settings struct {
 	StatusBarShowKernel   bool
 	StatusBarShowUptime   bool
 	StatusBarShowLoad     bool
+	ShowGitStatus         bool
 
 	DuplicateSeparator        string
 	DuplicateStrategy         string
@@ -321,6 +322,7 @@ func DefaultSettings() Settings {
 		StatusBarShowKernel:   true,
 		StatusBarShowUptime:   true,
 		StatusBarShowLoad:     true,
+		ShowGitStatus:         true,
 
 		DuplicateSeparator:        "_",
 		DuplicateStrategy:         "numbered",
@@ -410,6 +412,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.StatusBarShowUptime)
 	case "status_bar_show_load":
 		return parseBool(&s.StatusBarShowLoad)
+	case "show_git_status":
+		return parseBool(&s.ShowGitStatus)
 	case "duplicate_separator":
 		s.DuplicateSeparator = value
 	case "duplicate_strategy":

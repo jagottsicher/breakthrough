@@ -341,6 +341,12 @@ func (r *Root) buildStatusBar() string {
 			}
 		}
 	}
+	if r.settings.ShowGitStatus {
+		if git, ok := gitStatusForStatusBar(r.theme, r.panel.path); ok {
+			write(git)
+			sep()
+		}
+	}
 	if r.settings.StatusBarShowKernel {
 		if k := kernelVersionText(); k != "" {
 			write(wrapColor(statusKernelColor, k))

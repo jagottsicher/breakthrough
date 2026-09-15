@@ -474,13 +474,17 @@ terminal.
   current user (green, red while running as root), disk space
   (`free/total`) and inode usage (`used/total`) for the directory on
   screen — each with its own fixed color and a green/orange/red
-  percentage (under 80% / 80%+ / 90%+) — the running kernel (`uname -r`),
-  uptime and load average where the platform exposes them (Linux's own
-  `/proc/uptime` and `/proc/loadavg` — quietly omitted elsewhere rather
-  than shown wrong; load's own three numbers are colored against this
-  machine's core count, not as raw, meaningless-alone figures), and a
-  clock. Every one of those seven segments can be switched off on its
-  own from Options → Status bar. See
+  percentage (under 80% / 80%+ / 90%+) — git status (`git:(branch)
+  ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts`, the same
+  phrasing several zsh prompt themes already use, green/orange/red for
+  clean/dirty/conflicted, shown only inside a git repository), the
+  running kernel (`uname -r`), uptime and load average where the
+  platform exposes them (Linux's own `/proc/uptime` and
+  `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong;
+  load's own three numbers are colored against this machine's core
+  count, not as raw, meaningless-alone figures), and a clock. Every one
+  of those eight segments can be switched off on its own from Options
+  → Status bar. See
   [docs/user-guide.md](docs/user-guide.md#status-bar) for the full
   breakdown. The real filesystem root shows a selectable "/" row in
   place of the usual `..`; selecting it and opening the Details
@@ -488,7 +492,11 @@ terminal.
   plus memory, swap, open file handles, mounted filesystems, process
   count, network interfaces and logged-in sessions, in the same colors
   and green/orange/red scale — while every other entry under "/" still
-  gets its own ordinary per-file Details. See
+  gets its own ordinary per-file Details. Selecting any other directory
+  that's part of a git repository adds that same git status line as
+  its own section there too, fetched a moment after the cursor settles
+  and cancelled if it moves on, so scrolling through a long list of
+  directories never queues up one `git status` per row. See
   [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
   full field list.
 - Color schemes: JSON files under `colorschemes/` in either config tier
