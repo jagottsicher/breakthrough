@@ -702,6 +702,16 @@
       "sha256": "c18ffa7f257ce1b119c0c7baca5f319d8ea0369308d490273e077e2ae7635ea9"
     },
     {
+      "path": "internal/rsync/rsync.go",
+      "size": 9253,
+      "sha256": "443db9dcd01169ad82953a824a1ae295dc3a57936c40795e3c131b51f7c9b1a0"
+    },
+    {
+      "path": "internal/rsync/rsync_test.go",
+      "size": 6409,
+      "sha256": "568ebe312368b56b4331597dba8b598326260e40185119afdcca2ef5f3d9a59c"
+    },
+    {
       "path": "internal/search/archive.go",
       "size": 14266,
       "sha256": "e30c04b282c6c61bf3716ddb2b533a3c4dbd6275c8a129b6baf8a57eba6b3e63"
@@ -1790,6 +1800,20 @@
         "os",
         "os/exec",
         "path/filepath",
+        "strings",
+        "testing"
+      ]
+    },
+    {
+      "import_path": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "directory": "internal/rsync",
+      "name": "rsync",
+      "files": [
+        "internal/rsync/rsync.go",
+        "internal/rsync/rsync_test.go"
+      ],
+      "imports": [
+        "fmt",
         "strings",
         "testing"
       ]
@@ -8164,6 +8188,195 @@
       "name": "RunSed",
       "kind": "function",
       "line": 18
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "Endpoint",
+      "kind": "type",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "IsRemote",
+      "kind": "method",
+      "receiver": "Endpoint",
+      "line": 31
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "String",
+      "kind": "method",
+      "receiver": "Endpoint",
+      "line": 42
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "Job",
+      "kind": "type",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "sourceArg",
+      "kind": "method",
+      "receiver": "Job",
+      "line": 104
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "rsh",
+      "kind": "method",
+      "receiver": "Job",
+      "line": 122
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "flagArgs",
+      "kind": "method",
+      "receiver": "Job",
+      "line": 138
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "Args",
+      "kind": "method",
+      "receiver": "Job",
+      "line": 174
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "Command",
+      "kind": "method",
+      "receiver": "Job",
+      "line": 197
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync.go",
+      "name": "shellQuote",
+      "kind": "function",
+      "line": 219
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestEndpointStringLocalIsJustThePath",
+      "kind": "function",
+      "line": 8
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestEndpointStringRemoteWithUser",
+      "kind": "function",
+      "line": 18
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestEndpointStringRemoteWithoutUser",
+      "kind": "function",
+      "line": 28
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestSourceArgCopyContentsAppendsTrailingSlash",
+      "kind": "function",
+      "line": 41
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestSourceArgWithoutCopyContentsHasNoTrailingSlash",
+      "kind": "function",
+      "line": 48
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestSourceArgCopyContentsOnAnAlreadySlashedPathDoesNotDouble",
+      "kind": "function",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsBuildsFlagsInOrderThenSourceThenDestination",
+      "kind": "function",
+      "line": 65
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsOmitsEveryFlagThatIsOff",
+      "kind": "function",
+      "line": 80
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsIncludesOneExcludeFlagPerPattern",
+      "kind": "function",
+      "line": 89
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsAddsRshWithPortWhenDestinationHasANonDefaultPort",
+      "kind": "function",
+      "line": 102
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsPrefersSourcePortWhenBothEndpointsAreRemoteWithDifferentPorts",
+      "kind": "function",
+      "line": 114
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestArgsOmitsRshWhenNeitherEndpointHasANonDefaultPort",
+      "kind": "function",
+      "line": 130
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestCommandProducesAShellQuotedLineMatchingArgs",
+      "kind": "function",
+      "line": 142
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestCommandSplicesExtraArgsVerbatimBetweenFlagsAndPositionals",
+      "kind": "function",
+      "line": 161
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestShellQuoteEscapesEmbeddedSingleQuotes",
+      "kind": "function",
+      "line": 175
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/rsync",
+      "file": "internal/rsync/rsync_test.go",
+      "name": "TestShellQuoteOnAnEmptyStringStillProducesQuotes",
+      "kind": "function",
+      "line": 183
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/search",
@@ -28491,5 +28704,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "6ada94e7879abb025f88e7ff66309756931144e7dc11c115e26b7473c5d2f0ec"
+  "merkle_root": "14ebc6fa9d55aacb0f152735eb254a1795f8b5a4e06ad6d1d765af6d9f6bca78"
 }
