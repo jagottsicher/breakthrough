@@ -216,6 +216,26 @@ var helpText = strings.TrimLeft(`
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
 
+[::b]Status bar (the bottom line, purely informational)[::-]
+
+  Left to right, whatever's actually staged or in flight (a pending
+  chord's countdown, a running Paste's progress, or the clipboard's own
+  contents), then: username (green, red while running as root), Mouse
+  on/off, disk space, inode usage, kernel version, uptime, load average,
+  and a clock. Disk and inode usage, kernel, uptime and load each have
+  their own fixed color so they stand out from one another at a glance.
+
+  Disk space reads "free/total" — how much room is left; inode usage
+  reads "used/total" — how many you've used up, since that's the
+  direction that actually creeps toward trouble. Both percentages are
+  green under 80%, orange from 80%, red from 90%. Load average colors
+  each of its three numbers the same way, scaled against this machine's
+  own core count (a load of 2 is idle on 16 cores, overloaded on 2)
+  rather than as a raw, meaningless-on-its-own number.
+
+  Every one of these seven segments can be turned off individually —
+  see "oo" → Status bar below.
+
 [::b]Options screen ("oo")[::-]
 
   Categories down the left, that category's settings on the right.

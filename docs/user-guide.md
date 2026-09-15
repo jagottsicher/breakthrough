@@ -24,6 +24,7 @@ material, always matching the version you are actually running.
 - [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
 - [The command line](#the-command-line)
+- [Status bar](#status-bar)
 - [Options and configuration](#options-and-configuration)
 - [Settings reference](#settings-reference)
 - [Keyboard reference](#keyboard-reference)
@@ -1138,6 +1139,43 @@ While the command line has focus it keeps the keys it needs for
 readline-style editing, so global shortcuts that would collide with them
 fall through to it. `Escape` or a click on the panel gets you back out.
 
+## Status bar
+
+The bottom line, purely informational — nothing on it is clickable.
+Left to right: whatever's actually staged or in flight (a chord
+countdown, a running Paste's progress, or the clipboard's own contents
+— see [Copy, Cut and Paste](#copy-cut-and-paste)), then seven segments,
+each independently switchable off (see [Options and
+configuration](#options-and-configuration) below), and finally a clock.
+
+| Segment | Shows | Color |
+|---|---|---|
+| Username | The current user | Green — red while running as root |
+| Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
+| Disk space | `Disk free <free>/<total> (<percent>%)` for the current directory's own filesystem | Blue, percentage green/orange/red |
+| Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem | Violet, percentage green/orange/red |
+| Kernel version | `uname -r`'s own output | Gold |
+| Uptime | `up <days> <HH:MM>` (Linux's own `/proc/uptime`) | Teal |
+| Load average | The 1/5/15-minute load average (Linux's own `/proc/loadavg`) | Slate blue label, each number green/orange/red |
+
+Disk space and inode usage deliberately read in opposite directions:
+disk space as **free**/total (how much room is left, the number you
+check before starting something large), inode usage as **used**/total
+(how many you've used up — inode exhaustion creeps up from zero, not
+down from the total, so that's the direction worth watching).
+
+Every percentage — disk, inodes, and each of the three load numbers —
+uses the same green/orange/red scale: green under 80%, orange from
+80%, red from 90%. Load average has no natural percentage of its own,
+so it's scaled against this machine's own core count instead (a load
+of 2 means idle on a 16-core machine, overloaded on a 2-core one) —
+the raw number alone from the old status bar told you nothing without
+doing that division yourself.
+
+Kernel version, uptime, and load average are quietly omitted on a
+platform that doesn't expose them (anything without `/proc/uptime` or
+`/proc/loadavg`, or without `uname` at all) rather than shown wrong.
+
 ## Options and configuration
 
 The `o` chord's own `oo` (`o` then `o` again — see [The keyboard
@@ -1207,6 +1245,13 @@ Every key breakthrough recognizes, with its default:
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
 | `chord_timeout_ms` | `4000` | How long, in milliseconds, a chord's second key stays live for |
+| `status_bar_show_username` | `true` | Show the current username in the status bar |
+| `status_bar_show_mouse` | `true` | Show the "Mouse on"/"Mouse off" segment in the status bar |
+| `status_bar_show_disk` | `true` | Show free/total disk space for the current directory in the status bar |
+| `status_bar_show_inodes` | `true` | Show used/total inode count for the current directory in the status bar |
+| `status_bar_show_kernel` | `true` | Show the running kernel version (`uname -r`) in the status bar |
+| `status_bar_show_uptime` | `true` | Show system uptime in the status bar, where the platform exposes it |
+| `status_bar_show_load` | `true` | Show the 1/5/15-minute load average in the status bar, where the platform exposes it |
 | `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
 | `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
 | `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |
