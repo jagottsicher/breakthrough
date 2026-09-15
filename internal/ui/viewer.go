@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -125,11 +126,54 @@ func (r *Root) openLook() {
 		return
 	}
 
+	if remote := r.panel.remote; remote != nil {
+		r.openRemoteLook(remote, path)
+		return
+	}
 	if r.settings.Pager == "external" {
 		r.runExternalPager(path)
 		return
 	}
 	r.showBuiltinLook(path)
+}
+
+// openRemoteLook is openLook's own remote-panel half: stages
+// remotePath into a local temp file (see downloadRemoteToTemp) and
+// hands that off to whichever of the two ordinary, unmodified local
+// Look paths is configured — external pager or the builtin viewer —
+// exactly as if it had always been a real local file.
+//
+// The temp file is removed immediately once Look is done with it,
+// with one exception: a PDF viewed through the builtin path keeps
+// paging on demand (showPDFPage/turnPDFPage — see their own doc
+// comments), so its own temp file has to outlive this function,
+// surviving until the Look overlay actually closes instead
+// (r.viewerRemoteTempFile, cleaned up via hideOverlay's own per-page
+// hook and showBuiltinLook's own reset — see the struct field's own
+// doc comment). showBuiltinLook's bool return is what tells this
+// apart from every other case (Load failed, unsupported content,
+// ...), where nothing ever reached the overlay at all and the temp
+// file is just as immediately disposable as it would be for plain
+// text or an image.
+func (r *Root) openRemoteLook(remote remotefs.Client, remotePath string) {
+	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+	if err != nil {
+		r.showError(fmt.Errorf("look %s: %w", remotePath, err))
+		return
+	}
+
+	if r.settings.Pager == "external" {
+		defer cleanup()
+		r.runExternalPager(localPath)
+		return
+	}
+
+	opened := r.showBuiltinLook(localPath)
+	if !opened || r.viewerPDFPath != localPath {
+		cleanup()
+		return
+	}
+	r.viewerRemoteTempFile = localPath
 }
 
 // lookCurrentEntry is openLook under the name the context menu's own
@@ -154,7 +198,13 @@ func (r *Root) lookCurrentEntry() {
 // showUnsupportedLook instead (see its own doc comment) — sometimes
 // still the overlay, sometimes still a plain showError, depending on
 // what's actually known about the file.
-func (r *Root) showBuiltinLook(path string) {
+//
+// Reports whether the overlay actually opened — false on every early
+// return below, true only once pushOverlay has actually run. Read by
+// openRemoteLook to decide whether path's own temp file (if this call
+// came from there) is safe to remove immediately, since a failed Look
+// never leaves anything on screen still referencing it.
+func (r *Root) showBuiltinLook(path string) bool {
 	// Reset unconditionally, before Load even runs: whatever Kind this
 	// turns out to be, it isn't "still showing the previous Look's own
 	// PDF" — see captureViewerKey's own doc comment on why a stale,
@@ -162,14 +212,19 @@ func (r *Root) showBuiltinLook(path string) {
 	// very next, unrelated file opened afterward. viewerPDFMode resets
 	// alongside it: a 'g'/'t' choice made on one PDF never carries over
 	// to the next one opened — each PDF starts back at
-	// viewer.PDFViewAuto.
+	// viewer.PDFViewAuto. cleanupViewerRemoteTempFile alongside both:
+	// a remote PDF's own staged temp file (see openRemoteLook) is just
+	// as stale as viewerPDFPath itself the moment a new Look — remote
+	// or local — starts, whether or not the previous overlay was ever
+	// actually closed first.
 	r.viewerPDFPath = ""
 	r.viewerPDFMode = viewer.PDFViewAuto
+	r.cleanupViewerRemoteTempFile()
 
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil {
 		r.showError(fmt.Errorf("look %s: %w", path, err))
-		return
+		return false
 	}
 
 	// Inner width/height account for newViewerView's own 1-column left/
@@ -183,7 +238,7 @@ func (r *Root) showBuiltinLook(path string) {
 	switch result.Kind {
 	case viewer.KindPDF:
 		if !r.showPDFPage(path, 1, innerWidth, innerHeight) {
-			return // showPDFPage already reported it via showError
+			return false // showPDFPage already reported it via showError
 		}
 
 	case viewer.KindText:
@@ -212,7 +267,7 @@ func (r *Root) showBuiltinLook(path string) {
 
 	default: // viewer.KindUnsupported
 		if !r.showUnsupportedLook(path, result, innerWidth, innerHeight) {
-			return // showUnsupportedLook already reported it via showError
+			return false // showUnsupportedLook already reported it via showError
 		}
 	}
 	r.viewerView.ScrollToBeginning()
@@ -232,6 +287,7 @@ func (r *Root) showBuiltinLook(path string) {
 	// uses over anything) leaves Properties intact underneath; Escape
 	// returns to it exactly as it was.
 	r.pushOverlay(viewerPage, r.viewerView, nil)
+	return true
 }
 
 // showUnsupportedLook decides how to report content Load read but

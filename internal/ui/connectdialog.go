@@ -39,11 +39,11 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 
 	// height covers connectTitleBar's own row plus connectLayout's three
 	// stacked pieces (connectForm's own 9, see newConnectLayout's own
-	// doc comment on why; connectStatus's 1; connectActions' 2) —
+	// doc comment on why; connectStatus's 1; connectButtons' 1) —
 	// checked against a real render, not guessed; a shorter value
 	// silently clipped the bottom rows (see openSedReplace's own
 	// identical comment on its own dialog).
-	width, height := 64, 13
+	width, height := 64, 12
 	_, _, screenWidth, screenHeight := r.GetRect()
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -89,22 +89,23 @@ func (r *Root) newConnectForm() *tview.Form {
 	f.AddFormItem(r.connectPasswordField)
 
 	// Tab/Enter on the form's own last field would otherwise just wrap
-	// back to its first one instead of ever reaching connectActions:
-	// verified directly against tview's own form.go, not guessed —
-	// Form.Focus unconditionally calls item.SetFinishedFunc on every
-	// item whenever the form itself gains focus, silently overwriting
-	// any SetDoneFunc set here beforehand, so the only place left to
-	// actually intercept Tab is a SetInputCapture, which runs before an
-	// item's own native handling at all. Enter goes one step further
-	// and submits the form outright, the same "last field, Enter
-	// submits" convenience a real login form has — the same reasoning
-	// this is only wired on the *last* field: every other field's own
-	// Tab/Enter already does the right thing (move to the next field)
-	// via the form's own default handling.
+	// back to its first one instead of ever reaching connectCancelBtn/
+	// connectConnectBtn: verified directly against tview's own form.go,
+	// not guessed — Form.Focus unconditionally calls
+	// item.SetFinishedFunc on every item whenever the form itself gains
+	// focus, silently overwriting any SetDoneFunc set here beforehand,
+	// so the only place left to actually intercept Tab is a
+	// SetInputCapture, which runs before an item's own native handling
+	// at all. Enter goes one step further and submits the form
+	// outright, the same "last field, Enter submits" convenience a real
+	// login form has — the same reasoning this is only wired on the
+	// *last* field: every other field's own Tab/Enter already does the
+	// right thing (move to the next field) via the form's own default
+	// handling.
 	r.connectPasswordField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.connectActions)
+			r.app.SetFocus(r.connectCancelBtn)
 			return nil
 		case tcell.KeyEnter:
 			r.runConnect()
@@ -116,29 +117,56 @@ func (r *Root) newConnectForm() *tview.Form {
 	return f
 }
 
-func (r *Root) newConnectActions() *tview.List {
-	l := tview.NewList().ShowSecondaryText(false)
-	l.SetHighlightFullLine(true)
-	l.AddItem("Connect", "", 0, r.runConnect)
-	l.AddItem("Cancel", "", 0, r.cancelConnect)
-	l.SetDoneFunc(r.cancelConnect) // Escape
-	// Backtab out of the list's own first item returns to the form,
-	// symmetric with connectPasswordField's own forward Tab into here
-	// (see newConnectForm's own doc comment on why plain SetDoneFunc
-	// alone can't do this either direction).
-	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyBacktab {
-			r.app.SetFocus(r.connectForm)
-			return nil
+// newConnectButtons builds a real Cancel/Connect button pair,
+// bottom-left/bottom-right — the same shape
+// newChmodButtons/newSearchButtons/newPropertiesButtons/
+// newDuplicateButtons all already establish for their own dialogs, per
+// the user's own explicit, repeated request that every dialog's own
+// action row match that established look rather than Sed Replace's
+// own vertical two-item List (see newDuplicateButtons' own doc comment
+// for the first time this exact correction was made).
+func (r *Root) newConnectButtons() *tview.Flex {
+	r.connectCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.cancelConnect)
+	r.connectConnectBtn = tview.NewButton("Connect").SetSelectedFunc(r.runConnect)
+	r.connectCancelBtn.SetInputCapture(spaceAlsoActivates(r.cancelConnect))
+	r.connectConnectBtn.SetInputCapture(spaceAlsoActivates(r.runConnect))
+
+	// Tab/Backtab cycle between the two buttons and back into the form
+	// (connectPasswordField's own forward Tab is the other half of this
+	// — see newConnectForm's own doc comment); Escape always cancels,
+	// the same as everywhere else in this dialog.
+	r.connectCancelBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.connectConnectBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.connectPasswordField)
+		case tcell.KeyEscape:
+			r.cancelConnect()
 		}
-		return event
 	})
-	return l
+	r.connectConnectBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.connectHostField)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.connectCancelBtn)
+		case tcell.KeyEscape:
+			r.cancelConnect()
+		}
+	})
+
+	// Equal proportion (0, 1) each, nothing else, so the two together
+	// fill the whole row edge to edge, split exactly in half — the same
+	// shape newChmodButtons/newDuplicateButtons already use.
+	return tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.connectCancelBtn, 0, 1, false).
+		AddItem(r.connectConnectBtn, 0, 1, false)
 }
 
 // newConnectLayout wraps connectTitleBar over the form, a one-line
 // status area (blank until runConnect has something to say — an
-// in-progress spinner, or an error), and the Connect/Cancel actions —
+// in-progress spinner, or an error), and the Cancel/Connect buttons —
 // the same title-bar-over-content shape newSedLayout already
 // establishes.
 func (r *Root) newConnectLayout() *tview.Flex {
@@ -154,7 +182,7 @@ func (r *Root) newConnectLayout() *tview.Flex {
 	content := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.connectForm, 9, 0, true).
 		AddItem(r.connectStatus, 1, 0, false).
-		AddItem(r.connectActions, 2, 0, false)
+		AddItem(r.connectButtons, 1, 0, false)
 	return tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.connectTitleBar, 1, 0, false).
 		AddItem(content, 0, 1, true)

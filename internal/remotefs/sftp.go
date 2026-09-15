@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"path"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -146,6 +148,15 @@ func dialSSHContext(ctx context.Context, addr string, config *ssh.ClientConfig) 
 
 func (c *SFTPClient) Root() string { return c.root }
 
+// ListDir sorts its own result — directories before files, then
+// case-insensitive name — before returning, the exact same order
+// fsops.ListDir's own local implementation already sorts by. This
+// isn't just cosmetic: Panel.applySortPreference (internal/ui/panel.go)
+// assumes its own input already arrives grouped this way and only
+// re-sorts *within* each group for every sort mode other than plain
+// Name — an unsorted remote listing broke that precondition entirely,
+// interleaving directories and files at random (a real, user-reported
+// bug) rather than merely sorting each of the two groups differently.
 func (c *SFTPClient) ListDir(dir string) ([]fsops.Entry, error) {
 	infos, err := c.sftp.ReadDir(dir)
 	if err != nil {
@@ -155,6 +166,12 @@ func (c *SFTPClient) ListDir(dir string) ([]fsops.Entry, error) {
 	for _, fi := range infos {
 		entries = append(entries, c.adaptLstatEntry(path.Join(dir, fi.Name()), fi))
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDir != entries[j].IsDir {
+			return entries[i].IsDir // directories before files
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	})
 	return entries, nil
 }
 
@@ -166,12 +183,74 @@ func (c *SFTPClient) Stat(p string) (fsops.Entry, error) {
 	return adaptResolvedEntry(fi), nil
 }
 
+func (c *SFTPClient) Lstat(p string) (fsops.Entry, error) {
+	fi, err := c.sftp.Lstat(p) // never follows a symlink, same contract as fsops.Info's own Lstat basis
+	if err != nil {
+		return fsops.Entry{}, err
+	}
+	return c.adaptLstatEntry(p, fi), nil
+}
+
 func (c *SFTPClient) Open(p string) (io.ReadCloser, error)    { return c.sftp.Open(p) }
 func (c *SFTPClient) Create(p string) (io.WriteCloser, error) { return c.sftp.Create(p) }
 func (c *SFTPClient) Mkdir(p string) error                    { return c.sftp.Mkdir(p) }
 func (c *SFTPClient) Remove(p string) error                   { return c.sftp.Remove(p) }
 func (c *SFTPClient) RemoveDirectory(p string) error          { return c.sftp.RemoveDirectory(p) }
 func (c *SFTPClient) Rename(oldPath, newPath string) error    { return c.sftp.Rename(oldPath, newPath) }
+func (c *SFTPClient) Chmod(p string, mode os.FileMode) error  { return c.sftp.Chmod(p, mode) }
+
+// DiskUsage reports path's own filesystem block/inode usage via the
+// statvfs@openssh.com SFTP extension — supported by every OpenSSH
+// sftp-server, the de facto standard remote endpoint this project
+// targets (see its own package doc comment). Percentages are computed
+// against used+avail, not the raw block/inode total: some blocks/
+// inodes are always reserved for root and excluded from that base,
+// exactly the same convention fsops.FetchDiskUsage's own local percent
+// already follows (parsed there straight from df's own printed
+// column; computed here instead, since StatVFS returns raw counts,
+// not a percentage of its own).
+func (c *SFTPClient) DiskUsage(p string) (fsops.DiskUsage, error) {
+	v, err := c.sftp.StatVFS(p)
+	if err != nil {
+		return fsops.DiskUsage{}, err
+	}
+	return diskUsageFromStatVFS(v), nil
+}
+
+// diskUsageFromStatVFS converts one raw StatVFS response into
+// fsops.DiskUsage — split out from DiskUsage itself specifically so a
+// test can exercise the actual unit conversion/percentage math
+// directly against hand-built values, without needing a real SFTP
+// server that speaks the statvfs@openssh.com extension at all (the
+// project's own hermetic test server, built on pkg/sftp's simple
+// *sftp.Server, doesn't implement it — only the heavier, handler-based
+// request server does).
+func diskUsageFromStatVFS(v *sftp.StatVFS) fsops.DiskUsage {
+	usedBytes := int64(v.Frsize * (v.Blocks - v.Bfree))
+	availBytes := int64(v.Frsize * v.Bavail)
+	usedInodes := int64(v.Files - v.Ffree)
+	availInodes := int64(v.Favail)
+	return fsops.DiskUsage{
+		UsedBytes:    usedBytes,
+		AvailBytes:   availBytes,
+		UsedInodes:   usedInodes,
+		AvailInodes:  availInodes,
+		UsePercent:   percentOfCounts(usedBytes, usedBytes+availBytes),
+		InodePercent: percentOfCounts(usedInodes, usedInodes+availInodes),
+	}
+}
+
+// percentOfCounts is part as a percentage of total, 0 for a zero or
+// negative total rather than dividing by it — the same defensive
+// "degenerate input, not a real filesystem, never panic over it"
+// shape internal/ui's own percentOf already uses for the identical
+// local Memory/Swap/Disk figures.
+func percentOfCounts(part, total int64) int {
+	if total <= 0 {
+		return 0
+	}
+	return int(part * 100 / total)
+}
 
 func (c *SFTPClient) Close() error {
 	sftpErr := c.sftp.Close()

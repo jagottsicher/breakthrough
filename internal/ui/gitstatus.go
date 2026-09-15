@@ -155,6 +155,13 @@ func (r *Root) startDetailsGitStatus(path string) {
 	if !r.settings.ShowGitStatus || path == "" || r.detailsStatErr != nil || !isDirish(r.detailsStat) || !gitstatus.Available() {
 		return
 	}
+	if r.panel.remote != nil {
+		// git itself runs locally against a real working tree on this
+		// machine's own filesystem — there's no remote git repo to
+		// inspect here at all without a real command-execution channel
+		// to the other end, which this project doesn't have.
+		return
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r.detailsGitCancel = cancel

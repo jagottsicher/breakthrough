@@ -536,12 +536,22 @@ func (r *Root) loadDetailsTarget(path string) {
 	}
 
 	if path != "" {
-		// Only the stat block synchronously: one syscall, and it is what
-		// the sidebar shows first anyway, so it should be on screen
-		// before the cursor has finished moving. Everything expensive —
-		// decoding an image, parsing a PDF, running pdftoppm — happens
-		// in the background instead (see startDetailsPreview).
-		r.detailsStat, r.detailsStatErr = fsops.Stat(path)
+		// Only the stat block synchronously: one syscall (or one round
+		// trip, remotely), and it is what the sidebar shows first
+		// anyway, so it should be on screen before the cursor has
+		// finished moving. Everything expensive — decoding an image,
+		// parsing a PDF, running pdftoppm — happens in the background
+		// instead (see startDetailsPreview), and none of it is even
+		// attempted remotely (see startDetailsPreview's own guard).
+		if remote := r.panel.remote; remote != nil {
+			var entry fsops.Entry
+			entry, r.detailsStatErr = remote.Lstat(path)
+			if r.detailsStatErr == nil {
+				r.detailsStat = remoteInfoFromEntry(path, entry)
+			}
+		} else {
+			r.detailsStat, r.detailsStatErr = fsops.Stat(path)
+		}
 	}
 	r.renderDetailsSidebar()
 	r.startDetailsPreview(path)
@@ -1171,6 +1181,18 @@ func (r *Root) cancelDetailsPreview() {
 func (r *Root) startDetailsPreview(path string) {
 	if path == "" || r.detailsStatErr != nil || isDirish(r.detailsStat) {
 		return // nothing previewable — see loadDetailsTarget
+	}
+	if r.panel.remote != nil {
+		// Decoding an image or rasterizing a PDF both need the whole
+		// file's own bytes read locally (image.Decode/pdftoppm), which
+		// would otherwise silently try to open path on this machine —
+		// a path that only exists on the remote one. A real streamed
+		// remote read is possible (Client.Open already gives an
+		// io.ReadCloser) but downloading a potentially large image/PDF
+		// just to preview it is real, deliberately out-of-scope-for-now
+		// work, not something to do silently as a side effect of this
+		// fix.
+		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

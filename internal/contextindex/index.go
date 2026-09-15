@@ -278,6 +278,18 @@ func excludedDirectory(path string) bool {
 	if path == "docs/images" || strings.HasPrefix(path, "docs/images/") {
 		return true
 	}
+	// bin/ (root-level only, matching .gitignore's own "/bin/" — a
+	// package named "bin" nested somewhere else in the tree is a real,
+	// checked-in directory, not a build artifact) is GoReleaser/a local
+	// `go build -o bin/...` own output, never checked in. A real,
+	// previously-unnoticed gap: nothing here skipped it before, so a
+	// binary anyone happened to have built locally before running this
+	// tool silently ended up in the committed index — caught only once
+	// CI's own fresh checkout (with no such binary lying around)
+	// regenerated a different one and the two disagreed.
+	if path == "bin" || strings.HasPrefix(path, "bin/") {
+		return true
+	}
 	for _, component := range strings.Split(path, "/") {
 		if component == ".git" || component == ".cache" || (strings.HasPrefix(component, ".") && component != "." && component != ".github") || component == "vendor" || component == "node_modules" {
 			return true

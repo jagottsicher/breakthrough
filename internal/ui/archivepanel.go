@@ -48,6 +48,42 @@ func (p *Panel) resolveArchiveState(abs string) (archivePath, internalDir string
 	return splitArchivePath(abs)
 }
 
+// resolveRemoteArchiveState is resolveArchiveState's own remote-panel
+// counterpart, used in its place by load()'s own p.remote != nil
+// branch. Deliberately narrower: it only ever recognizes an archive
+// this Panel already knows about (p.archiveLocalPath already staged),
+// never discovers a brand-new one cold the way resolveArchiveState's
+// own splitArchivePath fallback does — a remote panel can only ever
+// enter an archive through enterRemoteArchive's own async download
+// flow (see activateRow's dispatch and Panel.onEnterRemoteArchive's own
+// doc comment), which always downloads first and only calls load()
+// once archiveLocalPath is already set, so there is nothing left for a
+// from-scratch check to discover here.
+//
+// p.archivePath itself is still "" the very first time this runs for a
+// freshly staged archive (loadArchiveEntries is what sets it, a few
+// lines further into the very same load() call — see its own doc
+// comment) — abs is treated as that archive's own root in that case,
+// since enterRemoteArchive only ever navigates to exactly the path it
+// just finished staging, never anywhere else. Every call after that
+// first one falls through to the same prefix-match resolveArchiveState
+// itself already uses.
+func (p *Panel) resolveRemoteArchiveState(abs string) (archivePath, internalDir string, inArchive bool) {
+	if p.archiveLocalPath == "" {
+		return "", "", false
+	}
+	if p.archivePath == "" {
+		return abs, "", true
+	}
+	if abs == p.archivePath {
+		return p.archivePath, "", true
+	}
+	if rel, ok := strings.CutPrefix(abs, p.archivePath+"/"); ok {
+		return p.archivePath, rel, true
+	}
+	return "", "", false
+}
+
 // splitArchivePath is resolveArchiveState's own stateless fallback,
 // also used directly wherever there's no live Panel to ask (Root's own
 // Copy/Paste plumbing, whose r.clipboard entries may well have been
@@ -109,12 +145,27 @@ func splitOnce(cur string) (archivePath string, ok bool) {
 // no type bits set — Type below is what load()'s row-building actually
 // keys off, the same as a real fsops.ListDir result.
 //
+// archivePath is always the archive's own real identity for display and
+// dedup purposes — the exact path shown in the header/breadcrumb, local
+// or remote alike — but the actual bytes for a *remote* one are read
+// from p.archiveLocalPath instead (the local temp copy
+// enterRemoteArchive already downloaded before ever calling load() at
+// all — see its own doc comment), never archivePath itself: it's a
+// remote path a plain archive.List (built on os.Open throughout) has no
+// way to open. archiveLocalPath is "" for a local archive, so this is a
+// no-op fallback to archivePath unchanged there — the same call it's
+// always made.
+//
 // Reports the underlying archive.List error, if any (a corrupted
 // archive, one deleted out from under an open tab, ...), the same way
 // fsops.ListDir's own error already surfaces to load()'s caller.
 func (p *Panel) loadArchiveEntries(archivePath, internalDir string) ([]fsops.Entry, error) {
 	if p.archivePath != archivePath {
-		listed, err := archive.List(archivePath)
+		readPath := archivePath
+		if p.archiveLocalPath != "" {
+			readPath = p.archiveLocalPath
+		}
+		listed, err := archive.List(readPath)
 		if err != nil {
 			return nil, err
 		}

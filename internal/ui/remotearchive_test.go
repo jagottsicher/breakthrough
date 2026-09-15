@@ -1,0 +1,302 @@
+package ui
+
+import (
+	"archive/zip"
+	"bytes"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+)
+
+// buildTestZipBytes is internal/archive's own writeZip fixture builder,
+// duplicated here in-memory (bytes rather than a file on disk) since a
+// fakeRemoteClient's own content map holds raw bytes, not a real local
+// path — the same small per-package test-fixture duplication this
+// codebase already accepts elsewhere (see pdf_test.go's own
+// buildMinimalPDF doc comment for the identical reasoning).
+func buildTestZipBytes(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for path, content := range files {
+		w, err := zw.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestNeedsRemoteArchiveConfirmAtExactlyTheThresholdReturnsTrue(t *testing.T) {
+	// >=, not >: a file exactly at the configured threshold still asks
+	// first — see needsRemoteArchiveConfirm's own doc comment.
+	if !needsRemoteArchiveConfirm(10, 10) {
+		t.Error("needsRemoteArchiveConfirm(10, 10) = false, want true (size exactly at the threshold)")
+	}
+	if needsRemoteArchiveConfirm(9, 10) {
+		t.Error("needsRemoteArchiveConfirm(9, 10) = true, want false (below the threshold)")
+	}
+	if !needsRemoteArchiveConfirm(11, 10) {
+		t.Error("needsRemoteArchiveConfirm(11, 10) = false, want true (above the threshold)")
+	}
+}
+
+// TestEnterRemoteArchiveAboveThresholdAsksFirst pins the confirm path
+// — a large archive must not start downloading before the user has
+// actually agreed to it.
+func TestEnterRemoteArchiveAboveThresholdAsksFirst(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"file.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "big.zip", Type: fsops.TypeFile, Size: int64(len(zipBytes))})
+	client.content = map[string][]byte{"/remote/big.zip": zipBytes}
+	r.settings.RemoteArchiveConfirmSize = 1 // anything real is "large" against this
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatal(err)
+	}
+	row := rowForName(t, r.panel, "big.zip")
+	r.panel.focusRow(row)
+
+	r.enterRemoteArchive()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want %q — a large archive must ask before downloading", r.activePage, confirmPage)
+	}
+	if r.panel.archiveLocalPath != "" {
+		t.Error("archiveLocalPath is already set despite the confirm dialog never having been answered")
+	}
+}
+
+// TestFinishRemoteArchiveDownloadEntersTheArchiveAndBrowsesItsContent
+// is the end-to-end real behavior finishRemoteArchiveDownload,
+// resolveRemoteArchiveState, and loadArchiveEntries together produce
+// once a download has actually landed — called directly rather than
+// through the real async startRemoteArchiveDownload/safeGo path, which
+// needs a real Application event loop this test doesn't have (see
+// finishRemoteArchiveDownload's own doc comment).
+func TestFinishRemoteArchiveDownloadEntersTheArchiveAndBrowsesItsContent(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{
+		"top.txt":      "top level",
+		"sub/deep.txt": "nested",
+	})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+
+	if r.panel.path != "/remote/archive.zip" {
+		t.Fatalf("panel.path = %q, want the archive's own remote path", r.panel.path)
+	}
+	if !r.panel.inArchiveView() {
+		t.Fatal("panel is not in archive view after entering a remote archive")
+	}
+	if r.panel.archiveLocalPath != localPath {
+		t.Errorf("archiveLocalPath = %q, want %q", r.panel.archiveLocalPath, localPath)
+	}
+
+	var names []string
+	for row := 1; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok {
+			names = append(names, ref.name)
+		}
+	}
+	if !strings.Contains(strings.Join(names, ","), "top.txt") {
+		t.Errorf("archive listing = %v, want it to include top.txt", names)
+	}
+	if !strings.Contains(strings.Join(names, ","), "sub") {
+		t.Errorf("archive listing = %v, want it to include the sub directory", names)
+	}
+
+	// Navigate one level deeper inside the archive — resolveRemoteArchiveState's
+	// own "already inside, prefix-match" branch.
+	if err := r.panel.navigate("/remote/archive.zip/sub"); err != nil {
+		t.Fatalf("navigate into sub: %v", err)
+	}
+	var subNames []string
+	for row := 1; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok {
+			subNames = append(subNames, ref.name)
+		}
+	}
+	if !strings.Contains(strings.Join(subNames, ","), "deep.txt") {
+		t.Errorf("sub listing = %v, want it to include deep.txt", subNames)
+	}
+}
+
+// TestLeavingARemoteArchiveRemovesItsOwnTempFile pins the cleanup half
+// — a remote archive's own staged temp copy must not linger on disk
+// once the panel navigates back out of it.
+func TestLeavingARemoteArchiveRemovesItsOwnTempFile(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"file.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+	if !r.panel.inArchiveView() {
+		t.Fatal("setup: expected to be inside the archive")
+	}
+
+	if err := r.panel.navigate("/remote"); err != nil {
+		t.Fatalf("navigate back out: %v", err)
+	}
+
+	if r.panel.archiveLocalPath != "" {
+		t.Errorf("archiveLocalPath = %q after leaving the archive, want it cleared", r.panel.archiveLocalPath)
+	}
+	if r.panel.archiveRemoteClient != nil {
+		t.Error("archiveRemoteClient still set after leaving the archive")
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s) after leaving the archive: err = %v, want a not-exist error", localPath, err)
+	}
+}
+
+// TestFinishRemoteArchiveDownloadOnDownloadFailureReportsTheError pins
+// the "download itself failed" case — never reaches staging at all.
+func TestFinishRemoteArchiveDownloadOnDownloadFailureReportsTheError(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/missing.zip", "", func() {}, fmt.Errorf("boom"))
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, errorPage)
+	}
+	if r.panel.archiveLocalPath != "" {
+		t.Error("archiveLocalPath is set despite the download itself failing")
+	}
+}
+
+// TestFinishRemoteArchiveDownloadOnNavigateFailureRollsBackStaging
+// pins the corrupted-archive case: entering fails after the download
+// already succeeded, and the panel must not be left looking like it's
+// still browsing an archive it never actually entered.
+func TestFinishRemoteArchiveDownloadOnNavigateFailureRollsBackStaging(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	// Not a real zip at all — archive.List will fail against it.
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "corrupt.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/corrupt.zip": []byte("not a real zip file")}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/corrupt.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/corrupt.zip", localPath, cleanup, nil)
+
+	if r.panel.archiveLocalPath != "" {
+		t.Errorf("archiveLocalPath = %q after a failed navigate, want it rolled back to empty", r.panel.archiveLocalPath)
+	}
+	if r.panel.archiveRemoteClient != nil {
+		t.Error("archiveRemoteClient still set after a failed navigate")
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s) after a failed navigate: err = %v, want the temp file removed", localPath, err)
+	}
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want %q reporting the navigate failure", r.activePage, errorPage)
+	}
+}
+
+// TestFinishRemoteArchiveDownloadOnAClosedTabCleansUpWithoutEntering
+// pins the "the tab closed while the download was in flight" guard —
+// the same shape remotepaste.go's own startRemotePaste already
+// establishes for the identical race.
+func TestFinishRemoteArchiveDownloadOnAClosedTabCleansUpWithoutEntering(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.content = map[string][]byte{"/remote/b.txt": []byte("hello")}
+	orphan, err := NewPanel(r.app, t.TempDir(), r.theme, r.settings)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	// Deliberately never added to r.tabs — this is exactly what makes
+	// hasTab report false.
+
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/b.txt")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+
+	r.finishRemoteArchiveDownload(orphan, client, "/remote/b.txt", localPath, cleanup, nil)
+
+	if orphan.archiveLocalPath != "" {
+		t.Error("archiveLocalPath was set on a panel whose own tab had already closed")
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s): err = %v, want the temp file cleaned up even though nothing entered it", localPath, err)
+	}
+}
+
+// TestPasteRefusesAMemberCopiedFromARemoteArchive pins the guard
+// remoteArchiveMemberOrigin exists for: copying a member out of a
+// remote-staged archive isn't supported yet, and must fail with a
+// clear message rather than a confusing raw SFTP error from trying to
+// remote.Open a purely virtual "archive/member" path that was never a
+// real path on the server at all.
+func TestPasteRefusesAMemberCopiedFromARemoteArchive(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"member.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	defer cleanup()
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+	if !r.panel.inArchiveView() {
+		t.Fatal("setup: expected to be inside the archive")
+	}
+
+	r.clipboardSourceClient = client
+	r.clipboard = []string{"/remote/archive.zip/member.txt"}
+	r.clipboardCut = false
+
+	r.pasteInto(r.panel.path, false)
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, errorPage)
+	}
+	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
+	if !strings.Contains(got, "remote archive") {
+		t.Errorf("error text = %q, want it to explain that a remote archive member can't be copied out yet", got)
+	}
+}
+
+// rowForName returns the row index of the entry named name in panel's
+// current listing, failing the test if it isn't there — used wherever
+// a test needs a real row index rather than relying on a fixed
+// position that would silently break if sort order ever changed.
+func rowForName(t *testing.T, panel *Panel, name string) int {
+	t.Helper()
+	for row := 0; row < panel.table.GetRowCount(); row++ {
+		if ref, ok := panel.rowRef(row); ok && ref.name == name {
+			return row
+		}
+	}
+	t.Fatalf("no row named %q in the current listing", name)
+	return -1
+}

@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -320,6 +321,28 @@ type Panel struct {
 	archivePath    string
 	archiveEntries []archive.Entry
 
+	// archiveLocalPath/archiveRemoteClient are set only while archivePath
+	// itself actually names a *remote* archive — archivePath still holds
+	// the real remote path (what's shown in the header/breadcrumb and
+	// used for the virtual "inside the archive" navigation, exactly as
+	// it always has), while archiveLocalPath is the local, downloaded
+	// temp copy archive.List/archive.Children/archive.Extract actually
+	// read bytes from (see archiveReadPath) — neither of those has any
+	// notion of a remotefs.Client, only ever a real path on this
+	// machine. archiveRemoteClient records which connection it came
+	// from, both to know this archive session *is* remote at all
+	// (archiveLocalPath alone being non-empty would already imply it,
+	// but naming the client explicitly reads clearer at every call site
+	// than inferring it from "some other field happens to be set") and
+	// for enterRemoteArchive's own re-entry check when navigating
+	// between two remote archives back to back. Both reset to their
+	// zero value in the exact same places archivePath/archiveEntries
+	// already are (see leavingArchive) — cleaning up archiveLocalPath's
+	// own temp file first, unlike those two, since nothing else ever
+	// removes it.
+	archiveLocalPath    string
+	archiveRemoteClient remotefs.Client
+
 	// selected holds the absolute paths currently checked in the checkbox
 	// column. Reset on every successful load() — selection is scoped to
 	// the directory currently on screen, not carried across navigation,
@@ -541,6 +564,21 @@ type Panel struct {
 	// already has. Left nil the same as onRenameGesture if nothing's
 	// wired it up.
 	onOpenFile func()
+
+	// onEnterRemoteArchive reports activateRow landing on a recognized
+	// archive file (see archive.Classify) while this Panel is connected
+	// remotely — Root wires this to enterRemoteArchive, which stats the
+	// real remote size, downloads it (asking first above
+	// remote_archive_confirm_size — see config.Settings' own doc
+	// comment), and only then actually navigates in. Never fires for a
+	// local archive, which enters directly through the ordinary
+	// p.navigate path instead — see activateRow's own dispatch. No path
+	// parameter, the same "cursor's already on the right row" shape
+	// onOpenFile already has. Left nil the same as onOpenFile if
+	// nothing's wired it up (e.g. a test constructing a Panel directly
+	// — those exercise enterRemoteArchive itself, or the lower-level
+	// pieces it calls, rather than depending on this callback firing).
+	onEnterRemoteArchive func()
 
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
@@ -1118,6 +1156,15 @@ func (p *Panel) load(dir string) error {
 	if p.leavingArchive(abs) {
 		p.archivePath = ""
 		p.archiveEntries = nil
+		if p.archiveLocalPath != "" {
+			// The downloaded temp copy a remote archive was staged into
+			// (see enterRemoteArchive) — nothing else ever removes it,
+			// unlike archivePath/archiveEntries, which are just in-memory
+			// state with nothing on disk to clean up.
+			_ = os.Remove(p.archiveLocalPath)
+			p.archiveLocalPath = ""
+		}
+		p.archiveRemoteClient = nil
 	}
 
 	// resolveArchiveState (see its own doc comment) is what lets
@@ -1126,14 +1173,20 @@ func (p *Panel) load(dir string) error {
 	// file, or a subdirectory already inside one: load() itself is the
 	// one place that has to know the difference, everything upstream of
 	// it (navigate, the ".." row, Root's tab/history plumbing) just
-	// keeps treating abs as an ordinary path. A connected panel skips
-	// this branch entirely: browsing into an archive that itself lives
-	// on a remote host isn't supported yet (see remote's own doc
-	// comment on the struct).
+	// keeps treating abs as an ordinary path. resolveRemoteArchiveState
+	// is that same idea's remote-panel counterpart (see its own doc
+	// comment on why it's narrower) — a connected panel can still browse
+	// into a recognized archive file, just always by way of
+	// enterRemoteArchive's own real download first (see
+	// Panel.onEnterRemoteArchive), never cold from this switch alone.
 	var entries []fsops.Entry
 	switch {
 	case p.remote != nil:
-		entries, err = p.remote.ListDir(abs)
+		if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
+			entries, err = p.loadArchiveEntries(archivePath, internalDir)
+		} else {
+			entries, err = p.remote.ListDir(abs)
+		}
 	default:
 		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
 			entries, err = p.loadArchiveEntries(archivePath, internalDir)
@@ -2992,6 +3045,12 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		// navigable file here, same as any other.
 		if p.archivePath == "" {
 			if _, ok := archive.Classify(ref.path); ok {
+				if p.remote != nil {
+					if p.onEnterRemoteArchive != nil {
+						p.onEnterRemoteArchive()
+					}
+					return true
+				}
 				p.reportError(p.navigate(ref.path))
 				return true
 			}
@@ -3527,6 +3586,86 @@ const headerButtonSeparator = " "
 // most pictographs), and needs no legend of its own.
 const connectionButtonGlyph = "@"
 
+// connectionGlowNow is time.Now, a package-level var so a test can
+// pin it to a fixed instant — the same substitution shape isRoot/
+// hashFile already establish for other real-world effects a test needs
+// to control rather than actually depend on (here, the wall clock a
+// live connection's glow animates against).
+var connectionGlowNow = time.Now
+
+// connectionGlowPeriod/connectionGlowPeakBlend shape the header's own
+// "@" button while connected: a slow, single pulse toward
+// theme.EntryExecutable's own lighter self and back to rest, once every
+// connectionGlowPeriod — never dipping below the base color at all.
+//
+// Deliberately one-directional (brighten only, resting exactly at the
+// base color rather than swinging past it toward black): an earlier
+// design also darkened on the other half of the cycle, which read, per
+// the user's own explicit report, as a "still trying to connect"
+// searching-for-signal pulse rather than a settled, already-connected
+// one — dipping toward black is what a modem/router's own "no link
+// yet" light does, not what a steady, healthy connection should look
+// like. The earlier all-the-way-to-black swing existed to survive a
+// non-truecolor terminal's color quantization (see this constant's own
+// git history); connectionGlowPeakBlend alone is still wide enough for
+// that — the point being fixed here is which direction the swing goes
+// in, not how far. Sampled once per second (see
+// Root.refreshActivePanelHeaderGlow, driven by the same ticker
+// StartClock's own clock/System Info refresh already uses), not its
+// own faster ticker: a three-second period still reads clearly at one
+// sample a second, and adding a second background ticker just for
+// this would cost a further goroutine and redraw cadence for a purely
+// cosmetic effect.
+const (
+	connectionGlowPeriod    = 3 * time.Second
+	connectionGlowPeakBlend = 0.85
+)
+
+// connectionGlowColor is the header's own connection-button color for
+// this instant: theme.MutedTextColor while local (nothing to animate),
+// or theme.EntryExecutable easing up to a lighter variant of itself and
+// back while connected. (1-cos(x))/2 rather than a plain sine: it
+// stays non-negative throughout, so the color only ever brightens off
+// the base and returns to it — exactly the "resting, connected, alive"
+// pulse this is meant to read as (see this file's own doc comment on
+// connectionGlowPeriod for why never dipping below the base color at
+// all is the point) — while still easing smoothly through both the
+// rest point and the peak rather than reversing direction with a sharp
+// corner at either one.
+func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Time) tcell.Color {
+	if !connected {
+		return theme.MutedTextColor
+	}
+	period := connectionGlowPeriod.Seconds()
+	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
+	brightness := (1 - math.Cos(2*math.Pi*phase)) / 2 // 0 (rest) .. 1 (peak) .. 0 (rest)
+	return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
+}
+
+// colorWhite/colorBlack are blendToward's own two endpoints — named
+// rather than written inline at each call site, since "toward white"/
+// "toward black" is the whole point of picking one over the other.
+var (
+	colorWhite = tcell.NewRGBColor(255, 255, 255)
+	colorBlack = tcell.NewRGBColor(0, 0, 0)
+)
+
+// blendToward mixes c toward target by fraction t (0 = c itself, 1 =
+// target), clamped to [0, 1] so a caller's own math (a sine wave's
+// rounding, say) can never overshoot into an invalid color.
+func blendToward(c, target tcell.Color, t float64) tcell.Color {
+	switch {
+	case t < 0:
+		t = 0
+	case t > 1:
+		t = 1
+	}
+	cr, cg, cb := c.RGB()
+	tr, tg, tb := target.RGB()
+	lerp := func(from, to int32) int32 { return from + int32(float64(to-from)*t) }
+	return tcell.NewRGBColor(lerp(cr, tr), lerp(cg, tg), lerp(cb, tb))
+}
+
 // headerButtonPrefix is the plain-text form of the six nav buttons
 // plus their separators — see buildHeaderSpans for the colored,
 // clickable version actually drawn in the header. Reused by
@@ -3591,14 +3730,13 @@ func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool) (t
 	// The connection button: same padded-button shape as the seven
 	// above, but its own foreground color (not just the shared
 	// ButtonBackground) carries the state — muted for a plain local
-	// panel, the same "healthy" green username/git-status/disk-percent
-	// already use elsewhere in this app once a remote session is
-	// attached (see internal/ui's own bottombar.go/gitstatus.go for
-	// that established color convention).
-	connColor := theme.MutedTextColor
-	if connected {
-		connColor = theme.EntryExecutable
-	}
+	// panel, a slow breathing glow around the same "healthy" green
+	// username/git-status/disk-percent already use elsewhere in this
+	// app (see bottombar.go/gitstatus.go) once a remote session is
+	// attached — a flat, unmoving green wasn't a clear enough "this is
+	// live right now" signal on its own, per the user's own explicit
+	// report.
+	connColor := connectionGlowColor(theme, connected, connectionGlowNow())
 	connStart := col
 	fmt.Fprintf(&b, "[%s:%s:] %s [-:-:-]", colorTag(connColor), keyBG, connectionButtonGlyph)
 	col += 1 + tview.TaggedStringWidth(connectionButtonGlyph) + 1

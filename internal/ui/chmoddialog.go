@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 const chmodPage = "chmod"
@@ -980,24 +981,32 @@ func (r *Root) openChmod() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
-	if r.panel.isRemote() {
-		r.showError(errNotSupportedRemote)
-		return
-	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
 	r.chmodPages.HidePage("editfield")
 
+	remote := r.panel.remote
 	mode := chmodDefaultMode
-	if info, err := fsops.Stat(targets[0]); err == nil {
+	if remote != nil {
+		if entry, err := remote.Stat(targets[0]); err == nil {
+			mode = entry.Mode.Perm()
+		}
+	} else if info, err := fsops.Stat(targets[0]); err == nil {
 		mode = info.Mode.Perm()
 	}
 
 	r.chmodTargets = targets
 	r.chmodAnyDir = false
 	for _, t := range targets {
+		if remote != nil {
+			if entry, err := remote.Stat(t); err == nil && entry.IsDir {
+				r.chmodAnyDir = true
+				break
+			}
+			continue
+		}
 		if info, err := fsops.Stat(t); err == nil && isDirish(info) {
 			r.chmodAnyDir = true
 			break
@@ -1108,6 +1117,10 @@ func (r *Root) applyChmodDialog() {
 // applyChmodDialog's own loop over the *other* targets (see its own doc
 // comment).
 func (r *Root) applyChmodToTarget(target string) error {
+	if remote := r.panel.remote; remote != nil {
+		return r.applyChmodToTargetRemote(remote, target)
+	}
+
 	info, err := fsops.Stat(target)
 	if err != nil {
 		return err
@@ -1123,6 +1136,33 @@ func (r *Root) applyChmodToTarget(target string) error {
 
 	if isDirish(info) && r.stagedChmodFilesEnabled {
 		if err := fsops.ChmodFilesRecursive(target, r.stagedChmodFilesMode); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// applyChmodToTargetRemote is applyChmodToTarget's own remote-panel
+// half — the exact same three independent behaviors, against a remote
+// Client instead of the local filesystem (see remoteops.go's own
+// chmodDirsRecursiveRemote/chmodFilesRecursiveRemote).
+func (r *Root) applyChmodToTargetRemote(remote remotefs.Client, target string) error {
+	entry, err := remote.Stat(target)
+	if err != nil {
+		return err
+	}
+
+	if entry.IsDir && r.stagedChmodRecursiveDirs {
+		if err := chmodDirsRecursiveRemote(remote, target, r.stagedChmodMode); err != nil {
+			return err
+		}
+	} else if err := remote.Chmod(target, r.stagedChmodMode); err != nil {
+		return err
+	}
+
+	if entry.IsDir && r.stagedChmodFilesEnabled {
+		if err := chmodFilesRecursiveRemote(remote, target, r.stagedChmodFilesMode); err != nil {
 			return err
 		}
 	}

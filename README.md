@@ -492,7 +492,11 @@ terminal.
   plus memory, swap, open file handles, mounted filesystems, process
   count, network interfaces and logged-in sessions, in the same colors
   and green/orange/red scale — while every other entry under "/" still
-  gets its own ordinary per-file Details. Selecting any other directory
+  gets its own ordinary per-file Details. On a remote connection's own
+  "/" this describes *that* machine instead, sourced straight from its
+  own `/proc`/`/etc/os-release` over the same connection, no separate
+  command-execution channel needed — except logged-in sessions, which
+  does need one and is simply left out remotely. Selecting any other directory
   that's part of a git repository adds that same git status line as
   its own section there too, fetched a moment after the cursor settles
   and cancelled if it moves on, so scrolling through a long list of
@@ -500,10 +504,20 @@ terminal.
   [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
   full field list.
 - Remote connections (SFTP): a compact `@` button sits right before the
-  path itself in the header — muted for a plain local panel, green once
-  connected — opening a dropdown (also reachable via the `g` chord's
-  own `gc`) with New connection…, Disconnect once one's active, and
-  recent history colored the same way (red for one that last failed).
+  path itself in the header — muted for a plain local panel, a slow
+  pulse toward a lighter green and back once connected (never dipping
+  toward black — that reads as "still searching for a signal", not a
+  settled, already-alive connection) — opening a dropdown (also
+  reachable via the `g` chord's own `gc`), styled and shaped like the
+  tab switcher: + New connection plus recent history, each row its own
+  independently clickable cells rather than markup-colored text — bright
+  green for the one active in this panel, a matte dimmer green for one
+  that has connected successfully before but isn't active now, red for
+  one that used to work and just failed (a connection that has *never*
+  once succeeded isn't added to history at all — only ever going to show
+  up red is clutter, not a useful shortcut). The active row's own
+  trailing `⏏` (or the "e" key) disconnects, right next to the `✕` (or
+  "x"/Delete) every row already has to drop it out of history.
   Connecting dials in the background with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
@@ -513,12 +527,26 @@ terminal.
   question, while a host whose key *changed* is always rejected
   outright, no prompt, no bypass. Once connected, the panel browses the
   remote filesystem exactly like a local one — same columns, same
-  sorting, same navigation. This first release covers browsing and
-  viewing only: everything that changes files (rename, edit, chmod/
-  chown, Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, Sed
-  Replace) is refused with a clear message on a remote panel for now.
-  See [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp)
-  for the full picture.
+  sorting, same navigation, and Details/status-bar Disk+Inodes/System
+  Info at "/" all describe the *remote* machine, not this one. Rename,
+  permanent delete, chmod (including its recursive dirs/files options),
+  and Copy/Cut/Paste all work against a remote target too — including
+  moving a file between two directories on the same connection, which
+  goes through a single rename rather than downloading and re-uploading
+  it; "d" (Move to Trash) explains why it switches straight to a
+  permanent-delete confirmation instead, since a remote session has no
+  trash to move into. Look and Edit stage a real local temp copy
+  behind the scenes and hand it to the ordinary built-in viewer/
+  external pager/$VISUAL/$EDITOR unchanged — Edit only uploads it back
+  if it actually changed. Opening a zip/tar that itself lives on a
+  remote connection downloads and browses it the same transparent way;
+  above a configurable size (Options → Remote connections, KB/MB/GB,
+  10MB by default) it asks first, naming the real size. Still refused
+  with a clear message for now: chown, Compare, Batch rename, Sed
+  Replace, Properties as a whole, and copying a member back *out* of a
+  remote archive. See
+  [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp) for
+  the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Options screen (the `o` chord's
   own `oo`) — no restart needed, and the pick is remembered for next
