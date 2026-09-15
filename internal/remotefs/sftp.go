@@ -1,0 +1,256 @@
+package remotefs
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path"
+	"time"
+
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+)
+
+// dialDefaultTimeout bounds both the raw TCP connect and the whole
+// SSH handshake (see ssh.ClientConfig's own Timeout field) when a
+// caller doesn't set DialOptions.Timeout — long enough for a slow
+// but working link, short enough that a silently dropping firewall
+// doesn't hang the connection dialog indefinitely.
+const dialDefaultTimeout = 10 * time.Second
+
+// DialOptions is everything Dial needs: which endpoint (Connection),
+// how to authenticate and verify its host key (AuthOptions,
+// HostKeyPrompt), and how long to wait.
+type DialOptions struct {
+	Connection
+
+	Auth AuthOptions
+
+	// KnownHostsFile overrides where host keys are read from/appended
+	// to; "" means DefaultKnownHostsFile().
+	KnownHostsFile string
+	HostKeyPrompt  HostKeyPrompt
+
+	// Timeout bounds the connect+handshake; 0 means
+	// dialDefaultTimeout.
+	Timeout time.Duration
+}
+
+// SFTPClient is the Client implementation for a single SFTP session —
+// one TCP connection, one SSH handshake, one SFTP subsystem channel
+// on top of it. See Dial.
+type SFTPClient struct {
+	ssh  *ssh.Client
+	sftp *sftp.Client
+	root string
+}
+
+var _ Client = (*SFTPClient)(nil)
+
+// Dial authenticates to opts's endpoint and starts an SFTP session
+// against it. ctx bounds the whole attempt, including a handshake
+// that never completes at all (a host that accepts the TCP connection
+// but then goes silent) — not just the initial TCP connect, which
+// opts.Timeout alone would already cover.
+func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = dialDefaultTimeout
+	}
+
+	knownHosts := opts.KnownHostsFile
+	if knownHosts == "" {
+		var err error
+		knownHosts, err = DefaultKnownHostsFile()
+		if err != nil {
+			return nil, fmt.Errorf("locating known_hosts: %w", err)
+		}
+	}
+	hostKeyCB, err := hostKeyCallback(knownHosts, opts.HostKeyPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	methods := authMethods(opts.Auth)
+	if len(methods) == 0 {
+		return nil, errors.New("no authentication method available: no running agent, no default private key, no password supplied")
+	}
+
+	config := &ssh.ClientConfig{
+		User:            opts.User,
+		Auth:            methods,
+		HostKeyCallback: hostKeyCB,
+		Timeout:         timeout,
+	}
+
+	sshClient, err := dialSSHContext(ctx, opts.Addr(), config)
+	if err != nil {
+		return nil, err
+	}
+
+	sftpClient, err := sftp.NewClient(sshClient)
+	if err != nil {
+		_ = sshClient.Close()
+		return nil, fmt.Errorf("starting sftp session: %w", err)
+	}
+
+	root, err := sftpClient.Getwd()
+	if err != nil || root == "" {
+		root = "/" // best-effort fallback — every SFTP server has a "/"
+	}
+
+	return &SFTPClient{ssh: sshClient, sftp: sftpClient, root: root}, nil
+}
+
+// dialSSHContext races the TCP connect + SSH handshake against ctx —
+// neither ssh.Dial nor ssh.NewClientConn take a context natively, so
+// cancellation is applied by hand: closing conn unblocks
+// NewClientConn's own blocking read/write the moment ctx is done,
+// exactly the same "closing the underlying connection is what actually
+// interrupts an in-flight handshake" mechanism a context-aware
+// database/sql driver relies on internally.
+func dialSSHContext(ctx context.Context, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, &ConnectionRefusedError{Addr: addr, Err: err}
+	}
+
+	type result struct {
+		client *ssh.Client
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+		if err != nil {
+			done <- result{nil, err}
+			return
+		}
+		done <- result{ssh.NewClient(c, chans, reqs), nil}
+	}()
+
+	select {
+	case <-ctx.Done():
+		_ = conn.Close()
+		return nil, ctx.Err()
+	case r := <-done:
+		return r.client, r.err
+	}
+}
+
+func (c *SFTPClient) Root() string { return c.root }
+
+func (c *SFTPClient) ListDir(dir string) ([]fsops.Entry, error) {
+	infos, err := c.sftp.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]fsops.Entry, 0, len(infos))
+	for _, fi := range infos {
+		entries = append(entries, c.adaptLstatEntry(path.Join(dir, fi.Name()), fi))
+	}
+	return entries, nil
+}
+
+func (c *SFTPClient) Stat(p string) (fsops.Entry, error) {
+	fi, err := c.sftp.Stat(p) // follows symlinks, same contract as fsops.Stat
+	if err != nil {
+		return fsops.Entry{}, err
+	}
+	return adaptResolvedEntry(fi), nil
+}
+
+func (c *SFTPClient) Open(p string) (io.ReadCloser, error)    { return c.sftp.Open(p) }
+func (c *SFTPClient) Create(p string) (io.WriteCloser, error) { return c.sftp.Create(p) }
+func (c *SFTPClient) Mkdir(p string) error                    { return c.sftp.Mkdir(p) }
+func (c *SFTPClient) Remove(p string) error                   { return c.sftp.Remove(p) }
+func (c *SFTPClient) RemoveDirectory(p string) error          { return c.sftp.RemoveDirectory(p) }
+func (c *SFTPClient) Rename(oldPath, newPath string) error    { return c.sftp.Rename(oldPath, newPath) }
+
+func (c *SFTPClient) Close() error {
+	sftpErr := c.sftp.Close()
+	sshErr := c.ssh.Close()
+	if sftpErr != nil {
+		return sftpErr
+	}
+	return sshErr
+}
+
+// adaptLstatEntry builds an fsops.Entry from one ReadDir/Lstat-style
+// os.FileInfo — fullPath is that entry's own complete remote path
+// (dir joined with its name), needed to resolve a symlink's own
+// target type via a second round trip, the same "Lstat then, for a
+// symlink, also resolve the target" shape fsops.ListDir's own local
+// describeEntry already follows.
+func (c *SFTPClient) adaptLstatEntry(fullPath string, fi os.FileInfo) fsops.Entry {
+	entry := fsops.Entry{
+		Name:    fi.Name(),
+		Mode:    fi.Mode(),
+		Size:    fi.Size(),
+		ModTime: fi.ModTime(),
+	}
+
+	if fi.Mode()&os.ModeSymlink == 0 {
+		entry.Type = entryTypeFromMode(fi.Mode())
+		entry.IsDir = entry.Type == fsops.TypeDir
+		return entry
+	}
+
+	if target, err := c.sftp.ReadLink(fullPath); err == nil {
+		entry.LinkTarget = target
+	}
+	resolved, err := c.sftp.Stat(fullPath)
+	switch {
+	case err != nil:
+		entry.Type = fsops.TypeSymlinkBroken
+	case resolved.IsDir():
+		entry.Type = fsops.TypeSymlinkDir
+		entry.IsDir = true
+	default:
+		entry.Type = fsops.TypeSymlinkFile
+	}
+	return entry
+}
+
+// adaptResolvedEntry builds an fsops.Entry from an already
+// symlink-resolved os.FileInfo (Client.Stat's own contract) — never a
+// symlink Type itself, since Stat never reports one.
+func adaptResolvedEntry(fi os.FileInfo) fsops.Entry {
+	entry := fsops.Entry{
+		Name:    fi.Name(),
+		Mode:    fi.Mode(),
+		Size:    fi.Size(),
+		ModTime: fi.ModTime(),
+	}
+	entry.Type = entryTypeFromMode(fi.Mode())
+	entry.IsDir = entry.Type == fsops.TypeDir
+	return entry
+}
+
+// entryTypeFromMode maps a resolved (non-symlink) os.FileMode to the
+// fsops.EntryType it corresponds to — checked in this specific order
+// because a character device's mode carries *both* ModeDevice and
+// ModeCharDevice, per os.FileMode's own documented convention; a plain
+// block device carries ModeDevice alone.
+func entryTypeFromMode(mode os.FileMode) fsops.EntryType {
+	switch {
+	case mode&os.ModeDir != 0:
+		return fsops.TypeDir
+	case mode&os.ModeSocket != 0:
+		return fsops.TypeSocket
+	case mode&os.ModeNamedPipe != 0:
+		return fsops.TypeFIFO
+	case mode&os.ModeCharDevice != 0:
+		return fsops.TypeCharDevice
+	case mode&os.ModeDevice != 0:
+		return fsops.TypeBlockDevice
+	default:
+		return fsops.TypeFile
+	}
+}

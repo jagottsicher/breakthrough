@@ -499,6 +499,26 @@ terminal.
   directories never queues up one `git status` per row. See
   [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
   full field list.
+- Remote connections (SFTP): a compact `@` button sits right before the
+  path itself in the header — muted for a plain local panel, green once
+  connected — opening a dropdown (also reachable via the `g` chord's
+  own `gc`) with New connection…, Disconnect once one's active, and
+  recent history colored the same way (red for one that last failed).
+  Connecting dials in the background with a live progress line;
+  authentication tries an `ssh-agent` first, then the usual default key
+  files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
+  password as the last resort. Host keys are checked against the real
+  `~/.ssh/known_hosts` — an unknown host raises a trust-on-first-use
+  prompt, exactly like a real `ssh` client's own "authenticity of host"
+  question, while a host whose key *changed* is always rejected
+  outright, no prompt, no bypass. Once connected, the panel browses the
+  remote filesystem exactly like a local one — same columns, same
+  sorting, same navigation. This first release covers browsing and
+  viewing only: everything that changes files (rename, edit, chmod/
+  chown, Copy/Cut/Paste, Trash/Remove, Compare, Batch rename, Sed
+  Replace) is refused with a clear message on a remote panel for now.
+  See [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp)
+  for the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Options screen (the `o` chord's
   own `oo`) — no restart needed, and the pick is remembered for next

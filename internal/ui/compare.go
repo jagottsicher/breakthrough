@@ -197,6 +197,10 @@ func (r *Root) openCompare() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	a, b, ok := r.compareTargets()
 	if !ok {
 		r.showError(errCompareNeedsTwoTargets)

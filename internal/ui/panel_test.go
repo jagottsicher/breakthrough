@@ -42,9 +42,9 @@ func stripColorTags(s string) string {
 
 func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/a/bb/c", theme)
+	text, spans := buildHeaderSpans("/a/bb/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -57,10 +57,11 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 29, action: actionNavigate, target: "/"},
-		{start: 29, end: 30, action: actionNavigate, target: "/a"},
-		{start: 31, end: 33, action: actionNavigate, target: "/a/bb"},
-		{start: 34, end: 35, action: actionNavigate, target: "/a/bb/c"},
+		{start: 28, end: 31, action: actionOpenConnectionMenu},
+		{start: 32, end: 33, action: actionNavigate, target: "/"},
+		{start: 33, end: 34, action: actionNavigate, target: "/a"},
+		{start: 35, end: 37, action: actionNavigate, target: "/a/bb"},
+		{start: 38, end: 39, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -108,7 +109,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 // tags of its own (see its own doc comment).
 func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, _ := buildHeaderSpans("/a/bb/c", theme)
+	text, _ := buildHeaderSpans("/a/bb/c", theme, false)
 	if visible := stripColorTags(text); !strings.HasPrefix(visible, headerButtonPrefix) {
 		t.Errorf("buildHeaderSpans' own visible text %q does not start with headerButtonPrefix %q", visible, headerButtonPrefix)
 	}
@@ -116,19 +117,19 @@ func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/", theme)
+	text, spans := buildHeaderSpans("/", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
-	// 7 buttons + the root span.
-	if len(spans) != 8 {
-		t.Fatalf("got %d spans, want 8: %+v", len(spans), spans)
+	// 7 nav buttons + the connection button + the root span.
+	if len(spans) != 9 {
+		t.Fatalf("got %d spans, want 9: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 28, end: 29, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 32, end: 33, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -141,9 +142,9 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 // on screen. "文档" is 2 runes but 4 terminal columns.
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/文档/c", theme)
+	text, spans := buildHeaderSpans("/文档/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -156,9 +157,10 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 29, action: actionNavigate, target: "/"},
-		{start: 29, end: 33, action: actionNavigate, target: "/文档"},
-		{start: 34, end: 35, action: actionNavigate, target: "/文档/c"},
+		{start: 28, end: 31, action: actionOpenConnectionMenu},
+		{start: 32, end: 33, action: actionNavigate, target: "/"},
+		{start: 33, end: 37, action: actionNavigate, target: "/文档"},
+		{start: 38, end: 39, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -2505,7 +2507,7 @@ func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
 // buildHeaderSpansText is buildHeaderSpans' own text half, for a test
 // that only needs to compare against it, not the spans too.
 func buildHeaderSpansText(abs string, theme config.ResolvedTheme) string {
-	text, _ := buildHeaderSpans(abs, theme)
+	text, _ := buildHeaderSpans(abs, theme, false)
 	return text
 }
 
