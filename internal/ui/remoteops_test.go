@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -219,6 +220,38 @@ func TestMoveSelectionToTrashOnARemotePanelRedirectsToRemove(t *testing.T) {
 
 	if r.activePage != confirmPage {
 		t.Fatalf("activePage = %q, want moveSelectionToTrash to redirect to the Remove confirmation on a remote panel", r.activePage)
+	}
+}
+
+// TestMoveSelectionToTrashOnARemotePanelExplainsWhyThereIsNoTrash pins
+// the user's own explicit request: "d" ordinarily means something
+// reversible everywhere else in this app, so silently switching it to
+// a permanent delete on a remote panel needs its own "why", not just
+// the plain question "D" already asks unprompted.
+func TestMoveSelectionToTrashOnARemotePanelExplainsWhyThereIsNoTrash(t *testing.T) {
+	r := newTestRemoteRoot(t)
+
+	r.moveSelectionToTrash()
+
+	got := r.confirmDialogTitleBar.GetText(true)
+	if !strings.Contains(got, "no trash") {
+		t.Errorf("confirm message = %q, want it to explain that a remote connection has no trash", got)
+	}
+}
+
+// TestOpenRemoveConfirmOnARemotePanelDoesNotExplainTrash is the
+// negative case: "D" already means "permanently delete" on its own,
+// local or remote — repeating an explanation of why there's no trash
+// here would just be confusing noise on a key that was never about
+// reversibility in the first place.
+func TestOpenRemoveConfirmOnARemotePanelDoesNotExplainTrash(t *testing.T) {
+	r := newTestRemoteRoot(t)
+
+	r.openRemoveConfirm()
+
+	got := r.confirmDialogTitleBar.GetText(true)
+	if strings.Contains(got, "no trash") {
+		t.Errorf("confirm message = %q, want the plain permanent-delete question, no trash explanation", got)
 	}
 }
 

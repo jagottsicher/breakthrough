@@ -890,7 +890,12 @@ chord's own `pm`, including its recursive dirs/files options), and
 Copy/Cut/Paste all work against a remote target the same way they do
 locally. `d` ("Move to Trash") redirects straight to the same
 permanent-delete confirmation `D` already uses instead: a remote
-session has no trash of its own to move into. Paste dispatches by
+session has no trash of its own to move into — the confirmation itself
+says so ("A remote connection has no trash to move … into — permanently
+delete instead?"), since `d` means something reversible everywhere
+else in this app and silently switching that to a permanent delete
+would otherwise be an easy trap. `D` skips that explanation: it
+already means "permanently delete" on its own. Paste dispatches by
 which side (or both) is remote: uploading, downloading, or copying/
 moving between two remote directories all work, including across two
 different connections at once; a move where both ends are the exact

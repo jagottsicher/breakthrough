@@ -83,8 +83,8 @@
     },
     {
       "path": "bin/breakthrough",
-      "size": 18906856,
-      "sha256": "342e762900fb2bb69f5de5533e014fb16f6878cad37888b1bc254d3bdb777bea"
+      "size": 18948351,
+      "sha256": "7ace6d79b0d6762d0723b8e236d6cb96f51a5b1a9553bf318b50d66f78ed2a5e"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 85632,
-      "sha256": "4fb667757b0a89a6d6e62df94c7e972b5128d672e37a5bd049e9623ddc1dfa27"
+      "size": 85980,
+      "sha256": "98025d0227756387a409450e905af2dc0838463a8d92594b54b3787a639b5ba1"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1158,8 +1158,8 @@
     },
     {
       "path": "internal/ui/remoteops_test.go",
-      "size": 13732,
-      "sha256": "135c75301c4bd628b089f0fac7d9bb37b236efbe9cb46dd8f660375f6ff745ab"
+      "size": 15040,
+      "sha256": "462afa58684c60d67401ffba71dfa5028318883c42f41152046ea4cf3205f25e"
     },
     {
       "path": "internal/ui/remotepaste.go",
@@ -1283,8 +1283,8 @@
     },
     {
       "path": "internal/ui/trash.go",
-      "size": 25458,
-      "sha256": "14d842049f59b2fc7bb9420427fbfdd64e0c1262297d4582c466c5a5f5a2cd4f"
+      "size": 26924,
+      "sha256": "92ca3fab98821b991f459ec34e116bf43171500831238c2db9821fe9d04d4670"
     },
     {
       "path": "internal/ui/trash_test.go",
@@ -22121,105 +22121,119 @@
       "file": "internal/ui/remoteops_test.go",
       "name": "TestLoadDetailsTargetOnARemotePanelStatsThroughTheClient",
       "kind": "function",
-      "line": 18
+      "line": 19
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestLoadDetailsTargetOnARemoteDirectoryReportsItAsADirectory",
       "kind": "function",
-      "line": 38
+      "line": 39
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestRemoteInfoFromEntryMapsEachSymlinkTypeCorrectly",
       "kind": "function",
-      "line": 60
+      "line": 61
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf",
       "kind": "function",
-      "line": 100
+      "line": 101
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestDiskUsageForOnARemotePanelFailsGracefullyWhenTheClientErrors",
       "kind": "function",
-      "line": 120
+      "line": 121
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestFinishRenameOnARemotePanelRenamesThroughTheClient",
       "kind": "function",
-      "line": 132
+      "line": 133
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestFinishRenameOnARemotePanelRefusesAnExistingDestination",
       "kind": "function",
-      "line": 147
+      "line": 148
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestOpenRemoveConfirmOnARemotePanelDeletesThroughTheClient",
       "kind": "function",
-      "line": 163
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestOpenRemoveConfirmOnARemotePanelDeletesADirectoryRecursively",
       "kind": "function",
-      "line": 178
+      "line": 179
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestMoveSelectionToTrashOnARemotePanelRedirectsToRemove",
       "kind": "function",
-      "line": 215
+      "line": 216
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remoteops_test.go",
+      "name": "TestMoveSelectionToTrashOnARemotePanelExplainsWhyThereIsNoTrash",
+      "kind": "function",
+      "line": 231
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remoteops_test.go",
+      "name": "TestOpenRemoveConfirmOnARemotePanelDoesNotExplainTrash",
+      "kind": "function",
+      "line": 247
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestApplyChmodDialogOnARemotePanelChmodsThroughTheClient",
       "kind": "function",
-      "line": 225
+      "line": 258
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestChmodDirsRecursiveRemoteAppliesToDirectoriesOnlyNotFiles",
       "kind": "function",
-      "line": 248
+      "line": 281
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestChmodFilesRecursiveRemoteAppliesToRegularFilesOnlyNotSymlinks",
       "kind": "function",
-      "line": 287
+      "line": 320
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestRemoveRemoteRecursiveNeverFollowsASymlinkIntoItsTarget",
       "kind": "function",
-      "line": 317
+      "line": 350
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remoteops_test.go",
       "name": "TestRemoveRemoteRecursiveSkipsASymlinkChildDuringRecursion",
       "kind": "function",
-      "line": 346
+      "line": 379
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26840,21 +26854,21 @@
       "name": "reallyMoveToTrash",
       "kind": "method",
       "receiver": "*Root",
-      "line": 114
+      "line": 128
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/trash.go",
       "name": "moveToTrashConfirmMessage",
       "kind": "function",
-      "line": 145
+      "line": 159
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/trash.go",
       "name": "moveToTrashConfirmSingleMessage",
       "kind": "function",
-      "line": 152
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26862,7 +26876,7 @@
       "name": "openTrash",
       "kind": "method",
       "receiver": "*Root",
-      "line": 172
+      "line": 186
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26870,7 +26884,7 @@
       "name": "openRemoveConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 188
+      "line": 202
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26878,21 +26892,21 @@
       "name": "openRemoveConfirmRemote",
       "kind": "method",
       "receiver": "*Root",
-      "line": 228
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/trash.go",
       "name": "removeConfirmMessage",
       "kind": "function",
-      "line": 257
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/trash.go",
       "name": "removeConfirmSingleMessage",
       "kind": "function",
-      "line": 264
+      "line": 292
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26900,7 +26914,7 @@
       "name": "restoreSelectionFromTrash",
       "kind": "method",
       "receiver": "*Root",
-      "line": 302
+      "line": 330
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26908,7 +26922,7 @@
       "name": "openEmptyTrashConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 346
+      "line": 374
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26916,7 +26930,7 @@
       "name": "TrashShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 387
+      "line": 415
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26924,7 +26938,7 @@
       "name": "PurgeShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 393
+      "line": 421
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26932,7 +26946,7 @@
       "name": "TrashbinShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 408
+      "line": 436
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26940,7 +26954,7 @@
       "name": "newConfirmDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 434
+      "line": 462
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26948,7 +26962,7 @@
       "name": "openConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 467
+      "line": 495
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26956,7 +26970,7 @@
       "name": "openPurgeConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 512
+      "line": 540
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26964,7 +26978,7 @@
       "name": "acceptConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 517
+      "line": 545
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26972,7 +26986,7 @@
       "name": "cancelConfirm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 526
+      "line": 554
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26980,14 +26994,14 @@
       "name": "pruneTrashAtStartup",
       "kind": "method",
       "receiver": "*Root",
-      "line": 548
+      "line": 576
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/trash.go",
       "name": "trashPruneMessage",
       "kind": "function",
-      "line": 572
+      "line": 600
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26995,7 +27009,7 @@
       "name": "describeTrashRows",
       "kind": "method",
       "receiver": "*Root",
-      "line": 599
+      "line": 627
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28134,5 +28148,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "5aa12324928a1367cf3aab36f3f6410bd0c4e6d4f0c026e8c7e75063dada97b3"
+  "merkle_root": "008b94e60f18fd4685f771a50bb8e1f7248ad666c28f299c9a045d4c3e6af492"
 }
