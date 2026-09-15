@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -3527,6 +3528,60 @@ const headerButtonSeparator = " "
 // most pictographs), and needs no legend of its own.
 const connectionButtonGlyph = "@"
 
+// connectionGlowNow is time.Now, a package-level var so a test can
+// pin it to a fixed instant — the same substitution shape isRoot/
+// hashFile already establish for other real-world effects a test needs
+// to control rather than actually depend on (here, the wall clock a
+// live connection's glow animates against).
+var connectionGlowNow = time.Now
+
+// connectionGlowPeriod/connectionGlowPeakBlend shape the header's own
+// "@" button while connected: a slow, continuous brighten-then-dim
+// breathing motion around theme.EntryExecutable — never a hard on/off
+// blink — one full cycle every connectionGlowPeriod, peaking at
+// connectionGlowPeakBlend blended toward white. Sampled once per
+// second (see Root.refreshActivePanelHeaderGlow, driven by the same
+// ticker StartClock's own clock/System Info refresh already uses), not
+// its own faster ticker: a three-second period still reads clearly at
+// one sample a second, and adding a second background ticker just for
+// this would cost a further goroutine and redraw cadence for a purely
+// cosmetic effect.
+const (
+	connectionGlowPeriod    = 3 * time.Second
+	connectionGlowPeakBlend = 0.55
+)
+
+// connectionGlowColor is the header's own connection-button color for
+// this instant: theme.MutedTextColor while local (nothing to animate),
+// or theme.EntryExecutable breathing toward white and back while
+// connected. The breathing motion is a sine wave, not a linear ramp,
+// so it eases through both the brightest and dimmest points rather
+// than visibly reversing direction with a sharp corner there.
+func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Time) tcell.Color {
+	if !connected {
+		return theme.MutedTextColor
+	}
+	period := connectionGlowPeriod.Seconds()
+	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
+	brightness := (1 + math.Sin(2*math.Pi*phase)) / 2 // 0 (dimmest) .. 1 (brightest)
+	return blendTowardWhite(theme.EntryExecutable, brightness*connectionGlowPeakBlend)
+}
+
+// blendTowardWhite mixes c toward pure white by fraction t (0 = c
+// itself, 1 = white), clamped to [0, 1] so a caller's own math (a sine
+// wave's rounding, say) can never overshoot into an invalid color.
+func blendTowardWhite(c tcell.Color, t float64) tcell.Color {
+	switch {
+	case t < 0:
+		t = 0
+	case t > 1:
+		t = 1
+	}
+	r, g, b := c.RGB()
+	lerp := func(x int32) int32 { return x + int32(float64(255-x)*t) }
+	return tcell.NewRGBColor(lerp(r), lerp(g), lerp(b))
+}
+
 // headerButtonPrefix is the plain-text form of the six nav buttons
 // plus their separators — see buildHeaderSpans for the colored,
 // clickable version actually drawn in the header. Reused by
@@ -3591,14 +3646,13 @@ func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool) (t
 	// The connection button: same padded-button shape as the seven
 	// above, but its own foreground color (not just the shared
 	// ButtonBackground) carries the state — muted for a plain local
-	// panel, the same "healthy" green username/git-status/disk-percent
-	// already use elsewhere in this app once a remote session is
-	// attached (see internal/ui's own bottombar.go/gitstatus.go for
-	// that established color convention).
-	connColor := theme.MutedTextColor
-	if connected {
-		connColor = theme.EntryExecutable
-	}
+	// panel, a slow breathing glow around the same "healthy" green
+	// username/git-status/disk-percent already use elsewhere in this
+	// app (see bottombar.go/gitstatus.go) once a remote session is
+	// attached — a flat, unmoving green wasn't a clear enough "this is
+	// live right now" signal on its own, per the user's own explicit
+	// report.
+	connColor := connectionGlowColor(theme, connected, connectionGlowNow())
 	connStart := col
 	fmt.Fprintf(&b, "[%s:%s:] %s [-:-:-]", colorTag(connColor), keyBG, connectionButtonGlyph)
 	col += 1 + tview.TaggedStringWidth(connectionButtonGlyph) + 1

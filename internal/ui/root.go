@@ -344,21 +344,25 @@ type Root struct {
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
 
-	// connectForm/connectActions/connectLayout make up the "Connect"
+	// connectForm/connectButtons/connectLayout make up the "Connect"
 	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
 	// User/Password), so it's built once here rather than rebuilt fresh
 	// per open the way Sed Replace's own variable field set is (see
 	// newSedForm's own doc comment on that distinction). connectStatus
 	// is the one-line area below the form showing either an in-progress
 	// "Connecting…" animation or the last attempt's own error, in
-	// place, without closing the dialog.
+	// place, without closing the dialog. connectCancelBtn/
+	// connectConnectBtn are a real button pair (see newConnectButtons'
+	// own doc comment for why, not a List).
 	connectForm          *tview.Form
 	connectHostField     *tview.InputField
 	connectPortField     *tview.InputField
 	connectUserField     *tview.InputField
 	connectPasswordField *tview.InputField
 	connectStatus        *tview.TextView
-	connectActions       *tview.List
+	connectCancelBtn     *tview.Button
+	connectConnectBtn    *tview.Button
+	connectButtons       *tview.Flex
 	connectTitleBar      *tview.TextView
 	connectLayout        *tview.Flex
 	connectCancel        context.CancelFunc
@@ -1367,7 +1371,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// once here the same way Sed Replace's own form is (see
 	// newConnectForm's own doc comment).
 	r.connectForm = r.newConnectForm()
-	r.connectActions = r.newConnectActions()
+	r.connectButtons = r.newConnectButtons()
 	r.connectLayout = r.newConnectLayout()
 	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
 	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()

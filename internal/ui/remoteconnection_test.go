@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -196,6 +197,14 @@ func TestActionHomeUsesTheRemoteRootWhenConnected(t *testing.T) {
 func TestBuildHeaderSpansColorsTheConnectionButtonByState(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 
+	// Pinned to the glow's own dimmest instant (see
+	// TestConnectionGlowColorAtItsDimmestPointEqualsTheBaseColor) so the
+	// connected color is deterministically exactly theme.EntryExecutable,
+	// not whatever the wall clock happens to be mid-breath right now.
+	old := connectionGlowNow
+	connectionGlowNow = func() time.Time { return time.UnixMilli(2250) }
+	defer func() { connectionGlowNow = old }()
+
 	localText, _ := buildHeaderSpans("/", theme, false)
 	connectedText, _ := buildHeaderSpans("/", theme, true)
 
@@ -210,5 +219,54 @@ func TestBuildHeaderSpansColorsTheConnectionButtonByState(t *testing.T) {
 	}
 	if strings.Contains(connectedText, mutedTag) {
 		t.Errorf("connected header text %q still contains the muted color tag", connectedText)
+	}
+}
+
+// TestRefreshActivePanelHeaderGlowUpdatesTheConnectedHeaderColor pins
+// StartClock's own once-a-second call to this: the header's own text
+// must actually change as the glow's phase advances, not just get
+// rewritten with the same color every tick.
+func TestRefreshActivePanelHeaderGlowUpdatesTheConnectedHeaderColor(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	client := fakeConnectedClient()
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	old := connectionGlowNow
+	defer func() { connectionGlowNow = old }()
+
+	connectionGlowNow = func() time.Time { return time.UnixMilli(2250) } // dimmest
+	r.refreshActivePanelHeaderGlow()
+	dim := r.panel.header.GetText(false)
+
+	connectionGlowNow = func() time.Time { return time.UnixMilli(750) } // brightest
+	r.refreshActivePanelHeaderGlow()
+	bright := r.panel.header.GetText(false)
+
+	if dim == bright {
+		t.Error("refreshActivePanelHeaderGlow produced identical header text at the glow's dimmest and brightest points")
+	}
+}
+
+// TestRefreshActivePanelHeaderGlowDoesNothingForALocalPanel confirms
+// the no-op guard: a plain local panel's header must never be
+// rewritten by this once-a-second call at all.
+func TestRefreshActivePanelHeaderGlowDoesNothingForALocalPanel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	before := r.panel.header.GetText(true)
+
+	r.refreshActivePanelHeaderGlow()
+
+	if got := r.panel.header.GetText(true); got != before {
+		t.Errorf("header text changed for a local panel: %q -> %q", before, got)
 	}
 }

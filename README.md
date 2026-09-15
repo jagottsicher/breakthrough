@@ -500,8 +500,10 @@ terminal.
   [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
   full field list.
 - Remote connections (SFTP): a compact `@` button sits right before the
-  path itself in the header — muted for a plain local panel, green once
-  connected — opening a dropdown (also reachable via the `g` chord's
+  path itself in the header — muted for a plain local panel, a slow
+  green breathing glow (never a flat, static color) once connected, so
+  a live connection reads as visibly alive at a glance — opening a
+  dropdown (also reachable via the `g` chord's
   own `gc`) with New connection…, Disconnect once one's active, and
   recent history colored the same way (red for one that last failed).
   Connecting dials in the background with a live progress line;

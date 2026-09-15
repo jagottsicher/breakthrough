@@ -199,8 +199,9 @@ var helpText = strings.TrimLeft(`
   directories costs nothing.
 
   The "@" button right before the path (or "gc") opens a dropdown to
-  browse another machine over SFTP — muted for a local panel, green
-  once connected. New connection…/Disconnect plus recent history,
+  browse another machine over SFTP — muted for a local panel, a slow
+  breathing green glow once connected. New connection…/Disconnect plus
+  recent history,
   colored red for one whose last attempt failed. Auth tries an
   ssh-agent, then ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if
   unencrypted, then a typed password; host keys are checked against

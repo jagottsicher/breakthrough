@@ -428,7 +428,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
 	r.connectForm.SetFieldTextColor(theme.TextColor)
 	r.connectStatus.SetBackgroundColor(theme.SurfaceBackground)
-	styleList(r.connectActions, theme)
+	styleButton(r.connectCancelBtn, theme)
+	styleButton(r.connectConnectBtn, theme)
 	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.connectTitleBar.SetTextColor(theme.TextColor)
 

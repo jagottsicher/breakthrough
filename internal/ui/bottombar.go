@@ -1257,6 +1257,7 @@ func (r *Root) StartClock() (stop func()) {
 					if r.detailsSidebarVisible && r.showingSystemInfo() {
 						r.renderDetailsSidebar()
 					}
+					r.refreshActivePanelHeaderGlow()
 				})
 			case <-done:
 				ticker.Stop()
@@ -1265,4 +1266,29 @@ func (r *Root) StartClock() (stop func()) {
 		}
 	})
 	return func() { close(done) }
+}
+
+// refreshActivePanelHeaderGlow re-renders the active panel's own
+// header text so the "@" button's breathing glow (see
+// connectionGlowColor) actually advances while sitting idle in a
+// remote-connected directory, not just on the next real navigation —
+// called from StartClock's own once-a-second ticker. A no-op for a
+// local panel: there's no animation running to advance, so no reason
+// to force a redraw a plain, unconnected header never needs.
+func (r *Root) refreshActivePanelHeaderGlow() {
+	p := r.panel
+	if p == nil || p.remote == nil {
+		return
+	}
+	if p.searchMode {
+		// setSearchStatus rebuilds the breadcrumb half of the combined
+		// text via buildHeaderSpans itself, the same as the plain
+		// branch below — reusing it here rather than duplicating that
+		// call keeps the two paths from ever drifting apart.
+		p.setSearchStatus(p.searchStatusText)
+		return
+	}
+	text, spans := buildHeaderSpans(p.path, p.theme, true)
+	p.header.SetText(text)
+	p.headerSpans = spans
 }

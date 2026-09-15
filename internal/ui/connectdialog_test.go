@@ -36,23 +36,23 @@ func newTestRootForConnect(t *testing.T) *Root {
 	return r
 }
 
-// TestTabFromThePasswordFieldReachesTheActionsList pins a real,
+// TestTabFromThePasswordFieldReachesTheCancelButton pins a real,
 // live-tmux-discovered bug: tview.Form.Focus unconditionally overwrites
 // every item's own SetFinishedFunc whenever the form itself gains
 // focus (verified directly against tview's own form.go), so a bare
 // SetDoneFunc on the last field is silently discarded and Tab there
 // just wraps back to the first field instead of ever reaching
-// connectActions — see newConnectForm's own doc comment on why a
+// connectCancelBtn — see newConnectForm's own doc comment on why a
 // SetInputCapture is what actually has to intercept it instead.
-func TestTabFromThePasswordFieldReachesTheActionsList(t *testing.T) {
+func TestTabFromThePasswordFieldReachesTheCancelButton(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
 	r.app.SetFocus(r.connectPasswordField)
 	r.connectPasswordField.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
 
-	if !r.connectActions.HasFocus() {
-		t.Error("Tab from the password field did not move focus to connectActions")
+	if !r.connectCancelBtn.HasFocus() {
+		t.Error("Tab from the password field did not move focus to connectCancelBtn")
 	}
 }
 
@@ -74,18 +74,36 @@ func TestEnterInThePasswordFieldSubmitsTheForm(t *testing.T) {
 	}
 }
 
-// TestBacktabFromTheActionsListReturnsToTheForm is the reverse
+// TestBacktabFromTheCancelButtonReturnsToTheForm is the reverse
 // direction of the same fix — see
-// TestTabFromThePasswordFieldReachesTheActionsList's own doc comment.
-func TestBacktabFromTheActionsListReturnsToTheForm(t *testing.T) {
+// TestTabFromThePasswordFieldReachesTheCancelButton's own doc comment.
+func TestBacktabFromTheCancelButtonReturnsToTheForm(t *testing.T) {
 	r := newTestRootForConnect(t)
 	noop := func(tview.Primitive) {}
 
-	r.app.SetFocus(r.connectActions)
-	r.connectActions.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	r.app.SetFocus(r.connectCancelBtn)
+	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
 
 	if !r.connectForm.HasFocus() {
-		t.Error("Backtab from connectActions did not return focus to the form")
+		t.Error("Backtab from connectCancelBtn did not return focus to the form")
+	}
+}
+
+// TestTabCyclesFromCancelToConnectAndBacktabReturns pins the cycle
+// between the dialog's own two buttons themselves.
+func TestTabCyclesFromCancelToConnectAndBacktabReturns(t *testing.T) {
+	r := newTestRootForConnect(t)
+	noop := func(tview.Primitive) {}
+
+	r.app.SetFocus(r.connectCancelBtn)
+	r.connectCancelBtn.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), noop)
+	if !r.connectConnectBtn.HasFocus() {
+		t.Fatal("Tab from connectCancelBtn did not move focus to connectConnectBtn")
+	}
+
+	r.connectConnectBtn.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), noop)
+	if !r.connectCancelBtn.HasFocus() {
+		t.Error("Backtab from connectConnectBtn did not move focus back to connectCancelBtn")
 	}
 }
 

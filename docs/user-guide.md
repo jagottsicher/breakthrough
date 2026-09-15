@@ -179,8 +179,11 @@ links there too, but as a plain, easy-to-miss character; Root gives
 that same destination a proper, styled button of its own.
 
 Right after Reload, one more button — `@` — sits directly before the
-path itself: muted for an ordinary local panel, green once connected
-to a remote host. Clicking it (or the `g` chord's own `gc`) opens the
+path itself: muted for an ordinary local panel, a slow green breathing
+glow — brightening and dimming on a roughly three-second cycle, never a
+flat, unmoving color — once connected to a remote host, so a live
+connection is unmistakably visible at a glance rather than just another
+static indicator. Clicking it (or the `g` chord's own `gc`) opens the
 connection dropdown — see [Remote connections
 (SFTP)](#remote-connections-sftp) below for the whole feature.
 
@@ -811,8 +814,8 @@ closes it.
 The `@` button right before the path itself (see [The path
 bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
 for browsing a directory tree on another machine over SFTP, exactly the
-way SSH itself already reaches it. Muted while a panel is local, green
-once connected.
+way SSH itself already reaches it. Muted while a panel is local, a slow
+breathing green glow while connected.
 
 The dropdown lists, in order: **Disconnect** (only once this panel is
 actually connected to something), **New connection…**, then recent
