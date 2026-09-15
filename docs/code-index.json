@@ -302,6 +302,16 @@
       "sha256": "095675cab10b156577a5afc7f30dcac37947a78cb4b87a238a32f3b5c1266a89"
     },
     {
+      "path": "internal/config/bytesize.go",
+      "size": 2907,
+      "sha256": "8436012a21bd070cb9d723bbcd9f0a15a6e99a58c9837d84e7bf048cf3c13d63"
+    },
+    {
+      "path": "internal/config/bytesize_test.go",
+      "size": 1732,
+      "sha256": "9e461a30f86f30c9c46c485b961a3514fbaf6fb6637559abdec784af7b74fdc1"
+    },
+    {
       "path": "internal/config/doc.go",
       "size": 1031,
       "sha256": "90d574beacb1610d231164551d0be2a22f820bcf65b2c906dd49ba0d2e5317f1"
@@ -333,8 +343,8 @@
     },
     {
       "path": "internal/config/schema.go",
-      "size": 15276,
-      "sha256": "b96f77f52c36d25126bd2fa8f87e899e96a7e6221719d6f7d7cb4916bb03227b"
+      "size": 15550,
+      "sha256": "26f98b93711d6080c8b9f76c7e56a3b49bc5d4942b0c56906e1a26237aa082bb"
     },
     {
       "path": "internal/config/schema_test.go",
@@ -343,8 +353,8 @@
     },
     {
       "path": "internal/config/settings.go",
-      "size": 27453,
-      "sha256": "b7162ebb0efe7124d8a2e39c7ccb13c84b817bf5eea7035285902dfaa0e3e52c"
+      "size": 28849,
+      "sha256": "91c74a6053b5ae04a43acf42aea59270d71b29037f8584069215c4329245802e"
     },
     {
       "path": "internal/config/settings_test.go",
@@ -1073,8 +1083,8 @@
     },
     {
       "path": "internal/ui/optioncatalog.go",
-      "size": 41204,
-      "sha256": "3559be01cc59027ee5f7b7e8f17f392fdfd62e9849cdd45187263db765ba739a"
+      "size": 42667,
+      "sha256": "0e1ef36491286574270aba018c3264256ecf088c1411621381f92fbf1d9f1386"
     },
     {
       "path": "internal/ui/options.go",
@@ -1542,6 +1552,8 @@
       "directory": "internal/config",
       "name": "config",
       "files": [
+        "internal/config/bytesize.go",
+        "internal/config/bytesize_test.go",
         "internal/config/doc.go",
         "internal/config/examples_test.go",
         "internal/config/origin.go",
@@ -3938,6 +3950,55 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize.go",
+      "name": "byteSizeUnits",
+      "kind": "var",
+      "line": 13
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize.go",
+      "name": "ParseByteSize",
+      "kind": "function",
+      "line": 35
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize.go",
+      "name": "FormatByteSize",
+      "kind": "function",
+      "line": 77
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize_test.go",
+      "name": "TestParseByteSizeAcceptsEveryUnitCaseInsensitively",
+      "kind": "function",
+      "line": 5
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize_test.go",
+      "name": "TestParseByteSizeRejectsGarbage",
+      "kind": "function",
+      "line": 35
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize_test.go",
+      "name": "TestFormatByteSizeRoundTripsThroughParseByteSize",
+      "kind": "function",
+      "line": 44
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
+      "file": "internal/config/bytesize_test.go",
+      "name": "TestFormatByteSizePicksTheLargestCleanUnit",
+      "kind": "function",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/examples_test.go",
       "name": "TestExampleColorSchemesParseAndResolve",
       "kind": "function",
@@ -4208,21 +4269,21 @@
       "file": "internal/config/schema.go",
       "name": "FindSettingDoc",
       "kind": "function",
-      "line": 355
+      "line": 362
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/schema.go",
       "name": "defaultFileHeader",
       "kind": "const",
-      "line": 376
+      "line": 383
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/schema.go",
       "name": "DefaultFileTemplate",
       "kind": "function",
-      "line": 404
+      "line": 411
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -4285,14 +4346,14 @@
       "file": "internal/config/settings.go",
       "name": "Settings",
       "kind": "type",
-      "line": 249
+      "line": 266
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "DefaultSettings",
       "kind": "function",
-      "line": 300
+      "line": 319
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -4300,56 +4361,56 @@
       "name": "apply",
       "kind": "method",
       "receiver": "*Settings",
-      "line": 353
+      "line": 374
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "Load",
       "kind": "function",
-      "line": 469
+      "line": 496
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "sortedKeys",
       "kind": "function",
-      "line": 477
+      "line": 504
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "SetKey",
       "kind": "function",
-      "line": 494
+      "line": 521
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "UnsetKey",
       "kind": "function",
-      "line": 542
+      "line": 569
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "EnsureUserFile",
       "kind": "function",
-      "line": 576
+      "line": 603
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "readConfigLines",
       "kind": "function",
-      "line": 591
+      "line": 618
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/settings.go",
       "name": "writeConfigLines",
       "kind": "function",
-      "line": 613
+      "line": 640
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -14915,14 +14976,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
@@ -16869,14 +16930,14 @@
       "file": "internal/ui/optioncatalog.go",
       "name": "optionSpecByKey",
       "kind": "function",
-      "line": 758
+      "line": 785
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/optioncatalog.go",
       "name": "settingValueByKey",
       "kind": "function",
-      "line": 776
+      "line": 803
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27396,14 +27457,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinHeight",
+      "name": "viewerMinWidth",
       "kind": "const",
       "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinWidth",
+      "name": "viewerMinHeight",
       "kind": "const",
       "line": 24
     },
@@ -28299,5 +28360,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "881019330a2a6772f39c5913f0042e2448004acb09a2a337eacb5f1a32bcf108"
+  "merkle_root": "e1d7b6a719e9f56982b1c2d98778ceb21bff68e446408ea91e276fb8f8b64a4c"
 }

@@ -347,6 +347,13 @@ func SettingDocs() []SettingDoc {
 			Summary:     "Move jobs rewrite a symlink's target to the new location if it points inside the tree being moved.",
 			Implemented: true,
 		},
+		{
+			Key:         "remote_archive_confirm_size",
+			Default:     FormatByteSize(d.RemoteArchiveConfirmSize),
+			Kind:        KindString,
+			Summary:     `Opening a remote zip/tar at or above this size asks first (e.g. "10MB", "500KB", "1GB").`,
+			Implemented: true,
+		},
 	}
 }
 
