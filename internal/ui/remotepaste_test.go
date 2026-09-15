@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -219,6 +220,50 @@ func TestRunRemotePasteCopiesADirectoryRecursively(t *testing.T) {
 	deep, err := os.ReadFile(filepath.Join(localDir, "dir", "sub", "nested.txt"))
 	if err != nil || string(deep) != "deep" {
 		t.Errorf("dir/sub/nested.txt = %q, %v, want %q", deep, err, "deep")
+	}
+}
+
+// TestRunRemoteArchiveExtractionUploadsAMemberToARemoteDirectory pins
+// the destination-is-itself-remote case pasteInto routes here once
+// Root.remoteArchiveExtractionFor has already resolved a clipboard
+// entry to a real, already-downloaded local archive copy: extract
+// into a throwaway local temp directory, then upload the result the
+// same way an ordinary local-source Paste to a remote destination
+// already does.
+func TestRunRemoteArchiveExtractionUploadsAMemberToARemoteDirectory(t *testing.T) {
+	zipPath := writeTestZip(t, t.TempDir(), "archive.zip", map[string]string{"member.txt": "hello from the archive"})
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+
+	succeeded, skipped, err := runRemoteArchiveExtraction(zipPath, []archive.Entry{{Path: "member.txt"}}, client, "/remote")
+
+	if err != nil || succeeded != 1 || len(skipped) != 0 {
+		t.Fatalf("succeeded, skipped, err = %d, %v, %v", succeeded, skipped, err)
+	}
+	if got := string(client.content["/remote/member.txt"]); got != "hello from the archive" {
+		t.Errorf("uploaded content = %q, want %q", got, "hello from the archive")
+	}
+}
+
+// TestRunRemoteArchiveExtractionUploadsADirectoryMemberRecursively
+// pins that a marked directory member extracts and uploads everything
+// nested under it, not just its own top-level entry.
+func TestRunRemoteArchiveExtractionUploadsADirectoryMemberRecursively(t *testing.T) {
+	zipPath := writeTestZip(t, t.TempDir(), "archive.zip", map[string]string{
+		"src/main.go":     "package main\n",
+		"src/lib/util.go": "package lib\n",
+	})
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+
+	succeeded, skipped, err := runRemoteArchiveExtraction(zipPath, []archive.Entry{{Path: "src", IsDir: true}}, client, "/remote")
+
+	if err != nil || succeeded != 1 || len(skipped) != 0 {
+		t.Fatalf("succeeded, skipped, err = %d, %v, %v", succeeded, skipped, err)
+	}
+	if got := string(client.content["/remote/src/main.go"]); got != "package main\n" {
+		t.Errorf("uploaded src/main.go = %q, want %q", got, "package main\n")
+	}
+	if got := string(client.content["/remote/src/lib/util.go"]); got != "package lib\n" {
+		t.Errorf("uploaded src/lib/util.go = %q, want %q", got, "package lib\n")
 	}
 }
 

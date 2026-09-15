@@ -182,6 +182,7 @@ func plainCommands() []plainCommand {
 		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
+		{key: 'R', label: "Rsync", action: func(r *Root) { r.openRsync() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
 		{key: '-', label: "Deselect by pattern", action: func(r *Root) { r.openSelectMinus() }},

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -249,13 +250,12 @@ func TestFinishRemoteArchiveDownloadOnAClosedTabCleansUpWithoutEntering(t *testi
 	}
 }
 
-// TestPasteRefusesAMemberCopiedFromARemoteArchive pins the guard
-// remoteArchiveMemberOrigin exists for: copying a member out of a
-// remote-staged archive isn't supported yet, and must fail with a
-// clear message rather than a confusing raw SFTP error from trying to
-// remote.Open a purely virtual "archive/member" path that was never a
-// real path on the server at all.
-func TestPasteRefusesAMemberCopiedFromARemoteArchive(t *testing.T) {
+// TestPasteRefusesCuttingAMemberFromARemoteArchive pins that Cut is
+// refused for a remote archive member exactly the way it already is
+// for a local one (see archiveExtractionFor's own identical local
+// refusal): there's no writing back into a read-only archive to make
+// the "move" half of it real, remote or not.
+func TestPasteRefusesCuttingAMemberFromARemoteArchive(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	client := r.panel.remote.(*fakeRemoteClient)
 	zipBytes := buildTestZipBytes(t, map[string]string{"member.txt": "hello"})
@@ -273,7 +273,7 @@ func TestPasteRefusesAMemberCopiedFromARemoteArchive(t *testing.T) {
 
 	r.clipboardSourceClient = client
 	r.clipboard = []string{"/remote/archive.zip/member.txt"}
-	r.clipboardCut = false
+	r.clipboardCut = true
 
 	r.pasteInto(r.panel.path, false)
 
@@ -281,8 +281,115 @@ func TestPasteRefusesAMemberCopiedFromARemoteArchive(t *testing.T) {
 		t.Fatalf("activePage = %q, want %q", r.activePage, errorPage)
 	}
 	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
-	if !strings.Contains(got, "remote archive") {
-		t.Errorf("error text = %q, want it to explain that a remote archive member can't be copied out yet", got)
+	if !strings.Contains(got, "Copy instead") {
+		t.Errorf("error text = %q, want it to explain that Cut isn't supported here", got)
+	}
+}
+
+// TestPasteCopiesAMemberOutOfARemoteArchiveToALocalDestination pins
+// the "total easy" case: the archive is already downloaded locally
+// (archiveLocalPath), so copying a member back out to a real local
+// directory needs nothing more than an ordinary local archive.Extract
+// against that temp copy — see remoteArchiveExtractionFor's own doc
+// comment.
+func TestPasteCopiesAMemberOutOfARemoteArchiveToALocalDestination(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"member.txt": "hello from the archive"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	defer cleanup()
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+	if !r.panel.inArchiveView() {
+		t.Fatal("setup: expected to be inside the archive")
+	}
+
+	r.clipboardSourceClient = client
+	r.clipboard = []string{"/remote/archive.zip/member.txt"}
+	r.clipboardCut = false
+
+	// Switch to a genuinely local tab before pasting — pasteInto's own
+	// dispatch reads r.panel.remote to decide whether the destination
+	// itself is remote (see runRemoteArchiveExtraction's own doc
+	// comment for the other case), and the clipboard carries across
+	// tabs untouched, exactly like an ordinary Copy-then-switch-tabs-
+	// then-Paste.
+	destDir := t.TempDir()
+	r.newTab(destDir)
+	if r.panel.remote != nil {
+		t.Fatal("setup: the new tab should be a plain local panel")
+	}
+
+	r.pasteInto(destDir, false)
+
+	// extractClipboardArchive runs off the UI thread (see its own doc
+	// comment) — waitForCondition polls the real disk write it makes
+	// rather than asserting immediately after pasteInto returns, the
+	// same way TestCopyPasteExtractsMarkedArchiveEntry already has to
+	// for the identical local-archive case.
+	waitForCondition(t, func() bool {
+		_, err := os.Stat(filepath.Join(destDir, "member.txt"))
+		return err == nil
+	})
+	got, err := os.ReadFile(filepath.Join(destDir, "member.txt"))
+	if err != nil {
+		t.Fatalf("member.txt was not extracted to the local destination: %v", err)
+	}
+	if string(got) != "hello from the archive" {
+		t.Errorf("member.txt content = %q, want %q", got, "hello from the archive")
+	}
+}
+
+// TestRemoteArchiveExtractionForResolvesTheAlreadyDownloadedLocalCopy
+// pins remoteArchiveExtractionFor's own core job directly (no async
+// paste involved): given a clipboard path inside a remote-staged
+// archive still open in some tab, it must find that tab's own
+// archiveLocalPath and resolve the marked member against it — this is
+// what lets pasteInto treat the destination-is-itself-remote case (see
+// runRemoteArchiveExtraction in remotepaste_test.go) as an ordinary
+// local-source upload once this has already done its job.
+func TestRemoteArchiveExtractionForResolvesTheAlreadyDownloadedLocalCopy(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"member.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	defer cleanup()
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+	if !r.panel.inArchiveView() {
+		t.Fatal("setup: expected to be inside the archive")
+	}
+
+	gotPath, members, ok := r.remoteArchiveExtractionFor([]string{"/remote/archive.zip/member.txt"})
+
+	if !ok {
+		t.Fatal("remoteArchiveExtractionFor should have recognized the clipboard as a remote archive member")
+	}
+	if gotPath != localPath {
+		t.Errorf("archiveLocalPath = %q, want the already-downloaded temp copy %q", gotPath, localPath)
+	}
+	if len(members) != 1 || members[0].Path != "member.txt" || members[0].IsDir {
+		t.Errorf("members = %v, want exactly one file entry for \"member.txt\"", members)
+	}
+}
+
+// TestRemoteArchiveExtractionForOnAnUnrelatedPathReturnsFalse pins
+// the "ordinary remote paste" fallback: a clipboard path that isn't
+// under any currently-open remote archive tab must not be mistaken
+// for one.
+func TestRemoteArchiveExtractionForOnAnUnrelatedPathReturnsFalse(t *testing.T) {
+	r := newTestRemoteRoot(t)
+
+	if _, _, ok := r.remoteArchiveExtractionFor([]string{"/remote/b.txt"}); ok {
+		t.Error("remoteArchiveExtractionFor should return false for a plain remote path outside any archive")
 	}
 }
 
