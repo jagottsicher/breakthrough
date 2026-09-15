@@ -21,30 +21,46 @@ func newTestRootForConnectionMenu(t *testing.T) *Root {
 	return r
 }
 
-func itemTexts(l *tview.List) []string {
-	texts := make([]string, l.GetItemCount())
-	for i := range texts {
-		texts[i], _ = l.GetItemText(i)
+// connectionMenuLabelTexts reads every row's own label cell — the
+// Table equivalent of the old List's itemTexts, now that each row is
+// three independent cells (see connectionMenuCol* and this file's own
+// doc comment on why) rather than one string.
+func connectionMenuLabelTexts(table *tview.Table) []string {
+	rows := table.GetRowCount()
+	texts := make([]string, rows)
+	for i := 0; i < rows; i++ {
+		if cell := table.GetCell(i, connectionMenuColLabel); cell != nil {
+			texts[i] = cell.Text
+		}
 	}
 	return texts
+}
+
+// cellTextColor extracts the color connectionHistoryColor actually set
+// on cell (see TableCell.SetTextColor's own doc comment: it lands in
+// Style, not the deprecated Color field, once NewTableCell has already
+// given the cell a non-default Style — which it always has here).
+func cellTextColor(cell *tview.TableCell) tcell.Color {
+	fg, _, _ := cell.Style.Decompose()
+	return fg
 }
 
 func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	r.renderConnectionMenu()
 
-	texts := itemTexts(r.connectionMenuList)
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) != 1 || !strings.Contains(texts[0], "New connection") {
-		t.Errorf("items = %v, want exactly one \"New connection…\" row for a local panel", texts)
+		t.Errorf("rows = %v, want exactly one \"New connection…\" row for a local panel", texts)
 	}
 }
 
 // TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry
 // pins the fact that there's no longer a dedicated "Disconnect (...)"
-// row of its own — disconnecting instead happens via
-// connectionHistoryEjectGlyph on the active connection's own history
-// row (see TestPressingEOnTheActiveConnectionRowDisconnects/
-// TestClickingTheEjectGlyphDisconnectsTheActiveConnection).
+// row of its own — disconnecting instead happens via the active
+// connection's own eject cell (see
+// TestPressingEOnTheActiveConnectionRowDisconnects/
+// TestClickingTheEjectCellDisconnectsTheActiveConnection).
 func TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
@@ -57,18 +73,19 @@ func TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEnt
 
 	r.renderConnectionMenu()
 
-	texts := itemTexts(r.connectionMenuList)
+	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) != 2 {
-		t.Fatalf("items = %v, want exactly \"New connection…\" plus one history row for the active connection", texts)
+		t.Fatalf("rows = %v, want exactly \"New connection…\" plus one history row for the active connection", texts)
 	}
 	if !strings.Contains(texts[0], "New connection") {
-		t.Errorf("items[0] = %q, want \"New connection…\" first — no separate \"Disconnect\" row anymore", texts[0])
+		t.Errorf("row 0 label = %q, want \"New connection…\" first — no separate \"Disconnect\" row anymore", texts[0])
 	}
 	if !strings.Contains(texts[1], conn.Label()) {
-		t.Errorf("items[1] = %q, want the active connection's own history row", texts[1])
+		t.Errorf("row 1 label = %q, want the active connection's own history row", texts[1])
 	}
-	if !strings.Contains(texts[1], connectionHistoryEjectGlyph) {
-		t.Errorf("items[1] = %q, want the active connection's row to carry the eject glyph", texts[1])
+	ejectCell := r.connectionMenuTable.GetCell(1, connectionMenuColEject)
+	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
+		t.Errorf("row 1 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
 	if r.connectionMenuActiveRow != 1 {
 		t.Errorf("connectionMenuActiveRow = %d, want 1", r.connectionMenuActiveRow)
@@ -88,24 +105,26 @@ func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 
 	r.renderConnectionMenu()
 
-	texts := itemTexts(r.connectionMenuList)
-	var okLine, failedLine string
-	for _, text := range texts {
-		if strings.Contains(text, ok.Label()) {
-			okLine = text
+	okRow, failedRow := -1, -1
+	for row, conn := range r.connectionMenuHistoryRows {
+		switch conn {
+		case ok:
+			okRow = row
+		case failed:
+			failedRow = row
 		}
-		if strings.Contains(text, failed.Label()) {
-			failedLine = text
-		}
 	}
-	if okLine == "" || failedLine == "" {
-		t.Fatalf("items = %v, want both history entries listed", texts)
+	if okRow == -1 || failedRow == -1 {
+		t.Fatalf("history rows = %+v, want both entries listed", r.connectionMenuHistoryRows)
 	}
-	if !strings.Contains(failedLine, colorTag(r.theme.CriticalText)) {
-		t.Errorf("failed entry %q does not carry the critical color tag", failedLine)
+
+	failedColor := cellTextColor(r.connectionMenuTable.GetCell(failedRow, connectionMenuColLabel))
+	if failedColor != r.theme.CriticalText {
+		t.Errorf("failed entry color = %v, want %v (theme.CriticalText)", failedColor, r.theme.CriticalText)
 	}
-	if strings.Contains(okLine, colorTag(r.theme.CriticalText)) {
-		t.Errorf("successful entry %q incorrectly carries the critical color tag", okLine)
+	okColor := cellTextColor(r.connectionMenuTable.GetCell(okRow, connectionMenuColLabel))
+	if okColor == r.theme.CriticalText {
+		t.Errorf("successful entry incorrectly carries the critical color %v", okColor)
 	}
 }
 
@@ -121,17 +140,10 @@ func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 
 	r.renderConnectionMenu()
 
-	var line string
-	for _, text := range itemTexts(r.connectionMenuList) {
-		if strings.Contains(text, conn.Label()) {
-			line = text
-		}
-	}
-	if line == "" {
-		t.Fatal("history row for the active connection not found")
-	}
-	if !strings.Contains(line, colorTag(r.theme.EntryExecutable)) {
-		t.Errorf("active connection's history row %q does not carry the connected color tag", line)
+	row := historyRowFor(t, r, conn)
+	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColLabel))
+	if got != r.theme.EntryExecutable {
+		t.Errorf("active connection's row color = %v, want %v (theme.EntryExecutable)", got, r.theme.EntryExecutable)
 	}
 }
 
@@ -139,7 +151,7 @@ func TestRenderConnectionMenuColorsTheCurrentlyActiveEntryGreen(t *testing.T) {
 // pins the user's own explicit report: a connection that isn't
 // currently active, isn't the last-failed one either, must still read
 // as green (just a dimmer shade — see connectionHistorySuccessBlend's
-// own doc comment) — never the dropdown's own plain, uncolored text,
+// own doc comment) — never the dropdown's own default, uncolored text,
 // which reads as "unknown" rather than "this one has worked before".
 func TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
@@ -153,24 +165,17 @@ func TestRenderConnectionMenuColorsAPreviouslySuccessfulEntryAMutedGreen(t *test
 
 	r.renderConnectionMenu()
 
-	var line string
-	for _, text := range itemTexts(r.connectionMenuList) {
-		if strings.Contains(text, conn.Label()) {
-			line = text
-		}
+	row := historyRowFor(t, r, conn)
+	got := cellTextColor(r.connectionMenuTable.GetCell(row, connectionMenuColLabel))
+	if got == r.theme.EntryExecutable {
+		t.Error("an inactive entry carries the full-brightness connected color, want a dimmer shade")
 	}
-	if line == "" {
-		t.Fatal("history row for the successful connection not found")
+	if got == r.theme.CriticalText {
+		t.Error("a successful entry carries the failed/critical color")
 	}
-	if strings.Contains(line, colorTag(r.theme.EntryExecutable)) {
-		t.Error("an inactive entry carries the full-brightness connected color tag, want a dimmer shade")
-	}
-	if strings.Contains(line, colorTag(r.theme.CriticalText)) {
-		t.Error("a successful entry carries the failed/critical color tag")
-	}
-	wantColor := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
-	if !strings.Contains(line, colorTag(wantColor)) {
-		t.Errorf("row %q does not carry the expected muted-green color tag %q", line, colorTag(wantColor))
+	want := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
+	if got != want {
+		t.Errorf("row color = %v, want the muted-green blend %v", got, want)
 	}
 }
 
@@ -182,7 +187,7 @@ func TestPressingXOnAHistoryRowRemovesItFromHistory(t *testing.T) {
 	}
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
-	r.connectionMenuList.SetCurrentItem(row)
+	r.connectionMenuTable.Select(row, connectionMenuColLabel)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
@@ -204,7 +209,7 @@ func TestPressingXOnNewConnectionRowDoesNothing(t *testing.T) {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuList.SetCurrentItem(0) // "New connection…" is always first when local
+	r.connectionMenuTable.Select(0, connectionMenuColLabel) // "New connection…" is always first when local
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
@@ -220,67 +225,32 @@ func TestPressingXOnNewConnectionRowDoesNothing(t *testing.T) {
 	}
 }
 
-// TestClickingTheRemoveGlyphRemovesTheRowClickingElsewhereReconnects
-// pins captureConnectionMenuMouse's own column-based split: a click
-// landing on the trailing "✕" removes the row without ever running its
-// own reconnect action; a click anywhere else on the same row runs it
-// normally.
-func TestClickingTheRemoveGlyphRemovesTheRowClickingElsewhereReconnects(t *testing.T) {
+// TestClickingTheRemoveCellRemovesTheRow is the mouse equivalent of
+// TestPressingXOnAHistoryRowRemovesItFromHistory — a direct call to
+// the remove cell's own Clicked func, the same way tview's Table
+// itself dispatches a real click (see clickConnectionMenuCell's own
+// doc comment on why there's no more column-position math to drive
+// this through instead).
+func TestClickingTheRemoveCellRemovesTheRow(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
-	r.renderConnectionMenu()
-	r.connectionMenuList.SetRect(0, 0, 40, r.connectionMenuList.GetItemCount())
+	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
 
-	rectX, rectY, _, _ := r.connectionMenuList.GetInnerRect()
-	mainText, _ := r.connectionMenuList.GetItemText(row)
-	textWidth := tview.TaggedStringWidth(mainText)
-	removeX := rectX + textWidth - 1 // squarely on the "✕" glyph itself
-	y := rectY + row
+	r.connectionMenuTable.GetCell(row, connectionMenuColRemove).Clicked()
 
-	action, event := r.captureConnectionMenuMouse(tview.MouseLeftClick, tcell.NewEventMouse(removeX, y, tcell.Button1, 0))
-
-	if event != nil || action != tview.MouseConsumed {
-		t.Error("clicking the remove glyph did not consume the event")
-	}
 	history, err := remotefs.LoadHistory()
 	if err != nil {
 		t.Fatalf("LoadHistory: %v", err)
 	}
 	if len(history) != 0 {
-		t.Errorf("history = %+v, want it empty after clicking the remove glyph", history)
+		t.Errorf("history = %+v, want it empty after clicking the remove cell", history)
 	}
-}
-
-func TestClickingTheRestOfAHistoryRowDoesNotRemoveIt(t *testing.T) {
-	r := newTestRootForConnectionMenu(t)
-	conn := remotefs.Connection{Host: "example.com", User: "tester"}
-	if err := remotefs.RecordAttempt(conn, false); err != nil {
-		t.Fatalf("RecordAttempt: %v", err)
-	}
-	r.renderConnectionMenu()
-	r.connectionMenuList.SetRect(0, 0, 40, r.connectionMenuList.GetItemCount())
-	row := historyRowFor(t, r, conn)
-	rectX, rectY, _, _ := r.connectionMenuList.GetInnerRect()
-	sentEvent := tcell.NewEventMouse(rectX, rectY+row, tcell.Button1, 0)
-
-	action, event := r.captureConnectionMenuMouse(tview.MouseLeftClick, sentEvent)
-
-	// A click on the row but off the remove glyph must pass the event
-	// through unconsumed, so tview's own List still gets to select and
-	// fire that row's real reconnect action natively.
-	if action != tview.MouseLeftClick || event != sentEvent {
-		t.Errorf("action, event = %v, %v, want the original click passed through unconsumed", action, event)
-	}
-	history, err := remotefs.LoadHistory()
-	if err != nil {
-		t.Fatalf("LoadHistory: %v", err)
-	}
-	if len(history) != 1 {
-		t.Errorf("history = %+v, want the entry left untouched by a click elsewhere on the row", history)
+	if r.activePage != connectionMenuPage {
+		t.Errorf("activePage = %q, want the dropdown to stay open after removing one entry", r.activePage)
 	}
 }
 
@@ -294,7 +264,7 @@ func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
 		t.Fatalf("connectRemote: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuList.SetCurrentItem(r.connectionMenuActiveRow)
+	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColLabel)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
@@ -307,8 +277,8 @@ func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
 }
 
 // TestPressingEOnANonActiveHistoryRowDoesNothing pins that "e" is only
-// ever wired to the one row wearing connectionHistoryEjectGlyph — an
-// ordinary history row that merely happens to be highlighted must not
+// ever wired to the one row wearing an eject cell — an ordinary
+// history row that merely happens to be highlighted must not
 // disconnect whatever the currently active panel is doing elsewhere.
 func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
@@ -318,7 +288,7 @@ func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
 	}
 	r.openConnectionMenu()
 	row := historyRowFor(t, r, conn)
-	r.connectionMenuList.SetCurrentItem(row)
+	r.connectionMenuTable.Select(row, connectionMenuColLabel)
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
@@ -327,13 +297,13 @@ func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
 	}
 }
 
-// TestClickingTheEjectGlyphDisconnectsTheActiveConnection pins the
-// mouse equivalent of TestPressingEOnTheActiveConnectionRowDisconnects
-// — the small "⏏" this project's own doc comments compare to a USB
-// drive's own eject icon, replacing what used to be a whole separate
+// TestClickingTheEjectCellDisconnectsTheActiveConnection is the mouse
+// equivalent of TestPressingEOnTheActiveConnectionRowDisconnects — the
+// small "⏏" this project's own doc comments compare to a USB drive's
+// own eject icon, replacing what used to be a whole separate
 // "Disconnect (...)" list item (see
 // TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry).
-func TestClickingTheEjectGlyphDisconnectsTheActiveConnection(t *testing.T) {
+func TestClickingTheEjectCellDisconnectsTheActiveConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
@@ -342,25 +312,16 @@ func TestClickingTheEjectGlyphDisconnectsTheActiveConnection(t *testing.T) {
 	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
 		t.Fatalf("connectRemote: %v", err)
 	}
-	r.renderConnectionMenu()
-	r.connectionMenuList.SetRect(0, 0, 40, r.connectionMenuList.GetItemCount())
+	r.openConnectionMenu()
 	row := r.connectionMenuActiveRow
 
-	rectX, rectY, _, _ := r.connectionMenuList.GetInnerRect()
-	mainText, _ := r.connectionMenuList.GetItemText(row)
-	textWidth := tview.TaggedStringWidth(mainText)
-	removeGlyphWidth := tview.TaggedStringWidth(connectionHistoryRemoveGlyph)
-	ejectGlyphWidth := tview.TaggedStringWidth(connectionHistoryEjectGlyph)
-	ejectStart := rectX + textWidth - removeGlyphWidth - 2 - ejectGlyphWidth // squarely on the "⏏" glyph itself
-	y := rectY + row
+	r.connectionMenuTable.GetCell(row, connectionMenuColEject).Clicked()
 
-	action, event := r.captureConnectionMenuMouse(tview.MouseLeftClick, tcell.NewEventMouse(ejectStart, y, tcell.Button1, 0))
-
-	if event != nil || action != tview.MouseConsumed {
-		t.Error("clicking the eject glyph did not consume the event")
-	}
 	if r.panel.remote != nil {
-		t.Error("panel is still connected after clicking the eject glyph")
+		t.Error("panel is still connected after clicking the eject cell")
+	}
+	if r.activePage == connectionMenuPage {
+		t.Error("activePage still the dropdown after ejecting — want it dismissed, matching the old Disconnect row's own behavior")
 	}
 }
 

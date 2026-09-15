@@ -381,25 +381,32 @@ type Root struct {
 	hostKeyConfirmLayout   *tview.Flex
 	hostKeyConfirmResponse chan bool
 
-	// connectionMenuList/Layout is the dropdown the header's own "@"
-	// button (or the "gc" chord) opens — see connectionmenu.go.
-	// Rebuilt fresh on every open (see renderConnectionMenu), the same
-	// "which panel is active, and what history says, can both have
-	// changed since last time" reasoning renderFilterMenu's own doc
-	// comment already gives for its dropdown.
-	connectionMenuList   *tview.List
-	connectionMenuLayout *tview.Flex
+	// connectionMenuTable/TitleBar/Layout is the dropdown the header's
+	// own "@" button (or the "gc" chord) opens — see connectionmenu.go.
+	// A Table, styled and shaped after the tab switcher (see
+	// tabswitcher.go's own doc comment): a title bar above it, one
+	// column for the label and one real, independently selectable and
+	// clickable cell per row for each of its own small actions (eject,
+	// remove), rather than markup-colored text and manual mouse-column
+	// math baked into a plain List — the same per-cell-not-per-string
+	// shape the user's own explicit request to match the tabs list's
+	// look asked for. Rebuilt fresh on every open (see
+	// renderConnectionMenu), the same "which panel is active, and what
+	// history says, can both have changed since last time" reasoning
+	// renderFilterMenu's own doc comment already gives for its dropdown.
+	connectionMenuTable    *tview.Table
+	connectionMenuTitleBar *tview.TextView
+	connectionMenuLayout   *tview.Flex
 
-	// connectionMenuHistoryRows maps a row index in connectionMenuList
+	// connectionMenuHistoryRows maps a row index in connectionMenuTable
 	// to the Connection that row represents — populated fresh by
 	// renderConnectionMenu on every open, read by
-	// captureConnectionMenuMouse/removeHighlightedConnectionHistory to
-	// know which entry a click on its own "✕" or the "x" key should
-	// actually remove. Never populated for "New connection…", which
-	// isn't a history row at all.
+	// activateConnectionMenuCell/removeConnectionHistoryRow to know
+	// which entry a given row actually is. Never populated for "New
+	// connection…", which isn't a history row at all.
 	connectionMenuHistoryRows map[int]remotefs.Connection
 
-	// connectionMenuActiveRow is the row within connectionMenuList
+	// connectionMenuActiveRow is the row within connectionMenuTable
 	// (history rows only — see connectionMenuHistoryRows) that
 	// represents the active panel's own current connection, or -1 if
 	// the panel isn't connected at all — populated fresh by
@@ -1410,7 +1417,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
 	// on every open (see renderConnectionMenu), the same as the filter
 	// menu's own dropdown.
-	r.connectionMenuList = r.newConnectionMenuList()
+	r.connectionMenuTable = r.newConnectionMenuTable()
+	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
 	// The Batch Rename screen (see batchrename.go) — built once here,

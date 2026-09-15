@@ -4,6 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -16,20 +17,33 @@ import (
 // idea.
 const connectionMenuMaxHistoryRows = 10
 
+// Column indices within the connection menu table — the same
+// label/action-cell/action-cell shape tabswitcher.go's own
+// tabSwitcherCol* constants already establish for an identical reason:
+// each row carries more than one independent thing to act on.
+const (
+	connectionMenuColLabel = iota
+	connectionMenuColEject
+	connectionMenuColRemove
+)
+
 // openConnectionMenu shows the connection dropdown for the currently
 // active panel — reached via a click on the header's own "@" button
 // (see buildHeaderSpans/Panel.onOpenConnectionMenu) or the "gc" chord
 // (see keymap.go). Anchored under that button, the same "appears right
-// below what it drops down from" placement openFilterMenu already
-// establishes for its own dropdown.
+// below what it drops down from" placement openFilterMenu establishes
+// for its own dropdown, and openTabSwitcher for its own.
 func (r *Root) openConnectionMenu() {
 	r.renderConnectionMenu()
 
 	right, top := r.connectionMenuAnchor()
-	width, height := listSize(r.connectionMenuList)
+	width, height := r.connectionMenuSize()
 	x, y, width, height := r.clampToPanel(right-width, top, width, height)
 	r.connectionMenuLayout.SetRect(x, y, width, height)
-	r.showOverlay(connectionMenuPage, r.connectionMenuLayout)
+	// connectionMenuTable is the real focus target, connectionMenuLayout
+	// (title bar + table) what Pages actually shows — the identical split
+	// openTabSwitcher's own doc comment explains for the tab switcher.
+	r.showOverlay(connectionMenuPage, r.connectionMenuTable)
 }
 
 // connectionMenuAnchor returns the screen position the header's own
@@ -50,119 +64,179 @@ func (r *Root) connectionMenuAnchor() (right, y int) {
 	return hx, hy + 1
 }
 
-// renderConnectionMenu (re)builds connectionMenuList fresh against
+// renderConnectionMenu (re)builds connectionMenuTable fresh against
 // r.panel — the active panel at the moment this runs — every time it's
 // opened, the same "rebuilt fresh, not kept in sync incrementally"
-// shape renderFilterMenu already establishes for its own dropdown:
-// which panel is "active" can change between opens, and the history
-// list on disk can too.
+// shape renderFilterMenu/openTabSwitcher already establish for their
+// own dropdowns: which panel is "active", and what history says, can
+// both have changed since last time.
 func (r *Root) renderConnectionMenu() {
 	panel := r.panel
-	r.connectionMenuList.Clear()
+	table := r.connectionMenuTable
+	table.Clear()
 	r.connectionMenuHistoryRows = map[int]remotefs.Connection{}
 	r.connectionMenuActiveRow = -1
 
-	r.connectionMenuList.AddItem("New connection…", "", 0, func() {
-		r.hideOverlay()
-		r.openConnectDialog(remotefs.Connection{})
-	})
+	table.SetCell(0, connectionMenuColLabel,
+		tview.NewTableCell("New connection…").
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickConnectionMenuCell(0, connectionMenuColLabel)))
+	table.SetCell(0, connectionMenuColEject, blankConnectionMenuCell())
+	table.SetCell(0, connectionMenuColRemove, blankConnectionMenuCell())
 
 	// A read failure here just means an empty history section, not an
 	// error worth surfacing through a dropdown menu — the same
 	// "absence isn't an error" contract LoadHistory's own doc comment
 	// already promises callers.
 	history, _ := remotefs.LoadHistory()
+	row := 1
 	for i, entry := range history {
 		if i >= connectionMenuMaxHistoryRows {
 			break
 		}
 		entry := entry
-		r.connectionMenuList.AddItem(r.connectionHistoryLabel(panel, entry), "", 0, func() {
-			r.hideOverlay()
-			r.openConnectDialog(entry.Connection)
-			r.runConnect()
-		})
-		row := r.connectionMenuList.GetItemCount() - 1
-		r.connectionMenuHistoryRows[row] = entry.Connection
-		if panel.remote != nil && panel.remoteConn.Equal(entry.Connection) {
-			r.connectionMenuActiveRow = row
+		thisRow := row
+		isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
+
+		table.SetCell(thisRow, connectionMenuColLabel,
+			tview.NewTableCell(entry.Label()).
+				SetTextColor(connectionHistoryColor(r.theme, isActive, entry.LastFailed)).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColLabel)))
+
+		if isActive {
+			table.SetCell(thisRow, connectionMenuColEject,
+				tview.NewTableCell(" "+connectionHistoryEjectGlyph+" ").
+					SetTextColor(r.theme.MutedTextColor).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColEject)))
+			r.connectionMenuActiveRow = thisRow
+		} else {
+			table.SetCell(thisRow, connectionMenuColEject, blankConnectionMenuCell())
 		}
+
+		table.SetCell(thisRow, connectionMenuColRemove,
+			tview.NewTableCell(" "+connectionHistoryRemoveGlyph+" ").
+				SetTextColor(r.theme.MutedTextColor).
+				SetSelectable(true).
+				SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColRemove)))
+
+		r.connectionMenuHistoryRows[thisRow] = entry.Connection
+		row++
 	}
 
-	l := r.connectionMenuList
-	l.SetDoneFunc(r.hideOverlay) // Escape
-	l.SetInputCapture(r.captureConnectionMenuKey)
-	l.SetMouseCapture(r.captureConnectionMenuMouse)
+	table.Select(0, connectionMenuColLabel)
 }
 
-// captureConnectionMenuKey adds "x"/Delete as the keyboard equivalent
-// of clicking a history row's own "✕" (see captureConnectionMenuMouse),
-// and "e" as the equivalent of clicking its "⏏" — whichever row
-// currently has the list's own highlight, per this project's own
-// "every mouse action needs a keyboard one" rule. A no-op, not
-// consumed, on any row the pressed key doesn't apply to at all (not
-// history, or history but not the active connection for "e"), or once
-// history is genuinely empty.
+// newConnectionMenuTable builds the dropdown's own Table — no border,
+// one column of side padding, cell selection so the eject/remove
+// buttons in a row are their own navigable target, and
+// SetSelectedFunc/SetInputCapture wired once here rather than on every
+// renderConnectionMenu call. The identical shape newTabSwitcher already
+// establishes, for the identical reason (see this file's own doc
+// comment on the column constants).
+func (r *Root) newConnectionMenuTable() *tview.Table {
+	table := tview.NewTable()
+	table.SetBorders(false)
+	table.SetBorderPadding(0, 0, 1, 1)
+	table.SetSelectable(true, true)
+	table.SetInputCapture(r.captureConnectionMenuKey)
+	table.SetSelectedFunc(func(row, column int) { r.activateConnectionMenuCell(row, column) })
+	return table
+}
+
+func (r *Root) newConnectionMenuLayout() *tview.Flex {
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.connectionMenuTitleBar, 1, 0, false).
+		AddItem(r.connectionMenuTable, 0, 1, true)
+}
+
+// blankConnectionMenuCell fills a column that this particular row has
+// nothing for (the "New connection…" row's own eject/remove cells, or
+// an ordinary history row's eject cell) — a single non-selectable
+// space, the same pattern openTabSwitcher uses for the first tab's own
+// missing close button, so the column stays present and tview simply
+// steps over it when moving the selection.
+func blankConnectionMenuCell() *tview.TableCell {
+	return tview.NewTableCell(" ").SetSelectable(false)
+}
+
+// activateConnectionMenuCell is Enter, Space or a click on one cell —
+// the identical dispatch-by-column shape activateTabSwitcherCell
+// already establishes. Row 0 is always "New connection…", regardless
+// of column: it has nothing in its own eject/remove cells to tell
+// apart in the first place.
+func (r *Root) activateConnectionMenuCell(row, column int) {
+	if row == 0 {
+		r.hideOverlay()
+		r.openConnectDialog(remotefs.Connection{})
+		return
+	}
+	conn, ok := r.connectionMenuHistoryRows[row]
+	if !ok {
+		return
+	}
+	switch column {
+	case connectionMenuColEject:
+		r.disconnectConnectionRow(row)
+	case connectionMenuColRemove:
+		r.removeConnectionHistoryRow(row)
+	default:
+		r.hideOverlay()
+		r.openConnectDialog(conn)
+		r.runConnect()
+	}
+}
+
+// clickConnectionMenuCell is one cell's own mouse action — the same
+// thing Enter and Space do on it. Per cell rather than a table-wide
+// mouse capture, because tview's Table does not run a row's selected
+// function on a click at all — it only moves the selection there (see
+// clickTabSwitcherCell's own doc comment, which found and documented
+// this exact tview behavior first). Returns true so tview does not
+// also move the selection afterwards: every one of these actions
+// rebuilds or closes the table underneath, so the row/column it would
+// select next means something else, or nothing at all.
+func (r *Root) clickConnectionMenuCell(row, column int) func() bool {
+	return func() bool {
+		r.activateConnectionMenuCell(row, column)
+		return true
+	}
+}
+
+// captureConnectionMenuKey adds "x"/Delete as a from-anywhere-in-the-row
+// keyboard equivalent of clicking a history row's own "✕" (see
+// captureTabSwitcherKey's identical Delete handling for the tab
+// switcher's own close button), and "e" as the same for its "⏏".
+// Escape closes the dropdown outright: a Table has no DoneFunc of its
+// own, unlike the List this replaced (see captureTabSwitcherKey's own
+// doc comment on the identical gap), and Space activates whichever
+// cell currently has the selection, since tview's Table only wires
+// that natively to Enter.
 func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
-	current := r.connectionMenuList.GetCurrentItem()
+	row, column := r.connectionMenuTable.GetSelection()
+
+	switch {
+	case event.Key() == tcell.KeyEscape:
+		r.hideOverlay()
+		return nil
+	case event.Key() == tcell.KeyRune && event.Rune() == ' ':
+		r.activateConnectionMenuCell(row, column)
+		return nil
+	}
 
 	isRemoveKey := (event.Key() == tcell.KeyRune && event.Rune() == 'x') || event.Key() == tcell.KeyDelete
-	if isRemoveKey && r.removeConnectionHistoryRow(current) {
+	if isRemoveKey && r.removeConnectionHistoryRow(row) {
 		return nil
 	}
 
 	isEjectKey := event.Key() == tcell.KeyRune && event.Rune() == 'e'
-	if isEjectKey && r.disconnectConnectionRow(current) {
+	if isEjectKey && r.disconnectConnectionRow(row) {
 		return nil
 	}
 
 	return event
-}
-
-// captureConnectionMenuMouse lets a click land on a history row's own
-// trailing "✕" (see connectionHistoryLabel) as "remove this entry", or
-// on its "⏏" — present only on the active connection's own row, see
-// connectionMenuActiveRow — as "disconnect", instead of the row's own
-// default "reconnect" action. Both are checked first, before falling
-// through to the list's native click-selects-and-fires handling, the
-// same "figure out exactly what was clicked before deciding what it
-// means" shape captureHeaderMouse/Panel.filterMenuBtn's own mouse
-// captures already use. No scrolling to account for here:
-// openConnectionMenu always sizes the dropdown to listSize's own item
-// count, so every row is already fully visible and row index == y -
-// the list's own inner top, unlike a list that can actually scroll.
-func (r *Root) captureConnectionMenuMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	if action != tview.MouseLeftClick {
-		return action, event
-	}
-	x, y := event.Position()
-	rectX, rectY, _, _ := r.connectionMenuList.GetInnerRect()
-	if !r.connectionMenuList.InRect(x, y) {
-		return action, event
-	}
-	row := y - rectY
-
-	if _, ok := r.connectionMenuHistoryRows[row]; !ok {
-		return action, event // not a history row at all — let the list handle its own click natively
-	}
-	mainText, _ := r.connectionMenuList.GetItemText(row)
-	textWidth := tview.TaggedStringWidth(mainText)
-	removeGlyphWidth := tview.TaggedStringWidth(connectionHistoryRemoveGlyph)
-	removeStart := rectX + textWidth - removeGlyphWidth
-	if x >= removeStart {
-		r.removeConnectionHistoryRow(row)
-		return tview.MouseConsumed, nil
-	}
-	if row == r.connectionMenuActiveRow {
-		ejectGlyphWidth := tview.TaggedStringWidth(connectionHistoryEjectGlyph)
-		ejectEnd := removeStart - 2 // the "  " gap connectionHistoryLabel puts between the two glyphs
-		ejectStart := ejectEnd - ejectGlyphWidth
-		if x >= ejectStart && x < ejectEnd {
-			r.disconnectConnectionRow(row)
-			return tview.MouseConsumed, nil
-		}
-	}
-	return action, event // elsewhere on the row — let it reconnect normally
 }
 
 // removeConnectionHistoryRow drops row's own Connection out of the
@@ -180,12 +254,12 @@ func (r *Root) removeConnectionHistoryRow(row int) bool {
 	r.showError(remotefs.RemoveFromHistory(conn))
 	r.renderConnectionMenu()
 
-	// The dropdown's own box was sized to the old item count in
+	// The dropdown's own box was sized to the old row count in
 	// openConnectionMenu — one fewer row now, so it needs the same
 	// resize that a fresh open would give it, or removing an entry
 	// would leave dead space where that row used to be.
 	right, top := r.connectionMenuAnchor()
-	width, height := listSize(r.connectionMenuList)
+	width, height := r.connectionMenuSize()
 	x, y, width, height := r.clampToPanel(right-width, top, width, height)
 	r.connectionMenuLayout.SetRect(x, y, width, height)
 	return true
@@ -199,10 +273,7 @@ func (r *Root) removeConnectionHistoryRow(row int) bool {
 // rather than a row of its own that's only ever relevant for exactly
 // one entry. Reports whether row actually was the active connection's
 // own row at all — false otherwise, so a stray "e" elsewhere in the
-// list (typed while renaming isn't even possible here, but see
-// removeConnectionHistoryRow's own "false means nothing to do"
-// contract) is left for the list's native handling instead of being
-// swallowed.
+// table is left for its native handling instead of being swallowed.
 func (r *Root) disconnectConnectionRow(row int) bool {
 	if row < 0 || row != r.connectionMenuActiveRow {
 		return false
@@ -210,6 +281,41 @@ func (r *Root) disconnectConnectionRow(row int) bool {
 	r.hideOverlay()
 	r.showError(r.panel.disconnectRemote())
 	return true
+}
+
+// connectionMenuSize is the dropdown's own size: wide enough for its
+// widest row plus both action columns, tall enough for every row plus
+// the title bar. The identical per-column measurement
+// tabSwitcherSize's own doc comment explains (summing a single row's
+// own cells under-counts whenever the longest label and an action
+// glyph sit on different rows, which is the normal case here too).
+func (r *Root) connectionMenuSize() (width, height int) {
+	table := r.connectionMenuTable
+	rows := table.GetRowCount()
+
+	columnWidths := make([]int, connectionMenuColRemove+1)
+	for row := 0; row < rows; row++ {
+		for column := range columnWidths {
+			cell := table.GetCell(row, column)
+			if cell == nil {
+				continue
+			}
+			if w := tview.TaggedStringWidth(cell.Text); w > columnWidths[column] {
+				columnWidths[column] = w
+			}
+		}
+	}
+	for i, w := range columnWidths {
+		width += w
+		if i > 0 {
+			width++ // the single column tview leaves between cells
+		}
+	}
+
+	// +2 for the table's own left/right border padding.
+	width += 2
+	// +1 for the title bar's own row (see connectionMenuLayout).
+	return width, rows + 1
 }
 
 // connectionHistorySuccessBlend darkens theme.EntryExecutable for a
@@ -223,68 +329,47 @@ func (r *Root) disconnectConnectionRow(row int) bool {
 // indistinguishable from one that had simply never been tried.
 const connectionHistorySuccessBlend = 0.45
 
-// connectionHistoryRemoveGlyph is the small "✕" appended to every
-// history row (see renderConnectionMenu), per the user's own explicit
-// request for a visible, individually clickable way to drop one entry
-// out of history without connecting to it — "x" the character itself
-// is reserved for typing into a real name, so a distinct glyph avoids
-// any chance of the two being confused, the same reasoning
-// connectionButtonGlyph's own doc comment gives for picking one
-// character over another.
+// connectionHistoryRemoveGlyph is the small "✕" every history row's
+// own remove cell carries (see renderConnectionMenu), per the user's
+// own explicit request for a visible, individually clickable way to
+// drop one entry out of history without connecting to it — "x" the
+// character itself is reserved for typing into a real name, so a
+// distinct glyph avoids any chance of the two being confused, the same
+// reasoning connectionButtonGlyph's own doc comment gives for picking
+// one character over another.
 const connectionHistoryRemoveGlyph = "✕"
 
-// connectionHistoryEjectGlyph appears only on the one history row that
-// is the active panel's own current connection (see
-// connectionMenuActiveRow) — clicking it, or pressing "e" while it's
-// highlighted (see captureConnectionMenuKey), disconnects. Replaces
-// what used to be a separate, always-present "Disconnect (...)" list
-// item of its own — the user asked for a per-row button in its place
-// instead, the international "eject media" symbol reading naturally as
-// "detach from this" the same way a USB drive's own eject icon does.
+// connectionHistoryEjectGlyph fills the eject cell only on the one
+// history row that is the active panel's own current connection (see
+// connectionMenuActiveRow) — clicking it, or pressing "e" while that
+// row is highlighted (see captureConnectionMenuKey), disconnects.
+// Replaces what used to be a separate, always-present "Disconnect
+// (...)" list item of its own — the user asked for a per-row button in
+// its place instead, the international "eject media" symbol reading
+// naturally as "detach from this" the same way a USB drive's own eject
+// icon does.
 const connectionHistoryEjectGlyph = "⏏"
 
-// connectionHistoryLabel colors entry's own plain Connection.Label()
-// by state — green (theme.EntryExecutable, this app's established
-// "healthy/active" color — see bottombar.go/gitstatus.go) if entry is
-// the panel's own currently active connection, red (theme.CriticalText)
-// if the last attempt to reach it failed, a dimmer green (see
+// connectionHistoryColor picks entry's own label color by state —
+// green (theme.EntryExecutable, this app's established "healthy/
+// active" color — see bottombar.go/gitstatus.go) if it's the panel's
+// own currently active connection, red (theme.CriticalText) if the
+// last attempt to reach it failed, a dimmer green (see
 // connectionHistorySuccessBlend) otherwise — per the user's own
 // explicit request that the current connection, any failed one, and
 // any merely-inactive-but-working one all be visually distinguishable
-// from each other at a glance. The active row alone also gets a
-// leading connectionHistoryEjectGlyph "button" ahead of the
-// connectionHistoryRemoveGlyph every row already ends with — both
-// muted, not colored by row state, since disconnecting/removing are
-// the same action regardless of whether this particular entry
-// succeeded or failed last time.
-func (r *Root) connectionHistoryLabel(panel *Panel, entry remotefs.HistoryEntry) string {
-	label := entry.Label()
-	isActive := panel.remote != nil && panel.remoteConn.Equal(entry.Connection)
-	var colored string
+// from each other at a glance. A real tcell.Color set directly on the
+// cell (TableCell.SetTextColor), not a markup tag embedded in its own
+// text — the same "the widget's own API carries color, not the
+// string" shape tabSwitcherRowLabel's plain dim/undimmed split already
+// uses, now needed here for a three-way split instead of two.
+func connectionHistoryColor(theme config.ResolvedTheme, isActive, lastFailed bool) tcell.Color {
 	switch {
 	case isActive:
-		colored = "[" + colorTag(r.theme.EntryExecutable) + "]" + label + "[-]"
-	case entry.LastFailed:
-		colored = "[" + colorTag(r.theme.CriticalText) + "]" + label + "[-]"
+		return theme.EntryExecutable
+	case lastFailed:
+		return theme.CriticalText
 	default:
-		successColor := blendToward(r.theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
-		colored = "[" + colorTag(successColor) + "]" + label + "[-]"
+		return blendToward(theme.EntryExecutable, colorBlack, connectionHistorySuccessBlend)
 	}
-	mutedTag := "[" + colorTag(r.theme.MutedTextColor) + "]"
-	if isActive {
-		colored += "  " + mutedTag + connectionHistoryEjectGlyph + "[-]"
-	}
-	return colored + "  " + mutedTag + connectionHistoryRemoveGlyph + "[-]"
-}
-
-func (r *Root) newConnectionMenuList() *tview.List {
-	l := tview.NewList().ShowSecondaryText(false)
-	l.SetHighlightFullLine(true)
-	l.SetBorderPadding(0, 0, 1, 1)
-	return l
-}
-
-func (r *Root) newConnectionMenuLayout() *tview.Flex {
-	return tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.connectionMenuList, 0, 1, true)
 }

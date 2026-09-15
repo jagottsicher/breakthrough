@@ -437,7 +437,19 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.hostKeyConfirmTitleBar.SetTextColor(theme.TextColor)
 
-	styleList(r.connectionMenuList, theme)
+	// Styled like the tab switcher (see its own identical block above),
+	// not styleList: this is a Table now, per the user's own explicit
+	// request to match the tabs list's own style/color/table shape.
+	// SurfaceBackground on the title bar, not FocusedBackground — the
+	// same reasoning filterMenuTitleBar's own doc comment gives: a small
+	// dropdown anchored under a header button, not a full centered modal
+	// dialog.
+	r.connectionMenuTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectionMenuTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	r.connectionMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectionMenuTitleBar.SetTextColor(theme.Text)
 
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.duplicateForm.SetLabelColor(theme.TextColor)
