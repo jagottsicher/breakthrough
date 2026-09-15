@@ -84,13 +84,33 @@ func TestOpenFilesLineGuardsAgainstAnAbsurdCeiling(t *testing.T) {
 	}
 }
 
-func TestShowingSystemInfoTriggersOnlyAtTheRealFilesystemRoot(t *testing.T) {
+// TestShowingSystemInfoTriggersOnlyOnTheRootRowItself pins the user's
+// own explicit correction: System Info must not win for every entry
+// while merely browsing "/" (that made every real top-level directory
+// permanently unreachable from Details) — only selecting the
+// synthesized "/" row itself (see Panel.load's own doc comment on it,
+// replacing the usual ".." there) should.
+func TestShowingSystemInfoTriggersOnlyOnTheRootRowItself(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), "/")
 	if err != nil {
 		t.Fatalf("NewRoot(\"/\"): %v", err)
 	}
+	r.SetRect(0, 0, 100, 40)
+	r.showDetailsSidebar() // default cursor: row 0, the "/" row itself
+
+	if r.detailsTarget != "/" {
+		t.Fatalf("setup: detailsTarget = %q, want \"/\" (row 0 should be the root row)", r.detailsTarget)
+	}
 	if !r.showingSystemInfo() {
-		t.Error("showingSystemInfo() = false while browsing \"/\", want true")
+		t.Error("showingSystemInfo() = false with the \"/\" row selected, want true")
+	}
+
+	r.panel.focusRow(1) // a real top-level entry (e.g. "bin" or the first real one)
+	if r.detailsTarget == "/" {
+		t.Fatal("setup: row 1 should be a real entry, not \"/\" again")
+	}
+	if r.showingSystemInfo() {
+		t.Errorf("showingSystemInfo() = true with %q selected, want false — real entries under \"/\" must still get ordinary Details", r.detailsTarget)
 	}
 
 	dir := t.TempDir()
@@ -100,6 +120,26 @@ func TestShowingSystemInfoTriggersOnlyAtTheRealFilesystemRoot(t *testing.T) {
 	}
 	if r2.showingSystemInfo() {
 		t.Errorf("showingSystemInfo() = true while browsing %q, want false", dir)
+	}
+}
+
+// TestRootDirectoryListingShowsASelectableSelfRowInsteadOfDotDot pins
+// the other half of the same fix: filepath.Dir("/") is "/" itself, so
+// the ordinary ".." row (see Panel.load) was never added there at all
+// before this — silently leaving no way to select "/" as such.
+func TestRootDirectoryListingShowsASelectableSelfRowInsteadOfDotDot(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), "/")
+	if err != nil {
+		t.Fatalf("NewRoot(\"/\"): %v", err)
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok || path != "/" {
+		t.Fatalf("CurrentRowPath() at row 0 = (%q, %v), want (\"/\", true)", path, ok)
+	}
+
+	ref, ok := r.panel.rowRef(0)
+	if !ok || ref.name != "/" || ref.checkable {
+		t.Errorf("row 0 = %+v, ok=%v; want name \"/\", not checkable", ref, ok)
 	}
 }
 

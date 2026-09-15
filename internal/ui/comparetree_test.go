@@ -38,6 +38,7 @@ func finishCompareTreeWalk(t *testing.T, r *Root) {
 	r.cancelCompareTreeWalk()
 	r.compareTreeEntries, r.compareTreeStats = entries, stats
 	r.renderCompareTree()
+	r.resetCompareTreeScrollPosition()
 }
 
 // newCompareTreePair builds two real directory trees under one
@@ -216,6 +217,33 @@ func TestCopyCompareTreeRowAsksThenCopiesAndRewalks(t *testing.T) {
 	}
 	if contains(compareTreeVisibleRelPaths(r), "onlyA.txt") {
 		t.Error("onlyA.txt should no longer be a one-sided row after the copy and re-walk")
+	}
+}
+
+// TestOpenCompareTreeAlwaysStartsAtTheTopOfANewComparison pins the
+// user's own explicit request: the table widget is shared across
+// opens (see newCompareTreeScreen), and neither Table.Clear() nor
+// renderCompareTree resets its own cursor/scroll on their own — so
+// without resetCompareTreeScrollPosition, a second comparison would
+// silently inherit wherever the first one's own review left off.
+func TestOpenCompareTreeAlwaysStartsAtTheTopOfANewComparison(t *testing.T) {
+	r, dirA, dirB := newCompareTreePair(t)
+	r.openCompareTree(dirA, dirB)
+	r.toggleCompareTreeShowIdentical() // guarantee more than one real row to scroll away from
+	finishCompareTreeWalk(t, r)
+
+	lastRow := r.compareTreeTable.GetRowCount() - 1
+	if lastRow <= 1 {
+		t.Fatalf("setup: expected more than one row, got last row %d", lastRow)
+	}
+	r.compareTreeTable.Select(lastRow, 0)
+
+	// A second, fresh comparison against the exact same shared widget.
+	r.openCompareTree(dirA, dirB)
+	finishCompareTreeWalk(t, r)
+
+	if row, _ := r.compareTreeTable.GetSelection(); row != 1 {
+		t.Errorf("selection after opening a fresh comparison = row %d, want row 1 (the top)", row)
 	}
 }
 
