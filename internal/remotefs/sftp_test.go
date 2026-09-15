@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
@@ -28,6 +29,25 @@ import (
 // call from the UI layer always goes through the TOFU-and-persist
 // hostkey.go path instead (see hostkey_test.go for that).
 func noPromptHostKeyCallback(string, string, string) (bool, error) { return true, nil }
+
+// testKnownHostsFile is a fresh, empty path inside t.TempDir() for
+// DialOptions.KnownHostsFile — every test in this file must set this
+// explicitly rather than leaving it "" (which defaults to the real
+// developer's own ~/.ssh/known_hosts, via DefaultKnownHostsFile): a
+// real, previously-unnoticed bug found by actually reading a failure
+// message rather than just rerunning it, this whole file was silently
+// appending a throwaway 127.0.0.1 entry to that real file on every
+// single test run (confirmed directly: 143 of them accumulated there
+// before this fix), and once the OS happened to reuse the same
+// ephemeral port for two different freshly generated test servers, a
+// later Dial's real host-key verification (see hostkey.go's own
+// deliberate "no bypass" refusal for a key that changed) failed with a
+// hard "knownhosts: key mismatch" against a stale entry from an
+// earlier, unrelated test run — the exact flake that surfaced this.
+func testKnownHostsFile(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "known_hosts")
+}
 
 // passwordServerConfig builds a *ssh.ServerConfig that accepts exactly
 // one user/password pair — the simplest auth a test server can offer,
@@ -61,7 +81,8 @@ func TestDialWithPasswordAuthListsAndReadsFiles(t *testing.T) {
 			IdentityFiles: []string{},
 			Password:      func() (string, error) { return "s3cret", nil },
 		},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -138,7 +159,8 @@ func TestListDirSortsDirectoriesFirstThenCaseInsensitiveName(t *testing.T) {
 			IdentityFiles: []string{},
 			Password:      func() (string, error) { return "s3cret", nil },
 		},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -168,7 +190,8 @@ func TestDialWithWrongPasswordFailsWithoutBeingAConnectionRefusedError(t *testin
 			IdentityFiles: []string{},
 			Password:      func() (string, error) { return "wrong", nil },
 		},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err == nil {
 		t.Fatal("Dial succeeded with the wrong password, want an error")
@@ -201,9 +224,10 @@ func TestDialWithPublicKeyIdentityFileSucceeds(t *testing.T) {
 	addr := startTestSFTPServer(t, config)
 
 	client, err := Dial(context.Background(), DialOptions{
-		Connection:    Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
-		Auth:          AuthOptions{IdentityFiles: []string{keyPath}},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		Connection:     Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth:           AuthOptions{IdentityFiles: []string{keyPath}},
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -234,9 +258,10 @@ func TestDialWithAgentAuthSucceeds(t *testing.T) {
 	addr := startTestSFTPServer(t, config)
 
 	client, err := Dial(context.Background(), DialOptions{
-		Connection:    Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
-		Auth:          AuthOptions{AgentSocket: socketPath, IdentityFiles: []string{}},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		Connection:     Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth:           AuthOptions{AgentSocket: socketPath, IdentityFiles: []string{}},
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -253,7 +278,8 @@ func TestClientCreateMkdirRenameAndRemoveRoundTrip(t *testing.T) {
 			IdentityFiles: []string{},
 			Password:      func() (string, error) { return "s3cret", nil },
 		},
-		HostKeyPrompt: noPromptHostKeyCallback,
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
 	})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -310,6 +336,78 @@ func TestClientCreateMkdirRenameAndRemoveRoundTrip(t *testing.T) {
 	}
 	if _, err := os.Stat(subdir); !os.IsNotExist(err) {
 		t.Error("directory still exists after RemoveDirectory")
+	}
+}
+
+// TestDiskUsageReturnsRealFiguresFromTheTestServersOwnFilesystem pins
+// the real, end-to-end path: pkg/sftp's simple *sftp.Server does
+// implement the statvfs@openssh.com extension on Linux (via a real
+// syscall.Statfs against whatever local directory it's serving —
+// confirmed by reading server_statvfs_impl.go/server_statvfs_linux.go
+// directly, not assumed), so this hermetic test server can answer a
+// real DiskUsage call the same way an actual OpenSSH sftp-server
+// would, without needing anything faked.
+func TestDiskUsageReturnsRealFiguresFromTheTestServersOwnFilesystem(t *testing.T) {
+	dir := t.TempDir()
+	addr := startTestSFTPServer(t, passwordServerConfig("tester", "s3cret"))
+	client, err := Dial(context.Background(), DialOptions{
+		Connection: Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth: AuthOptions{
+			IdentityFiles: []string{},
+			Password:      func() (string, error) { return "s3cret", nil },
+		},
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	got, err := client.DiskUsage(dir)
+	if err != nil {
+		t.Fatalf("DiskUsage: %v", err)
+	}
+	// The real numbers depend on whatever filesystem the test runner's
+	// own temp directory happens to live on — only the shape is worth
+	// pinning here, not exact values (see
+	// TestDiskUsageFromStatVFSConvertsBlocksAndInodesToBytesAndPercentages
+	// for the exact unit-conversion math against known inputs).
+	if got.AvailBytes <= 0 {
+		t.Errorf("AvailBytes = %d, want a positive figure for a real, writable temp directory", got.AvailBytes)
+	}
+	if got.UsePercent < 0 || got.UsePercent > 100 {
+		t.Errorf("UsePercent = %d, want a value in [0, 100]", got.UsePercent)
+	}
+}
+
+// TestDiskUsageFromStatVFSConvertsBlocksAndInodesToBytesAndPercentages
+// pins diskUsageFromStatVFS's own unit conversion and percentage math
+// directly against hand-built values — no real server round trip
+// needed at all (see diskUsageFromStatVFS's own doc comment on why).
+func TestDiskUsageFromStatVFSConvertsBlocksAndInodesToBytesAndPercentages(t *testing.T) {
+	v := &sftp.StatVFS{
+		Frsize: 1024,
+		Blocks: 1000,
+		Bfree:  400, // used = (1000-400)*1024 = 614400
+		Bavail: 300, // avail = 300*1024 = 307200; percent = 600/(600+300) = 66%... in blocks: 600/900
+		Files:  200,
+		Ffree:  120, // used inodes = 80
+		Favail: 100, // percent = 80/(80+100) = 44%
+	}
+
+	got := diskUsageFromStatVFS(v)
+
+	want := fsops.DiskUsage{
+		UsedBytes:    614400,
+		AvailBytes:   307200,
+		UsedInodes:   80,
+		AvailInodes:  100,
+		UsePercent:   66,
+		InodePercent: 44,
+	}
+	if got != want {
+		t.Errorf("diskUsageFromStatVFS(%+v) = %+v, want %+v", v, got, want)
 	}
 }
 

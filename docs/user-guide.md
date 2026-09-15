@@ -814,26 +814,34 @@ closes it.
 The `@` button right before the path itself (see [The path
 bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
 for browsing a directory tree on another machine over SFTP, exactly the
-way SSH itself already reaches it. Muted while a panel is local, a slow
-breathing green glow while connected.
+way SSH itself already reaches it. Muted while a panel is local; once
+connected it pulses gently toward a lighter green and back, never
+dipping darker than its resting color — a settled, alive connection,
+not a "still trying to reach it" search light.
 
-The dropdown lists, in order: **New connection…**, then recent
-history — most recently used first, colored by state: bright green for
-the connection currently active in this panel, a dimmer green for one
-that has connected successfully before but isn't active right now, red
-for one whose last attempt failed. Selecting a history entry (anywhere
-but its own trailing glyphs) reopens the Connect dialog prefilled from
-it and immediately retries — nothing about *how* it authenticated is
-ever remembered (see Authentication below), so a connection that needs
-a typed password will stop there with the dialog open, ready for it.
-Every history row ends with a small "✕" — click it (or press `x` or
-Delete while that row is highlighted) to drop just that one entry out
-of history, without ever connecting to it. The one row that's this
-panel's own active connection additionally carries a leading "⏏" right
-before it — click it (or press `e` while that row is highlighted) to
-disconnect; there's no separate "Disconnect" row anymore.
+The dropdown itself is a table, styled like the tab switcher: each row
+is its own set of clickable cells rather than markup-colored text
+glued into one string. It lists, in order: **+ New connection**, then
+recent history — most recently used first, colored by state: bright
+green for the connection currently active in this panel, a matte,
+dimmer green for one that has connected successfully before but isn't
+active right now, red for one that used to connect and just failed. A
+connection that has *never* once succeeded isn't added to history at
+all, even after a failed attempt — an entry that could only ever show
+up red isn't a useful "reconnect to this" shortcut, just clutter.
+Selecting a history entry (anywhere but its own trailing cells)
+reopens the Connect dialog prefilled from it and immediately retries —
+nothing about *how* it authenticated is ever remembered (see
+Authentication below), so a connection that needs a typed password
+will stop there with the dialog open, ready for it. Every history row
+ends with a small "✕" cell — click it (or press `x` or Delete while
+that row is highlighted) to drop just that one entry out of history,
+without ever connecting to it. The one row that's this panel's own
+active connection additionally carries a leading "⏏" cell — click it
+(or press `e` while that row is highlighted) to disconnect; there's no
+separate "Disconnect" row anymore.
 
-**New connection…** opens a small form: Host, Port (blank means 22),
+**+ New connection** opens a small form: Host, Port (blank means 22),
 User (blank means this machine's own local username, the same
 assumption a bare `ssh host` already makes), and Password — tried only
 as a last resort, see below. Connecting runs in the background with a
@@ -877,25 +885,48 @@ local one: same columns, same sorting, the Home button (`~`) goes to
 the remote account's own home directory instead of this machine's.
 Viewing a file (Look, `l`) works the same way too.
 
-Rename (`r`), permanent delete (`d`/`D` — see below), and chmod (the
-`p` chord's own `pm`, including its recursive dirs/files options) all
-work against a remote target the same way they do locally. `d` ("Move
-to Trash") redirects straight to the same permanent-delete confirmation
-`D` already uses instead: a remote session has no trash of its own to
-move into.
+Rename (`r`), permanent delete (`d`/`D` — see below), chmod (the `p`
+chord's own `pm`, including its recursive dirs/files options), and
+Copy/Cut/Paste all work against a remote target the same way they do
+locally. `d` ("Move to Trash") redirects straight to the same
+permanent-delete confirmation `D` already uses instead: a remote
+session has no trash of its own to move into. Paste dispatches by
+which side (or both) is remote: uploading, downloading, or copying/
+moving between two remote directories all work, including across two
+different connections at once; a move where both ends are the exact
+same live connection goes through a single rename on the server's own
+filesystem rather than downloading and re-uploading the whole file.
+Conflicts are handled more simply than a local Paste's own dialog: an
+existing destination is always left alone rather than offering to
+overwrite/rename/skip, and a symlink anywhere in a copied tree is
+skipped outright rather than followed or recreated on the other end
+("following symlinks" isn't offered as a Paste option at all here).
 
-Everything else that changes files does not yet: Edit, chown,
-Copy/Cut/Paste, Compare, Batch rename, Sed Replace, and Properties as a
-whole (its own Save button combines Name/Permissions with Owner/Group
-and Modified/hash into one action, and only some of those are
-remote-aware yet) all refuse outright with a clear message on a remote
-panel — chown specifically because there's no remote user/group
-database to resolve a typed name against, the rest because they'd need
-either a real remote command-execution channel or a streamed
-byte-range read this project doesn't have yet. Disconnecting (the
-active row's own "⏏" in the dropdown, or `e` while it's highlighted)
-closes the session and returns the panel to browsing this machine's
-own home directory.
+Details (`i`/`I`), the status bar's own Disk/Inodes segment, and
+System Info at the remote's own "/" all describe *that* machine now,
+not this one — Details through the same Stat call every other
+per-file view already needs, Disk/Inodes through the
+`statvfs@openssh.com` SFTP extension every real OpenSSH server
+supports, and System Info by reading straight from the remote's own
+`/proc`/`/etc/os-release` over the same connection (no separate
+command-execution channel needed for any of that) — except logged-in
+sessions, which does need one and is simply left off remotely, the
+same "one less line" treatment a source this project can't reach at
+all already gets elsewhere.
+
+Everything else that changes files does not yet: Edit, chown, Compare,
+Batch rename, Sed Replace, Properties as a whole (its own Save button
+combines Name/Permissions with Owner/Group and Modified/hash into one
+action, and only some of those are remote-aware yet), and browsing
+into a zip/tar archive that itself lives on a remote connection, all
+refuse outright with a clear message — chown specifically because
+there's no remote user/group database to resolve a typed name
+against, archive browsing because it needs random-access reads this
+project doesn't stream over a connection yet, the rest because they'd
+need a real remote command-execution channel this project doesn't
+have. Disconnecting (the active row's own "⏏" in the dropdown, or `e`
+while it's highlighted) closes the session and returns the panel to
+browsing this machine's own home directory.
 
 ## Properties
 

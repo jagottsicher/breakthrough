@@ -330,7 +330,7 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 	if r.settings.StatusBarShowDisk || r.settings.StatusBarShowInodes {
-		if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
+		if u, ok := diskUsageFor(r.panel); ok {
 			if r.settings.StatusBarShowDisk {
 				write(diskUsageText(u, r.theme))
 				sep()
@@ -831,6 +831,25 @@ func percentStatusColor(percent int, theme config.ResolvedTheme) tcell.Color {
 	default:
 		return theme.EntryExecutable
 	}
+}
+
+// diskUsageFor is fsops.FetchDiskUsage's own dispatch point: the local
+// `df`-based fetcher for a local panel, or the connected Client's own
+// DiskUsage (see remotefs.Client's own doc comment — the
+// statvfs@openssh.com SFTP extension) for a remote one. Used by both
+// the status bar's own Disk/Inodes segment here and System Info's
+// identical figures for "/" (see systeminfo.go) — before this, both
+// always called fsops.FetchDiskUsage directly regardless of which
+// panel was showing, so a remote panel's status bar silently dropped
+// the segment entirely (df run locally against a path that only
+// exists on the other end always fails) and System Info showed this
+// machine's own disk, mislabeled as the remote one.
+func diskUsageFor(panel *Panel) (fsops.DiskUsage, bool) {
+	if remote := panel.remote; remote != nil {
+		u, err := remote.DiskUsage(panel.path)
+		return u, err == nil
+	}
+	return fsops.FetchDiskUsage(panel.path)
 }
 
 // diskUsageText and inodeUsageText render one status-bar segment each,

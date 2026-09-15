@@ -136,3 +136,44 @@ func chmodFilesRecursiveRemote(client remotefs.Client, p string, mode os.FileMod
 	}
 	return nil
 }
+
+// remoteInfoFromEntry builds an fsops.Info from a Client.Stat/Lstat
+// result — the Details sidebar's own per-file stat block (see
+// loadDetailsTarget) needs the richer Info shape, not the
+// directory-listing-oriented Entry every remote Client method actually
+// returns (see fsops.Entry's own doc comment on the difference).
+//
+// Owner/Group are deliberately left blank rather than falling back to
+// a numeric uid/gid the way fsops.Stat's own ownerGroup does locally:
+// the SFTP protocol's stat response doesn't carry a raw uid/gid this
+// code currently keeps hold of anywhere past Client.Stat's own
+// adapter, and there is no remote user/group database to resolve a
+// name against regardless (the same limitation openChown's own doc
+// comment already gives for why chown itself stays refused) — an
+// empty field here is honest about that, not a bug to chase down.
+func remoteInfoFromEntry(path string, entry fsops.Entry) fsops.Info {
+	info := fsops.Info{
+		Name:       entry.Name,
+		Path:       path,
+		IsDir:      entry.Type == fsops.TypeDir,
+		Mode:       entry.Mode,
+		Size:       entry.Size,
+		ModTime:    entry.ModTime,
+		Nlink:      entry.Nlink,
+		MountPoint: entry.MountPoint,
+	}
+	switch entry.Type {
+	case fsops.TypeSymlinkFile:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+	case fsops.TypeSymlinkDir:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+		info.LinkIsDir = true
+	case fsops.TypeSymlinkBroken:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+		info.LinkBroken = true
+	}
+	return info
+}

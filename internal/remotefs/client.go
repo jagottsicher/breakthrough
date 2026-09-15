@@ -72,6 +72,14 @@ type Client interface {
 	// way os.Chmod's own doc comment already says they are locally.
 	Chmod(path string, mode os.FileMode) error
 
+	// DiskUsage reports the block/inode usage of the filesystem path
+	// lives on — the remote counterpart to fsops.FetchDiskUsage, so the
+	// status bar's own disk/inode segment and System Info (see
+	// internal/ui's bottombar.go/systeminfo.go) can keep working once a
+	// panel is connected instead of silently describing the wrong
+	// (local) machine or showing nothing at all.
+	DiskUsage(path string) (fsops.DiskUsage, error)
+
 	// Close ends the underlying connection. Safe to call more than
 	// once; a Client is unusable afterward.
 	Close() error

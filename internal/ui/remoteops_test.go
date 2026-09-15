@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -8,6 +9,125 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
+
+// TestLoadDetailsTargetOnARemotePanelStatsThroughTheClient pins a real,
+// previously-broken gap: loadDetailsTarget used to call the local
+// fsops.Stat unconditionally, so Details ("i"/"I") on any remote file
+// always failed — the sidebar's own per-file stat block never worked
+// at all on a remote connection, not merely lacked some polish.
+func TestLoadDetailsTargetOnARemotePanelStatsThroughTheClient(t *testing.T) {
+	r := newTestRemoteRoot(t) // cursor on /remote/b.txt
+	r.SetRect(0, 0, 100, 40)
+
+	r.loadDetailsTarget("/remote/b.txt")
+
+	if r.detailsStatErr != nil {
+		t.Fatalf("detailsStatErr = %v, want the remote file stat'd successfully", r.detailsStatErr)
+	}
+	if r.detailsStat.Name != "b.txt" || r.detailsStat.Path != "/remote/b.txt" {
+		t.Errorf("detailsStat = %+v, want Name=b.txt Path=/remote/b.txt", r.detailsStat)
+	}
+	if r.detailsStat.IsDir {
+		t.Error("detailsStat.IsDir = true for a plain remote file")
+	}
+}
+
+// TestLoadDetailsTargetOnARemoteDirectoryReportsItAsADirectory covers
+// the other basic classification loadDetailsTarget's own dispatch must
+// get right — classifyKind (see detailsStatLines) reads IsDir directly.
+func TestLoadDetailsTargetOnARemoteDirectoryReportsItAsADirectory(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "sub", Type: fsops.TypeDir, IsDir: true})
+	r.SetRect(0, 0, 100, 40)
+
+	r.loadDetailsTarget("/remote/sub")
+
+	if r.detailsStatErr != nil {
+		t.Fatalf("detailsStatErr = %v", r.detailsStatErr)
+	}
+	if !r.detailsStat.IsDir {
+		t.Error("detailsStat.IsDir = false for a remote directory")
+	}
+}
+
+// TestRemoteInfoFromEntryMapsEachSymlinkTypeCorrectly pins
+// remoteInfoFromEntry's own field mapping for all three symlink
+// EntryTypes plus a plain file — classifyKind (detailssidebar.go) reads
+// exactly IsSymlink/LinkBroken/LinkIsDir/IsDir to decide what to show,
+// so getting these wrong would silently mislabel a remote symlink's own
+// kind in Details.
+func TestRemoteInfoFromEntryMapsEachSymlinkTypeCorrectly(t *testing.T) {
+	cases := []struct {
+		name           string
+		entry          fsops.Entry
+		wantIsSymlink  bool
+		wantLinkBroken bool
+		wantLinkIsDir  bool
+		wantIsDir      bool
+	}{
+		{name: "plain file", entry: fsops.Entry{Type: fsops.TypeFile}},
+		{name: "plain dir", entry: fsops.Entry{Type: fsops.TypeDir}, wantIsDir: true},
+		{name: "symlink to file", entry: fsops.Entry{Type: fsops.TypeSymlinkFile, LinkTarget: "x"}, wantIsSymlink: true},
+		{name: "symlink to dir", entry: fsops.Entry{Type: fsops.TypeSymlinkDir, LinkTarget: "x"}, wantIsSymlink: true, wantLinkIsDir: true},
+		{name: "broken symlink", entry: fsops.Entry{Type: fsops.TypeSymlinkBroken, LinkTarget: "x"}, wantIsSymlink: true, wantLinkBroken: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			info := remoteInfoFromEntry("/remote/thing", c.entry)
+			if info.IsSymlink != c.wantIsSymlink {
+				t.Errorf("IsSymlink = %v, want %v", info.IsSymlink, c.wantIsSymlink)
+			}
+			if info.LinkBroken != c.wantLinkBroken {
+				t.Errorf("LinkBroken = %v, want %v", info.LinkBroken, c.wantLinkBroken)
+			}
+			if info.LinkIsDir != c.wantLinkIsDir {
+				t.Errorf("LinkIsDir = %v, want %v", info.LinkIsDir, c.wantLinkIsDir)
+			}
+			if info.IsDir != c.wantIsDir {
+				t.Errorf("IsDir = %v, want %v", info.IsDir, c.wantIsDir)
+			}
+		})
+	}
+}
+
+// TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf pins another
+// previously-broken gap alongside Details' own Stat: the status bar's
+// Disk/Inodes segment used to call the local fsops.FetchDiskUsage
+// (shelling out to `df`) unconditionally, so it silently vanished from
+// the status bar entirely on a remote panel — `df` against a path that
+// only exists on the other end always fails.
+func TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.diskUsage = fsops.DiskUsage{UsedBytes: 100, AvailBytes: 900, UsePercent: 10}
+
+	got, ok := diskUsageFor(r.panel)
+
+	if !ok {
+		t.Fatal("diskUsageFor reported not-ok despite the fake client returning a usable value")
+	}
+	if got != client.diskUsage {
+		t.Errorf("diskUsageFor = %+v, want the remote client's own figure %+v", got, client.diskUsage)
+	}
+}
+
+// TestDiskUsageForOnARemotePanelFailsGracefullyWhenTheClientErrors
+// mirrors fsops.FetchDiskUsage's own "ok=false, not an error surfaced
+// to the user" contract for the remote side too — the status bar
+// simply omits the segment, the same as when `df` itself fails
+// locally.
+func TestDiskUsageForOnARemotePanelFailsGracefullyWhenTheClientErrors(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.diskUsageErr = fmt.Errorf("statvfs@openssh.com not supported")
+
+	_, ok := diskUsageFor(r.panel)
+
+	if ok {
+		t.Error("diskUsageFor reported ok despite the client returning an error")
+	}
+}
 
 func TestFinishRenameOnARemotePanelRenamesThroughTheClient(t *testing.T) {
 	r := newTestRemoteRoot(t) // cursor on /remote/b.txt (see its own doc comment)

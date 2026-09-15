@@ -200,21 +200,27 @@ var helpText = strings.TrimLeft(`
 
   The "@" button right before the path (or "gc") opens a dropdown to
   browse another machine over SFTP — muted for a local panel, a slow
-  breathing green glow once connected. New connection… plus recent
-  history (bright green = active here, dimmer green = worked before,
-  red = last attempt failed; "x"/Delete or a row's own trailing "✕"
-  drops one entry out of history; the active row's own leading "⏏", or
-  "e", disconnects — no separate "Disconnect" row anymore). Auth tries
-  an ssh-agent, then
+  pulse toward a lighter green and back (never darker than at rest)
+  once connected. + New connection plus recent history in a table like
+  the tab switcher (bright green = active here, matte dimmer green =
+  worked before, red = used to work and just failed — a connection
+  that has never once succeeded isn't added to history at all; "x"/
+  Delete or a row's own trailing "✕" cell drops one entry out of
+  history; the active row's own leading "⏏" cell, or "e", disconnects
+  — no separate "Disconnect" row anymore). Auth tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal,
   no prompt, for one that changed. Browsing, viewing, rename,
-  permanent delete, and chmod all work once connected ("d" redirects
-  straight to the same permanent-delete confirmation "D" uses — no
-  remote trash exists to move into instead); Edit, chown, Copy/Cut/
-  Paste, Compare, Batch rename, Sed Replace, and Properties as a whole
-  still refuse outright for now.
+  permanent delete, chmod, and Copy/Cut/Paste all work once connected
+  ("d" redirects straight to the same permanent-delete confirmation
+  "D" uses — no remote trash exists to move into instead; a same-
+  connection move renames instead of downloading and re-uploading).
+  Details, status-bar Disk/Inodes, and System Info at "/" all describe
+  the remote machine, not this one, once connected. Edit, chown,
+  Compare, Batch rename, Sed Replace, Properties as a whole, and
+  opening a zip/tar archive that lives on the connection still refuse
+  outright for now.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
