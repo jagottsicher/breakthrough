@@ -593,8 +593,8 @@
     },
     {
       "path": "internal/gitstatus/gitstatus_test.go",
-      "size": 10367,
-      "sha256": "65fdb259e33e2ab125cf301c049a96a567e006eb71fb25b488b5f016f14704b1"
+      "size": 10747,
+      "sha256": "7c43b39811b749e17f7a908dd8484342ba0290d5042dd445d9961f80b296f2e8"
     },
     {
       "path": "internal/replace/apply.go",
@@ -6815,79 +6815,86 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
+      "name": "gitTestEnv",
+      "kind": "function",
+      "line": 30
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
+      "file": "internal/gitstatus/gitstatus_test.go",
       "name": "runGit",
       "kind": "function",
-      "line": 28
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "initRepo",
       "kind": "function",
-      "line": 40
+      "line": 50
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnADirectoryThatIsNotARepository",
       "kind": "function",
-      "line": 47
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnACleanRepository",
       "kind": "function",
-      "line": 60
+      "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchFromANestedSubdirectoryReportsTheWholeRepository",
       "kind": "function",
-      "line": 84
+      "line": 94
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchCountsStagedUnstagedUntrackedAndConflictsSeparately",
       "kind": "function",
-      "line": 113
+      "line": 123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchReportsAheadAndBehindAgainstUpstream",
       "kind": "function",
-      "line": 164
+      "line": 174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchReportsConflicts",
       "kind": "function",
-      "line": 211
+      "line": 221
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnARepositoryWithNoCommitsYet",
       "kind": "function",
-      "line": 268
+      "line": 277
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestFetchOnADetachedHead",
       "kind": "function",
-      "line": 284
+      "line": 293
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/gitstatus",
       "file": "internal/gitstatus/gitstatus_test.go",
       "name": "TestShortOID",
       "kind": "function",
-      "line": 313
+      "line": 322
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/replace",
@@ -25658,5 +25665,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "2a97bd430c0f3879e011d4bf3b69258bbd0645df174bf2aa71f93706e9f59b2d"
+  "merkle_root": "8c07d8631b2b762e6d763c80de961bb5146c0a21ca6572ff7cb1eb373058e962"
 }

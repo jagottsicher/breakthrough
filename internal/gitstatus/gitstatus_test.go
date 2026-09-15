@@ -21,6 +21,19 @@ func requireGit(t *testing.T) {
 	}
 }
 
+// gitTestEnv is the author/committer identity every git invocation in
+// this file runs with — CI runners have no global git identity
+// configured (unlike a real developer machine), so anything that skips
+// this and shells out to git directly risks "fatal: empty ident name",
+// a failure mode that looks nothing like the git behavior it's
+// actually testing.
+func gitTestEnv() []string {
+	return append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",
+	)
+}
+
 // runGit runs a real git command against dir, failing the test
 // immediately if it doesn't succeed — the test's own setup helper, not
 // the thing under test (that's Fetch, which shells out to git itself
@@ -28,10 +41,7 @@ func requireGit(t *testing.T) {
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",
-	)
+	cmd.Env = gitTestEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
@@ -231,16 +241,21 @@ func TestFetchReportsConflicts(t *testing.T) {
 	// exactly the state being tested for, not a setup error. "-c
 	// merge.ff=false" overrides any global merge.ff a CI runner's own
 	// git config might set (a real, observed CI failure otherwise: a
-	// runner with merge.ff=only refuses the whole merge outright
-	// -- "Not possible to fast-forward, aborting" -- leaving main
-	// completely untouched and the working tree clean, so Fetch
-	// afterward correctly reported 0 conflicts for what was actually a
-	// no-op here, not a bug in Fetch itself). Asserted below rather
-	// than just ignored, so a future case where the merge succeeds
-	// cleanly for some *other* reason fails with a clear message
-	// instead of the oblique "Conflicts = 0, want 1" this one first
-	// surfaced as.
+	// runner with merge.ff=only refuses the whole merge outright --
+	// "Not possible to fast-forward, aborting" -- leaving main
+	// completely untouched). The explicit identity env is just as load-
+	// bearing here as it is in runGit: without it, a CI runner with no
+	// global git identity configured bails out of the merge immediately
+	// with "Committer identity unknown", *before* it ever attempts the
+	// actual content merge -- which also leaves the working tree
+	// untouched and reads exactly like a real conflict never happened,
+	// the same observable symptom as the merge.ff=only case above but
+	// for a completely different reason. Asserted below rather than
+	// just ignored, so a future case like either of these fails with a
+	// clear message instead of the oblique "Conflicts = 0, want 1" both
+	// first surfaced as.
 	mergeCmd := exec.Command("git", "-c", "merge.ff=false", "-C", dir, "merge", "-q", "other")
+	mergeCmd.Env = gitTestEnv()
 	mergeOut, mergeErr := mergeCmd.CombinedOutput()
 	if mergeErr == nil {
 		t.Fatalf("setup: expected the merge to conflict, but it succeeded cleanly, output:\n%s", mergeOut)
@@ -254,12 +269,6 @@ func TestFetchReportsConflicts(t *testing.T) {
 		t.Fatal("expected inRepo = true")
 	}
 	if st.Conflicts != 1 {
-		// Diagnostic dump, not part of the normal assertion: this
-		// exact test intermittently disagreed with itself across CI
-		// runners during development (the merge command above genuinely
-		// failing, yet the conflict not showing up here) for a reason
-		// never fully pinned down locally — see the raw command output
-		// and status text if it happens again.
 		raw, _ := exec.Command("git", "-C", dir, "status", "--porcelain=v2", "--branch").CombinedOutput()
 		t.Errorf("Conflicts = %d, want 1\nmerge output:\n%s\nraw git status:\n%s", st.Conflicts, mergeOut, raw)
 	}
