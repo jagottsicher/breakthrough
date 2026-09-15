@@ -221,10 +221,13 @@ var helpText = strings.TrimLeft(`
   Edit only uploads it back if it actually changed. Opening a zip/tar
   that lives on the connection downloads and browses it the same
   transparent way, asking first above a configurable size (Options ->
-  Remote connections, e.g. "10MB") — Copy'ing a member back out of one
-  isn't supported yet, download the whole archive elsewhere and
-  extract locally instead. Details, status-bar Disk/Inodes, and System
-  Info at "/" all
+  Remote connections, e.g. "10MB"). Copy'ing a member back out of one
+  works too, straight from the local temp copy already downloaded to
+  browse it — to a real local directory directly, or to another
+  remote directory (same connection or a different one) via a local
+  staging round trip; Cut is refused either way, same as for a local
+  archive member. Details, status-bar Disk/Inodes, and System Info at
+  "/" all
   describe the remote machine, not this one, once connected. chown,
   Compare, Batch rename, Sed Replace, and Properties as a whole still
   refuse outright for now.

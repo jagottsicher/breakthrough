@@ -557,10 +557,13 @@ terminal.
   if it actually changed. Opening a zip/tar that itself lives on a
   remote connection downloads and browses it the same transparent way;
   above a configurable size (Options → Remote connections, KB/MB/GB,
-  10MB by default) it asks first, naming the real size. Still refused
-  with a clear message for now: chown, Compare, Batch rename, Sed
-  Replace, Properties as a whole, and copying a member back *out* of a
-  remote archive. See
+  10MB by default) it asks first, naming the real size. Copying a
+  member back *out* of a remote archive works too, straight from the
+  local temp copy already downloaded to browse it — to a local
+  destination directly, or to another remote directory via a local
+  staging round trip. Still refused with a clear message for now:
+  chown, Compare, Batch rename, Sed Replace, and Properties as a
+  whole. See
   [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp) for
   the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier

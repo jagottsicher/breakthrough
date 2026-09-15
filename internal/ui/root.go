@@ -3198,18 +3198,28 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
 	if r.clipboardSourceClient != nil || r.panel.remote != nil {
 		// remotepaste.go's own engine, once either side of the paste is
-		// remote — never mixed with the archive-extraction or local
-		// startPaste paths below, both of which assume a real local
-		// path throughout.
-		if r.remoteArchiveMemberOrigin(r.clipboard) {
+		// remote — never mixed with the local startPaste path below,
+		// which assumes a real local path throughout.
+		if archiveLocalPath, members, ok := r.remoteArchiveExtractionFor(r.clipboard); ok {
 			// A marked member inside a remote-staged archive still on
-			// screen somewhere (see remoteArchiveMemberOrigin's own doc
+			// screen somewhere (see remoteArchiveExtractionFor's own doc
 			// comment) — its clipboard path is a purely virtual
 			// "archive/member" string our own UI constructs, not a real
 			// path remote.Open could ever resolve, so startRemotePaste
 			// below would otherwise fail with a confusing raw SFTP
-			// "no such file" instead of a real explanation.
-			r.showError(fmt.Errorf("copying a member out of a remote archive isn't supported yet — download the whole archive elsewhere first, then extract it locally"))
+			// "no such file" instead of actually extracting it from the
+			// local temp copy already sitting on disk. Cut has nothing
+			// to remove afterward, same as archiveExtractionFor's own
+			// identical local-archive refusal.
+			if r.clipboardCut {
+				r.showError(fmt.Errorf("cut isn't supported for items inside an archive — use Copy instead"))
+				return
+			}
+			if r.panel.remote == nil {
+				r.extractClipboardArchive(archiveLocalPath, members, dir)
+				return
+			}
+			r.startRemoteArchiveExtraction(archiveLocalPath, members, r.panel.remote, dir)
 			return
 		}
 		if followSymlinks {

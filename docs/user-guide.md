@@ -1006,10 +1006,17 @@ real size first, so a large archive over a slow link can't turn one
 Enter keypress into an unexpected, unwarned multi-minute wait.
 Everything about browsing it afterward — navigating in and out,
 Copy'ing a member to a real destination — works the same as a local
-archive, with one exception: a member marked *inside* a remote archive
-can't be Copied back out again yet (Paste explains this rather than
-failing with a raw connection error) — download the whole archive
-somewhere real first, then extract from it locally instead.
+archive, member-marked-inside-a-remote-archive case included: the
+local temp copy already downloaded to browse it is right there, so
+Copy'ing a marked member back out just extracts from that same copy,
+exactly like a local archive would. Pasting into a real local
+directory extracts straight there; pasting into another remote
+directory (same connection or a different one) extracts into a
+throwaway local temp directory first and uploads the result, the same
+way an ordinary local-source Paste to a remote destination already
+does. Cut is refused either way, same as for a local archive member —
+there's no writing back into a read-only archive to make the "move"
+half of it real.
 
 Everything else that changes files does not yet: chown, Compare, Batch
 rename, Sed Replace, and Properties as a whole (its own Save button
