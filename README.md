@@ -168,7 +168,7 @@ terminal.
   submenus that replace the list in place when chosen (Windows
   Explorer's own cascading-menu idea, without needing room to open
   beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
-  Batch rename, Undo last rename, Remove), "Selection" (Select
+  Batch rename, Undo last rename, Compare, Remove), "Selection" (Select
   all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
@@ -406,6 +406,20 @@ terminal.
   Rename is confirmed, and "Undo last rename" reverses the whole batch
   afterwards. See [docs/user-guide.md](docs/user-guide.md#batch-rename)
   for the step reference.
+- Compare (`C`, or the context menu): "are these two things the same,
+  and if not, what's different" — for two files (mark them, or use
+  split view with the cursor on one in each pane) or two whole
+  directory trees. Two files get size/modified side by side plus an
+  immediate verdict from the same size+time heuristic `rsync`'s own
+  default sync mode uses, an on-demand SHA-256 hash for a certain
+  answer, and a real line-by-line diff (the system's own `diff(1)`,
+  shown through the existing Look pager) for text. Two directories get
+  a full screen listing every difference and every one-sided path — a
+  one-sided directory is one row, never descended into, so an old
+  backup folder doesn't turn into thousands of lines — with a key to
+  switch between the quick check and a real hash, and to copy a
+  one-sided item across after asking. See
+  [docs/user-guide.md](docs/user-guide.md#compare) for the details.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -517,7 +531,7 @@ terminal.
 
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
-archive browsing, Sed Replace, Batch rename, and a full Options screen
+archive browsing, Sed Replace, Batch rename, Compare, and a full Options screen
 covering every setting breakthrough recognizes. Progress bars for
 long-running file operations and a set of built-in networking/hardware
 tool windows are what's planned next — see
