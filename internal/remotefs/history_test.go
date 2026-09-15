@@ -1,0 +1,96 @@
+package remotefs
+
+import (
+	"testing"
+)
+
+// withTestConfigHome points config.UserDir (and therefore
+// connectionsFile) at a fresh, empty temp directory for the duration
+// of one test — never the real developer's own
+// ~/.config/breakthrough, the same isolation gitstatus_test.go's own
+// requireGit/runGit helpers give real git commands.
+func withTestConfigHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
+
+func TestLoadHistoryOnAFreshConfigDirReturnsNoEntriesNotAnError(t *testing.T) {
+	withTestConfigHome(t)
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("len(entries) = %d, want 0", len(entries))
+	}
+}
+
+func TestRecordAttemptAddsANewEntryAtTheFront(t *testing.T) {
+	withTestConfigHome(t)
+	if err := RecordAttempt(Connection{Host: "a.example.com", User: "jens"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(Connection{Host: "b.example.com", User: "jens"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2", len(entries))
+	}
+	if entries[0].Host != "b.example.com" {
+		t.Errorf("entries[0].Host = %q, want the most recently recorded one, %q", entries[0].Host, "b.example.com")
+	}
+}
+
+func TestRecordAttemptOnAnExistingConnectionMovesItToTheFrontInsteadOfDuplicating(t *testing.T) {
+	withTestConfigHome(t)
+	conn := Connection{Host: "a.example.com", User: "jens"}
+	if err := RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(Connection{Host: "b.example.com", User: "jens"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := RecordAttempt(conn, true); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2 (re-recording a.example.com must move it, not duplicate it)", len(entries))
+	}
+	if entries[0].Host != "a.example.com" || !entries[0].LastFailed {
+		t.Errorf("entries[0] = %+v, want a.example.com recorded as failed, moved back to the front", entries[0])
+	}
+}
+
+func TestRecordAttemptTrimsHistoryToTheMaxEntryCount(t *testing.T) {
+	withTestConfigHome(t)
+	for i := 0; i < historyMaxEntries+5; i++ {
+		conn := Connection{Host: "host", User: "jens", Port: i + 1}
+		if err := RecordAttempt(conn, false); err != nil {
+			t.Fatalf("RecordAttempt: %v", err)
+		}
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != historyMaxEntries {
+		t.Errorf("len(entries) = %d, want %d", len(entries), historyMaxEntries)
+	}
+	// The most recently recorded connection used port
+	// historyMaxEntries+5 — confirms trimming drops the *oldest*
+	// entries, not the newest.
+	if entries[0].Port != historyMaxEntries+5 {
+		t.Errorf("entries[0].Port = %d, want %d (the most recent one)", entries[0].Port, historyMaxEntries+5)
+	}
+}
