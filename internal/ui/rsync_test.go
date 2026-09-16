@@ -7,6 +7,11 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
 func newTestRootForRsync(t *testing.T) (r *Root, dir string) {
@@ -50,8 +55,8 @@ func TestDefaultRsyncSourceUsesTheSingleSelectedEntry(t *testing.T) {
 	got := r.defaultRsyncSource()
 
 	want := filepath.Join(dir, "a.txt")
-	if got != want {
-		t.Errorf("defaultRsyncSource() = %q, want %q", got, want)
+	if got.text != want {
+		t.Errorf("defaultRsyncSource().text = %q, want %q", got.text, want)
 	}
 }
 
@@ -60,8 +65,24 @@ func TestDefaultRsyncSourceFallsBackToThePanelPath(t *testing.T) {
 
 	got := r.defaultRsyncSource()
 
-	if got != dir {
-		t.Errorf("defaultRsyncSource() = %q, want the panel's own directory %q", got, dir)
+	if got.text != dir {
+		t.Errorf("defaultRsyncSource().text = %q, want the panel's own directory %q", got.text, dir)
+	}
+}
+
+// TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected pins the
+// bare-right-click case: it moves the cursor to the clicked row but
+// marks nothing, so the source must still be that row, not the panel's
+// own directory.
+func TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.panel.focusRow(1) // off ".." onto a.txt, nothing checked
+
+	got := r.defaultRsyncSource()
+
+	want := filepath.Join(dir, "a.txt")
+	if got.text != want {
+		t.Errorf("defaultRsyncSource().text = %q, want %q", got.text, want)
 	}
 }
 
@@ -89,16 +110,187 @@ func TestDefaultRsyncDestinationUsesTheSplitPartner(t *testing.T) {
 
 	got := r.defaultRsyncDestination()
 
-	if got != dir {
-		t.Errorf("defaultRsyncDestination() = %q, want the split partner's own path %q", got, dir)
+	if got.text != dir {
+		t.Errorf("defaultRsyncDestination().text = %q, want the split partner's own path %q", got.text, dir)
 	}
 }
 
 func TestDefaultRsyncDestinationIsBlankWithoutASplitPartner(t *testing.T) {
 	r, _ := newTestRootForRsync(t)
 
-	if got := r.defaultRsyncDestination(); got != "" {
-		t.Errorf("defaultRsyncDestination() = %q, want empty with no split view open", got)
+	if got := r.defaultRsyncDestination(); got.text != "" {
+		t.Errorf("defaultRsyncDestination().text = %q, want empty with no split view open", got.text)
+	}
+}
+
+// TestDefaultRsyncSourceUsesUserHostSyntaxWhenThePanelIsRemote pins
+// the actual point of this feature: a tab already connected via the
+// Connect dialog shouldn't need Host/User typed into Rsync a second
+// time by hand.
+func TestDefaultRsyncSourceUsesUserHostSyntaxWhenThePanelIsRemote(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	got := r.defaultRsyncSource()
+
+	if want := "tester@example.com:/remote"; got.text != want {
+		t.Errorf("defaultRsyncSource().text = %q, want %q", got.text, want)
+	}
+	if got.conn == nil {
+		t.Fatal("defaultRsyncSource().conn = nil, want the connection tracked alongside it")
+	}
+}
+
+// TestDefaultRsyncDestinationUsesUserHostSyntaxWhenTheSplitPartnerIsRemote
+// mirrors the source-side test above, against the split partner's own
+// panel instead.
+func TestDefaultRsyncDestinationUsesUserHostSyntaxWhenTheSplitPartnerIsRemote(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.newTabHere()
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0)
+	if r.panel.path != dir {
+		t.Fatalf("setup: r.panel.path = %q, want %q", r.panel.path, dir)
+	}
+	r.splitWithTab(1)
+
+	got := r.defaultRsyncDestination()
+
+	if want := "tester@example.com:/remote"; got.text != want {
+		t.Errorf("defaultRsyncDestination().text = %q, want %q", got.text, want)
+	}
+}
+
+// TestCurrentRsyncJobPropagatesThePortFromAnUntouchedRemoteDefault
+// pins the one thing rsync's own compact "user@host:path" syntax has
+// no room for at all (see rsync.Endpoint's own Port field doc
+// comment): a non-default port only ever travels through to the real
+// -e 'ssh -p PORT' flag when the field still reads exactly what was
+// defaulted from a live connection.
+func TestCurrentRsyncJobPropagatesThePortFromAnUntouchedRemoteDefault(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester", Port: 2222}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync() // resetRsyncForm defaults Source from r.panel, untouched from here on
+
+	job := r.currentRsyncJob()
+
+	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
+		t.Errorf("Source = %+v, want Host=example.com User=tester Port=2222", job.Source)
+	}
+	if !strings.Contains(job.Command(), "'-e' 'ssh -p 2222'") {
+		t.Errorf("Command() = %q, want it to carry the connection's own non-default port via -e", job.Command())
+	}
+}
+
+// TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort
+// is the flip side: once the user has typed something different into
+// the field, the port can no longer be assumed — the same reason a
+// bare `ssh host` typed by hand doesn't know a non-standard port
+// either.
+func TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester", Port: 2222}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync()
+	r.rsyncSourceField.SetText("tester@example.com:/remote/elsewhere") // edited: different path than what was defaulted
+
+	job := r.currentRsyncJob()
+
+	if job.Source.Port != 0 {
+		t.Errorf("Source.Port = %d, want 0 (no port known for hand-typed text)", job.Source.Port)
+	}
+	if job.Source.Path != "tester@example.com:/remote/elsewhere" {
+		t.Errorf("Source.Path = %q, want the whole typed string verbatim (Host unset)", job.Source.Path)
+	}
+}
+
+func TestRsyncRelayHintOnlyAppearsWhenBothEndpointsAreRemote(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	remote := rsync.Endpoint{Host: "example.com", Path: "/x"}
+	local := rsync.Endpoint{Path: "/x"}
+
+	cases := []struct {
+		name                string
+		source, destination rsync.Endpoint
+		wantHint            bool
+	}{
+		{"both remote", remote, remote, true},
+		{"source only", remote, local, false},
+		{"destination only", local, remote, false},
+		{"both local", local, local, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			job := rsync.Job{Source: c.source, Destination: c.destination}
+			got := rsyncRelayHint(job, theme) != ""
+			if got != c.wantHint {
+				t.Errorf("rsyncRelayHint non-empty = %v, want %v", got, c.wantHint)
+			}
+		})
+	}
+}
+
+// TestRsyncRelayHintAlsoCatchesHandTypedRemoteSyntax pins that the
+// hint isn't limited to connections this project itself resolved —
+// typing a remote address straight into Source/Destination for a host
+// never connected to via the Connect dialog at all is common on its
+// own, and the relay warning should still fire for it.
+func TestRsyncRelayHintAlsoCatchesHandTypedRemoteSyntax(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	typed := rsync.Endpoint{Path: "tester@example.com:/data"} // Host unset — never went through a live connection
+	local := rsync.Endpoint{Path: "/data/with:colon/deep/inside"}
+
+	if got := rsyncRelayHint(rsync.Job{Source: typed, Destination: typed}, theme); got == "" {
+		t.Error("rsyncRelayHint = \"\", want the warning for two hand-typed remote addresses")
+	}
+	if got := rsyncRelayHint(rsync.Job{Source: local, Destination: typed}, theme); got != "" {
+		t.Errorf("rsyncRelayHint = %q, want no warning — the local path's own colon comes after a \"/\"", got)
+	}
+}
+
+func TestRenderRsyncPreviewShowsTheRelayHintForRemoteToRemote(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("tester@a.example.com:/src")
+	r.rsyncDestinationField.SetText("tester@b.example.com:/dst")
+
+	r.renderRsyncPreview()
+
+	got := r.rsyncHintView.GetText(true)
+	if !strings.Contains(got, "relayed through this machine") {
+		t.Errorf("hint text = %q, want the remote-to-remote relay warning", got)
+	}
+}
+
+func TestRenderRsyncPreviewHintIsBlankForLocalToRemote(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("/src")
+	r.rsyncDestinationField.SetText("tester@b.example.com:/dst")
+
+	r.renderRsyncPreview()
+
+	if got := r.rsyncHintView.GetText(true); got != "" {
+		t.Errorf("hint text = %q, want blank for a local source", got)
 	}
 }
 
