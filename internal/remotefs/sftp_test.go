@@ -339,6 +339,62 @@ func TestClientCreateMkdirRenameAndRemoveRoundTrip(t *testing.T) {
 	}
 }
 
+// TestClientCreateWritesALargeFileCorrectlyWithConcurrentWrites pins
+// that Dial's own UseConcurrentWrites(true) (see its own doc comment
+// on why: a real, user-reported case of copying between two machines
+// on the same LAN feeling far slower than the link itself could
+// explain, since a plain sequential Write waits for the server's own
+// ack before sending the next packet) doesn't corrupt a real,
+// multi-packet upload. A single Write call larger than pkg/sftp's own
+// 32KB max packet size is exactly what routes through its concurrent
+// write dispatch instead of the single-packet path every smaller
+// write already took before this — content coming back byte-for-byte
+// identical against this project's own real, hermetic test server is
+// the one thing a fake client's own in-memory buffer could never
+// actually prove.
+func TestClientCreateWritesALargeFileCorrectlyWithConcurrentWrites(t *testing.T) {
+	dir := t.TempDir()
+	addr := startTestSFTPServer(t, passwordServerConfig("tester", "s3cret"))
+	client, err := Dial(context.Background(), DialOptions{
+		Connection: Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth: AuthOptions{
+			IdentityFiles: []string{},
+			Password:      func() (string, error) { return "s3cret", nil },
+		},
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	want := make([]byte, 512*1024) // several times the 32KB max packet size
+	if _, err := rand.Read(want); err != nil {
+		t.Fatalf("rand.Read: %v", err)
+	}
+
+	filePath := filepath.Join(dir, "large.bin")
+	w, err := client.Create(filePath)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := w.Write(want); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	got, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("reading what should have been uploaded: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("large concurrent-write upload did not come back byte-for-byte identical")
+	}
+}
+
 // TestDiskUsageReturnsRealFiguresFromTheTestServersOwnFilesystem pins
 // the real, end-to-end path: pkg/sftp's simple *sftp.Server does
 // implement the statvfs@openssh.com extension on Linux (via a real

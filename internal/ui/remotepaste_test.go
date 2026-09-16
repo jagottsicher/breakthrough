@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -471,5 +472,106 @@ func TestFinishRemotePasteReloadsTheDestinationPanel(t *testing.T) {
 	}
 	if !found {
 		t.Error("panel was not reloaded after a successful paste — newfile.txt is missing from the table")
+	}
+}
+
+// plainReaderOnly hides everything about r except the plain io.Reader
+// method — several stdlib readers (bytes.Reader, strings.Reader,
+// bufio.Reader) implement WriteTo themselves, which would make a test
+// meant to exercise newProgressReader's *other*, non-WriterTo shape
+// accidentally take the WriterTo one instead.
+type plainReaderOnly struct{ r io.Reader }
+
+func (p plainReaderOnly) Read(b []byte) (int, error) { return p.r.Read(b) }
+
+// TestNewProgressReaderPreservesWriteToWhenTheSourceHasOne pins the
+// download-direction half of newProgressReader's own dispatch: a
+// source that already implements io.WriterTo (a remote download's own
+// *sftp.File, standing in for it here) must come back wrapped in a
+// value that *also* declares WriteTo, or io.Copy would never reach for
+// it — silently downgrading a download back to a plain read/write loop
+// instead of pkg/sftp's own concurrent-read fast path.
+func TestNewProgressReaderPreservesWriteToWhenTheSourceHasOne(t *testing.T) {
+	r := bytes.NewReader([]byte("hello"))
+
+	got := newProgressReader(r, func(int64) {})
+
+	if _, ok := got.(io.WriterTo); !ok {
+		t.Error("newProgressReader dropped WriteTo even though the underlying reader has one")
+	}
+}
+
+// TestNewProgressReaderHasNoWriteToWhenTheSourceHasNone is the upload-
+// direction flip side: a source with no WriteTo of its own (a local
+// os.File, standing in for it here via plainReaderOnly) must come back
+// as a value that *also* has none — declaring one unconditionally
+// would make io.Copy always prefer it over ever checking the
+// destination's own io.ReaderFrom, which is exactly the fast path an
+// upload to a remote connection needs (see remotefs.Dial's own
+// UseConcurrentWrites).
+func TestNewProgressReaderHasNoWriteToWhenTheSourceHasNone(t *testing.T) {
+	r := plainReaderOnly{r: bytes.NewReader([]byte("hello"))}
+
+	got := newProgressReader(r, func(int64) {})
+
+	if _, ok := got.(io.WriterTo); ok {
+		t.Error("newProgressReader added a WriteTo the underlying reader never had — this would hide the destination's own ReaderFrom fast path from io.Copy")
+	}
+}
+
+// TestNewProgressReaderReportsProgressThroughTheWriteToPath pins that
+// progress still works on the WriterTo-preserving shape specifically —
+// TestPasteOneRemoteReportsTheRealCurrentFileSize already covers the
+// plain shape end to end, but that one never exercises a source with a
+// WriteTo of its own at all.
+func TestNewProgressReaderReportsProgressThroughTheWriteToPath(t *testing.T) {
+	content := []byte("hello world")
+	r := bytes.NewReader(content)
+	var reported int64
+	pr := newProgressReader(r, func(n int64) { reported = n })
+
+	var buf bytes.Buffer
+	n, err := pr.(io.WriterTo).WriteTo(&buf)
+
+	if err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if n != int64(len(content)) {
+		t.Errorf("WriteTo returned %d, want %d", n, len(content))
+	}
+	if buf.String() != string(content) {
+		t.Errorf("buf = %q, want %q", buf.String(), string(content))
+	}
+	if reported != int64(len(content)) {
+		t.Errorf("onBytes last reported %d, want %d", reported, len(content))
+	}
+}
+
+// TestPasteTransferFileTruncatesTheDestinationOnAWriteError pins the
+// real risk remotefs.Dial's own UseConcurrentWrites trades in for
+// speed (see its own doc comment): a failed transfer must leave the
+// destination visibly, unambiguously incomplete — truncated to empty —
+// rather than a "hole" a later, since-succeeded chunk could otherwise
+// leave sitting at the wrong offset with no earlier data underneath.
+func TestPasteTransferFileTruncatesTheDestinationOnAWriteError(t *testing.T) {
+	localDir := t.TempDir()
+	srcPath := filepath.Join(localDir, "big.bin")
+	if err := os.WriteFile(srcPath, bytes.Repeat([]byte("x"), 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}, writeFailAfter: 50}
+	src := transferSide{client: nil}
+	dest := transferSide{client: client}
+
+	err := pasteTransferFile(src, dest, srcPath, "/remote/big.bin", nil)
+
+	if err == nil {
+		t.Fatal("pasteTransferFile did not report the forced write failure")
+	}
+	if size, ok := client.truncated["/remote/big.bin"]; !ok || size != 0 {
+		t.Errorf("Truncate called with (ok=%v) %d, want Truncate(0) after a failed transfer", ok, size)
+	}
+	if content, ok := client.content["/remote/big.bin"]; ok && len(content) != 0 {
+		t.Errorf("destination content = %q, want empty after Truncate(0) ran before Close committed it", content)
 	}
 }
