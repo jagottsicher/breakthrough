@@ -667,7 +667,23 @@ hand — never reimplements any of rsync's own transfer logic, the same
   command that can permanently delete files (see `--delete` below) is
   worse than asking. Both fields accept a plain local path, or a
   `user@host:path`/`host:path` remote one exactly the way a real
-  `rsync` or `ssh` command line would.
+  `rsync` or `ssh` command line would — typed by hand, or filled in for
+  you automatically: if the tab a field defaults from is currently
+  connected via the Connect dialog (see [Remote connections
+  (SFTP)](#remote-connections-sftp)), the field opens already showing
+  `user@host:path` instead of a bare local one, and that connection's
+  own port (if it isn't the default 22) travels through to a real
+  `-e 'ssh -p PORT'` flag automatically — something rsync's own compact
+  `host:path` syntax has no room to express on its own, and which is
+  otherwise lost the moment you edit the field to anything other than
+  exactly what was filled in (there's no way to know a non-default port
+  from typed text alone, the same as a bare `ssh host` wouldn't either).
+  Syncing between two remote endpoints at once — whether both came from
+  connected tabs, one did, or both were typed by hand — shows a warning
+  line beneath the preview: `rsync -e ssh` has no server-to-server
+  transfer mode of its own, so every byte still relays through this
+  machine over two separate ssh connections, never directly between the
+  two remote hosts, which can matter a lot over a slow local link.
 - **Copy the folder's contents in (not the folder itself)** is the one
   choice this dialog makes explicit rather than implicit: real `rsync`
   decides this from whether the *source* path ends in a trailing

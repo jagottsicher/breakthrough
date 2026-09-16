@@ -428,14 +428,25 @@ terminal.
   impossible to get wrong by accident — an explicit "Copy the folder's
   contents in (not the folder itself)" switch, instead of leaving that
   distinction to whether a trailing "/" happened to be typed on the
-  source path the way a bare `rsync` invocation always has. A live
-  preview line shows the exact command that would run, `--delete`
-  called out in its own warning color the moment it's turned on, right
-  up until "Run" hands it to a real `rsync` process with the real
-  terminal attached — the same way the embedded bash line already runs
-  anything that benefits from one, so `--info=progress2`'s own live
-  progress line renders correctly. See
-  [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
+  source path the way a bare `rsync` invocation always has. Source/
+  Destination already know about a tab's own SFTP connection: pre-
+  filled as `user@host:path` instead of a bare local one when that tab
+  is currently connected, its own port carried through to a real
+  `-e 'ssh -p PORT'` flag rather than guessed — the same applies to an
+  address typed straight in by hand for a host never connected to via
+  the Connect dialog at all, recognized by rsync's own real
+  disambiguation rule (a colon before the first "/" names a host).
+  Syncing between two remote hosts at once shows a warning line: `rsync
+  -e ssh` has no server-to-server mode of its own, every byte still
+  relays through this machine over two separate ssh connections, never
+  directly between the two remote ends. A live preview line shows the
+  exact command that would run, `--delete` called out in its own
+  warning color the moment it's turned on, right up until "Run" hands
+  it to a real `rsync` process with the real terminal attached — the
+  same way the embedded bash line already runs anything that benefits
+  from one, so `--info=progress2`'s own live progress line renders
+  correctly. See [docs/user-guide.md](docs/user-guide.md#rsync) for the
+  full picture.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
