@@ -2210,10 +2210,15 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 
 // clampToScreen is clampToPanel's own logic, bounded against the whole
 // screen (Root's own rect) instead of just the current panel's inner
-// rect — used only by the Help overlay (see helpSize), a read-only
-// reference deliberately allowed to span wider than one panel. Every
-// other overlay in this app stays within one panel — see clampToPanel's
-// own doc comment.
+// rect — every dialog genuinely meant to sit in the middle of the
+// whole terminal uses this one (Help, BatchRename, Options, the image/
+// text viewer, ...), so a wide one still reads as centered in split
+// view instead of being squeezed into (and, since it typically doesn't
+// fit, visibly shoved to one edge of) whichever pane happens to be
+// active. clampToPanel is for the opposite case: an overlay that's
+// deliberately anchored to something inside the active panel itself
+// (a right-clicked row, a dropdown under a header button, ...), where
+// following that panel around really is the point.
 func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
 	_, _, sw, sh := r.GetRect()
 	if sw <= 0 || sh <= 0 {
@@ -2949,7 +2954,12 @@ func (r *Root) openPrompt(label, prefill string, onSubmit func(text string)) {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	x, y, width, clampedHeight := r.clampToPanel(x, y, width, height)
+	// clampToScreen, not clampToPanel: this prompt is centered on the
+	// whole terminal a moment above, so clamping it back down to just
+	// the active panel's own width in split view would squeeze it —
+	// visibly shoved against one edge instead of staying centered, a
+	// real, reported bug.
+	x, y, width, clampedHeight := r.clampToScreen(x, y, width, height)
 
 	r.prompt.SetRect(x, y, width, clampedHeight)
 	r.showOverlay(promptPage, r.prompt)

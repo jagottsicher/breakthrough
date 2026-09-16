@@ -901,14 +901,16 @@ func (r *Root) openSearch() {
 }
 
 // resizeSearchPages centers the dialog's own fixed searchFormWidth/
-// Height on screen, clamped to the current panel like every other
-// overlay in this app (see clampToPanel) — results no longer resize
-// this overlay at all now that they show directly in the panel's own
-// area instead (see Panel.showSearchResults), so there's only ever
-// this one size to apply.
+// Height on the whole screen, clamped the same way (see clampToScreen)
+// — clamping to just the active panel instead used to visibly shove
+// this dialog against one edge in split view rather than keeping it
+// centered, a real, reported bug. Results no longer resize this
+// overlay at all now that they show directly in the panel's own area
+// instead (see Panel.showSearchResults), so there's only ever this one
+// size to apply.
 func (r *Root) resizeSearchPages() {
 	x, y := r.centeredOnScreen(searchFormWidth, searchFormHeight)
-	x, y, w, h := r.clampToPanel(x, y, searchFormWidth, searchFormHeight)
+	x, y, w, h := r.clampToScreen(x, y, searchFormWidth, searchFormHeight)
 	r.searchPages.SetRect(x, y, w, h)
 	r.searchTitleBar.SetRect(x, y, w, 1)
 }

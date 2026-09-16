@@ -176,6 +176,30 @@ func TestOpenSearchHasATitleBar(t *testing.T) {
 	}
 }
 
+// TestOpenSearchStaysCenteredOnTheWholeScreenInSplitView pins a real,
+// reported bug: resizeSearchPages centers itself against the whole
+// screen (centeredOnScreen) but used to clamp the result down to just
+// the active panel's own, narrower width in split view — visibly
+// shoving it against one edge instead of keeping it centered.
+// searchFormWidth (84) comfortably exceeds one pane's own share of a
+// 100-wide split screen, which is exactly what lets this test tell the
+// two behaviors apart.
+func TestOpenSearchStaysCenteredOnTheWholeScreenInSplitView(t *testing.T) {
+	const screenWidth, screenHeight = 100, 40
+	r := newTestRootInSplitView(t, screenWidth, screenHeight)
+
+	r.openSearch()
+
+	x, _, width, _ := r.searchPages.GetRect()
+	if width != searchFormWidth {
+		t.Fatalf("search dialog width = %d, want %d — clamped down to fit inside the active pane's own width instead of staying its own full size across the whole screen", width, searchFormWidth)
+	}
+	wantX := (screenWidth - width) / 2
+	if x != wantX {
+		t.Errorf("search dialog x = %d, want %d (centered on the whole %d-wide screen, not just the active pane's own half)", x, wantX, screenWidth)
+	}
+}
+
 func TestCloseSearchHidesOverlay(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
