@@ -477,73 +477,197 @@ func TestFinishRemotePasteReloadsTheDestinationPanel(t *testing.T) {
 
 // plainReaderOnly hides everything about r except the plain io.Reader
 // method — several stdlib readers (bytes.Reader, strings.Reader,
-// bufio.Reader) implement WriteTo themselves, which would make a test
-// meant to exercise newProgressReader's *other*, non-WriterTo shape
-// accidentally take the WriterTo one instead.
+// bufio.Reader) and *os.File itself implement WriteTo, which would
+// make a test meant to exercise the no-fast-path case accidentally
+// take a fast one instead.
 type plainReaderOnly struct{ r io.Reader }
 
 func (p plainReaderOnly) Read(b []byte) (int, error) { return p.r.Read(b) }
 
-// TestNewProgressReaderPreservesWriteToWhenTheSourceHasOne pins the
-// download-direction half of newProgressReader's own dispatch: a
-// source that already implements io.WriterTo (a remote download's own
-// *sftp.File, standing in for it here) must come back wrapped in a
-// value that *also* declares WriteTo, or io.Copy would never reach for
-// it — silently downgrading a download back to a plain read/write loop
-// instead of pkg/sftp's own concurrent-read fast path.
-func TestNewProgressReaderPreservesWriteToWhenTheSourceHasOne(t *testing.T) {
-	r := bytes.NewReader([]byte("hello"))
-
-	got := newProgressReader(r, func(int64) {})
-
-	if _, ok := got.(io.WriterTo); !ok {
-		t.Error("newProgressReader dropped WriteTo even though the underlying reader has one")
-	}
+// fakeReaderFromWriter is a plain io.Writer that also implements
+// io.ReaderFrom, recording whether ReadFrom was actually called — the
+// only way a test can tell transferWithProgress reached for it
+// directly instead of falling back to a plain io.Copy loop, since both
+// produce byte-identical output either way.
+type fakeReaderFromWriter struct {
+	bytes.Buffer
+	readFromCalled bool
 }
 
-// TestNewProgressReaderHasNoWriteToWhenTheSourceHasNone is the upload-
-// direction flip side: a source with no WriteTo of its own (a local
-// os.File, standing in for it here via plainReaderOnly) must come back
-// as a value that *also* has none — declaring one unconditionally
-// would make io.Copy always prefer it over ever checking the
-// destination's own io.ReaderFrom, which is exactly the fast path an
-// upload to a remote connection needs (see remotefs.Dial's own
-// UseConcurrentWrites).
-func TestNewProgressReaderHasNoWriteToWhenTheSourceHasNone(t *testing.T) {
-	r := plainReaderOnly{r: bytes.NewReader([]byte("hello"))}
-
-	got := newProgressReader(r, func(int64) {})
-
-	if _, ok := got.(io.WriterTo); ok {
-		t.Error("newProgressReader added a WriteTo the underlying reader never had — this would hide the destination's own ReaderFrom fast path from io.Copy")
-	}
+func (w *fakeReaderFromWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.readFromCalled = true
+	return w.Buffer.ReadFrom(r)
 }
 
-// TestNewProgressReaderReportsProgressThroughTheWriteToPath pins that
-// progress still works on the WriterTo-preserving shape specifically —
-// TestPasteOneRemoteReportsTheRealCurrentFileSize already covers the
-// plain shape end to end, but that one never exercises a source with a
-// WriteTo of its own at all.
-func TestNewProgressReaderReportsProgressThroughTheWriteToPath(t *testing.T) {
-	content := []byte("hello world")
-	r := bytes.NewReader(content)
-	var reported int64
-	pr := newProgressReader(r, func(n int64) { reported = n })
+// fakeWriterToReader is plainReaderOnly's own opposite: a plain
+// io.Reader that also implements io.WriterTo, recording whether
+// WriteTo was actually called.
+type fakeWriterToReader struct {
+	r              *bytes.Reader
+	writeToCalled  bool
+	underlyingRead bool
+}
 
-	var buf bytes.Buffer
-	n, err := pr.(io.WriterTo).WriteTo(&buf)
+func (r *fakeWriterToReader) Read(b []byte) (int, error) {
+	r.underlyingRead = true
+	return r.r.Read(b)
+}
+
+func (r *fakeWriterToReader) WriteTo(w io.Writer) (int64, error) {
+	r.writeToCalled = true
+	return r.r.WriteTo(w)
+}
+
+// TestTransferWithProgressUsesTheDestinationsOwnReadFromForARemoteDestination
+// pins the real, live-reported regression this whole dispatch exists
+// to fix: Go's own *os.File implements io.WriterTo itself now (for its
+// own sendfile/copy_file_range fast path), so a plain io.Copy call
+// always prefers a real local source's own WriteTo over ever checking
+// a remote destination's own ReaderFrom at all — permanently hiding
+// pkg/sftp's own concurrent-write dispatch for the one direction
+// (uploading a real local file) it matters most for. src here is
+// plainReaderOnly specifically to rule that confound out: no WriteTo
+// of its own to accidentally win regardless of the dispatch under
+// test.
+// r implements io.WriterTo itself here — standing in for what a real
+// local *os.File source always does now (Go's own sendfile/
+// copy_file_range fast path) — and onBytes is nil, deliberately
+// leaving r unwrapped: with progress tracking on, transferWithProgress's
+// own progressReader wrapper happens to hide that WriteTo from io.Copy's
+// dispatch regardless of which branch runs, incidentally reaching
+// dest's own ReadFrom either way and masking whether the explicit
+// dest.client check actually did anything. Without it, io.Copy would
+// call r's own WriteTo first — exactly the real, live-reported bug
+// this dispatch exists to fix — so this is the one setup that
+// genuinely tells the two branches apart.
+func TestTransferWithProgressUsesTheDestinationsOwnReadFromForARemoteDestination(t *testing.T) {
+	src := transferSide{client: nil}
+	dest := transferSide{client: &fakeRemoteClient{}}
+	r := &fakeWriterToReader{r: bytes.NewReader([]byte("hello world"))}
+	w := &fakeReaderFromWriter{}
+
+	err := transferWithProgress(src, dest, r, w, nil)
 
 	if err != nil {
-		t.Fatalf("WriteTo: %v", err)
+		t.Fatalf("transferWithProgress: %v", err)
 	}
-	if n != int64(len(content)) {
-		t.Errorf("WriteTo returned %d, want %d", n, len(content))
+	if !w.readFromCalled {
+		t.Error("destination's own ReadFrom was never called — fell back to a plain copy loop instead")
 	}
-	if buf.String() != string(content) {
-		t.Errorf("buf = %q, want %q", buf.String(), string(content))
+	if r.writeToCalled {
+		t.Error("source's own WriteTo was called instead — this is the real bug: io.Copy's own dispatch always prefers it over the destination's own ReadFrom, the moment the source happens to implement WriteTo (a real local os.File always does)")
 	}
-	if reported != int64(len(content)) {
-		t.Errorf("onBytes last reported %d, want %d", reported, len(content))
+	if w.String() != "hello world" {
+		t.Errorf("content = %q, want %q", w.String(), "hello world")
+	}
+}
+
+// TestTransferWithProgressUsesTheSourcesOwnWriteToForARemoteSource is
+// the download-direction flip side: a remote source's own WriteTo
+// (pkg/sftp's own concurrent-read dispatch, on by default) must still
+// be reached directly too.
+func TestTransferWithProgressUsesTheSourcesOwnWriteToForARemoteSource(t *testing.T) {
+	src := transferSide{client: &fakeRemoteClient{}}
+	dest := transferSide{client: nil}
+	r := &fakeWriterToReader{r: bytes.NewReader([]byte("hello world"))}
+	var buf bytes.Buffer
+	var reported int64
+
+	err := transferWithProgress(src, dest, r, &buf, func(n int64) { reported = n })
+
+	if err != nil {
+		t.Fatalf("transferWithProgress: %v", err)
+	}
+	if !r.writeToCalled {
+		t.Error("source's own WriteTo was never called — fell back to a plain copy loop instead")
+	}
+	if buf.String() != "hello world" {
+		t.Errorf("content = %q, want %q", buf.String(), "hello world")
+	}
+	if reported != 11 {
+		t.Errorf("onBytes last reported %d, want 11", reported)
+	}
+}
+
+// TestTransferWithProgressFallsBackToPlainCopyWhenNeitherSideHasAFastPath
+// pins the safe fallback: a remote destination whose own writer has no
+// ReadFrom of its own (fakeRemoteWriteCloser, this project's own
+// in-memory Client double, standing in for a hypothetical
+// remotefs.Client implementation that doesn't expose one either) must
+// still transfer correctly via a plain io.Copy, not panic on a failed
+// type assertion.
+func TestTransferWithProgressFallsBackToPlainCopyWhenNeitherSideHasAFastPath(t *testing.T) {
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+	src := transferSide{client: nil}
+	dest := transferSide{client: client}
+	r := plainReaderOnly{r: bytes.NewReader([]byte("hello world"))}
+	w, err := client.Create("/remote/f.txt")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	var reported int64
+
+	err = transferWithProgress(src, dest, r, w, func(n int64) { reported = n })
+
+	if err != nil {
+		t.Fatalf("transferWithProgress: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := string(client.content["/remote/f.txt"]); got != "hello world" {
+		t.Errorf("content = %q, want %q", got, "hello world")
+	}
+	if reported != 11 {
+		t.Errorf("onBytes last reported %d, want 11", reported)
+	}
+}
+
+// TestProgressReaderStatForwardsToTheUnderlyingReadersOwnSize pins a
+// real, live-reported regression: pkg/sftp's own concurrent-write
+// ReadFrom decides how many workers to use — or whether to bother with
+// concurrency at all — by checking whether the reader it was given
+// exposes a size, via (among others) this exact Stat interface, the
+// one a local *os.File source actually satisfies. Without forwarding
+// it, every real upload through this reader looked size-*un*known to
+// pkg/sftp and silently fell straight back to the single-worker
+// sequential path regardless of remotefs.Dial's own
+// UseConcurrentWrites — the observed symptom was several files copied
+// in the same job, only the first "fast", every one after it back to
+// the old slow behavior.
+func TestProgressReaderStatForwardsToTheUnderlyingReadersOwnSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sized.bin")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("x"), 12345), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+
+	pr := &progressReader{r: f, onBytes: func(int64) {}}
+
+	info, err := pr.Stat()
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Size() != 12345 {
+		t.Errorf("Stat().Size() = %d, want 12345", info.Size())
+	}
+}
+
+// TestProgressReaderStatErrorsWithoutPanickingWhenTheSourceHasNone
+// pins the safe fallback for a reader with no Stat of its own (not
+// every remote Client.Open result necessarily has one) — pkg/sftp's
+// own type switch already treats a Stat error exactly the same as no
+// Stat method at all (see its own doc comment), so this only needs to
+// report the failure, never panic trying to reach through to nothing.
+func TestProgressReaderStatErrorsWithoutPanickingWhenTheSourceHasNone(t *testing.T) {
+	pr := &progressReader{r: plainReaderOnly{r: bytes.NewReader([]byte("hi"))}, onBytes: func(int64) {}}
+
+	if _, err := pr.Stat(); err == nil {
+		t.Error("Stat() = nil error, want one — the underlying reader has no Stat of its own to forward to")
 	}
 }
 
