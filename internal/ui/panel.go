@@ -3110,6 +3110,24 @@ func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
 	return row, ref.path, true
 }
 
+// rowRefForPath finds path's own already-loaded rowRef, if it's
+// currently a visible row — a linear scan, the same cost
+// SelectedPathsInDisplayOrder already pays for the identical reason:
+// this project has no separate path-to-row index, and a panel's own
+// row count never gets large enough for that to matter. Returns
+// ok=false for a selected-but-currently-filtered-out path the same way
+// that function's own fallback branch already accepts as a real
+// possibility — callers here only ever use this for a cheap "is it a
+// directory" hint and have a safe default to fall back on.
+func (p *Panel) rowRefForPath(path string) (rowRef, bool) {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.path == path {
+			return ref, true
+		}
+	}
+	return rowRef{}, false
+}
+
 // rowIndexAt returns the row index at screen position (x, y), or
 // ok=false if that position doesn't correspond to a populated row.
 // Unlike RowAt, this doesn't exclude "..": a caller working with a
