@@ -58,14 +58,17 @@ var rsyncFlagOrder = []string{rsyncLabelCopyContents, rsyncLabelArchive, rsyncLa
 func (r *Root) openRsync() {
 	r.resetRsyncForm()
 
-	// height fits rsyncTitleBar's own row plus rsyncContentLayout's
-	// stacked widgets (rsyncForm's four fields, rsyncFlagsList's five
-	// toggles, rsyncPreviewView's own row, rsyncSpacer, rsyncButtons) —
-	// checked against a real render (see this dialog's own live-tmux
-	// verification), not guessed; a shorter value silently clips the
-	// bottom rows, the same lesson every other dialog in this app's
-	// own history already recorded once.
-	width, height := 86, 24
+	// height is rsyncTitleBar's own row (1) plus newRsyncContentLayout's
+	// own stacked rows (9 + 5 + 2 + 1 + 1 + 1 = 19), checked against a
+	// real render (see this dialog's own live-tmux verification): a
+	// shorter value silently clips the bottom rows, the same lesson
+	// every other dialog in this app's own history already recorded
+	// once, but a taller one leaves genuinely blank rows of its own
+	// rect unfilled at the bottom instead — none of this dialog's own
+	// Flex containers paint a background across space no child actually
+	// occupies, so those leftover rows show whatever the panel
+	// underneath last drew there rather than empty space.
+	width, height := 86, 20
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4

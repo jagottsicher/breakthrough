@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -26,6 +27,47 @@ func newTestRootForRsync(t *testing.T) (r *Root, dir string) {
 	}
 	r.SetRect(0, 0, 200, 50) // openRsync sizes/centers against this
 	return r, dir
+}
+
+// TestOpenRsyncFillsItsEntireRectSoNothingBehindItShowsThrough guards
+// against openRsync's own height drifting out of sync with
+// newRsyncContentLayout's real row count: every child there is a fixed-
+// size Flex item (no proportional one to soak up leftover space), so a
+// height taller than the content actually needs leaves genuine gaps at
+// the bottom of the dialog's own rect that no widget ever paints —
+// gaps that then show whatever the underlying panel last drew there
+// instead of the dialog's own background. Filling the whole screen with
+// a sentinel rune before Draw and checking that none of it survives
+// inside the dialog's own rect catches exactly that regression,
+// regardless of which literal height value openRsync happens to use.
+func TestOpenRsyncFillsItsEntireRectSoNothingBehindItShowsThrough(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(200, 50)
+
+	const sentinel = "X"
+	for y := 0; y < 50; y++ {
+		for x := 0; x < 200; x++ {
+			screen.SetContent(x, y, 'X', nil, tcell.StyleDefault)
+		}
+	}
+
+	r.rsyncLayout.Draw(screen)
+
+	x, y, width, height := r.rsyncLayout.GetRect()
+	for row := y; row < y+height; row++ {
+		for col := x; col < x+width; col++ {
+			if ch, _, _ := screen.Get(col, row); ch == sentinel {
+				t.Fatalf("cell (%d,%d) inside the dialog's own rect (%d,%d,%d,%d) still shows the sentinel — this row is never painted by any widget", col, row, x, y, width, height)
+			}
+		}
+	}
 }
 
 func TestOpenRsyncOpensTheDialogWithFormItems(t *testing.T) {
