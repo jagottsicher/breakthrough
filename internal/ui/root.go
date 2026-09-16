@@ -225,6 +225,20 @@ type Root struct {
 	toolboxTable    *tview.Table
 	toolboxInput    *tview.InputField
 
+	// The Mounts screen (see mounts.go) — a third full-screen catalog,
+	// kept deliberately separate from the Toolbox rather than folded in
+	// as one more entry there, per the user's own explicit request:
+	// this one shows live, structured data (with a computed "would this
+	// survive a reboot" column) rather than a list of commands to run.
+	// mountsEntries/mountsErr hold the last read result, refreshed by
+	// reloadMounts (on open, and on "r").
+	mountsLayout   *tview.Flex
+	mountsTitleBar *tview.TextView
+	mountsHint     *tview.TextView
+	mountsTable    *tview.Table
+	mountsEntries  []mountEntry
+	mountsErr      error
+
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
 	// package keeps meaning the right one without knowing tabs exist.
@@ -1563,6 +1577,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shape as Options, built once here and repopulated on every open.
 	r.newToolboxScreen()
 
+	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
+	// catalog, same build-once/repopulate-on-open shape.
+	r.newMountsScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -1683,6 +1701,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// just above gives.
 	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
 	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
+	// resize=true: the Mounts screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox screens' own
+	// comments above give.
+	r.AddPage(mountsPage, r.mountsLayout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
