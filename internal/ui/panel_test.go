@@ -2203,6 +2203,38 @@ func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
 	}
 }
 
+// TestLoadClampsTheCursorAfterTheRowItWasOnIsDeleted pins a real,
+// reported bug: Table.Clear() (see load's own doc comment on why)
+// never touches tview's own internal selection index, only cell
+// content — so deleting the row the cursor was actually on, then
+// reloading the same directory in place (exactly what Move to
+// Trash/Remove already does), used to leave that index pointing past
+// the end of the now-shorter table. Nothing then highlighted any row
+// at all until some unrelated keypress happened to nudge tview's own
+// Select()-driven clamp into re-validating it — reported as "tab focus
+// away and back after deleting a file, and nothing is selected until
+// pressing Down once first".
+func TestLoadClampsTheCursorAfterTheRowItWasOnIsDeleted(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.panel.focusRow(4) // banana.txt, the last row
+	if err := os.Remove(filepath.Join(dir, "banana.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatalf("load (refresh): %v", err)
+	}
+
+	row, _ := r.panel.table.GetSelection()
+	if last := r.panel.table.GetRowCount() - 1; row != last {
+		t.Errorf("selected row after deleting the row the cursor was on = %d, want the new last row %d", row, last)
+	}
+}
+
 // TestShowSearchResultsClearsTableAndEntersSearchMode pins
 // showSearchResults' own basic contract: an empty table, searchMode
 // true, p.path itself left completely untouched (see its own doc
