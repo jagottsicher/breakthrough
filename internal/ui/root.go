@@ -538,6 +538,7 @@ type Root struct {
 	rsyncSpacer           *tview.Box
 	rsyncCancelBtn        *tview.Button
 	rsyncRunBtn           *tview.Button
+	rsyncRunBackgroundBtn *tview.Button
 	rsyncButtons          *tview.Flex
 	rsyncTitleBar         *tview.TextView
 	rsyncContentLayout    *tview.Flex
@@ -1167,6 +1168,17 @@ type Root struct {
 	// pasteJob itself only ever running one job at a time; empty
 	// whenever nothing is waiting.
 	pasteQueue []queuedPaste
+
+	// rsyncJob is the currently-running backgrounded rsync, if any (see
+	// startRsyncBackground's own doc comment in rsyncjob.go) — entirely
+	// independent of pasteJob above: the two never share state, a lock,
+	// or a queue, since a Paste and a background rsync are two separate
+	// process trees with nothing to serialize between them. nil whenever
+	// no background rsync is currently running.
+	rsyncJob *rsyncJob
+	// rsyncQueue mirrors pasteQueue for a background rsync asked for
+	// while one is already running — see advanceRsyncQueue.
+	rsyncQueue []queuedRsync
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
@@ -2417,8 +2429,18 @@ func (r *Root) RequestCancel() {
 		r.hideOverlay()
 		return
 	}
-	if r.pasteJob != nil {
-		r.cancelPasteJob()
+	// Stops both a running Paste and a backgrounded rsync in the same
+	// press, if both happen to be running at once — they're two
+	// entirely independent background jobs (see rsyncjob.go's own
+	// package doc comment), so "cancel whatever's running" naturally
+	// means both, not whichever one happened to be checked first.
+	if r.pasteJob != nil || r.rsyncJob != nil {
+		if r.pasteJob != nil {
+			r.cancelPasteJob()
+		}
+		if r.rsyncJob != nil {
+			r.cancelRsyncJob()
+		}
 		r.refreshStatusBar()
 		return
 	}

@@ -504,6 +504,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
 	styleButton(r.rsyncCancelBtn, theme)
 	styleButton(r.rsyncRunBtn, theme)
+	styleButton(r.rsyncRunBackgroundBtn, theme)
 	r.rsyncTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.rsyncTitleBar.SetTextColor(theme.TextColor)
 

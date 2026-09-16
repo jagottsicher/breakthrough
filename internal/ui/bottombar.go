@@ -317,6 +317,16 @@ func (r *Root) buildStatusBar() string {
 		}
 	}
 
+	// A backgrounded rsync's own progress -- entirely independent of the
+	// paste/clipboard segment just above, since the two can genuinely be
+	// running at the same time (see rsyncjob.go's own package doc
+	// comment): both get their own segment rather than one having to
+	// yield to the other the way paste and the clipboard indicator do.
+	if r.rsyncJob != nil {
+		write(rsyncProgressText(r.rsyncJob, len(r.rsyncQueue)))
+		sep()
+	}
+
 	// Every segment from here on is independently toggle-able (Options
 	// → Status bar — see optioncatalog.go), per the user's own explicit
 	// request: someone who never looks at load average, say, gets to
@@ -613,6 +623,44 @@ func pasteProgressText(job *pasteJob, queued int) string {
 		b.WriteByte(' ')
 		b.WriteString(filepath.Base(*current))
 	}
+
+	if queued > 0 {
+		fmt.Fprintf(&b, " (+%d queued)", queued)
+	}
+	return b.String()
+}
+
+// rsyncProgressText renders buildStatusBar's own backgrounded-rsync
+// segment (see rsyncjob.go's own package doc comment) — a spinner-free
+// counterpart to pasteProgressText, since rsync's own --info=progress2
+// output already supplies a discrete update signal (each parsed line —
+// see watchRsyncProgress) instead of needing a separate ticker just to
+// look alive between updates the way byte-copy progress does. "starting
+// ..." for job.percent's own -1 sentinel (rsync is still connecting or
+// building its file list, before its first progress line has arrived
+// at all); once a real percentage exists, job.detail carries whatever
+// rsync itself already printed after it (rate, elapsed time, and its
+// own "(xfr#i, to-chk=j/k)" transfer count) completely verbatim, the
+// same "show exactly what the real tool says" principle the dialog's
+// own live preview line already follows.
+func rsyncProgressText(job *rsyncJob, queued int) string {
+	var b strings.Builder
+	b.WriteString("rsync ")
+
+	percent := job.percent.Load()
+	if percent < 0 {
+		b.WriteString("starting… ")
+	} else {
+		frac := float64(percent) / 100
+		fmt.Fprintf(&b, "%d%% ", percent)
+		b.WriteString(pasteDualBar(frac, frac, pasteProgressBarWidth))
+		b.WriteByte(' ')
+		if detail := job.detail.Load(); detail != nil && *detail != "" {
+			b.WriteString(*detail)
+			b.WriteByte(' ')
+		}
+	}
+	b.WriteString(job.label)
 
 	if queued > 0 {
 		fmt.Fprintf(&b, " (+%d queued)", queued)
