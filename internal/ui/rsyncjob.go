@@ -140,7 +140,15 @@ func (r *Root) startRsyncBackground(job rsync.Job, label string) {
 func (r *Root) reallyStartRsyncBackground(job rsync.Job, label string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, userShell(), fullScreenShellArgs(job.Command())...)
-	cmd.Dir = r.panel.path
+	// Only ever a real local directory — see runShellCommandFullScreen's
+	// own doc comment for why r.panel.path is skipped outright while the
+	// active panel is a remote connection: it's a path on that other
+	// machine, and passing it here would make the child's own chdir fail
+	// before rsync ever starts, misreported in a way that reads exactly
+	// like rsync itself couldn't find its own remote source file.
+	if r.panel.remote == nil {
+		cmd.Dir = r.panel.path
+	}
 	// Setsid: a real, live-tested finding, not a guess — without this,
 	// the child (an *interactive* shell, per fullScreenShellArgs' own
 	// "-i") inherits breakthrough's own process group and controlling
