@@ -87,11 +87,6 @@
       "sha256": "6bda25db1728cba1b012f09459e12b064acfa6d7ae3c09b1883d172b1a251ff3"
     },
     {
-      "path": "bt",
-      "size": 19264564,
-      "sha256": "b6832cbe756255c4e74d733d67d9e6bcce01d955f45377e765231c462958222f"
-    },
-    {
       "path": "cmd/breakthrough/debug.go",
       "size": 2981,
       "sha256": "647a9963a0e05f643193f6cc8e36086c5beb46396b83b9939848d478622eba71"
@@ -30324,5 +30319,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "e83d079ef33a3442310d30c066a12876fc69eec19a4131c90f436f64fe7a512b"
+  "merkle_root": "f55fd6f39cef5b42dbc26e5d7c94b42aed8f64ffa4234182bcbcc8867c8a0673"
 }
