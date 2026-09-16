@@ -221,9 +221,13 @@ var helpText = strings.TrimLeft(`
   remote trash exists to move into instead). A remote-involving Paste
   shares the exact same Overwrite/Merge/Skip conflict dialog a local
   one has, rather than refusing outright the moment a destination
-  already exists; it doesn't yet preserve permissions/times, show
-  byte-accurate progress, or follow a symlink instead of skipping it —
-  all still local-only for now. Look and Edit
+  already exists; it doesn't yet preserve permissions/times or follow a
+  symlink instead of skipping it — still local-only for now. The
+  progress bar shows a real, live current-file size once it starts
+  copying a given file, the same as a local Paste, but the job-wide
+  byte total (and the ETA it drives) stays item-count only, since
+  sizing a whole remote tree up front costs a full recursive listing
+  this first version doesn't spend. Look and Edit
   stage a real local temp copy behind the scenes for the ordinary
   built-in viewer/external pager/$VISUAL/$EDITOR to use unchanged —
   Edit only uploads it back if it actually changed. Opening a zip/tar
