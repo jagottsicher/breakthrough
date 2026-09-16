@@ -347,6 +347,20 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
 	}
 
+	if r.mountsTable != nil {
+		r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
+		// fixed FocusedBackground just above follows.
+		r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.mountsTitleBar.SetTextColor(theme.TextColor)
+		r.mountsHint.SetBackgroundColor(theme.InputBackground)
+		r.mountsHint.SetTextColor(theme.MutedTextColor)
+
+		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
 		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)

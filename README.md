@@ -469,6 +469,15 @@ terminal.
   draggable tool window, non-modal so the Toolbox screen and the panel
   underneath both stay usable while it runs. See
   [docs/user-guide.md](docs/user-guide.md#toolbox) for the full catalog.
+- Mounts (`j` then `m`): a third full-screen catalog, kept deliberately
+  separate from the Toolbox above — a read-only, live table of every
+  currently mounted filesystem (real storage only, pseudo filesystems
+  like `proc`/`sysfs`/`tmpfs` left out), built from the real `findmnt`
+  command. Cross-references each mount's own target against `/etc/fstab`
+  to mark it "Persistent" (survives a reboot) or not (mounted by hand at
+  some point since), and flags bind mounts, so it doubles as a quick
+  answer to "what will still be here after I reboot this box?" See
+  [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -658,9 +667,11 @@ terminal.
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
-covering every setting breakthrough recognizes, and a Toolbox screen
-(`jj`) of built-in networking and hardware tools. Progress bars for
-long-running file operations are what's planned next — see
+covering every setting breakthrough recognizes, a Toolbox screen
+(`jj`) of built-in networking and hardware tools, and a Mounts screen
+(`jm`) showing what's currently mounted and whether it survives a
+reboot. Progress bars for long-running file operations are what's
+planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).

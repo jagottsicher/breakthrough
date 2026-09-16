@@ -360,7 +360,7 @@ func chordFamilies() []chordFamily {
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
-		// "jj" doubles the prefix for the family's own single
+		// "jj" doubles the prefix for the family's own single main
 		// destination, the same shape "gg"/"oo" already establish —
 		// opening the Toolbox screen (toolbox.go), a catalog of real
 		// external networking/hardware tools. "j" itself carries no
@@ -368,8 +368,16 @@ func chordFamilies() []chordFamily {
 		// other letter already meant something else as either a plain
 		// command or a chord prefix, and "j" (along with "b") was one of
 		// only two still completely free.
+		//
+		// "jm" opens the Mounts screen (mounts.go) — a second, related
+		// full-screen catalog under the same prefix, per the user's own
+		// explicit request to keep it separate from the Toolbox's own
+		// command list rather than folding it in as one more entry
+		// there. Same "one prefix, several distinct destinations" shape
+		// the "o" chord's own "oo"/"om" already establish.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
 			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
+			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 		}},
 	}
 }
