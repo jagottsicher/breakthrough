@@ -748,6 +748,56 @@ func TestPromptCancelDoesNotSubmit(t *testing.T) {
 	}
 }
 
+// newTestRootInSplitView returns a Root already showing two tabs side
+// by side, laid out for real against a SimulationScreen — the only way
+// r.panel.GetInnerRect() (what clampToPanel bounds against — see
+// clampToScreen's own doc comment) ends up narrower than the whole
+// screen in a test, the same way it really does once split view is on.
+func newTestRootInSplitView(t *testing.T, width, height int) *Root {
+	t.Helper()
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(screen.Fini)
+	r.app.SetScreen(screen)
+	screen.SetSize(width, height)
+	r.SetRect(0, 0, width, height)
+
+	r.newTabHere()
+	r.splitWithTab(0)
+	r.Draw(screen)
+	return r
+}
+
+// TestOpenPromptStaysCenteredOnTheWholeScreenInSplitView pins a real,
+// reported bug: openPrompt centers itself against the whole screen
+// (r.GetRect()) but used to clamp the result down to just the active
+// panel's own, narrower width in split view — visibly shoving it
+// against one edge instead of keeping it centered.
+func TestOpenPromptStaysCenteredOnTheWholeScreenInSplitView(t *testing.T) {
+	const screenWidth, screenHeight = 100, 40
+	r := newTestRootInSplitView(t, screenWidth, screenHeight)
+
+	label := strings.Repeat("x", 40) + ":" // pushes the prompt's own natural width well past half the screen
+	wantWidth := tview.TaggedStringWidth(label) + 26
+	r.openPrompt(label, "", func(string) {})
+
+	x, _, width, _ := r.prompt.GetRect()
+	if width != wantWidth {
+		t.Fatalf("prompt width = %d, want %d — clamped down to fit inside the active pane's own width instead of staying its own full size across the whole screen", width, wantWidth)
+	}
+	wantX := (screenWidth - width) / 2
+	if x != wantX {
+		t.Errorf("prompt x = %d, want %d (centered on the whole %d-wide screen, not just the active pane's own half)", x, wantX, screenWidth)
+	}
+}
+
 // simulationScreen returns a real tcell.SimulationScreen sized width x
 // height, initialized and ready for handleBeforeDraw — the same
 // approach clickButtonBar (see bottombar_test.go) already uses to give
