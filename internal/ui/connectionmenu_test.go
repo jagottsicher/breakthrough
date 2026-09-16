@@ -283,13 +283,15 @@ func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
 	}
 }
 
-// TestPressingEOnANonActiveHistoryRowDoesNothing pins that "e" is only
-// ever wired to the one row wearing an eject cell — an ordinary
-// history row that merely happens to be highlighted must not
-// disconnect whatever the currently active panel is doing elsewhere.
-func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
+// TestPressingEOnANonActiveHistoryRowOpensEditPrefilled pins the "e"
+// key's own second meaning: on any history row that isn't the active
+// connection, it opens the Connect dialog prefilled from that row's
+// own entry instead of disconnecting anything — the active panel
+// elsewhere is left untouched, only ever ejected by pressing "e" on
+// its own row (see TestPressingEOnTheActiveConnectionRowDisconnects).
+func TestPressingEOnANonActiveHistoryRowOpensEditPrefilled(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
-	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	conn := remotefs.Connection{Host: "example.com", Port: 2222, User: "tester"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
@@ -299,8 +301,78 @@ func TestPressingEOnANonActiveHistoryRowDoesNothing(t *testing.T) {
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 
-	if got == nil {
-		t.Error("captureConnectionMenuKey consumed \"e\" on a row that isn't the active connection")
+	if got != nil {
+		t.Error("captureConnectionMenuKey did not consume \"e\" on a non-active history row")
+	}
+	if r.activePage != connectDialogPage {
+		t.Errorf("activePage = %q, want the Connect dialog open", r.activePage)
+	}
+	if got := r.connectHostField.GetText(); got != conn.Host {
+		t.Errorf("Host field = %q, want %q", got, conn.Host)
+	}
+	if got := r.connectPortField.GetText(); got != "2222" {
+		t.Errorf("Port field = %q, want \"2222\"", got)
+	}
+	if got := r.connectUserField.GetText(); got != conn.User {
+		t.Errorf("User field = %q, want %q", got, conn.User)
+	}
+	if r.panel.remote != nil {
+		t.Error("editing a history row must not connect anything on its own")
+	}
+}
+
+// TestPressingEOnANonActiveHistoryRowDoesNotDisconnectTheActivePanel
+// covers the one thing TestPressingEOnANonActiveHistoryRowOpensEditPrefilled
+// doesn't: a highlighted, non-active history row's own "e" must never
+// reach for whatever connection some *other* panel happens to be
+// running, even though editConnectionHistoryRow now makes "e" do
+// something on that row instead of nothing.
+func TestPressingEOnANonActiveHistoryRowDoesNotDisconnectTheActivePanel(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	active := remotefs.Connection{Host: "active.example.com", User: "tester"}
+	other := remotefs.Connection{Host: "other.example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(active, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := remotefs.RecordAttempt(other, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), active); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openConnectionMenu()
+	row := historyRowFor(t, r, other)
+	r.connectionMenuTable.Select(row, connectionMenuColLabel)
+
+	r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
+
+	if r.panel.remote == nil {
+		t.Error("editing an unrelated history row disconnected the active panel")
+	}
+}
+
+// TestClickingTheEditCellOpensEditPrefilled is the mouse equivalent of
+// TestPressingEOnANonActiveHistoryRowOpensEditPrefilled.
+func TestClickingTheEditCellOpensEditPrefilled(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	r.openConnectionMenu()
+	row := historyRowFor(t, r, conn)
+
+	editCell := r.connectionMenuTable.GetCell(row, connectionMenuColEject)
+	if !strings.Contains(editCell.Text, connectionHistoryEditGlyph) {
+		t.Fatalf("non-active row's own eject-column cell = %q, want it to carry the edit glyph", editCell.Text)
+	}
+	editCell.Clicked()
+
+	if r.activePage != connectDialogPage {
+		t.Errorf("activePage = %q, want the Connect dialog open", r.activePage)
+	}
+	if got := r.connectHostField.GetText(); got != conn.Host {
+		t.Errorf("Host field = %q, want %q", got, conn.Host)
 	}
 }
 

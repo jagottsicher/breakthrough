@@ -555,7 +555,10 @@ terminal.
   once succeeded isn't added to history at all — only ever going to show
   up red is clutter, not a useful shortcut). The active row's own
   trailing `⏏` (or the "e" key) disconnects, right next to the `✕` (or
-  "x"/Delete) every row already has to drop it out of history.
+  "x"/Delete) every row already has to drop it out of history — every
+  other history row carries a `✎` in that same spot instead ("e" there
+  too), opening the Connect dialog prefilled from it without immediately
+  retrying, so a saved Host/Port/User can be fixed before reconnecting.
   Connecting dials in the background with a live progress line;
   authentication tries an `ssh-agent` first, then the usual default key
   files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
