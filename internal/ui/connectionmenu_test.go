@@ -94,6 +94,54 @@ func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnecti
 	}
 }
 
+// TestRenderConnectionMenuSelectsTheActiveConnectionRowByDefault pins
+// the same default-selection rule openTabSwitcher's own
+// r.openTabSwitcher(r.activeTab) already establishes for the tab
+// switcher: land on whatever's already relevant (the active
+// connection's own row here), never on the trailing "New connection"
+// fallback action, per the user's own explicit request that the two
+// dropdowns behave the same way.
+func TestRenderConnectionMenuSelectsTheActiveConnectionRowByDefault(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	other := remotefs.Connection{Host: "other.example.com", User: "tester"}
+	active := remotefs.Connection{Host: "active.example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(other, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := remotefs.RecordAttempt(active, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), active); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	row, _ := r.connectionMenuTable.GetSelection()
+	if row != r.connectionMenuActiveRow {
+		t.Errorf("default selected row = %d, want the active connection's own row %d", row, r.connectionMenuActiveRow)
+	}
+}
+
+// TestRenderConnectionMenuSelectsRowZeroByDefaultWithoutAnActiveConnection
+// is the flip side: an unconnected panel has no active row to prefer,
+// so the default lands on row 0 — the first history entry, exactly
+// like the tab switcher's own r.activeTab defaults to 0 for the first
+// tab when nothing else is more specifically "active".
+func TestRenderConnectionMenuSelectsRowZeroByDefaultWithoutAnActiveConnection(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	if err := remotefs.RecordAttempt(remotefs.Connection{Host: "example.com", User: "tester"}, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	r.renderConnectionMenu()
+
+	row, _ := r.connectionMenuTable.GetSelection()
+	if row != 0 {
+		t.Errorf("default selected row = %d, want 0 (no active connection to prefer)", row)
+	}
+}
+
 func TestRenderConnectionMenuListsHistoryColoredByState(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	ok := remotefs.Connection{Host: "ok.example.com", User: "tester"}
