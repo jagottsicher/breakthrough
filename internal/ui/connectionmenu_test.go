@@ -55,13 +55,15 @@ func TestRenderConnectionMenuOnALocalPanelOffersOnlyNewConnection(t *testing.T) 
 	}
 }
 
-// TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry
-// pins the fact that there's no longer a dedicated "Disconnect (...)"
-// row of its own — disconnecting instead happens via the active
-// connection's own eject cell (see
+// TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnection
+// pins two things at once: there's no longer a dedicated "Disconnect
+// (...)" row of its own — disconnecting instead happens via the
+// active connection's own eject cell (see
 // TestPressingEOnTheActiveConnectionRowDisconnects/
-// TestClickingTheEjectCellDisconnectsTheActiveConnection).
-func TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEntry(t *testing.T) {
+// TestClickingTheEjectCellDisconnectsTheActiveConnection) — and
+// "New connection…" is a trailing row, after every history entry, the
+// same position tabswitcher.go's own "New tab" occupies.
+func TestRenderConnectionMenuOnAConnectedPanelListsTheActiveEntryThenNewConnection(t *testing.T) {
 	r := newTestRootForConnectionMenu(t)
 	conn := remotefs.Connection{Host: "example.com", User: "tester"}
 	if err := remotefs.RecordAttempt(conn, false); err != nil {
@@ -75,20 +77,20 @@ func TestRenderConnectionMenuOnAConnectedPanelListsNewConnectionThenTheActiveEnt
 
 	texts := connectionMenuLabelTexts(r.connectionMenuTable)
 	if len(texts) != 2 {
-		t.Fatalf("rows = %v, want exactly \"New connection…\" plus one history row for the active connection", texts)
+		t.Fatalf("rows = %v, want exactly one history row for the active connection plus \"New connection…\"", texts)
 	}
-	if !strings.Contains(texts[0], "New connection") {
-		t.Errorf("row 0 label = %q, want \"New connection…\" first — no separate \"Disconnect\" row anymore", texts[0])
+	if !strings.Contains(texts[0], conn.Label()) {
+		t.Errorf("row 0 label = %q, want the active connection's own history row first", texts[0])
 	}
-	if !strings.Contains(texts[1], conn.Label()) {
-		t.Errorf("row 1 label = %q, want the active connection's own history row", texts[1])
+	if !strings.Contains(texts[1], "New connection") {
+		t.Errorf("row 1 label = %q, want \"New connection…\" trailing, after every history entry", texts[1])
 	}
-	ejectCell := r.connectionMenuTable.GetCell(1, connectionMenuColEject)
+	ejectCell := r.connectionMenuTable.GetCell(0, connectionMenuColEject)
 	if !strings.Contains(ejectCell.Text, connectionHistoryEjectGlyph) {
-		t.Errorf("row 1 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
+		t.Errorf("row 0 eject cell = %q, want it to carry the eject glyph", ejectCell.Text)
 	}
-	if r.connectionMenuActiveRow != 1 {
-		t.Errorf("connectionMenuActiveRow = %d, want 1", r.connectionMenuActiveRow)
+	if r.connectionMenuActiveRow != 0 {
+		t.Errorf("connectionMenuActiveRow = %d, want 0", r.connectionMenuActiveRow)
 	}
 }
 
@@ -216,7 +218,7 @@ func TestPressingXOnNewConnectionRowDoesNothing(t *testing.T) {
 		t.Fatalf("RecordAttempt: %v", err)
 	}
 	r.openConnectionMenu()
-	r.connectionMenuTable.Select(0, connectionMenuColLabel) // "New connection…" is always first when local
+	r.connectionMenuTable.Select(1, connectionMenuColLabel) // "New connection…" trails the one history row
 
 	got := r.captureConnectionMenuKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 

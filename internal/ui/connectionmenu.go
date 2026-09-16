@@ -77,6 +77,15 @@ func (r *Root) connectionMenuAnchor() (right, y int) {
 // shape renderFilterMenu/openTabSwitcher already establish for their
 // own dropdowns: which panel is "active", and what history says, can
 // both have changed since last time.
+//
+// "+ New connection" is a trailing row, after every history entry —
+// the same position tabswitcher.go's own "New tab" row occupies at the
+// bottom of that dropdown (see tabSwitcherNewRowLabel's own doc
+// comment), per the user's own explicit request that the two read as
+// the same kind of row in the same kind of place, not just the same
+// label shape. History (the thing actually used most often, and what
+// this dropdown mainly exists to show) reads first as a result,
+// "New connection" last as the deliberate fallback it is.
 func (r *Root) renderConnectionMenu() {
 	panel := r.panel
 	table := r.connectionMenuTable
@@ -84,20 +93,12 @@ func (r *Root) renderConnectionMenu() {
 	r.connectionMenuHistoryRows = map[int]remotefs.Connection{}
 	r.connectionMenuActiveRow = -1
 
-	table.SetCell(0, connectionMenuColLabel,
-		tview.NewTableCell(connectionMenuNewConnectionLabel).
-			SetTextColor(r.theme.Text).
-			SetSelectable(true).
-			SetClickedFunc(r.clickConnectionMenuCell(0, connectionMenuColLabel)))
-	table.SetCell(0, connectionMenuColEject, blankConnectionMenuCell())
-	table.SetCell(0, connectionMenuColRemove, blankConnectionMenuCell())
-
 	// A read failure here just means an empty history section, not an
 	// error worth surfacing through a dropdown menu — the same
 	// "absence isn't an error" contract LoadHistory's own doc comment
 	// already promises callers.
 	history, _ := remotefs.LoadHistory()
-	row := 1
+	row := 0
 	for i, entry := range history {
 		if i >= connectionMenuMaxHistoryRows {
 			break
@@ -137,7 +138,16 @@ func (r *Root) renderConnectionMenu() {
 		row++
 	}
 
-	table.Select(0, connectionMenuColLabel)
+	newRow := row
+	table.SetCell(newRow, connectionMenuColLabel,
+		tview.NewTableCell(connectionMenuNewConnectionLabel).
+			SetTextColor(r.theme.Text).
+			SetSelectable(true).
+			SetClickedFunc(r.clickConnectionMenuCell(newRow, connectionMenuColLabel)))
+	table.SetCell(newRow, connectionMenuColEject, blankConnectionMenuCell())
+	table.SetCell(newRow, connectionMenuColRemove, blankConnectionMenuCell())
+
+	table.Select(newRow, connectionMenuColLabel)
 }
 
 // newConnectionMenuTable builds the dropdown's own Table — no border,
@@ -175,20 +185,20 @@ func blankConnectionMenuCell() *tview.TableCell {
 
 // activateConnectionMenuCell is Enter, Space or a click on one cell —
 // the identical dispatch-by-column shape activateTabSwitcherCell
-// already establishes. Row 0 is always "New connection…", regardless
-// of column: it has nothing in its own eject/remove cells to tell
-// apart in the first place. connectionMenuColEject carries two
-// different actions depending on the row, not one — see
-// connectionHistoryEditGlyph's own doc comment for why the same column
-// position works for both without ever being ambiguous.
+// already establishes. The trailing "New connection…" row (see
+// renderConnectionMenu) is always whichever row isn't in
+// connectionMenuHistoryRows at all — the only other kind of row this
+// table ever has — regardless of column: it has nothing in its own
+// eject/remove cells to tell apart in the first place.
+// connectionMenuColEject carries two different actions depending on
+// the row, not one — see connectionHistoryEditGlyph's own doc comment
+// for why the same column position works for both without ever being
+// ambiguous.
 func (r *Root) activateConnectionMenuCell(row, column int) {
-	if row == 0 {
-		r.hideOverlay()
-		r.openConnectDialog(remotefs.Connection{})
-		return
-	}
 	conn, ok := r.connectionMenuHistoryRows[row]
 	if !ok {
+		r.hideOverlay()
+		r.openConnectDialog(remotefs.Connection{})
 		return
 	}
 	switch column {
