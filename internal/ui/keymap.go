@@ -132,7 +132,6 @@ func plainCommands() []plainCommand {
 		{key: '/', label: "Filter", action: func(r *Root) { r.openFilterMenu() }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
-		{key: 'm', label: "Context menu", quick: true, short: "Menu", action: func(r *Root) { r.MenuShortcut() }},
 		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
@@ -318,6 +317,26 @@ func chordFamilies() []chordFamily {
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
 			{'o', "chown", func(r *Root) { r.openChown() }},
+		}},
+		// "mm" doubles the prefix the same way "gg"/"oo" already do —
+		// opening the context menu, exactly what a bare "m" always did
+		// before this family existed. Per the user's own explicit
+		// request for mnemonic chords to create a new file/directory
+		// without going through the menu at all: "mf"/"md" read as
+		// "make file"/"make dir", both landing directly inside the
+		// active panel's own current directory.
+		//
+		// One accepted side effect, not an oversight: the context
+		// menu's own "Multiply" entry already used "m" as its mnemonic
+		// once the menu is open (see contextmenu.go's own doc comment —
+		// "m opens the menu, mm duplicates"), so reaching it from plain
+		// browsing now takes "mmm" (open the family, open the menu,
+		// then the menu's own Multiply mnemonic) instead of the
+		// previous two keystrokes.
+		{prefix: 'm', name: "menu", quick: true, members: []chordMember{
+			{'m', "Context menu", func(r *Root) { r.MenuShortcut() }},
+			{'f', "New file", func(r *Root) { r.openNewFile() }},
+			{'d', "New dir", func(r *Root) { r.openNewDir() }},
 		}},
 		{prefix: 'z', name: "display", quick: true, members: []chordMember{
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},

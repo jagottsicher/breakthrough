@@ -413,7 +413,6 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 
 	wantLabels := map[rune]string{
 		'?': " ? Help",
-		'm': " m Menu",
 		'l': " l Look",
 		'i': " i Props",
 		'I': " I Details",
@@ -427,7 +426,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
-		if s.key == 'g' || s.key == 'p' || s.key == 'z' || s.key == 'o' {
+		if s.key == 'g' || s.key == 'p' || s.key == 'm' || s.key == 'z' || s.key == 'o' {
 			continue // a chord-family cascade cell — see TestBuildButtonBarShowsChordCascades
 		}
 		want, ok := wantLabels[s.key]
@@ -464,7 +463,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'z': " z … display", 'o': " o … options"}
+	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'm': " m … menu", 'z': " z … display", 'o': " o … options"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
@@ -1043,7 +1042,15 @@ func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
 // entries read r.target/r.targetRow rather than the panel's own cursor,
 // so opening the menu by any route other than a right-click has to set
 // both, or the menu would act on whatever was last right-clicked.
-func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
+// TestCaptureButtonBarMouseMenuClickStartsTheMenuChord pins that
+// clicking the button bar's "m" cell now starts the "m" chord (see
+// keymap.go) instead of opening the context menu directly — the same
+// click-starts-a-cascade behavior every other chord-family button
+// (g/p/z/o) already has. Reaching the context menu itself from the
+// mouse takes a second click, on the chord hint bar's own "mm" cell
+// that appears once this one starts (every chord member is mouse-
+// clickable too, not just its keyboard letter).
+func TestCaptureButtonBarMouseMenuClickStartsTheMenuChord(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -1051,22 +1058,17 @@ func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
 	}
 	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
 
-	row, path, ok := r.panel.CurrentRowPath()
-	if !ok {
-		t.Fatal("setup: no current row")
-	}
-
 	span, ok := buttonBarSpanFor(r, 'm')
 	if !ok {
-		t.Fatal("no Menu span found")
+		t.Fatal("no menu chord span found")
 	}
 	clickButtonBar(t, r, span.startCol)
 
-	if r.activePage != contextMenuPage {
-		t.Errorf("activePage = %q, want %q", r.activePage, contextMenuPage)
+	if r.pendingChord != 'm' {
+		t.Errorf("pendingChord = %q, want 'm'", string(r.pendingChord))
 	}
-	if r.target != path || r.targetRow != row {
-		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want still closed until the chord resolves", r.activePage)
 	}
 }
 

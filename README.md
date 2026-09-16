@@ -158,18 +158,20 @@ terminal.
   field focused, since a Ctrl combination safely can where a plain
   letter never can — was deliberately retired anyway in favor of `om`
   above, a considered trade-off rather than an oversight.
-- A context menu on `m` or right-click, showing only what actually
-  applies right now rather than a fixed list of everything it can ever
-  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Multiply,
-  Paste (only once the clipboard has something in it), Move to Trash,
-  Properties (editable — name, permissions, click a bit or type the
-  octal value directly, owner and group via a scrollable picker of
-  every local user/group, modified date and time), plus three `▸`
-  submenus that replace the list in place when chosen (Windows
-  Explorer's own cascading-menu idea, without needing room to open
-  beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
-  Batch rename, Undo last rename, Compare, Rsync, Remove), "Selection" (Select
-  all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
+- A context menu on `mm` (the `m` chord's own doubled prefix, the same
+  "gg"/"oo" shape every other family uses for its main destination) or
+  right-click, showing only what actually applies right now rather than
+  a fixed list of everything it can ever do: Look, Edit (dropped for a
+  directory), Rename, Copy/Cut/Multiply, Paste (only once the clipboard
+  has something in it), Move to Trash, Properties (editable — name,
+  permissions, click a bit or type the octal value directly, owner and
+  group via a scrollable picker of every local user/group, modified
+  date and time), plus three `▸` submenus that replace the list in
+  place when chosen (Windows Explorer's own cascading-menu idea,
+  without needing room to open beside it): "More actions" (New file,
+  New dir, `tail -f`, chown, chmod, Sed Replace, Batch rename, Undo
+  last rename, Compare, Rsync, Remove), "Selection" (Select all/
+  Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
   or Left arrow step back out one level at a time. Browsing the Trash
@@ -178,9 +180,14 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `m` again (`mm`) does
-  too, for Multiply specifically — the one entry with no plain-key
-  equivalent of its own, since it only ever opens from here.
+  entry isn't currently showing does nothing. `m` again (`mmm` from
+  plain browsing) does too, for Multiply specifically — the one entry
+  with no plain-key equivalent of its own, since it only ever opens
+  from here. `mf`/`md` reach New file/New dir directly from plain
+  browsing, without opening the menu at all — both create their new
+  entry directly inside the active panel's own current directory
+  (remote-aware the same way Rename already is), prompting only for a
+  name.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -477,10 +484,10 @@ terminal.
   (`x`), Paste (`v`), Move to Trash (`d`), toggle hidden files (`.` —
   labeled Hide or Unhide, whichever it would do next, not whichever
   state you're currently in), Properties (`i`), Details sidebar (`I`),
-  context menu (`m`), Split view (`s`), the tab switcher (`t`), Look
-  (`l`), and Help (`?`), plus the three chord families marked with an
-  ellipsis to show they lead to more keys (`g…` go, `p…` permissions,
-  `z…` display toggles) — every member of an open chord's own legend is
+  Split view (`s`), the tab switcher (`t`), Look (`l`), and Help (`?`),
+  plus the five chord families marked with an ellipsis to show they
+  lead to more keys (`g…` go, `p…` permissions, `m…` menu, `z…` display
+  toggles, `o…` options) — every member of an open chord's own legend is
   clickable too, the same highlighted-key treatment, so pointing at one
   works as well as typing its second letter. A few of these change
   meaning while actually browsing the

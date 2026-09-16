@@ -38,7 +38,7 @@ var helpText = strings.TrimLeft(`
   x   Cut               D   Remove permanently    I   Details sidebar
   v   Paste             u   Undo last rename       h  Compute hashes
   r   Rename            e   Edit                   k  Directory size
-  m   Context menu      f   Find                   M  Image metadata
+  f   Find                   M  Image metadata
   n   New tab           w   Close tab             l   Look
   s   Split view                                  t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
@@ -85,6 +85,8 @@ var helpText = strings.TrimLeft(`
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trashbin · gc Connect…
     p  perms    pm chmod · po chown
+    m  menu     mm Context menu (what a bare "m" always opened before
+                this family existed) · mf New file · md New dir
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
@@ -146,16 +148,18 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Multiply,
                   Paste, Move to Trash, Properties, and submenus for
-                  rarer actions — tail -f/chown/chmod/sed/Batch
-                  rename/Undo last rename/Remove/Paste following
-                  symlinks, Selection, Tabs & Split). "m" opens the
-                  same menu from the keyboard. Once it's open,
+                  rarer actions — New file/New dir/tail -f/chown/chmod/
+                  sed/Batch rename/Undo last rename/Remove/Paste
+                  following symlinks, Selection, Tabs & Split). "mm"
+                  opens the same menu from the keyboard (see the "m"
+                  chord above). Once it's open,
                   "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
                   seven already have on their own — fire that entry
                   directly, without arrowing down to it first. "m"
-                  again ("mm") does too, for Multiply specifically —
-                  the one entry with no plain-key equivalent of its
-                  own to mirror, since it only ever opens from here.
+                  again (so "mmm" from plain browsing) does too, for
+                  Multiply specifically — the one entry with no
+                  plain-key equivalent of its own to mirror, since it
+                  only ever opens from here.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -603,7 +607,7 @@ var helpText = strings.TrimLeft(`
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
 
-[::b]Multiply dialog ("mm", or context menu's "Multiply")[::-]
+[::b]Multiply dialog ("mmm", or context menu's "Multiply")[::-]
 
   Creates one or more copies of the selection right beside it, each
   named by the current strategy — an ordinary Copy underneath (works on

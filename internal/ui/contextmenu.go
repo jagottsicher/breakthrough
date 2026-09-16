@@ -132,6 +132,14 @@ func contextMenuTree() []menuEntry {
 		{label: "Move to Trash", mnemonic: 'd', action: func(r *Root) { r.moveSelectionToTrash() }},
 		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 		{label: "More actions", submenu: []menuEntry{
+			// "f"/"d" match the "mf"/"md" chord that reaches these same
+			// two actions directly from plain browsing (see keymap.go's
+			// own "m" family) — act on the active panel's own current
+			// directory, not on whatever's selected, so unlike most of
+			// this submenu they need no visibility check tied to the
+			// target row at all.
+			{label: "New file", mnemonic: 'f', action: func(r *Root) { r.openNewFile() }},
+			{label: "New dir", mnemonic: 'd', action: func(r *Root) { r.openNewDir() }},
 			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
 			{label: "chmod", action: func(r *Root) { r.openChmod() }},
