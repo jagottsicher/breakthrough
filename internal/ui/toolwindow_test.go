@@ -588,30 +588,6 @@ func TestOpenToolCommandReportsStartFailure(t *testing.T) {
 	}
 }
 
-// TestOpenPingTestWindowPromptsForHost pins that Ping, this first
-// slice's own placeholder entry point (see openPingTestWindow's own doc
-// comment), asks for a host through the existing generic prompt overlay
-// rather than running against a hardcoded target — real ping execution
-// itself is exercised by hand (see this PR's own tmux verification),
-// not here: a real ICMP ping depends on raw-socket permissions this
-// sandbox (or a CI runner) may not have, which openToolCommand's own
-// tests above already avoid entirely by using echo instead.
-func TestOpenPingTestWindowPromptsForHost(t *testing.T) {
-	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-
-	r.openPingTestWindow()
-
-	if r.activePage != promptPage {
-		t.Fatalf("activePage = %q, want the prompt overlay", r.activePage)
-	}
-	if got := r.prompt.GetLabel(); got != "Ping host: " {
-		t.Errorf("prompt label = %q, want %q", got, "Ping host: ")
-	}
-}
-
 // TestCycleFocusShortcutReachesToolWindow pins the whole reason
 // CycleFocusShortcut was generalized past a plain panel/Details toggle
 // in the first place: without it, a tool window could only ever be
