@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -45,13 +46,6 @@ func (s transferSide) join(dir, name string) string {
 		return filepath.Join(dir, name)
 	}
 	return path.Join(dir, name)
-}
-
-func (s transferSide) base(p string) string {
-	if s.client == nil {
-		return filepath.Base(p)
-	}
-	return path.Base(p)
 }
 
 // lstatType reports p's own fsops.EntryType without following a
@@ -94,6 +88,129 @@ func (s transferSide) exists(p string) bool {
 	}
 	_, err := s.client.Lstat(p)
 	return err == nil
+}
+
+// lstat is exists' own richer sibling, for the one caller (pasteWalk,
+// once either side of a Paste is remote) that needs real file info —
+// size/mtime/IsDir — for a conflict already confirmed to exist via
+// exists, not just a yes/no answer. Returns a real os.FileInfo either
+// way, so pasteConflict/resolveConflictAsync/pasteWalk's own
+// autoMergeDirectories check never need to know or care which side of
+// the transfer produced it — see entryFileInfo's own doc comment for
+// how the remote half gets there.
+func (s transferSide) lstat(p string) (os.FileInfo, error) {
+	if s.client == nil {
+		return os.Lstat(p)
+	}
+	entry, err := s.client.Lstat(p)
+	if err != nil {
+		return nil, err
+	}
+	return entryFileInfo{entry}, nil
+}
+
+// statOrNotExist is pasteWalk's own conflict check, generalized across
+// local and remote: mirrors os.Lstat's own three-way "exists / genuinely
+// doesn't / some other real error" contract exactly for the local side
+// (nothing changes there — the identical os.Lstat/os.IsNotExist pair
+// this always used), but folds the remote side's own coarser two-way
+// answer into it rather than pretending a false distinction: an SFTP
+// error has no reliable, protocol-guaranteed way to tell "no such file"
+// apart from other failures the way os.IsNotExist can locally (nothing
+// elsewhere in this project has ever needed to make that call before —
+// see transferSide.exists' own doc comment, which already accepts the
+// exact same simplification for every other remote existence check in
+// this file). So a remote Lstat failure of any kind is treated as
+// "doesn't exist" here, exactly like exists() already does — a
+// genuinely different failure (permission denied on the parent
+// directory, say) then simply surfaces moments later from whatever
+// real operation pasteOne's own create/mkdir attempts next, still a
+// real, reported error, just one step further downstream than the
+// local path's own immediate one.
+func (s transferSide) statOrNotExist(p string) (info os.FileInfo, notExist bool, err error) {
+	if s.client == nil {
+		info, err = os.Lstat(p)
+		if err == nil {
+			return info, false, nil
+		}
+		if os.IsNotExist(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
+	}
+	info, err = s.lstat(p)
+	if err != nil {
+		return nil, true, nil
+	}
+	return info, false, nil
+}
+
+// removeAll deletes an existing p outright — the one step ReplaceEntirely
+// needs before recreating a directory conflict from scratch (see
+// pasteTransferItem), mirroring os.RemoveAll's own "remove p and
+// everything under it" contract for the remote side via
+// removeRemoteRecursive.
+func (s transferSide) removeAll(p string) error {
+	if s.client == nil {
+		return os.RemoveAll(p)
+	}
+	return removeRemoteRecursive(s.client, p, true)
+}
+
+// entryFileInfo adapts a remotefs Client's own fsops.Entry (from Lstat)
+// to the real os.FileInfo interface pasteconflict.go's job/dialog
+// machinery already speaks throughout (pasteConflict.srcInfo/dstInfo,
+// resolveConflictAsync's ModTime/Size comparisons, pasteWalk's own
+// IsDir check) — letting that whole machinery stay completely unaware
+// of whether a given conflict's info came from a real local os.Lstat or
+// a remote Client.Lstat call. Sys() has no local-os-specific analogue
+// to report for a remote entry, so it returns nil, the same as any
+// os.FileInfo implementation with nothing meaningful to put there.
+type entryFileInfo struct {
+	entry fsops.Entry
+}
+
+func (e entryFileInfo) Name() string       { return e.entry.Name }
+func (e entryFileInfo) Size() int64        { return e.entry.Size }
+func (e entryFileInfo) Mode() os.FileMode  { return e.entry.Mode }
+func (e entryFileInfo) ModTime() time.Time { return e.entry.ModTime }
+func (e entryFileInfo) IsDir() bool        { return e.entry.IsDir }
+func (e entryFileInfo) Sys() any           { return nil }
+
+// remotePathOverlaps is fsops.Overlaps' own remote counterpart, for the
+// one case its local, filepath.Rel-based logic can't be reused for
+// directly: two paths on the very same remote connection (see
+// pasteOverlaps). Remote paths are always POSIX-"/"-separated and
+// already absolute (see remotefs's own package doc comment), so the
+// same "dst is src itself, or lives inside it" question reduces to a
+// plain string prefix check via the "path" package instead of
+// filepath.Rel's OS-specific one.
+func remotePathOverlaps(src, dst string) bool {
+	src = path.Clean(src)
+	dst = path.Clean(dst)
+	return dst == src || strings.HasPrefix(dst, src+"/")
+}
+
+// pasteOverlaps is pasteWalk's own overlap check, generalized across
+// however many of job's two ends are remote — see fsops.Overlaps' own
+// doc comment for why this matters at all (pasting into the very thing
+// being read from). Two genuinely different machines (a local src with
+// a remote dst, or two different remote connections) can never overlap
+// by construction — a path on one has no meaning on the other — so this
+// only ever does real work for a same-machine transfer: both local, or
+// the same live remote Client value on both ends (comparable directly,
+// since every real implementation is a pointer — see
+// runRemotePaste's own doc comment for the identical comparison it
+// already made for its own same-connection fast path).
+func pasteOverlaps(job *pasteJob, src, dst string) bool {
+	switch {
+	case job.srcClient == nil && job.destClient == nil:
+		return fsops.Overlaps(src, dst)
+	case job.srcClient != nil && job.srcClient == job.destClient:
+		return remotePathOverlaps(src, dst)
+	default:
+		return false
+	}
 }
 
 func (s transferSide) open(p string) (io.ReadCloser, error) {
@@ -195,96 +312,165 @@ func copyTransferFile(src, dest transferSide, srcPath, destPath string) error {
 	return w.Close()
 }
 
-// startRemotePaste is pasteInto's own remote-aware half — runs
-// runRemotePaste in the background (see safeGo) so a slow network
-// transfer never freezes the rest of the app, then hands the outcome
-// to finishRemotePaste through QueueUpdateDraw once every item has
-// been attempted.
-func (r *Root) startRemotePaste(items []string, srcClient remotefs.Client, move bool, destClient remotefs.Client, destDir string) {
-	if len(items) == 0 {
-		return
+// pasteTransferItem is copyTransferItem's own richer sibling: the same
+// recursive copy, but Force/Mode-aware (see fsops.OverwriteMode's own
+// doc comment for the two choices, mirrored here exactly — Copy's own
+// "remove dst first, then recurse into what's now empty space for
+// ReplaceEntirely; recurse straight in, overwriting only names both
+// sides share, for MergeInto" shape, including copyDir's own detail
+// that every nested child is written unconditionally once Force is
+// true at the top, never asked about individually a second time) and
+// progress-reporting (onFile/onBytes, the same contract
+// fsops.CopyOptions/MoveOptions already give pasteOne locally) — so
+// pasteOne can drive a remote-involving paste through the exact same
+// job/dialog machinery as a local one, once either side of it is
+// remote (see pasteWalk/pasteOne's own doc comments).
+//
+// skippedSymlinks collects every symlink path left untouched, the same
+// "never followed, never recreated" simplification copyTransferItem's
+// own package doc comment already documents — still true here, for the
+// same reason: recreating a symlink meaningfully across two different
+// machines has no single right answer this project has picked yet.
+//
+// topLevelSkipped reports whether srcPath itself (never a descendant
+// found during a directory's own recursion, which only ever affects
+// *skippedSymlinks — see copyTransferItem's own identical
+// thisSkipped/skipped split for the reasoning) was a symlink left
+// untouched — pasteOneRemote needs this to tell "genuinely copied, safe
+// to remove the source of for a Cut" apart from "skipped: nothing there
+// to have moved at all, the original must survive".
+//
+// Recursion always calls this real function directly, never through
+// runPasteTransferItem below — the same "the swappable var is only the
+// top-level entry point, recursion never re-enters it" shape
+// fsops.Copy/copyDir already establish for fsCopy.
+func pasteTransferItem(src, dest transferSide, srcPath, destPath string, force bool, mode fsops.OverwriteMode, onFile func(string), onBytes func(int64), skippedSymlinks *[]string) (topLevelSkipped bool, err error) {
+	srcType, err := src.lstatType(srcPath)
+	if err != nil {
+		return false, err
 	}
-	panel := r.panel
 
-	r.safeGo("remote paste", nil, func() {
-		succeeded, skipped, firstErr := runRemotePaste(items, srcClient, move, destClient, destDir)
-		r.app.QueueUpdateDraw(func() {
-			r.finishRemotePaste(panel, succeeded, skipped, firstErr, move)
-		})
-	})
-}
+	if srcType == fsops.TypeSymlinkFile || srcType == fsops.TypeSymlinkDir || srcType == fsops.TypeSymlinkBroken {
+		*skippedSymlinks = append(*skippedSymlinks, srcPath)
+		return true, nil
+	}
 
-// runRemotePaste is startRemotePaste's own synchronous core — copies
-// every item in turn (see copyTransferItem), then, for a move, removes
-// each one's own top-level source once its copy actually succeeded
-// (never for one that failed to copy in the first place), using the
-// same Lstat-then-recurse removal every other delete in this project
-// already uses (fsops.PurgeCompletely locally, removeRemoteRecursive
-// remotely). srcClient/destClient follow the same "nil means local"
-// convention as clipboardSourceClient/Panel.remote themselves.
-//
-// A move where both ends are the identical live remote connection
-// (the same Client value — comparable here since every real
-// implementation is a pointer, see remotefs.SFTPClient/fakeRemoteClient)
-// skips all of that: it's really just one rename on the server's own
-// filesystem, so it goes straight through Client.Rename instead,
-// without ever streaming a single byte across the wire, let alone
-// twice (down to this machine, then back up) the way copy-then-delete
-// would otherwise cost for every file. Doesn't apply to a plain local
-// move (pasteInto never routes one here at all — see its own doc
-// comment) or to two panels merely connected to the same server as two
-// separate sessions, which are two different Client values.
-//
-// Split out from startRemotePaste specifically so it's callable
-// directly in a test with no real Application event loop behind it —
-// the same reasoning connectdialog.go's own finishConnect doc comment
-// gives for its identical split from runConnect.
-func runRemotePaste(items []string, srcClient remotefs.Client, move bool, destClient remotefs.Client, destDir string) (succeeded int, skipped []transferSkip, firstErr error) {
-	src := transferSide{client: srcClient}
-	dest := transferSide{client: destClient}
-	sameRemoteClient := move && srcClient != nil && srcClient == destClient
+	exists := dest.exists(destPath)
+	if exists && !force {
+		return false, fmt.Errorf("%s already exists", destPath)
+	}
 
-	for _, item := range items {
-		destPath := dest.join(destDir, src.base(item))
-
-		if sameRemoteClient {
-			if err := destClient.Rename(item, destPath); err != nil {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("%s: %w", item, err)
-				}
-				continue
+	if srcType == fsops.TypeDir {
+		if exists && mode == fsops.ReplaceEntirely {
+			if err := dest.removeAll(destPath); err != nil {
+				return false, err
 			}
-			succeeded++
-			continue
+			exists = false
 		}
-
-		itemSkipped, err := copyTransferItem(src, dest, item, destPath, &skipped)
+		if !exists {
+			if err := dest.mkdir(destPath); err != nil {
+				return false, err
+			}
+		}
+		children, err := src.list(srcPath)
 		if err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("%s: %w", item, err)
+			return false, err
+		}
+		for _, child := range children {
+			// Force always propagates unchanged into every nested level,
+			// the same as fsops.copyDir's own recursion — a MergeInto's
+			// own "ask again per nested conflict" would need this dialog
+			// to somehow surface a second round of questions mid-recursion,
+			// which neither engine does; a name both sides share below the
+			// top level is always just overwritten once Force already
+			// allowed proceeding at all.
+			if _, err := pasteTransferItem(src, dest, src.join(srcPath, child.Name), dest.join(destPath, child.Name), true, mode, onFile, onBytes, skippedSymlinks); err != nil {
+				return false, err
 			}
-			continue
 		}
-		if itemSkipped {
-			continue // recorded in skipped already — not a success, and a move must leave a skipped symlink's own source alone
-		}
-		succeeded++
-		if move {
-			if err := removeTransferSource(srcClient, item); err != nil && firstErr == nil {
-				firstErr = fmt.Errorf("copied, but could not remove the original %s: %w", item, err)
-			}
-		}
+		return false, nil
 	}
-	return succeeded, skipped, firstErr
+
+	// A plain file (or a special file — socket/FIFO/device — copied the
+	// same way, the only thing Open/Create can do with one either way):
+	// force alone is enough to proceed, the same as fsops.Copy's own
+	// "mode only matters for a directory" contract — overwriting a
+	// file's own content has only one sensible meaning regardless of
+	// Merge vs Replace.
+	if onFile != nil {
+		onFile(srcPath)
+	}
+	return false, pasteTransferFile(src, dest, srcPath, destPath, onBytes)
 }
 
-// finishRemotePaste applies runRemotePaste's own outcome: clears the
-// clipboard once a clean move has fully landed (nothing left to paste
-// again — mirrors finishPasteJob's identical local-paste behavior),
-// reloads panel if it's still open, and reports any error/skip summary
-// through the ordinary error overlay. Split out for the same
-// directly-callable-without-a-real-event-loop reason runRemotePaste's
-// own doc comment gives.
+// runPasteTransferItem is pasteOneRemote's own entry point into
+// pasteTransferItem — a package-level var for the same reason
+// fsCopy/fsMove are (see their own doc comment): a test can substitute
+// a wrapper that still calls through to the real implementation but
+// signals once it actually returns, the one way to deterministically
+// wait for a remote-involving pasteWalk's own background goroutine to
+// have done its real work against a fake remote client.
+var runPasteTransferItem = pasteTransferItem
+
+// pasteTransferFile is copyTransferFile's own progress-reporting
+// sibling — see pasteTransferItem's own doc comment for why a second,
+// parallel function exists rather than adding onBytes to
+// copyTransferFile itself: the archive-extraction path
+// (runRemoteArchiveExtraction) that still calls the plain version has
+// no job-wide progress to report into at all.
+func pasteTransferFile(src, dest transferSide, srcPath, destPath string, onBytes func(int64)) error {
+	r, err := src.open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+
+	w, err := dest.create(destPath)
+	if err != nil {
+		return err
+	}
+	var copied int64
+	if onBytes == nil {
+		_, err = io.Copy(w, r)
+	} else {
+		buf := make([]byte, 32*1024)
+		_, err = io.CopyBuffer(progressWriter{w: w, copied: &copied, onBytes: onBytes}, r, buf)
+	}
+	if err != nil {
+		_ = w.Close()
+		return err
+	}
+	return w.Close()
+}
+
+// progressWriter wraps an io.Writer, reporting the running total of
+// bytes written so far after every chunk — io.CopyBuffer's own way of
+// giving pasteTransferFile a per-chunk hook, the same running-total
+// contract fsops.CopyOptions.OnBytes already documents for the local
+// engine (see pasteTransferItem's own doc comment).
+type progressWriter struct {
+	w       io.Writer
+	copied  *int64
+	onBytes func(int64)
+}
+
+func (p progressWriter) Write(b []byte) (int, error) {
+	n, err := p.w.Write(b)
+	*p.copied += int64(n)
+	p.onBytes(*p.copied)
+	return n, err
+}
+
+// finishRemotePaste applies runRemoteArchiveExtraction's own outcome —
+// its only caller. An ordinary remote-involving Paste instead goes
+// through startPaste/pasteconflict.go, sharing the exact same conflict
+// dialog/queue a local Paste always has (see pasteJob's own
+// srcClient/destClient doc comment). Reloads panel if it's still open
+// and reports any error/skip summary through the ordinary error
+// overlay. move is always false for archive extraction (Cut has
+// nothing to remove afterward from inside a read-only archive) but
+// kept as a parameter rather than hardcoded, since nothing about the
+// logic itself assumes that.
 func (r *Root) finishRemotePaste(panel *Panel, succeeded int, skipped []transferSkip, firstErr error, move bool) {
 	if move && firstErr == nil {
 		r.setClipboard(nil, false)
