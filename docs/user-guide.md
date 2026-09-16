@@ -1040,13 +1040,17 @@ included — rather than an older, simpler engine that just refused
 outright the moment a destination already existed. A symlink anywhere
 in a copied tree is still skipped outright rather than followed or
 recreated on the other end ("following symlinks" isn't offered as a
-Paste option here), and the live progress display falls back to
-item-count only — no byte-accurate total or current-file size — since
-sizing a remote tree up front costs a full recursive listing this first
-version doesn't spend; both are reported plainly rather than silently
-missing (a "N symlink(s) skipped" summary once the Paste finishes, and
-a progress line that simply omits the byte count it can't cheaply
-know). Permissions/ownership/modification time are not preserved on a
+Paste option here; a "N symlink(s) skipped" summary reports it plainly
+once the Paste finishes, rather than passing by silently). The live
+progress bar's current-file half is real: it reads that file's own
+actual size before copying it, the same as a purely local Paste, so a
+single large file's progress still moves visibly instead of sitting
+frozen at 0 for its entire transfer. The job-wide byte total (and the
+ETA it drives) stays item-count only, though, since sizing a whole
+remote tree up front costs a full recursive listing this first version
+doesn't spend — that one omits the byte count it can't cheaply know
+rather than pretending to have it. Permissions/ownership/modification
+time are not preserved on a
 remote-involving Paste the way a purely local one always preserves
 them, and a move between two ends of the exact same live connection
 still copies the file across the connection and then deletes the

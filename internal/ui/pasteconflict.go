@@ -852,7 +852,26 @@ func (r *Root) pasteOneRemote(job *pasteJob, src, dst string, force bool, mode f
 	onFile := func(path string) {
 		job.currentFile.Store(&path)
 		job.bytesBase.Add(job.currentFileSize.Load())
-		job.currentFileSize.Store(0)
+		// A real Lstat per file, not job-wide TotalBytes' own full
+		// tree walk up front (see scanPasteBytes' own doc comment on
+		// why that stays local-only): still one real network round
+		// trip per file, but a single one, already paid for by
+		// pasteTransferItem's own srcType lookup moments before this
+		// same call — the one real, live-reported gap this closes is
+		// a large single file (a video, say) that used to show a
+		// permanently empty progress bar and a static filename for its
+		// entire transfer, reading as "stuck" even while genuinely
+		// still copying; the file name alone changing per item was
+		// never enough of a live signal for anyone glancing at the bar
+		// itself rather than reading the text next to it. Best-effort:
+		// a failed lookup leaves size at 0, exactly the previous
+		// always-0 behavior, rather than failing the transfer over a
+		// cosmetic progress detail.
+		var size int64
+		if info, err := srcSide.lstat(path); err == nil {
+			size = info.Size()
+		}
+		job.currentFileSize.Store(size)
 		job.currentFileBytes.Store(0)
 	}
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }

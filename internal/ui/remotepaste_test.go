@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -71,6 +72,41 @@ func TestPasteWalkUploadsALocalFileToARemoteDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(localDir, "local.txt")); err != nil {
 		t.Error("a plain Copy must leave the local source file in place")
+	}
+}
+
+// TestPasteOneRemoteReportsTheRealCurrentFileSize pins a real,
+// live-reported gap: without a real per-file size lookup, a large
+// single file (a video, say) copied to or from a remote connection
+// showed a permanently empty progress bar for its entire transfer —
+// currentFileSize stuck at 0 read as "stuck", not "still copying",
+// since fileFrac (see pasteProgressText) can never be anything but 0
+// without a real size to divide by. onFile now looks the real size up
+// via a plain Lstat on whichever side src lives on, the same call
+// pasteWalk's own conflict check already makes for free elsewhere.
+func TestPasteOneRemoteReportsTheRealCurrentFileSize(t *testing.T) {
+	localDir := t.TempDir()
+	content := bytes.Repeat([]byte("a"), 12345)
+	if err := os.WriteFile(filepath.Join(localDir, "big.bin"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+	job := newRemotePasteTestJob(r, false, "/remote", 1, nil, client)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{filepath.Join(localDir, "big.bin")})
+	waitPasteIO(t, done, 1)
+
+	if got := job.currentFileSize.Load(); got != int64(len(content)) {
+		t.Errorf("currentFileSize = %d, want %d (the file's own real size, not the previous always-0 default)", got, len(content))
+	}
+	if got := job.currentFileBytes.Load(); got != int64(len(content)) {
+		t.Errorf("currentFileBytes = %d, want %d (fully copied)", got, len(content))
 	}
 }
 
