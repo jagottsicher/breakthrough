@@ -33,6 +33,14 @@ go test ./...
 ## Code style
 
 - Run `gofmt`, `go vet ./...`, and `golangci-lint run` before committing.
+- Any change to code, packages, imports, or symbols must come with a
+  freshly regenerated `docs/code-index.json` and `docs/images/callgraph.svg`
+  (see [Architecture](README.md#architecture)) — CI rejects a pull request
+  where the committed files don't match what a fresh run produces.
+- `make check` runs all of the above (`gofmt`, `go vet`, `golangci-lint`,
+  `go test -race -cover`, both generators) in one pass and fails if
+  anything is left out of sync; see `make help` for the individual
+  targets it's built from.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`).
 - Comments are in English — please comment generously, especially around
