@@ -211,7 +211,12 @@ var helpText = strings.TrimLeft(`
   that has never once succeeded isn't added to history at all; "x"/
   Delete or a row's own trailing "✕" cell drops one entry out of
   history; the active row's own leading "⏏" cell, or "e", disconnects
-  — no separate "Disconnect" row anymore). Auth tries an ssh-agent, then
+  — no separate "Disconnect" row anymore. Every other history row shows
+  "✎" there instead: opens the Connect dialog prefilled from that entry
+  without dialing it immediately, so a saved Host/Port/User can be
+  fixed before reconnecting, rather than only ever being retyped from
+  scratch or fired off as-is — "e" on that row does the same). Auth
+  tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
   trust-on-first-use prompt for an unknown one and an outright refusal,

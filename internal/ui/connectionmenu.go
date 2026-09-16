@@ -120,7 +120,11 @@ func (r *Root) renderConnectionMenu() {
 					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColEject)))
 			r.connectionMenuActiveRow = thisRow
 		} else {
-			table.SetCell(thisRow, connectionMenuColEject, blankConnectionMenuCell())
+			table.SetCell(thisRow, connectionMenuColEject,
+				tview.NewTableCell(" "+connectionHistoryEditGlyph+" ").
+					SetTextColor(r.theme.MutedTextColor).
+					SetSelectable(true).
+					SetClickedFunc(r.clickConnectionMenuCell(thisRow, connectionMenuColEject)))
 		}
 
 		table.SetCell(thisRow, connectionMenuColRemove,
@@ -173,7 +177,10 @@ func blankConnectionMenuCell() *tview.TableCell {
 // the identical dispatch-by-column shape activateTabSwitcherCell
 // already establishes. Row 0 is always "New connection…", regardless
 // of column: it has nothing in its own eject/remove cells to tell
-// apart in the first place.
+// apart in the first place. connectionMenuColEject carries two
+// different actions depending on the row, not one — see
+// connectionHistoryEditGlyph's own doc comment for why the same column
+// position works for both without ever being ambiguous.
 func (r *Root) activateConnectionMenuCell(row, column int) {
 	if row == 0 {
 		r.hideOverlay()
@@ -186,7 +193,11 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 	}
 	switch column {
 	case connectionMenuColEject:
-		r.disconnectConnectionRow(row)
+		if row == r.connectionMenuActiveRow {
+			r.disconnectConnectionRow(row)
+		} else {
+			r.editConnectionHistoryRow(conn)
+		}
 	case connectionMenuColRemove:
 		r.removeConnectionHistoryRow(row)
 	default:
@@ -194,6 +205,19 @@ func (r *Root) activateConnectionMenuCell(row, column int) {
 		r.openConnectDialog(conn)
 		r.runConnect()
 	}
+}
+
+// editConnectionHistoryRow opens the Connect dialog prefilled from
+// conn, the same as reconnecting to a history row does, but without
+// immediately dialing it the way clicking the row's own label does —
+// lets the user review or fix a saved entry's Host/Port/User (a typo,
+// a since-changed port) before actually attempting a connection with
+// it, rather than only ever being able to retype it from scratch as a
+// brand-new "New connection…" or fire off an attempt with whatever the
+// history already has.
+func (r *Root) editConnectionHistoryRow(conn remotefs.Connection) {
+	r.hideOverlay()
+	r.openConnectDialog(conn)
 }
 
 // clickConnectionMenuCell is one cell's own mouse action — the same
@@ -215,12 +239,15 @@ func (r *Root) clickConnectionMenuCell(row, column int) func() bool {
 // captureConnectionMenuKey adds "x"/Delete as a from-anywhere-in-the-row
 // keyboard equivalent of clicking a history row's own "✕" (see
 // captureTabSwitcherKey's identical Delete handling for the tab
-// switcher's own close button), and "e" as the same for its "⏏".
-// Escape closes the dropdown outright: a Table has no DoneFunc of its
-// own, unlike the List this replaced (see captureTabSwitcherKey's own
-// doc comment on the identical gap), and Space activates whichever
-// cell currently has the selection, since tview's Table only wires
-// that natively to Enter.
+// switcher's own close button), and "e" as the same for whichever of
+// "⏏"/"✎" the currently selected row actually carries — eject on the
+// one active row, edit on every other history row (see
+// connectionHistoryEditGlyph's own doc comment). Escape closes the
+// dropdown outright: a Table has no DoneFunc of its own, unlike the
+// List this replaced (see captureTabSwitcherKey's own doc comment on
+// the identical gap), and Space activates whichever cell currently has
+// the selection, since tview's Table only wires that natively to
+// Enter.
 func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	row, column := r.connectionMenuTable.GetSelection()
 
@@ -239,8 +266,14 @@ func (r *Root) captureConnectionMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	isEjectKey := event.Key() == tcell.KeyRune && event.Rune() == 'e'
-	if isEjectKey && r.disconnectConnectionRow(row) {
-		return nil
+	if isEjectKey {
+		if r.disconnectConnectionRow(row) {
+			return nil
+		}
+		if conn, ok := r.connectionMenuHistoryRows[row]; ok {
+			r.editConnectionHistoryRow(conn)
+			return nil
+		}
 	}
 
 	return event
@@ -364,6 +397,23 @@ const connectionHistoryRemoveGlyph = "✕"
 // naturally as "detach from this" the same way a USB drive's own eject
 // icon does.
 const connectionHistoryEjectGlyph = "⏏"
+
+// connectionHistoryEditGlyph fills the same column position as
+// connectionHistoryEjectGlyph, on every history row that is *not* the
+// active connection — the two are mutually exclusive per row (see
+// renderConnectionMenu), so one column comfortably carries both
+// without ever needing a column of its own. Clicking it, or pressing
+// "e" while that row is highlighted (see captureConnectionMenuKey and
+// editConnectionHistoryRow), opens the Connect dialog prefilled from
+// that entry instead of dialing it immediately the way clicking the
+// row's own label does — per the user's own explicit request for a
+// way to fix a saved entry's Host/Port/User before reconnecting,
+// rather than only being able to retype it from scratch. A thin
+// pencil outline, matching the eject glyph's own hollow-line weight
+// rather than a filled one, and unambiguous next to "✕": the two read
+// as clearly different actions at a glance even though both use a
+// single stroke-based symbol.
+const connectionHistoryEditGlyph = "✎"
 
 // connectionHistoryColor picks entry's own label color by state —
 // green (theme.EntryExecutable, this app's established "healthy/

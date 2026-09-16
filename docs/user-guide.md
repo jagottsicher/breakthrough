@@ -963,7 +963,12 @@ that row is highlighted) to drop just that one entry out of history,
 without ever connecting to it. The one row that's this panel's own
 active connection additionally carries a leading "⏏" cell — click it
 (or press `e` while that row is highlighted) to disconnect; there's no
-separate "Disconnect" row anymore.
+separate "Disconnect" row anymore. Every *other* history row carries a
+"✎" there instead — click it (or press `e`) to open the Connect dialog
+prefilled from that entry without immediately retrying it, so a saved
+Host/Port/User can be fixed first (a typo, a port that's since
+changed) rather than only ever being retyped as a brand-new connection
+or fired off exactly as saved.
 
 **+ New connection** opens a small form: Host, Port (blank means 22),
 User (blank means this machine's own local username, the same
