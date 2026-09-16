@@ -500,6 +500,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleList(r.rsyncFlagsList, theme)
 	r.rsyncPreviewView.SetBackgroundColor(theme.SurfaceBackground)
 	r.rsyncPreviewView.SetTextColor(theme.TextColor)
+	r.rsyncHintView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncHintView.SetTextColor(theme.TextColor)
 	r.rsyncSpacer.SetBackgroundColor(theme.SurfaceBackground)
 	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
 	styleButton(r.rsyncCancelBtn, theme)
