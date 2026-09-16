@@ -523,7 +523,17 @@ var helpText = strings.TrimLeft(`
   Edit or the bash command line already do and hands the real terminal
   to rsync, so its own --info=progress2 live progress renders exactly
   as it would from a shell; breakthrough resumes and reloads the panel
-  once it exits.
+  once it exits. "Run in background" instead keeps breakthrough fully
+  usable the whole time — Copy/Cut/Paste included, running at the same
+  time if you start one — showing a live "rsync N%" percentage in the
+  status bar instead, parsed from that same --info=progress2 output;
+  only one background rsync runs at a time, a second one asked for
+  queues behind it the same way a second Paste already does. Ctrl+C/
+  Ctrl+Delete cancels a running background rsync, the same key that
+  already cancels a running Paste. The one thing it can't do that "Run"
+  can: answer an interactive prompt — an untrusted ssh host key or a
+  password prompt fails fast with a real error instead of hanging,
+  since its own stdin deliberately reads from nothing.
 
 [::b]Tabs[::-]
 

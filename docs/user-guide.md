@@ -748,6 +748,25 @@ empty, unquoted shell argument doesn't produce a plain "missing
 argument" error the way you'd expect — it silently vanishes from the
 argument list instead, shifting everything after it).
 
+**Run in background** runs the exact same command without taking over
+the terminal at all: breakthrough itself stays fully usable the whole
+time — Copy/Cut/Paste included, running at the same time if you start
+one — while a live "rsync N% ▀▀▀▀▀▀▀▀▀▀ rate elapsed" segment tracks
+progress in the status bar, parsed straight from rsync's own
+`--info=progress2` output (which is why that flag is always on,
+whichever way you run it). Only one background rsync runs at a time; a
+second one asked for while one is still going queues behind it, the
+same way a second Paste already queues behind one still copying.
+`Ctrl+C`/`Ctrl+Delete` cancels a running background rsync the same key
+that already cancels a running Paste — both, if both happen to be
+running at once. The one thing this path can't do that Run's own
+directly-attached terminal can: answer an interactive prompt — an
+`ssh` connection whose host key isn't already trusted, or one that
+still needs a typed password, fails fast with a real, reported error
+instead of hanging with no visible prompt at all, since a backgrounded
+rsync's own stdin deliberately reads from nothing rather than from
+breakthrough's own keyboard.
+
 ## Sed Replace
 
 `E`, or the context menu's "sed". Runs a real `sed(1)`

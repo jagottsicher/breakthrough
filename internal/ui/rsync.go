@@ -2,14 +2,19 @@
 // command-building core: picks sensible Source/Destination defaults
 // from whatever's on screen right now, lets the user adjust every
 // flag internal/rsync.Job understands, shows the exact command that
-// would run as a live preview, and — once confirmed — hands that
-// command to a real rsync(1) process with the real terminal, the same
-// way this app's own embedded bash line already runs anything else
-// that isn't safe or useful to run silently in the background.
+// would run as a live preview, and — once confirmed — either hands
+// that command to a real rsync(1) process with the real terminal
+// ("Run", the same way this app's own embedded bash line already runs
+// anything that benefits from one directly attached), or starts it in
+// the background ("Run in background" — see rsyncjob.go), keeping
+// breakthrough itself fully usable, including a Copy/Cut/Paste running
+// at the same time, while its own live --info=progress2 percentage
+// shows in the status bar instead.
 package ui
 
 import (
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -325,13 +330,16 @@ func (r *Root) newRsyncHintView() *tview.TextView {
 func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsyncCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
 	r.rsyncRunBtn = tview.NewButton("Run").SetSelectedFunc(r.runRsync)
+	r.rsyncRunBackgroundBtn = tview.NewButton("Run in background").SetSelectedFunc(r.runRsyncBackground)
 	r.rsyncCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
 	r.rsyncRunBtn.SetInputCapture(spaceAlsoActivates(r.runRsync))
+	r.rsyncRunBackgroundBtn.SetInputCapture(spaceAlsoActivates(r.runRsyncBackground))
 
 	// Tab/Backtab close the chain rsyncExtraArgsField/rsyncFlagsList's
 	// own SetInputCapture calls start — the same shape
 	// newConnectButtons' own doc comment explains in full: cycles
-	// Cancel -> Run -> back to Source, and the reverse.
+	// Cancel -> Run -> Run in background -> back to Source, and the
+	// reverse.
 	r.rsyncCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
@@ -345,9 +353,19 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsyncRunBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncSourceField)
+			r.app.SetFocus(r.rsyncRunBackgroundBtn)
 		case tcell.KeyBacktab:
 			r.app.SetFocus(r.rsyncCancelBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.rsyncRunBackgroundBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.rsyncSourceField)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.rsyncRunBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -355,7 +373,8 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 
 	return tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.rsyncCancelBtn, 0, 1, false).
-		AddItem(r.rsyncRunBtn, 0, 1, false)
+		AddItem(r.rsyncRunBtn, 0, 1, false).
+		AddItem(r.rsyncRunBackgroundBtn, 0, 1, false)
 }
 
 // newRsyncLayout wraps rsyncTitleBar (" Rsync ") above
@@ -532,4 +551,36 @@ func (r *Root) runRsync() {
 	}
 	r.hideOverlay()
 	r.runShellCommandFullScreen(job.Command())
+}
+
+// runRsyncBackground is the "Run in background" button's own action —
+// the same Source/Destination validation runRsync already does, then
+// startRsyncBackground instead of suspending the terminal (see
+// rsyncjob.go's own package doc comment for the full trade-off: no
+// directly-attached terminal for whatever isn't already covered by
+// --info=progress2's own percentage, but Copy/Cut/Paste — and browsing
+// itself — keep working the whole time, and its own live progress shows
+// in the status bar exactly the way a Paste's already does).
+func (r *Root) runRsyncBackground() {
+	job := r.currentRsyncJob()
+	if job.Source.Path == "" || job.Destination.Path == "" {
+		r.showError(fmt.Errorf("rsync: both Source and Destination are required"))
+		return
+	}
+	r.hideOverlay()
+	r.startRsyncBackground(job, rsyncEndpointBase(job.Source)+" → "+rsyncEndpointBase(job.Destination))
+}
+
+// rsyncEndpointBase is startRsyncBackground's own compact label for one
+// endpoint — just enough to tell two backgrounded runs apart in the
+// status bar without eating the whole line the way a full path would:
+// the trailing path component, prefixed with the host for a remote
+// endpoint (its path alone could name the same last component on two
+// completely different machines).
+func rsyncEndpointBase(e rsync.Endpoint) string {
+	base := path.Base(e.Path)
+	if !e.IsRemote() {
+		return base
+	}
+	return e.Host + ":" + base
 }
