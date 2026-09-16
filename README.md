@@ -448,12 +448,16 @@ terminal.
   relays through this machine over two separate ssh connections, never
   directly between the two remote ends. A live preview line shows the
   exact command that would run, `--delete` called out in its own
-  warning color the moment it's turned on, right up until "Run" hands
-  it to a real `rsync` process with the real terminal attached — the
-  same way the embedded bash line already runs anything that benefits
-  from one, so `--info=progress2`'s own live progress line renders
-  correctly. See [docs/user-guide.md](docs/user-guide.md#rsync) for the
-  full picture.
+  warning color the moment it's turned on, right up until either button
+  runs it for real: "Run" hands it to a real `rsync` process with the
+  real terminal attached, the same way the embedded bash line already
+  runs anything that benefits from one, so `--info=progress2`'s own
+  live progress line renders correctly; "Run in background" instead
+  keeps breakthrough itself fully usable — Copy/Cut/Paste included, at
+  the same time — while its own live percentage shows in the status
+  bar, queuing behind an already-running background rsync the same way
+  a second Paste already queues behind one still in flight. See
+  [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
