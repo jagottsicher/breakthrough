@@ -95,7 +95,21 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 		return nil, err
 	}
 
-	sftpClient, err := sftp.NewClient(sshClient)
+	// UseConcurrentWrites: pkg/sftp's own default is off ("write
+	// concurrency is... error prone", per its own doc comment) — plain
+	// sequential Write calls wait for the server's own ack before
+	// sending the next packet, which is fine over a slow link where
+	// bandwidth is the real limit, but on a fast local network the
+	// per-packet round trip itself becomes the bottleneck: a real,
+	// live-reported case of copying between two machines on the same
+	// LAN feeling far slower than the link itself could ever explain.
+	// internal/ui's own pasteTransferFile takes on the one real risk
+	// this trades in return (a failed transfer can otherwise leave a
+	// "hole" — a later chunk landing before an earlier one that then
+	// fails — instead of a cleanly truncated file) by truncating the
+	// destination to empty on any copy error, so a failure still looks
+	// unmistakably incomplete rather than silently corrupt.
+	sftpClient, err := sftp.NewClient(sshClient, sftp.UseConcurrentWrites(true))
 	if err != nil {
 		_ = sshClient.Close()
 		return nil, fmt.Errorf("starting sftp session: %w", err)

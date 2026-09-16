@@ -45,6 +45,19 @@ type fakeRemoteClient struct {
 	// meaningful default here.
 	diskUsage    fsops.DiskUsage
 	diskUsageErr error
+
+	// writeFailAfter, when > 0, makes a fakeRemoteWriteCloser's own
+	// Write fail once its cumulative byte count would exceed this —
+	// TestPasteTransferFileTruncatesTheDestinationOnAWriteError's own
+	// way to force exactly the "some data already landed, then a
+	// later chunk failed" case a real concurrent write can leave
+	// behind, without needing a real, flaky network failure to do it.
+	writeFailAfter int
+
+	// truncated records, by path, the size Truncate was last called
+	// with — the only way a test can observe that call at all, since
+	// nothing here ever hands the created writer itself back out.
+	truncated map[string]int64
 }
 
 var _ remotefs.Client = (*fakeRemoteClient)(nil)
@@ -116,7 +129,12 @@ type fakeRemoteWriteCloser struct {
 	buf    bytes.Buffer
 }
 
-func (w *fakeRemoteWriteCloser) Write(p []byte) (int, error) { return w.buf.Write(p) }
+func (w *fakeRemoteWriteCloser) Write(p []byte) (int, error) {
+	if fail := w.client.writeFailAfter; fail > 0 && w.buf.Len()+len(p) > fail {
+		return 0, fmt.Errorf("fakeRemoteWriteCloser: forced write failure past %d bytes", fail)
+	}
+	return w.buf.Write(p)
+}
 func (w *fakeRemoteWriteCloser) Close() error {
 	if w.client.content == nil {
 		w.client.content = map[string][]byte{}
@@ -126,6 +144,19 @@ func (w *fakeRemoteWriteCloser) Close() error {
 		dir := path.Dir(w.path)
 		w.client.entries[dir] = append(w.client.entries[dir], fsops.Entry{Name: path.Base(w.path), Type: fsops.TypeFile})
 	}
+	return nil
+}
+
+// Truncate mirrors *sftp.File's own method of the same name — see
+// pasteTransferFile's own doc comment for why a failed transfer calls
+// it. Real files truncate in place, so this discards everything past
+// size rather than treating a shorter buffer as a fresh one.
+func (w *fakeRemoteWriteCloser) Truncate(size int64) error {
+	if w.client.truncated == nil {
+		w.client.truncated = map[string]int64{}
+	}
+	w.client.truncated[w.path] = size
+	w.buf.Truncate(int(size))
 	return nil
 }
 

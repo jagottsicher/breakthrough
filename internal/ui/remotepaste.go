@@ -412,12 +412,34 @@ func pasteTransferItem(src, dest transferSide, srcPath, destPath string, force b
 // have done its real work against a fake remote client.
 var runPasteTransferItem = pasteTransferItem
 
-// pasteTransferFile is copyTransferFile's own progress-reporting
+// pasteTransferFile is copyTransferItem's own progress-reporting
 // sibling — see pasteTransferItem's own doc comment for why a second,
 // parallel function exists rather than adding onBytes to
 // copyTransferFile itself: the archive-extraction path
 // (runRemoteArchiveExtraction) that still calls the plain version has
 // no job-wide progress to report into at all.
+//
+// The progress hook wraps r (the source), never w (the destination) —
+// see newProgressReader's own doc comment for why that side of the
+// wrap is the one that actually matters: wrapping w the way an earlier
+// version of this function did unconditionally hid w's own
+// io.ReaderFrom from io.Copy's own dispatch, silently falling back to
+// a plain byte-shuffling loop even once remotefs.Dial started asking
+// pkg/sftp for concurrent writes (see its own doc comment) — a real,
+// user-reported case of copying between two machines on the very same
+// LAN feeling far slower than the link itself could explain, because
+// every 32KB chunk was still waiting for its own round trip before the
+// next one went out.
+//
+// A copy error truncates dest to empty before returning it, rather
+// than leaving whatever partial write is already sitting there:
+// concurrent writes can otherwise leave a "hole" instead of a clean
+// truncation on failure — a later chunk at a higher offset landing
+// before an earlier one that then fails, leaving a file with the
+// *right* final size but silently missing data partway through,
+// rather than obviously, visibly incomplete the way a sequential
+// failure always was. Best-effort: Truncate failing too just means
+// leaving whatever's there, no worse than before this existed.
 func pasteTransferFile(src, dest transferSide, srcPath, destPath string, onBytes func(int64)) error {
 	r, err := src.open(srcPath)
 	if err != nil {
@@ -429,35 +451,116 @@ func pasteTransferFile(src, dest transferSide, srcPath, destPath string, onBytes
 	if err != nil {
 		return err
 	}
-	var copied int64
-	if onBytes == nil {
-		_, err = io.Copy(w, r)
-	} else {
-		buf := make([]byte, 32*1024)
-		_, err = io.CopyBuffer(progressWriter{w: w, copied: &copied, onBytes: onBytes}, r, buf)
+
+	var reader io.Reader = r
+	if onBytes != nil {
+		reader = newProgressReader(r, onBytes)
 	}
-	if err != nil {
+	if _, err := io.Copy(w, reader); err != nil {
+		if t, ok := w.(interface{ Truncate(int64) error }); ok {
+			_ = t.Truncate(0)
+		}
 		_ = w.Close()
 		return err
 	}
 	return w.Close()
 }
 
-// progressWriter wraps an io.Writer, reporting the running total of
-// bytes written so far after every chunk — io.CopyBuffer's own way of
-// giving pasteTransferFile a per-chunk hook, the same running-total
-// contract fsops.CopyOptions.OnBytes already documents for the local
-// engine (see pasteTransferItem's own doc comment).
-type progressWriter struct {
-	w       io.Writer
-	copied  *int64
+// newProgressReader wraps r, reporting the running total of bytes read
+// so far after every chunk — the same running-total contract
+// fsops.CopyOptions.OnBytes already documents for the local engine
+// (see pasteTransferItem's own doc comment), just measured on the read
+// side instead of the write side (see pasteTransferFile's own doc
+// comment for why that side of the wrap is the one that matters here).
+//
+// Returns one of two different concrete shapes depending on whether r
+// itself already implements io.WriterTo (a remote download's own
+// *sftp.File source, which uses it for pkg/sftp's own concurrent-read
+// fast path): wrapping a WriterTo-capable reader in a value that
+// *also* declares WriteTo keeps io.Copy calling into it — io.Copy
+// checks src.(io.WriterTo) before ever looking at the destination, so
+// hiding it here would silently downgrade a download back to a plain
+// read/write loop. Wrapping anything else (an upload's own local
+// os.File source, which has no WriteTo of its own) in a value that
+// deliberately has *no* WriteTo instead makes io.Copy check the
+// destination's own io.ReaderFrom next — a remote upload's own
+// concurrent-*write* fast path, the one this whole function exists to
+// stop hiding.
+func newProgressReader(r io.Reader, onBytes func(int64)) io.Reader {
+	if wt, ok := r.(io.WriterTo); ok {
+		return &progressWriterToReader{r: r, wt: wt, onBytes: onBytes}
+	}
+	return &progressReader{r: r, onBytes: onBytes}
+}
+
+// progressReader is newProgressReader's own plain shape — no WriteTo
+// of its own, so io.Copy always falls through to checking the
+// destination's own io.ReaderFrom instead (see newProgressReader's own
+// doc comment).
+type progressReader struct {
+	r       io.Reader
+	read    int64
 	onBytes func(int64)
 }
 
-func (p progressWriter) Write(b []byte) (int, error) {
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.read += int64(n)
+		p.onBytes(p.read)
+	}
+	return n, err
+}
+
+// progressWriterToReader is newProgressReader's own other shape —
+// declares WriteTo so io.Copy still reaches for r's own real one, with
+// progress reported as each chunk actually lands on the destination
+// (via progressWriteWrap) rather than only once the whole WriteTo call
+// returns.
+type progressWriterToReader struct {
+	r       io.Reader
+	wt      io.WriterTo
+	read    int64
+	onBytes func(int64)
+}
+
+// Read exists only so progressWriterToReader still satisfies
+// io.Reader (Go doesn't let one type declare WriteTo alone and be
+// used where a plain io.Reader is expected, e.g. as the src argument
+// of a fallback read/write loop) — never actually reached through
+// io.Copy, which always prefers WriteTo once it's present at all.
+func (p *progressWriterToReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.read += int64(n)
+		p.onBytes(p.read)
+	}
+	return n, err
+}
+
+func (p *progressWriterToReader) WriteTo(w io.Writer) (int64, error) {
+	return p.wt.WriteTo(&progressWriteWrap{w: w, base: &p.read, onBytes: p.onBytes})
+}
+
+// progressWriteWrap is progressWriterToReader.WriteTo's own
+// destination wrapper, incrementing the running total kept on the
+// progressWriterToReader that created it (base) after every chunk.
+// Plain, non-atomic arithmetic is safe here the same way it already
+// is on progressReader.Read: pkg/sftp's own concurrent-read
+// implementation fetches data over several parallel requests, but
+// still delivers it to the io.Writer it was given — this wrap — one
+// chunk at a time, in file order, from a single goroutine; a real
+// io.Writer has no offset parameter to make anything else safe.
+type progressWriteWrap struct {
+	w       io.Writer
+	base    *int64
+	onBytes func(int64)
+}
+
+func (p *progressWriteWrap) Write(b []byte) (int, error) {
 	n, err := p.w.Write(b)
-	*p.copied += int64(n)
-	p.onBytes(*p.copied)
+	*p.base += int64(n)
+	p.onBytes(*p.base)
 	return n, err
 }
 
