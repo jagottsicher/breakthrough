@@ -12,7 +12,7 @@ const dirPickerPage = "dir-picker"
 
 // dirPickerSize is the picker's fixed width/height — tall enough to
 // browse comfortably, but still an overlay rather than a full-screen
-// replacement (see clampToPanel, which still shrinks it on a small
+// replacement (see clampToScreen, which still shrinks it on a small
 // terminal).
 const dirPickerWidth, dirPickerHeight = 60, 20
 
@@ -71,7 +71,12 @@ func (r *Root) openDirPicker(start string, onSelect func(string), onCancel func(
 	r.loadDirPicker(start)
 
 	x, y := r.centeredOnScreen(dirPickerWidth, dirPickerHeight)
-	x, y, w, h := r.clampToPanel(x, y, dirPickerWidth, dirPickerHeight)
+	// clampToScreen, not clampToPanel: centeredOnScreen already centers
+	// this on the whole terminal, so clamping it back down to just the
+	// active panel's own width in split view would squeeze it — visibly
+	// shoved against one edge instead of staying centered, a real,
+	// reported bug.
+	x, y, w, h := r.clampToScreen(x, y, dirPickerWidth, dirPickerHeight)
 	r.dirPicker.SetRect(x, y, w, h)
 
 	r.pushOverlay(dirPickerPage, r.dirPicker, nil)

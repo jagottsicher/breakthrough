@@ -9,6 +9,30 @@ import (
 	"github.com/rivo/tview"
 )
 
+// TestOpenDirPickerStaysCenteredOnTheWholeScreenInSplitView pins a
+// real, reported bug: openDirPicker centers itself against the whole
+// screen (centeredOnScreen) but used to clamp the result down to just
+// the active panel's own, narrower width in split view — visibly
+// shoving it against one edge instead of keeping it centered.
+// dirPickerWidth (60) comfortably exceeds one pane's own share of a
+// 100-wide split screen, which is exactly what lets this test tell the
+// two behaviors apart.
+func TestOpenDirPickerStaysCenteredOnTheWholeScreenInSplitView(t *testing.T) {
+	const screenWidth, screenHeight = 100, 40
+	r := newTestRootInSplitView(t, screenWidth, screenHeight)
+
+	r.openDirPicker(r.panel.path, nil, nil)
+
+	x, _, width, _ := r.dirPicker.GetRect()
+	if width != dirPickerWidth {
+		t.Fatalf("dirPicker width = %d, want %d — clamped down to fit inside the active pane's own width instead of staying its own full size across the whole screen", width, dirPickerWidth)
+	}
+	wantX := (screenWidth - width) / 2
+	if x != wantX {
+		t.Errorf("dirPicker x = %d, want %d (centered on the whole %d-wide screen, not just the active pane's own half)", x, wantX, screenWidth)
+	}
+}
+
 // TestOpenDirPickerListsSubdirectoriesOnly pins loadDirPicker's own
 // filtering: only subdirectories appear (see fixtureDir's own mix of
 // files and exactly one directory, "app-data"), plus a leading ".."
