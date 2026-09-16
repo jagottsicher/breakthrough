@@ -214,8 +214,12 @@ var helpText = strings.TrimLeft(`
   no prompt, for one that changed. Browsing, rename, permanent delete,
   chmod, and Copy/Cut/Paste all work once connected ("d" redirects
   straight to the same permanent-delete confirmation "D" uses — no
-  remote trash exists to move into instead; a same-connection move
-  renames instead of downloading and re-uploading). Look and Edit
+  remote trash exists to move into instead). A remote-involving Paste
+  shares the exact same Overwrite/Merge/Skip conflict dialog a local
+  one has, rather than refusing outright the moment a destination
+  already exists; it doesn't yet preserve permissions/times, show
+  byte-accurate progress, or follow a symlink instead of skipping it —
+  all still local-only for now. Look and Edit
   stage a real local temp copy behind the scenes for the ordinary
   built-in viewer/external pager/$VISUAL/$EDITOR to use unchanged —
   Edit only uploads it back if it actually changed. Opening a zip/tar

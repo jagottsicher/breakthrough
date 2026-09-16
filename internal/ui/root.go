@@ -3227,24 +3227,22 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // itself picks a search result's own directory instead of r.panel.path
 // while search results are showing (see its own doc comment). A thin
 // wrapper around startPaste (see pasteconflict.go for the full async,
-// conflict-resolving shape); a no-op if nothing was ever copied/cut,
-// same as before.
+// conflict-resolving shape, and pasteJob.srcClient/destClient's own doc
+// comment for how that same job type now also drives a remote-involving
+// paste through the exact same conflict dialog/queue an ordinary local
+// one always has); a no-op if nothing was ever copied/cut, same as
+// before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
 	if r.clipboardSourceClient != nil || r.panel.remote != nil {
-		// remotepaste.go's own engine, once either side of the paste is
-		// remote — never mixed with the local startPaste path below,
-		// which assumes a real local path throughout.
+		// A marked member inside a remote-staged archive still on
+		// screen somewhere (see remoteArchiveExtractionFor's own doc
+		// comment) still goes through its own dedicated extraction path,
+		// never startPaste: its clipboard path is a purely virtual
+		// "archive/member" string our own UI constructs, not a real path
+		// a Client.Open call could ever resolve. Cut has nothing to
+		// remove afterward, same as archiveExtractionFor's own identical
+		// local-archive refusal.
 		if archiveLocalPath, members, ok := r.remoteArchiveExtractionFor(r.clipboard); ok {
-			// A marked member inside a remote-staged archive still on
-			// screen somewhere (see remoteArchiveExtractionFor's own doc
-			// comment) — its clipboard path is a purely virtual
-			// "archive/member" string our own UI constructs, not a real
-			// path remote.Open could ever resolve, so startRemotePaste
-			// below would otherwise fail with a confusing raw SFTP
-			// "no such file" instead of actually extracting it from the
-			// local temp copy already sitting on disk. Cut has nothing
-			// to remove afterward, same as archiveExtractionFor's own
-			// identical local-archive refusal.
 			if r.clipboardCut {
 				r.showError(fmt.Errorf("cut isn't supported for items inside an archive — use Copy instead"))
 				return
@@ -3260,7 +3258,7 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 			r.showError(fmt.Errorf("pasting while following symlinks isn't supported yet for a remote connection — use plain Paste instead"))
 			return
 		}
-		r.startRemotePaste(r.clipboard, r.clipboardSourceClient, r.clipboardCut, r.panel.remote, dir)
+		r.startPaste(r.clipboard, r.clipboardCut, dir, false, nil, "", r.clipboardSourceClient, r.panel.remote)
 		return
 	}
 	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {
@@ -3276,7 +3274,7 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 		r.extractClipboardArchive(archivePath, members, dir)
 		return
 	}
-	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "")
+	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "", nil, nil)
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker

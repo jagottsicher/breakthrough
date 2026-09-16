@@ -557,12 +557,12 @@ terminal.
   sorting, same navigation, and Details/status-bar Disk+Inodes/System
   Info at "/" all describe the *remote* machine, not this one. Rename,
   permanent delete, chmod (including its recursive dirs/files options),
-  and Copy/Cut/Paste all work against a remote target too — including
-  moving a file between two directories on the same connection, which
-  goes through a single rename rather than downloading and re-uploading
-  it; "d" (Move to Trash) explains why it switches straight to a
-  permanent-delete confirmation instead, since a remote session has no
-  trash to move into. Look and Edit stage a real local temp copy
+  and Copy/Cut/Paste all work against a remote target too, through the
+  exact same Overwrite/Merge/Skip conflict dialog a purely local Paste
+  already has, rather than an older engine that just refused outright
+  the moment a destination already existed; "d" (Move to Trash) explains
+  why it switches straight to a permanent-delete confirmation instead,
+  since a remote session has no trash to move into. Look and Edit stage a real local temp copy
   behind the scenes and hand it to the ordinary built-in viewer/
   external pager/$VISUAL/$EDITOR unchanged — Edit only uploads it back
   if it actually changed. Opening a zip/tar that itself lives on a
