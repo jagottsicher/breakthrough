@@ -1223,8 +1223,8 @@
     },
     {
       "path": "internal/ui/rsync_test.go",
-      "size": 14984,
-      "sha256": "3a924cad98d941f6e4d5908cb75008e8fe1a0284d8de3e9fb2b6840b5b5c07a0"
+      "size": 15556,
+      "sha256": "fc4abb0e519b87b8da4a29abd34f9ad838f813323fa92d1eb2b067f2d0593f2d"
     },
     {
       "path": "internal/ui/search.go",
@@ -24157,121 +24157,128 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
-      "name": "TestDefaultRsyncDestinationUsesTheSplitPartner",
+      "name": "TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected",
       "kind": "function",
       "line": 77
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
+      "name": "TestDefaultRsyncDestinationUsesTheSplitPartner",
+      "kind": "function",
+      "line": 93
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
       "name": "TestDefaultRsyncDestinationIsBlankWithoutASplitPartner",
       "kind": "function",
-      "line": 102
+      "line": 118
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestDefaultRsyncSourceUsesUserHostSyntaxWhenThePanelIsRemote",
       "kind": "function",
-      "line": 114
+      "line": 130
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestDefaultRsyncDestinationUsesUserHostSyntaxWhenTheSplitPartnerIsRemote",
       "kind": "function",
-      "line": 136
+      "line": 152
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestCurrentRsyncJobPropagatesThePortFromAnUntouchedRemoteDefault",
       "kind": "function",
-      "line": 164
+      "line": 180
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort",
       "kind": "function",
-      "line": 189
+      "line": 205
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRsyncRelayHintOnlyAppearsWhenBothEndpointsAreRemote",
       "kind": "function",
-      "line": 210
+      "line": 226
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRsyncRelayHintAlsoCatchesHandTypedRemoteSyntax",
       "kind": "function",
-      "line": 241
+      "line": 257
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewShowsTheRelayHintForRemoteToRemote",
       "kind": "function",
-      "line": 254
+      "line": 270
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewHintIsBlankForLocalToRemote",
       "kind": "function",
-      "line": 268
+      "line": 284
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestSplitRsyncExcludesTrimsAndDropsEmptyEntries",
       "kind": "function",
-      "line": 281
+      "line": 297
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestSplitRsyncExcludesOnBlankTextReturnsNothing",
       "kind": "function",
-      "line": 289
+      "line": 305
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestCurrentRsyncJobReflectsEveryFieldAndFlag",
       "kind": "function",
-      "line": 299
+      "line": 315
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewShowsTheRealCommand",
       "kind": "function",
-      "line": 335
+      "line": 351
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewHighlightsDeleteWithAWarningTag",
       "kind": "function",
-      "line": 353
+      "line": 369
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRunRsyncRefusesAnEmptySourceOrDestination",
       "kind": "function",
-      "line": 372
+      "line": 388
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagFlipsStateAndRelabelsTheRow",
       "kind": "function",
-      "line": 389
+      "line": 405
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29155,5 +29162,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "42807899315c91c825c647d4d2cafea00cd8727d41b5ecf1b121c4b6efb3644f"
+  "merkle_root": "18349eb26579856a23613e555b3fdb1d620ebce448625e4a8a762fa9caa254e7"
 }

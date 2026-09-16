@@ -70,6 +70,22 @@ func TestDefaultRsyncSourceFallsBackToThePanelPath(t *testing.T) {
 	}
 }
 
+// TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected pins the
+// bare-right-click case: it moves the cursor to the clicked row but
+// marks nothing, so the source must still be that row, not the panel's
+// own directory.
+func TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.panel.focusRow(1) // off ".." onto a.txt, nothing checked
+
+	got := r.defaultRsyncSource()
+
+	want := filepath.Join(dir, "a.txt")
+	if got.text != want {
+		t.Errorf("defaultRsyncSource().text = %q, want %q", got.text, want)
+	}
+}
+
 // TestDefaultRsyncDestinationUsesTheSplitPartner pins the one case
 // where "the other side" is unambiguous — see openRsync's own doc
 // comment on why every other case is deliberately left blank instead
