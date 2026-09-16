@@ -365,7 +365,7 @@ func (r *Root) restoreSelectionFromTrash() {
 		dests = append(dests, item.OriginalPath)
 	}
 
-	r.startPaste(items, true, "", false, dests, dir)
+	r.startPaste(items, true, "", false, dests, dir, nil, nil)
 }
 
 // openEmptyTrashConfirm is the context menu's "Empty Trash" — same

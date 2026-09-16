@@ -474,7 +474,7 @@ func TestRestoreMultiSelectFromDifferentOriginalDirsRestoresBoth(t *testing.T) {
 	items := []string{itemA.Path(trashDir), itemB.Path(trashDir)}
 	dests := []string{fileA, fileB}
 	done := isolatePasteIO(t)
-	r.startPaste(items, true, "", false, dests, trashDir)
+	r.startPaste(items, true, "", false, dests, trashDir, nil, nil)
 	waitPasteIO(t, done, 2)
 
 	if got, err := os.ReadFile(fileA); err != nil || string(got) != "a" {

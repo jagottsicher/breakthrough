@@ -988,14 +988,24 @@ would otherwise be an easy trap. `D` skips that explanation: it
 already means "permanently delete" on its own. Paste dispatches by
 which side (or both) is remote: uploading, downloading, or copying/
 moving between two remote directories all work, including across two
-different connections at once; a move where both ends are the exact
-same live connection goes through a single rename on the server's own
-filesystem rather than downloading and re-uploading the whole file.
-Conflicts are handled more simply than a local Paste's own dialog: an
-existing destination is always left alone rather than offering to
-overwrite/rename/skip, and a symlink anywhere in a copied tree is
-skipped outright rather than followed or recreated on the other end
-("following symlinks" isn't offered as a Paste option at all here).
+different connections at once, through the exact same [conflict
+dialog](#copy-cut-and-paste) a purely local Paste already has —
+Overwrite, Merge, Skip, every "all"/"if newer"/"if not empty" variant
+included — rather than an older, simpler engine that just refused
+outright the moment a destination already existed. A symlink anywhere
+in a copied tree is still skipped outright rather than followed or
+recreated on the other end ("following symlinks" isn't offered as a
+Paste option here), and the live progress display falls back to
+item-count only — no byte-accurate total or current-file size — since
+sizing a remote tree up front costs a full recursive listing this first
+version doesn't spend; both are reported plainly rather than silently
+missing (a "N symlink(s) skipped" summary once the Paste finishes, and
+a progress line that simply omits the byte count it can't cheaply
+know). Permissions/ownership/modification time are not preserved on a
+remote-involving Paste the way a purely local one always preserves
+them, and a move between two ends of the exact same live connection
+still copies the file across the connection and then deletes the
+original, rather than a single, wire-free server-side rename.
 
 Details (`i`/`I`), the status bar's own Disk/Inodes segment, and
 System Info at the remote's own "/" all describe *that* machine now,

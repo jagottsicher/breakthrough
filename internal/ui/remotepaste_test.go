@@ -1,28 +1,71 @@
 package ui
 
 import (
+	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
-func TestRunRemotePasteUploadsALocalFileToARemoteDirectory(t *testing.T) {
+// isolateRemotePasteIO is isolatePasteIO's own remote counterpart —
+// wraps runPasteTransferItem instead of fsCopy/fsMove, the same
+// "still call through to the real implementation, just signal once it
+// actually returns" shape, for a test that needs to deterministically
+// wait for a remote-involving pasteWalk's own background goroutine.
+func isolateRemotePasteIO(t *testing.T) <-chan struct{} {
+	t.Helper()
+	done := make(chan struct{}, 64)
+	orig := runPasteTransferItem
+	runPasteTransferItem = func(src, dest transferSide, srcPath, destPath string, force bool, mode fsops.OverwriteMode, onFile func(string), onBytes func(int64), skippedSymlinks *[]string) (bool, error) {
+		skipped, err := orig(src, dest, srcPath, destPath, force, mode, onFile, onBytes, skippedSymlinks)
+		done <- struct{}{}
+		return skipped, err
+	}
+	t.Cleanup(func() { runPasteTransferItem = orig })
+	return done
+}
+
+// newRemotePasteTestJob mirrors newPasteTestJob (pasteconflict_test.go)
+// with srcClient/destClient additionally set — nil for whichever end is
+// local, matching every other "nil means local" call site in this
+// package.
+func newRemotePasteTestJob(r *Root, cut bool, destDir string, total int, srcClient, destClient remotefs.Client) *pasteJob {
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &pasteJob{
+		ctx: ctx, cancel: cancel, cut: cut, destDir: destDir, total: total, remaining: total,
+		destDirs:   map[string]bool{destDir: true},
+		srcClient:  srcClient,
+		destClient: destClient,
+	}
+	r.pasteJob = job
+	return job
+}
+
+func TestPasteWalkUploadsALocalFileToARemoteDirectory(t *testing.T) {
 	localDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(localDir, "local.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
-
-	succeeded, skipped, err := runRemotePaste([]string{filepath.Join(localDir, "local.txt")}, nil, false, client, "/remote")
-
-	if err != nil || succeeded != 1 || len(skipped) != 0 {
-		t.Fatalf("succeeded, skipped, err = %d, %v, %v", succeeded, skipped, err)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+	job := newRemotePasteTestJob(r, false, "/remote", 1, nil, client)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{filepath.Join(localDir, "local.txt")})
+	waitPasteIO(t, done, 1)
+
 	if got := string(client.content["/remote/local.txt"]); got != "hello" {
 		t.Errorf("uploaded content = %q, want %q", got, "hello")
 	}
@@ -31,18 +74,23 @@ func TestRunRemotePasteUploadsALocalFileToARemoteDirectory(t *testing.T) {
 	}
 }
 
-func TestRunRemotePasteDownloadsARemoteFileToALocalDirectory(t *testing.T) {
+func TestPasteWalkDownloadsARemoteFileToALocalDirectory(t *testing.T) {
 	client := &fakeRemoteClient{
 		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
 		content: map[string][]byte{"/remote/a.txt": []byte("hi")},
 	}
 	localDir := t.TempDir()
-
-	succeeded, skipped, err := runRemotePaste([]string{"/remote/a.txt"}, client, false, nil, localDir)
-
-	if err != nil || succeeded != 1 || len(skipped) != 0 {
-		t.Fatalf("succeeded, skipped, err = %d, %v, %v", succeeded, skipped, err)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
+	job := newRemotePasteTestJob(r, false, localDir, 1, client, nil)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{"/remote/a.txt"})
+	waitPasteIO(t, done, 1)
+
 	got, readErr := os.ReadFile(filepath.Join(localDir, "a.txt"))
 	if readErr != nil {
 		t.Fatalf("ReadFile: %v", readErr)
@@ -55,19 +103,28 @@ func TestRunRemotePasteDownloadsARemoteFileToALocalDirectory(t *testing.T) {
 	}
 }
 
-func TestRunRemotePasteMoveRemovesTheLocalSourceAfterUploading(t *testing.T) {
+func TestPasteWalkMoveRemovesTheLocalSourceAfterUploading(t *testing.T) {
 	localDir := t.TempDir()
 	srcPath := filepath.Join(localDir, "local.txt")
 	if err := os.WriteFile(srcPath, []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
-
-	succeeded, _, err := runRemotePaste([]string{srcPath}, nil, true, client, "/remote")
-
-	if err != nil || succeeded != 1 {
-		t.Fatalf("succeeded, err = %d, %v", succeeded, err)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
+	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/remote": nil}}
+	job := newRemotePasteTestJob(r, true, "/remote", 1, nil, client)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{srcPath})
+	waitPasteIO(t, done, 1)
+	// removeTransferSource runs synchronously, right after
+	// runPasteTransferItem returns, inside the very same background
+	// goroutine — give it a moment to actually finish before asserting.
+	time.Sleep(20 * time.Millisecond)
+
 	if _, err := os.Stat(srcPath); err == nil {
 		t.Error("a Cut+Paste must remove the local source once the upload succeeds")
 	}
@@ -76,92 +133,25 @@ func TestRunRemotePasteMoveRemovesTheLocalSourceAfterUploading(t *testing.T) {
 	}
 }
 
-// renameSpyClient wraps fakeRemoteClient to record whether Open or
-// Rename actually got called — runRemotePasteMoveWithinTheSameRemoteClient
-// needs to prove the same-connection move optimization (see
-// runRemotePaste's own doc comment) really took the single-Rename path
-// instead of silently falling back to a stream copy plus a separate
-// delete, which would still produce an identical *end result* but defeats
-// the entire point of the optimization for a real, possibly large file.
-type renameSpyClient struct {
-	*fakeRemoteClient
-	openCalled             bool
-	renamedFrom, renamedTo string
-}
-
-func (s *renameSpyClient) Open(p string) (io.ReadCloser, error) {
-	s.openCalled = true
-	return s.fakeRemoteClient.Open(p)
-}
-
-func (s *renameSpyClient) Rename(oldPath, newPath string) error {
-	s.renamedFrom, s.renamedTo = oldPath, newPath
-	return s.fakeRemoteClient.Rename(oldPath, newPath)
-}
-
-func TestRunRemotePasteMoveWithinTheSameRemoteClientUsesRenameNotCopy(t *testing.T) {
-	client := &renameSpyClient{fakeRemoteClient: &fakeRemoteClient{
-		entries: map[string][]fsops.Entry{
-			"/remote":      {{Name: "a.txt", Type: fsops.TypeFile}},
-			"/remote/dest": nil,
-		},
-		content: map[string][]byte{"/remote/a.txt": []byte("hello")},
-	}}
-
-	succeeded, _, err := runRemotePaste([]string{"/remote/a.txt"}, client, true, client, "/remote/dest")
-
-	if err != nil || succeeded != 1 {
-		t.Fatalf("succeeded, err = %d, %v", succeeded, err)
-	}
-	if client.openCalled {
-		t.Error("a same-connection move called Open — want a single Rename, no streamed copy")
-	}
-	if client.renamedFrom != "/remote/a.txt" || client.renamedTo != "/remote/dest/a.txt" {
-		t.Errorf("renamedFrom, renamedTo = %q, %q", client.renamedFrom, client.renamedTo)
-	}
-	if _, err := client.Stat("/remote/a.txt"); err == nil {
-		t.Error("the old path still exists after the same-connection move")
-	}
-}
-
-// TestRunRemotePasteMoveAcrossTwoDifferentRemoteClientsStillCopiesAndDeletes
-// pins the negative case for the same optimization: two Client values —
-// even if they happen to point at the same server, as two separate
-// connections would — are never treated as "the same connection", so
-// the move still goes through the ordinary copy-then-delete path.
-func TestRunRemotePasteMoveAcrossTwoDifferentRemoteClientsStillCopiesAndDeletes(t *testing.T) {
-	src := &fakeRemoteClient{
-		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
-		content: map[string][]byte{"/remote/a.txt": []byte("hello")},
-	}
-	dest := &fakeRemoteClient{entries: map[string][]fsops.Entry{"/other": nil}}
-
-	succeeded, _, err := runRemotePaste([]string{"/remote/a.txt"}, src, true, dest, "/other")
-
-	if err != nil || succeeded != 1 {
-		t.Fatalf("succeeded, err = %d, %v", succeeded, err)
-	}
-	if _, err := src.Stat("/remote/a.txt"); err == nil {
-		t.Error("the source client still has the file after a completed move")
-	}
-	if got := string(dest.content["/other/a.txt"]); got != "hello" {
-		t.Errorf("destination content = %q, want %q", got, "hello")
-	}
-}
-
-func TestRunRemotePasteSkipsASymlinkSourceWithoutCopyingIt(t *testing.T) {
+func TestPasteWalkSkipsASymlinkSourceWithoutCopyingItAndLeavesItInPlace(t *testing.T) {
 	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{
 		"/remote": {{Name: "link", Type: fsops.TypeSymlinkFile}},
 	}}
 	localDir := t.TempDir()
-
-	succeeded, skipped, err := runRemotePaste([]string{"/remote/link"}, client, false, nil, localDir)
-
-	if err != nil || succeeded != 0 {
-		t.Fatalf("succeeded, err = %d, %v", succeeded, err)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
-	if len(skipped) != 1 || skipped[0].path != "/remote/link" {
-		t.Errorf("skipped = %+v, want exactly one entry for /remote/link", skipped)
+	job := newRemotePasteTestJob(r, true, localDir, 1, client, nil)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{"/remote/link"})
+	waitPasteIO(t, done, 1)
+	time.Sleep(20 * time.Millisecond)
+
+	if len(job.skippedSymlinks) != 1 || job.skippedSymlinks[0] != "/remote/link" {
+		t.Errorf("skippedSymlinks = %v, want exactly [\"/remote/link\"]", job.skippedSymlinks)
 	}
 	entries, readErr := os.ReadDir(localDir)
 	if readErr != nil {
@@ -170,29 +160,14 @@ func TestRunRemotePasteSkipsASymlinkSourceWithoutCopyingIt(t *testing.T) {
 	if len(entries) != 0 {
 		t.Errorf("local dir = %v, want nothing created for a skipped symlink", entries)
 	}
-}
-
-func TestRunRemotePasteRefusesToOverwriteAnExistingDestination(t *testing.T) {
-	localDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(localDir, "a.txt"), []byte("new"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	client := &fakeRemoteClient{
-		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
-		content: map[string][]byte{"/remote/a.txt": []byte("original")},
-	}
-
-	succeeded, _, err := runRemotePaste([]string{filepath.Join(localDir, "a.txt")}, nil, false, client, "/remote")
-
-	if succeeded != 0 || err == nil {
-		t.Fatalf("succeeded, err = %d, %v, want a refusal and nothing copied", succeeded, err)
-	}
-	if got := string(client.content["/remote/a.txt"]); got != "original" {
-		t.Errorf("existing remote content = %q, want it left untouched", got)
+	// A Cut of a symlink that was skipped, not copied, must leave the
+	// original in place — see pasteOneRemote's own !skipped guard.
+	if _, err := client.Stat("/remote/link"); err != nil {
+		t.Error("a skipped symlink's own source must survive a Cut")
 	}
 }
 
-func TestRunRemotePasteCopiesADirectoryRecursively(t *testing.T) {
+func TestPasteWalkCopiesADirectoryRecursively(t *testing.T) {
 	client := &fakeRemoteClient{entries: map[string][]fsops.Entry{
 		// "/remote/dir" needs an entry in its own parent's list too —
 		// Lstat looks a path up by finding it as a named child of
@@ -207,12 +182,17 @@ func TestRunRemotePasteCopiesADirectoryRecursively(t *testing.T) {
 		"/remote/dir/sub/nested.txt": []byte("deep"),
 	}}
 	localDir := t.TempDir()
-
-	succeeded, skipped, err := runRemotePaste([]string{"/remote/dir"}, client, false, nil, localDir)
-
-	if err != nil || succeeded != 1 || len(skipped) != 0 {
-		t.Fatalf("succeeded, skipped, err = %d, %v, %v", succeeded, skipped, err)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
 	}
+	job := newRemotePasteTestJob(r, false, localDir, 1, client, nil)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{"/remote/dir"})
+	waitPasteIO(t, done, 1)
+
 	top, err := os.ReadFile(filepath.Join(localDir, "dir", "file.txt"))
 	if err != nil || string(top) != "top" {
 		t.Errorf("dir/file.txt = %q, %v, want %q", top, err, "top")
@@ -220,6 +200,138 @@ func TestRunRemotePasteCopiesADirectoryRecursively(t *testing.T) {
 	deep, err := os.ReadFile(filepath.Join(localDir, "dir", "sub", "nested.txt"))
 	if err != nil || string(deep) != "deep" {
 		t.Errorf("dir/sub/nested.txt = %q, %v, want %q", deep, err, "deep")
+	}
+}
+
+// TestPasteWalkNeverCopiesOverAnExistingRemoteDestination pins the
+// actual bug this whole engine unification fixes: pasteWalk used to
+// hand a remote-involving item straight to a hard error the moment its
+// destination already existed — this proves it never even attempts the
+// real copy for one, the same "never touch it, hand off to the dialog
+// instead" guarantee TestPasteWalkNeverAttemptsWhenDestinationOverlapsSource
+// already pins for the unrelated overlap case. Doesn't assert
+// job.current itself (see TestPasteConflictFoundOpensDialogForARemoteDestinationInsteadOfErroring
+// for that, called directly — the real hand-off happens on the far side
+// of a QueueUpdateDraw hop nothing here drains, the same reason every
+// other conflict test in this package calls pasteConflictFound
+// directly rather than going through pasteWalk end to end).
+func TestPasteWalkNeverCopiesOverAnExistingRemoteDestination(t *testing.T) {
+	localDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(localDir, "a.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteClient{
+		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
+		content: map[string][]byte{"/remote/a.txt": []byte("original")},
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newRemotePasteTestJob(r, false, "/remote", 1, nil, client)
+
+	done := isolateRemotePasteIO(t)
+	r.pasteWalk(job, []string{filepath.Join(localDir, "a.txt")})
+
+	select {
+	case <-done:
+		t.Fatal("runPasteTransferItem was called — an existing remote destination must go to the conflict dialog, never a direct copy")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: pasteWalk found the conflict and handed it off
+		// instead of ever attempting the real copy.
+	}
+	if got := string(client.content["/remote/a.txt"]); got != "original" {
+		t.Errorf("existing remote content = %q, want it left untouched", got)
+	}
+}
+
+// newRemotePasteTestConflict is newPasteTestConflict's own remote
+// counterpart — src/dst can each be local or remote, matching whichever
+// of srcClient/destClient is nil (see transferSide's own "nil means
+// local" convention).
+func newRemotePasteTestConflict(t *testing.T, srcClient, destClient remotefs.Client, src, dst string) pasteConflict {
+	t.Helper()
+	srcInfo, err := (transferSide{client: srcClient}).lstat(src)
+	if err != nil {
+		t.Fatalf("lstat(src): %v", err)
+	}
+	dstInfo, err := (transferSide{client: destClient}).lstat(dst)
+	if err != nil {
+		t.Fatalf("lstat(dst): %v", err)
+	}
+	return pasteConflict{src: src, dst: dst, srcInfo: srcInfo, dstInfo: dstInfo}
+}
+
+// TestPasteConflictFoundOpensDialogForARemoteDestinationInsteadOfErroring
+// pins the actual point of folding a remote-involving Paste into this
+// same job type: pasting into an existing remote destination used to
+// fail outright, with no way to choose Overwrite/Merge/Skip the way a
+// local conflict always could — now it raises the exact same dialog
+// (see TestPasteConflictOpensDialogInsteadOfErroring, its identical
+// local-only counterpart), sharing every one of its resolution options.
+func TestPasteConflictFoundOpensDialogForARemoteDestinationInsteadOfErroring(t *testing.T) {
+	localDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(localDir, "a.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteClient{
+		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
+		content: map[string][]byte{"/remote/a.txt": []byte("original")},
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newRemotePasteTestJob(r, false, "/remote", 1, nil, client)
+	conflict := newRemotePasteTestConflict(t, nil, client, filepath.Join(localDir, "a.txt"), "/remote/a.txt")
+
+	r.pasteConflictFound(job, conflict)
+
+	if job.current == nil {
+		t.Fatal("expected a conflict dialog to be raised, job.current is nil")
+	}
+	if job.current.dst != "/remote/a.txt" {
+		t.Errorf("conflict.dst = %q, want %q", job.current.dst, "/remote/a.txt")
+	}
+	if got := string(client.content["/remote/a.txt"]); got != "original" {
+		t.Errorf("existing remote content = %q, want it left untouched until the conflict is resolved", got)
+	}
+}
+
+// TestChooseConflictResolutionOverwriteAppliesToARemoteDestination pins
+// that actually choosing "Overwrite" on that same dialog carries
+// through and replaces the remote file's content — the dialog isn't
+// just cosmetically reachable, its answer really drives
+// pasteOneRemote.
+func TestChooseConflictResolutionOverwriteAppliesToARemoteDestination(t *testing.T) {
+	localDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(localDir, "a.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeRemoteClient{
+		entries: map[string][]fsops.Entry{"/remote": {{Name: "a.txt", Type: fsops.TypeFile}}},
+		content: map[string][]byte{"/remote/a.txt": []byte("original")},
+	}
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newRemotePasteTestJob(r, false, "/remote", 1, nil, client)
+	conflict := newRemotePasteTestConflict(t, nil, client, filepath.Join(localDir, "a.txt"), "/remote/a.txt")
+	r.pasteConflictFound(job, conflict)
+	if job.current == nil {
+		t.Fatal("setup: expected a conflict dialog to be raised")
+	}
+
+	done := isolateRemotePasteIO(t)
+	r.chooseConflictResolution(resolveOverwrite, false)
+	waitPasteIO(t, done, 1)
+
+	if got := string(client.content["/remote/a.txt"]); got != "new" {
+		t.Errorf("remote content after Overwrite = %q, want %q", got, "new")
 	}
 }
 
@@ -305,9 +417,9 @@ func TestFinishRemotePasteKeepsTheClipboardWhenAMoveFails(t *testing.T) {
 // TestFinishRemotePasteReloadsTheDestinationPanel confirms the visible
 // result guarantee every other paste path in this project already
 // gives (see finishPasteJob/extractClipboardArchive's own identical
-// doc comments): once runRemotePaste has actually mutated the remote
-// directory, the panel showing it must reflect that without a manual
-// reload.
+// doc comments): once runRemoteArchiveExtraction has actually mutated
+// the remote directory, the panel showing it must reflect that without
+// a manual reload.
 func TestFinishRemotePasteReloadsTheDestinationPanel(t *testing.T) {
 	r := newTestRemoteRoot(t)
 	client := r.panel.remote.(*fakeRemoteClient)
