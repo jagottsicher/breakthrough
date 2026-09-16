@@ -102,28 +102,36 @@ func (r *Root) openRsync() {
 // current *directory* instead of the row actually clicked.
 func (r *Root) defaultRsyncSource() rsyncFieldDefault {
 	path := r.panel.path
+	isFile := false
 	switch paths := r.panel.SelectedPathsInDisplayOrder(); len(paths) {
 	case 1:
 		path = paths[0]
+		if ref, ok := r.panel.rowRefForPath(path); ok {
+			isFile = !ref.isDir
+		}
 	case 0:
 		if _, rowPath, ok := r.panel.CurrentRowPath(); ok {
 			path = rowPath
+			if ref, ok := r.panel.rowRefForPath(path); ok {
+				isFile = !ref.isDir
+			}
 		}
 	}
-	return rsyncFieldDefaultFor(r.panel, path)
+	return rsyncFieldDefaultFor(r.panel, path, isFile)
 }
 
 // defaultRsyncDestination is openRsync's own Destination default —
 // see its doc comment for the reasoning. Remote-aware the same way
 // defaultRsyncSource is, against the split partner's own panel instead
-// of r.panel.
+// of r.panel. Always a directory (a tab's own current directory can
+// never be a plain file), unlike Source.
 func (r *Root) defaultRsyncDestination() rsyncFieldDefault {
 	idx, ok := r.splitPartner()
 	if !ok {
 		return rsyncFieldDefault{}
 	}
 	partner := r.tabs[idx]
-	return rsyncFieldDefaultFor(partner, partner.path)
+	return rsyncFieldDefaultFor(partner, partner.path, false)
 }
 
 // rsyncFieldDefault records exactly what defaultRsyncSource/
@@ -141,6 +149,16 @@ type rsyncFieldDefault struct {
 	text string               // the exact string put into the field
 	conn *remotefs.Connection // nil if this default was a local path
 	path string               // the bare path portion; meaningful only when conn != nil
+
+	// isFile records whether this default resolved to a single plain
+	// file rather than a directory (see defaultRsyncSource — always
+	// false for defaultRsyncDestination, a tab's own current directory
+	// is never a file). "Copy the folder's contents in" has no meaning
+	// for a file the way it does for a directory, so
+	// applyRsyncCopyContentsFlagToField and endpoint both special-case
+	// this instead of mechanically appending "/" to a filename, which
+	// would just be a nonexistent path rsync itself would refuse.
+	isFile bool
 }
 
 // rsyncFieldDefaultFor builds one field's own default from panel: its
@@ -148,13 +166,29 @@ type rsyncFieldDefault struct {
 // syntax via rsync.Endpoint.String — reused rather than reimplemented,
 // so this can never drift from what Job.Command/Args actually produce
 // — or path unchanged for a local panel.
-func rsyncFieldDefaultFor(panel *Panel, path string) rsyncFieldDefault {
+func rsyncFieldDefaultFor(panel *Panel, path string, isFile bool) rsyncFieldDefault {
 	if panel.remote == nil {
-		return rsyncFieldDefault{text: path}
+		return rsyncFieldDefault{text: path, isFile: isFile}
 	}
 	conn := panel.remoteConn
 	text := rsync.Endpoint{Host: conn.Host, User: conn.User, Path: path}.String()
-	return rsyncFieldDefault{text: text, conn: &conn, path: path}
+	return rsyncFieldDefault{text: text, conn: &conn, path: path, isFile: isFile}
+}
+
+// parentDirWithSlash returns d's own containing directory, rendered
+// exactly the same way d.text itself is (a bare local path, or this
+// connection's own "user@host:path" syntax), always ending in "/" —
+// rsync's own "copy what's inside this directory" syntax. Only ever
+// called when d.isFile: what applyRsyncCopyContentsFlagToField
+// substitutes the Source field's own file default with while "Copy the
+// folder's contents in" is checked, and what endpoint recognizes as
+// still tracking d's own connection (see its own doc comment) rather
+// than a real edit.
+func (d rsyncFieldDefault) parentDirWithSlash() string {
+	if d.conn == nil {
+		return path.Dir(d.text) + "/"
+	}
+	return rsync.Endpoint{Host: d.conn.Host, User: d.conn.User, Path: path.Dir(d.path)}.String() + "/"
 }
 
 // endpoint reconstructs the real rsync.Endpoint fieldText should
@@ -170,13 +204,24 @@ func rsyncFieldDefaultFor(panel *Panel, path string) rsyncFieldDefault {
 // edit the user typed — losing a connection's own tracked port just
 // because that toggle was flipped would be a real, surprising
 // regression, not the harmless no-op it's meant to be.
+//
+// A file default (d.isFile) additionally tolerates fieldText reading
+// exactly d.parentDirWithSlash() — the same toggle substitutes the
+// whole field with that, not just an appended "/", since a plain file
+// has no directory of its own to add one to.
 func (d rsyncFieldDefault) endpoint(fieldText string) rsync.Endpoint {
 	fieldText = strings.TrimSpace(fieldText)
+	if d.conn == nil {
+		return rsync.Endpoint{Path: fieldText}
+	}
+	if d.isFile && fieldText == d.parentDirWithSlash() {
+		return rsync.Endpoint{Host: d.conn.Host, Port: d.conn.Port, User: d.conn.User, Path: path.Dir(d.path)}
+	}
 	compareText := fieldText
 	if !strings.HasSuffix(d.text, "/") {
 		compareText = strings.TrimSuffix(fieldText, "/")
 	}
-	if d.conn != nil && compareText == d.text {
+	if compareText == d.text {
 		return rsync.Endpoint{Host: d.conn.Host, Port: d.conn.Port, User: d.conn.User, Path: d.path}
 	}
 	return rsync.Endpoint{Path: fieldText}
@@ -308,10 +353,36 @@ func (r *Root) toggleRsyncFlag(label string) {
 // or remove a slash from. See rsyncFieldDefault.endpoint's own doc
 // comment for why this cosmetic edit doesn't lose a connection's own
 // tracked port the way a real edit deliberately would.
+//
+// A file default (rsyncSourceDefault.isFile) is special-cased instead:
+// "contents" has no meaning for a plain file, so checking the box
+// while the field still reads exactly that file's own default path
+// substitutes its parent directory (with the trailing "/") instead of
+// mechanically appending one to a filename — which would just describe
+// a directory that doesn't exist, and which rsync would refuse outright
+// rather than silently do something sensible with. Unchecking it again
+// while the field still reads exactly that substituted directory
+// restores the original file path exactly, rather than merely
+// stripping the slash, which would leave the directory selected
+// instead of going back to the single file the dialog actually opened
+// on. Either substitution only ever fires while the field still reads
+// exactly what it was substituted from — the same "only a cosmetic
+// no-op, never overriding something the user actually typed" guarantee
+// the plain slash-toggle below already gives.
 func (r *Root) applyRsyncCopyContentsFlagToField(on bool) {
 	text := r.rsyncSourceField.GetText()
 	if text == "" {
 		return
+	}
+	if d := r.rsyncSourceDefault; d.isFile {
+		switch {
+		case on && text == d.text:
+			r.rsyncSourceField.SetText(d.parentDirWithSlash())
+			return
+		case !on && text == d.parentDirWithSlash():
+			r.rsyncSourceField.SetText(d.text)
+			return
+		}
 	}
 	switch {
 	case on && !strings.HasSuffix(text, "/"):

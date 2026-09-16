@@ -128,6 +128,33 @@ func TestDefaultRsyncSourceUsesTheCursorRowWithNothingSelected(t *testing.T) {
 	}
 }
 
+// TestDefaultRsyncSourceMarksACursorFileAsIsFile pins the one bit
+// applyRsyncCopyContentsFlagToField/endpoint both key their own
+// file-vs-directory substitution on — see their own doc comments.
+func TestDefaultRsyncSourceMarksACursorFileAsIsFile(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.panel.focusRow(1) // off ".." onto a.txt, nothing checked
+
+	got := r.defaultRsyncSource()
+
+	if !got.isFile {
+		t.Error("defaultRsyncSource().isFile = false, want true for a plain file under the cursor")
+	}
+}
+
+// TestDefaultRsyncSourceDoesNotMarkTheDirectoryFallbackAsIsFile is the
+// flip side: falling back to the panel's own current directory (cursor
+// still on "..") must never be mistaken for a file default.
+func TestDefaultRsyncSourceDoesNotMarkTheDirectoryFallbackAsIsFile(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+
+	got := r.defaultRsyncSource()
+
+	if got.isFile {
+		t.Error("defaultRsyncSource().isFile = true, want false for the panel's own directory")
+	}
+}
+
 // TestDefaultRsyncDestinationUsesTheSplitPartner pins the one case
 // where "the other side" is unambiguous — see openRsync's own doc
 // comment on why every other case is deliberately left blank instead
@@ -557,5 +584,101 @@ func TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource(t *testing.T) {
 	job := r.currentRsyncJob()
 	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
 		t.Errorf("Source = %+v, want Host=example.com User=tester Port=2222 (port lost after toggling Copy Contents)", job.Source)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsSubstitutesTheParentDirectoryForAFileSource
+// pins the user's own explicit request: opening the dialog on a single
+// file, then checking "Copy the folder's contents in", obviously can't
+// mean "the file's own contents" the way it does for a directory — it
+// substitutes the file's own parent directory instead of appending a
+// slash to the filename itself, which would just describe a directory
+// that doesn't exist.
+func TestToggleRsyncFlagCopyContentsSubstitutesTheParentDirectoryForAFileSource(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.panel.focusRow(1) // off ".." onto a.txt, nothing checked
+	r.openRsync()
+	file := filepath.Join(dir, "a.txt")
+	if got := r.rsyncSourceField.GetText(); got != file {
+		t.Fatalf("setup: Source field = %q, want %q", got, file)
+	}
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+		t.Errorf("Source field = %q, want the file's own parent directory %q", got, want)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsRestoresTheOriginalFileWhenTurnedOffAgain
+// is the flip side the user explicitly asked for: unchecking the box
+// again brings back the exact file the dialog originally opened on —
+// not just the substituted directory with its own trailing slash
+// stripped, which would leave the whole directory selected instead of
+// going back to the single file.
+func TestToggleRsyncFlagCopyContentsRestoresTheOriginalFileWhenTurnedOffAgain(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.panel.focusRow(1) // a.txt
+	r.openRsync()
+	file := filepath.Join(dir, "a.txt")
+	r.toggleRsyncFlag(rsyncLabelCopyContents) // on: substitutes the parent directory
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents) // off again
+
+	if got := r.rsyncSourceField.GetText(); got != file {
+		t.Errorf("Source field = %q, want the original file %q restored", got, file)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsFileSubstitutionSkipsAnEditedField
+// pins that the file-to-parent-directory substitution only ever fires
+// while the field still reads exactly the file default it came from —
+// the same "never override something the user actually typed" guarantee
+// the plain slash-toggle already gives (see
+// TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash).
+func TestToggleRsyncFlagCopyContentsFileSubstitutionSkipsAnEditedField(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.panel.focusRow(1) // a.txt
+	r.openRsync()
+	edited := filepath.Join(dir, "other.txt")
+	r.rsyncSourceField.SetText(edited) // edited away from the original file default
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if got, want := r.rsyncSourceField.GetText(), edited+"/"; got != want {
+		t.Errorf("Source field = %q, want the plain slash-append fallback %q, not the original file's own parent directory", got, want)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsFileSubstitutionKeepsThePortForARemoteFileSource
+// mirrors TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource
+// for the file-specific substitution path: it must preserve a
+// connection's own non-default port exactly the same way the plain
+// directory case already does.
+func TestToggleRsyncFlagCopyContentsFileSubstitutionKeepsThePortForARemoteFileSource(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester", Port: 2222}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.panel.focusRow(1) // b.txt, a plain file
+	r.openRsync()
+	if want := "tester@example.com:/remote/b.txt"; r.rsyncSourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	}
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if want := "tester@example.com:/remote/"; r.rsyncSourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	}
+	job := r.currentRsyncJob()
+	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
+		t.Errorf("Source = %+v, want Host=example.com User=tester Port=2222 preserved across the file-to-parent-directory substitution", job.Source)
+	}
+	if job.Source.Path != "/remote" {
+		t.Errorf("Source.Path = %q, want the file's own parent directory %q", job.Source.Path, "/remote")
 	}
 }

@@ -720,6 +720,13 @@ hand — never reimplements any of rsync's own transfer logic, the same
   that same trailing `/` on the Source field itself, not just in the
   live preview below — so the field always shows exactly what's about
   to run, never something that quietly disagrees with the preview.
+  Opening the dialog on a single *file* (the cursor's own row, or one
+  marked item) puts that file itself into Source — obviously only it
+  is meant to sync. "Contents" has no meaning for a plain file the way
+  it does for a directory, so turning this on then instead substitutes
+  the file's own parent directory (still with the trailing `/`); turning
+  it back off restores the exact file the dialog originally opened on,
+  not just that directory with the slash removed again.
 - **Archive mode** (`-a`, on by default), **Compress** (`-z`),
   **Delete extraneous files from destination** (`--delete`, off by
   default — the one flag here that can permanently remove files that
