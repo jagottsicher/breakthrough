@@ -716,7 +716,10 @@ hand — never reimplements any of rsync's own transfer logic, the same
   outcomes is exactly the kind of trap this toggle exists to remove —
   off by default, matching how this app's own ordinary Copy/Paste
   already behaves (a new folder inside the destination, not a
-  content-merge).
+  content-merge). Turning it on (or off again) also adds (or removes)
+  that same trailing `/` on the Source field itself, not just in the
+  live preview below — so the field always shows exactly what's about
+  to run, never something that quietly disagrees with the preview.
 - **Archive mode** (`-a`, on by default), **Compress** (`-z`),
   **Delete extraneous files from destination** (`--delete`, off by
   default — the one flag here that can permanently remove files that

@@ -425,3 +425,95 @@ func TestToggleRsyncFlagFlipsStateAndRelabelsTheRow(t *testing.T) {
 		t.Errorf("row text = %q, want it to start with the filled toggle glyph", rowText)
 	}
 }
+
+// TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField pins
+// the user's own explicit request: the live preview line already
+// showed the trailing "/" this toggle means (via sourceArg), but the
+// Source field itself stayed exactly as typed or defaulted, silently
+// disagreeing with what the preview said was actually about to run.
+func TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(dir)
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+		t.Errorf("Source field = %q, want %q", got, want)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff is
+// the flip side: turning the toggle back off removes exactly the
+// trailing "/" it added, restoring the field to what it showed before.
+func TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(dir)
+	r.toggleRsyncFlag(rsyncLabelCopyContents) // on: dir -> dir + "/"
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents) // off again
+
+	if got := r.rsyncSourceField.GetText(); got != dir {
+		t.Errorf("Source field = %q, want %q (the trailing \"/\" removed again)", got, dir)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash
+// pins that turning the toggle on when the field already ends with
+// "/" (typed by hand, or already toggled on once) doesn't add a
+// second one.
+func TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(dir + "/")
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if got, want := r.rsyncSourceField.GetText(), dir+"/"; got != want {
+		t.Errorf("Source field = %q, want %q (no doubled slash)", got, want)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsIsANoOpOnAnEmptyField pins that there's
+// no path to add or remove a slash from yet when the field is blank —
+// toggling the flag itself still works (see
+// TestToggleRsyncFlagFlipsStateAndRelabelsTheRow), only the field-text
+// side effect is skipped.
+func TestToggleRsyncFlagCopyContentsIsANoOpOnAnEmptyField(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("")
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if got := r.rsyncSourceField.GetText(); got != "" {
+		t.Errorf("Source field = %q, want it to stay empty", got)
+	}
+}
+
+// TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource pins the
+// real regression this cosmetic field edit could otherwise cause: the
+// trailing "/" it adds must not read as "the user edited the field" to
+// rsyncFieldDefault.endpoint, which would silently drop the
+// connection's own tracked port.
+func TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester", Port: 2222}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync() // resetRsyncForm defaults Source from r.panel, e.g. "tester@example.com:/remote"
+
+	r.toggleRsyncFlag(rsyncLabelCopyContents)
+
+	if want := "tester@example.com:/remote/"; r.rsyncSourceField.GetText() != want {
+		t.Fatalf("setup: Source field = %q, want %q", r.rsyncSourceField.GetText(), want)
+	}
+	job := r.currentRsyncJob()
+	if job.Source.Host != "example.com" || job.Source.User != "tester" || job.Source.Port != 2222 {
+		t.Errorf("Source = %+v, want Host=example.com User=tester Port=2222 (port lost after toggling Copy Contents)", job.Source)
+	}
+}
