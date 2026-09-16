@@ -1213,13 +1213,13 @@
     },
     {
       "path": "internal/ui/remotepaste.go",
-      "size": 27900,
-      "sha256": "bdb82d7fffafc3e188592f452b741dbe0c8c317b1cfafed7b0f3e32645f885eb"
+      "size": 28329,
+      "sha256": "dc4ca9ff4d7a2ca8e28a8523be908a096a3b68e20673fa8042540033e7507eb7"
     },
     {
       "path": "internal/ui/remotepaste_test.go",
-      "size": 23617,
-      "sha256": "f09beabedef88625d2ac5b6a4e745318e139401552bd93480c3a2f82844b2a97"
+      "size": 28655,
+      "sha256": "dab791a6f6e56b66e1065bfc00cea10b04c80c42312b4a3d6b68390610e72a11"
     },
     {
       "path": "internal/ui/remotestage.go",
@@ -22980,7 +22980,7 @@
       "file": "internal/ui/remotepaste.go",
       "name": "transferSide",
       "kind": "type",
-      "line": 40
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22988,7 +22988,7 @@
       "name": "join",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 44
+      "line": 45
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22996,7 +22996,7 @@
       "name": "lstatType",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 55
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23004,7 +23004,7 @@
       "name": "list",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 77
+      "line": 78
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23012,7 +23012,7 @@
       "name": "exists",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 84
+      "line": 85
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23020,7 +23020,7 @@
       "name": "lstat",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 101
+      "line": 102
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23028,7 +23028,7 @@
       "name": "statOrNotExist",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 130
+      "line": 131
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23036,14 +23036,14 @@
       "name": "removeAll",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 153
+      "line": 154
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "entryFileInfo",
       "kind": "type",
-      "line": 169
+      "line": 170
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23051,7 +23051,7 @@
       "name": "Name",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 173
+      "line": 174
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23059,7 +23059,7 @@
       "name": "Size",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 174
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23067,7 +23067,7 @@
       "name": "Mode",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 175
+      "line": 176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23075,7 +23075,7 @@
       "name": "ModTime",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 176
+      "line": 177
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23083,7 +23083,7 @@
       "name": "IsDir",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 177
+      "line": 178
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23091,21 +23091,21 @@
       "name": "Sys",
       "kind": "method",
       "receiver": "entryFileInfo",
-      "line": 178
+      "line": 179
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "remotePathOverlaps",
       "kind": "function",
-      "line": 188
+      "line": 189
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "pasteOverlaps",
       "kind": "function",
-      "line": 205
+      "line": 206
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23113,7 +23113,7 @@
       "name": "open",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 216
+      "line": 217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23121,7 +23121,7 @@
       "name": "create",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 223
+      "line": 224
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23129,63 +23129,63 @@
       "name": "mkdir",
       "kind": "method",
       "receiver": "transferSide",
-      "line": 230
+      "line": 231
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "transferSkip",
       "kind": "type",
-      "line": 241
+      "line": 242
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "copyTransferItem",
       "kind": "function",
-      "line": 262
+      "line": 263
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "copyTransferFile",
       "kind": "function",
-      "line": 297
+      "line": 298
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "pasteTransferItem",
       "kind": "function",
-      "line": 347
+      "line": 348
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "runPasteTransferItem",
       "kind": "var",
-      "line": 413
+      "line": 414
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "pasteTransferFile",
       "kind": "function",
-      "line": 443
+      "line": 437
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
-      "name": "newProgressReader",
+      "name": "transferWithProgress",
       "kind": "function",
-      "line": 489
+      "line": 483
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "progressReader",
       "kind": "type",
-      "line": 500
+      "line": 518
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23193,45 +23193,30 @@
       "name": "Read",
       "kind": "method",
       "receiver": "*progressReader",
-      "line": 506
+      "line": 524
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
-      "name": "progressWriterToReader",
-      "kind": "type",
-      "line": 520
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/remotepaste.go",
-      "name": "Read",
+      "name": "Stat",
       "kind": "method",
-      "receiver": "*progressWriterToReader",
-      "line": 532
+      "receiver": "*progressReader",
+      "line": 546
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
-      "name": "WriteTo",
-      "kind": "method",
-      "receiver": "*progressWriterToReader",
-      "line": 541
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/remotepaste.go",
-      "name": "progressWriteWrap",
+      "name": "progressWriter",
       "kind": "type",
-      "line": 554
+      "line": 563
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "Write",
       "kind": "method",
-      "receiver": "*progressWriteWrap",
-      "line": 560
+      "receiver": "*progressWriter",
+      "line": 569
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23239,7 +23224,7 @@
       "name": "finishRemotePaste",
       "kind": "method",
       "receiver": "*Root",
-      "line": 577
+      "line": 586
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23247,28 +23232,28 @@
       "name": "startRemoteArchiveExtraction",
       "kind": "method",
       "receiver": "*Root",
-      "line": 601
+      "line": 610
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "runRemoteArchiveExtraction",
       "kind": "function",
-      "line": 619
+      "line": 628
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "removeTransferSource",
       "kind": "function",
-      "line": 664
+      "line": 673
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste.go",
       "name": "remotePasteSummaryError",
       "kind": "function",
-      "line": 680
+      "line": 689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23407,30 +23392,82 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste_test.go",
-      "name": "TestNewProgressReaderPreservesWriteToWhenTheSourceHasOne",
-      "kind": "function",
-      "line": 494
+      "name": "fakeReaderFromWriter",
+      "kind": "type",
+      "line": 492
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste_test.go",
-      "name": "TestNewProgressReaderHasNoWriteToWhenTheSourceHasNone",
-      "kind": "function",
-      "line": 512
+      "name": "ReadFrom",
+      "kind": "method",
+      "receiver": "*fakeReaderFromWriter",
+      "line": 497
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste_test.go",
-      "name": "TestNewProgressReaderReportsProgressThroughTheWriteToPath",
+      "name": "fakeWriterToReader",
+      "kind": "type",
+      "line": 505
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "Read",
+      "kind": "method",
+      "receiver": "*fakeWriterToReader",
+      "line": 511
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "WriteTo",
+      "kind": "method",
+      "receiver": "*fakeWriterToReader",
+      "line": 516
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "TestTransferWithProgressUsesTheDestinationsOwnReadFromForARemoteDestination",
       "kind": "function",
-      "line": 527
+      "line": 543
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "TestTransferWithProgressUsesTheSourcesOwnWriteToForARemoteSource",
+      "kind": "function",
+      "line": 569
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "TestTransferWithProgressFallsBackToPlainCopyWhenNeitherSideHasAFastPath",
+      "kind": "function",
+      "line": 599
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "TestProgressReaderStatForwardsToTheUnderlyingReadersOwnSize",
+      "kind": "function",
+      "line": 638
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotepaste_test.go",
+      "name": "TestProgressReaderStatErrorsWithoutPanickingWhenTheSourceHasNone",
+      "kind": "function",
+      "line": 666
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotepaste_test.go",
       "name": "TestPasteTransferFileTruncatesTheDestinationOnAWriteError",
       "kind": "function",
-      "line": 556
+      "line": 680
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29968,5 +30005,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "6d567a60bf80bb68cb6195a02efaa745d28a1c6bef33ceb1757e18228efc0aa5"
+  "merkle_root": "2318a145f0be85b8df28cf4fcaeb47c7ed16a966073cc77e472b933be7d882c7"
 }
