@@ -72,12 +72,29 @@ func (r *Root) openRsync() {
 	r.showOverlay(rsyncPage, r.rsyncLayout)
 }
 
-// defaultRsyncSource is openRsync's own Source default — see its
-// doc comment for the reasoning.
+// defaultRsyncSource is openRsync's own Source default — see its doc
+// comment for the reasoning.
+//
+// Checked the checkbox selection first, then — with nothing marked —
+// whichever row the table's cursor is actually on, the same
+// selection-with-single-item-fallback shape selectedOrCurrentPaths
+// already establishes for Move to Trash/Remove/Sed Replace. That
+// second step is what a bare right-click needs: it moves the cursor to
+// the clicked row but marks nothing (see editCurrentEntry's own doc
+// comment on the identical mechanic), so reading only
+// SelectedPathsInDisplayOrder here — the original bug, reported
+// directly — fell through to the panel's own current *directory*
+// instead of the row actually clicked, e.g. opening Rsync from a
+// right-click on "etc" defaulted the source to its parent, not "etc"
+// itself.
 func (r *Root) defaultRsyncSource() string {
-	paths := r.panel.SelectedPathsInDisplayOrder()
-	if len(paths) == 1 {
+	switch paths := r.panel.SelectedPathsInDisplayOrder(); len(paths) {
+	case 1:
 		return paths[0]
+	case 0:
+		if _, path, ok := r.panel.CurrentRowPath(); ok {
+			return path
+		}
 	}
 	return r.panel.path
 }
