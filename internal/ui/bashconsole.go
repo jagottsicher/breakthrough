@@ -547,6 +547,21 @@ func (r *Root) runBashCommand(command string) {
 // including interactive programs like vim, less, or mc, exactly like
 // Midnight Commander's own command line.
 //
+// That working directory is only ever a real local one: while the
+// active panel is a remote connection, r.panel.path is a path on that
+// *other* machine (e.g. "/home/pi/videos"), never one this local
+// process could actually chdir into. Passing it to cmd.Dir regardless
+// used to make the child's own chdir fail before the shell ever even
+// started, which os/exec then reports back as a generic, deeply
+// misleading "fork/exec <shell>: no such file or directory" — with the
+// whole command line, remote source path included, printed right next
+// to it (see showError below), which reads exactly like rsync itself
+// complaining that its own remote source file doesn't exist, when the
+// shell that would have run rsync never actually started at all. Left
+// unset here instead, so the child simply inherits this process's own
+// real working directory, same as any other command that can't
+// sensibly be tied to a directory that isn't real on this machine.
+//
 // Run with "-i" (interactive) rather than plain "-c": without it, bash
 // (and every other common userShell()) starts a non-interactive shell,
 // which skips ~/.bashrc entirely and — even if it were sourced anyway —
@@ -580,7 +595,9 @@ func (r *Root) runShellCommandFullScreen(command string) {
 	r.app.Suspend(func() {
 		fmt.Printf("$ %s\n", command)
 		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
-		cmd.Dir = r.panel.path
+		if r.panel.remote == nil {
+			cmd.Dir = r.panel.path
+		}
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
 

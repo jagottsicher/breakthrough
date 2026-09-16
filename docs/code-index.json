@@ -858,8 +858,8 @@
     },
     {
       "path": "internal/ui/bashconsole.go",
-      "size": 30279,
-      "sha256": "17e13d9c5e81dde46bcdf51bd656823562991bb7b4741eafc1016d2e6380d8ac"
+      "size": 31286,
+      "sha256": "b9b8a785d0ad81a2258db7b47ec09cd1bc7a1c65d686ff0258896a3532e91353"
     },
     {
       "path": "internal/ui/bashconsole_test.go",
@@ -1253,13 +1253,13 @@
     },
     {
       "path": "internal/ui/rsyncjob.go",
-      "size": 17058,
-      "sha256": "a266c574c763ef17d90b4400439438a142bcb870c163c7e267c837a4b73fadc0"
+      "size": 17506,
+      "sha256": "7fdb3d338e7cd9b8dcee60d6ac05ff093102db115c31125bbf711be58c5c1260"
     },
     {
       "path": "internal/ui/rsyncjob_test.go",
-      "size": 9987,
-      "sha256": "05b7fcd72adefe24e28cc2c96d354816eff4fea46e251e7790155f2b67ad178b"
+      "size": 12194,
+      "sha256": "64312baa43af0f4e7b0d52c6824ec833284b16bdc2a0c86942ab2b1ca69b04e0"
     },
     {
       "path": "internal/ui/search.go",
@@ -10299,28 +10299,28 @@
       "name": "runShellCommandFullScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 578
+      "line": 593
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "fullScreenShellArgs",
       "kind": "function",
-      "line": 612
+      "line": 629
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "waitForEscape",
       "kind": "function",
-      "line": 631
+      "line": 648
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "parseCdCommand",
       "kind": "function",
-      "line": 662
+      "line": 679
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -10328,7 +10328,7 @@
       "name": "changeDirectory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 680
+      "line": 697
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24785,14 +24785,14 @@
       "name": "watchAndWaitRsync",
       "kind": "method",
       "receiver": "*Root",
-      "line": 245
+      "line": 253
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob.go",
       "name": "stderrTail",
       "kind": "function",
-      "line": 270
+      "line": 278
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24800,7 +24800,7 @@
       "name": "watchRsyncProgress",
       "kind": "method",
       "receiver": "*Root",
-      "line": 294
+      "line": 302
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24808,14 +24808,14 @@
       "name": "animateRsyncProgress",
       "kind": "method",
       "receiver": "*Root",
-      "line": 320
+      "line": 328
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob.go",
       "name": "scanLinesOrCR",
       "kind": "function",
-      "line": 345
+      "line": 353
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24823,7 +24823,7 @@
       "name": "finishRsyncJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 364
+      "line": 372
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24831,7 +24831,7 @@
       "name": "cancelRsyncJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 399
+      "line": 407
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24839,28 +24839,28 @@
       "name": "advanceRsyncQueue",
       "kind": "method",
       "receiver": "*Root",
-      "line": 409
+      "line": 417
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestScanLinesOrCR",
       "kind": "function",
-      "line": 17
+      "line": 19
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "newTestScanner",
       "kind": "function",
-      "line": 42
+      "line": 44
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "testScanner",
       "kind": "type",
-      "line": 47
+      "line": 49
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24868,7 +24868,7 @@
       "name": "Scan",
       "kind": "method",
       "receiver": "*testScanner",
-      "line": 52
+      "line": 54
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24876,105 +24876,112 @@
       "name": "Text",
       "kind": "method",
       "receiver": "*testScanner",
-      "line": 65
+      "line": 67
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestWatchRsyncProgressParsesThePercentageAndDetail",
       "kind": "function",
-      "line": 67
+      "line": 69
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestWatchRsyncProgressParsesAPeriodGroupedByteCount",
       "kind": "function",
-      "line": 94
+      "line": 96
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestWatchRsyncProgressIgnoresUnparseableLines",
       "kind": "function",
-      "line": 112
+      "line": 114
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "newFakeRsyncCmd",
       "kind": "function",
-      "line": 134
+      "line": 136
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestWatchAndWaitRsyncReportsACleanExit",
       "kind": "function",
-      "line": 155
+      "line": 157
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestWatchAndWaitRsyncReportsAFailureWithStderr",
       "kind": "function",
-      "line": 174
+      "line": 176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "newTestRootForRsyncJob",
       "kind": "function",
-      "line": 193
+      "line": 195
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobReloadsTheDestinationPanel",
       "kind": "function",
-      "line": 203
+      "line": 205
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobReportsARealError",
       "kind": "function",
-      "line": 229
+      "line": 231
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobSuppressesErrorWhenCancelled",
       "kind": "function",
-      "line": 247
+      "line": 249
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobStartsTheNextQueuedRun",
       "kind": "function",
-      "line": 261
+      "line": 263
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestCancelRsyncJobStopsTheProcessAndClearsTheQueue",
       "kind": "function",
-      "line": 282
+      "line": 284
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestRunRsyncBackgroundRefusesAnEmptyDestination",
       "kind": "function",
-      "line": 299
+      "line": 301
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsyncjob_test.go",
+      "name": "TestReallyStartRsyncBackgroundNeverChdirsIntoARemotePanelsOwnPath",
+      "kind": "function",
+      "line": 332
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestRsyncEndpointBase",
       "kind": "function",
-      "line": 315
+      "line": 360
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29858,5 +29865,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "5a4092696eb64dcfa9a389976b4654dfc30bd9845d0a7f3429faad1035e934ca"
+  "merkle_root": "dcb685f875d37c18c9f02c97286df2269f384e232df8c75a3928ad9a38b5d0c0"
 }

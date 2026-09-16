@@ -11,6 +11,8 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
@@ -309,6 +311,49 @@ func TestRunRsyncBackgroundRefusesAnEmptyDestination(t *testing.T) {
 	}
 	if r.rsyncJob != nil {
 		t.Error("no background job should have started")
+	}
+}
+
+// TestReallyStartRsyncBackgroundNeverChdirsIntoARemotePanelsOwnPath
+// pins the real bug behind the user's own report that a real remote
+// source rsync failed with what looked like "no such file or
+// directory" for the source file, even though that file genuinely
+// existed and the exact same command ran fine when copied out and run
+// by hand: with a remote panel active, r.panel.path is a path on that
+// *other* machine, never a real local directory — passing it to
+// cmd.Dir made the child's own chdir fail before rsync (or even the
+// shell meant to run it) ever started, which os/exec then reports as
+// a generic "fork/exec <shell>: no such file or directory" printed
+// right next to the whole command line, remote source path included.
+// Verified here the same way the bug itself would surface: if cmd.Dir
+// were still set to the remote panel's own bogus local-looking path,
+// cmd.Start() below would fail outright, exactly like the report
+// described.
+func TestReallyStartRsyncBackgroundNeverChdirsIntoARemotePanelsOwnPath(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	// r.panel.path is now "/remote" — not a real directory on this
+	// machine, the same shape as the user's own real "/home/pi/videos".
+	job := rsync.Job{
+		Source:      rsync.Endpoint{Host: "example.com", User: "tester", Path: "/remote/b.txt"},
+		Destination: rsync.Endpoint{Path: t.TempDir()},
+	}
+
+	r.reallyStartRsyncBackground(job, "test")
+	if r.rsyncJob != nil {
+		defer r.rsyncJob.cancel()
+	}
+
+	if r.rsyncJob == nil {
+		t.Fatal("reallyStartRsyncBackground did not start a job — cmd.Start likely failed because of a bad cmd.Dir")
+	}
+	if got := r.rsyncJob.cmd.Dir; got != "" {
+		t.Errorf("cmd.Dir = %q, want empty — a remote panel's own path is never a real local directory to chdir into", got)
 	}
 }
 
