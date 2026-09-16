@@ -157,9 +157,23 @@ func rsyncFieldDefaultFor(panel *Panel, path string) rsyncFieldDefault {
 // endpoint reconstructs the real rsync.Endpoint fieldText should
 // become right now — see rsyncFieldDefault's own doc comment for the
 // exact-match reasoning.
+//
+// Tolerates fieldText carrying exactly one trailing "/" beyond d.text
+// (unless d.text already ends in one itself, e.g. defaulted from the
+// filesystem root — then an exact match is required, same as before):
+// applyRsyncCopyContentsFlagToField adds or removes that same trailing
+// "/" on the Source field as a purely cosmetic mirror of the "Copy the
+// folder's contents in" toggle (see its own doc comment), not a real
+// edit the user typed — losing a connection's own tracked port just
+// because that toggle was flipped would be a real, surprising
+// regression, not the harmless no-op it's meant to be.
 func (d rsyncFieldDefault) endpoint(fieldText string) rsync.Endpoint {
 	fieldText = strings.TrimSpace(fieldText)
-	if d.conn != nil && fieldText == d.text {
+	compareText := fieldText
+	if !strings.HasSuffix(d.text, "/") {
+		compareText = strings.TrimSuffix(fieldText, "/")
+	}
+	if d.conn != nil && compareText == d.text {
 		return rsync.Endpoint{Host: d.conn.Host, Port: d.conn.Port, User: d.conn.User, Path: d.path}
 	}
 	return rsync.Endpoint{Path: fieldText}
@@ -273,7 +287,35 @@ func (r *Root) toggleRsyncFlag(label string) {
 			break
 		}
 	}
+	if label == rsyncLabelCopyContents {
+		r.applyRsyncCopyContentsFlagToField(r.rsyncFlags[label])
+	}
 	r.renderRsyncPreview()
+}
+
+// applyRsyncCopyContentsFlagToField keeps the Source field's own
+// visible text in sync with "Copy the folder's contents in" — per the
+// user's own explicit request: the trailing "/" this toggle means was
+// already reflected in the live preview line below (via
+// currentRsyncJob/sourceArg), but the field itself stayed exactly as
+// typed or defaulted, showing something that silently disagreed with
+// what the preview said was actually about to run. on appends a
+// trailing "/" if the field doesn't already end with one; off strips
+// exactly one. A no-op on an empty field — there's no path yet to add
+// or remove a slash from. See rsyncFieldDefault.endpoint's own doc
+// comment for why this cosmetic edit doesn't lose a connection's own
+// tracked port the way a real edit deliberately would.
+func (r *Root) applyRsyncCopyContentsFlagToField(on bool) {
+	text := r.rsyncSourceField.GetText()
+	if text == "" {
+		return
+	}
+	switch {
+	case on && !strings.HasSuffix(text, "/"):
+		r.rsyncSourceField.SetText(text + "/")
+	case !on && strings.HasSuffix(text, "/"):
+		r.rsyncSourceField.SetText(strings.TrimSuffix(text, "/"))
+	}
 }
 
 // newRsyncFlagsList builds rsyncFlagsList once, from NewRoot — see

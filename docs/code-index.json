@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 95825,
-      "sha256": "64e69c8d2e1716d7009f688c984d9d31922aee3a614596e7fbab2c3292c45d25"
+      "size": 96085,
+      "sha256": "cc66f3beadef2042d4d6a8111c34911b98906e78a8017a3fdbc8111252795431"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1053,8 +1053,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 52679,
-      "sha256": "7501acd267c4fa2861820c358b62215df3be5c492eb03b57778c446789ed52a0"
+      "size": 52803,
+      "sha256": "a74613ccba32ea67f987cce49399a91bc0b057fd8aa4b11187e847327e5ee35e"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1243,13 +1243,13 @@
     },
     {
       "path": "internal/ui/rsync.go",
-      "size": 25534,
-      "sha256": "a85259c09f95f79856a7697f263f6e53cbe1e8993c7e97c6c7f392860581866b"
+      "size": 27514,
+      "sha256": "fe68387903ff59671f890d1cfc0b9b18afb345bc357793cf40b8ded3152c5bb8"
     },
     {
       "path": "internal/ui/rsync_test.go",
-      "size": 15556,
-      "sha256": "fc4abb0e519b87b8da4a29abd34f9ad838f813323fa92d1eb2b067f2d0593f2d"
+      "size": 19381,
+      "sha256": "bc0d45b875a8b1143137ada5222264de812039409a35ae107f54d1f3057fc5e3"
     },
     {
       "path": "internal/ui/rsyncjob.go",
@@ -16502,7 +16502,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 814
+      "line": 816
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16510,7 +16510,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 837
+      "line": 839
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16518,7 +16518,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 854
+      "line": 856
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16526,7 +16526,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 870
+      "line": 872
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16534,7 +16534,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 890
+      "line": 892
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16542,7 +16542,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 906
+      "line": 908
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16550,7 +16550,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 932
+      "line": 934
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16558,7 +16558,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 962
+      "line": 964
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16566,7 +16566,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 980
+      "line": 982
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24303,7 +24303,7 @@
       "name": "endpoint",
       "kind": "method",
       "receiver": "rsyncFieldDefault",
-      "line": 160
+      "line": 170
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24311,7 +24311,7 @@
       "name": "newRsyncForm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 173
+      "line": 187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24319,14 +24319,14 @@
       "name": "resetRsyncForm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 199
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
       "name": "rsyncFlagItemText",
       "kind": "function",
-      "line": 258
+      "line": 272
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24334,20 +24334,12 @@
       "name": "toggleRsyncFlag",
       "kind": "method",
       "receiver": "*Root",
-      "line": 268
+      "line": 282
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
-      "name": "newRsyncFlagsList",
-      "kind": "method",
-      "receiver": "*Root",
-      "line": 284
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/rsync.go",
-      "name": "newRsyncPreviewView",
+      "name": "applyRsyncCopyContentsFlagToField",
       "kind": "method",
       "receiver": "*Root",
       "line": 308
@@ -24355,10 +24347,26 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
+      "name": "newRsyncFlagsList",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 326
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync.go",
+      "name": "newRsyncPreviewView",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 350
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync.go",
       "name": "newRsyncHintView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 318
+      "line": 360
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24366,7 +24374,7 @@
       "name": "newRsyncButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 330
+      "line": 372
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24374,7 +24382,7 @@
       "name": "newRsyncLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 384
+      "line": 426
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24382,7 +24390,7 @@
       "name": "newRsyncContentLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 412
+      "line": 454
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24390,14 +24398,14 @@
       "name": "currentRsyncJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 434
+      "line": 476
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
       "name": "splitRsyncExcludes",
       "kind": "function",
-      "line": 454
+      "line": 496
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24405,21 +24413,21 @@
       "name": "renderRsyncPreview",
       "kind": "method",
       "receiver": "*Root",
-      "line": 477
+      "line": 519
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
       "name": "rsyncRelayHint",
       "kind": "function",
-      "line": 499
+      "line": 541
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
       "name": "rsyncEndpointIsRemote",
       "kind": "function",
-      "line": 518
+      "line": 560
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24427,7 +24435,7 @@
       "name": "runRsync",
       "kind": "method",
       "receiver": "*Root",
-      "line": 546
+      "line": 588
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24435,14 +24443,14 @@
       "name": "runRsyncBackground",
       "kind": "method",
       "receiver": "*Root",
-      "line": 564
+      "line": 606
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync.go",
       "name": "rsyncEndpointBase",
       "kind": "function",
-      "line": 580
+      "line": 622
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24597,6 +24605,41 @@
       "name": "TestToggleRsyncFlagFlipsStateAndRelabelsTheRow",
       "kind": "function",
       "line": 405
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField",
+      "kind": "function",
+      "line": 434
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff",
+      "kind": "function",
+      "line": 449
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash",
+      "kind": "function",
+      "line": 466
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestToggleRsyncFlagCopyContentsIsANoOpOnAnEmptyField",
+      "kind": "function",
+      "line": 483
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource",
+      "kind": "function",
+      "line": 500
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29714,5 +29757,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "6ec303c98068ddc660e08951b2c5001e2ed05f63fb6dc6674e98475b21997ab9"
+  "merkle_root": "41d2eeb26ba209162597956a0f46f7115e5159ccd6a827c7d465c3d05e35cdf2"
 }

@@ -505,7 +505,9 @@ var helpText = strings.TrimLeft(`
   risk. Off by default — the source folder itself lands inside the
   destination, matching how this app's own Copy/Paste already
   behaves; switching it on copies only what's inside the source
-  folder, into the destination directly.
+  folder, into the destination directly. Flipping it also adds or
+  removes that same trailing "/" on the Source field itself, not just
+  in the live preview below.
 
   Further toggles: Archive mode (-a, permissions/times/symlinks
   preserved — on by default), Compress data in transit (-z), Delete
