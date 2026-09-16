@@ -1260,6 +1260,15 @@ func (p *Panel) load(dir string) error {
 	p.filterMatchesNothing = len(entries) == 0 && beforeFilterCount > 0
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
+	// Captured before Clear() below, for the same-directory reload
+	// branch further down: Table.Clear() only ever touches cell
+	// content, never tview's own internal selection index, so this is
+	// still whatever row the cursor was actually on a moment ago —
+	// including a row that's no longer valid once entries has fewer
+	// rows than before (see that branch's own doc comment for why that
+	// matters).
+	curRow, _ := p.table.GetSelection()
+
 	p.table.Clear()
 	p.selected = make(map[string]bool)
 	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
@@ -1358,6 +1367,30 @@ func (p *Panel) load(dir string) error {
 		// entirely rather than depending on it to happen to fire.
 		p.table.SetOffset(0, 0)
 		p.focusRow(0) // top of the listing — see this func's own doc comment
+	} else if last := p.table.GetRowCount() - 1; curRow > last {
+		// Same directory reloading in place (a Trash/Remove, a "zr"
+		// manual refresh, ...) with the cursor left sitting past the
+		// last row that still exists — Table.Clear() above never
+		// adjusts tview's own internal selection index for a row count
+		// that may have just shrunk, e.g. deleting the last row the
+		// cursor was actually on. Left untouched, tview then has no
+		// valid row left to highlight at all, and nothing fixes that on
+		// its own until some unrelated keypress happens to nudge
+		// tview's own Select()-driven clamp into re-validating it. A
+		// real, reported bug: delete a file, tab focus away and back,
+		// and the panel shows no selection whatsoever until pressing
+		// Down once first.
+		//
+		// Deliberately only the out-of-range case, not every
+		// same-directory reload: a rename (say) can leave curRow still
+		// perfectly in range while pointing at a different file than
+		// before, since the renamed entry itself moved to wherever its
+		// new name now sorts — re-selecting unconditionally here would
+		// fire the table's own SetSelectionChangedFunc and clobber
+		// whatever finishRename's own refreshDetailsIfShowing just set
+		// moments earlier for the file's real new path, with whatever
+		// this numeric row happens to show post-reorder instead.
+		p.focusRowClamped(last)
 	}
 
 	if p.onLoad != nil {
