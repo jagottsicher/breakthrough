@@ -516,7 +516,12 @@ var helpText = strings.TrimLeft(`
   behaves; switching it on copies only what's inside the source
   folder, into the destination directly. Flipping it also adds or
   removes that same trailing "/" on the Source field itself, not just
-  in the live preview below.
+  in the live preview below. Opened on a single file instead of a
+  folder, turning it on substitutes that file's own parent directory
+  (still with the trailing "/") rather than appending one to a
+  filename, since "contents" has no meaning for a plain file — turning
+  it back off restores the exact original file, not just that
+  directory with the slash removed.
 
   Further toggles: Archive mode (-a, permissions/times/symlinks
   preserved — on by default), Compress data in transit (-z), Delete
