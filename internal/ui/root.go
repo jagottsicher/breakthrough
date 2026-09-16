@@ -98,6 +98,17 @@ type Root struct {
 
 	app *tview.Application
 
+	// startDir is the directory breakthrough was actually launched
+	// with (an explicit CLI argument, or the launching shell's own
+	// working directory — see cmd/breakthrough's own startDir) —
+	// captured once here at NewRoot time, since the first Panel it
+	// built from is free to navigate away from it immediately
+	// afterward. Read by newTabStartPath as the local fallback for a
+	// new tab opened while the active panel is remote, whose own path
+	// is a remote absolute path a fresh, always-local tab has no
+	// business reusing.
+	startDir string
+
 	// mouseEnabled mirrors whatever the last app.EnableMouse call (see
 	// NewRoot/setMouseEnabled) left the Application in — tview itself has
 	// no getter for this (see Application.EnableMouse's own private
@@ -1305,6 +1316,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r := &Root{
 		Pages:          tview.NewPages(),
 		app:            app,
+		startDir:       path,
 		mouseEnabled:   settings.MouseEnabled,
 		panel:          panel,
 		settings:       settings,

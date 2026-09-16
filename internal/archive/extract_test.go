@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,6 +102,63 @@ func TestExtractZipFileAndDirectory(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dest, "lib/util.go")); got != "package lib\n" {
 		t.Errorf("lib/util.go content = %q, want %q", got, "package lib\n")
+	}
+}
+
+// TestExtractOverwritesAPreviousReadOnlyExtractionOfTheSameMember pins
+// a real, reported bug: a member whose own stored mode has no owner
+// write bit (a license file marked read-only, say — common enough,
+// and Extract's own doc comment already documents "silently
+// overwritten" as the intended behavior for a name already present)
+// used to fail with "permission denied" extracting it a *second* time
+// on top of its own previous copy, because os.OpenFile's O_TRUNC was
+// asked to reopen an *existing* file for writing, which has to satisfy
+// that file's own current permissions — unlike creating a brand new
+// one, which doesn't.
+func TestExtractOverwritesAPreviousReadOnlyExtractionOfTheSameMember(t *testing.T) {
+	src := t.TempDir()
+	zipPath := filepath.Join(src, "a.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	hdr := &zip.FileHeader{Name: "readonly.txt", Method: zip.Deflate}
+	hdr.SetMode(0o444) // no write bit at all
+	w, err := zw.CreateHeader(hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("second\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := List(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := Children(entries, "")
+
+	dest := t.TempDir()
+	// A previous extraction of the same member already left behind a
+	// read-only copy — exactly what a first, successful Extract call
+	// of this same archive would produce.
+	existing := filepath.Join(dest, "readonly.txt")
+	if err := os.WriteFile(existing, []byte("first\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Extract(zipPath, members, dest); err != nil {
+		t.Fatalf("Extract: %v, want the pre-existing read-only file replaced, not refused", err)
+	}
+	if got := readFile(t, existing); got != "second\n" {
+		t.Errorf("content = %q, want the archive's own content to have replaced the old file", got)
 	}
 }
 
