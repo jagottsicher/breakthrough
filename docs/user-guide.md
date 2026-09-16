@@ -18,6 +18,8 @@ material, always matching the version you are actually running.
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
 - [Rsync](#rsync)
+- [Toolbox](#toolbox)
+- [Tool windows](#tool-windows)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -90,6 +92,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
+| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -100,7 +103,7 @@ second letter if you'd rather point at it.
 
 **The button bar** below the command line always shows a curated subset
 of these keys as a quick legend — Copy/Cut/Paste, Move to Trash,
-Properties, Details, Split, the tab switcher, Look, Help, and the five
+Properties, Details, Split, the tab switcher, Look, Help, and the six
 chord families — with the actual key to press set off by its own
 background color, one space either side, so the letter-to-action
 mapping is easy to scan at a glance. Every other key still works
@@ -776,6 +779,66 @@ still needs a typed password, fails fast with a real, reported error
 instead of hanging with no visible prompt at all, since a backgrounded
 rsync's own stdin deliberately reads from nothing rather than from
 breakthrough's own keyboard.
+
+## Toolbox
+
+`j` then `j`. A full-screen, browsable catalog of external networking
+and hardware tools — never reimplemented, the same "shell out to the
+real tool" approach Rsync and Sed Replace already take. Two categories:
+
+- **Networking**: Ping, Nmap scan, IP addresses (`ip addr`), Routing
+  table (`route -n`), Sockets (`ss -tulpn`), `getent`, `wget`,
+  `nslookup`, `dig`, netcat (`nc`), `curl`, and a Logviewer that runs a
+  real `tail -f` on a file you name (defaulting to `/var/log/syslog`).
+- **Hardware**: Block devices (`lsblk -f`), USB devices (`lsusb`), CPU
+  info (`lscpu`), Memory devices (`lsmem`), Kernel devices (`lsdev`),
+  Hardware summary (`hwinfo --short`), System overview (`inxi -Fxz`),
+  and SCSI devices (`lsscsi`).
+
+`Up`/`Down` move between entries, `Enter` (or a click) runs the one
+selected. An entry that needs further input — a host for Ping, a URL
+for `curl`, a database and key for `getent`, and so on — asks for it
+first in a small field floated on top of the screen; leaving it empty
+and pressing `Escape` cancels without running anything. Whatever you
+type for one of these is split on whitespace and appended to the
+command as-is, so `curl`'s own prompt happily accepts extra flags
+(`-I https://example.com`), not just a bare URL.
+
+Every tool's output opens in its own tool window (see [Tool
+windows](#tool-windows) below), floating on top of the Toolbox screen
+rather than replacing it. That means you can start Ping, then pick
+another entry right after — each tool keeps running independently
+until you close its window or the command finishes on its own.
+
+Not every one of these commands ships by default on every distribution
+(`lsdev`, `hwinfo`, and `inxi` especially vary) — running one that isn't
+installed reports a real "command not found" in its own tool window,
+the same as typing it at a shell would.
+
+## Tool windows
+
+A small, freely positioned window showing one command's own live
+output — what every Toolbox entry (see [Toolbox](#toolbox) above)
+actually opens. Unlike every other dialog in this app, it is
+deliberately not modal: the panel underneath, the Toolbox screen if
+it's still open, and any other tool window all stay fully usable while
+this one floats on top of them.
+
+| Action | Effect |
+|---|---|
+| `Escape` | Close it, stopping the process first if it's still running |
+| Drag the title bar | Move the window; `Alt`+arrow keys do the same |
+| Click the title bar's `✕` | Close it, same as `Escape` |
+| Drag the bottom-right `◢` | Resize it by hand |
+| Arrow keys / `PageUp`/`PageDown` / mouse wheel | Scroll the output once it's longer than the window currently shows |
+
+Left alone, a tool window auto-fits its own width to whatever it's
+currently showing — growing the moment a long line arrives, shrinking
+back once that line scrolls out of view — until the resize handle is
+ever dragged by hand, which turns that auto-fit off for that window for
+good. A window that finishes on its own (the command exits) says so
+right in its own content area instead of closing itself, so its last
+output stays readable until you close it yourself.
 
 ## Sed Replace
 

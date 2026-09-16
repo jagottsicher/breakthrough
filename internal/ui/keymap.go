@@ -360,6 +360,17 @@ func chordFamilies() []chordFamily {
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
+		// "jj" doubles the prefix for the family's own single
+		// destination, the same shape "gg"/"oo" already establish —
+		// opening the Toolbox screen (toolbox.go), a catalog of real
+		// external networking/hardware tools. "j" itself carries no
+		// mnemonic of its own — by the time this family was added, every
+		// other letter already meant something else as either a plain
+		// command or a chord prefix, and "j" (along with "b") was one of
+		// only two still completely free.
+		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
+			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
+		}},
 	}
 }
 

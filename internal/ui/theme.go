@@ -327,6 +327,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderBatchRenamePreview()
 	}
 
+	if r.toolboxTable != nil {
+		r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — the Toolbox screen has exactly one
+		// focusable widget (its own table), never itself the base a
+		// further overlay stacks on top of in a way that should dim it,
+		// the same reasoning optionsTitleBar's own fixed
+		// FocusedBackground already follows.
+		r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.toolboxTitleBar.SetTextColor(theme.TextColor)
+		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
+		r.toolboxHint.SetTextColor(theme.MutedTextColor)
+
+		styleInput(r.toolboxInput, theme, true)
+		r.toolboxInput.SetLabelColor(theme.TextColor)
+
+		r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
 		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)

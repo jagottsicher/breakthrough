@@ -92,6 +92,7 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
+    j  tools    jj Toolbox screen (networking/hardware tools)
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -354,6 +355,25 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]Toolbox screen ("jj")[::-]
+
+  A browsable catalog of real networking and hardware tools — Networking
+  (Ping, Nmap, ip, route, ss, getent, wget, nslookup, dig, netcat, curl,
+  a log-following Tail -f) and Hardware (lsblk, lsusb, lscpu, lsmem,
+  lsdev, hwinfo, inxi, lsscsi) — each one a genuine external command,
+  never reimplemented, the same "shell out to the real tool" approach
+  Rsync and Sed Replace already take.
+
+  Up / Down         Move between entries
+  Enter             Run the selected tool — asks for one further
+                     argument first (a host, a URL, ...) if it needs one
+  Escape            Close the Toolbox screen
+
+  Every tool's output opens in its own tool window (see "Tool windows"
+  below), floating on top of this screen rather than replacing it — pick
+  another tool, or press Escape to get back to browsing, without losing
+  anything already running.
 
 [::b]Split view ("s")[::-]
 
@@ -776,7 +796,7 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
-[::b]Tool windows (context menu's "Ping (test)", more to come)[::-]
+[::b]Tool windows (every entry in the Toolbox screen, "jj")[::-]
 
   A small floating window running one command's live output — unlike
   every dialog above, not modal: the panel underneath (and any other

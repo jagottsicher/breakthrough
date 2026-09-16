@@ -426,7 +426,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
-		if s.key == 'g' || s.key == 'p' || s.key == 'm' || s.key == 'z' || s.key == 'o' {
+		if s.key == 'g' || s.key == 'p' || s.key == 'm' || s.key == 'z' || s.key == 'o' || s.key == 'j' {
 			continue // a chord-family cascade cell — see TestBuildButtonBarShowsChordCascades
 		}
 		want, ok := wantLabels[s.key]
@@ -463,7 +463,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'm': " m … menu", 'z': " z … display", 'o': " o … options"}
+	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'm': " m … menu", 'z': " z … display", 'o': " o … options", 'j': " j … tools"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
