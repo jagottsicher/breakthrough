@@ -147,7 +147,18 @@ func (r *Root) renderConnectionMenu() {
 	table.SetCell(newRow, connectionMenuColEject, blankConnectionMenuCell())
 	table.SetCell(newRow, connectionMenuColRemove, blankConnectionMenuCell())
 
-	table.Select(newRow, connectionMenuColLabel)
+	// Default selection mirrors openTabSwitcher's own
+	// r.openTabSwitcher(r.activeTab): the active connection's own row
+	// if this panel has one, row 0 otherwise — never the trailing "New
+	// connection" row by default, the same "land on whatever's already
+	// relevant, not on the fallback action" the tab switcher already
+	// establishes, per the user's own explicit request that the two
+	// dropdowns behave the same way here too.
+	initialRow := 0
+	if r.connectionMenuActiveRow >= 0 {
+		initialRow = r.connectionMenuActiveRow
+	}
+	table.Select(initialRow, connectionMenuColLabel)
 }
 
 // newConnectionMenuTable builds the dropdown's own Table — no border,
