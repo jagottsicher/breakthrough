@@ -13,6 +13,7 @@ material, always matching the version you are actually running.
 - [Tabs](#tabs)
 - [Split view](#split-view)
 - [The context menu](#the-context-menu)
+- [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
@@ -48,7 +49,7 @@ dialog open.
 | `x` | Cut | `D` | Remove permanently | `I` | Details sidebar |
 | `v` | Paste | `u` | Undo last rename | `l` | Look |
 | `r` | Rename | `e` | Edit | `/` | Filter |
-| `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
+| | | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
 | `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
@@ -85,7 +86,9 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
 | `p` — permissions | `pm` chmod · `po` chown |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
+| `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
@@ -97,12 +100,12 @@ second letter if you'd rather point at it.
 
 **The button bar** below the command line always shows a curated subset
 of these keys as a quick legend — Copy/Cut/Paste, Move to Trash,
-Properties, Details, the context menu, Split, the tab switcher, Look,
-Help, and the three chord families — with the actual key to press set
-off by its own background color, one space either side, so the
-letter-to-action mapping is easy to scan at a glance. Every other key
-still works exactly the same whether or not it's shown there; `?`
-documents all of them.
+Properties, Details, Split, the tab switcher, Look, Help, and the five
+chord families — with the actual key to press set off by its own
+background color, one space either side, so the letter-to-action
+mapping is easy to scan at a glance. Every other key still works
+exactly the same whether or not it's shown there; `?` documents all of
+them.
 
 **No function keys anywhere in the application.** Every F-key is free
 for your terminal or window manager to use however it likes. A handful
@@ -362,7 +365,8 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-`m`, or right-click anywhere in the listing.
+`mm` (the `m` chord's own doubled prefix — see [the chords
+table](#the-keyboard-layer)), or right-click anywhere in the listing.
 
 Only what actually applies right now is shown — not a fixed list of
 everything the menu can ever do. On a plain file, that's:
@@ -393,9 +397,10 @@ Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing. `m` again (`mm`) fires **Multiply** the same way — the one
-entry here with no plain-key shortcut of its own to mirror, since it
-only ever opens from this menu — see [Multiply](#multiply).
+nothing. `m` again (`mmm` from plain browsing) fires **Multiply** the
+same way — the one entry here with no plain-key shortcut of its own to
+mirror, since it only ever opens from this menu — see
+[Multiply](#multiply).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -417,9 +422,10 @@ arrow does the same, alongside clicking or selecting `◂ Back` itself.
 The menu's own title bar names where you are — "Menu" at the top,
 "Menu › Selection" one level in.
 
-- **▸ More actions** — `tail -f` (files only), `chown`, `chmod`, `sed`,
-  Batch rename, Undo last rename, Remove (the permanent, asks-first
-  sibling of Move to Trash above).
+- **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
+  (files only), `chown`, `chmod`, `sed`, Batch rename, Undo last
+  rename, Compare, Rsync, Remove (the permanent, asks-first sibling of
+  Move to Trash above), Paste following symlinks.
 - **▸ Selection** — Select all, Deselect all, Select +, Select -
   (checkbox-based, the same these already reach on their own keys).
 - **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
@@ -432,9 +438,26 @@ live at the bottom of this menu are Options-screen and keyboard-only
 now (`.` and the `z` chord) — they're a view setting for the whole
 panel, not an action on whatever the menu was opened for.
 
+## New file and New dir
+
+`mf`/`md`, or the context menu's **"More actions" → "New file"/"New
+dir"**. Prompts for a name and creates an empty file (`mf`, the same as
+a bare `touch`) or an empty directory (`md`, the same as a bare
+`mkdir`) directly inside the active panel's own current directory —
+neither depends on a selection or the cursor's own row, so both work
+the same whether the cursor sits on a real entry or on `..`.
+
+Refuses an empty name, a name containing a path separator (this only
+ever creates directly inside the current directory, not somewhere
+nested), or an existing destination — the same three refusals Rename
+already has. Works the same way against a remote connection (see
+[Remote connections (SFTP)](#remote-connections-sftp)): the new file or
+directory is created through that connection instead of on this
+machine, without needing to leave the panel.
+
 ## Multiply
 
-`mm` (`m` opens the context menu, `m` again fires this one directly),
+`mmm` (`mm` opens the context menu, `m` again fires this one directly),
 or the context menu's **Multiply**.
 
 Creates one or more copies of the current selection right beside it.

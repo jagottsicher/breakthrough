@@ -1,9 +1,10 @@
 // Package ui's own remoteops.go holds the small, single-item remote
-// operations (rename, permanent delete, chmod) that don't need the
-// full async/progress/conflict machinery remotepaste.go's own transfer
-// engine does — see this project's own phased rollout: Phase 1
-// (browsing, viewing) shipped first; Phase 2 filled in rename/delete/
-// chmod/copy-cut-paste for a remote panel; Edit and Look (see
+// operations (rename, permanent delete, chmod, new file/new dir) that
+// don't need the full async/progress/conflict machinery
+// remotepaste.go's own transfer engine does — see this project's own
+// phased rollout: Phase 1 (browsing, viewing) shipped first; Phase 2
+// filled in rename/delete/chmod/copy-cut-paste/new-file/new-dir for a
+// remote panel; Edit and Look (see
 // bottombar.go's own editRemoteEntry and viewer.go's own
 // openRemoteLook) stage a local temp copy through remotestage.go's own
 // downloadRemoteToTemp instead of refusing outright, the same way a
@@ -50,6 +51,55 @@ func renameRemote(client remotefs.Client, p, newName string) (string, error) {
 		return "", fmt.Errorf("%s already exists", dest)
 	}
 	if err := client.Rename(p, dest); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// createFileRemote is fsops.CreateFile's own remote counterpart: an
+// empty file called name, created directly inside dir (the currently
+// browsed remote directory, not p's own parent the way renameRemote's
+// dest is — there's no existing entry to stay alongside here). Same
+// refusals as renameRemote (empty name, a "/" in name, an existing
+// destination).
+func createFileRemote(client remotefs.Client, dir, name string) (string, error) {
+	if name == "" {
+		return "", errEmptyName
+	}
+	if strings.ContainsRune(name, '/') {
+		return "", fmt.Errorf("name must not contain a path separator: %q", name)
+	}
+
+	dest := path.Join(dir, name)
+	if _, err := client.Stat(dest); err == nil {
+		return "", fmt.Errorf("%s already exists", dest)
+	}
+	w, err := client.Create(dest)
+	if err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// createDirRemote is fsops.CreateDir's own remote counterpart — see
+// createFileRemote's own doc comment just above for the shared
+// reasoning (dir, not a parent-of-p; same refusals).
+func createDirRemote(client remotefs.Client, dir, name string) (string, error) {
+	if name == "" {
+		return "", errEmptyName
+	}
+	if strings.ContainsRune(name, '/') {
+		return "", fmt.Errorf("name must not contain a path separator: %q", name)
+	}
+
+	dest := path.Join(dir, name)
+	if _, err := client.Stat(dest); err == nil {
+		return "", fmt.Errorf("%s already exists", dest)
+	}
+	if err := client.Mkdir(dest); err != nil {
 		return "", err
 	}
 	return dest, nil
