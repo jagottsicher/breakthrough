@@ -458,6 +458,17 @@ terminal.
   bar, queuing behind an already-running background rsync the same way
   a second Paste already queues behind one still in flight. See
   [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
+- Toolbox (`j` then `j`): a full-screen, browsable catalog of built-in
+  networking (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`,
+  `nslookup`, `dig`, netcat, `curl`, a `tail -f` Logviewer) and hardware
+  (`lsblk`, `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`,
+  `lsscsi`) tools — real external commands, never reimplemented, the
+  same approach Rsync above already takes. An entry that needs one — a
+  host, a URL, a database key — asks for it in a small field first;
+  every one of them then streams its live output into its own small,
+  draggable tool window, non-modal so the Toolbox screen and the panel
+  underneath both stay usable while it runs. See
+  [docs/user-guide.md](docs/user-guide.md#toolbox) for the full catalog.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -489,9 +500,9 @@ terminal.
   labeled Hide or Unhide, whichever it would do next, not whichever
   state you're currently in), Properties (`i`), Details sidebar (`I`),
   Split view (`s`), the tab switcher (`t`), Look (`l`), and Help (`?`),
-  plus the five chord families marked with an ellipsis to show they
+  plus the six chord families marked with an ellipsis to show they
   lead to more keys (`g…` go, `p…` permissions, `m…` menu, `z…` display
-  toggles, `o…` options) — every member of an open chord's own legend is
+  toggles, `o…` options, `j…` tools) — every member of an open chord's own legend is
   clickable too, the same highlighted-key treatment, so pointing at one
   works as well as typing its second letter. A few of these change
   meaning while actually browsing the
@@ -646,10 +657,10 @@ terminal.
 
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
-archive browsing, Sed Replace, Batch rename, Compare, and a full Options screen
-covering every setting breakthrough recognizes. Progress bars for
-long-running file operations and a set of built-in networking/hardware
-tool windows are what's planned next — see
+archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
+covering every setting breakthrough recognizes, and a Toolbox screen
+(`jj`) of built-in networking and hardware tools. Progress bars for
+long-running file operations are what's planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).

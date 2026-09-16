@@ -211,6 +211,20 @@ type Root struct {
 	optionsInfo             *tview.TextView
 	optionsInput            *tview.InputField
 
+	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
+	// real external networking/hardware tools, each one either run
+	// immediately (toolboxFixedEntry) or after asking for one further
+	// argument through toolboxInput, the same "small floating field over
+	// a full-screen list" shape optionsInput already establishes for
+	// Options. Every entry ends up in openToolCommand (toolwindow.go),
+	// the same draggable, non-modal window Ping already used before this
+	// screen gave it (and everything else here) a real home.
+	toolboxLayout   *tview.Flex
+	toolboxTitleBar *tview.TextView
+	toolboxHint     *tview.TextView
+	toolboxTable    *tview.Table
+	toolboxInput    *tview.InputField
+
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
 	// package keeps meaning the right one without knowing tabs exist.
@@ -1545,6 +1559,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated List" pattern as r.picker above.
 	r.newOptionsScreen()
 
+	// The Toolbox screen (see toolbox.go/openToolbox) — same full-screen
+	// shape as Options, built once here and repopulated on every open.
+	r.newToolboxScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -1660,6 +1678,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(optionsPage, r.optionsLayout, true, false)
 	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
 	r.AddPage(optionsInputPage, r.optionsInput, false, false)
+	// resize=true: the Toolbox screen deliberately fills the whole
+	// terminal too, the same reasoning the Options screen's own comment
+	// just above gives.
+	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
+	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
