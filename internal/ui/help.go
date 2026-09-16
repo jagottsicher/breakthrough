@@ -92,7 +92,8 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    j  tools    jj Toolbox screen (networking/hardware tools)
+    j  tools    jj Toolbox screen (networking/hardware tools) ·
+                jm Mounts screen (what's mounted right now)
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -374,6 +375,23 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
+
+[::b]Mounts screen ("jm")[::-]
+
+  A read-only, live view of every currently mounted filesystem — real
+  storage only (pseudo filesystems like proc/sysfs/tmpfs are left out),
+  via the real findmnt command, never reimplemented.
+
+  Up / Down         Move between mounts
+  r                 Re-read the live mount table
+  Escape            Close the Mounts screen
+
+  "Bind" marks a bind mount (the same underlying filesystem attached a
+  second time at another path). "Persistent" marks a mount also
+  configured in /etc/fstab — it will still be there after a reboot; one
+  without it was mounted by hand (or by something other than the
+  boot-time fstab pass) at some point since, shown in a warning color so
+  it stands out at a glance.
 
 [::b]Split view ("s")[::-]
 

@@ -20,6 +20,7 @@ material, always matching the version you are actually running.
 - [Rsync](#rsync)
 - [Toolbox](#toolbox)
 - [Tool windows](#tool-windows)
+- [Mounts](#mounts)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -92,7 +93,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) |
+| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -839,6 +840,33 @@ ever dragged by hand, which turns that auto-fit off for that window for
 good. A window that finishes on its own (the command exits) says so
 right in its own content area instead of closing itself, so its last
 output stays readable until you close it yourself.
+
+## Mounts
+
+`j` then `m`. A third full-screen catalog, alongside Options and the
+Toolbox, kept deliberately separate from the Toolbox's own command list:
+a read-only, live table of every currently mounted filesystem, rather
+than a list of commands to run.
+
+Built entirely from the real `findmnt` command (never reimplemented,
+never a hand-rolled `/etc/fstab` parser): one call for what's actually
+mounted right now (real storage only — `proc`, `sysfs`, `tmpfs` and
+other pseudo filesystems are left out), a second for what `/etc/fstab`
+itself configures, cross-referenced by mountpoint. Six columns: Target,
+Source, Type, Bind, Persistent, and Options.
+
+- **Bind** marks a bind mount — the same underlying filesystem attached
+  a second time at another path (`mount --bind`).
+- **Persistent** marks a mount whose mountpoint is also configured in
+  `/etc/fstab` — it will still be there after a reboot. One without it
+  was mounted by hand (or by something other than the boot-time fstab
+  pass) at some point since, and is shown in a warning color so it
+  stands out at a glance — the whole reason this column exists.
+
+`Up`/`Down` move between mounts, `r` re-reads the live mount table (a
+USB stick plugged in, or a network share that dropped, while this
+screen is open won't otherwise be noticed on its own), `Escape` closes
+it. Read-only for now — no mount/unmount actions yet.
 
 ## Sed Replace
 
