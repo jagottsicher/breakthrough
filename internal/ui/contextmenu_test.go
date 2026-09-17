@@ -93,7 +93,7 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 	openMenuOnRow(t, r, 2) // apple.txt — see fixtureDir
 
 	want := []string{
-		"Look", "Edit", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
+		"Look", "Edit", "Open with…", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
 		menuGroupGlyph + "More actions",
 		menuGroupGlyph + "Selection",
 		menuGroupGlyph + "Tabs & Split",
@@ -109,8 +109,8 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 }
 
 // TestContextMenuHidesEditAndTailForADirectory pins menuTargetIsFile:
-// "Edit" and (inside "More actions") "tail -f" don't apply to a
-// directory and shouldn't be offered for one.
+// "Edit", "Open with…", and (inside "More actions") "tail -f" don't
+// apply to a directory and shouldn't be offered for one.
 func TestContextMenuHidesEditAndTailForADirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -124,6 +124,9 @@ func TestContextMenuHidesEditAndTailForADirectory(t *testing.T) {
 	}
 	if menuItemIndex(r, "Edit") >= 0 {
 		t.Error(`"Edit" should not be offered for a directory`)
+	}
+	if menuItemIndex(r, "Open with…") >= 0 {
+		t.Error(`"Open with…" should not be offered for a directory`)
 	}
 
 	selectMenuItem(t, r, menuGroupGlyph+"More actions")

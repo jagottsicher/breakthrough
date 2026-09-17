@@ -160,6 +160,14 @@ type Root struct {
 	// harmless, since nothing it repositions is open that early anyway.
 	lastScreenWidth, lastScreenHeight int
 
+	// lastOpenWithCommand is "Open with…"'s own most recently typed
+	// command (see openCurrentEntryWith) — prefilled the next time it's
+	// opened, the same "remember what you typed last" convenience
+	// openRename's own current-name prefill already gives for a
+	// different field. Empty until first used; never persisted across
+	// restarts.
+	lastOpenWithCommand string
+
 	// theme is the active color scheme, resolved once at startup (see
 	// loadInitialSettings/applyTheme) from settings.ColorScheme against
 	// colorSchemes, and again live whenever the Options overlay (see
