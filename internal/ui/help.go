@@ -148,20 +148,21 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Multiply,
-                  Paste, Move to Trash, Properties, and submenus for
-                  rarer actions — New file/New dir/tail -f/chown/chmod/
-                  sed/Batch rename/Undo last rename/Remove/Paste
-                  following symlinks, Selection, Tabs & Split). "mm"
-                  opens the same menu from the keyboard (see the "m"
-                  chord above). Once it's open,
+  Right-click     Context menu (Look, Rename, Edit, Open with…, Copy,
+                  Cut, Multiply, Paste, Move to Trash, Properties, and
+                  submenus for rarer actions — New file/New dir/tail -f/
+                  chown/chmod/sed/Batch rename/Undo last rename/Remove/
+                  Paste following symlinks, Selection, Tabs & Split).
+                  "mm" opens the same menu from the keyboard (see the
+                  "m" chord above). Once it's open,
                   "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
                   seven already have on their own — fire that entry
                   directly, without arrowing down to it first. "m"
                   again (so "mmm" from plain browsing) does too, for
-                  Multiply specifically — the one entry with no
-                  plain-key equivalent of its own to mirror, since it
-                  only ever opens from here.
+                  Multiply, and "o" for Open with… — both have no
+                  plain-key equivalent of their own to mirror, since
+                  neither ever opens anywhere but here, so each just
+                  uses its own first letter instead.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -234,10 +235,11 @@ var helpText = strings.TrimLeft(`
   copying a given file, the same as a local Paste, but the job-wide
   byte total (and the ETA it drives) stays item-count only, since
   sizing a whole remote tree up front costs a full recursive listing
-  this first version doesn't spend. Look and Edit
+  this first version doesn't spend. Look, Edit, and Open with… all
   stage a real local temp copy behind the scenes for the ordinary
-  built-in viewer/external pager/$VISUAL/$EDITOR to use unchanged —
-  Edit only uploads it back if it actually changed. Opening a zip/tar
+  built-in viewer/external pager/$VISUAL/$EDITOR/typed command to use
+  unchanged — Edit and Open with… only upload it back if it actually
+  changed. Opening a zip/tar
   that lives on the connection downloads and browses it the same
   transparent way, asking first above a configurable size (Options ->
   Remote connections, e.g. "10MB"). Copy'ing a member back out of one
@@ -720,6 +722,22 @@ var helpText = strings.TrimLeft(`
   setting group in this whole app that adapts itself this way, per its
   own explicit design. Only on actually pressing "Duplicate": editing a
   field and then Cancel never touches the sticky default at all.
+
+[::b]Open with… (context menu, files only)[::-]
+
+  Runs any program you type against the selected file, instead of
+  always the configured editor (see "e" above) — prefilled with
+  whatever you typed last time. Whatever you type is handed to your
+  real shell exactly as written, so a multi-word command with its own
+  flags ("libreoffice --writer", "code -w") works the same as typing it
+  at a shell prompt would. A GUI program takes over the screen the same
+  way a terminal editor does until it's closed; append "&" to the typed
+  command to background it instead, exactly as at a real shell.
+
+  Works for a remote file exactly like Edit already does: downloads a
+  local temp copy, runs the typed command against it, and uploads the
+  result back over the connection only if it actually changed —
+  nothing extra to do differently for a file on another machine.
 
 [::b]Search dialog ("f")[::-]
 

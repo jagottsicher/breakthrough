@@ -1034,6 +1034,52 @@ func (r *Root) editCurrentEntry() {
 	r.runEditor(path, 0)
 }
 
+// openCurrentEntryWith is the context menu's own "Open with…" action —
+// the same target-selection shape editCurrentEntry already uses (a
+// right-click's own cursor move makes CurrentRowPath correct either
+// way), but for an arbitrary program typed on the spot instead of the
+// one fixed, configured editor. Prompts for it (prefilled with whatever
+// was typed last time, see lastOpenWithCommand) rather than offering a
+// picker: this app has no dependency on desktop .desktop-file/MIME
+// machinery anywhere else, and a typed command is the one thing that
+// works identically on every POSIX system this app targets, matching
+// Rsync's own "Extra flags" field and Edit's own $VISUAL/$EDITOR
+// invocation.
+//
+// Reuses runCommandOnFileAndReload/openRemoteEntryWithCommand — the
+// exact same local-vs-remote dispatch, and the exact same
+// download/run/upload-if-changed mechanics for a remote file, Edit
+// already established. A GUI program blocks this app until it's closed
+// the same way a terminal editor does (app.Suspend hands the real
+// terminal to whatever command runs); appending "&" to the typed
+// command backgrounds it instead, exactly as it would at a real shell
+// prompt — there is no separate "run detached" mode to reason about on
+// top of that.
+func (r *Root) openCurrentEntryWith() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return
+	}
+
+	r.openPrompt("Open with:", r.lastOpenWithCommand, func(command string) {
+		command = strings.TrimSpace(command)
+		if command == "" {
+			return
+		}
+		r.lastOpenWithCommand = command
+
+		if remote := r.panel.remote; remote != nil {
+			r.openRemoteEntryWithCommand(remote, path, command)
+			return
+		}
+		r.runCommandOnFileAndReload(command, path, 0)
+	})
+}
+
 // renameCurrentEntry is the "r" key's actual action — the
 // keyboard/status-bar equivalent of the context menu's "Rename" (see
 // Root.openRename), targeting whichever entry the table's cursor is
@@ -1234,42 +1280,34 @@ func selectedEditor() string {
 	return ""
 }
 
-// runEditor suspends the TUI (see runShellCommand's own doc comment for
-// why) and runs editorCommand on path, at line if it's > 0 (see
-// Panel.activateRow's own searchMode branch — a content-search match's
-// own line number, 0 for every other caller, including
-// editCurrentEntry). Run through the shell (via "$@", not a literal
-// exec argument) rather than exec'd directly: $VISUAL/$EDITOR can
-// legitimately be more than one word (e.g. "emacsclient -t"), and only
-// the shell can be trusted to split that the way the user intended
-// while still passing each of its own remaining arguments through
-// exactly as given, spaces and all.
+// runEditor suspends the TUI and runs editorCommand on path, at line if
+// it's > 0 — the configured-editor special case of the more general
+// runCommandOnFileAndReload, which "Open with…" (see
+// openCurrentEntryWith) also goes through for an arbitrary typed
+// command instead.
+func (r *Root) runEditor(path string, line int) {
+	r.runCommandOnFileAndReload(editorCommand(), path, line)
+}
+
+// runCommandOnFileAndReload runs command on path (see runCommandOnFile
+// for the actual subprocess mechanics), then reloads the current
+// directory — runEditor's own shape, generalized so "Open with…" can
+// share it for a typed command instead of always the configured editor.
 //
-// A line is passed as a leading "+N" argument, vi/vim/nvim/nano/
-// emacs' own shared convention for "open already positioned at line
-// N" — the overwhelming majority of terminal $EDITOR values in this
-// app's own POSIX-focused audience already understand it; there's no
-// attempt at a per-editor
-// lookup table for anything fancier (e.g. VS Code's own "-g file:N")
-// — an editor that doesn't recognize "+N" is no worse off than not
-// jumping to a line at all, just a leading argument it happens to
-// ignore or, at worst, visibly complain about once, on-screen, exactly
-// where the user would see and understand why.
-//
-// Skips its own usual post-edit reload if search results are currently
+// Skips its own usual post-run reload if search results are currently
 // showing (see Panel.searchMode): r.panel.path stays whatever real
 // directory was current before the search that produced them ran (see
 // Panel.showSearchResults' own doc comment), completely unrelated to
 // path here, so reloading it would be both useless (refreshing a
-// directory the file being edited isn't even in) and would silently
-// discard the results themselves (Panel.load always exits search mode
-// — see its own doc comment) the moment the editor closes — the
-// opposite of the "stay in the results, jump straight back into the
-// editor for the next match" flow this exists for. Editing a real row
-// still refreshes the real directory afterward, unchanged.
-func (r *Root) runEditor(path string, line int) {
-	if err := r.runEditorProcess(path, line); err != nil {
-		r.showError(fmt.Errorf("edit %s: %w", path, err))
+// directory the file isn't even in) and would silently discard the
+// results themselves (Panel.load always exits search mode — see its
+// own doc comment) the moment the command exits — the opposite of the
+// "stay in the results, jump straight back in for the next match" flow
+// this exists for. Acting on a real row still refreshes the real
+// directory afterward, unchanged.
+func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
+	if err := r.runCommandOnFile(command, path, line); err != nil {
+		r.showError(fmt.Errorf("run %s on %s: %w", command, path, err))
 		return
 	}
 	if r.panel.searchMode {
@@ -1278,17 +1316,35 @@ func (r *Root) runEditor(path string, line int) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
-// runEditorProcess is runEditor's own subprocess mechanics, split out
-// so editRemoteEntry can run the exact same editor invocation against
-// a locally staged copy of a remote file without inheriting runEditor's
-// own reload postamble — reloading r.panel.path (a remote directory)
-// makes sense there too, but only *after* deciding whether the edit
-// actually needs uploading back first, not unconditionally the moment
-// the editor process exits.
-func (r *Root) runEditorProcess(path string, line int) error {
+// runCommandOnFile is runEditor/"Open with…"'s own shared subprocess
+// mechanics: suspends the TUI (see runShellCommand's own doc comment
+// for why) and runs command against path, at line if it's > 0 (see
+// Panel.activateRow's own searchMode branch — a content-search match's
+// own line number, 0 for every other caller). Run through the shell
+// (via "$@", not a literal exec argument) rather than exec'd directly:
+// command can legitimately be more than one word (e.g. "emacsclient
+// -t", or a typed "Open with…" command carrying its own flags), and
+// only the shell can be trusted to split that the way the user intended
+// while still passing each of its own remaining arguments through
+// exactly as given, spaces and all — the same "hand it to a real shell,
+// don't re-parse shell syntax by hand" principle Rsync's own "Extra
+// flags" field already follows.
+//
+// A line is passed as a leading "+N" argument, vi/vim/nvim/nano/
+// emacs' own shared convention for "open already positioned at line
+// N" — the overwhelming majority of terminal $EDITOR values in this
+// app's own POSIX-focused audience already understand it; there's no
+// attempt at a per-editor lookup table for anything fancier (e.g. VS
+// Code's own "-g file:N") — a command that doesn't recognize "+N" is no
+// worse off than not jumping to a line at all, just a leading argument
+// it happens to ignore or, at worst, visibly complain about once,
+// on-screen, exactly where the user would see and understand why. Only
+// ever non-zero for the configured editor today — "Open with…" always
+// passes 0.
+func (r *Root) runCommandOnFile(command, path string, line int) error {
 	var runErr error
 	r.app.Suspend(func() {
-		script := editorCommand() + ` "$@"`
+		script := command + ` "$@"`
 		args := []string{"-c", script, "sh"}
 		if line > 0 {
 			args = append(args, fmt.Sprintf("+%d", line))
@@ -1301,38 +1357,48 @@ func (r *Root) runEditorProcess(path string, line int) error {
 	return runErr
 }
 
-// editRemoteEntry is editCurrentEntry's own remote-panel half: stages
-// remotePath into a local temp file (see downloadRemoteToTemp — the
-// same staging openRemoteLook already uses for Look), runs the
-// configured editor against that local copy exactly like runEditor
-// already does for a real local file, and uploads the result back over
-// the connection only if the editor actually changed it.
+// editRemoteEntry is editCurrentEntry's own remote-panel half — the
+// configured-editor special case of the more general
+// openRemoteEntryWithCommand, which "Open with…" also goes through for
+// an arbitrary typed command instead.
+func (r *Root) editRemoteEntry(remote remotefs.Client, remotePath string) {
+	r.openRemoteEntryWithCommand(remote, remotePath, editorCommand())
+}
+
+// openRemoteEntryWithCommand stages remotePath into a local temp file
+// (see downloadRemoteToTemp — the same staging openRemoteLook already
+// uses for Look), runs command against that local copy exactly like
+// runCommandOnFile already does for a real local file, and uploads the
+// result back over the connection only if command actually changed it.
+// This is what makes "Open with…" (see openCurrentEntryWith) work for a
+// remote file exactly the same way Edit already does: download, run
+// the chosen program against the local copy, upload back only if it
+// changed — never a special remote-only code path for either.
 //
 // "Changed" is decided by the temp file's own mtime and size before vs.
-// after the editor ran, not by re-reading and hashing both copies: an
+// after command ran, not by re-reading and hashing both copies: an
 // editor that rewrites a file unchanged still updates its own mtime on
 // save (even vim's :wq does, with no edits made at all), the same
 // signal a real sync tool already keys off — and it costs one os.Stat
 // each time rather than a second full read of a file that might be
 // large. Nothing is ever uploaded, and the remote copy is never
-// touched at all, if the editor made no change or exited with an
-// error.
-func (r *Root) editRemoteEntry(remote remotefs.Client, remotePath string) {
+// touched at all, if command made no change or exited with an error.
+func (r *Root) openRemoteEntryWithCommand(remote remotefs.Client, remotePath, command string) {
 	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
 	if err != nil {
-		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
 	defer cleanup()
 
 	before, err := os.Stat(localPath)
 	if err != nil {
-		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
 
-	if err := r.runEditorProcess(localPath, 0); err != nil {
-		r.showError(fmt.Errorf("edit %s: %w", remotePath, err))
+	if err := r.runCommandOnFile(command, localPath, 0); err != nil {
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
 
