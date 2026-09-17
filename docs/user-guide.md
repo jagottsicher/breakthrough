@@ -15,6 +15,7 @@ material, always matching the version you are actually running.
 - [The context menu](#the-context-menu)
 - [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
+- [Open with…](#open-with)
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
 - [Rsync](#rsync)
@@ -378,6 +379,7 @@ everything the menu can ever do. On a plain file, that's:
 ```
 Look
 Edit
+Open with…
 Rename
 Copy
 Cut
@@ -389,22 +391,24 @@ Properties
 ▸ Tabs & Split
 ```
 
-A few of these come and go on their own: **Edit** (and, one level into
-"More actions", **tail -f**) drop out entirely for a directory — neither
-means anything there. **Paste** only appears once Copy or Cut has
-actually put something in the clipboard. Inside "Tabs & Split",
-**Split orientation** and **Swap panes** only show up once a split is
-actually active — there's nothing to orient or swap before that.
+A few of these come and go on their own: **Edit** and **Open with…**
+(and, one level into "More actions", **tail -f**) drop out entirely for
+a directory — none of the three mean anything there. **Paste** only
+appears once Copy or Cut has actually put something in the clipboard.
+Inside "Tabs & Split", **Split orientation** and **Swap panes** only
+show up once a split is actually active — there's nothing to orient or
+swap before that.
 
 Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Look**/**Edit**/**Rename**/**Copy**/**Cut**/**Move to Trash**/
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing. `m` again (`mmm` from plain browsing) fires **Multiply** the
-same way — the one entry here with no plain-key shortcut of its own to
-mirror, since it only ever opens from this menu — see
-[Multiply](#multiply).
+nothing. `m`/`o` again (`mmm`/`mmo` from plain browsing) fire
+**Multiply**/**Open with…** the same way — the two entries here with no
+plain-key shortcut of their own to mirror, since neither ever opens
+from anywhere but this menu — see [Multiply](#multiply) and [Open
+with…](#open-with).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -513,6 +517,31 @@ becomes the new default shown next time, under Options → Behavior →
 Duplicate (see [Settings reference](#settings-reference)). This only
 happens once **Duplicate** is actually pressed; editing a field and
 then **Cancel** never touches the sticky default at all.
+
+## Open with…
+
+The context menu's **Open with…** (files only) — runs any program you
+type against the selected file, instead of always the configured
+editor (see [The keyboard layer](#the-keyboard-layer) for `e`/Edit).
+Prefilled with whatever you typed last time, so opening the next file
+with the same program takes one Enter, not a full retype.
+
+Whatever you type is handed to your real shell exactly as written — a
+multi-word command with its own flags (`libreoffice --writer`,
+`code -w`) works the same as typing it at a shell prompt would, the
+same "hand it to a real shell, don't re-parse shell syntax by hand"
+principle [Rsync](#rsync)'s own "Extra flags" field already follows. A
+GUI program takes over the screen the same way a terminal editor does,
+until it's closed; append `&` to background it instead, exactly as at
+a real shell — there's no separate "run detached" mode to pick between,
+just the one typed command.
+
+Works for a remote file exactly like Edit already does (see [Remote
+connections (SFTP)](#remote-connections-sftp)): downloads a local temp
+copy, runs the typed command against it, and uploads the result back
+over the connection only if it actually changed — nothing about a file
+living on another machine needs a different command or a separate
+step.
 
 ## Batch rename
 
@@ -1111,13 +1140,14 @@ Once connected, the panel browses the remote filesystem exactly like a
 local one: same columns, same sorting, the Home button (`~`) goes to
 the remote account's own home directory instead of this machine's.
 
-Look (`l`) and Edit (`e`) both stage the file into a real local temp
-copy first (there's no other way to hand it to the built-in viewer, an
-external pager, or `$VISUAL`/`$EDITOR` — none of them have any notion
-of a remote connection) and remove that copy again once they're done
-with it. Edit specifically only uploads it back if it actually
+Look (`l`), Edit (`e`), and [Open with…](#open-with) all stage the file
+into a real local temp copy first (there's no other way to hand it to
+the built-in viewer, an external pager, `$VISUAL`/`$EDITOR`, or a typed
+"Open with…" command — none of them have any notion of a remote
+connection) and remove that copy again once they're done with it. Edit
+and Open with… specifically only upload it back if it actually
 changed, compared by its own mtime and size, not a second full read —
-opening a file, looking at it, and closing the editor without
+opening a file, looking at it, and closing the program without
 touching anything never writes back to the remote copy at all. A PDF's
 own staged copy sticks around for as long as Look stays open, since
 page turns keep reading from it on demand; everything else is removed
