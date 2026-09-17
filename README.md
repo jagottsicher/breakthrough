@@ -161,9 +161,9 @@ terminal.
 - A context menu on `mm` (the `m` chord's own doubled prefix, the same
   "gg"/"oo" shape every other family uses for its main destination) or
   right-click, showing only what actually applies right now rather than
-  a fixed list of everything it can ever do: Look, Edit (dropped for a
-  directory), Rename, Copy/Cut/Multiply, Paste (only once the clipboard
-  has something in it), Move to Trash, Properties (editable — name,
+  a fixed list of everything it can ever do: Look, Edit, Open with…
+  (both dropped for a directory), Rename, Copy/Cut/Multiply, Paste (only
+  once the clipboard has something in it), Move to Trash, Properties (editable — name,
   permissions, click a bit or type the octal value directly, owner and
   group via a scrollable picker of every local user/group, modified
   date and time), plus three `▸` submenus that replace the list in
@@ -180,10 +180,10 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `m` again (`mmm` from
-  plain browsing) does too, for Multiply specifically — the one entry
-  with no plain-key equivalent of its own, since it only ever opens
-  from here. `mf`/`md` reach New file/New dir directly from plain
+  entry isn't currently showing does nothing. `m`/`o` again (`mmm`/`mmo`
+  from plain browsing) do too, for Multiply and Open with… — the two
+  entries with no plain-key equivalent of their own, since neither ever
+  opens from anywhere but here. `mf`/`md` reach New file/New dir directly from plain
   browsing, without opening the menu at all — both create their new
   entry directly inside the active panel's own current directory
   (remote-aware the same way Rename already is), prompting only for a
@@ -365,6 +365,15 @@ terminal.
   Behavior → Duplicate) — the one setting group in this whole app that
   adapts itself this way — but only once "Duplicate" is actually
   pressed; Cancel never touches the sticky default.
+- Open with… (context menu, files only): runs any program you type
+  against the selected file instead of always the configured editor —
+  prefilled with whatever you typed last time, handed to your real
+  shell exactly as typed (so a multi-word command with its own flags,
+  like `libreoffice --writer` or `code -w`, works the same as at a real
+  shell prompt). Works for a remote file exactly like Edit already
+  does: downloads a local temp copy, runs the typed command against it,
+  and uploads the result back over the connection only if it actually
+  changed.
 - Sed Replace (`E`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex

@@ -121,6 +121,13 @@ func contextMenuTree() []menuEntry {
 		// menu's own most-likely-wanted default.
 		{label: "Look", mnemonic: 'l', action: func(r *Root) { r.lookCurrentEntry() }},
 		{label: "Edit", visible: menuTargetIsFile, mnemonic: 'e', action: func(r *Root) { r.editCurrentEntry() }},
+		// No plain-key equivalent to mirror — this only ever opens from
+		// here — so, like "Multiply", its mnemonic is just its own first
+		// letter (see menuEntry.mnemonic's own doc comment on that
+		// exception). Works for a remote file exactly like Edit does:
+		// download, run the typed command against the local copy,
+		// upload back only if it changed (see openCurrentEntryWith).
+		{label: "Open with…", visible: menuTargetIsFile, mnemonic: 'o', action: func(r *Root) { r.openCurrentEntryWith() }},
 		{label: "Rename", mnemonic: 'r', action: func(r *Root) { r.openRename() }},
 		{label: "Copy", mnemonic: 'c', action: func(r *Root) { r.copyToClipboard() }},
 		{label: "Cut", mnemonic: 'x', action: func(r *Root) { r.cutToClipboard() }},
