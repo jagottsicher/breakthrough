@@ -640,11 +640,13 @@ func TestRefreshDetailsSidebarUpdatesOnSelectionChange(t *testing.T) {
 	}
 }
 
-// TestRefreshDetailsSidebarShowsPlaceholderForDotDot pins the
-// nothing-meaningfully-selected case: CurrentRowPath reports ok=false
-// for "..", and the sidebar should say so rather than show stale or
-// garbage content.
-func TestRefreshDetailsSidebarShowsPlaceholderForDotDot(t *testing.T) {
+// TestShowDetailsSidebarOnDotDotShowsPanelDirectory pins the current
+// contract: since Panel.CurrentRowPath reports the panel's own current
+// directory (not ok=false) while the cursor sits on "..", Details shows
+// that directory's own info instead of a "nothing selected" placeholder
+// — the same "obviously about this folder" reasoning the user's own
+// feedback gave for the chord/keyboard actions this same fallback fixes.
+func TestShowDetailsSidebarOnDotDotShowsPanelDirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -655,11 +657,11 @@ func TestRefreshDetailsSidebarShowsPlaceholderForDotDot(t *testing.T) {
 
 	r.showDetailsSidebar()
 
-	if r.detailsTarget != "" {
-		t.Errorf("detailsTarget = %q, want \"\" while \"..\" is selected", r.detailsTarget)
+	if r.detailsTarget != dir {
+		t.Errorf("detailsTarget = %q, want %q (the panel's own current directory)", r.detailsTarget, dir)
 	}
-	if text := r.detailsSidebar.GetText(true); !strings.Contains(text, "nothing selected") {
-		t.Errorf("details sidebar text should say nothing is selected, got:\n%s", text)
+	if text := r.detailsSidebar.GetText(true); strings.Contains(text, "nothing selected") {
+		t.Errorf("details sidebar shouldn't say nothing is selected while showing %q, got:\n%s", dir, text)
 	}
 }
 
