@@ -22,6 +22,7 @@ material, always matching the version you are actually running.
 - [Toolbox](#toolbox)
 - [Tool windows](#tool-windows)
 - [Mounts](#mounts)
+- [Firewall](#firewall)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -94,7 +95,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen |
+| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -902,6 +903,37 @@ Source, Type, Bind, Persistent, and Options.
 USB stick plugged in, or a network share that dropped, while this
 screen is open won't otherwise be noticed on its own), `Escape` closes
 it. Read-only for now — no mount/unmount actions yet.
+
+## Firewall
+
+`j` then `f`. A fourth full-screen catalog, alongside Options, the
+Toolbox, and Mounts: a read-only, live view of this host's own actual
+firewall rules.
+
+Exactly one backend is read — UFW if it's active, otherwise nftables if
+it has any rules, otherwise iptables, otherwise none — never more than
+one, since on a modern system these are different front ends onto the
+same underlying rules, and reading more than one would double-count.
+Built entirely from the real `ufw`, `nft`, and `iptables-save` commands,
+never reimplemented.
+
+Rules are grouped into "Incoming" and "Outgoing" sections, listed in the
+exact order each is actually evaluated — first match wins, so a rule
+further down a section only ever applies once every rule above it has
+already been ruled out. Columns: `#` (evaluation order), Dir, Action,
+Proto, Port, Source, Destination, Interface, and Note.
+
+- **Allow** rules and **Deny**/**Reject** rules are colored apart (green
+  vs. red) for a quick scan of what's actually open.
+- A rule already fully covered by an earlier, broader-or-equal rule in
+  its own section can never actually fire — it's shown dimmed, with a
+  "shadowed by #N (...)" note explaining which earlier rule makes it
+  unreachable and what that rule itself does.
+
+`Up`/`Down` move between rules, `r` re-reads the live rules, `Escape`
+closes it. Read-only for now — building a new rule, and testing "what
+happens to a request on port X from IP Y" without needing to know any
+firewall-specific syntax, are planned next.
 
 ## Sed Replace
 

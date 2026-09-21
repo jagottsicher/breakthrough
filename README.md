@@ -683,9 +683,12 @@ built and tested: browsing, tabs, split view, the trash, Search, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
 covering every setting breakthrough recognizes, a Toolbox screen
 (`jj`) of built-in networking and hardware tools with its own filtered
-Network Tools (`jn`) and Hardware Tools (`jh`) screens, and a Mounts
+Network Tools (`jn`) and Hardware Tools (`jh`) screens, a Mounts
 screen (`jm`) showing what's currently mounted and whether it survives a
-reboot. Progress bars for long-running file operations are what's
+reboot, and a Firewall screen (`jf`) showing this host's own actual
+firewall rules (UFW, nftables, or iptables — whichever one really
+governs traffic), including which rules shadow each other. Progress bars
+for long-running file operations are what's
 planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on

@@ -94,7 +94,8 @@ var helpText = strings.TrimLeft(`
                 built yet (needs its own system-clipboard design first)
     j  tools    jj Toolbox screen (networking/hardware tools) ·
                 jm Mounts screen (what's mounted right now) ·
-                jn Network Tools screen · jh Hardware Tools screen
+                jn Network Tools screen · jh Hardware Tools screen ·
+                jf Firewall screen (this host's own actual rules)
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -401,6 +402,32 @@ var helpText = strings.TrimLeft(`
   without it was mounted by hand (or by something other than the
   boot-time fstab pass) at some point since, shown in a warning color so
   it stands out at a glance.
+
+[::b]Firewall screen ("jf")[::-]
+
+  A read-only, live view of this host's own actual firewall rules —
+  whichever single backend really governs traffic right now (UFW,
+  nftables, or iptables, in that preference order; only one is ever read,
+  since on a modern system they're different front ends onto the same
+  underlying rules, and reading more than one would double-count), via
+  the real ufw/nft/iptables-save commands, never reimplemented.
+
+  Up / Down         Move between rules
+  r                 Re-read the live firewall rules
+  Escape            Close the Firewall screen
+
+  Rules are shown grouped into "Incoming" and "Outgoing", in the exact
+  order each is actually evaluated — first match wins, so within a
+  section a rule further down only ever applies once every rule above it
+  has already been ruled out. A rule already fully covered by an earlier,
+  broader-or-equal one in its own section can never actually fire; it's
+  shown dimmed with a "shadowed by #N (...)" note instead of looking just
+  as active as one that does. Allow rules and deny/reject rules are
+  colored apart for a quick scan of what's actually open.
+
+  Building a new rule, and testing "what happens to a request on port X
+  from IP Y" without needing to know any firewall-specific syntax, are
+  not part of this first, read-only cut.
 
 [::b]Split view ("s")[::-]
 

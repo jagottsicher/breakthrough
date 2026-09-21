@@ -16,6 +16,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -253,6 +254,20 @@ type Root struct {
 	mountsTable    *tview.Table
 	mountsEntries  []mountEntry
 	mountsErr      error
+
+	// The Firewall screen (see firewall.go) — a fourth full-screen
+	// catalog, showing this host's own actual firewall rules (whichever
+	// single backend actually governs traffic right now; see
+	// internal/firewall). firewallSnapshot/firewallErr/firewallServices
+	// hold the last read result, refreshed by reloadFirewall (on open,
+	// and on "r").
+	firewallLayout   *tview.Flex
+	firewallTitleBar *tview.TextView
+	firewallHint     *tview.TextView
+	firewallTable    *tview.Table
+	firewallSnapshot firewall.Snapshot
+	firewallErr      error
+	firewallServices firewall.ServiceLookup
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -1596,6 +1611,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// catalog, same build-once/repopulate-on-open shape.
 	r.newMountsScreen()
 
+	// The Firewall screen (see firewall.go/openFirewall) — a fourth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newFirewallScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -1720,6 +1739,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox screens' own
 	// comments above give.
 	r.AddPage(mountsPage, r.mountsLayout, true, false)
+	// resize=true: the Firewall screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts
+	// screens' own comments above give.
+	r.AddPage(firewallPage, r.firewallLayout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
