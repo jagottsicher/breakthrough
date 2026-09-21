@@ -1403,17 +1403,20 @@ func TestComputeDirSizeShortcutOpensDetailsWhenNotVisible(t *testing.T) {
 }
 
 // TestComputeDirSizeShortcutNoOpsForANonDirectoryTarget pins the other
-// half: opening Details this way for whatever the cursor happens to be
-// on (here, the ".." row, with nothing meaningfully selected) must not
-// then go on to compute anything — computeDetailsDirSize's own
-// isDirish/empty-target guard is what actually prevents it, unchanged
-// by ensureDetailsSidebarShowing.
+// half: opening Details this way for a plain file must not then go on
+// to compute anything — computeDetailsDirSize's own isDirish guard is
+// what actually prevents it, unchanged by ensureDetailsSidebarShowing.
+// Not the ".." row: since Panel.CurrentRowPath now reports the panel's
+// own current directory there (see
+// TestComputeDirSizeShortcutOnDotDotComputesThePanelDirectory), that
+// row no longer belongs in a "nothing to compute" test.
 func TestComputeDirSizeShortcutNoOpsForANonDirectoryTarget(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	r.panel.focusRow(2) // apple.txt — a plain file, not a directory
 	original := dirSize
 	called := false
 	dirSize = func(dir string) (int64, string, bool) { called = true; return 0, dir, true }
@@ -1422,7 +1425,39 @@ func TestComputeDirSizeShortcutNoOpsForANonDirectoryTarget(t *testing.T) {
 	r.ComputeDirSizeShortcut()
 
 	if called {
-		t.Error("ComputeDirSizeShortcut ran dirSize for \"..\", which has nothing meaningfully selected")
+		t.Error("ComputeDirSizeShortcut ran dirSize for a plain file, which has no directory size to compute")
+	}
+}
+
+// TestComputeDirSizeShortcutOnDotDotComputesThePanelDirectory pins the
+// current contract: since Panel.CurrentRowPath reports the panel's own
+// current directory (not ok=false) while the cursor sits on "..",
+// pressing "k" there computes that directory's own size instead of
+// no-op'ing — the same "obviously about this folder" fallback
+// TestShowDetailsSidebarOnDotDotShowsPanelDirectory already pins for
+// Details generally. Uses isolateDirSize (see its own doc comment)
+// rather than a bare "was I called" flag, for the same race reason
+// TestComputeDirSizeShortcutOpensDetailsWhenNotVisible already does.
+func TestComputeDirSizeShortcutOnDotDotComputesThePanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(0) // ".."
+	started := isolateDirSize(t)
+
+	r.ComputeDirSizeShortcut()
+	<-started // wait for dirSize's one-time read before this test can safely end
+
+	if !r.detailsSidebarVisible {
+		t.Error("ComputeDirSizeShortcut should have opened Details")
+	}
+	if r.detailsTarget != dir {
+		t.Errorf("detailsTarget = %q, want %q (the panel's own current directory)", r.detailsTarget, dir)
+	}
+	if !r.detailsDirSizeInProgress {
+		t.Error("ComputeDirSizeShortcut should have started computing the size for the panel's own directory")
 	}
 }
 
