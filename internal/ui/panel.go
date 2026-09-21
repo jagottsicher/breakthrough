@@ -3113,8 +3113,18 @@ func (p *Panel) nameCellRect(row int) (x, y, width int, ok bool) {
 
 // RowAt returns the absolute path of the entry at screen position (x, y),
 // or ok=false if that position isn't a selectable entry — outside the
-// table, past the last row, or the ".." row, which isn't a file operation
-// target. Used by Root to find which entry was right-clicked.
+// table or past the last row. The ".." row reports the panel's own
+// current directory (p.path), not ref.path (which for that row holds the
+// *parent* directory it navigates to) — the same "acting on this row
+// means acting on the directory it stands for" reasoning the filesystem
+// root's own leading row already relies on (see Panel.load's own "/"
+// branch, which has always pointed straight at p.path this way). Per the
+// user's own explicit request: almost every action reads as obviously
+// about "this folder" when the cursor sits on "..", not about its
+// parent, and every one of them already has to tolerate an ordinary
+// directory row's own path flowing through here regardless — "." is not
+// a new capability, just no longer a uniquely excluded one. Used by Root
+// to find which entry was right-clicked.
 func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 	row, ok := p.rowIndexAt(x, y)
 	if !ok {
@@ -3122,7 +3132,7 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 	}
 	ref, _ := p.rowRef(row) // rowIndexAt already confirmed this succeeds
 	if ref.name == ".." {
-		return "", false
+		return p.path, true
 	}
 	return ref.path, true
 }
@@ -3131,14 +3141,18 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 // path of whichever entry the table's own cursor (arrow-key navigation)
 // currently sits on, rather than one under a screen position. Used by
 // Root's keyboard-triggered actions ("e" Edit, "r" Rename, "i"
-// Properties) that have no right-clicked position to work from. ok is
-// false for the ".." row (not a file operation target, matching RowAt)
-// or an empty table.
+// Properties, the "m" chord's own context menu, ...) that have no
+// right-clicked position to work from. The ".." row reports the panel's
+// own current directory — see RowAt's own doc comment for why. ok is
+// false only for a genuinely empty table.
 func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
 	row, _ = p.table.GetSelection()
 	ref, ok := p.rowRef(row)
-	if !ok || ref.name == ".." {
+	if !ok {
 		return 0, "", false
+	}
+	if ref.name == ".." {
+		return row, p.path, true
 	}
 	return row, ref.path, true
 }
