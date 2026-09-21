@@ -1180,6 +1180,33 @@ func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
 	}
 }
 
+// TestMenuShortcutOnDotDotTargetsPanelDirectory pins the user's own
+// explicit complaint: chords like "mm" (MenuShortcut is the "m" key's
+// own action) did nothing while the cursor sat on "..", even though
+// most menu items obviously apply to "this directory" regardless. Since
+// Panel.CurrentRowPath now reports the panel's own current directory
+// for that row (see its own doc comment), MenuShortcut opens the
+// context menu targeting it instead of silently no-op'ing.
+func TestMenuShortcutOnDotDotTargetsPanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	// Row 0 ("..") is the table's default initial selection — no
+	// focusRow call needed to reproduce the reported scenario.
+
+	r.MenuShortcut()
+
+	if r.activePage != contextMenuPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, contextMenuPage)
+	}
+	if r.target != dir {
+		t.Errorf("target = %q, want %q (the panel's own current directory)", r.target, dir)
+	}
+}
+
 // TestPropertiesShortcutTargetsCurrentRow pins PropertiesShortcut's own
 // guarded action (see its doc comment on why it's kept despite no longer
 // being wired to Ctrl+P): it targets whichever row the table's cursor is

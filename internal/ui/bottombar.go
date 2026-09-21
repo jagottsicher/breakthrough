@@ -1016,7 +1016,9 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 // before the menu opens (see captureMouse's MouseRightClick case), so
 // reading it here targets the same entry either way. Runs the
 // configured editor (see editorCommand) on whichever entry the table's
-// cursor is currently on. A no-op on the ".." row or an empty panel
+// cursor is currently on — the panel's own current directory while it
+// sits on ".." (see Panel.CurrentRowPath), the same as any other
+// directory row already does; a no-op only for a genuinely empty panel
 // (Panel.CurrentRowPath's ok=false).
 func (r *Root) editCurrentEntry() {
 	if r.panel.inArchiveView() {

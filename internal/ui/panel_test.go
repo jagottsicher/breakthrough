@@ -3475,3 +3475,35 @@ func TestColumnHeaderNameWidthMatchesDataRows(t *testing.T) {
 		})
 	}
 }
+
+// TestRowAtAndCurrentRowPathOnDotDot pins the ".." row's own fallback
+// in Panel.RowAt and Panel.CurrentRowPath: acting on the row that
+// otherwise reads "up one directory" must resolve to the panel's own
+// current directory, dir — exactly like the filesystem root's own "/"
+// row already does — instead of reporting ok == false the way both
+// functions used to for this one row alone. This directly pins the
+// user's own complaint that chords like "mm" did nothing while the
+// cursor sat on "..".
+func TestRowAtAndCurrentRowPathOnDotDot(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	ref, ok := root.panel.rowRef(0)
+	if !ok || ref.name != ".." {
+		t.Fatalf("setup: row 0 = (%+v, %v), want the \"..\" row", ref, ok)
+	}
+
+	x, y, ok := findRowPos(root.panel.table, 0, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 0's screen position")
+	}
+	if path, ok := root.panel.RowAt(x, y); !ok || path != dir {
+		t.Errorf("RowAt(row 0) = (%q, %v), want (%q, true)", path, ok, dir)
+	}
+
+	root.panel.table.Select(0, 0)
+	if row, path, ok := root.panel.CurrentRowPath(); !ok || path != dir || row != 0 {
+		t.Errorf("CurrentRowPath() = (%d, %q, %v), want (0, %q, true)", row, path, ok, dir)
+	}
+}

@@ -512,8 +512,11 @@ func TestRenameRowOpensRenameForGivenRow(t *testing.T) {
 }
 
 // TestRenameRowNoopsForDotDot pins that the rename gesture can't be
-// used to rename ".." — the same exclusion CurrentRowPath already
-// applies for the keyboard path ("r"/renameCurrentEntry).
+// used to rename ".." — the click-pause-click gesture's own exclusion
+// (ref.checkable, false for ".."), unlike the keyboard path
+// ("r"/renameCurrentEntry), which since Panel.CurrentRowPath's own
+// ".." fallback now renames the current directory itself instead (see
+// TestRenameCurrentEntryOnDotDotTargetsPanelDirectory).
 func TestRenameRowNoopsForDotDot(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -525,6 +528,31 @@ func TestRenameRowNoopsForDotDot(t *testing.T) {
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q, want still closed", r.activePage)
+	}
+}
+
+// TestRenameCurrentEntryOnDotDotTargetsPanelDirectory pins
+// renameCurrentEntry's own use of Panel.CurrentRowPath (see
+// TestRenameRowNoopsForDotDot's own doc comment for how this differs
+// from the click-pause-click gesture's separate renameRow, which still
+// excludes ".." via rowRef.checkable): the "r" key while the cursor
+// sits on ".." now renames the panel's own current directory instead
+// of silently doing nothing, the user's own explicit request.
+func TestRenameCurrentEntryOnDotDotTargetsPanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.renameCurrentEntry()
+
+	if r.activePage != renamePage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+	if r.target != dir {
+		t.Errorf("target = %q, want %q (the panel's own current directory)", r.target, dir)
 	}
 }
 

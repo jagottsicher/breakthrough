@@ -140,11 +140,15 @@ func TestMoveSelectionToTrashCancelledLeavesFileInPlace(t *testing.T) {
 // TestMoveSelectionToTrashClearsDetailsShowingSameFile pins the user's
 // own explicit request extended to Trash: Details, if it's showing the
 // very entry that just got trashed, must not keep claiming stale data
-// for a file that isn't there any more — cleared to "(nothing
-// selected)" (see refreshDetailsIfShowing's own doc comment on why an
-// obscure trash-internal path isn't worth following it to instead).
+// for a file that isn't there any more (see refreshDetailsIfShowing's
+// own doc comment on why an obscure trash-internal path isn't worth
+// following it to instead). Trashing the directory's only file leaves
+// the cursor on "..", which Panel.CurrentRowPath now reports as the
+// panel's own current directory rather than ok=false — so Details ends
+// up showing that directory, fresh and real, never the trashed file's
+// stale data.
 func TestMoveSelectionToTrashClearsDetailsShowingSameFile(t *testing.T) {
-	r, _, file := newTestRootWithFile(t)
+	r, dir, file := newTestRootWithFile(t)
 	r.SetRect(0, 0, 100, 40)
 	r.showDetailsSidebar()
 	if r.detailsTarget != file {
@@ -153,15 +157,15 @@ func TestMoveSelectionToTrashClearsDetailsShowingSameFile(t *testing.T) {
 
 	r.moveSelectionToTrash()
 
-	if r.detailsTarget != "" {
-		t.Errorf("detailsTarget after Trash = %q, want \"\" (cleared)", r.detailsTarget)
+	if r.detailsTarget != dir {
+		t.Errorf("detailsTarget after Trash = %q, want %q (the panel's own directory, not the trashed file)", r.detailsTarget, dir)
 	}
 }
 
 // TestRemoveClearsDetailsShowingSameFile is the same pin for a
 // permanent delete (see openRemoveConfirm's own confirm callback).
 func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
-	r, _, file := newTestRootWithFile(t)
+	r, dir, file := newTestRootWithFile(t)
 	r.SetRect(0, 0, 100, 40)
 	r.showDetailsSidebar()
 	if r.detailsTarget != file {
@@ -172,8 +176,8 @@ func TestRemoveClearsDetailsShowingSameFile(t *testing.T) {
 	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
 	r.acceptConfirm()
 
-	if r.detailsTarget != "" {
-		t.Errorf("detailsTarget after Remove = %q, want \"\" (cleared)", r.detailsTarget)
+	if r.detailsTarget != dir {
+		t.Errorf("detailsTarget after Remove = %q, want %q (the panel's own directory, not the removed file)", r.detailsTarget, dir)
 	}
 }
 
