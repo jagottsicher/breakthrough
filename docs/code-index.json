@@ -48,8 +48,8 @@
     },
     {
       "path": ".gitignore",
-      "size": 1045,
-      "sha256": "d8452e4464c41c86c1486778fd616f418ec98d6042d4c71601a6b8873c6471b8"
+      "size": 1059,
+      "sha256": "dd19ee5379c4f00fe8bf50332a1ebe17eef27e1bb3a5334fc3bc1399dbae5063"
     },
     {
       "path": ".golangci.yml",
@@ -493,13 +493,13 @@
     },
     {
       "path": "internal/fsops/duplicate.go",
-      "size": 10409,
-      "sha256": "e8b32796c081a0911307454cff5d58bca02d3c3315246272fc8a42244994100c"
+      "size": 11194,
+      "sha256": "f567306dc6bc994d3ca9b50625716fdf1ccd3b5d4477c4f7503a80caa92ad299"
     },
     {
       "path": "internal/fsops/duplicate_test.go",
-      "size": 8958,
-      "sha256": "3e3d4cfe1cd2bebb8ff8348c522e521ae57090d51c58076ddcefc93fa6798dc5"
+      "size": 11006,
+      "sha256": "8921a9e15ae68b9fb43d71155e17f2c947029f2622950f7a2ff3cdb5c6434410"
     },
     {
       "path": "internal/fsops/hash.go",
@@ -1013,8 +1013,8 @@
     },
     {
       "path": "internal/ui/duplicate_test.go",
-      "size": 33776,
-      "sha256": "3f88ef34fe6a6155e3684b82c0fad16ab62389b11e91566747dc7f5761805529"
+      "size": 34177,
+      "sha256": "019c80b3038792bf98d7a5abd30624339594128174d64a6c5f02757b43e92773"
     },
     {
       "path": "internal/ui/errors.go",
@@ -6148,63 +6148,63 @@
       "file": "internal/fsops/duplicate.go",
       "name": "DuplicateSuffixText",
       "kind": "const",
-      "line": 20
+      "line": 22
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "DuplicateNumbered",
       "kind": "const",
-      "line": 23
+      "line": 25
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "DuplicateDateTime",
       "kind": "const",
-      "line": 27
+      "line": 30
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "duplicateNumberedScanLimit",
       "kind": "var",
-      "line": 38
+      "line": 43
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "DuplicateOptions",
       "kind": "type",
-      "line": 43
+      "line": 48
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "ComputeDuplicateName",
       "kind": "function",
-      "line": 126
+      "line": 136
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "duplicateSuffix",
       "kind": "function",
-      "line": 155
+      "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "StrftimeToGoLayout",
       "kind": "function",
-      "line": 199
+      "line": 217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate.go",
       "name": "strftimeLayout",
       "kind": "function",
-      "line": 234
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
@@ -6216,86 +6216,100 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
-      "name": "TestComputeDuplicateNameSuffixTextHasNoAutoRetry",
+      "name": "TestComputeDuplicateNameSuffixTextChainsOnCollision",
       "kind": "function",
-      "line": 34
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/fsops",
+      "file": "internal/fsops/duplicate_test.go",
+      "name": "TestComputeDuplicateNameSuffixTextChainScanLimitErrors",
+      "kind": "function",
+      "line": 60
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/fsops",
+      "file": "internal/fsops/duplicate_test.go",
+      "name": "TestComputeDuplicateNameDateTimeChainsOnCollision",
+      "kind": "function",
+      "line": 86
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameNumberedStartsAtOne",
       "kind": "function",
-      "line": 54
+      "line": 107
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameNumberedScansUntilFree",
       "kind": "function",
-      "line": 72
+      "line": 125
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameNumberedPadding",
       "kind": "function",
-      "line": 91
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameNumberedReportsErrorOnceLimitExhausted",
       "kind": "function",
-      "line": 112
+      "line": 165
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameDateTimeGoLayoutReproducesTheAgreedExample",
       "kind": "function",
-      "line": 137
+      "line": 190
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameDateTimeStrftimeReproducesTheAgreedExample",
       "kind": "function",
-      "line": 159
+      "line": 212
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameDateTimeUsesRawUnixTimestamp",
       "kind": "function",
-      "line": 177
+      "line": 230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestComputeDuplicateNameNeverSplitsOffAnyExtension",
       "kind": "function",
-      "line": 209
+      "line": 262
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestStrftimeToGoLayoutUnsupportedSpecifierErrors",
       "kind": "function",
-      "line": 232
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestStrftimeToGoLayoutDanglingPercentErrors",
       "kind": "function",
-      "line": 238
+      "line": 291
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
       "file": "internal/fsops/duplicate_test.go",
       "name": "TestStrftimeToGoLayoutLiteralPercentEscape",
       "kind": "function",
-      "line": 247
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
@@ -15901,58 +15915,58 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
-      "name": "TestPerformDuplicateSuffixTextDoesNotRetry",
+      "name": "TestPerformDuplicateSuffixTextChainsInsteadOfFailing",
       "kind": "function",
-      "line": 702
+      "line": 705
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "isolateFailingCopy",
       "kind": "function",
-      "line": 724
+      "line": 732
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "TestPerformDuplicateStopsAtFirstErrorAndReportsCountSoFar",
       "kind": "function",
-      "line": 741
+      "line": 749
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "TestRunDuplicateRejectsNonPositiveCount",
       "kind": "function",
-      "line": 756
+      "line": 764
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "TestRunDuplicateRejectsCountAboveMax",
       "kind": "function",
-      "line": 772
+      "line": 780
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "isolateDuplicateIO",
       "kind": "function",
-      "line": 795
+      "line": 803
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "TestRunDuplicateAppliesSelectionClosesDialogAndCopiesInBackground",
       "kind": "function",
-      "line": 814
+      "line": 822
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/duplicate_test.go",
       "name": "TestContextMenuMnemonicMOpensDuplicate",
       "kind": "function",
-      "line": 844
+      "line": 852
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30668,5 +30682,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "76ccbd5dc9122b442690c3325043755565475ac02e37237280cd7e5068c5ceee"
+  "merkle_root": "ff1dc5a01ec29d5af8e7d0460cdfc4d73a01b8e1c7deb727360313f8e6c2d4a7"
 }
