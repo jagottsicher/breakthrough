@@ -468,8 +468,8 @@
     },
     {
       "path": "internal/firewall/services.go",
-      "size": 2248,
-      "sha256": "c3392f7fd9c0345c3e9d0bc4709a0749757d31fc26f2a2bca662296e4780ce45"
+      "size": 2307,
+      "sha256": "6cbd513bf1cf25a9353b596f9cc9e47452e4db964539fdccb61bb62077334788"
     },
     {
       "path": "internal/firewall/services_test.go",
@@ -31909,5 +31909,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "f87ee6db20bdbc927b6980552c2761fdcab51a43f75a26818647e09800f0b597"
+  "merkle_root": "b413ddd7ec63798b7afa202617b7a6bd144769dff6642b6d492080cfc3131465"
 }
