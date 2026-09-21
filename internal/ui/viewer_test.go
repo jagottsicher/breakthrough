@@ -226,8 +226,10 @@ func TestShowUnsupportedLookRecommendsToolWhenLoadReportsReason(t *testing.T) {
 }
 
 // TestShowBuiltinLookOnDirectoryShowsError pins that Look on a directory
-// entry (CurrentRowPath doesn't exclude these — only ".." — see its own
-// doc comment) reports a clear error instead of trying to render one.
+// entry — including the panel's own current directory, which is what
+// Panel.CurrentRowPath now reports while the cursor sits on ".." (see
+// its own doc comment) — reports a clear error instead of trying to
+// render one.
 func TestShowBuiltinLookOnDirectoryShowsError(t *testing.T) {
 	dir := fixtureDir(t) // includes an "app-data" subdirectory
 	r, err := NewRoot(tview.NewApplication(), dir)

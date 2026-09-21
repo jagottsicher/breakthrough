@@ -118,8 +118,9 @@ func (r *Root) viewerSize() (width, height int) {
 // — read-only, unlike Edit (see runEditor): it never lets the file be
 // modified, and (in its default "builtin" path — see
 // config.Settings.Pager) works without $VISUAL/$EDITOR being set to
-// anything at all. A no-op on the ".." row or an empty panel, same as
-// editCurrentEntry.
+// anything at all. Looks at the panel's own current directory while the
+// cursor sits on ".." (see Panel.CurrentRowPath), the same as editCurrentEntry;
+// a no-op only for a genuinely empty panel.
 func (r *Root) openLook() {
 	_, path, ok := r.panel.CurrentRowPath()
 	if !ok {
