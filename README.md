@@ -487,6 +487,11 @@ terminal.
   some point since), and flags bind mounts, so it doubles as a quick
   answer to "what will still be here after I reboot this box?" See
   [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
+- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): the
+  same Toolbox screen above, opened already filtered down to just its
+  Networking or just its Hardware catalog, for jumping straight to one
+  tool without scrolling past the other category first. `jj` itself
+  still shows both categories together.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -677,8 +682,9 @@ Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
 covering every setting breakthrough recognizes, a Toolbox screen
-(`jj`) of built-in networking and hardware tools, and a Mounts screen
-(`jm`) showing what's currently mounted and whether it survives a
+(`jj`) of built-in networking and hardware tools with its own filtered
+Network Tools (`jn`) and Hardware Tools (`jh`) screens, and a Mounts
+screen (`jm`) showing what's currently mounted and whether it survives a
 reboot. Progress bars for long-running file operations are what's
 planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and

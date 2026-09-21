@@ -233,6 +233,13 @@ type Root struct {
 	toolboxTable    *tview.Table
 	toolboxInput    *tview.InputField
 
+	// toolboxRows is the currently open screen's own row list — the
+	// whole catalog for "jj" (openToolbox), one single category for "jn"
+	// (openNetworkTools) or "jh" (openHardwareTools). One table/rendering
+	// implementation (renderToolbox et al.) driven by whichever rows this
+	// holds, rather than a separate near-identical screen per category.
+	toolboxRows []toolboxDisplayRow
+
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
 	// kept deliberately separate from the Toolbox rather than folded in
 	// as one more entry there, per the user's own explicit request:

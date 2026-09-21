@@ -375,9 +375,21 @@ func chordFamilies() []chordFamily {
 		// command list rather than folding it in as one more entry
 		// there. Same "one prefix, several distinct destinations" shape
 		// the "o" chord's own "oo"/"om" already establish.
+		//
+		// "jn"/"jh" jump straight to the Toolbox's own "Networking"/
+		// "Hardware" category alone (openNetworkTools/openHardwareTools
+		// in toolbox.go), skipping past the other category entirely —
+		// per the user's own explicit request: by the time the catalog
+		// held enough entries in both categories to scroll through,
+		// reaching one specific tool through the combined "jj" list
+		// meant passing the other category's entries first. "jj" itself
+		// is unchanged and still shows both, for browsing the whole
+		// catalog at once.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
 			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
+			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
+			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 		}},
 	}
 }
