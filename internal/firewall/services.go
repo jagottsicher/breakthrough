@@ -41,7 +41,7 @@ func LoadServiceLookup(path string) (ServiceLookup, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only; nothing to do if this fails
 	return parseServices(f)
 }
 
