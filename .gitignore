@@ -1,5 +1,6 @@
 # Local-only development file, never committed (see local dev notes).
 CLAUDE.md
+CLAUDE.md_BAK
 
 # Fine-grained GitHub PAT, local-only, never committed.
 github-token.txt
