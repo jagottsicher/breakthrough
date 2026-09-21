@@ -385,11 +385,20 @@ func chordFamilies() []chordFamily {
 		// meant passing the other category's entries first. "jj" itself
 		// is unchanged and still shows both, for browsing the whole
 		// catalog at once.
+		//
+		// "jf" opens the Firewall screen (firewall.go) — a third,
+		// unrelated full-screen catalog under the same prefix, same "one
+		// prefix, several distinct destinations" shape as "jm"/"jn"/"jh"
+		// above: this host's own actual firewall rules (UFW, nftables, or
+		// iptables, whichever one actually governs traffic), not a list
+		// of commands to run, so it gets its own destination rather than
+		// a Toolbox catalog entry.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
 			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
+			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 		}},
 	}
 }
