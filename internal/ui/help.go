@@ -93,7 +93,8 @@ var helpText = strings.TrimLeft(`
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
     j  tools    jj Toolbox screen (networking/hardware tools) ·
-                jm Mounts screen (what's mounted right now)
+                jm Mounts screen (what's mounted right now) ·
+                jn Network Tools screen · jh Hardware Tools screen
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -377,6 +378,12 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
+
+  "jn" (Network Tools) and "jh" (Hardware Tools) open this very same
+  screen already filtered down to just the Networking or just the
+  Hardware category, for jumping straight to one tool without scrolling
+  past the other category's entries first. Everything above about
+  Up/Down, Enter, Escape and tool windows applies the same way there.
 
 [::b]Mounts screen ("jm")[::-]
 
