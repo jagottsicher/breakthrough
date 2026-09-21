@@ -92,6 +92,29 @@ func toolboxArgEntry(label, help, promptLabel, prefill, name string, fixedArgs .
 	}
 }
 
+// toolboxCategoriesNamed returns the catalog filtered down to the
+// categories in names, preserving toolboxCategories' own order — used by
+// the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
+// one category at a time. No names at all (the empty call) means "no
+// filter", i.e. the full catalog, the same list toolboxCategories itself
+// returns — the "jj" Toolbox screen's own case.
+func toolboxCategoriesNamed(names ...string) []toolboxCategory {
+	if len(names) == 0 {
+		return toolboxCategories()
+	}
+	want := make(map[string]bool, len(names))
+	for _, n := range names {
+		want[n] = true
+	}
+	var out []toolboxCategory
+	for _, cat := range toolboxCategories() {
+		if want[cat.name] {
+			out = append(out, cat)
+		}
+	}
+	return out
+}
+
 // toolboxCategories is the whole Toolbox catalog — every networking and
 // hardware tool from the project's own longer-term notes, each wired
 // directly to its real command line.
@@ -145,13 +168,15 @@ func (dr toolboxDisplayRow) isEntry() bool {
 	return !dr.blank && dr.header == ""
 }
 
-// toolboxDisplayRows expands toolboxCategories into the table's own row
+// toolboxDisplayRowsFor expands categories into the table's own row
 // list: one header row per category, a blank spacer between two
 // categories (never before the first one), then each category's own
-// entries.
-func toolboxDisplayRows() []toolboxDisplayRow {
+// entries. The screen currently open (see r.toolboxRows) decides which
+// categories that is — the full catalog for "jj", one single category
+// for "jn"/"jh".
+func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	var rows []toolboxDisplayRow
-	for i, cat := range toolboxCategories() {
+	for i, cat := range categories {
 		if i > 0 {
 			rows = append(rows, toolboxDisplayRow{blank: true})
 		}
@@ -163,26 +188,43 @@ func toolboxDisplayRows() []toolboxDisplayRow {
 	return rows
 }
 
-// toolboxEntryAtRow is the entry shown on one row of the table — false
-// for a row out of range, or a header/blank row, neither of which has
-// an entry of its own to run.
-func toolboxEntryAtRow(row int) (toolboxEntry, bool) {
-	rows := toolboxDisplayRows()
+// toolboxDisplayRows is toolboxDisplayRowsFor for the whole catalog — the
+// "jj" Toolbox screen's own case, and the one every test not concerned
+// with category filtering exercises directly.
+func toolboxDisplayRows() []toolboxDisplayRow {
+	return toolboxDisplayRowsFor(toolboxCategories())
+}
+
+// toolboxEntryAtRowIn is the entry shown on one row of rows — false for a
+// row out of range, or a header/blank row, neither of which has an entry
+// of its own to run.
+func toolboxEntryAtRowIn(rows []toolboxDisplayRow, row int) (toolboxEntry, bool) {
 	if row < 0 || row >= len(rows) || !rows[row].isEntry() {
 		return toolboxEntry{}, false
 	}
 	return rows[row].entry, true
 }
 
-// firstSelectableToolboxRow is the first row that is a real entry
-// rather than the catalog's own leading "Networking" header.
-func firstSelectableToolboxRow() int {
-	for row, dr := range toolboxDisplayRows() {
+// toolboxEntryAtRow is toolboxEntryAtRowIn against the whole catalog.
+func toolboxEntryAtRow(row int) (toolboxEntry, bool) {
+	return toolboxEntryAtRowIn(toolboxDisplayRows(), row)
+}
+
+// firstSelectableToolboxRowIn is the first row in rows that is a real
+// entry rather than a category's own leading header.
+func firstSelectableToolboxRowIn(rows []toolboxDisplayRow) int {
+	for row, dr := range rows {
 		if dr.isEntry() {
 			return row
 		}
 	}
 	return 0
+}
+
+// firstSelectableToolboxRow is firstSelectableToolboxRowIn against the
+// whole catalog.
+func firstSelectableToolboxRow() int {
+	return firstSelectableToolboxRowIn(toolboxDisplayRows())
 }
 
 // newToolboxScreen builds the whole screen once, at startup — the same
@@ -218,12 +260,38 @@ func (r *Root) newToolboxScreen() {
 	r.toolboxInput = tview.NewInputField()
 }
 
-// openToolbox shows the Toolbox screen, rebuilt fresh every time —
+// openToolboxScreen shows the Toolbox screen filled with categories and
+// titled title — the one shared mechanism behind "jj" (openToolbox, the
+// whole catalog), "jn" (openNetworkTools, Networking only), and "jh"
+// (openHardwareTools, Hardware only): a single table/rendering
+// implementation, parameterized by which categories it currently shows,
+// rather than three near-identical screens. Rebuilt fresh every time —
 // there is no per-session state here worth remembering across opens the
 // way Options remembers its last category.
-func (r *Root) openToolbox() {
+func (r *Root) openToolboxScreen(title string, categories []toolboxCategory) {
+	r.toolboxRows = toolboxDisplayRowsFor(categories)
+	r.toolboxTitleBar.SetText(" " + title + " ")
 	r.renderToolbox()
 	r.showOverlay(toolboxPage, r.toolboxLayout)
+}
+
+// openToolbox shows the whole Toolbox catalog — every category, one
+// after another.
+func (r *Root) openToolbox() {
+	r.openToolboxScreen("Toolbox", toolboxCategories())
+}
+
+// openNetworkTools shows only the catalog's "Networking" category, per
+// the user's own explicit request to reach it directly rather than
+// scrolling past Hardware (or vice versa) in the combined Toolbox.
+func (r *Root) openNetworkTools() {
+	r.openToolboxScreen("Network Tools", toolboxCategoriesNamed("Networking"))
+}
+
+// openHardwareTools is openNetworkTools' own counterpart for the
+// catalog's "Hardware" category.
+func (r *Root) openHardwareTools() {
+	r.openToolboxScreen("Hardware Tools", toolboxCategoriesNamed("Hardware"))
 }
 
 // closeToolbox hides the Toolbox screen. Nothing to save — every entry
@@ -246,7 +314,7 @@ func (r *Root) closeToolbox() {
 func (r *Root) renderToolbox() {
 	r.toolboxTable.Clear()
 
-	for row, dr := range toolboxDisplayRows() {
+	for row, dr := range r.toolboxRows {
 		switch {
 		case dr.blank:
 			r.toolboxTable.SetCell(row, toolboxColLabel, tview.NewTableCell("").SetSelectable(false))
@@ -270,23 +338,28 @@ func (r *Root) renderToolbox() {
 		}
 	}
 
-	if row, _ := r.toolboxTable.GetSelection(); !isToolboxEntryRow(row) {
-		r.toolboxTable.Select(firstSelectableToolboxRow(), 0)
+	if row, _ := r.toolboxTable.GetSelection(); !isToolboxEntryRowIn(r.toolboxRows, row) {
+		r.toolboxTable.Select(firstSelectableToolboxRowIn(r.toolboxRows), 0)
 	}
 }
 
-// isToolboxEntryRow reports whether row currently refers to a real,
-// runnable entry — used instead of a plain bounds check (see
-// renderToolbox) since the catalog's own leading row is always a
-// header, never a valid cursor position on its own.
-func isToolboxEntryRow(row int) bool {
-	_, ok := toolboxEntryAtRow(row)
+// isToolboxEntryRowIn reports whether row refers to a real, runnable
+// entry within rows — used instead of a plain bounds check (see
+// renderToolbox) since a category's own leading row is always a header,
+// never a valid cursor position on its own.
+func isToolboxEntryRowIn(rows []toolboxDisplayRow, row int) bool {
+	_, ok := toolboxEntryAtRowIn(rows, row)
 	return ok
+}
+
+// isToolboxEntryRow is isToolboxEntryRowIn against the whole catalog.
+func isToolboxEntryRow(row int) bool {
+	return isToolboxEntryRowIn(toolboxDisplayRows(), row)
 }
 
 // activateToolboxRow is Enter (or a click) on an entry: run it.
 func (r *Root) activateToolboxRow(row int) {
-	if entry, ok := toolboxEntryAtRow(row); ok {
+	if entry, ok := toolboxEntryAtRowIn(r.toolboxRows, row); ok {
 		entry.run(r)
 	}
 }
@@ -316,7 +389,7 @@ func (r *Root) captureToolboxTableMouse(action tview.MouseAction, event *tcell.E
 	}
 
 	row, _ := r.toolboxTable.CellAt(x, y)
-	if !isToolboxEntryRow(row) {
+	if !isToolboxEntryRowIn(r.toolboxRows, row) {
 		return action, event
 	}
 	r.toolboxTable.Select(row, 0)
