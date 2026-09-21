@@ -288,6 +288,106 @@ func TestOpenToolboxRendersTheWholeCatalog(t *testing.T) {
 	}
 }
 
+// TestToolboxCategoriesNamedFiltersAndPreservesOrder pins
+// toolboxCategoriesNamed's own two cases: filtering down to exactly the
+// requested categories, in the catalog's own order, and — no names at
+// all — falling back to the full, unfiltered catalog (the "jj" case).
+func TestToolboxCategoriesNamedFiltersAndPreservesOrder(t *testing.T) {
+	all := toolboxCategories()
+	if got := toolboxCategoriesNamed(); len(got) != len(all) {
+		t.Errorf("toolboxCategoriesNamed() (no names) = %d categories, want the full catalog's %d", len(got), len(all))
+	}
+
+	networking := toolboxCategoriesNamed("Networking")
+	if len(networking) != 1 || networking[0].name != "Networking" {
+		t.Fatalf("toolboxCategoriesNamed(%q) = %+v, want exactly that one category", "Networking", networking)
+	}
+
+	hardware := toolboxCategoriesNamed("Hardware")
+	if len(hardware) != 1 || hardware[0].name != "Hardware" {
+		t.Fatalf("toolboxCategoriesNamed(%q) = %+v, want exactly that one category", "Hardware", hardware)
+	}
+}
+
+// TestOpenNetworkToolsShowsOnlyTheNetworkingCategory pins "jn"'s own
+// contract: a dedicated screen with just the Networking entries, no
+// Hardware header or entries mixed in — per the user's own explicit
+// request to reach them without the combined "jj" catalog's other
+// category in the way.
+func TestOpenNetworkToolsShowsOnlyTheNetworkingCategory(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openNetworkTools()
+
+	if r.activePage != toolboxPage {
+		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
+	}
+	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Networking"))
+	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+		t.Errorf("row count = %d, want %d (Networking category alone)", got, want)
+	}
+	for _, dr := range r.toolboxRows {
+		if dr.header == "Hardware" {
+			t.Error("Network Tools screen must not include the Hardware header")
+		}
+	}
+}
+
+// TestOpenHardwareToolsShowsOnlyTheHardwareCategory is
+// TestOpenNetworkToolsShowsOnlyTheNetworkingCategory's own counterpart
+// for "jh".
+func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openHardwareTools()
+
+	if r.activePage != toolboxPage {
+		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
+	}
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
+	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+		t.Errorf("row count = %d, want %d (Hardware category alone)", got, want)
+	}
+	for _, dr := range r.toolboxRows {
+		if dr.header == "Networking" {
+			t.Error("Hardware Tools screen must not include the Networking header")
+		}
+	}
+}
+
+// TestOpenToolboxRestoresTheWholeCatalogAfterAFilteredScreen pins that
+// re-opening the combined "jj" screen after a filtered "jn"/"jh" one
+// shows the whole catalog again — r.toolboxRows must not stay stuck on
+// the previous, narrower filter.
+func TestOpenToolboxRestoresTheWholeCatalogAfterAFilteredScreen(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openNetworkTools()
+	r.openToolbox()
+
+	if got, want := r.toolboxTable.GetRowCount(), len(toolboxDisplayRows()); got != want {
+		t.Errorf("row count after re-opening jj = %d, want %d (the whole catalog)", got, want)
+	}
+	if got, want := r.toolboxTitleBar.GetText(true), " Toolbox "; got != want {
+		t.Errorf("title = %q, want %q", got, want)
+	}
+}
+
 // TestCaptureToolboxKeyEscapeClosesTheScreen pins the one key this
 // screen's own capture handles directly — Enter already reaches
 // activateToolboxRow through the table's own SetSelectedFunc, the same
