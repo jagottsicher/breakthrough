@@ -1261,6 +1261,17 @@ type Root struct {
 	// rsyncQueue mirrors pasteQueue for a background rsync asked for
 	// while one is already running — see advanceRsyncQueue.
 	rsyncQueue []queuedRsync
+
+	// compressJob is the currently-running backgrounded Compress or
+	// Extract, if any (see startCompressJob's own doc comment in
+	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
+	// for the same reason those two are independent of each other: a
+	// separate process tree with nothing to serialize against either.
+	// nil whenever no background Compress/Extract is currently running.
+	compressJob *compressJob
+	// compressQueue mirrors rsyncQueue for a further Compress/Extract
+	// asked for while one is already running — see advanceCompressQueue.
+	compressQueue []compressRequest
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
@@ -2551,17 +2562,21 @@ func (r *Root) RequestCancel() {
 		r.hideOverlay()
 		return
 	}
-	// Stops both a running Paste and a backgrounded rsync in the same
-	// press, if both happen to be running at once — they're two
-	// entirely independent background jobs (see rsyncjob.go's own
-	// package doc comment), so "cancel whatever's running" naturally
-	// means both, not whichever one happened to be checked first.
-	if r.pasteJob != nil || r.rsyncJob != nil {
+	// Stops a running Paste, a backgrounded rsync, and a backgrounded
+	// Compress/Extract in the same press, if more than one happens to
+	// be running at once — three entirely independent background jobs
+	// (see rsyncjob.go/compressjob.go's own package doc comments), so
+	// "cancel whatever's running" naturally means all of them, not
+	// whichever one happened to be checked first.
+	if r.pasteJob != nil || r.rsyncJob != nil || r.compressJob != nil {
 		if r.pasteJob != nil {
 			r.cancelPasteJob()
 		}
 		if r.rsyncJob != nil {
 			r.cancelRsyncJob()
+		}
+		if r.compressJob != nil {
+			r.cancelCompressJob()
 		}
 		r.refreshStatusBar()
 		return

@@ -86,7 +86,8 @@ var helpText = strings.TrimLeft(`
                 gr / (root) · gb Trashbin · gc Connect…
     p  perms    pm chmod · po chown
     m  menu     mm Context menu (what a bare "m" always opened before
-                this family existed) · mf New file · md New dir
+                this family existed) · mf New file · md New dir ·
+                mo Open with… · mt tail -f · mA Deselect all
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
@@ -156,15 +157,19 @@ var helpText = strings.TrimLeft(`
                   chown/chmod/sed/Batch rename/Undo last rename/Remove/
                   Paste following symlinks, Selection, Tabs & Split).
                   "mm" opens the same menu from the keyboard (see the
-                  "m" chord above). Once it's open,
-                  "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
-                  seven already have on their own — fire that entry
-                  directly, without arrowing down to it first. "m"
-                  again (so "mmm" from plain browsing) does too, for
-                  Multiply, and "o" for Open with… — both have no
-                  plain-key equivalent of their own to mirror, since
-                  neither ever opens anywhere but here, so each just
-                  uses its own first letter instead.
+                  "m" chord above). Once it's open, a plain letter fires
+                  whichever entry already carries it as its own
+                  mnemonic, without arrowing down to it first:
+                  "l"/"e"/"r"/"c"/"x"/"d"/"i" (the same letters those
+                  seven already have on their own outside the menu),
+                  "o" for Open with… and "t" for tail -f (also directly
+                  reachable as "mo"/"mt" without opening the menu at
+                  all — see the "m" chord above), and "A" for Deselect
+                  all (likewise "mA"). "m" again (so "mmm" from plain
+                  browsing) fires Multiply — the one entry with no
+                  keyboard route of its own anywhere else, since its
+                  natural letter, "m", is already this family's own
+                  prefix key.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -786,6 +791,11 @@ var helpText = strings.TrimLeft(`
   xz, zstd) has to actually be installed — a missing one reports
   exactly which, rather than a bare "command not found".
 
+  Runs in the background, the same way Copy/Cut/Paste already do — no
+  terminal takes over the screen, and the current directory reloads on
+  its own once the archive is actually done (see the status bar for a
+  spinner and elapsed time while it runs; Ctrl+C cancels it).
+
 [::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
 
   Unpacks the archive currently under the cursor in one step, without
@@ -797,6 +807,10 @@ var helpText = strings.TrimLeft(`
   unavailable, or the move itself errors), asks first, naming plainly
   that the fallback is a real, permanent delete, rather than either
   silently leaving the archive behind or deleting it without asking.
+
+  Runs in the background exactly like Compress above — no terminal, a
+  status bar spinner instead, and whichever tab shows the destination
+  reloads once it's done.
 
 [::b]Search dialog ("f")[::-]
 
