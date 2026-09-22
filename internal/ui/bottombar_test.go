@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
@@ -196,36 +197,72 @@ func TestClockTextFormat(t *testing.T) {
 // needed the same "how big is this filesystem" logic the status bar
 // already had, rather than duplicating it. What's left here is purely
 // the UI-side formatting (diskUsageText/inodeUsageText/
-// diskUsageWarnColor below) built on top of fsops.DiskUsage.
+// percentStatusColor below) built on top of fsops.DiskUsage.
 
-func TestDiskUsageWarnColor(t *testing.T) {
+func TestPercentStatusColor(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	tests := []struct {
 		percent int
 		want    tcell.Color
 	}{
-		{0, tcell.ColorDefault},
-		{79, tcell.ColorDefault},
+		{0, theme.EntryExecutable},
+		{79, theme.EntryExecutable},
 		{80, theme.WarningText},
 		{89, theme.WarningText},
 		{90, theme.CriticalText},
 		{100, theme.CriticalText},
 	}
 	for _, tt := range tests {
-		if got := diskUsageWarnColor(tt.percent, theme); got != tt.want {
-			t.Errorf("diskUsageWarnColor(%d) = %v, want %v", tt.percent, got, tt.want)
+		if got := percentStatusColor(tt.percent, theme); got != tt.want {
+			t.Errorf("percentStatusColor(%d) = %v, want %v", tt.percent, got, tt.want)
 		}
 	}
 }
 
-func TestFormatUsagePercentColorsAboveThresholds(t *testing.T) {
+func TestColoredPercentInSwitchesBackToBaseNotTheWidgetDefault(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	if got := formatUsagePercent(50, theme); got != "50%" {
-		t.Errorf("formatUsagePercent(50) = %q, want plain %q (no warning)", got, "50%")
+	got := coloredPercentIn(95, theme.CriticalText, statusDiskColor)
+	want := fmt.Sprintf("[%s]95%%[%s]", colorTag(theme.CriticalText), colorTag(statusDiskColor))
+	if got != want {
+		t.Errorf("coloredPercentIn(95, critical, diskColor) = %q, want %q", got, want)
 	}
-	got := formatUsagePercent(95, theme)
-	if !strings.Contains(got, "95%") || !strings.HasPrefix(got, "[") || !strings.HasSuffix(got, "[-]") {
-		t.Errorf("formatUsagePercent(95) = %q, want a color-tagged \"95%%\"", got)
+	if strings.Contains(got, "[-]") {
+		t.Errorf("coloredPercentIn(%q) should never reset to the widget default, only back to base", got)
+	}
+}
+
+func TestUsernameTextColorsGreenNormallyRedAsRoot(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	original := isRoot
+	defer func() { isRoot = original }()
+
+	isRoot = func() bool { return false }
+	if got, want := usernameText("jens", theme), wrapColor(theme.EntryExecutable, "jens"); got != want {
+		t.Errorf("usernameText (non-root) = %q, want %q", got, want)
+	}
+
+	isRoot = func() bool { return true }
+	if got, want := usernameText("root", theme), wrapColor(theme.EntryError, "root"); got != want {
+		t.Errorf("usernameText (root) = %q, want %q", got, want)
+	}
+}
+
+func TestLoadNumberColorScalesByCoreCount(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	tests := []struct {
+		load  float64
+		cores int
+		want  tcell.Color
+	}{
+		{1.0, 4, theme.EntryExecutable}, // 0.25/core: healthy
+		{3.0, 4, theme.WarningText},     // 0.75/core: elevated
+		{4.5, 4, theme.CriticalText},    // 1.125/core: overloaded
+		{2.0, 2, theme.CriticalText},    // exactly one core's worth each
+	}
+	for _, tt := range tests {
+		if got := loadNumberColor(tt.load, tt.cores, theme); got != tt.want {
+			t.Errorf("loadNumberColor(%v, %d cores) = %v, want %v", tt.load, tt.cores, got, tt.want)
+		}
 	}
 }
 
@@ -247,14 +284,29 @@ func TestHumanCount(t *testing.T) {
 	}
 }
 
-func TestDiskUsageTextAndInodeUsageTextAreLabeled(t *testing.T) {
+// TestDiskUsageTextIsFreeOverTotalInodeUsageTextIsUsedOverTotal pins the
+// user's own explicit examples: Disk asks "how much room is left"
+// (free/total), Inodes asks "how many have I used up" (used/total) —
+// deliberately opposite directions from each other, not a copy-paste
+// slip to "fix" into matching.
+func TestDiskUsageTextIsFreeOverTotalInodeUsageTextIsUsedOverTotal(t *testing.T) {
 	u := fsops.DiskUsage{UsedBytes: 1024, AvailBytes: 2048, UsedInodes: 10, AvailInodes: 20, UsePercent: 50, InodePercent: 50}
 	theme := config.DefaultTheme().Resolve()
-	if got := diskUsageText(u, theme); !strings.HasPrefix(got, "Disk ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
-		t.Errorf("diskUsageText(%+v) = %q, want it labeled with \"Disk\"/\"used\"/\"free\"", u, got)
+
+	disk := diskUsageText(u, theme)
+	if !strings.HasPrefix(disk, fmt.Sprintf("[%s]Disk free ", colorTag(statusDiskColor))) {
+		t.Errorf("diskUsageText(%+v) = %q, want it to start \"Disk free \" in statusDiskColor", u, disk)
 	}
-	if got := inodeUsageText(u, theme); !strings.HasPrefix(got, "Inodes ") || !strings.Contains(got, "used") || !strings.Contains(got, "free") {
-		t.Errorf("inodeUsageText(%+v) = %q, want it labeled with \"Inodes\"/\"used\"/\"free\"", u, got)
+	if !strings.Contains(disk, humanSize(u.AvailBytes)+"/"+humanSize(u.UsedBytes+u.AvailBytes)) {
+		t.Errorf("diskUsageText(%+v) = %q, want free/total (%s/%s)", u, disk, humanSize(u.AvailBytes), humanSize(u.UsedBytes+u.AvailBytes))
+	}
+
+	inodes := inodeUsageText(u, theme)
+	if !strings.HasPrefix(inodes, fmt.Sprintf("[%s]Inodes used ", colorTag(statusInodeColor))) {
+		t.Errorf("inodeUsageText(%+v) = %q, want it to start \"Inodes used \" in statusInodeColor", u, inodes)
+	}
+	if !strings.Contains(inodes, humanCount(u.UsedInodes)+"/"+humanCount(u.UsedInodes+u.AvailInodes)) {
+		t.Errorf("inodeUsageText(%+v) = %q, want used/total (%s/%s)", u, inodes, humanCount(u.UsedInodes), humanCount(u.UsedInodes+u.AvailInodes))
 	}
 }
 
@@ -277,11 +329,16 @@ func TestUptimeAndLoadAverageTextOnLinux(t *testing.T) {
 	if _, err := os.Stat("/proc/uptime"); err != nil {
 		t.Skip("no /proc/uptime on this platform")
 	}
+	theme := config.DefaultTheme().Resolve()
 	if up, ok := uptimeText(); !ok || !strings.HasPrefix(up, "up ") {
 		t.Errorf("uptimeText() = %q, %v, want a \"up ...\" string, true", up, ok)
 	}
-	if load, ok := loadAverageText(); !ok || !strings.HasPrefix(load, "load ") {
-		t.Errorf("loadAverageText() = %q, %v, want a \"load ...\" string, true", load, ok)
+	load, ok := loadAverageText(theme)
+	if !ok || !strings.HasPrefix(load, wrapColor(statusLoadColor, "load")+" ") {
+		t.Errorf("loadAverageText() = %q, %v, want it to start with the colored \"load\" label", load, ok)
+	}
+	if strings.Count(load, "[") < 4 { // "load" itself, plus each of the three numbers, each its own color tag
+		t.Errorf("loadAverageText() = %q, want each of the three numbers individually colored too", load)
 	}
 }
 
@@ -356,7 +413,6 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 
 	wantLabels := map[rune]string{
 		'?': " ? Help",
-		'm': " m Menu",
 		'l': " l Look",
 		'i': " i Props",
 		'I': " I Details",
@@ -370,7 +426,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	}
 	found := map[rune]bool{}
 	for _, s := range spans {
-		if s.key == 'g' || s.key == 'p' || s.key == 'z' || s.key == 'o' {
+		if s.key == 'g' || s.key == 'p' || s.key == 'm' || s.key == 'z' || s.key == 'o' || s.key == 'j' {
 			continue // a chord-family cascade cell — see TestBuildButtonBarShowsChordCascades
 		}
 		want, ok := wantLabels[s.key]
@@ -407,7 +463,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'z': " z … display", 'o': " o … options"}
+	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'm': " m … menu", 'z': " z … display", 'o': " o … options", 'j': " j … tools"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {
@@ -515,6 +571,61 @@ func TestBuildStatusBarContainsUserNoButtons(t *testing.T) {
 		if strings.Contains(text, label) {
 			t.Errorf("status bar text should no longer contain button label %q, got:\n%s", label, text)
 		}
+	}
+}
+
+// TestBuildStatusBarEachSegmentToggleHidesOnlyThatSegment pins the
+// user's own explicit request: every status-bar segment turns off
+// independently, without disturbing any of the others (see the Status
+// bar options category, optioncatalog.go).
+func TestBuildStatusBarEachSegmentToggleHidesOnlyThatSegment(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		toggle *bool
+		want   string // present by default, expected gone once toggled off
+	}{
+		{"username", &r.settings.StatusBarShowUsername, r.currentUser},
+		{"mouse", &r.settings.StatusBarShowMouse, "Mouse on"},
+		{"disk", &r.settings.StatusBarShowDisk, "Disk free"},
+		{"inodes", &r.settings.StatusBarShowInodes, "Inodes used"},
+		{"kernel", &r.settings.StatusBarShowKernel, kernelVersionText()},
+		{"uptime", &r.settings.StatusBarShowUptime, "up "},
+		{"load", &r.settings.StatusBarShowLoad, "load"},
+	}
+	for _, tt := range tests {
+		if tt.want == "" {
+			continue // e.g. kernelVersionText() empty on a platform without uname
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			before := r.buildStatusBar()
+			if !strings.Contains(before, tt.want) {
+				t.Skipf("%q not present with the default settings on this machine/platform, nothing to toggle off", tt.want)
+			}
+
+			*tt.toggle = false
+			after := r.buildStatusBar()
+			*tt.toggle = true // restore before the next subtest shares r
+
+			if strings.Contains(after, tt.want) {
+				t.Errorf("%s toggled off: status bar still contains %q:\n%s", tt.name, tt.want, after)
+			}
+			// Every other segment that was present before should still
+			// be there — a toggle must never take out its neighbors.
+			for _, other := range tests {
+				if other.name == tt.name || other.want == "" || !strings.Contains(before, other.want) {
+					continue
+				}
+				if !strings.Contains(after, other.want) {
+					t.Errorf("toggling off %s also removed unrelated segment %q:\n%s", tt.name, other.want, after)
+				}
+			}
+		})
 	}
 }
 
@@ -931,7 +1042,15 @@ func TestRunEditorSkipsReloadWhileSearchResultsShowing(t *testing.T) {
 // entries read r.target/r.targetRow rather than the panel's own cursor,
 // so opening the menu by any route other than a right-click has to set
 // both, or the menu would act on whatever was last right-clicked.
-func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
+// TestCaptureButtonBarMouseMenuClickStartsTheMenuChord pins that
+// clicking the button bar's "m" cell now starts the "m" chord (see
+// keymap.go) instead of opening the context menu directly — the same
+// click-starts-a-cascade behavior every other chord-family button
+// (g/p/z/o) already has. Reaching the context menu itself from the
+// mouse takes a second click, on the chord hint bar's own "mm" cell
+// that appears once this one starts (every chord member is mouse-
+// clickable too, not just its keyboard letter).
+func TestCaptureButtonBarMouseMenuClickStartsTheMenuChord(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -939,22 +1058,17 @@ func TestCaptureButtonBarMouseMenuClickOpensTheContextMenu(t *testing.T) {
 	}
 	r.panel.focusRow(1) // off ".." (the table's default initial selection) onto a real entry
 
-	row, path, ok := r.panel.CurrentRowPath()
-	if !ok {
-		t.Fatal("setup: no current row")
-	}
-
 	span, ok := buttonBarSpanFor(r, 'm')
 	if !ok {
-		t.Fatal("no Menu span found")
+		t.Fatal("no menu chord span found")
 	}
 	clickButtonBar(t, r, span.startCol)
 
-	if r.activePage != contextMenuPage {
-		t.Errorf("activePage = %q, want %q", r.activePage, contextMenuPage)
+	if r.pendingChord != 'm' {
+		t.Errorf("pendingChord = %q, want 'm'", string(r.pendingChord))
 	}
-	if r.target != path || r.targetRow != row {
-		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)
+	if r.activePage != "" {
+		t.Errorf("activePage = %q, want still closed until the chord resolves", r.activePage)
 	}
 }
 
@@ -1063,6 +1177,33 @@ func TestRenameShortcutTargetsCurrentRow(t *testing.T) {
 	}
 	if r.target != path || r.targetRow != row {
 		t.Errorf("target/targetRow = %q/%d, want %q/%d", r.target, r.targetRow, path, row)
+	}
+}
+
+// TestMenuShortcutOnDotDotTargetsPanelDirectory pins the user's own
+// explicit complaint: chords like "mm" (MenuShortcut is the "m" key's
+// own action) did nothing while the cursor sat on "..", even though
+// most menu items obviously apply to "this directory" regardless. Since
+// Panel.CurrentRowPath now reports the panel's own current directory
+// for that row (see its own doc comment), MenuShortcut opens the
+// context menu targeting it instead of silently no-op'ing.
+func TestMenuShortcutOnDotDotTargetsPanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	// Row 0 ("..") is the table's default initial selection — no
+	// focusRow call needed to reproduce the reported scenario.
+
+	r.MenuShortcut()
+
+	if r.activePage != contextMenuPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, contextMenuPage)
+	}
+	if r.target != dir {
+		t.Errorf("target = %q, want %q (the panel's own current directory)", r.target, dir)
 	}
 }
 

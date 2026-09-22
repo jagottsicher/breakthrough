@@ -13,9 +13,9 @@ import (
 
 // toolWindow is a small, freely positioned, draggable overlay hosting
 // one running external command's live output — the mechanism behind
-// this session's own first entry, Ping (see openPingTestWindow), and
-// eventually every Toolbox command that doesn't finish instantly
-// (nmap, tail -f, ...; see feature_ideas.txt). Unlike every other
+// every entry in the Toolbox screen (see toolbox.go/openToolCommand),
+// networking and hardware tools alike, whether they finish instantly
+// (lsblk) or run until stopped (ping, tail -f). Unlike every other
 // overlay in this codebase — Properties/Chmod/Search are centered, the
 // Details sidebar is docked to one edge — a toolWindow's own position is
 // state the user controls directly, by dragging its title bar or moving
@@ -571,10 +571,10 @@ const toolWindowMinWidth = 24
 const toolWindowContentPadding = 1
 
 // openToolCommand starts name(args...) and shows its combined
-// stdout+stderr, live, in a new draggable toolWindow titled title — the
-// general-purpose launcher every Toolbox entry that doesn't finish
-// instantly is meant to go through eventually (this session's first is
-// Ping — see openPingTestWindow). The process runs for as long as the
+// stdout+stderr, live, in a new draggable toolWindow titled title —
+// the general-purpose launcher every Toolbox entry (see toolbox.go)
+// runs through, whether or not it finishes instantly. The process runs
+// for as long as the
 // window stays open: closing it (Escape, or the process ending on its
 // own) cancels ctx, which — via exec.CommandContext — kills the process
 // if it's still running. This is the same context.WithCancel +
@@ -671,29 +671,4 @@ func (r *Root) nextToolWindowPosition() (x, y int) {
 	const step, wrap = 3, 6
 	n := len(r.toolWindows) % wrap
 	return 4 + n*step, 2 + n*step
-}
-
-// openPingTestWindow is this first toolWindow slice's own proof of
-// concept: asks for a host via the existing generic prompt overlay (see
-// openPrompt), then runs a plain, unbounded "ping <host>" — deliberately
-// not "ping -c N": running until explicitly stopped is exactly the case
-// a movable, non-modal window is for, and it doubles as this feature's
-// own test of closing a still-running process cleanly. A placeholder
-// entry point, not the planned feature itself — see openToolCommand's
-// own doc comment and feature_ideas.txt for the real Toolbox this is a
-// first step towards.
-//
-// Has no context-menu entry any more (see contextmenu.go's own package
-// doc on the slimmer, context-sensitive menu that replaced the one
-// forty-row list this used to live in) — kept, and still exercised
-// directly by its own test, as the working demonstration of the
-// underlying toolWindow mechanism until the real Toolbox gives it a
-// real entry point.
-func (r *Root) openPingTestWindow() {
-	r.openPrompt("Ping host:", "", func(host string) {
-		if host == "" {
-			return
-		}
-		r.openToolCommand("ping "+host, "ping", []string{host})
-	})
 }

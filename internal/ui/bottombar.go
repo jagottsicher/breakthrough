@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // buttonBarSpan is one clickable region within the button bar's text —
@@ -82,6 +84,31 @@ func currentUsername() string {
 		return u.Username
 	}
 	return os.Getenv("USER")
+}
+
+// isRoot reports whether this process is running as root — a var,
+// not a plain func, so a test can substitute it rather than actually
+// needing to run as root or in a container that fakes it (the same
+// substitution shape hashFile already uses for the same reason).
+// Checked via the effective UID rather than currentUsername() ==
+// "root": what actually governs whether a stray Remove or Move to
+// Trash can touch files you don't own is the UID, not whatever name
+// happens to be attached to it.
+var isRoot = func() bool { return os.Geteuid() == 0 }
+
+// usernameText colors name green — the same "healthy/normal" role
+// theme.EntryExecutable already carries elsewhere in this app — or,
+// while running as root, red (theme.EntryError): a highlighted
+// reminder that everything the current session does runs with no
+// permission checks at all, the one username value where that's
+// worth calling out at a glance rather than leaving it to blend in
+// with the rest of the status bar.
+func usernameText(name string, theme config.ResolvedTheme) string {
+	color := theme.EntryExecutable
+	if isRoot() {
+		color = theme.EntryError
+	}
+	return wrapColor(color, name)
 }
 
 // refreshStatusBar rebuilds and redraws the (purely informational, no
@@ -290,27 +317,64 @@ func (r *Root) buildStatusBar() string {
 		}
 	}
 
-	write(r.currentUser)
-	sep()
-	write(mouseStatusText(r.mouseEnabled))
-	sep()
-	if u, ok := fsops.FetchDiskUsage(r.panel.path); ok {
-		write(diskUsageText(u, r.theme))
-		sep()
-		write(inodeUsageText(u, r.theme))
-		sep()
-	}
-	if k := kernelVersionText(); k != "" {
-		write(k)
+	// A backgrounded rsync's own progress -- entirely independent of the
+	// paste/clipboard segment just above, since the two can genuinely be
+	// running at the same time (see rsyncjob.go's own package doc
+	// comment): both get their own segment rather than one having to
+	// yield to the other the way paste and the clipboard indicator do.
+	if r.rsyncJob != nil {
+		write(rsyncProgressText(r.rsyncJob, len(r.rsyncQueue)))
 		sep()
 	}
-	if up, ok := uptimeText(); ok {
-		write(up)
+
+	// Every segment from here on is independently toggle-able (Options
+	// → Status bar — see optioncatalog.go), per the user's own explicit
+	// request: someone who never looks at load average, say, gets to
+	// stop it taking up room on an already busy line without losing
+	// anything else here.
+	if r.settings.StatusBarShowUsername {
+		write(usernameText(r.currentUser, r.theme))
 		sep()
 	}
-	if load, ok := loadAverageText(); ok {
-		write(load)
+	if r.settings.StatusBarShowMouse {
+		write(mouseStatusText(r.mouseEnabled))
 		sep()
+	}
+	if r.settings.StatusBarShowDisk || r.settings.StatusBarShowInodes {
+		if u, ok := diskUsageFor(r.panel); ok {
+			if r.settings.StatusBarShowDisk {
+				write(diskUsageText(u, r.theme))
+				sep()
+			}
+			if r.settings.StatusBarShowInodes {
+				write(inodeUsageText(u, r.theme))
+				sep()
+			}
+		}
+	}
+	if r.settings.ShowGitStatus {
+		if git, ok := gitStatusForStatusBar(r.theme, r.panel.path); ok {
+			write(git)
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowKernel {
+		if k := kernelVersionText(); k != "" {
+			write(wrapColor(statusKernelColor, k))
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowUptime {
+		if up, ok := uptimeText(); ok {
+			write(wrapColor(statusUptimeColor, up))
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowLoad {
+		if load, ok := loadAverageText(r.theme); ok {
+			write(load)
+			sep()
+		}
 	}
 	write(clockText())
 
@@ -566,6 +630,44 @@ func pasteProgressText(job *pasteJob, queued int) string {
 	return b.String()
 }
 
+// rsyncProgressText renders buildStatusBar's own backgrounded-rsync
+// segment (see rsyncjob.go's own package doc comment) — a spinner-free
+// counterpart to pasteProgressText, since rsync's own --info=progress2
+// output already supplies a discrete update signal (each parsed line —
+// see watchRsyncProgress) instead of needing a separate ticker just to
+// look alive between updates the way byte-copy progress does. "starting
+// ..." for job.percent's own -1 sentinel (rsync is still connecting or
+// building its file list, before its first progress line has arrived
+// at all); once a real percentage exists, job.detail carries whatever
+// rsync itself already printed after it (rate, elapsed time, and its
+// own "(xfr#i, to-chk=j/k)" transfer count) completely verbatim, the
+// same "show exactly what the real tool says" principle the dialog's
+// own live preview line already follows.
+func rsyncProgressText(job *rsyncJob, queued int) string {
+	var b strings.Builder
+	b.WriteString("rsync ")
+
+	percent := job.percent.Load()
+	if percent < 0 {
+		b.WriteString("starting… ")
+	} else {
+		frac := float64(percent) / 100
+		fmt.Fprintf(&b, "%d%% ", percent)
+		b.WriteString(pasteDualBar(frac, frac, pasteProgressBarWidth))
+		b.WriteByte(' ')
+		if detail := job.detail.Load(); detail != nil && *detail != "" {
+			b.WriteString(*detail)
+			b.WriteByte(' ')
+		}
+	}
+	b.WriteString(job.label)
+
+	if queued > 0 {
+		fmt.Fprintf(&b, " (+%d queued)", queued)
+	}
+	return b.String()
+}
+
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"
 // segment — per a real user report: enabling mouse reporting at all
 // (needed for this app's own clicks/drags) hands every mouse event to
@@ -592,7 +694,15 @@ func mouseStatusText(enabled bool) string {
 // uname isn't available (e.g. some minimal containers) — the status bar
 // just shows one less segment then.
 func kernelVersionText() string {
-	out, err := exec.Command("uname", "-r").Output()
+	return unameField("-r")
+}
+
+// unameField runs `uname flag` and returns its trimmed output, "" if
+// uname itself isn't available — kernelVersionText's own shape,
+// generalized once systeminfo.go needed a second field ("-m", the
+// machine architecture) from the exact same tool.
+func unameField(flag string) string {
+	out, err := exec.Command("uname", flag).Output()
 	if err != nil {
 		return ""
 	}
@@ -640,7 +750,31 @@ func formatUptime(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", hours, minutes)
 }
 
-func loadAverageText() (string, bool) {
+// loadAverageText renders /proc/loadavg's own 1/5/15-minute figures,
+// each individually colored against this machine's own core count
+// (runtime.NumCPU) via the same green/orange/red scale
+// percentStatusColor uses for a plain percentage — a load of "2.0" is
+// idle on 16 cores and badly overloaded on 2, so the raw number alone
+// (this bar's previous behavior) told a sysadmin nothing without
+// mentally dividing by nproc themselves first. "load" itself is
+// wrapped in statusLoadColor throughout, same as every other
+// segment's own fixed base color.
+func loadAverageText(theme config.ResolvedTheme) (string, bool) {
+	numbers, ok := coloredLoadNumbers(theme)
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s %s", wrapColor(statusLoadColor, "load"), numbers), true
+}
+
+// coloredLoadNumbers reads /proc/loadavg's own three figures, each
+// individually colored via loadNumberColor against this machine's own
+// core count — the shared core of loadAverageText above (which adds
+// its own leading "load" label, for the status bar) and System Info's
+// own load line (systeminfo.go, which has a "Load:" label of its own
+// already — repeating the word there too would just read as "Load:
+// load 1.32 ...").
+func coloredLoadNumbers(theme config.ResolvedTheme) (string, bool) {
 	data, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
 		return "", false
@@ -649,58 +783,146 @@ func loadAverageText() (string, bool) {
 	if len(fields) < 3 {
 		return "", false
 	}
-	return fmt.Sprintf("load %s %s %s", fields[0], fields[1], fields[2]), true
+	cores := runtime.NumCPU()
+	numbers := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		v, err := strconv.ParseFloat(fields[i], 64)
+		if err != nil {
+			return "", false
+		}
+		numbers[i] = wrapColor(loadNumberColor(v, cores, theme), fields[i])
+	}
+	return strings.Join(numbers, " "), true
 }
 
-// diskUsageWarnColor is the color a usage percentage should stand out
-// in — warn.CriticalText at 90% or more, warn.WarningText at 80% or
-// more, tcell.ColorDefault (no warning, leave the surrounding text's
-// own color alone) otherwise — the two thresholds the user asked for,
-// shared by both the disk-space and the inode percentage. Reads its two
-// "stand out" colors from the active theme (see
-// config.Theme.WarningText/CriticalText's own doc comment) rather than
-// a hardcoded tcell.ColorOrange/tcell.ColorRed, so a scheme that already
-// leans orange or red elsewhere can still make this specific warning
-// legible against it.
-func diskUsageWarnColor(percent int, warn config.ResolvedTheme) tcell.Color {
+// loadNumberColor is percentStatusColor's own three-band scale, just
+// against a load-average-relative-to-core-count ratio instead of a
+// plain percentage: at or above 1 core's worth of load per core is
+// treated the same as 90%+ (theme.CriticalText — every core's already
+// fully busy), 70% of that as the 80%+ warning band, below that as
+// healthy. cores below 1 (shouldn't happen, but division needs a
+// floor) is treated as 1.
+func loadNumberColor(load float64, cores int, theme config.ResolvedTheme) tcell.Color {
+	if cores < 1 {
+		cores = 1
+	}
+	ratio := load / float64(cores)
+	switch {
+	case ratio >= 1.0:
+		return theme.CriticalText
+	case ratio >= 0.7:
+		return theme.WarningText
+	default:
+		return theme.EntryExecutable
+	}
+}
+
+// statusDiskColor/statusInodeColor/statusKernelColor/statusUptimeColor/
+// statusLoadColor are each status-bar segment's own distinguishing
+// color — the user's own explicit request that every segment stand
+// apart from its neighbors at a glance, "in a color of your choosing"
+// rather than a configurable one: fixed literals, not new theme roles,
+// since nothing here needs to vary by color scheme the way a warning
+// or a file-type color does. Chosen to read clearly against this
+// app's own dark default panel background while staying visually
+// distinct from the semantic green/orange/red scale below (warn/
+// critical/healthy), which every one of these segments still layers
+// on top of for its own numbers.
+var (
+	statusDiskColor   = tcell.GetColor("#4da6ff") // a clear blue: storage
+	statusInodeColor  = tcell.GetColor("#b285f0") // violet: a related but distinct filesystem stat
+	statusKernelColor = tcell.GetColor("#d8c06a") // muted gold: static system info
+	statusUptimeColor = tcell.GetColor("#4fd6b5") // teal: time-since-boot
+	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
+)
+
+// wrapColor renders text in color as a self-contained tview markup
+// span — starts with an explicit foreground tag, ends by resetting to
+// the widget's own configured text color ("[-]", not a second
+// explicit color, so this keeps looking right under every color
+// scheme — see Root.applyTheme). Used wherever a whole segment gets
+// one fixed color with nothing color-sensitive immediately following
+// it in the same breath; coloredPercentIn below is the one case that
+// specifically needs to NOT reset to the widget default partway
+// through a segment.
+func wrapColor(color tcell.Color, text string) string {
+	return fmt.Sprintf("[%s]%s[-]", colorTag(color), text)
+}
+
+// coloredPercentIn renders "N%" in warnColor, then switches straight
+// back to base rather than resetting to the widget's own default
+// color the way wrapColor's trailing "[-]" would — base is whatever
+// color the rest of that segment (the text on either side of the
+// percentage, e.g. diskUsageText's own closing parenthesis) is
+// already in, so the percentage is the only part of the segment that
+// ever visibly changes color.
+func coloredPercentIn(percent int, warnColor, base tcell.Color) string {
+	return fmt.Sprintf("[%s]%d%%[%s]", colorTag(warnColor), percent, colorTag(base))
+}
+
+// percentStatusColor is the color a usage percentage should stand out
+// in: theme.CriticalText at 90% or more, theme.WarningText at 80% or
+// more, theme.EntryExecutable (this app's own established "healthy"
+// green, the same role a file's executable bit already renders in)
+// below that — three explicit bands, per the user's own explicit
+// request, rather than the "elevated only" two this used to have.
+// Reads its colors from the active theme (see
+// config.Theme.WarningText/CriticalText/EntryExecutable's own doc
+// comments) rather than hardcoded tcell constants, so a scheme that
+// already leans orange, red, or green elsewhere still stays legible
+// against this specific warning.
+func percentStatusColor(percent int, theme config.ResolvedTheme) tcell.Color {
 	switch {
 	case percent >= 90:
-		return warn.CriticalText
+		return theme.CriticalText
 	case percent >= 80:
-		return warn.WarningText
+		return theme.WarningText
 	default:
-		return tcell.ColorDefault
+		return theme.EntryExecutable
 	}
 }
 
-// formatUsagePercent renders percent as "N%", wrapped in a foreground-
-// only tview color tag (see colorTag — the same "#rrggbb", not a color
-// name, so it round-trips exactly through tview's own tag parser) once
-// diskUsageWarnColor says it should stand out — "[-]" resets just the
-// foreground back to the status bar's own configured text color
-// afterward, not a hardcoded one, so this still looks right under
-// every color scheme (see Root.applyTheme).
-func formatUsagePercent(percent int, theme config.ResolvedTheme) string {
-	color := diskUsageWarnColor(percent, theme)
-	if color == tcell.ColorDefault {
-		return fmt.Sprintf("%d%%", percent)
+// diskUsageFor is fsops.FetchDiskUsage's own dispatch point: the local
+// `df`-based fetcher for a local panel, or the connected Client's own
+// DiskUsage (see remotefs.Client's own doc comment — the
+// statvfs@openssh.com SFTP extension) for a remote one. Used by both
+// the status bar's own Disk/Inodes segment here and System Info's
+// identical figures for "/" (see systeminfo.go) — before this, both
+// always called fsops.FetchDiskUsage directly regardless of which
+// panel was showing, so a remote panel's status bar silently dropped
+// the segment entirely (df run locally against a path that only
+// exists on the other end always fails) and System Info showed this
+// machine's own disk, mislabeled as the remote one.
+func diskUsageFor(panel *Panel) (fsops.DiskUsage, bool) {
+	if remote := panel.remote; remote != nil {
+		u, err := remote.DiskUsage(panel.path)
+		return u, err == nil
 	}
-	return fmt.Sprintf("[%s]%d%%[-]", colorTag(color), percent)
+	return fsops.FetchDiskUsage(panel.path)
 }
 
-// diskUsageText and inodeUsageText render one labeled "Label X used, Y
-// free (Z%)" status-bar segment each — explicit "used"/"free" labels
-// (not just two bare numbers) precisely because the user reported the
-// previous, unlabeled df dump as unreadable ("man weiß gar nicht was
-// die heißen sollen"), and explicit used *and* free numbers for
-// inodes specifically, per the user's own request, rather than just a
-// percentage.
+// diskUsageText and inodeUsageText render one status-bar segment each,
+// its own base color throughout except for the percentage — which
+// always stands out via percentStatusColor's three-band scheme, on
+// top of whichever base color surrounds it (see coloredPercentIn).
+//
+// Disk asks "how much room is left" (free/total — the number a
+// sysadmin checks before starting something large); Inodes asks "how
+// many have I used up" (used/total — inode exhaustion is the failure
+// mode that actually matters, and it creeps up from zero, not down
+// from the total) — deliberately the opposite direction from each
+// other, per the user's own explicit examples, not an inconsistency
+// to "fix".
 func diskUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
-	return fmt.Sprintf("Disk %s used, %s free (%s)", humanSize(u.UsedBytes), humanSize(u.AvailBytes), formatUsagePercent(u.UsePercent, theme))
+	total := u.UsedBytes + u.AvailBytes
+	percent := coloredPercentIn(u.UsePercent, percentStatusColor(u.UsePercent, theme), statusDiskColor)
+	return fmt.Sprintf("[%s]Disk free %s/%s (%s)[-]", colorTag(statusDiskColor), humanSize(u.AvailBytes), humanSize(total), percent)
 }
 
 func inodeUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
-	return fmt.Sprintf("Inodes %s used, %s free (%s)", humanCount(u.UsedInodes), humanCount(u.AvailInodes), formatUsagePercent(u.InodePercent, theme))
+	total := u.UsedInodes + u.AvailInodes
+	percent := coloredPercentIn(u.InodePercent, percentStatusColor(u.InodePercent, theme), statusInodeColor)
+	return fmt.Sprintf("[%s]Inodes used %s/%s (%s)[-]", colorTag(statusInodeColor), humanCount(u.UsedInodes), humanCount(total), percent)
 }
 
 // humanCount renders n the same way humanSize renders a byte count
@@ -794,7 +1016,9 @@ func (r *Root) captureButtonBarMouse(action tview.MouseAction, event *tcell.Even
 // before the menu opens (see captureMouse's MouseRightClick case), so
 // reading it here targets the same entry either way. Runs the
 // configured editor (see editorCommand) on whichever entry the table's
-// cursor is currently on. A no-op on the ".." row or an empty panel
+// cursor is currently on — the panel's own current directory while it
+// sits on ".." (see Panel.CurrentRowPath), the same as any other
+// directory row already does; a no-op only for a genuinely empty panel
 // (Panel.CurrentRowPath's ok=false).
 func (r *Root) editCurrentEntry() {
 	if r.panel.inArchiveView() {
@@ -805,7 +1029,57 @@ func (r *Root) editCurrentEntry() {
 	if !ok {
 		return
 	}
+	if remote := r.panel.remote; remote != nil {
+		r.editRemoteEntry(remote, path)
+		return
+	}
 	r.runEditor(path, 0)
+}
+
+// openCurrentEntryWith is the context menu's own "Open with…" action —
+// the same target-selection shape editCurrentEntry already uses (a
+// right-click's own cursor move makes CurrentRowPath correct either
+// way), but for an arbitrary program typed on the spot instead of the
+// one fixed, configured editor. Prompts for it (prefilled with whatever
+// was typed last time, see lastOpenWithCommand) rather than offering a
+// picker: this app has no dependency on desktop .desktop-file/MIME
+// machinery anywhere else, and a typed command is the one thing that
+// works identically on every POSIX system this app targets, matching
+// Rsync's own "Extra flags" field and Edit's own $VISUAL/$EDITOR
+// invocation.
+//
+// Reuses runCommandOnFileAndReload/openRemoteEntryWithCommand — the
+// exact same local-vs-remote dispatch, and the exact same
+// download/run/upload-if-changed mechanics for a remote file, Edit
+// already established. A GUI program blocks this app until it's closed
+// the same way a terminal editor does (app.Suspend hands the real
+// terminal to whatever command runs); appending "&" to the typed
+// command backgrounds it instead, exactly as it would at a real shell
+// prompt — there is no separate "run detached" mode to reason about on
+// top of that.
+func (r *Root) openCurrentEntryWith() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
+	_, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return
+	}
+
+	r.openPrompt("Open with:", r.lastOpenWithCommand, func(command string) {
+		command = strings.TrimSpace(command)
+		if command == "" {
+			return
+		}
+		r.lastOpenWithCommand = command
+
+		if remote := r.panel.remote; remote != nil {
+			r.openRemoteEntryWithCommand(remote, path, command)
+			return
+		}
+		r.runCommandOnFileAndReload(command, path, 0)
+	})
 }
 
 // renameCurrentEntry is the "r" key's actual action — the
@@ -1008,43 +1282,71 @@ func selectedEditor() string {
 	return ""
 }
 
-// runEditor suspends the TUI (see runShellCommand's own doc comment for
-// why) and runs editorCommand on path, at line if it's > 0 (see
+// runEditor suspends the TUI and runs editorCommand on path, at line if
+// it's > 0 — the configured-editor special case of the more general
+// runCommandOnFileAndReload, which "Open with…" (see
+// openCurrentEntryWith) also goes through for an arbitrary typed
+// command instead.
+func (r *Root) runEditor(path string, line int) {
+	r.runCommandOnFileAndReload(editorCommand(), path, line)
+}
+
+// runCommandOnFileAndReload runs command on path (see runCommandOnFile
+// for the actual subprocess mechanics), then reloads the current
+// directory — runEditor's own shape, generalized so "Open with…" can
+// share it for a typed command instead of always the configured editor.
+//
+// Skips its own usual post-run reload if search results are currently
+// showing (see Panel.searchMode): r.panel.path stays whatever real
+// directory was current before the search that produced them ran (see
+// Panel.showSearchResults' own doc comment), completely unrelated to
+// path here, so reloading it would be both useless (refreshing a
+// directory the file isn't even in) and would silently discard the
+// results themselves (Panel.load always exits search mode — see its
+// own doc comment) the moment the command exits — the opposite of the
+// "stay in the results, jump straight back in for the next match" flow
+// this exists for. Acting on a real row still refreshes the real
+// directory afterward, unchanged.
+func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
+	if err := r.runCommandOnFile(command, path, line); err != nil {
+		r.showError(fmt.Errorf("run %s on %s: %w", command, path, err))
+		return
+	}
+	if r.panel.searchMode {
+		return
+	}
+	r.showError(r.panel.load(r.panel.path))
+}
+
+// runCommandOnFile is runEditor/"Open with…"'s own shared subprocess
+// mechanics: suspends the TUI (see runShellCommand's own doc comment
+// for why) and runs command against path, at line if it's > 0 (see
 // Panel.activateRow's own searchMode branch — a content-search match's
-// own line number, 0 for every other caller, including
-// editCurrentEntry). Run through the shell (via "$@", not a literal
-// exec argument) rather than exec'd directly: $VISUAL/$EDITOR can
-// legitimately be more than one word (e.g. "emacsclient -t"), and only
-// the shell can be trusted to split that the way the user intended
+// own line number, 0 for every other caller). Run through the shell
+// (via "$@", not a literal exec argument) rather than exec'd directly:
+// command can legitimately be more than one word (e.g. "emacsclient
+// -t", or a typed "Open with…" command carrying its own flags), and
+// only the shell can be trusted to split that the way the user intended
 // while still passing each of its own remaining arguments through
-// exactly as given, spaces and all.
+// exactly as given, spaces and all — the same "hand it to a real shell,
+// don't re-parse shell syntax by hand" principle Rsync's own "Extra
+// flags" field already follows.
 //
 // A line is passed as a leading "+N" argument, vi/vim/nvim/nano/
 // emacs' own shared convention for "open already positioned at line
 // N" — the overwhelming majority of terminal $EDITOR values in this
 // app's own POSIX-focused audience already understand it; there's no
-// attempt at a per-editor
-// lookup table for anything fancier (e.g. VS Code's own "-g file:N")
-// — an editor that doesn't recognize "+N" is no worse off than not
-// jumping to a line at all, just a leading argument it happens to
-// ignore or, at worst, visibly complain about once, on-screen, exactly
-// where the user would see and understand why.
-//
-// Skips its own usual post-edit reload if search results are currently
-// showing (see Panel.searchMode): r.panel.path stays whatever real
-// directory was current before the search that produced them ran (see
-// Panel.showSearchResults' own doc comment), completely unrelated to
-// path here, so reloading it would be both useless (refreshing a
-// directory the file being edited isn't even in) and would silently
-// discard the results themselves (Panel.load always exits search mode
-// — see its own doc comment) the moment the editor closes — the
-// opposite of the "stay in the results, jump straight back into the
-// editor for the next match" flow this exists for. Editing a real row
-// still refreshes the real directory afterward, unchanged.
-func (r *Root) runEditor(path string, line int) {
+// attempt at a per-editor lookup table for anything fancier (e.g. VS
+// Code's own "-g file:N") — a command that doesn't recognize "+N" is no
+// worse off than not jumping to a line at all, just a leading argument
+// it happens to ignore or, at worst, visibly complain about once,
+// on-screen, exactly where the user would see and understand why. Only
+// ever non-zero for the configured editor today — "Open with…" always
+// passes 0.
+func (r *Root) runCommandOnFile(command, path string, line int) error {
 	var runErr error
 	r.app.Suspend(func() {
-		script := editorCommand() + ` "$@"`
+		script := command + ` "$@"`
 		args := []string{"-c", script, "sh"}
 		if line > 0 {
 			args = append(args, fmt.Sprintf("+%d", line))
@@ -1054,15 +1356,78 @@ func (r *Root) runEditor(path string, line int) {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
 	})
+	return runErr
+}
 
-	if runErr != nil {
-		r.showError(fmt.Errorf("edit %s: %w", path, runErr))
+// editRemoteEntry is editCurrentEntry's own remote-panel half — the
+// configured-editor special case of the more general
+// openRemoteEntryWithCommand, which "Open with…" also goes through for
+// an arbitrary typed command instead.
+func (r *Root) editRemoteEntry(remote remotefs.Client, remotePath string) {
+	r.openRemoteEntryWithCommand(remote, remotePath, editorCommand())
+}
+
+// openRemoteEntryWithCommand stages remotePath into a local temp file
+// (see downloadRemoteToTemp — the same staging openRemoteLook already
+// uses for Look), runs command against that local copy exactly like
+// runCommandOnFile already does for a real local file, and uploads the
+// result back over the connection only if command actually changed it.
+// This is what makes "Open with…" (see openCurrentEntryWith) work for a
+// remote file exactly the same way Edit already does: download, run
+// the chosen program against the local copy, upload back only if it
+// changed — never a special remote-only code path for either.
+//
+// "Changed" is decided by the temp file's own mtime and size before vs.
+// after command ran, not by re-reading and hashing both copies: an
+// editor that rewrites a file unchanged still updates its own mtime on
+// save (even vim's :wq does, with no edits made at all), the same
+// signal a real sync tool already keys off — and it costs one os.Stat
+// each time rather than a second full read of a file that might be
+// large. Nothing is ever uploaded, and the remote copy is never
+// touched at all, if command made no change or exited with an error.
+func (r *Root) openRemoteEntryWithCommand(remote remotefs.Client, remotePath, command string) {
+	localPath, cleanup, err := downloadRemoteToTemp(remote, remotePath)
+	if err != nil {
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
-	if r.panel.searchMode {
+	defer cleanup()
+
+	before, err := os.Stat(localPath)
+	if err != nil {
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
-	r.showError(r.panel.load(r.panel.path))
+
+	if err := r.runCommandOnFile(command, localPath, 0); err != nil {
+		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
+		return
+	}
+
+	r.showError(r.finishRemoteEdit(remote, remotePath, localPath, before))
+}
+
+// finishRemoteEdit is editRemoteEntry's own upload-if-changed decision
+// — split out from it so a test can drive the "did the editor actually
+// change anything" compare directly against a real temp file it
+// controls, without needing runEditorProcess's own app.Suspend (a
+// deliberate no-op outside a real, already-Run() terminal session —
+// see tview's own Application.Suspend, which bails out before ever
+// invoking its callback when a.screen is still nil) to have done
+// anything at all.
+func (r *Root) finishRemoteEdit(remote remotefs.Client, remotePath, localPath string, before os.FileInfo) error {
+	after, err := os.Stat(localPath)
+	if err != nil {
+		return err
+	}
+	if after.ModTime().Equal(before.ModTime()) && after.Size() == before.Size() {
+		return nil // the editor made no change — nothing to upload, remote copy untouched
+	}
+
+	if err := copyTransferFile(transferSide{}, transferSide{client: remote}, localPath, remotePath); err != nil {
+		return fmt.Errorf("uploading changes back to %s: %w", remotePath, err)
+	}
+	return r.panel.load(r.panel.path)
 }
 
 // StartClock begins refreshing the status bar's clock display once a
@@ -1086,6 +1451,16 @@ func (r *Root) StartClock() (stop func()) {
 			case <-ticker.C:
 				r.app.QueueUpdateDraw(func() {
 					r.refreshStatusBar()
+					// System Info (see systeminfo.go) shows the same
+					// kind of live figures (uptime, load, memory, ...)
+					// the status bar itself does — same ticker, same
+					// reasoning, so it never sits there showing a
+					// minute-old load average while Details stays open
+					// at "/".
+					if r.detailsSidebarVisible && r.showingSystemInfo() {
+						r.renderDetailsSidebar()
+					}
+					r.refreshActivePanelHeaderGlow()
 				})
 			case <-done:
 				ticker.Stop()
@@ -1094,4 +1469,29 @@ func (r *Root) StartClock() (stop func()) {
 		}
 	})
 	return func() { close(done) }
+}
+
+// refreshActivePanelHeaderGlow re-renders the active panel's own
+// header text so the "@" button's breathing glow (see
+// connectionGlowColor) actually advances while sitting idle in a
+// remote-connected directory, not just on the next real navigation —
+// called from StartClock's own once-a-second ticker. A no-op for a
+// local panel: there's no animation running to advance, so no reason
+// to force a redraw a plain, unconnected header never needs.
+func (r *Root) refreshActivePanelHeaderGlow() {
+	p := r.panel
+	if p == nil || p.remote == nil {
+		return
+	}
+	if p.searchMode {
+		// setSearchStatus rebuilds the breadcrumb half of the combined
+		// text via buildHeaderSpans itself, the same as the plain
+		// branch below — reusing it here rather than duplicating that
+		// call keeps the two paths from ever drifting apart.
+		p.setSearchStatus(p.searchStatusText)
+		return
+	}
+	text, spans := buildHeaderSpans(p.path, p.theme, true)
+	p.header.SetText(text)
+	p.headerSpans = spans
 }

@@ -842,10 +842,14 @@ func TestOpenChmodResetsStaleEditField(t *testing.T) {
 	}
 }
 
-// TestOpenChmodNoopWithoutTarget pins that opening Chmod with nothing
-// selected and nothing under the cursor (see selectedOrCurrentPaths) is
-// a harmless no-op, not a crash.
-func TestOpenChmodNoopWithoutTarget(t *testing.T) {
+// TestOpenChmodOnDotDotTargetsPanelDirectory pins the current contract
+// for an empty directory: with nothing selected and the cursor on "..",
+// selectedOrCurrentPaths now falls back to the panel's own current
+// directory (see Panel.CurrentRowPath) rather than finding no target at
+// all — chmod already handles a directory target generically (see
+// r.chmodAnyDir below), so this is Chmod's own share of the same fix
+// Multiply/Trash/Remove/etc. all got.
+func TestOpenChmodOnDotDotTargetsPanelDirectory(t *testing.T) {
 	dir := t.TempDir() // empty: only the ".." row exists
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -854,8 +858,14 @@ func TestOpenChmodNoopWithoutTarget(t *testing.T) {
 
 	r.openChmod()
 
-	if r.activePage != "" {
-		t.Errorf("activePage = %q, want still closed", r.activePage)
+	if r.activePage != chmodPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, chmodPage)
+	}
+	if len(r.chmodTargets) != 1 || r.chmodTargets[0] != dir {
+		t.Errorf("chmodTargets = %v, want [%q] (the panel's own current directory)", r.chmodTargets, dir)
+	}
+	if !r.chmodAnyDir {
+		t.Error("chmodAnyDir = false, want true for a directory target")
 	}
 }
 

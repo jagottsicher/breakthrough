@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/session"
@@ -378,15 +379,46 @@ func (r *Root) restoreSavedSplit(state session.TabState, savedToLive map[int]int
 // --- Actions reachable from the UI -----------------------------------
 
 // newTabHere opens a new tab on the same directory the current one is
-// showing — the context menu's "New tab" and the strip's own "+" button.
+// showing — the context menu's "New tab", the strip's own "+" button,
+// the tab switcher's own trailing row, and (via newTabForSplit) the
+// "split with a new tab" action.
 //
 // Same directory rather than $HOME or the working directory: opening a
 // second view of where you already are is the overwhelmingly common
 // reason to want another tab (compare two subdirectories, keep a
 // reference point while wandering off), and going somewhere else from
-// there is one navigation away.
+// there is one navigation away. That reasoning only holds for a local
+// panel, though — see newTabStartPath for the remote case, where
+// r.panel.path is a remote absolute path a fresh, always-local tab has
+// no business reusing.
 func (r *Root) newTabHere() {
-	r.newTab(r.panel.path)
+	r.newTab(r.newTabStartPath())
+}
+
+// newTabStartPath is newTabHere's own starting directory. A local
+// panel's own path works as-is (see newTabHere's own doc comment); a
+// remote one doesn't — a brand new tab is always a local
+// *Panel/NewPanel call, no remotefs.Client involved at all, so reusing
+// the remote panel's own absolute path would only work by sheer
+// coincidence that an identical path also exists on this machine (a
+// real, previously-reported gap: it silently didn't, virtually every
+// time). Falls back to the directory breakthrough was actually started
+// with (see r.startDir), or the user's own home directory if that
+// doesn't check out either — same "a fresh tab starts somewhere real
+// and predictable, never a guess" reasoning either fallback serves.
+func (r *Root) newTabStartPath() string {
+	if r.panel.remote == nil {
+		return r.panel.path
+	}
+	if r.startDir != "" {
+		if _, err := os.Stat(r.startDir); err == nil {
+			return r.startDir
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return home
+	}
+	return r.startDir
 }
 
 // closeCurrentTab is the context menu's "Close tab".

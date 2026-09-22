@@ -24,19 +24,21 @@ func TestComputeDuplicateNameSuffixText(t *testing.T) {
 	}
 }
 
-// TestComputeDuplicateNameSuffixTextHasNoAutoRetry pins the deliberate
-// design: with the computed candidate already on disk,
-// ComputeDuplicateName still returns it rather than looping — the
-// caller's own subsequent Copy is what reports "already exists". A
-// second, separate Duplicate run on that returned name (not exercised
-// by this call at all) is how "report.txt_BAK_BAK" would ever arise —
-// never a loop inside one call.
-func TestComputeDuplicateNameSuffixTextHasNoAutoRetry(t *testing.T) {
+// TestComputeDuplicateNameSuffixTextChainsOnCollision pins the fix for
+// a real, user-reported bug: with the one-shot candidate already on
+// disk, ComputeDuplicateName used to return that already-taken name
+// anyway, pushing the "already exists" failure onto the caller's own
+// subsequent Copy. It now chains, re-appending the same suffix again,
+// until it finds a name nothing is using yet.
+func TestComputeDuplicateNameSuffixTextChainsOnCollision(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "report.txt")
-	// The candidate this computes to already exists.
-	if err := os.WriteFile(filepath.Join(dir, "report.txt_BAK"), []byte("already here"), 0o640); err != nil {
-		t.Fatal(err)
+	// The one-shot candidate, and its own first chained retry, both
+	// already exist — this must skip past both.
+	for _, taken := range []string{"report.txt_BAK", "report.txt_BAK_BAK"} {
+		if err := os.WriteFile(filepath.Join(dir, taken), []byte("already here"), 0o640); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	got, err := ComputeDuplicateName(src, DuplicateOptions{
@@ -45,9 +47,60 @@ func TestComputeDuplicateNameSuffixTextHasNoAutoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComputeDuplicateName: %v", err)
 	}
-	want := filepath.Join(dir, "report.txt_BAK")
+	want := filepath.Join(dir, "report.txt_BAK_BAK_BAK")
 	if got != want {
-		t.Errorf("got %q, want %q (the same already-taken candidate, not a retried alternative)", got, want)
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestComputeDuplicateNameSuffixTextChainScanLimitErrors pins the same
+// safety net DuplicateNumbered already has, applied to the chaining
+// loop: once every chained candidate up to the (lowered) limit is
+// taken, this reports an error instead of looping forever.
+func TestComputeDuplicateNameSuffixTextChainScanLimitErrors(t *testing.T) {
+	original := duplicateNumberedScanLimit
+	duplicateNumberedScanLimit = 2
+	t.Cleanup(func() { duplicateNumberedScanLimit = original })
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "report.txt")
+	for _, taken := range []string{"report.txt_BAK", "report.txt_BAK_BAK"} {
+		if err := os.WriteFile(filepath.Join(dir, taken), []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := ComputeDuplicateName(src, DuplicateOptions{
+		Separator: "_", Strategy: DuplicateSuffixText, SuffixText: "BAK",
+	})
+	if err == nil {
+		t.Fatal("expected an error once every chained candidate up to the (lowered) scan limit is taken")
+	}
+}
+
+// TestComputeDuplicateNameDateTimeChainsOnCollision is
+// TestComputeDuplicateNameSuffixTextChainsOnCollision's own equivalent
+// for the DateTime strategy — same fix, same reasoning: a fixed Now
+// (as a real "Number of duplicates" > 1 run would see, all within the
+// same instant) must not surface as "already exists" either.
+func TestComputeDuplicateNameDateTimeChainsOnCollision(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "report.txt")
+	now := time.Date(2026, time.November, 9, 23, 59, 59, 0, time.UTC)
+	if err := os.WriteFile(filepath.Join(dir, "report.txt_2026-11-9 23:59:59"), []byte("already here"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ComputeDuplicateName(src, DuplicateOptions{
+		Separator: "_", Strategy: DuplicateDateTime,
+		DateTimeFormat: "2006-1-2 15:04:05", Now: now,
+	})
+	if err != nil {
+		t.Fatalf("ComputeDuplicateName: %v", err)
+	}
+	want := filepath.Join(dir, "report.txt_2026-11-9 23:59:59_2026-11-9 23:59:59")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -230,24 +283,24 @@ func TestComputeDuplicateNameNeverSplitsOffAnyExtension(t *testing.T) {
 }
 
 func TestStrftimeToGoLayoutUnsupportedSpecifierErrors(t *testing.T) {
-	if _, err := strftimeToGoLayout("%Q"); err == nil {
+	if _, err := StrftimeToGoLayout("%Q"); err == nil {
 		t.Error("expected an error for an unsupported specifier")
 	}
 }
 
 func TestStrftimeToGoLayoutDanglingPercentErrors(t *testing.T) {
-	if _, err := strftimeToGoLayout("%Y-%"); err == nil {
+	if _, err := StrftimeToGoLayout("%Y-%"); err == nil {
 		t.Error("expected an error for a dangling %% at the end")
 	}
-	if _, err := strftimeToGoLayout("%Y-%-"); err == nil {
+	if _, err := StrftimeToGoLayout("%Y-%-"); err == nil {
 		t.Error("expected an error for a dangling %%- at the end")
 	}
 }
 
 func TestStrftimeToGoLayoutLiteralPercentEscape(t *testing.T) {
-	got, err := strftimeToGoLayout("100%%")
+	got, err := StrftimeToGoLayout("100%%")
 	if err != nil {
-		t.Fatalf("strftimeToGoLayout: %v", err)
+		t.Fatalf("StrftimeToGoLayout: %v", err)
 	}
 	if got != "100%" {
 		t.Errorf("got %q, want %q", got, "100%")

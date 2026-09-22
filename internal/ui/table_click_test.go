@@ -584,6 +584,36 @@ func TestRightClickWithoutDragOpensMenu(t *testing.T) {
 	}
 }
 
+// TestRightClickOnDotDotOpensMenuForPanelDirectory pins the user's own
+// explicit request: right-clicking (or, via MenuShortcut, the "mm"
+// chord) while the cursor sits on ".." must still open the context
+// menu, targeting the panel's own current directory — not silently do
+// nothing the way Panel.RowAt's own exclusion used to make it. See
+// Panel.RowAt's own doc comment for why the target is dir, the panel's
+// current directory, rather than ref.path (".."'s own parent path).
+func TestRightClickOnDotDotOpensMenuForPanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	x, y, ok := findRowPos(root.panel.table, 0, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 0's (\"..\") screen position")
+	}
+
+	handler := root.MouseHandler()
+	handler(tview.MouseRightDown, tcell.NewEventMouse(x, y, tcell.ButtonSecondary, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightUp, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+	handler(tview.MouseRightClick, tcell.NewEventMouse(x, y, tcell.ButtonNone, 0), func(tview.Primitive) {})
+
+	if root.activePage != contextMenuPage {
+		t.Fatalf("activePage = %q, want %q (context menu should open even on \"..\")", root.activePage, contextMenuPage)
+	}
+	if root.target != dir {
+		t.Errorf("target = %q, want %q (the panel's own current directory)", root.target, dir)
+	}
+}
+
 // TestRightClickMovesFocus checks that right-clicking a row that isn't
 // already the table's highlighted one moves the highlight there — the
 // context menu is clearly about that row, so the highlight should agree,

@@ -695,12 +695,15 @@ func TestPerformDuplicateNumberedCreatesSequentialCopies(t *testing.T) {
 	}
 }
 
-// TestPerformDuplicateSuffixTextDoesNotRetry pins the documented,
-// deliberate behavior: a fixed-suffix duplicate run twice produces an
-// ordinary "already exists" failure the second time, not a silent
-// second attempt at some other name.
-func TestPerformDuplicateSuffixTextDoesNotRetry(t *testing.T) {
-	_, _, file := newTestRootWithDuplicateFile(t, "hello\n")
+// TestPerformDuplicateSuffixTextChainsInsteadOfFailing pins the fix for
+// a real, user-reported bug: running a fixed-suffix duplicate twice
+// used to fail the second time with "already exists" (see
+// fsops.ComputeDuplicateName's own doc comment). It now chains onto
+// "report.txt_copy_copy" instead of failing, and a single run
+// requesting several duplicates at once chains the same way rather than
+// colliding with itself on the second one.
+func TestPerformDuplicateSuffixTextChainsInsteadOfFailing(t *testing.T) {
+	_, dir, file := newTestRootWithDuplicateFile(t, "hello\n")
 	opts := fsops.DuplicateOptions{Separator: "_", Strategy: fsops.DuplicateSuffixText, SuffixText: "copy"}
 
 	created, err := performDuplicate([]string{file}, opts, fsops.CopyOptions{}, 1)
@@ -708,12 +711,17 @@ func TestPerformDuplicateSuffixTextDoesNotRetry(t *testing.T) {
 		t.Fatalf("first run: created=%d, err=%v, want 1, nil", created, err)
 	}
 
-	created, err = performDuplicate([]string{file}, opts, fsops.CopyOptions{}, 1)
-	if err == nil {
-		t.Fatal("second run should have failed: report.txt_copy already exists")
+	created, err = performDuplicate([]string{file}, opts, fsops.CopyOptions{}, 3)
+	if err != nil {
+		t.Fatalf("second run: %v", err)
 	}
-	if created != 0 {
-		t.Errorf("second run created = %d, want 0", created)
+	if created != 3 {
+		t.Fatalf("second run created = %d, want 3", created)
+	}
+	for _, name := range []string{"report.txt_copy_copy", "report.txt_copy_copy_copy", "report.txt_copy_copy_copy_copy"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

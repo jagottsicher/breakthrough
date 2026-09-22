@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -9,6 +11,8 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
+	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // The Batch Rename screen: a full-screen editor, replacing the context
@@ -35,14 +39,36 @@ import (
 // it, the same fsops-vs-ui split this project keeps everywhere else.
 
 const (
-	batchRenamePage      = "batch-rename"
-	batchRenameInputPage = "batch-rename-input"
+	batchRenamePage       = "batch-rename"
+	batchRenameInputPage  = "batch-rename-input"
+	batchRenamePresetPage = "batch-rename-preset"
 
 	// batchRenameFieldsHeight fits the widest step's own field count
-	// (Numbering, at 4 rows) plus SetBorderPadding's top row — checked
-	// against a real render, the same way sedLayout's own fixed height
-	// was (see openSedReplace).
-	batchRenameFieldsHeight = 6
+	// (Numbering, at 6 rows) plus SetBorderPadding's top row and one
+	// blank row before the help line — checked against a real render,
+	// the same way sedLayout's own fixed height was (see openSedReplace).
+	batchRenameFieldsHeight = 8
+
+	// batchRenamePresetSubdir is where presets live under the user's
+	// own config directory (see config.UserDir) — its own subdirectory,
+	// the same as colorschemes/, so the config directory's top level
+	// stays one file per concern.
+	batchRenamePresetSubdir = "rename-presets"
+
+	// batchRenameFieldHelpHeight is the live per-field help line under
+	// the fields table (see batchRenameField.help): three rows, so the
+	// longest help text (the Template step's token cheat sheet) still
+	// fits at the narrower widths the preview pane gets on a small
+	// terminal, plus one blank row separating it from the preview
+	// table's own header.
+	batchRenameFieldHelpHeight = 4
+
+	// batchRenameActiveMark/batchRenameInactiveMark prefix each step in
+	// the left-hand list (see renderBatchRenameStepsList) — a filled
+	// glyph for a step that currently changes something, the same width
+	// in blanks otherwise, so the names stay aligned either way.
+	batchRenameActiveMark   = "● "
+	batchRenameInactiveMark = "  "
 )
 
 // newBatchRenameScreen builds the whole screen once, at startup — the
@@ -63,11 +89,21 @@ func (r *Root) newBatchRenameScreen() {
 	r.batchRenameFieldsTable.SetSelectable(true, false) // whole rows: one field per row
 	r.batchRenameFieldsTable.SetSelectedFunc(func(row, _ int) { r.activateBatchRenameFieldRow(row) })
 	r.batchRenameFieldsTable.SetMouseCapture(r.captureBatchRenameFieldsMouse)
+	r.batchRenameFieldsTable.SetSelectionChangedFunc(func(row, _ int) { r.renderBatchRenameFieldHelp(row) })
+
+	// The live help line for whichever field is selected above (see
+	// batchRenameField.help) — a TextView so a longer sentence wraps
+	// instead of being cut off at the pane's width.
+	r.batchRenameFieldHelp = tview.NewTextView()
+	r.batchRenameFieldHelp.SetWrap(true)
+	r.batchRenameFieldHelp.SetWordWrap(true)
+	r.batchRenameFieldHelp.SetBorderPadding(0, 0, 2, 1)
 
 	r.batchRenamePreviewTable = tview.NewTable()
 	r.batchRenamePreviewTable.SetBorders(false)
 	r.batchRenamePreviewTable.SetBorderPadding(1, 0, 2, 1)
 	r.batchRenamePreviewTable.SetSelectable(true, false)
+	r.batchRenamePreviewTable.SetMouseCapture(r.captureBatchRenamePreviewMouse)
 
 	r.batchRenameStatus = tview.NewTextView()
 	r.batchRenameStatus.SetWrap(false)
@@ -76,6 +112,7 @@ func (r *Root) newBatchRenameScreen() {
 
 	rightPane := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.batchRenameFieldsTable, batchRenameFieldsHeight, 0, true).
+		AddItem(r.batchRenameFieldHelp, batchRenameFieldHelpHeight, 0, false).
 		AddItem(r.batchRenamePreviewTable, 0, 1, false).
 		AddItem(r.batchRenameStatus, 1, 0, false).
 		AddItem(r.batchRenameButtons, 1, 0, false)
@@ -90,7 +127,7 @@ func (r *Root) newBatchRenameScreen() {
 
 	r.batchRenameHint = tview.NewTextView()
 	r.batchRenameHint.SetWrap(false)
-	r.batchRenameHint.SetText(" ←/→: pane · ↑/↓: move · Enter/Space: change · Tab: buttons · Esc: close ")
+	r.batchRenameHint.SetText(" ←/→ pane · ↑/↓ move · Enter/Space change · Tab next · Esc close │ Preview: Space skip · u/d move · n/p change · c/C conflict ")
 
 	r.batchRenameLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.batchRenameTitleBar, 1, 0, false).
@@ -111,7 +148,20 @@ func (r *Root) newBatchRenameScreen() {
 	r.batchRenameStepsList.SetInputCapture(chainKeyCaptures(r.captureBatchRenameKey, r.captureBatchRenamePaneArrows))
 	r.batchRenameFieldsTable.SetInputCapture(chainKeyCaptures(r.captureBatchRenameKey,
 		chainKeyCaptures(r.captureBatchRenamePaneArrows, r.captureBatchRenameFieldsTableKey)))
-	r.batchRenamePreviewTable.SetInputCapture(r.captureBatchRenameKey)
+	r.batchRenamePreviewTable.SetInputCapture(chainKeyCaptures(r.captureBatchRenameKey, r.captureBatchRenamePreviewKey))
+
+	// The preset picker (see openBatchRenamePresetPicker) — a list plus
+	// its own title bar, the same shape as the tab switcher, rebuilt on
+	// every open from what's on disk.
+	r.batchRenamePresetList = tview.NewList().ShowSecondaryText(false)
+	r.batchRenamePresetList.SetHighlightFullLine(true)
+	r.batchRenamePresetList.SetBorderPadding(0, 0, 1, 1)
+	r.batchRenamePresetList.SetInputCapture(r.captureBatchRenamePresetKey)
+	r.batchRenamePresetList.SetDoneFunc(func() { r.hideOverlay() })
+	r.batchRenamePresetTitleBar = newPlainTitleBar("Load preset  (Enter: load · d: delete · Esc: close)")
+	r.batchRenamePresetLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.batchRenamePresetTitleBar, 1, 0, false).
+		AddItem(r.batchRenamePresetList, 0, 1, true)
 
 	// Visible focus, driven by the focus events themselves rather than
 	// re-derived at Draw time — see setOptionsPaneFocused's own doc
@@ -126,8 +176,10 @@ func (r *Root) newBatchRenameScreen() {
 
 // newBatchRenameButtons builds the row of screen-wide actions under the
 // preview: Rename actually does it (after confirming — see
-// confirmApplyBatchRename), Reset all steps clears every field back to
-// its no-op zero value without closing the screen (nothing has been
+// confirmApplyBatchRename), Save/Load preset keep and bring back a
+// whole pipeline by name (see openBatchRenameSavePreset/
+// openBatchRenamePresetPicker), Reset all steps clears every field back
+// to its no-op zero value without closing the screen (nothing has been
 // written to disk yet, so unlike the Options screen's own resets this
 // needs no confirmation of its own), Cancel discards everything and
 // closes.
@@ -139,6 +191,8 @@ func (r *Root) newBatchRenameButtons() *tview.Flex {
 	}
 	specs := []buttonSpec{
 		{&r.batchRenameApplyBtn, "Rename", r.confirmApplyBatchRename},
+		{&r.batchRenameSavePresetBtn, "Save preset...", r.openBatchRenameSavePreset},
+		{&r.batchRenameLoadPresetBtn, "Load preset...", r.openBatchRenamePresetPicker},
 		{&r.batchRenameResetBtn, "Reset all steps", r.resetBatchRenameSteps},
 		{&r.batchRenameCancelBtn, "Cancel", r.closeBatchRename},
 	}
@@ -157,7 +211,7 @@ func (r *Root) newBatchRenameButtons() *tview.Flex {
 // its construction and by the focus ring below, the same reasoning
 // optionsButtonList already documents.
 func (r *Root) batchRenameButtonList() []*tview.Button {
-	return []*tview.Button{r.batchRenameApplyBtn, r.batchRenameResetBtn, r.batchRenameCancelBtn}
+	return []*tview.Button{r.batchRenameApplyBtn, r.batchRenameSavePresetBtn, r.batchRenameLoadPresetBtn, r.batchRenameResetBtn, r.batchRenameCancelBtn}
 }
 
 // batchRenameFocusRing is Tab's own stop order: the steps list, the
@@ -270,10 +324,58 @@ func (r *Root) captureBatchRenameFieldsMouse(action tview.MouseAction, event *tc
 	return tview.MouseConsumed, nil
 }
 
+// errBatchRenameEmptyFolder is shown when expandLoneDirectoryTarget's
+// sole directory target turns out to have nothing inside it to rename.
+var errBatchRenameEmptyFolder = errors.New("batch rename: this folder has no entries to rename")
+
+// expandLoneDirectoryTarget turns a single directory target into its own
+// immediate contents (one level, not recursive): applying Batch Rename
+// to exactly one folder renames the files and subfolders inside it,
+// rather than the folder itself — a single-item rename that made the
+// whole screen look unusable on a folder (see feedback_list.txt). A
+// folder that's part of a larger selection, or that isn't the sole
+// target, is left as-is: renaming several folders' own names in one
+// pass is still a legitimate use of this screen.
+//
+// Hidden entries are included or excluded exactly as the panel
+// currently shows them (see Panel.showHidden), so what ends up in the
+// preview table matches what's already visible.
+func (r *Root) expandLoneDirectoryTarget(targets []string) ([]string, error) {
+	if len(targets) != 1 {
+		return targets, nil
+	}
+	info, err := os.Stat(targets[0])
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return targets, nil
+	}
+
+	entries, err := fsops.ListDir(targets[0])
+	if err != nil {
+		return nil, err
+	}
+	if !r.panel.showHidden {
+		entries = filterHidden(entries)
+	}
+	if len(entries) == 0 {
+		return nil, errBatchRenameEmptyFolder
+	}
+
+	expanded := make([]string, len(entries))
+	for i, e := range entries {
+		expanded[i] = filepath.Join(targets[0], e.Name)
+	}
+	return expanded, nil
+}
+
 // openBatchRename is the context menu's "Batch rename": opens the
 // screen fresh, for the current checkbox selection (or the current
 // row) — the same target-gathering fallback Sed Replace/Move to
-// Trash/Remove all already share (see selectedOrCurrentPaths).
+// Trash/Remove all already share (see selectedOrCurrentPaths) — except
+// a lone directory target is expanded into its own contents first (see
+// expandLoneDirectoryTarget).
 //
 // Always starts from a blank Rules{} rather than remembering the last
 // session's own settings: a stale "Find: vacation" silently applied to
@@ -285,16 +387,32 @@ func (r *Root) openBatchRename() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
 		return
 	}
+	targets, err := r.expandLoneDirectoryTarget(targets)
+	if err != nil {
+		r.showError(err)
+		return
+	}
 	r.batchRenameTargets = targets
+	r.batchRenameExcluded = map[string]bool{}
 	r.batchRenameRules = batchrename.Rules{}
 	r.batchRenameStep = 0
+	if r.batchRenamePresetDir == "" {
+		if dir := config.UserDir(); dir != "" {
+			r.batchRenamePresetDir = filepath.Join(dir, batchRenamePresetSubdir)
+		}
+	}
 
 	r.renderBatchRenameStepsList()
 	r.renderBatchRenameFields()
+	r.batchRenamePreviewTable.Select(1, 0) // top of this selection, not wherever the last one's cursor was left
 	r.renderBatchRenamePreview()
 
 	// The whole layout is the overlay, not just the fields table — the
@@ -328,13 +446,51 @@ func (r *Root) renderBatchRenameStepsList() {
 	r.batchRenameStepsList.SetChangedFunc(nil)
 	r.batchRenameStepsList.Clear()
 	for _, step := range batchRenameSteps() {
-		r.batchRenameStepsList.AddItem(step.name, "", 0, nil)
+		r.batchRenameStepsList.AddItem(batchRenameStepLabel(step, r.batchRenameRules), "", 0, nil)
 	}
 	r.batchRenameStepsList.SetCurrentItem(r.batchRenameStep)
 	r.batchRenameStepsList.SetChangedFunc(func(index int, _, _ string, _ rune) {
 		r.batchRenameStep = index
 		r.renderBatchRenameFields()
 	})
+}
+
+// batchRenameStepLabel is a step's list entry: its name, prefixed with
+// batchRenameActiveMark while it actually changes something under
+// rules (see batchRenameStep.active), the same width in blanks
+// otherwise — so which parts of the pipeline are in play is readable
+// from the list alone.
+func batchRenameStepLabel(step batchRenameStep, rules batchrename.Rules) string {
+	if step.active != nil && step.active(rules) {
+		return batchRenameActiveMark + step.name
+	}
+	return batchRenameInactiveMark + step.name
+}
+
+// refreshBatchRenameStepMarks re-labels the left-hand list in place so
+// each step's active mark tracks the rules as they're edited — in
+// place rather than a full rebuild, so neither the list's selection
+// nor its changed func fire from a mere value edit on the right.
+func (r *Root) refreshBatchRenameStepMarks() {
+	for i, step := range batchRenameSteps() {
+		if i >= r.batchRenameStepsList.GetItemCount() {
+			break
+		}
+		r.batchRenameStepsList.SetItemText(i, batchRenameStepLabel(step, r.batchRenameRules), "")
+	}
+}
+
+// renderBatchRenameFieldHelp shows the help text of the field on row
+// of the fields table (see batchRenameField.help) — called on every
+// selection change there, and by renderBatchRenameFields for whatever
+// row ends up selected after a rebuild.
+func (r *Root) renderBatchRenameFieldHelp(row int) {
+	f, ok := r.batchRenameFieldAtRow(row)
+	if !ok {
+		r.batchRenameFieldHelp.SetText("")
+		return
+	}
+	r.batchRenameFieldHelp.SetText(f.help)
 }
 
 // currentBatchRenameStep is the step the left-hand list currently has
@@ -359,13 +515,15 @@ func (r *Root) batchRenameFieldAtRow(row int) (batchRenameField, bool) {
 
 // renderBatchRenameFields fills the right-hand table with the selected
 // step's own fields: label and current value — no info column, unlike
-// Options' own table, since this first version has no per-field help
-// text to show (see the package doc's own scope note).
+// Options' own table; the per-field explanation lives in the help line
+// under the table instead (see renderBatchRenameFieldHelp), always
+// visible for whichever row is selected.
 func (r *Root) renderBatchRenameFields() {
 	r.batchRenameFieldsTable.Clear()
 
 	step, ok := r.currentBatchRenameStep()
 	if !ok {
+		r.renderBatchRenameFieldHelp(-1)
 		return
 	}
 	for row, f := range step.fields {
@@ -382,6 +540,8 @@ func (r *Root) renderBatchRenameFields() {
 	if row, _ := r.batchRenameFieldsTable.GetSelection(); row >= r.batchRenameFieldsTable.GetRowCount() {
 		r.batchRenameFieldsTable.Select(0, 0)
 	}
+	row, _ := r.batchRenameFieldsTable.GetSelection()
+	r.renderBatchRenameFieldHelp(row)
 }
 
 // batchRenameFieldDisplay renders one field's current value the way the
@@ -490,19 +650,31 @@ func (r *Root) editBatchRenameField(f batchRenameField) {
 // before pressing Rename, per the user's own explicit request for "a
 // proper preview".
 func (r *Root) renderBatchRenamePreview() {
+	// Every field edit lands here (see the builders in
+	// batchrenamecatalog.go), so this is also where the step marks on
+	// the left get to follow the rules.
+	r.refreshBatchRenameStepMarks()
+
+	selectedRow, _ := r.batchRenamePreviewTable.GetSelection()
 	r.batchRenamePreviewTable.Clear()
 
 	header := func(col int, text string) {
 		r.batchRenamePreviewTable.SetCell(0, col, tview.NewTableCell(text).
 			SetTextColor(r.theme.Text).SetAttributes(tcell.AttrBold).SetSelectable(false))
 	}
-	header(0, "Name")
-	header(1, "New name")
-	header(2, "Note")
+	header(0, " ")
+	header(1, "Name")
+	header(2, "New name")
+	header(3, "Note")
 	r.batchRenamePreviewTable.SetFixed(1, 0)
 
-	targets := r.batchRenameTargets
-	result := batchrename.Plan(targets, r.batchRenameRules)
+	// The preview lists every target in counting order (see
+	// batchrename.Ordered) — so "the order the preview shows" and "the
+	// order the numbers are handed out" are always the same thing — but
+	// only the rows still ticked go into Plan at all, so an unticked
+	// row neither renames nor takes a number.
+	targets, included := r.batchRenamePlanInputs()
+	result := batchrename.Plan(included, r.batchRenameRules)
 	r.batchRenamePendingChanges = result.Changes
 
 	changedTo := make(map[string]string, len(result.Changes))
@@ -514,7 +686,7 @@ func (r *Root) renderBatchRenamePreview() {
 		problemReason[p.Path] = p.Reason
 	}
 
-	changing, conflicts := 0, 0
+	changing, conflicts, skipped := 0, 0, 0
 	for i, path := range targets {
 		name := filepath.Base(path)
 		row := i + 1
@@ -524,6 +696,10 @@ func (r *Root) renderBatchRenamePreview() {
 		note := "(unchanged)"
 
 		switch {
+		case r.batchRenameExcluded[path]:
+			newName = "—"
+			note = "(skipped)"
+			skipped++
 		case problemReason[path] != "":
 			color = r.theme.EntryError // the same color a broken symlink gets — something is wrong here
 			newName = "—"
@@ -536,18 +712,177 @@ func (r *Root) renderBatchRenamePreview() {
 			changing++
 		}
 
-		r.batchRenamePreviewTable.SetCell(row, 0, tview.NewTableCell(name).SetTextColor(color))
-		r.batchRenamePreviewTable.SetCell(row, 1, tview.NewTableCell(newName).SetTextColor(color))
-		r.batchRenamePreviewTable.SetCell(row, 2, tview.NewTableCell(note).SetTextColor(color))
+		r.batchRenamePreviewTable.SetCell(row, 0, tview.NewTableCell(checkboxText(!r.batchRenameExcluded[path])).SetTextColor(color).SetReference(path))
+		r.batchRenamePreviewTable.SetCell(row, 1, tview.NewTableCell(name).SetTextColor(color))
+		r.batchRenamePreviewTable.SetCell(row, 2, tview.NewTableCell(newName).SetTextColor(color))
+		r.batchRenamePreviewTable.SetCell(row, 3, tview.NewTableCell(note).SetTextColor(color))
 	}
 
 	if len(targets) == 0 {
 		r.batchRenamePreviewTable.SetCell(1, 0, tview.NewTableCell("Nothing selected.").SetTextColor(r.theme.PlaceholderText).SetSelectable(false))
 	}
-	r.batchRenamePreviewTable.ScrollToBeginning()
+	// Keep the cursor where it was (a Space or u/d on row 7 shouldn't
+	// yank the view back to the top), clamped to what's there now.
+	if selectedRow < 1 {
+		selectedRow = 1
+	}
+	if last := r.batchRenamePreviewTable.GetRowCount() - 1; selectedRow > last {
+		selectedRow = last
+	}
+	r.batchRenamePreviewTable.Select(selectedRow, 0)
 
-	unchanged := len(targets) - changing - conflicts
-	r.batchRenameStatus.SetText(fmt.Sprintf(" %d changing · %d unchanged · %d conflict(s)", changing, unchanged, conflicts))
+	unchanged := len(targets) - changing - conflicts - skipped
+	r.batchRenameStatus.SetText(fmt.Sprintf(" %d changing · %d unchanged · %d conflict(s) · %d skipped", changing, unchanged, conflicts, skipped))
+}
+
+// batchRenamePlanInputs is every target in the order the preview shows
+// them (see batchrename.Ordered), and the subset of those still ticked
+// — the paths actually handed to Plan, in the order it numbers them.
+func (r *Root) batchRenamePlanInputs() (shown, included []string) {
+	shown = batchrename.Ordered(r.batchRenameTargets, r.batchRenameRules)
+	included = make([]string, 0, len(shown))
+	for _, p := range shown {
+		if !r.batchRenameExcluded[p] {
+			included = append(included, p)
+		}
+	}
+	return shown, included
+}
+
+// batchRenamePreviewPathAt is the target shown on row of the preview
+// table (stored on its checkbox cell by renderBatchRenamePreview), or
+// "" for the header/an empty table.
+func (r *Root) batchRenamePreviewPathAt(row int) string {
+	cell := r.batchRenamePreviewTable.GetCell(row, 0)
+	if cell == nil {
+		return ""
+	}
+	path, _ := cell.GetReference().(string)
+	return path
+}
+
+// batchRenamePreviewRowKind classifies row of the preview for the jump
+// keys (see captureBatchRenamePreviewKey): "change" for a row that
+// renames, "conflict" for one Plan refused, "" otherwise.
+func (r *Root) batchRenamePreviewRowKind(row int) string {
+	cell := r.batchRenamePreviewTable.GetCell(row, 3)
+	if cell == nil {
+		return ""
+	}
+	switch cell.Text {
+	case "":
+		return "change"
+	case "(unchanged)", "(skipped)":
+		return ""
+	default:
+		return "conflict"
+	}
+}
+
+// jumpBatchRenamePreview moves the preview cursor to the next (delta
+// +1) or previous (delta -1) row of the given kind, wrapping around —
+// so a long selection can be reviewed change by change, or conflict by
+// conflict, without scrolling past everything that's staying put.
+func (r *Root) jumpBatchRenamePreview(kind string, delta int) {
+	rows := r.batchRenamePreviewTable.GetRowCount() - 1 // minus the header
+	if rows < 1 {
+		return
+	}
+	current, _ := r.batchRenamePreviewTable.GetSelection()
+	for step := 1; step <= rows; step++ {
+		row := ((current-1+delta*step)%rows+rows)%rows + 1
+		if r.batchRenamePreviewRowKind(row) == kind {
+			r.batchRenamePreviewTable.Select(row, 0)
+			return
+		}
+	}
+}
+
+// toggleBatchRenamePreviewRow is Space (or a click on the checkbox) on
+// a preview row: untick it so it's left out of the rename — and out of
+// the numbering — or tick it back in.
+func (r *Root) toggleBatchRenamePreviewRow(row int) {
+	path := r.batchRenamePreviewPathAt(row)
+	if path == "" {
+		return
+	}
+	r.batchRenameExcluded[path] = !r.batchRenameExcluded[path]
+	r.renderBatchRenamePreview()
+}
+
+// moveBatchRenamePreviewRow is u/d on a preview row: swap it with its
+// neighbour, so the numbering order can be arranged by hand. Any
+// sorted order in effect is first frozen into the list as shown (so
+// the move is relative to what's on screen, not to some other order
+// underneath), and "Count in" flips to "As listed" — the only order
+// under which a hand-made arrangement means anything.
+func (r *Root) moveBatchRenamePreviewRow(row, delta int) {
+	rows := r.batchRenamePreviewTable.GetRowCount() - 1
+	target := row + delta
+	if row < 1 || row > rows || target < 1 || target > rows {
+		return
+	}
+	r.batchRenameTargets = batchrename.Ordered(r.batchRenameTargets, r.batchRenameRules)
+	r.batchRenameRules.NumberOrder = batchrename.OrderAsListed
+	r.batchRenameRules.NumberReversed = false
+
+	i, j := row-1, target-1
+	r.batchRenameTargets[i], r.batchRenameTargets[j] = r.batchRenameTargets[j], r.batchRenameTargets[i]
+	r.batchRenamePreviewTable.Select(target, 0)
+	r.renderBatchRenameFields() // "Count in"/"Reversed" may have just changed under the user
+	r.renderBatchRenamePreview()
+}
+
+// captureBatchRenamePreviewKey is the preview table's own keys: Space
+// ticks a row in or out, u/d move it, n/p and c/C jump between changes
+// and conflicts. Plain letters, not modifier combos — the same
+// reasoning the panel's own keymap gives: they arrive intact on every
+// terminal. They can't collide with the panel's own letters since the
+// preview only ever has focus while this screen is open.
+func (r *Root) captureBatchRenamePreviewKey(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() != tcell.KeyRune {
+		return event
+	}
+	row, _ := r.batchRenamePreviewTable.GetSelection()
+	switch event.Rune() {
+	case ' ':
+		r.toggleBatchRenamePreviewRow(row)
+	case 'u':
+		r.moveBatchRenamePreviewRow(row, -1)
+	case 'd':
+		r.moveBatchRenamePreviewRow(row, +1)
+	case 'n':
+		r.jumpBatchRenamePreview("change", +1)
+	case 'p':
+		r.jumpBatchRenamePreview("change", -1)
+	case 'c':
+		r.jumpBatchRenamePreview("conflict", +1)
+	case 'C':
+		r.jumpBatchRenamePreview("conflict", -1)
+	default:
+		return event
+	}
+	return nil
+}
+
+// captureBatchRenamePreviewMouse makes a click on a row's checkbox
+// column tick it in or out, the same as Space does; a click anywhere
+// else on the row just selects it, as the table would anyway.
+func (r *Root) captureBatchRenamePreviewMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action != tview.MouseLeftClick {
+		return action, event
+	}
+	x, y := event.Position()
+	if !r.batchRenamePreviewTable.InRect(x, y) {
+		return action, event
+	}
+	row, col := r.batchRenamePreviewTable.CellAt(x, y)
+	if col != 0 || r.batchRenamePreviewPathAt(row) == "" {
+		return action, event
+	}
+	r.batchRenamePreviewTable.Select(row, 0)
+	r.toggleBatchRenamePreviewRow(row)
+	return tview.MouseConsumed, nil
 }
 
 // resetBatchRenameSteps is "Reset all steps": every field back to its
@@ -572,7 +907,7 @@ func (r *Root) resetBatchRenameSteps() {
 // else could in principle have created a colliding file in the moment
 // between the last keystroke and this click.
 func (r *Root) confirmApplyBatchRename() {
-	targets := r.batchRenameTargets
+	_, targets := r.batchRenamePlanInputs()
 	rules := r.batchRenameRules
 	result := batchrename.Plan(targets, rules)
 	if len(result.Changes) == 0 {

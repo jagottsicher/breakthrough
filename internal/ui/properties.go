@@ -540,6 +540,22 @@ func spaceAlsoActivates(action func()) func(event *tcell.EventKey) *tcell.EventK
 // field once — not just an actual change — locks the overlay into
 // "Cancel or Save to leave" mode.
 func (r *Root) openProperties() {
+	// Properties combines Name/Permissions/Modified/Owner/Group editing
+	// and hash computation into one dialog and one Save action (see
+	// savePropertiesEdit) — deliberately not made remote-aware in this
+	// same round that gives plain Rename ("r") and the standalone
+	// Chmod dialog ("pm") their own remote support: Owner/Group has no
+	// remote user/group database to resolve against (see openChown's
+	// own doc comment on that same limitation) and Modified/hash both
+	// need a real byte-range read this project doesn't yet stream for
+	// a remote target. Revisit once those are addressed, rather than
+	// letting Save partially succeed (rename went through, chmod
+	// didn't) against a target this dialog was never actually taught
+	// to handle.
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
+		return
+	}
 	if err := r.loadPropertiesTarget(); err != nil {
 		r.hideOverlay() // close the context menu before reporting
 		r.showError(err)

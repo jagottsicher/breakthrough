@@ -108,7 +108,10 @@ func (r *Root) newDetailsTitleBar() *tview.TextView {
 // just once at showDetailsSidebar time the way Help's own
 // (non-resizing) title bar only needs.
 func (r *Root) renderDetailsTitleBar(width int) {
-	const label = " Details "
+	label := " Details "
+	if r.showingSystemInfo() {
+		label = " System Info "
+	}
 	closeCol := toolWindowCloseButtonCol(0, width)
 	padding := closeCol - len(label)
 	if padding < 0 {
@@ -491,9 +494,11 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.cancelDetailsHashComputation()
 	r.cancelDetailsDirSizeComputation()
 	r.cancelDetailsPreview()
+	r.cancelDetailsGitStatus()
 	r.detailsDirSize = nil
 	r.detailsDirSizeMeasured = ""
 	r.detailsMetadataState = ""
+	r.detailsGitStatus = nil
 	r.detailsTarget = path
 	// Adopts Properties' own result immediately if it's already open on
 	// this exact file and has one (see propertiesHashesFor's own doc
@@ -505,16 +510,52 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.detailsStatErr = nil
 	r.detailsImage = nil
 	r.detailsPDFPageCount = 0
+
+	// The title bar ("Details" vs. "System Info") depends on
+	// showingSystemInfo(), which can only ever change between one
+	// loadDetailsTarget call and the next (navigating in or out of
+	// "/") — but renderDetailsTitleBar itself is otherwise only ever
+	// re-run on a live terminal resize (see repositionDetailsSidebar's
+	// own doc comment), so without this call here the title would
+	// keep showing whatever it said the last time the sidebar was
+	// resized, regardless of which of the two it should say now — a
+	// real, observed bug caught by actually navigating in and out of
+	// "/" with Details open, not just by reading the code.
+	r.repositionDetailsSidebar()
+
+	// System Info (see systeminfo.go) replaces the whole per-file flow
+	// below rather than augmenting it: at "/" there's no single
+	// selected entry worth stat'ing/previewing/hashing regardless of
+	// which row the cursor happens to sit on, so none of that work —
+	// including a real stat(2) call per row as the cursor moves — is
+	// even attempted here.
+	if r.showingSystemInfo() {
+		r.renderDetailsSidebar()
+		r.detailsSidebar.ScrollToBeginning()
+		return
+	}
+
 	if path != "" {
-		// Only the stat block synchronously: one syscall, and it is what
-		// the sidebar shows first anyway, so it should be on screen
-		// before the cursor has finished moving. Everything expensive —
-		// decoding an image, parsing a PDF, running pdftoppm — happens
-		// in the background instead (see startDetailsPreview).
-		r.detailsStat, r.detailsStatErr = fsops.Stat(path)
+		// Only the stat block synchronously: one syscall (or one round
+		// trip, remotely), and it is what the sidebar shows first
+		// anyway, so it should be on screen before the cursor has
+		// finished moving. Everything expensive — decoding an image,
+		// parsing a PDF, running pdftoppm — happens in the background
+		// instead (see startDetailsPreview), and none of it is even
+		// attempted remotely (see startDetailsPreview's own guard).
+		if remote := r.panel.remote; remote != nil {
+			var entry fsops.Entry
+			entry, r.detailsStatErr = remote.Lstat(path)
+			if r.detailsStatErr == nil {
+				r.detailsStat = remoteInfoFromEntry(path, entry)
+			}
+		} else {
+			r.detailsStat, r.detailsStatErr = fsops.Stat(path)
+		}
 	}
 	r.renderDetailsSidebar()
 	r.startDetailsPreview(path)
+	r.startDetailsGitStatus(path)
 
 	// A new target always starts showing from its own top — not
 	// wherever the previous one happened to be scrolled to (see
@@ -718,6 +759,16 @@ func (r *Root) renderDetailsSidebar() {
 	r.detailsHashRowStart = -1
 	r.detailsDirSizeRowStart = -1
 
+	if r.showingSystemInfo() {
+		// No click zones of its own (every RowStart above is left at
+		// -1): System Info has nothing to compute on demand the way a
+		// file's hash or a directory's du -hs total does — see
+		// systeminfo.go's own doc comment on why nothing here needs a
+		// background computation at all.
+		r.detailsSidebar.SetText(r.systemInfoText())
+		return
+	}
+
 	if r.detailsTarget == "" {
 		r.detailsSidebar.SetText("(nothing selected)")
 		return
@@ -823,6 +874,18 @@ func (r *Root) renderDetailsSidebar() {
 
 	writeSection(detailsStatLines(r.detailsStat, r.detailsTarget))
 
+	// Git status (see gitstatus.go): only ever for a directory, and
+	// only once startDetailsGitStatus has actually confirmed it's part
+	// of a git working tree — nil the rest of the time (not a
+	// directory, the setting is off, no git on $PATH, outside any
+	// repository, or the background fetch hasn't landed yet), in which
+	// case this section simply doesn't exist, the same "one less
+	// segment" convention every other optional piece of this sidebar
+	// already follows.
+	if isDirish(r.detailsStat) && r.detailsGitStatus != nil {
+		writeSection(gitStatusText(*r.detailsGitStatus, r.theme))
+	}
+
 	switch {
 	case !isDirish(r.detailsStat):
 		var hashText string
@@ -889,7 +952,13 @@ func (r *Root) renderDetailsSidebar() {
 // once (Details isn't modal — see newDetailsSidebarView's own doc
 // comment — so it can stay open behind Properties).
 func (r *Root) computeDetailsHashes() {
-	if r.detailsTarget == "" || isDirish(r.detailsStat) || r.detailsHashInProgress {
+	// showingSystemInfo() first: detailsTarget/detailsStat still hold
+	// whatever the highlighted row's own path was (loadDetailsTarget
+	// never clears them for System Info, just skips stat'ing it — see
+	// its own doc comment), which would otherwise pass isDirish's zero-
+	// value check and hash a real directory here despite nothing on
+	// screen ever offering to.
+	if r.showingSystemInfo() || r.detailsTarget == "" || isDirish(r.detailsStat) || r.detailsHashInProgress {
 		return
 	}
 
@@ -1112,6 +1181,18 @@ func (r *Root) cancelDetailsPreview() {
 func (r *Root) startDetailsPreview(path string) {
 	if path == "" || r.detailsStatErr != nil || isDirish(r.detailsStat) {
 		return // nothing previewable — see loadDetailsTarget
+	}
+	if r.panel.remote != nil {
+		// Decoding an image or rasterizing a PDF both need the whole
+		// file's own bytes read locally (image.Decode/pdftoppm), which
+		// would otherwise silently try to open path on this machine —
+		// a path that only exists on the remote one. A real streamed
+		// remote read is possible (Client.Open already gives an
+		// io.ReadCloser) but downloading a potentially large image/PDF
+		// just to preview it is real, deliberately out-of-scope-for-now
+		// work, not something to do silently as a side effect of this
+		// fix.
+		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

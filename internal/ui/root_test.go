@@ -512,8 +512,11 @@ func TestRenameRowOpensRenameForGivenRow(t *testing.T) {
 }
 
 // TestRenameRowNoopsForDotDot pins that the rename gesture can't be
-// used to rename ".." — the same exclusion CurrentRowPath already
-// applies for the keyboard path ("r"/renameCurrentEntry).
+// used to rename ".." — the click-pause-click gesture's own exclusion
+// (ref.checkable, false for ".."), unlike the keyboard path
+// ("r"/renameCurrentEntry), which since Panel.CurrentRowPath's own
+// ".." fallback now renames the current directory itself instead (see
+// TestRenameCurrentEntryOnDotDotTargetsPanelDirectory).
 func TestRenameRowNoopsForDotDot(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -525,6 +528,31 @@ func TestRenameRowNoopsForDotDot(t *testing.T) {
 
 	if r.activePage != "" {
 		t.Errorf("activePage = %q, want still closed", r.activePage)
+	}
+}
+
+// TestRenameCurrentEntryOnDotDotTargetsPanelDirectory pins
+// renameCurrentEntry's own use of Panel.CurrentRowPath (see
+// TestRenameRowNoopsForDotDot's own doc comment for how this differs
+// from the click-pause-click gesture's separate renameRow, which still
+// excludes ".." via rowRef.checkable): the "r" key while the cursor
+// sits on ".." now renames the panel's own current directory instead
+// of silently doing nothing, the user's own explicit request.
+func TestRenameCurrentEntryOnDotDotTargetsPanelDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.renameCurrentEntry()
+
+	if r.activePage != renamePage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, renamePage)
+	}
+	if r.target != dir {
+		t.Errorf("target = %q, want %q (the panel's own current directory)", r.target, dir)
 	}
 }
 
@@ -745,6 +773,56 @@ func TestPromptCancelDoesNotSubmit(t *testing.T) {
 	}
 	if r.activePage != "" {
 		t.Errorf("activePage = %q, want empty after cancel", r.activePage)
+	}
+}
+
+// newTestRootInSplitView returns a Root already showing two tabs side
+// by side, laid out for real against a SimulationScreen — the only way
+// r.panel.GetInnerRect() (what clampToPanel bounds against — see
+// clampToScreen's own doc comment) ends up narrower than the whole
+// screen in a test, the same way it really does once split view is on.
+func newTestRootInSplitView(t *testing.T, width, height int) *Root {
+	t.Helper()
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(screen.Fini)
+	r.app.SetScreen(screen)
+	screen.SetSize(width, height)
+	r.SetRect(0, 0, width, height)
+
+	r.newTabHere()
+	r.splitWithTab(0)
+	r.Draw(screen)
+	return r
+}
+
+// TestOpenPromptStaysCenteredOnTheWholeScreenInSplitView pins a real,
+// reported bug: openPrompt centers itself against the whole screen
+// (r.GetRect()) but used to clamp the result down to just the active
+// panel's own, narrower width in split view — visibly shoving it
+// against one edge instead of keeping it centered.
+func TestOpenPromptStaysCenteredOnTheWholeScreenInSplitView(t *testing.T) {
+	const screenWidth, screenHeight = 100, 40
+	r := newTestRootInSplitView(t, screenWidth, screenHeight)
+
+	label := strings.Repeat("x", 40) + ":" // pushes the prompt's own natural width well past half the screen
+	wantWidth := tview.TaggedStringWidth(label) + 26
+	r.openPrompt(label, "", func(string) {})
+
+	x, _, width, _ := r.prompt.GetRect()
+	if width != wantWidth {
+		t.Fatalf("prompt width = %d, want %d — clamped down to fit inside the active pane's own width instead of staying its own full size across the whole screen", width, wantWidth)
+	}
+	wantX := (screenWidth - width) / 2
+	if x != wantX {
+		t.Errorf("prompt x = %d, want %d (centered on the whole %d-wide screen, not just the active pane's own half)", x, wantX, screenWidth)
 	}
 }
 

@@ -377,7 +377,7 @@ func TestStartPasteResolvesCopySettingsOnce(t *testing.T) {
 	// the assertions below, racing a later test's own isolatePasteIO
 	// swapping the same package-level fsCopy var out from under it.
 	done := isolatePasteIO(t)
-	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, false, t.TempDir(), false, nil, "")
+	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, false, t.TempDir(), false, nil, "", nil, nil)
 
 	job := r.pasteJob
 	if job == nil {
@@ -415,7 +415,7 @@ func TestStartPasteResolvesMoveSettingsOnce(t *testing.T) {
 	// See TestStartPasteResolvesCopySettingsOnce's own comment for why
 	// isolatePasteIO/waitPasteIO are needed here at all.
 	done := isolatePasteIO(t)
-	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, true, t.TempDir(), false, nil, "")
+	r.startPaste([]string{filepath.Join(dir, "apple.txt")}, true, t.TempDir(), false, nil, "", nil, nil)
 
 	job := r.pasteJob
 	if job == nil {
@@ -1890,7 +1890,7 @@ func TestStartPasteQueuesBehindARunningJob(t *testing.T) {
 
 	secondDestDir := t.TempDir()
 	secondItems := []string{filepath.Join(dir, "banana.txt")}
-	r.startPaste(secondItems, true, secondDestDir, false, nil, "")
+	r.startPaste(secondItems, true, secondDestDir, false, nil, "", nil, nil)
 
 	if r.pasteJob != running {
 		t.Fatal("starting a second Paste should not have touched the running job at all")

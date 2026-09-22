@@ -14,8 +14,12 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
+	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -31,6 +35,12 @@ const (
 	sedReplacePage  = "sed-replace"
 	sedPreviewPage  = "sed-preview"
 	duplicatePage   = "duplicate"
+	rsyncPage       = "rsync"
+	// The three remote-connection dialogs (see connectdialog.go,
+	// hostkeyconfirm.go, connectionmenu.go).
+	connectDialogPage  = "connect-dialog"
+	hostKeyConfirmPage = "host-key-confirm"
+	connectionMenuPage = "connection-menu"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -89,6 +99,17 @@ type Root struct {
 
 	app *tview.Application
 
+	// startDir is the directory breakthrough was actually launched
+	// with (an explicit CLI argument, or the launching shell's own
+	// working directory — see cmd/breakthrough's own startDir) —
+	// captured once here at NewRoot time, since the first Panel it
+	// built from is free to navigate away from it immediately
+	// afterward. Read by newTabStartPath as the local fallback for a
+	// new tab opened while the active panel is remote, whose own path
+	// is a remote absolute path a fresh, always-local tab has no
+	// business reusing.
+	startDir string
+
 	// mouseEnabled mirrors whatever the last app.EnableMouse call (see
 	// NewRoot/setMouseEnabled) left the Application in — tview itself has
 	// no getter for this (see Application.EnableMouse's own private
@@ -140,6 +161,14 @@ type Root struct {
 	// harmless, since nothing it repositions is open that early anyway.
 	lastScreenWidth, lastScreenHeight int
 
+	// lastOpenWithCommand is "Open with…"'s own most recently typed
+	// command (see openCurrentEntryWith) — prefilled the next time it's
+	// opened, the same "remember what you typed last" convenience
+	// openRename's own current-name prefill already gives for a
+	// different field. Empty until first used; never persisted across
+	// restarts.
+	lastOpenWithCommand string
+
 	// theme is the active color scheme, resolved once at startup (see
 	// loadInitialSettings/applyTheme) from settings.ColorScheme against
 	// colorSchemes, and again live whenever the Options overlay (see
@@ -190,6 +219,55 @@ type Root struct {
 	optionsCategory         int
 	optionsInfo             *tview.TextView
 	optionsInput            *tview.InputField
+
+	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
+	// real external networking/hardware tools, each one either run
+	// immediately (toolboxFixedEntry) or after asking for one further
+	// argument through toolboxInput, the same "small floating field over
+	// a full-screen list" shape optionsInput already establishes for
+	// Options. Every entry ends up in openToolCommand (toolwindow.go),
+	// the same draggable, non-modal window Ping already used before this
+	// screen gave it (and everything else here) a real home.
+	toolboxLayout   *tview.Flex
+	toolboxTitleBar *tview.TextView
+	toolboxHint     *tview.TextView
+	toolboxTable    *tview.Table
+	toolboxInput    *tview.InputField
+
+	// toolboxRows is the currently open screen's own row list — the
+	// whole catalog for "jj" (openToolbox), one single category for "jn"
+	// (openNetworkTools) or "jh" (openHardwareTools). One table/rendering
+	// implementation (renderToolbox et al.) driven by whichever rows this
+	// holds, rather than a separate near-identical screen per category.
+	toolboxRows []toolboxDisplayRow
+
+	// The Mounts screen (see mounts.go) — a third full-screen catalog,
+	// kept deliberately separate from the Toolbox rather than folded in
+	// as one more entry there, per the user's own explicit request:
+	// this one shows live, structured data (with a computed "would this
+	// survive a reboot" column) rather than a list of commands to run.
+	// mountsEntries/mountsErr hold the last read result, refreshed by
+	// reloadMounts (on open, and on "r").
+	mountsLayout   *tview.Flex
+	mountsTitleBar *tview.TextView
+	mountsHint     *tview.TextView
+	mountsTable    *tview.Table
+	mountsEntries  []mountEntry
+	mountsErr      error
+
+	// The Firewall screen (see firewall.go) — a fourth full-screen
+	// catalog, showing this host's own actual firewall rules (whichever
+	// single backend actually governs traffic right now; see
+	// internal/firewall). firewallSnapshot/firewallErr/firewallServices
+	// hold the last read result, refreshed by reloadFirewall (on open,
+	// and on "r").
+	firewallLayout   *tview.Flex
+	firewallTitleBar *tview.TextView
+	firewallHint     *tview.TextView
+	firewallTable    *tview.Table
+	firewallSnapshot firewall.Snapshot
+	firewallErr      error
+	firewallServices firewall.ServiceLookup
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -337,6 +415,78 @@ type Root struct {
 	sedPreviewTotal      int
 	sedPreviewCurrentPos string
 
+	// connectForm/connectButtons/connectLayout make up the "Connect"
+	// dialog (see connectdialog.go) — a fixed field set (Host/Port/
+	// User/Password), so it's built once here rather than rebuilt fresh
+	// per open the way Sed Replace's own variable field set is (see
+	// newSedForm's own doc comment on that distinction). connectStatus
+	// is the one-line area below the form showing either an in-progress
+	// "Connecting…" animation or the last attempt's own error, in
+	// place, without closing the dialog. connectCancelBtn/
+	// connectConnectBtn are a real button pair (see newConnectButtons'
+	// own doc comment for why, not a List).
+	connectForm          *tview.Form
+	connectHostField     *tview.InputField
+	connectPortField     *tview.InputField
+	connectUserField     *tview.InputField
+	connectPasswordField *tview.InputField
+	connectStatus        *tview.TextView
+	connectCancelBtn     *tview.Button
+	connectConnectBtn    *tview.Button
+	connectButtons       *tview.Flex
+	connectTitleBar      *tview.TextView
+	connectLayout        *tview.Flex
+	connectCancel        context.CancelFunc
+	connectAnimFrame     int
+
+	// hostKeyConfirmDialog/Layout is the trust-on-first-use prompt a
+	// Dial attempt can raise mid-connection (see hostkeyconfirm.go's
+	// own askHostKeyTrust) — hostKeyConfirmResponse is the single-use
+	// channel that call is currently blocked reading from, nil whenever
+	// none is (there's ever only one in flight at a time, since a
+	// second Dial can't start until runConnect's own goroutine for the
+	// first one has already returned).
+	hostKeyConfirmTitleBar *tview.TextView
+	hostKeyConfirmDialog   *tview.List
+	hostKeyConfirmLayout   *tview.Flex
+	hostKeyConfirmResponse chan bool
+
+	// connectionMenuTable/TitleBar/Layout is the dropdown the header's
+	// own "@" button (or the "gc" chord) opens — see connectionmenu.go.
+	// A Table, styled and shaped after the tab switcher (see
+	// tabswitcher.go's own doc comment): a title bar above it, one
+	// column for the label and one real, independently selectable and
+	// clickable cell per row for each of its own small actions (eject,
+	// remove), rather than markup-colored text and manual mouse-column
+	// math baked into a plain List — the same per-cell-not-per-string
+	// shape the user's own explicit request to match the tabs list's
+	// look asked for. Rebuilt fresh on every open (see
+	// renderConnectionMenu), the same "which panel is active, and what
+	// history says, can both have changed since last time" reasoning
+	// renderFilterMenu's own doc comment already gives for its dropdown.
+	connectionMenuTable    *tview.Table
+	connectionMenuTitleBar *tview.TextView
+	connectionMenuLayout   *tview.Flex
+
+	// connectionMenuHistoryRows maps a row index in connectionMenuTable
+	// to the Connection that row represents — populated fresh by
+	// renderConnectionMenu on every open, read by
+	// activateConnectionMenuCell/removeConnectionHistoryRow to know
+	// which entry a given row actually is. Never populated for "New
+	// connection…", which isn't a history row at all.
+	connectionMenuHistoryRows map[int]remotefs.Connection
+
+	// connectionMenuActiveRow is the row within connectionMenuTable
+	// (history rows only — see connectionMenuHistoryRows) that
+	// represents the active panel's own current connection, or -1 if
+	// the panel isn't connected at all — populated fresh by
+	// renderConnectionMenu alongside connectionMenuHistoryRows. There
+	// used to be a whole separate "Disconnect (...)" list item for
+	// this instead of a per-row glyph; the user asked for the glyph
+	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
+	// already established rather than a dedicated row of its own.
+	connectionMenuActiveRow int
+
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
 	// fixed field set, Multiply's own Form is genuinely strategy-driven:
@@ -422,6 +572,57 @@ type Root struct {
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
 
+	// The "Rsync" dialog (see rsync.go) — source/destination and the
+	// free-text Excludes/Extra flags fields live in rsyncForm; the five
+	// boolean toggles (Copy contents/Archive/Compress/Delete/Dry run)
+	// live in rsyncFlagsList instead, the same List-with-a-relabeling-
+	// glyph shape newSedFlagsList's own doc comment explains (a
+	// tview.Form checkbox can never keep a background different from a
+	// real text field's own). rsyncPreviewView is its own always-
+	// visible sibling row below the Form, never a Form item — the same
+	// "living outside the Form rules out a whole real bug class" reason
+	// duplicatePreviewView's own doc comment gives. rsyncButtons is a
+	// real Cancel/Run button pair, the current established shape for a
+	// dialog's own action row (see duplicateButtons' own doc comment),
+	// not Sed Replace's older vertical-List actions.
+	rsyncForm             *tview.Form
+	rsyncSourceField      *tview.InputField
+	rsyncDestinationField *tview.InputField
+	rsyncExcludesField    *tview.InputField
+	rsyncExtraArgsField   *tview.InputField
+	rsyncFlagsList        *tview.List
+	rsyncFlags            map[string]bool
+	rsyncPreviewView      *tview.TextView
+	rsyncSpacer           *tview.Box
+	rsyncCancelBtn        *tview.Button
+	rsyncRunBtn           *tview.Button
+	rsyncRunBackgroundBtn *tview.Button
+	rsyncButtons          *tview.Flex
+	rsyncTitleBar         *tview.TextView
+	rsyncContentLayout    *tview.Flex
+	rsyncLayout           *tview.Flex
+
+	// rsyncSourceDefault/rsyncDestinationDefault record exactly what
+	// defaultRsyncSource/defaultRsyncDestination prefilled
+	// rsyncSourceField/rsyncDestinationField with when the dialog was
+	// last opened — see rsyncFieldDefault's own doc comment on why:
+	// currentRsyncJob needs this to tell "field still reads exactly
+	// what a connected panel was defaulted to, so its own port travels
+	// through to the real rsync invocation too" apart from "user typed
+	// something else since, treat as plain text with no knowable port".
+	// rsyncHintView is a single always-reserved row beneath
+	// rsyncPreviewView for the one thing the preview line itself has no
+	// room for: a visible warning when both Source and Destination
+	// resolve to a remote host, since rsync -e ssh always relays
+	// through this machine rather than transferring directly
+	// server-to-server. Blank whenever that doesn't apply, rather than
+	// a conditionally-hidden row — see newRsyncContentLayout's own doc
+	// comment on why a fixed row budget is simpler than resizing the
+	// dialog live.
+	rsyncSourceDefault      rsyncFieldDefault
+	rsyncDestinationDefault rsyncFieldDefault
+	rsyncHintView           *tview.TextView
+
 	// The Batch Rename screen (see batchrename.go) — the same
 	// steps-list-on-the-left/settings-table-on-the-right shape the
 	// Options screen already establishes (batchRenameStepsList plays
@@ -436,23 +637,93 @@ type Root struct {
 	// computed (see renderBatchRenamePreview); batchRenameUndo is what
 	// confirmApplyBatchRename most recently actually applied, kept
 	// around only until undoLastBatchRename consumes it.
+	//
+	// batchRenameTargets is kept in the order the preview shows — the
+	// user can rearrange it by hand from the preview (see
+	// moveBatchRenamePreviewRow), which is what "as listed" numbering
+	// counts against. batchRenameExcluded marks targets the user has
+	// unticked in the preview: still listed, but left out of Plan (and
+	// so out of the numbering) entirely. batchRenamePresetDir is where
+	// saved presets live (see batchrename.SavePreset) — a field rather
+	// than a constant so tests can point it somewhere disposable.
 	batchRenameLayout         *tview.Flex
 	batchRenameTitleBar       *tview.TextView
 	batchRenameHint           *tview.TextView
 	batchRenameStepsList      *tview.List
 	batchRenameFieldsTable    *tview.Table
+	batchRenameFieldHelp      *tview.TextView
 	batchRenamePreviewTable   *tview.Table
 	batchRenameStatus         *tview.TextView
 	batchRenameButtons        *tview.Flex
 	batchRenameApplyBtn       *tview.Button
+	batchRenameSavePresetBtn  *tview.Button
+	batchRenameLoadPresetBtn  *tview.Button
 	batchRenameResetBtn       *tview.Button
 	batchRenameCancelBtn      *tview.Button
 	batchRenameInput          *tview.InputField
+	batchRenamePresetList     *tview.List
+	batchRenamePresetTitleBar *tview.TextView
+	batchRenamePresetLayout   *tview.Flex
+	batchRenamePresetDir      string
 	batchRenameStep           int
 	batchRenameRules          batchrename.Rules
 	batchRenameTargets        []string
+	batchRenameExcluded       map[string]bool
 	batchRenamePendingChanges []batchrename.Change
 	batchRenameUndo           []batchrename.Change
+
+	// The Compare feature (see compare.go): file-vs-file is a compact
+	// overlay (comparePage) much like Properties; directory-vs-directory
+	// is a full screen (compareTreePage), a Table plus a status line and
+	// buttons underneath — the same list-plus-status-plus-buttons shape
+	// Batch Rename's own preview already establishes. Both share one
+	// unified-diff pager overlay (compareDiffPage) for a text pair's
+	// actual line-by-line content, rather than each keeping its own.
+	//
+	// compareA/compareB are the file-vs-file overlay's own two targets;
+	// compareHashCancel/compareHashRunning back its on-demand hash
+	// computation, the same context.WithCancel + bool pair Properties'
+	// own hashCancel/hashInProgress already establish (see
+	// computeHashes) — deliberately not shared with Properties' fields
+	// themselves, since the two can legitimately be open, and hashing
+	// different targets, at the same time (Compare is not modal).
+	//
+	// compareTreeEntries is Walk's own last full result, kept so the
+	// table can be re-rendered (e.g. toggling "show identical") without
+	// re-walking the filesystem; compareTreeCancel/compareTreeRunning
+	// mirror compareHashCancel/compareHashRunning for the walk itself.
+	compareLayout      *tview.Flex
+	compareTitleBar    *tview.TextView
+	compareHeader      *tview.TextView
+	compareVerdict     *tview.TextView
+	compareButtons     *tview.Flex
+	compareHashBtn     *tview.Button
+	compareDiffBtn     *tview.Button
+	compareCloseBtn    *tview.Button
+	compareA, compareB string
+	compareHashes      map[string]string // path -> SHA-256, the one digest Compare ever needs for a verdict
+	compareHashCancel  context.CancelFunc
+	compareHashRunning bool
+	compareHashAnim    int
+
+	compareTreeLayout        *tview.Flex
+	compareTreeTitleBar      *tview.TextView
+	compareTreeHint          *tview.TextView
+	compareTreeTable         *tview.Table
+	compareTreeStatus        *tview.TextView
+	compareTreeButtons       *tview.Flex
+	compareTreeModeBtn       *tview.Button
+	compareTreeShowSameBtn   *tview.Button
+	compareTreeCloseBtn      *tview.Button
+	compareTreeA             string
+	compareTreeB             string
+	compareTreeMode          compare.Mode
+	compareTreeShowIdentical bool
+	compareTreeEntries       []compare.Entry
+	compareTreeStats         compare.Stats
+	compareTreeCancel        context.CancelFunc
+	compareTreeRunning       bool
+	compareTreeAnim          int
 
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
@@ -536,6 +807,18 @@ type Root struct {
 	detailsHashBytesRead atomic.Int64
 	detailsHashRowStart  int
 
+	// detailsGitStatus is the current target's own git status (see
+	// gitstatus.go) — nil until a background fetch actually confirms
+	// the selected directory is part of a git working tree (or while
+	// the setting is off, or the target isn't a directory at all).
+	// detailsGitCancel stops that fetch the same way detailsPreviewCancel
+	// stops an image/PDF preview load, for the identical reason: this
+	// runs on every cursor movement over a directory, not on a
+	// deliberate keypress, so a debounce and cancellation both matter
+	// (see startDetailsGitStatus).
+	detailsGitStatus *gitstatus.Status
+	detailsGitCancel context.CancelFunc
+
 	// detailsDirSize/InProgress/AnimFrame/Cancel/RowStart are the
 	// directory-size counterpart to detailsHashes/InProgress/AnimFrame/
 	// Cancel/RowStart just above — same on-demand-computation shape
@@ -582,6 +865,21 @@ type Root struct {
 	viewerPDFPage      int
 	viewerPDFPageCount int
 	viewerPDFMode      viewer.PDFViewMode
+
+	// viewerRemoteTempFile is the local temp file Look downloaded a
+	// remote PDF into (see downloadRemoteToTemp/openRemoteLook in
+	// remotestage.go), kept around only for as long as that PDF's own
+	// page turns (turnPDFPage) still need to read from it — "" whenever
+	// Look isn't currently showing a remote-staged PDF. A plain remote
+	// text/image Look never sets this at all: its whole content is
+	// already read into r.viewerView by the time showBuiltinLook
+	// returns, so its own temp file is removed immediately afterward
+	// instead of kept around for nothing (see openRemoteLook's own doc
+	// comment). Cleaned up via cleanupViewerRemoteTempFile, called both
+	// from hideOverlay (the viewer overlay actually closing) and from
+	// showBuiltinLook's own top-of-function reset (a new Look opened
+	// without closing the previous remote PDF's overlay first).
+	viewerRemoteTempFile string
 
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
@@ -896,6 +1194,16 @@ type Root struct {
 	clipboard    []string
 	clipboardCut bool
 
+	// clipboardSourceClient is nil for an ordinary local Copy/Cut, or
+	// the remote Client clipboard's own paths belong to otherwise — set
+	// alongside clipboard itself (see copyToClipboard/cutToClipboard),
+	// since every path on the clipboard always comes from the one
+	// panel that was active at that moment, never a mix of two. Read by
+	// pasteInto to decide whether a plain local paste (unchanged from
+	// before remote connections existed at all) or remotepaste.go's own
+	// transfer engine applies.
+	clipboardSourceClient remotefs.Client
+
 	// clipboardDirs/clipboardFiles tally how many of clipboard's own
 	// paths are directories vs plain files (see clipboardCounts) — for
 	// the status bar's own "Copy: N files, M dirs" indicator (see
@@ -918,6 +1226,17 @@ type Root struct {
 	// pasteJob itself only ever running one job at a time; empty
 	// whenever nothing is waiting.
 	pasteQueue []queuedPaste
+
+	// rsyncJob is the currently-running backgrounded rsync, if any (see
+	// startRsyncBackground's own doc comment in rsyncjob.go) — entirely
+	// independent of pasteJob above: the two never share state, a lock,
+	// or a queue, since a Paste and a background rsync are two separate
+	// process trees with nothing to serialize between them. nil whenever
+	// no background rsync is currently running.
+	rsyncJob *rsyncJob
+	// rsyncQueue mirrors pasteQueue for a background rsync asked for
+	// while one is already running — see advanceRsyncQueue.
+	rsyncQueue []queuedRsync
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
@@ -1088,6 +1407,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r := &Root{
 		Pages:          tview.NewPages(),
 		app:            app,
+		startDir:       path,
 		mouseEnabled:   settings.MouseEnabled,
 		panel:          panel,
 		settings:       settings,
@@ -1232,10 +1552,45 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The "Rsync" dialog (see rsync.go) — same "built once here,
+	// contents rebuilt fresh per open" shape as Multiply just above.
+	r.rsyncForm = r.newRsyncForm()
+	r.rsyncFlagsList = r.newRsyncFlagsList()
+	r.rsyncPreviewView = r.newRsyncPreviewView()
+	r.rsyncHintView = r.newRsyncHintView()
+	r.rsyncSpacer = tview.NewBox()
+	r.rsyncButtons = r.newRsyncButtons()
+	r.rsyncLayout = r.newRsyncLayout()
+
+	// The "Connect" dialog and its own host-key trust prompt (see
+	// connectdialog.go/hostkeyconfirm.go) — a fixed field set, built
+	// once here the same way Sed Replace's own form is (see
+	// newConnectForm's own doc comment).
+	r.connectForm = r.newConnectForm()
+	r.connectButtons = r.newConnectButtons()
+	r.connectLayout = r.newConnectLayout()
+	r.hostKeyConfirmDialog = r.newHostKeyConfirmDialog()
+	r.hostKeyConfirmLayout = r.newHostKeyConfirmLayout()
+
+	// The connection dropdown (see connectionmenu.go) — rebuilt fresh
+	// on every open (see renderConnectionMenu), the same as the filter
+	// menu's own dropdown.
+	r.connectionMenuTable = r.newConnectionMenuTable()
+	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
+	r.connectionMenuLayout = r.newConnectionMenuLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
 	r.newBatchRenameScreen()
+
+	// The Compare screens (see compare.go) — file-vs-file overlay and
+	// directory-vs-directory full screen, built once here the same way.
+	// A text diff (see compare.UnifiedDiff) is shown through the
+	// existing Look pager instead of a screen of its own — see
+	// openCompareDiff's own doc comment for why that's not corner-
+	// cutting but the actually simpler, more capable choice.
+	r.newCompareScreens()
 
 	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
 	// repopulated and repositioned per open, the same pattern rename/
@@ -1247,6 +1602,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// The Options overlay (see openOptions) — same "one shared,
 	// repopulated List" pattern as r.picker above.
 	r.newOptionsScreen()
+
+	// The Toolbox screen (see toolbox.go/openToolbox) — same full-screen
+	// shape as Options, built once here and repopulated on every open.
+	r.newToolboxScreen()
+
+	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
+	// catalog, same build-once/repopulate-on-open shape.
+	r.newMountsScreen()
+
+	// The Firewall screen (see firewall.go/openFirewall) — a fourth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newFirewallScreen()
 
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
@@ -1348,17 +1715,34 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
 	// just below gives.
 	r.AddPage(batchRenamePage, r.batchRenameLayout, true, false)
 	r.AddPage(batchRenameInputPage, r.batchRenameInput, false, false)
+	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
+	r.AddPage(comparePage, r.compareLayout, false, false)
+	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.
 	r.AddPage(optionsPage, r.optionsLayout, true, false)
 	r.AddPage(optionsInfoPage, r.optionsInfo, false, false)
 	r.AddPage(optionsInputPage, r.optionsInput, false, false)
+	// resize=true: the Toolbox screen deliberately fills the whole
+	// terminal too, the same reasoning the Options screen's own comment
+	// just above gives.
+	r.AddPage(toolboxPage, r.toolboxLayout, true, false)
+	r.AddPage(toolboxInputPage, r.toolboxInput, false, false)
+	// resize=true: the Mounts screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox screens' own
+	// comments above give.
+	r.AddPage(mountsPage, r.mountsLayout, true, false)
+	// resize=true: the Firewall screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts
+	// screens' own comments above give.
+	r.AddPage(firewallPage, r.firewallLayout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
@@ -1367,6 +1751,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(detailsSidebarPage, r.detailsSidebarLayout, false, false)
 	r.AddPage(tabSwitcherPage, r.tabSwitcherLayout, false, false)
 	r.AddPage(filterMenuPage, r.filterMenuLayout, false, false)
+	r.AddPage(connectDialogPage, r.connectLayout, false, false)
+	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
+	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
@@ -1450,6 +1837,13 @@ func (r *Root) wirePanel(panel *Panel) {
 	// own doc comment) — per the user's own explicit request.
 	panel.onOpenFile = r.openLook
 
+	// Entering a remote archive (see Panel.onEnterRemoteArchive's own
+	// doc comment) needs a real download first — genuinely async, with
+	// a possible confirm dialog in between — which is why this can't
+	// just be another branch inside Panel.navigate/load the way a
+	// local archive's own near-instant entry already is.
+	panel.onEnterRemoteArchive = r.enterRemoteArchive
+
 	// The header row's own "<" button expands the Details sidebar (see
 	// Panel.onExpandDetails/detailsExpandBtn's own doc comments) —
 	// showDetailsSidebar directly, not the toggle: this button only
@@ -1468,6 +1862,12 @@ func (r *Root) wirePanel(panel *Panel) {
 	// "closure captures r, not this specific panel" shape
 	// onOpenTabSwitcher above already uses.
 	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
+
+	// The header row's own "@" button opens the connection dropdown
+	// (see Panel.onOpenConnectionMenu/buildHeaderSpans' own doc
+	// comments and Root.openConnectionMenu) — same "closure captures r,
+	// not this specific panel" shape as onOpenFilterMenu just above.
+	panel.onOpenConnectionMenu = func() { r.openConnectionMenu() }
 
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
@@ -1700,6 +2100,14 @@ func (r *Root) hideOverlay() {
 	if top.page == contextMenuPage {
 		r.refreshButtonBar()
 	}
+	if top.page == viewerPage {
+		// A remote PDF's own staged temp file (see openRemoteLook) has
+		// to outlive every page turn while Look stays open — this is
+		// the one point every way of actually closing it (Escape,
+		// Enter/Tab/Backtab, a click outside, Ctrl+C) funnels through,
+		// so it's also the one point cleanup can't be missed from.
+		r.cleanupViewerRemoteTempFile()
+	}
 
 	if len(r.overlayStack) == 0 {
 		r.activePage = ""
@@ -1885,10 +2293,15 @@ func (r *Root) clampToPanel(x, y, width, height int) (int, int, int, int) {
 
 // clampToScreen is clampToPanel's own logic, bounded against the whole
 // screen (Root's own rect) instead of just the current panel's inner
-// rect — used only by the Help overlay (see helpSize), a read-only
-// reference deliberately allowed to span wider than one panel. Every
-// other overlay in this app stays within one panel — see clampToPanel's
-// own doc comment.
+// rect — every dialog genuinely meant to sit in the middle of the
+// whole terminal uses this one (Help, BatchRename, Options, the image/
+// text viewer, ...), so a wide one still reads as centered in split
+// view instead of being squeezed into (and, since it typically doesn't
+// fit, visibly shoved to one edge of) whichever pane happens to be
+// active. clampToPanel is for the opposite case: an overlay that's
+// deliberately anchored to something inside the active panel itself
+// (a right-clicked row, a dropdown under a header button, ...), where
+// following that panel around really is the point.
 func (r *Root) clampToScreen(x, y, width, height int) (int, int, int, int) {
 	_, _, sw, sh := r.GetRect()
 	if sw <= 0 || sh <= 0 {
@@ -2104,8 +2517,18 @@ func (r *Root) RequestCancel() {
 		r.hideOverlay()
 		return
 	}
-	if r.pasteJob != nil {
-		r.cancelPasteJob()
+	// Stops both a running Paste and a backgrounded rsync in the same
+	// press, if both happen to be running at once — they're two
+	// entirely independent background jobs (see rsyncjob.go's own
+	// package doc comment), so "cancel whatever's running" naturally
+	// means both, not whichever one happened to be checked first.
+	if r.pasteJob != nil || r.rsyncJob != nil {
+		if r.pasteJob != nil {
+			r.cancelPasteJob()
+		}
+		if r.rsyncJob != nil {
+			r.cancelRsyncJob()
+		}
 		r.refreshStatusBar()
 		return
 	}
@@ -2580,7 +3003,13 @@ func (r *Root) finishRename(key tcell.Key) {
 		return
 	}
 
-	newPath, err := fsops.Rename(r.target, newName)
+	var newPath string
+	var err error
+	if remote := r.panel.remote; remote != nil {
+		newPath, err = renameRemote(remote, r.target, newName)
+	} else {
+		newPath, err = fsops.Rename(r.target, newName)
+	}
 	if err != nil {
 		r.showError(err)
 		return
@@ -2608,7 +3037,12 @@ func (r *Root) openPrompt(label, prefill string, onSubmit func(text string)) {
 	}
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
-	x, y, width, clampedHeight := r.clampToPanel(x, y, width, height)
+	// clampToScreen, not clampToPanel: this prompt is centered on the
+	// whole terminal a moment above, so clamping it back down to just
+	// the active panel's own width in split view would squeeze it —
+	// visibly shoved against one edge instead of staying centered, a
+	// real, reported bug.
+	x, y, width, clampedHeight := r.clampToScreen(x, y, width, height)
 
 	r.prompt.SetRect(x, y, width, clampedHeight)
 	r.showOverlay(promptPage, r.prompt)
@@ -2674,7 +3108,7 @@ func (r *Root) clipboardTargets() []string {
 // "D"/Ctrl+Delete, "E" — see keymap.go/cmd/breakthrough), which never
 // goes through a right-click that would have set r.target at all.
 func (r *Root) selectedOrCurrentPaths() []string {
-	if paths := r.panel.SelectedPaths(); len(paths) > 0 {
+	if paths := r.panel.SelectedPathsInDisplayOrder(); len(paths) > 0 {
 		return paths
 	}
 	if _, path, ok := r.panel.CurrentRowPath(); ok {
@@ -2686,28 +3120,44 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // copyToClipboard is the context menu's "Copy": remembers the current
 // clipboard targets (see clipboardTargets) for a later Paste, which will
 // copy them, leaving these where they are.
+//
+// clipboardSourceClient records which filesystem those targets belong
+// to (nil for local) — every path on the clipboard always comes from
+// whichever one panel was active just now, never a mix of two, so a
+// single field alongside the paths themselves is enough for pasteInto
+// to later dispatch correctly regardless of which side, if either, of
+// the eventual Paste is remote.
 func (r *Root) copyToClipboard() {
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), false)
 }
 
 // cutToClipboard is "Cut": same as Copy, except the later Paste will move
 // the targets (removing them from here) instead of copying them.
 func (r *Root) cutToClipboard() {
+	r.clipboardSourceClient = r.panel.remote
 	r.setClipboard(r.clipboardTargets(), true)
 }
 
 // setClipboard is copyToClipboard/cutToClipboard's own shared body,
 // also used by finishPasteJob (pasteconflict.go) to clear the
-// clipboard once a clean Cut+Paste has fully landed — every place
-// clipboard/clipboardCut actually change goes through here, so the
-// dependent state (clipboardDirs/clipboardFiles, every open tab's own
-// row highlighting, the status bar's own indicator) can never drift
-// out of sync with them by only being updated from some of the call
-// sites.
+// clipboard once a clean Cut+Paste has fully landed (clearing also
+// resets clipboardSourceClient back to nil there, via the same call —
+// see its own call site) — every place clipboard/clipboardCut actually
+// change goes through here, so the dependent state
+// (clipboardDirs/clipboardFiles, every open tab's own row highlighting,
+// the status bar's own indicator) can never drift out of sync with
+// them by only being updated from some of the call sites.
 func (r *Root) setClipboard(paths []string, cut bool) {
+	if len(paths) == 0 {
+		// Clearing (finishPasteJob's own call): nothing left on the
+		// clipboard means no source for it either, regardless of
+		// whatever copyToClipboard/cutToClipboard last set it to.
+		r.clipboardSourceClient = nil
+	}
 	r.clipboard = paths
 	r.clipboardCut = cut
-	r.clipboardDirs, r.clipboardFiles = clipboardCounts(paths)
+	r.clipboardDirs, r.clipboardFiles = clipboardCounts(r.clipboardSourceClient, paths)
 	r.syncClipboardHighlight()
 	r.refreshStatusBar()
 }
@@ -2736,13 +3186,23 @@ func (r *Root) syncClipboardHighlight() {
 // place this app's own "no silent errors" guardrail needs to reach —
 // the paste itself, when it actually runs, is where a genuinely
 // missing source file gets reported (see pasteconflict.go).
-func clipboardCounts(paths []string) (dirs, files int) {
+func clipboardCounts(client remotefs.Client, paths []string) (dirs, files int) {
 	for _, path := range paths {
-		info, err := fsops.Stat(path)
-		if err != nil {
-			continue
+		var isDir bool
+		if client != nil {
+			entry, err := client.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = entry.IsDir
+		} else {
+			info, err := fsops.Stat(path)
+			if err != nil {
+				continue
+			}
+			isDir = isDirish(info)
 		}
-		if isDirish(info) {
+		if isDir {
 			dirs++
 		} else {
 			files++
@@ -2882,9 +3342,40 @@ func followSymlinksPasteConfirmText(count int, cut bool) (message, confirmLabel 
 // itself picks a search result's own directory instead of r.panel.path
 // while search results are showing (see its own doc comment). A thin
 // wrapper around startPaste (see pasteconflict.go for the full async,
-// conflict-resolving shape); a no-op if nothing was ever copied/cut,
-// same as before.
+// conflict-resolving shape, and pasteJob.srcClient/destClient's own doc
+// comment for how that same job type now also drives a remote-involving
+// paste through the exact same conflict dialog/queue an ordinary local
+// one always has); a no-op if nothing was ever copied/cut, same as
+// before.
 func (r *Root) pasteInto(dir string, followSymlinks bool) {
+	if r.clipboardSourceClient != nil || r.panel.remote != nil {
+		// A marked member inside a remote-staged archive still on
+		// screen somewhere (see remoteArchiveExtractionFor's own doc
+		// comment) still goes through its own dedicated extraction path,
+		// never startPaste: its clipboard path is a purely virtual
+		// "archive/member" string our own UI constructs, not a real path
+		// a Client.Open call could ever resolve. Cut has nothing to
+		// remove afterward, same as archiveExtractionFor's own identical
+		// local-archive refusal.
+		if archiveLocalPath, members, ok := r.remoteArchiveExtractionFor(r.clipboard); ok {
+			if r.clipboardCut {
+				r.showError(fmt.Errorf("cut isn't supported for items inside an archive — use Copy instead"))
+				return
+			}
+			if r.panel.remote == nil {
+				r.extractClipboardArchive(archiveLocalPath, members, dir)
+				return
+			}
+			r.startRemoteArchiveExtraction(archiveLocalPath, members, r.panel.remote, dir)
+			return
+		}
+		if followSymlinks {
+			r.showError(fmt.Errorf("pasting while following symlinks isn't supported yet for a remote connection — use plain Paste instead"))
+			return
+		}
+		r.startPaste(r.clipboard, r.clipboardCut, dir, false, nil, "", r.clipboardSourceClient, r.panel.remote)
+		return
+	}
 	if archivePath, members, ok := archiveExtractionFor(r.clipboard); ok {
 		// Cut has nothing to remove afterward — there's no writing back
 		// into a read-only archive to make the "move" half of it real —
@@ -2898,7 +3389,7 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 		r.extractClipboardArchive(archivePath, members, dir)
 		return
 	}
-	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "")
+	r.startPaste(r.clipboard, r.clipboardCut, dir, followSymlinks, nil, "", nil, nil)
 }
 
 // openChown is the context menu's "chown": opens a scrollable picker
@@ -2925,6 +3416,10 @@ func (r *Root) pasteInto(dir string, followSymlinks bool) {
 func (r *Root) openChown() {
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
+		return
+	}
+	if r.panel.isRemote() {
+		r.showError(errNotSupportedRemote)
 		return
 	}
 	r.hideOverlay()

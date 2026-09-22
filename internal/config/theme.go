@@ -314,7 +314,7 @@ func DefaultTheme() Theme {
 		BorderColor:        "#537070",
 
 		EntryNormal:     "white",
-		EntryExecutable: "green",
+		EntryExecutable: "#008000", // an explicit RGB rather than the terminal palette's own index-2 green, which many emulators render bright enough to glare against the dark panel
 		EntryError:      "red",
 		EntrySymlink:    "aqua",
 		EntrySpecial:    "orange",
