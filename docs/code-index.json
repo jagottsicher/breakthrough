@@ -412,6 +412,16 @@
       "sha256": "049121101c55f0d3915cfc2bac8eb20f3f8a0c80616701b41c5e25e4942787ad"
     },
     {
+      "path": "internal/firewall/addrule.go",
+      "size": 3569,
+      "sha256": "fdfe8617f5313675089d1513a94e66c375cbf89b0cd9f305bf2d8915a3c7b35a"
+    },
+    {
+      "path": "internal/firewall/addrule_test.go",
+      "size": 3077,
+      "sha256": "1baa59940df2fb7b428210afb24dadd2f35e7d99fadda13fe5459e28b9e19439"
+    },
+    {
       "path": "internal/firewall/detect.go",
       "size": 3169,
       "sha256": "869d4d19fb25a286c4fc501163170404cecb24b779db5dd5f24635a1ef4ec0ba"
@@ -428,23 +438,23 @@
     },
     {
       "path": "internal/firewall/iptables.go",
-      "size": 4119,
-      "sha256": "ef6f47055116dd8ef4613e7835f589cf5b1a85b21b8ce9af39c989970bcd8c8a"
+      "size": 7302,
+      "sha256": "0aeaa7fc0d6bebc998c3e6f5650c08481c9074836c02e424909d882ba36250e4"
     },
     {
       "path": "internal/firewall/iptables_test.go",
-      "size": 3473,
-      "sha256": "24bd35f22743eccb629a1046b33a71748e016e2e41a57ad8f47dadc92ec26fa3"
+      "size": 6751,
+      "sha256": "6f9e202bda9cf95d3c947bbc44d59adfd515cb28246b3bb0986a41243aa5fbeb"
     },
     {
       "path": "internal/firewall/nft.go",
-      "size": 8931,
-      "sha256": "33a3362c5c19f2e03062f1b3eaf337af1bad6723a564a6014e027d6c0261a6c2"
+      "size": 9836,
+      "sha256": "47b30e52a6d9ebf7029e755e8833fc625c0e3ed9ca5580110d61bf1ca2c66bda"
     },
     {
       "path": "internal/firewall/nft_test.go",
-      "size": 5520,
-      "sha256": "ccd086e9968f2a69acf8a816f975164bf9a8d77f04b76b8e5d6e7221964068c5"
+      "size": 6159,
+      "sha256": "6f0e35e4cf94f68df55ea59f64a17ef1cf40defcf8ea5e150af2ef07d456d3bb"
     },
     {
       "path": "internal/firewall/overlap.go",
@@ -488,13 +498,13 @@
     },
     {
       "path": "internal/firewall/ufw.go",
-      "size": 5982,
-      "sha256": "602610e125521547fe01d53b61c384b2634abd181daf95194d16cd80c8047116"
+      "size": 8510,
+      "sha256": "c23eddc86020714945badfe482f37e6bf6cbab75a690d7e589d97df694df0989"
     },
     {
       "path": "internal/firewall/ufw_test.go",
-      "size": 3987,
-      "sha256": "d0eb7a2b020518ebb4e867b8a963c637800d6e39423dcc9bd0ab783b4ce24a17"
+      "size": 7199,
+      "sha256": "4c3bbf71398aaba99f973596794ac64d763e395003e186939e348ba2c738c0b4"
     },
     {
       "path": "internal/fsops/chain.go",
@@ -1833,6 +1843,8 @@
       "directory": "internal/firewall",
       "name": "firewall",
       "files": [
+        "internal/firewall/addrule.go",
+        "internal/firewall/addrule_test.go",
         "internal/firewall/detect.go",
         "internal/firewall/detect_test.go",
         "internal/firewall/doc.go",
@@ -5555,6 +5567,121 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule.go",
+      "name": "NewRuleSpec",
+      "kind": "type",
+      "line": 14
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule.go",
+      "name": "HasAnyPort",
+      "kind": "method",
+      "receiver": "NewRuleSpec",
+      "line": 27
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule.go",
+      "name": "Validate",
+      "kind": "method",
+      "receiver": "NewRuleSpec",
+      "line": 37
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule.go",
+      "name": "isSSHRelevant",
+      "kind": "method",
+      "receiver": "NewRuleSpec",
+      "line": 63
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule.go",
+      "name": "portRangeArg",
+      "kind": "function",
+      "line": 77
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecValidateAcceptsAnyPort",
+      "kind": "function",
+      "line": 5
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecValidateAcceptsASinglePort",
+      "kind": "function",
+      "line": 12
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecValidateAcceptsARealRange",
+      "kind": "function",
+      "line": 19
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecValidateRefusesAnInvertedRange",
+      "kind": "function",
+      "line": 26
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecValidateRefusesAHalfSetPort",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecIsSSHRelevantMatchesPort22",
+      "kind": "function",
+      "line": 44
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecIsSSHRelevantMatchesARangeIncluding22",
+      "kind": "function",
+      "line": 51
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecIsSSHRelevantMatchesAnyPort",
+      "kind": "function",
+      "line": 58
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecIsSSHRelevantIgnoresAnUnrelatedPort",
+      "kind": "function",
+      "line": 65
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestNewRuleSpecIsSSHRelevantIgnoresUDP",
+      "kind": "function",
+      "line": 72
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/addrule_test.go",
+      "name": "TestPortRangeArgUsesTheGivenSeparatorOnlyForARealRange",
+      "kind": "function",
+      "line": 81
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/detect.go",
       "name": "runUFWStatus",
       "kind": "var",
@@ -5674,24 +5801,101 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "iptablesActionTarget",
+      "kind": "function",
+      "line": 151
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "iptablesChain",
+      "kind": "function",
+      "line": 162
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "iptablesInterfaceFlag",
+      "kind": "function",
+      "line": 169
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "iptablesRuleCommand",
+      "kind": "function",
+      "line": 190
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "IPTablesAddRuleCommand",
+      "kind": "function",
+      "line": 221
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables.go",
+      "name": "IPTablesDeleteRuleCommand",
+      "kind": "function",
+      "line": 230
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/iptables_test.go",
       "name": "realIPTablesSave",
       "kind": "const",
-      "line": 9
+      "line": 12
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/iptables_test.go",
       "name": "TestParseIPTablesSave",
       "kind": "function",
-      "line": 27
+      "line": 30
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/iptables_test.go",
       "name": "TestParseIPTablesPortSpec",
       "kind": "function",
-      "line": 84
+      "line": 87
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables_test.go",
+      "name": "TestIPTablesAddRuleCommandBuildsTheRealInvocation",
+      "kind": "function",
+      "line": 113
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables_test.go",
+      "name": "TestIPTablesAddRuleCommandUsesOutInterfaceFlagForOutgoing",
+      "kind": "function",
+      "line": 133
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables_test.go",
+      "name": "TestIPTablesAddRuleCommandRendersAPortRangeWithAColon",
+      "kind": "function",
+      "line": 147
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables_test.go",
+      "name": "TestIPTablesAddRuleCommandRefusesAPortWithNoProtocol",
+      "kind": "function",
+      "line": 163
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/iptables_test.go",
+      "name": "TestIPTablesDeleteRuleCommandUsesTheDeleteFlag",
+      "kind": "function",
+      "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
@@ -5807,31 +6011,45 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/nft.go",
+      "name": "NFTAddRuleCommand",
+      "kind": "function",
+      "line": 308
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/nft_test.go",
       "name": "realNFTRuleset",
       "kind": "const",
-      "line": 11
+      "line": 14
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/nft_test.go",
       "name": "TestParseNFTRuleset",
       "kind": "function",
-      "line": 50
+      "line": 53
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/nft_test.go",
       "name": "TestParseNFTRulesetEmptyRuleset",
       "kind": "function",
-      "line": 120
+      "line": 123
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/nft_test.go",
       "name": "TestParseNFTRulesetInvalidJSON",
       "kind": "function",
-      "line": 130
+      "line": 133
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/nft_test.go",
+      "name": "TestNFTAddRuleCommandRefusesRatherThanGuess",
+      "kind": "function",
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
@@ -6249,45 +6467,101 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw.go",
+      "name": "ufwActionWord",
+      "kind": "function",
+      "line": 192
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw.go",
+      "name": "UFWAddRuleCommand",
+      "kind": "function",
+      "line": 213
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw.go",
+      "name": "UFWDeleteRuleCommand",
+      "kind": "function",
+      "line": 254
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "TestUFWActive",
       "kind": "function",
-      "line": 5
+      "line": 8
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "realUFWStatusVerbose",
       "kind": "const",
-      "line": 22
+      "line": 25
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "TestParseUFWStatusVerbose",
       "kind": "function",
-      "line": 37
+      "line": 40
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "TestParseUFWStatusVerboseInactiveHasNoRules",
       "kind": "function",
-      "line": 95
+      "line": 98
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "TestParsePortList",
       "kind": "function",
-      "line": 105
+      "line": 108
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/firewall",
       "file": "internal/firewall/ufw_test.go",
       "name": "intSliceEqual",
       "kind": "function",
-      "line": 126
+      "line": 129
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw_test.go",
+      "name": "TestUFWAddRuleCommandBuildsTheRealInvocation",
+      "kind": "function",
+      "line": 146
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw_test.go",
+      "name": "TestUFWAddRuleCommandDefaultsEverythingUnsetToAny",
+      "kind": "function",
+      "line": 165
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw_test.go",
+      "name": "TestUFWAddRuleCommandRendersAPortRangeWithADash",
+      "kind": "function",
+      "line": 180
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw_test.go",
+      "name": "TestUFWAddRuleCommandRefusesAnInvalidPortRange",
+      "kind": "function",
+      "line": 194
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/firewall",
+      "file": "internal/firewall/ufw_test.go",
+      "name": "TestUFWDeleteRuleCommandInsertsDeleteRightAfterUFW",
+      "kind": "function",
+      "line": 207
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/fsops",
@@ -18233,14 +18507,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -32463,5 +32737,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "de733ec2a24710882255c535b0b78bc1376f257218f6127319741f27bc80ad52"
+  "merkle_root": "1bd940b6542e89ecaa814a86c9f6c3f0a5ddfbabab0e05a1fe74bfe3ec6d8125"
 }
