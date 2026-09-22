@@ -70,6 +70,15 @@ type compressJob struct {
 	// "" for Compress, and for a plain Extract with no delete requested.
 	deleteOriginal string
 
+	// onSuccess, once set, runs on the main goroutine right after a
+	// successful finish (after destDir's own reload and deleteOriginal,
+	// if any) — how a local compress/extract stage chains into a
+	// following upload stage once a remote destination is involved (see
+	// runCompressToRemote/extractCurrentArchiveToRemote in compress.go),
+	// each still its own separate compressJob/status-bar entry rather
+	// than one job silently doing two unrelated things.
+	onSuccess func(r *Root)
+
 	// animFrame advances once per animateCompressProgress tick — see
 	// pasteJob.animFrame's own doc comment for why this is a plain int
 	// rather than an atomic: only ever touched from inside an
@@ -83,12 +92,24 @@ type compressJob struct {
 // r.compressQueue while a further request waits behind an already-
 // running job (see queuedRsync's own identical dual role in rsyncjob.go).
 type compressRequest struct {
-	command        string
+	// command is the real shell command line to run for a subprocess-
+	// backed stage (the actual zip/tar/... invocation) — exactly one of
+	// command/goFunc is ever set. goFunc instead runs a plain Go
+	// function on this job's own background goroutine, no subprocess at
+	// all: how a download-from-remote or upload-to-remote stage (see
+	// runCompressToRemote/extractCurrentArchiveToRemote) shares this
+	// same job/status-bar/queue machinery despite having nothing to
+	// exec — copyTransferItem is already a plain Go call, not a real
+	// external tool, unlike every other stage this file drives.
+	command string
+	goFunc  func(ctx context.Context) error
+
 	errContext     string
 	verb           string
 	label          string
 	destDir        string
 	deleteOriginal string // "" unless this is an Extract with "delete original" requested
+	onSuccess      func(r *Root)
 }
 
 // startCompressJob is runCompress/extractCurrentArchive's own shared
@@ -107,14 +128,25 @@ func (r *Root) startCompressJob(req compressRequest) {
 // reallyStartCompressJob is startCompressJob's own "actually begin"
 // body — split out the same way reallyStartRsyncBackground is, so
 // advanceCompressQueue can start the next queued run through exactly
-// the same path.
+// the same path. Dispatches to reallyStartCompressGoFunc for a
+// goFunc-backed request (see compressRequest's own doc comment) — the
+// two share every field below goFunc/command themselves, only how the
+// actual work runs differs.
 func (r *Root) reallyStartCompressJob(req compressRequest) {
+	if req.goFunc != nil {
+		r.reallyStartCompressGoFunc(req)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, userShell(), fullScreenShellArgs(req.command)...)
-	// Only ever a real local directory — Compress/Extract have no
-	// remote path yet either way (see openCompress/extractCurrentArchive's
-	// own remote guard), but this mirrors runShellCommandFullScreen's
-	// own local-only cmd.Dir regardless.
+	// Only ever a real local directory: a subprocess-backed stage is
+	// always the actual zip/tar/... invocation, which only ever runs
+	// against locally-staged files even once either endpoint is remote
+	// (see runCompressToRemote/extractCurrentArchiveToRemote's own doc
+	// comments in compress.go for the download-stage/upload-stage split
+	// that makes that true) — this mirrors runShellCommandFullScreen's
+	// own identical, unconditional cmd.Dir.
 	if r.panel.remote == nil {
 		cmd.Dir = r.panel.path
 	}
@@ -131,6 +163,7 @@ func (r *Root) reallyStartCompressJob(req compressRequest) {
 		ctx: ctx, cancel: cancel, cmd: cmd,
 		startedAt: time.Now(), verb: req.verb, label: req.label,
 		errContext: req.errContext, destDir: req.destDir, deleteOriginal: req.deleteOriginal,
+		onSuccess: req.onSuccess,
 	}
 	r.compressJob = job
 
@@ -146,6 +179,46 @@ func (r *Root) reallyStartCompressJob(req compressRequest) {
 		var finishErr error
 		if waitErr != nil {
 			finishErr = fmt.Errorf("%s: %w%s", job.errContext, waitErr, stderrTail(output.String()))
+		}
+		r.app.QueueUpdateDraw(func() { r.finishCompressJob(job, finishErr) })
+	})
+	r.safeGo(req.errContext+" animation", func() { r.finishCompressJob(job, nil) }, func() {
+		r.animateCompressProgress(job)
+	})
+
+	r.refreshStatusBar()
+}
+
+// reallyStartCompressGoFunc is reallyStartCompressJob's own sibling
+// for a goFunc-backed request (see compressRequest's own doc comment)
+// — the same job/status-bar/queue shape, minus the subprocess: no cmd,
+// no output buffer, no stderrTail, just req.goFunc run on this job's
+// own background goroutine. Used for a download-from-remote or
+// upload-to-remote stage (see runCompressToRemote/
+// extractCurrentArchiveToRemote in compress.go), each a plain
+// copyTransferItem call, not a real external tool to exec.
+//
+// Not independently cancellable mid-transfer: copyTransferItem takes
+// no context of its own to check, the same accepted limitation
+// remotepaste.go's own transfer engine already has for the identical
+// reason (see its own package doc comment) — cancelling job.ctx here
+// only stops this stage from being *waited on* further, not a transfer
+// already under way inside req.goFunc itself.
+func (r *Root) reallyStartCompressGoFunc(req compressRequest) {
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &compressJob{
+		ctx: ctx, cancel: cancel,
+		startedAt: time.Now(), verb: req.verb, label: req.label,
+		errContext: req.errContext, destDir: req.destDir, deleteOriginal: req.deleteOriginal,
+		onSuccess: req.onSuccess,
+	}
+	r.compressJob = job
+
+	r.safeGo(req.errContext+" job", func() { r.finishCompressJob(job, nil) }, func() {
+		err := req.goFunc(ctx)
+		var finishErr error
+		if err != nil {
+			finishErr = fmt.Errorf("%s: %w", job.errContext, err)
 		}
 		r.app.QueueUpdateDraw(func() { r.finishCompressJob(job, finishErr) })
 	})
@@ -184,6 +257,9 @@ func (r *Root) finishCompressJob(job *compressJob, err error) {
 		})
 		if job.deleteOriginal != "" {
 			r.deleteExtractedArchive(job.deleteOriginal)
+		}
+		if job.onSuccess != nil {
+			job.onSuccess(r)
 		}
 	}
 	r.refreshStatusBar()

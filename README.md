@@ -501,17 +501,23 @@ terminal.
   real external tool (zip, tar, gzip, bzip2, xz, or zstd) in both
   directions, never a reimplementation. Compress archives the current
   selection — a file, several files, or a whole directory — into a new
-  file right beside it; pick a Format, type an Output name, a live
-  Preview line shows exactly what will be created. Extract unpacks the
-  archive under the cursor in one step, without first entering it —
-  into its own directory, or, once a split is active, straight into
-  the other pane's own current directory instead, the same default
-  Rsync/Compare already use. `jE` additionally moves the original
-  archive to the Trash once extraction has actually succeeded — asking
-  first, and naming the fallback plainly as a real permanent delete, if
-  that ever fails outright. Both run in the background, the same as
-  Copy/Cut/Paste — no terminal takes over the screen, and the affected
-  directory reloads on its own once the archive tool is actually done.
+  file right beside it, or, once a split is active, straight into the
+  other pane's own directory instead; pick a Format, type an Output
+  name, a live Preview line shows exactly what will be created. Extract
+  unpacks the archive under the cursor in one step, without first
+  entering it — into its own directory, or, once a split is active,
+  the other pane's own current directory, the same default
+  Rsync/Compare already use. Either direction's own "other pane" may be
+  a remote SFTP connection too: the real archive tool still only ever
+  runs locally, but the result is compressed/extracted into a local
+  staging copy first and then uploaded, transparently, with its own
+  "Uploading" status while that happens. `jE` additionally moves the
+  original archive to the Trash once extraction has actually succeeded
+  — asking first, and naming the fallback plainly as a real permanent
+  delete, if that ever fails outright. All of this runs in the
+  background, the same as Copy/Cut/Paste — no terminal takes over the
+  screen, and the affected directory reloads on its own once it's
+  actually done.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
