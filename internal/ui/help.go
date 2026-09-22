@@ -586,6 +586,13 @@ var helpText = strings.TrimLeft(`
   this machine over two separate ssh connections, never directly
   between the two remote hosts.
 
+  "Pick source tab…"/"Pick destination tab…" open a list of every
+  currently open tab (local or already connected via the Connect
+  dialog) as an alternative to typing or trusting the one-shot default
+  above — picking one fills the field exactly the way opening Rsync
+  fresh from that tab would have, connection and all, so a remote
+  tab's own Host/User/port still travel through to the real invocation.
+
   The toggle "Copy the folder's contents in (not the folder itself)"
   turns rsync's own classic, easy-to-get-wrong trailing-slash-on-
   source ambiguity into one explicit, named choice instead of a typo

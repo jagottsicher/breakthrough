@@ -682,3 +682,99 @@ func TestToggleRsyncFlagCopyContentsFileSubstitutionKeepsThePortForARemoteFileSo
 		t.Errorf("Source.Path = %q, want the file's own parent directory %q", job.Source.Path, "/remote")
 	}
 }
+
+// TestRsyncTabPickerLabelNumbersAndShowsTheEndpointText pins
+// rsyncTabPickerLabel's own shape: 1-based, matching
+// tabSwitcherRowLabel's own numbering, and the exact endpoint text
+// passed in — untouched for anything short enough not to need
+// shortenPathLeft's own truncation.
+func TestRsyncTabPickerLabelNumbersAndShowsTheEndpointText(t *testing.T) {
+	if got, want := rsyncTabPickerLabel(0, "/home/jens"), " 1  /home/jens"; got != want {
+		t.Errorf("rsyncTabPickerLabel(0, ...) = %q, want %q", got, want)
+	}
+	if got, want := rsyncTabPickerLabel(9, "tester@example.com:/remote"), "10  tester@example.com:/remote"; got != want {
+		t.Errorf("rsyncTabPickerLabel(9, ...) = %q, want %q", got, want)
+	}
+}
+
+// TestOpenRsyncTabPickerListsEveryOpenTab pins the picker's own basic
+// contract: one row per open tab, opened as its own overlay layered
+// over the Rsync dialog.
+func TestOpenRsyncTabPickerListsEveryOpenTab(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	r.openRsync()
+
+	r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault)
+
+	if r.activePage != pickerPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, pickerPage)
+	}
+	if got, want := r.picker.GetItemCount(), len(r.tabs); got != want {
+		t.Errorf("picker item count = %d, want one per open tab (%d)", got, want)
+	}
+}
+
+// TestOpenRsyncTabPickerPickingATabFillsTheFieldAndItsOwnDefault pins
+// the actual point of this feature: choosing a tab writes exactly what
+// opening Rsync fresh from that tab would have defaulted to (see
+// rsyncFieldDefaultFor), and updates the tracked default too, not just
+// the field's own visible text — currentRsyncJob reads the former, not
+// the latter, for anything beyond a plain local path.
+func TestOpenRsyncTabPickerPickingATabFillsTheFieldAndItsOwnDefault(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	otherDir := t.TempDir()
+	r.newTabHere()
+	if err := r.panel.load(otherDir); err != nil {
+		t.Fatal(err)
+	}
+	r.openRsync()
+	if r.rsyncSourceField.GetText() != otherDir {
+		t.Fatalf("setup: Source field = %q, want the active tab's own path %q", r.rsyncSourceField.GetText(), otherDir)
+	}
+
+	r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault)
+	r.picker.SetCurrentItem(0) // tab 0 — the original tab, showing dir
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if r.activePage != rsyncPage {
+		t.Errorf("activePage = %q, want back to %q once a tab is picked", r.activePage, rsyncPage)
+	}
+	if r.rsyncSourceField.GetText() != dir {
+		t.Errorf("Source field = %q, want the picked tab's own path %q", r.rsyncSourceField.GetText(), dir)
+	}
+	if r.rsyncSourceDefault.text != dir {
+		t.Errorf("rsyncSourceDefault.text = %q, want %q", r.rsyncSourceDefault.text, dir)
+	}
+}
+
+// TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection pins the
+// same "no need to type Host/User a second time" guarantee
+// defaultRsyncSource already gives an opening dialog, extended to a
+// tab picked afterward instead: currentRsyncJob's own Source ends up
+// with the picked tab's real Host/User, not just a "user@host:path"
+// string with no connection behind it.
+func TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{Host: "example.com", User: "tester"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0) // back to the original, local tab
+	r.openRsync()
+
+	r.openRsyncTabPicker(r.rsyncDestinationField, &r.rsyncDestinationDefault)
+	r.picker.SetCurrentItem(1) // tab 1 — the remote one
+	r.picker.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if want := "tester@example.com:/remote"; r.rsyncDestinationField.GetText() != want {
+		t.Fatalf("Destination field = %q, want %q", r.rsyncDestinationField.GetText(), want)
+	}
+	job := r.currentRsyncJob()
+	if job.Destination.Host != "example.com" || job.Destination.User != "tester" {
+		t.Errorf("Destination = %+v, want Host=example.com User=tester tracked from the picked tab's own connection", job.Destination)
+	}
+}

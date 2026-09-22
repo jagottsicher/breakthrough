@@ -817,6 +817,15 @@ hand — never reimplements any of rsync's own transfer logic, the same
   transfer mode of its own, so every byte still relays through this
   machine over two separate ssh connections, never directly between the
   two remote hosts, which can matter a lot over a slow local link.
+- **Pick source tab…**/**Pick destination tab…** open a list of every
+  currently open tab as an alternative to typing a path (or trusting
+  the one-shot default above) by hand — the same "choose from what's
+  already open" idea the tab switcher (`t`) already offers, applied
+  here to Source/Destination specifically. Picking one fills the field
+  exactly as if the dialog had been opened fresh from that tab: a
+  remote tab's own connection (Host/User/port) travels through to the
+  real invocation the same way the field's own one-shot default already
+  does, not just its visible `user@host:path` text.
 - **Copy the folder's contents in (not the folder itself)** is the one
   choice this dialog makes explicit rather than implicit: real `rsync`
   decides this from whether the *source* path ends in a trailing

@@ -626,6 +626,19 @@ type Root struct {
 	rsyncContentLayout    *tview.Flex
 	rsyncLayout           *tview.Flex
 
+	// rsyncPickSourceBtn/rsyncPickDestinationBtn open the tab picker
+	// (see openRsyncTabPicker) for Source/Destination respectively —
+	// their own row, rsyncPickButtons, sits right above the Cancel/Run/
+	// Run in background row. A button, not a new keybinding: this
+	// project's own keymap rules leave no room for a further Ctrl
+	// combination or function key, and a button reaches every existing
+	// "quick, discoverable, keyboard *and* mouse" bar this app's
+	// dialogs already clear via Tab-focus + Enter/Space, the same as
+	// Cancel/Run themselves.
+	rsyncPickSourceBtn      *tview.Button
+	rsyncPickDestinationBtn *tview.Button
+	rsyncPickButtons        *tview.Flex
+
 	// rsyncSourceDefault/rsyncDestinationDefault record exactly what
 	// defaultRsyncSource/defaultRsyncDestination prefilled
 	// rsyncSourceField/rsyncDestinationField with when the dialog was
@@ -1602,6 +1615,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rsyncPreviewView = r.newRsyncPreviewView()
 	r.rsyncHintView = r.newRsyncHintView()
 	r.rsyncSpacer = tview.NewBox()
+	r.rsyncPickButtons = r.newRsyncPickButtons()
 	r.rsyncButtons = r.newRsyncButtons()
 	r.rsyncLayout = r.newRsyncLayout()
 
@@ -1635,9 +1649,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// cutting but the actually simpler, more capable choice.
 	r.newCompareScreens()
 
-	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
-	// repopulated and repositioned per open, the same pattern rename/
-	// prompt/propertiesEditField already use.
+	// The generic picker (see openOwnerGroupPicker and, unrelated,
+	// openRsyncTabPicker) — one shared List, repopulated and
+	// repositioned per open, the same pattern rename/prompt/
+	// propertiesEditField already use. The two callers are never open
+	// at the same time, so neither has to know about the other's own
+	// state.
 	r.picker = tview.NewList().ShowSecondaryText(false)
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)

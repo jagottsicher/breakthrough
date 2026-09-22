@@ -59,8 +59,8 @@ func (r *Root) openRsync() {
 	r.resetRsyncForm()
 
 	// height is rsyncTitleBar's own row (1) plus newRsyncContentLayout's
-	// own stacked rows (9 + 5 + 2 + 1 + 1 + 1 = 19), checked against a
-	// real render (see this dialog's own live-tmux verification): a
+	// own stacked rows (9 + 5 + 2 + 1 + 1 + 1 + 1 = 20), checked against
+	// a real render (see this dialog's own live-tmux verification): a
 	// shorter value silently clips the bottom rows, the same lesson
 	// every other dialog in this app's own history already recorded
 	// once, but a taller one leaves genuinely blank rows of its own
@@ -68,7 +68,7 @@ func (r *Root) openRsync() {
 	// Flex containers paint a background across space no child actually
 	// occupies, so those leftover rows show whatever the panel
 	// underneath last drew there rather than empty space.
-	width, height := 86, 20
+	width, height := 86, 21
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
 	if width > screenWidth-4 {
 		width = screenWidth - 4
@@ -132,6 +132,63 @@ func (r *Root) defaultRsyncDestination() rsyncFieldDefault {
 	}
 	partner := r.tabs[idx]
 	return rsyncFieldDefaultFor(partner, partner.path, false)
+}
+
+// openRsyncTabPicker lists every open tab (see r.tabs) as a candidate
+// Source/Destination for the Rsync dialog open behind it — the user's
+// own explicit request for a real Tab-/Pane-Auswahl rather than typing
+// (or trusting a one-shot default) by hand every time. Layers over the
+// Rsync dialog the same way openOwnerGroupPicker already reuses r.picker
+// for the unrelated owner/group case (see its own doc comment on the
+// Root struct) — the two are never open at the same time, so nothing
+// here has to coexist with that one's own state.
+//
+// Picking a tab writes exactly what defaultRsyncSource/
+// defaultRsyncDestination would have defaulted field to had the dialog
+// been opened from that tab in the first place (see rsyncFieldDefaultFor
+// and *def, updated alongside field itself) — a remote tab's own
+// connection (Host/Port/User) travels through to the real rsync
+// invocation the same way a freshly-opened dialog's own default already
+// does, not just its visible path text.
+func (r *Root) openRsyncTabPicker(field *tview.InputField, def *rsyncFieldDefault) {
+	if len(r.tabs) == 0 {
+		return
+	}
+
+	r.picker.Clear()
+	for i, tab := range r.tabs {
+		picked := rsyncFieldDefaultFor(tab, tab.path, false)
+		r.picker.AddItem(rsyncTabPickerLabel(i, picked.text), "", 0, func() {
+			r.hideOverlay()
+			*def = picked
+			field.SetText(picked.text)
+			r.renderRsyncPreview()
+		})
+	}
+	r.picker.SetDoneFunc(func() { r.hideOverlay() })
+
+	width, _ := listSize(r.picker)
+	height := pickerHeight
+	if len(r.tabs) < height {
+		height = len(r.tabs)
+	}
+	x, y := r.centeredOnScreen(width, height)
+	x, y, width, height = r.clampToPanel(x, y, width, height)
+	r.picker.SetRect(x, y, width, height)
+	r.picker.SetCurrentItem(0)
+
+	r.pushOverlay(pickerPage, r.picker, nil)
+}
+
+// rsyncTabPickerLabel renders one row of openRsyncTabPicker — numbered
+// the same way the tab switcher's own rows already are (see
+// tabSwitcherRowLabel), but showing text exactly as it would land in
+// the Rsync field it's for (a remote tab's own "user@host:path", not
+// just its bare local-looking path — see rsyncFieldDefaultFor) rather
+// than reusing that function directly, which only ever shows the bare
+// path.
+func rsyncTabPickerLabel(i int, text string) string {
+	return fmt.Sprintf("%2d  %s", i+1, shortenPathLeft(text, tabSwitcherMaxPathWidth))
 }
 
 // rsyncFieldDefault records exactly what defaultRsyncSource/
@@ -410,7 +467,7 @@ func (r *Root) newRsyncFlagsList() *tview.List {
 	l.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			r.app.SetFocus(r.rsyncCancelBtn)
+			r.app.SetFocus(r.rsyncPickSourceBtn)
 			return nil
 		case tcell.KeyBacktab:
 			r.app.SetFocus(r.rsyncExtraArgsField)
@@ -438,6 +495,49 @@ func (r *Root) newRsyncHintView() *tview.TextView {
 	return v
 }
 
+// newRsyncPickButtons builds rsyncPickSourceBtn/rsyncPickDestinationBtn
+// once, from NewRoot — each opens openRsyncTabPicker for its own field.
+// A real button pair, not a new keybinding: see the Root struct's own
+// doc comment on rsyncPickSourceBtn for why.
+func (r *Root) newRsyncPickButtons() *tview.Flex {
+	pickSource := func() { r.openRsyncTabPicker(r.rsyncSourceField, &r.rsyncSourceDefault) }
+	pickDestination := func() { r.openRsyncTabPicker(r.rsyncDestinationField, &r.rsyncDestinationDefault) }
+
+	r.rsyncPickSourceBtn = tview.NewButton("Pick source tab…").SetSelectedFunc(pickSource)
+	r.rsyncPickDestinationBtn = tview.NewButton("Pick destination tab…").SetSelectedFunc(pickDestination)
+	r.rsyncPickSourceBtn.SetInputCapture(spaceAlsoActivates(pickSource))
+	r.rsyncPickDestinationBtn.SetInputCapture(spaceAlsoActivates(pickDestination))
+
+	// Tab/Backtab continue the chain rsyncFlagsList's own
+	// SetInputCapture starts and rsyncCancelBtn's own SetExitFunc picks
+	// back up — see newRsyncButtons' own doc comment for the whole
+	// cycle.
+	r.rsyncPickSourceBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.rsyncPickDestinationBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.rsyncFlagsList)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+	r.rsyncPickDestinationBtn.SetExitFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyTab:
+			r.app.SetFocus(r.rsyncCancelBtn)
+		case tcell.KeyBacktab:
+			r.app.SetFocus(r.rsyncPickSourceBtn)
+		case tcell.KeyEscape:
+			r.hideOverlay()
+		}
+	})
+
+	return tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.rsyncPickSourceBtn, 0, 1, false).
+		AddItem(r.rsyncPickDestinationBtn, 0, 1, false)
+}
+
 // newRsyncButtons builds rsyncForm's own action row once, from
 // NewRoot — a real Cancel/Run button pair, the same established shape
 // newDuplicateButtons/newChmodButtons/newSearchButtons already use for
@@ -451,17 +551,17 @@ func (r *Root) newRsyncButtons() *tview.Flex {
 	r.rsyncRunBtn.SetInputCapture(spaceAlsoActivates(r.runRsync))
 	r.rsyncRunBackgroundBtn.SetInputCapture(spaceAlsoActivates(r.runRsyncBackground))
 
-	// Tab/Backtab close the chain rsyncExtraArgsField/rsyncFlagsList's
-	// own SetInputCapture calls start — the same shape
-	// newConnectButtons' own doc comment explains in full: cycles
-	// Cancel -> Run -> Run in background -> back to Source, and the
-	// reverse.
+	// Tab/Backtab close the chain rsyncExtraArgsField/rsyncFlagsList/
+	// rsyncPickButtons' own SetInputCapture/SetExitFunc calls start —
+	// the same shape newConnectButtons' own doc comment explains in
+	// full: cycles Pick destination tab… -> Cancel -> Run -> Run in
+	// background -> back to Source, and the reverse.
 	r.rsyncCancelBtn.SetExitFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyTab:
 			r.app.SetFocus(r.rsyncRunBtn)
 		case tcell.KeyBacktab:
-			r.app.SetFocus(r.rsyncFlagsList)
+			r.app.SetFocus(r.rsyncPickDestinationBtn)
 		case tcell.KeyEscape:
 			r.hideOverlay()
 		}
@@ -531,6 +631,7 @@ func (r *Root) newRsyncContentLayout() *tview.Flex {
 	layout.AddItem(r.rsyncFlagsList, 5, 0, false)
 	layout.AddItem(r.rsyncPreviewView, 2, 0, false)
 	layout.AddItem(r.rsyncHintView, 1, 0, false)
+	layout.AddItem(r.rsyncPickButtons, 1, 0, false)
 	layout.AddItem(r.rsyncSpacer, 1, 0, false)
 	layout.AddItem(r.rsyncButtons, 1, 0, false)
 	return layout
