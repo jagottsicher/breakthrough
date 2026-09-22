@@ -399,6 +399,19 @@ func chordFamilies() []chordFamily {
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
+			// "jc"/"je"/"jE" belong here rather than a chord family of
+			// their own, per the user's own explicit call: Compress and
+			// Extract are tools too, the same category "jj"/"jn"/"jh"
+			// already cover, not a fourth full-screen catalog like
+			// "jm"/"jf". "jE" is this family's own first capitalized
+			// member — the same "bigger, more consequential sibling"
+			// convention the plain-letter layer's own d/D and v/V pairs
+			// already use, just spelled as a chord's own second key
+			// instead of a whole separate top-level letter, since there
+			// was no letter left to spare for a fourth verb here.
+			{'c', "Compress…", func(r *Root) { r.openCompress() }},
+			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
+			{'E', "Extract, delete original", func(r *Root) { r.extractCurrentArchive(true) }},
 		}},
 	}
 }

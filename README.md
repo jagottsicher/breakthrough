@@ -170,7 +170,8 @@ terminal.
   place when chosen (Windows Explorer's own cascading-menu idea,
   without needing room to open beside it): "More actions" (New file,
   New dir, `tail -f`, chown, chmod, Sed Replace, Batch rename, Undo
-  last rename, Compare, Rsync, Remove), "Selection" (Select all/
+  last rename, Compare, Rsync, Compress…, Extract/Extract-delete-original
+  (the latter two only for a recognized archive), Remove), "Selection" (Select all/
   Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
@@ -492,6 +493,21 @@ terminal.
   Networking or just its Hardware catalog, for jumping straight to one
   tool without scrolling past the other category first. `jj` itself
   still shows both categories together.
+- Compress (`j` then `c`, or the context menu's "Compress…") and
+  Extract (`j` then `e`/`E`, or the context menu's "Extract"/"Extract,
+  delete original"): real archive creation and unpacking, through a
+  real external tool (zip, tar, gzip, bzip2, xz, or zstd) in both
+  directions, never a reimplementation. Compress archives the current
+  selection — a file, several files, or a whole directory — into a new
+  file right beside it; pick a Format, type an Output name, a live
+  Preview line shows exactly what will be created. Extract unpacks the
+  archive under the cursor in one step, without first entering it —
+  into its own directory, or, once a split is active, straight into
+  the other pane's own current directory instead, the same default
+  Rsync/Compare already use. `jE` additionally moves the original
+  archive to the Trash once extraction has actually succeeded — asking
+  first, and naming the fallback plainly as a real permanent delete, if
+  that ever fails outright.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -685,10 +701,11 @@ covering every setting breakthrough recognizes, a Toolbox screen
 (`jj`) of built-in networking and hardware tools with its own filtered
 Network Tools (`jn`) and Hardware Tools (`jh`) screens, a Mounts
 screen (`jm`) showing what's currently mounted and whether it survives a
-reboot, and a Firewall screen (`jf`) showing this host's own actual
+reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other. Progress bars
-for long-running file operations are what's
+governs traffic), including which rules shadow each other, and real
+Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
+zstd. Progress bars for long-running file operations are what's
 planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on

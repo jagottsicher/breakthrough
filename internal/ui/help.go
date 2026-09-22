@@ -95,7 +95,8 @@ var helpText = strings.TrimLeft(`
     j  tools    jj Toolbox screen (networking/hardware tools) ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jh Hardware Tools screen ·
-                jf Firewall screen (this host's own actual rules)
+                jf Firewall screen (this host's own actual rules) ·
+                jc Compress… · je Extract · jE Extract, delete original
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -777,6 +778,32 @@ var helpText = strings.TrimLeft(`
   local temp copy, runs the typed command against it, and uploads the
   result back over the connection only if it actually changed —
   nothing extra to do differently for a file on another machine.
+
+[::b]Compress ("jc", or context menu's "Compress…")[::-]
+
+  Archives the current selection — one file, several files, or a whole
+  directory — into a new file right beside it, via a real external tool
+  (zip, tar, gzip, bzip2, xz, or zstd — never a reimplementation). Pick
+  a Format, type an Output name (the extension is added automatically);
+  the live Preview line shows exactly what will be created. Refuses a
+  name that already exists rather than overwriting it. Local panels
+  only for now.
+
+  Whichever tool the chosen format needs (zip/unzip, tar, gzip, bzip2,
+  xz, zstd) has to actually be installed — a missing one reports
+  exactly which, rather than a bare "command not found".
+
+[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
+
+  Unpacks the archive currently under the cursor in one step, without
+  first entering it — into the archive's own directory, or, if a split
+  is currently active, straight into the other pane's own current
+  directory instead (the same default Rsync/Compare already use once a
+  split exists). "jE" additionally moves the original archive to the
+  Trash once extraction has actually succeeded — if that fails (Trash
+  unavailable, or the move itself errors), asks first, naming plainly
+  that the fallback is a real, permanent delete, rather than either
+  silently leaving the archive behind or deleting it without asking.
 
 [::b]Search dialog ("f")[::-]
 

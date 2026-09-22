@@ -155,6 +155,21 @@ func contextMenuTree() []menuEntry {
 			{label: "Undo last rename", action: func(r *Root) { r.undoLastBatchRename() }},
 			{label: "Compare", action: func(r *Root) { r.openCompare() }},
 			{label: "Rsync", action: func(r *Root) { r.openRsync() }},
+			// Compress works on any selection (a file, several files, or a
+			// whole directory tree) — no visibility gate of its own, the
+			// same as Rsync/sed/chmod/chown just above.
+			{label: "Compress…", action: func(r *Root) { r.openCompress() }},
+			// Extract only makes sense once the target is actually a
+			// recognized archive (see menuTargetIsArchive) — the same
+			// "hide what doesn't apply" reasoning menuTargetIsFile already
+			// follows for Edit/Open with… above.
+			{label: "Extract", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(false) }},
+			// The dangerous sibling of "Extract" just above — kept right
+			// next to it rather than a further step away, since the real
+			// safety net here is deleteExtractedArchive's own Trash-first
+			// behavior (see its own doc comment), not physical distance in
+			// the menu.
+			{label: "Extract, delete original", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(true) }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the
@@ -211,6 +226,19 @@ func trashMenuTree() []menuEntry {
 func menuTargetIsFile(r *Root) bool {
 	ref, ok := r.panel.rowRef(r.targetRow)
 	return ok && !ref.isDir
+}
+
+// menuTargetIsArchive reports whether the row this menu was opened for
+// is a file this app can extract (see archiveFormatFor) — false for a
+// directory, or for a file whose extension none of the compress/extract
+// formats recognize.
+func menuTargetIsArchive(r *Root) bool {
+	ref, ok := r.panel.rowRef(r.targetRow)
+	if !ok || ref.isDir {
+		return false
+	}
+	_, ok = archiveFormatFor(ref.path)
+	return ok
 }
 
 // menuClipboardHasContent reports whether Paste currently has anything
