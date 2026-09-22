@@ -1,0 +1,558 @@
+package ui
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+)
+
+// Compress and Extract: real archive creation and unpacking, both
+// always through a real external tool (zip/unzip/tar/gzip/bzip2/xz/
+// zstd) — never a reimplementation of any compression algorithm, the
+// same "shell out to the real tool" principle already used for Rsync
+// and Sed Replace. Deliberately separate from internal/archive (which
+// only ever browses/lists/extracts specific members of an already-open
+// archive in pure Go): this is "the whole archive, in one step",
+// reachable directly from plain browsing without ever entering it.
+
+const compressPage = "compress"
+
+// archiveFormat is one Compress/Extract format this app offers.
+type archiveFormat struct {
+	label string // shown in the Format dropdown
+	ext   string // appended to the typed output name, e.g. ".tar.gz"
+
+	// compressTools/extractTools are the real binaries each direction
+	// needs, checked with checkTools before either ever runs — kept
+	// separate (not one merged list) so having zip but not unzip still
+	// leaves Compress fully working, and vice versa.
+	compressTools []string
+	extractTools  []string
+
+	// compress/extract build the real shell command line for each
+	// direction. Arguments are passed in already shell-quoted (see
+	// shellQuoteArg), so neither function needs to know anything about
+	// quoting itself.
+	compress func(out string, targets []string) string
+	extract  func(archive, destDir string) string
+
+	// matches reports whether lower (an already-lowercased path) is this
+	// format's own extension — used by archiveFormatFor to recognize an
+	// existing file as extractable.
+	matches func(lower string) bool
+}
+
+// archiveFormats is every Compress/Extract format, in the order the
+// Format dropdown offers them — the same five extensions
+// internal/archive already recognizes for browsing (zip, tar, tar.gz,
+// tar.bz2, tar.xz), plus tar.zst: that package can't read it back (no
+// zstd decompressor in Go's own standard library), but a real zstd
+// binary handles it exactly like any of the others here.
+//
+// Every tar-based compressed format runs a plain "tar -cf -" (or "tar
+// -x") piped through the one real compressor binary for that
+// extension, rather than relying on tar's own bundled "-z"/"-j"/"-J"
+// support: that support varies by which tar is actually installed
+// (GNU tar vs. macOS/BSD's own bsdtar), while a plain pipe through
+// gzip/bzip2/xz/zstd works identically everywhere those are installed,
+// and lets checkTools name exactly the one binary that's missing.
+func archiveFormats() []archiveFormat {
+	return []archiveFormat{
+		{
+			label:         "zip (.zip)",
+			ext:           ".zip",
+			compressTools: []string{"zip"},
+			extractTools:  []string{"unzip"},
+			compress: func(out string, targets []string) string {
+				return "zip -r " + out + " " + strings.Join(targets, " ")
+			},
+			extract: func(archive, destDir string) string {
+				return "unzip -o " + archive + " -d " + destDir
+			},
+			matches: func(lower string) bool { return strings.HasSuffix(lower, ".zip") },
+		},
+		{
+			label:         "tar (.tar)",
+			ext:           ".tar",
+			compressTools: []string{"tar"},
+			extractTools:  []string{"tar"},
+			compress: func(out string, targets []string) string {
+				return "tar -cf " + out + " " + strings.Join(targets, " ")
+			},
+			extract: func(archive, destDir string) string {
+				return "tar -xf " + archive + " -C " + destDir
+			},
+			matches: func(lower string) bool { return strings.HasSuffix(lower, ".tar") },
+		},
+		{
+			label:         "tar.gz (.tar.gz, .tgz)",
+			ext:           ".tar.gz",
+			compressTools: []string{"tar", "gzip"},
+			extractTools:  []string{"gzip", "tar"},
+			compress: func(out string, targets []string) string {
+				return "tar -cf - " + strings.Join(targets, " ") + " | gzip > " + out
+			},
+			extract: func(archive, destDir string) string {
+				return "gzip -dc " + archive + " | tar -x -C " + destDir
+			},
+			matches: func(lower string) bool {
+				return strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
+			},
+		},
+		{
+			label:         "tar.bz2 (.tar.bz2, .tbz2)",
+			ext:           ".tar.bz2",
+			compressTools: []string{"tar", "bzip2"},
+			extractTools:  []string{"bzip2", "tar"},
+			compress: func(out string, targets []string) string {
+				return "tar -cf - " + strings.Join(targets, " ") + " | bzip2 > " + out
+			},
+			extract: func(archive, destDir string) string {
+				return "bzip2 -dc " + archive + " | tar -x -C " + destDir
+			},
+			matches: func(lower string) bool {
+				return strings.HasSuffix(lower, ".tar.bz2") || strings.HasSuffix(lower, ".tbz2") || strings.HasSuffix(lower, ".tbz")
+			},
+		},
+		{
+			label:         "tar.xz (.tar.xz, .txz)",
+			ext:           ".tar.xz",
+			compressTools: []string{"tar", "xz"},
+			extractTools:  []string{"xz", "tar"},
+			compress: func(out string, targets []string) string {
+				return "tar -cf - " + strings.Join(targets, " ") + " | xz > " + out
+			},
+			extract: func(archive, destDir string) string {
+				return "xz -dc " + archive + " | tar -x -C " + destDir
+			},
+			matches: func(lower string) bool {
+				return strings.HasSuffix(lower, ".tar.xz") || strings.HasSuffix(lower, ".txz")
+			},
+		},
+		{
+			label:         "tar.zst (.tar.zst, .tzst)",
+			ext:           ".tar.zst",
+			compressTools: []string{"tar", "zstd"},
+			extractTools:  []string{"zstd", "tar"},
+			compress: func(out string, targets []string) string {
+				return "tar -cf - " + strings.Join(targets, " ") + " | zstd > " + out
+			},
+			extract: func(archive, destDir string) string {
+				return "zstd -dc " + archive + " | tar -x -C " + destDir
+			},
+			matches: func(lower string) bool {
+				return strings.HasSuffix(lower, ".tar.zst") || strings.HasSuffix(lower, ".tzst")
+			},
+		},
+	}
+}
+
+// archiveFormatFor reports which archiveFormats entry path's own
+// extension matches (case-insensitively), if any — Extract's own way
+// of recognizing a file as an archive at all, independent of
+// internal/archive's own, narrower Classify (see this file's own
+// package doc comment on why the two are separate).
+func archiveFormatFor(path string) (archiveFormat, bool) {
+	lower := strings.ToLower(path)
+	for _, f := range archiveFormats() {
+		if f.matches(lower) {
+			return f, true
+		}
+	}
+	return archiveFormat{}, false
+}
+
+// shellQuoteArg wraps s in single quotes for safe use inside a real
+// shell command line — the same POSIX sh idiom (and the same escaping)
+// internal/rsync's own shellQuote already uses for exactly this reason;
+// duplicated here rather than exported and shared, since it's a
+// three-line, fully self-contained utility and internal/rsync has no
+// other reason to be a dependency of internal/ui.
+func shellQuoteArg(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+// checkTools reports a clear, actionable error naming every one of
+// names that isn't on $PATH, or nil if all of them are — checked
+// before either Compress or Extract ever runs a real command, so a
+// format whose tool isn't installed (zstd and xz especially, absent by
+// default on plenty of systems, macOS included) fails with "install
+// this" rather than a shell's own, less legible "command not found"
+// buried in whatever output already scrolled past.
+func checkTools(names []string) error {
+	var missing []string
+	for _, name := range names {
+		if _, err := exec.LookPath(name); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s not found on $PATH — install it first (e.g. via apt/dnf/pacman on Linux, or Homebrew on macOS)", strings.Join(missing, ", "))
+}
+
+// openCompress is the context menu's "Compress…", and (through the "j"
+// chord's own "jc" — see keymap.go) the keyboard's action: archives the
+// current selection (one file, several files, or a whole directory —
+// selectedOrCurrentPaths, the same target set Copy/Cut/Multiply already
+// use) into a new file right beside it, via a real external tool
+// chosen from the Format dropdown.
+//
+// Local panels only for now, the same scope Rsync's own Source/
+// Destination fields default to before a connection is involved —
+// there is no remote archive-creation path yet.
+func (r *Root) openCompress() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
+	if r.panel.remote != nil {
+		r.showError(fmt.Errorf("compress: remote panels aren't supported yet"))
+		return
+	}
+	targets := r.selectedOrCurrentPaths()
+	if len(targets) == 0 {
+		return
+	}
+
+	r.compressTargets = targets
+	r.compressFormatIndex = 0
+	r.compressOutputName = defaultCompressOutputName(targets, r.panel.path)
+	r.renderCompressForm()
+	r.renderCompressPreview()
+
+	// 11 rows: Target/Format/Output name (3, all height 1) + 2 rows of
+	// itemPadding between them + 2 rows of the Form's own top/bottom
+	// border padding (7) + Preview (1) + Spacer (1) + Buttons (1) + the
+	// title bar's own row (1) — the same derivation newDuplicateForm's
+	// own doc comment spells out in full for its own, larger form.
+	width, height := 70, 11
+	_, _, screenWidth, screenHeight := r.GetRect()
+	if width > screenWidth-4 {
+		width = screenWidth - 4
+	}
+	if height > screenHeight-4 {
+		height = screenHeight - 4
+	}
+	x := (screenWidth - width) / 2
+	y := (screenHeight - height) / 2
+	r.compressLayout.SetRect(x, y, width, height)
+	r.showOverlay(compressPage, r.compressLayout)
+}
+
+// defaultCompressOutputName picks Compress's own starting "Output name"
+// — the single target's own base name for exactly one target (the
+// common case: "compress this one folder"), or the current directory's
+// own name for several at once (the same "name it after where they
+// live" convention a real GUI file manager's own "compress N items"
+// already follows), falling back to the generic "archive" only once
+// currentDir itself has no meaningful name of its own (the filesystem
+// root).
+func defaultCompressOutputName(targets []string, currentDir string) string {
+	if len(targets) == 1 {
+		return filepath.Base(targets[0])
+	}
+	if base := filepath.Base(currentDir); base != "" && base != "." && base != string(filepath.Separator) {
+		return base
+	}
+	return "archive"
+}
+
+// newCompressForm builds the (initially empty) Compress form — called
+// once from NewRoot; renderCompressForm populates it fresh on every
+// open, the same reasoning newDuplicateForm's own doc comment gives.
+func (r *Root) newCompressForm() *tview.Form {
+	f := tview.NewForm()
+	f.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			r.hideOverlay()
+			return nil
+		}
+		return event
+	})
+	return f
+}
+
+// renderCompressForm (re)builds compressForm's own items: Target
+// (read-only, the same duplicateTargetsLabel wording Multiply's own
+// identical field already uses — nothing about naming a target set is
+// specific to either dialog), Format, and Output name.
+func (r *Root) renderCompressForm() {
+	r.compressForm.Clear(true)
+
+	r.compressForm.AddTextView("Target", duplicateTargetsLabel(r.compressTargets), 0, 1, true, false)
+
+	formats := archiveFormats()
+	labels := make([]string, len(formats))
+	for i, f := range formats {
+		labels[i] = f.label
+	}
+	dd := tview.NewDropDown().SetLabel("Format").SetOptions(labels, func(_ string, index int) {
+		if index < 0 || index >= len(formats) || index == r.compressFormatIndex {
+			return
+		}
+		r.compressFormatIndex = index
+		r.renderCompressPreview()
+	})
+	dd.SetCurrentOption(r.compressFormatIndex)
+	styleDropDown(dd, r.theme)
+	r.compressFormatField = dd
+	r.compressForm.AddFormItem(dd)
+
+	nameField := tview.NewInputField().SetLabel("Output name").SetText(r.compressOutputName)
+	nameField.SetChangedFunc(func(v string) {
+		r.compressOutputName = v
+		r.renderCompressPreview()
+	})
+	r.compressOutputNameField = nameField
+	r.compressForm.AddFormItem(nameField)
+}
+
+// newCompressPreviewView builds compressPreviewView once, from NewRoot
+// — the same "plain, read-only TextView sibling of the Form, never one
+// of its own items" shape newDuplicatePreviewView's own doc comment
+// explains in full (a TextView added as a Form item needs an explicit
+// height or tview substitutes a 5-row default).
+func (r *Root) newCompressPreviewView() *tview.TextView {
+	v := tview.NewTextView()
+	v.SetBorderPadding(0, 0, 1, 0)
+	return v
+}
+
+// renderCompressPreview shows the exact file name Compress would
+// create right now — the typed Output name plus the selected Format's
+// own extension, recomputed on every keystroke and every Format change
+// so neither one can silently disagree with what "Compress" is about
+// to do.
+func (r *Root) renderCompressPreview() {
+	if r.compressPreviewView == nil {
+		return
+	}
+	format := archiveFormats()[r.compressFormatIndex]
+	name := strings.TrimSpace(r.compressOutputName)
+	if name == "" {
+		r.compressPreviewView.SetText("Preview: (enter an output name)")
+		return
+	}
+	r.compressPreviewView.SetText("Preview: " + name + format.ext)
+}
+
+// newCompressButtons builds compressForm's own action row once, from
+// NewRoot — the same Cancel/action button pair newDuplicateButtons
+// already establishes.
+func (r *Root) newCompressButtons() *tview.Flex {
+	r.compressCancelBtn = tview.NewButton("Cancel").SetSelectedFunc(r.hideOverlay)
+	r.compressApplyBtn = tview.NewButton("Compress").SetSelectedFunc(r.runCompress)
+	r.compressCancelBtn.SetInputCapture(spaceAlsoActivates(r.hideOverlay))
+	r.compressApplyBtn.SetInputCapture(spaceAlsoActivates(r.runCompress))
+
+	exitFunc := func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			r.hideOverlay()
+		}
+	}
+	r.compressCancelBtn.SetExitFunc(exitFunc)
+	r.compressApplyBtn.SetExitFunc(exitFunc)
+
+	return tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compressCancelBtn, 0, 1, false).
+		AddItem(r.compressApplyBtn, 0, 1, false)
+}
+
+// newCompressLayout wraps compressTitleBar above compressContentLayout
+// — the same widget/layout split newDuplicateLayout already establishes.
+func (r *Root) newCompressLayout() *tview.Flex {
+	r.compressTitleBar = newPlainTitleBar("Compress")
+	r.compressContentLayout = r.newCompressContentLayout()
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.compressTitleBar, 1, 0, false).
+		AddItem(r.compressContentLayout, 0, 1, true)
+}
+
+// newCompressContentLayout stacks compressForm (7 rows: 3 items, 2 rows
+// of itemPadding between them, 2 rows of the Form's own border padding
+// — the same derivation newDuplicateContentLayout's own doc comment
+// spells out in full), compressPreviewView, compressSpacer, and
+// compressButtons.
+func (r *Root) newCompressContentLayout() *tview.Flex {
+	layout := tview.NewFlex().SetDirection(tview.FlexRow)
+	layout.AddItem(r.compressForm, 7, 0, true)
+	layout.AddItem(r.compressPreviewView, 1, 0, false)
+	layout.AddItem(r.compressSpacer, 1, 0, false)
+	layout.AddItem(r.compressButtons, 1, 0, false)
+	return layout
+}
+
+// runCompress is compressButtons' own "Compress": refuses an empty
+// name or one that would collide with a file that already exists
+// (never silently overwriting — the same "kein Datenverlust" principle
+// every destructive-adjacent action in this app already follows),
+// checks the chosen format's own required tools, then hands the real
+// command line to a real shell with the real terminal attached (see
+// runArchiveCommand) — the same "show the real tool's own output,
+// don't hide it behind a custom progress bar" approach Rsync's own
+// "Run" already takes, reused rather than inventing a second one here.
+func (r *Root) runCompress() {
+	format := archiveFormats()[r.compressFormatIndex]
+	name := strings.TrimSpace(r.compressOutputName)
+	if name == "" {
+		r.showError(fmt.Errorf("compress: an output name is required"))
+		return
+	}
+	outPath := filepath.Join(r.panel.path, name+format.ext)
+	if _, err := os.Stat(outPath); err == nil {
+		r.showError(fmt.Errorf("compress: %s already exists — pick a different name", filepath.Base(outPath)))
+		return
+	}
+	if err := checkTools(format.compressTools); err != nil {
+		r.showError(fmt.Errorf("compress: %w", err))
+		return
+	}
+
+	names := make([]string, len(r.compressTargets))
+	for i, t := range r.compressTargets {
+		names[i] = shellQuoteArg(filepath.Base(t))
+	}
+	command := format.compress(shellQuoteArg(name+format.ext), names)
+
+	r.hideOverlay()
+	if err := r.runArchiveCommand(command); err != nil {
+		r.showError(fmt.Errorf("compress: %w", err))
+		return
+	}
+	r.reloadPanel(nil)
+}
+
+// runArchiveCommand runs a real, already fully-formed shell command
+// line (built by Compress/Extract — may itself contain a pipe, e.g.
+// "tar -cf - ... | gzip > out.tar.gz") with the real terminal attached
+// — the same "suspend the TUI, attach the real terminal, echo the
+// command first" approach runShellCommandFullScreen already
+// establishes for Rsync's own "Run" and the embedded bash line, reused
+// here rather than invented fresh. Unlike that function (which owns its
+// own error handling end to end and never reports back), this returns
+// the result instead: extractCurrentArchive's own "delete the original
+// afterward" step needs to know whether extraction actually succeeded
+// before deciding what to do next.
+//
+// cmd.Dir is set the same way runShellCommandFullScreen's own is: a
+// local panel's own current directory, so Compress's own target names
+// (passed in as plain base names, not full paths — see runCompress)
+// resolve against the right place, and a freshly created archive lands
+// there too rather than wherever this process happened to start from.
+func (r *Root) runArchiveCommand(command string) error {
+	var runErr error
+	r.app.Suspend(func() {
+		fmt.Printf("$ %s\n", command)
+		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
+		if r.panel.remote == nil {
+			cmd.Dir = r.panel.path
+		}
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		runErr = cmd.Run()
+		fmt.Print("\n[Press Esc to return to breakthrough]\n")
+		waitForEscape()
+	})
+	r.app.SetFocus(r.panel.table)
+	return runErr
+}
+
+// extractCurrentArchive is the context menu's "Extract"/"Extract,
+// delete original", and (through the "j" chord's own "je"/"jE" — see
+// keymap.go) the keyboard's action: unpacks the archive currently under
+// the cursor with a real external tool (see archiveFormatFor), into
+// either the archive's own directory or, if a split is currently
+// active, the other pane's own current directory — the same "the other
+// pane is the destination once a split exists" default Rsync/Compare
+// already use (see splitPartner), rather than asking every time.
+//
+// deleteOriginal, once extraction has actually succeeded, moves the
+// original archive to the Trash (never a hard delete outright — see
+// deleteExtractedArchive for what happens if that fails).
+func (r *Root) extractCurrentArchive(deleteOriginal bool) {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
+	if r.panel.remote != nil {
+		r.showError(fmt.Errorf("extract: remote archives aren't supported yet"))
+		return
+	}
+	_, archivePath, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return
+	}
+	format, ok := archiveFormatFor(archivePath)
+	if !ok {
+		r.showError(fmt.Errorf("extract: %s is not a recognized archive format", filepath.Base(archivePath)))
+		return
+	}
+
+	destDir := filepath.Dir(archivePath)
+	destTab, toOtherPane := -1, false
+	if partnerIdx, ok := r.splitPartner(); ok {
+		destDir = r.tabs[partnerIdx].path
+		destTab = partnerIdx
+		toOtherPane = true
+	}
+
+	if err := checkTools(format.extractTools); err != nil {
+		r.showError(fmt.Errorf("extract: %w", err))
+		return
+	}
+
+	command := format.extract(shellQuoteArg(archivePath), shellQuoteArg(destDir))
+	if err := r.runArchiveCommand(command); err != nil {
+		r.showError(fmt.Errorf("extract %s: %w", filepath.Base(archivePath), err))
+		return
+	}
+
+	if toOtherPane {
+		r.showError(r.tabs[destTab].load(r.tabs[destTab].path))
+	}
+	if !toOtherPane || deleteOriginal {
+		r.reloadPanel(nil)
+	}
+
+	if deleteOriginal {
+		r.deleteExtractedArchive(archivePath)
+	}
+}
+
+// deleteExtractedArchive is extractCurrentArchive's own "delete
+// original" half, split out so it only ever runs after extraction has
+// already succeeded — moves archivePath to the Trash, the same
+// reversible-by-default choice moveSelectionToTrash already makes for
+// "d" elsewhere in this app. If that fails outright (trash
+// unavailable, or the move itself errors), this does not just silently
+// leave the archive behind: it asks, explicitly naming that the
+// fallback is a real, permanent delete, before ever doing one — the
+// same "irreversible actions must be clearly flagged and confirmed"
+// principle openRemoveConfirm's own confirmation already follows.
+func (r *Root) deleteExtractedArchive(archivePath string) {
+	dir, err := r.trashDir()
+	if err == nil {
+		if err = fsops.MoveToTrash(archivePath, dir); err == nil {
+			r.reloadPanel(nil)
+			return
+		}
+	}
+	r.openPurgeConfirm(
+		fmt.Sprintf("Moving %q to Trash failed (%v) — delete it completely instead?", filepath.Base(archivePath), err),
+		func() {
+			if err := fsops.PurgeCompletely(archivePath); err != nil {
+				r.showError(err)
+				return
+			}
+			r.reloadPanel(nil)
+		},
+	)
+}
