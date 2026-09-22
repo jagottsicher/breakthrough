@@ -93,10 +93,10 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    j  tools    jm Mounts screen (what's mounted right now) ·
-                jn Network Tools screen · jh Hardware Tools screen ·
-                jf Firewall screen (this host's own actual rules) ·
-                jc Compress… · je Extract · jE Extract, delete original
+    j  tools    jc Compress… · je Extract · jE Extract, delete original ·
+                jm Mounts screen (what's mounted right now) ·
+                jn Network Tools screen · jf Firewall screen (this
+                host's own actual rules) · jh Hardware Tools screen
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
