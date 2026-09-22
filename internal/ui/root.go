@@ -234,11 +234,11 @@ type Root struct {
 	toolboxTable    *tview.Table
 	toolboxInput    *tview.InputField
 
-	// toolboxRows is the currently open screen's own row list — the
-	// whole catalog for "jj" (openToolbox), one single category for "jn"
-	// (openNetworkTools) or "jh" (openHardwareTools). One table/rendering
-	// implementation (renderToolbox et al.) driven by whichever rows this
-	// holds, rather than a separate near-identical screen per category.
+	// toolboxRows is the currently open screen's own row list — one
+	// single category, for "jn" (openNetworkTools) or "jh"
+	// (openHardwareTools). One table/rendering implementation
+	// (renderToolbox et al.) driven by whichever rows this holds, rather
+	// than a separate near-identical screen per category.
 	toolboxRows []toolboxDisplayRow
 
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
@@ -571,6 +571,30 @@ type Root struct {
 	duplicateContentLayout               *tview.Flex
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
+
+	// compressForm/compressButtons/compressLayout together make up the
+	// "Compress" dialog (compress.go) — the same Target/live-preview/
+	// Cancel-Action shape newDuplicateLayout's own doc comment already
+	// establishes, just with a fixed Format dropdown and an Output name
+	// field instead of Multiply's own strategy-dependent ones.
+	// compressTargets is the file(s) this open is for; compressFormatIndex
+	// indexes archiveFormats(); compressOutputName mirrors the Output
+	// name field's own current text (needed across renderCompressForm's
+	// own rebuilds the same reason every duplicateXxxValue mirror is).
+	compressForm            *tview.Form
+	compressFormatField     *tview.DropDown
+	compressOutputNameField *tview.InputField
+	compressPreviewView     *tview.TextView
+	compressSpacer          *tview.Box
+	compressCancelBtn       *tview.Button
+	compressApplyBtn        *tview.Button
+	compressButtons         *tview.Flex
+	compressTitleBar        *tview.TextView
+	compressContentLayout   *tview.Flex
+	compressLayout          *tview.Flex
+	compressTargets         []string
+	compressFormatIndex     int
+	compressOutputName      string
 
 	// The "Rsync" dialog (see rsync.go) — source/destination and the
 	// free-text Excludes/Extra flags fields live in rsyncForm; the five
@@ -1552,6 +1576,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The Compress dialog (see compress.go/openCompress) — same
+	// build-once/repopulate-on-open shape as Duplicate just above.
+	r.compressForm = r.newCompressForm()
+	r.compressPreviewView = r.newCompressPreviewView()
+	r.compressSpacer = tview.NewBox()
+	r.compressButtons = r.newCompressButtons()
+	r.compressLayout = r.newCompressLayout()
+
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
 	r.rsyncForm = r.newRsyncForm()
@@ -1603,8 +1635,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated List" pattern as r.picker above.
 	r.newOptionsScreen()
 
-	// The Toolbox screen (see toolbox.go/openToolbox) — same full-screen
-	// shape as Options, built once here and repopulated on every open.
+	// The Toolbox screen (see toolbox.go/openToolboxScreen) — same
+	// full-screen shape as Options, built once here and repopulated on
+	// every open.
 	r.newToolboxScreen()
 
 	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
@@ -1715,6 +1748,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(compressPage, r.compressLayout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment

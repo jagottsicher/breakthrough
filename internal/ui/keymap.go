@@ -360,10 +360,10 @@ func chordFamilies() []chordFamily {
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
-		// "jj" doubles the prefix for the family's own single main
-		// destination, the same shape "gg"/"oo" already establish —
-		// opening the Toolbox screen (toolbox.go), a catalog of real
-		// external networking/hardware tools. "j" itself carries no
+		// "jn"/"jh" open the Toolbox's own "Networking"/"Hardware"
+		// category (openNetworkTools/openHardwareTools in toolbox.go) —
+		// the only two ways into the Toolbox catalog; there is no
+		// combined "browse both at once" entry. "j" itself carries no
 		// mnemonic of its own — by the time this family was added, every
 		// other letter already meant something else as either a plain
 		// command or a chord prefix, and "j" (along with "b") was one of
@@ -376,16 +376,6 @@ func chordFamilies() []chordFamily {
 		// there. Same "one prefix, several distinct destinations" shape
 		// the "o" chord's own "oo"/"om" already establish.
 		//
-		// "jn"/"jh" jump straight to the Toolbox's own "Networking"/
-		// "Hardware" category alone (openNetworkTools/openHardwareTools
-		// in toolbox.go), skipping past the other category entirely —
-		// per the user's own explicit request: by the time the catalog
-		// held enough entries in both categories to scroll through,
-		// reaching one specific tool through the combined "jj" list
-		// meant passing the other category's entries first. "jj" itself
-		// is unchanged and still shows both, for browsing the whole
-		// catalog at once.
-		//
 		// "jf" opens the Firewall screen (firewall.go) — a third,
 		// unrelated full-screen catalog under the same prefix, same "one
 		// prefix, several distinct destinations" shape as "jm"/"jn"/"jh"
@@ -394,11 +384,23 @@ func chordFamilies() []chordFamily {
 		// of commands to run, so it gets its own destination rather than
 		// a Toolbox catalog entry.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
-			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
+			// "jc"/"je"/"jE" belong here rather than a chord family of
+			// their own, per the user's own explicit call: Compress and
+			// Extract are tools too, the same category "jn"/"jh"
+			// already cover, not a fourth full-screen catalog like
+			// "jm"/"jf". "jE" is this family's own first capitalized
+			// member — the same "bigger, more consequential sibling"
+			// convention the plain-letter layer's own d/D and v/V pairs
+			// already use, just spelled as a chord's own second key
+			// instead of a whole separate top-level letter, since there
+			// was no letter left to spare for a fourth verb here.
+			{'c', "Compress…", func(r *Root) { r.openCompress() }},
+			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
+			{'E', "Extract, delete original", func(r *Root) { r.extractCurrentArchive(true) }},
 		}},
 	}
 }

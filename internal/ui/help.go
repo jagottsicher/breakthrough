@@ -92,10 +92,10 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    j  tools    jj Toolbox screen (networking/hardware tools) ·
-                jm Mounts screen (what's mounted right now) ·
+    j  tools    jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jh Hardware Tools screen ·
-                jf Firewall screen (this host's own actual rules)
+                jf Firewall screen (this host's own actual rules) ·
+                jc Compress… · je Extract · jE Extract, delete original
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -361,14 +361,14 @@ var helpText = strings.TrimLeft(`
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
 
-[::b]Toolbox screen ("jj")[::-]
+[::b]Toolbox screen ("jn"/"jh")[::-]
 
-  A browsable catalog of real networking and hardware tools — Networking
-  (Ping, Nmap, ip, route, ss, getent, wget, nslookup, dig, netcat, curl,
-  a log-following Tail -f) and Hardware (lsblk, lsusb, lscpu, lsmem,
-  lsdev, hwinfo, inxi, lsscsi) — each one a genuine external command,
-  never reimplemented, the same "shell out to the real tool" approach
-  Rsync and Sed Replace already take.
+  A browsable catalog of real networking and hardware tools — "jn"
+  (Network Tools: Ping, Nmap, ip, route, ss, getent, wget, nslookup,
+  dig, netcat, curl, a log-following Tail -f) and "jh" (Hardware Tools:
+  lsblk, lsusb, lscpu, lsmem, lsdev, hwinfo, inxi, lsscsi) — each one a
+  genuine external command, never reimplemented, the same "shell out to
+  the real tool" approach Rsync and Sed Replace already take.
 
   Up / Down         Move between entries
   Enter             Run the selected tool — asks for one further
@@ -379,12 +379,6 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
-
-  "jn" (Network Tools) and "jh" (Hardware Tools) open this very same
-  screen already filtered down to just the Networking or just the
-  Hardware category, for jumping straight to one tool without scrolling
-  past the other category's entries first. Everything above about
-  Up/Down, Enter, Escape and tool windows applies the same way there.
 
 [::b]Mounts screen ("jm")[::-]
 
@@ -778,6 +772,32 @@ var helpText = strings.TrimLeft(`
   result back over the connection only if it actually changed —
   nothing extra to do differently for a file on another machine.
 
+[::b]Compress ("jc", or context menu's "Compress…")[::-]
+
+  Archives the current selection — one file, several files, or a whole
+  directory — into a new file right beside it, via a real external tool
+  (zip, tar, gzip, bzip2, xz, or zstd — never a reimplementation). Pick
+  a Format, type an Output name (the extension is added automatically);
+  the live Preview line shows exactly what will be created. Refuses a
+  name that already exists rather than overwriting it. Local panels
+  only for now.
+
+  Whichever tool the chosen format needs (zip/unzip, tar, gzip, bzip2,
+  xz, zstd) has to actually be installed — a missing one reports
+  exactly which, rather than a bare "command not found".
+
+[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
+
+  Unpacks the archive currently under the cursor in one step, without
+  first entering it — into the archive's own directory, or, if a split
+  is currently active, straight into the other pane's own current
+  directory instead (the same default Rsync/Compare already use once a
+  split exists). "jE" additionally moves the original archive to the
+  Trash once extraction has actually succeeded — if that fails (Trash
+  unavailable, or the move itself errors), asks first, naming plainly
+  that the fallback is a real, permanent delete, rather than either
+  silently leaving the archive behind or deleting it without asking.
+
 [::b]Search dialog ("f")[::-]
 
   Tab / Shift+Tab   Move between fields
@@ -871,7 +891,7 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
-[::b]Tool windows (every entry in the Toolbox screen, "jj")[::-]
+[::b]Tool windows (every entry in the Toolbox screen, "jn"/"jh")[::-]
 
   A small floating window running one command's live output — unlike
   every dialog above, not modal: the panel underneath (and any other
