@@ -93,7 +93,7 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
@@ -407,11 +407,13 @@ Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing. `m`/`o` again (`mmm`/`mmo` from plain browsing) fire
-**Multiply**/**Open with…** the same way — the two entries here with no
-plain-key shortcut of their own to mirror, since neither ever opens
-from anywhere but this menu — see [Multiply](#multiply) and [Open
-with…](#open-with).
+nothing. `o`/`t`/`A` do too, for **Open with…**, `tail -f`, and
+**Deselect all** — see [Open with…](#open-with) — all three also
+directly reachable as `mo`/`mt`/`mA` from plain browsing, without
+opening the menu at all. `m` again (`mmm` from plain browsing) fires
+**Multiply** — the one entry with no keyboard route of its own anywhere
+else, since its own natural letter is already this chord's own prefix
+key — see [Multiply](#multiply).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -434,12 +436,12 @@ The menu's own title bar names where you are — "Menu" at the top,
 "Menu › Selection" one level in.
 
 - **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
-  (files only), `chown`, `chmod`, `sed`, Batch rename, Undo last
+  (files only, `mt`), `chown`, `chmod`, `sed`, Batch rename, Undo last
   rename, Compare, Rsync, [Compress…](#compress) (`jc`),
   [Extract](#extract)/"Extract, delete original" (`je`/`jE`, shown only
   for a recognized archive), Remove (the permanent, asks-first sibling
   of Move to Trash above), Paste following symlinks.
-- **▸ Selection** — Select all, Deselect all, Select +, Select -
+- **▸ Selection** — Select all, Deselect all (`mA`), Select +, Select -
   (checkbox-based, the same these already reach on their own keys).
 - **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
   Split orientation, Swap panes.
@@ -578,6 +580,11 @@ has to actually be on `$PATH` — a missing one is reported by name
 ("`zstd` not found on \$PATH — install it first…") rather than a bare,
 buried "command not found".
 
+Runs in the background, the same as [Copy, Cut and Paste](#copy-cut-and-paste) —
+no terminal takes over the screen; a spinner and elapsed time show in
+the status bar while it runs (Ctrl+C cancels it), and the current
+directory reloads on its own once the archive is actually done.
+
 ## Extract
 
 `j` then `e` (keep the original) or `E` (also delete it), or the
@@ -604,6 +611,10 @@ must be clearly flagged and confirmed" principle [Trash, Remove and
 Restore](#trash-remove-and-restore) already follows.
 
 Local panels only for now, the same scope [Compress](#compress) has.
+
+Runs in the background exactly like [Compress](#compress) above — no
+terminal, a status bar spinner instead, and whichever tab shows the
+destination reloads once it's done.
 
 ## Batch rename
 

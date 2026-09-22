@@ -162,6 +162,59 @@ func TestDefaultCompressOutputNameFallsBackAtFilesystemRoot(t *testing.T) {
 	}
 }
 
+// TestCompressTargetNameUsesDotForTheCurrentDirectoryItself pins a
+// real, live-tested regression: compressing the current directory as a
+// whole (reached by cursor-on-".." — see Panel.CurrentRowPath) used to
+// pass the directory's own base name as the zip/tar target, which
+// zip/tar then refused to find *inside* that same directory ("zip
+// warning: name not matched"). "." is the same relative name a real
+// shell prompt would use here instead.
+func TestCompressTargetNameUsesDotForTheCurrentDirectoryItself(t *testing.T) {
+	if got := compressTargetName("/home/jens/project", "/home/jens/project"); got != "." {
+		t.Errorf("compressTargetName(destDir, destDir) = %q, want %q", got, ".")
+	}
+}
+
+// TestCompressTargetNameUsesTheBaseNameOtherwise pins the ordinary
+// case: an entry actually inside destDir names itself normally.
+func TestCompressTargetNameUsesTheBaseNameOtherwise(t *testing.T) {
+	if got := compressTargetName("/home/jens/project/report.txt", "/home/jens/project"); got != "report.txt" {
+		t.Errorf("compressTargetName = %q, want %q", got, "report.txt")
+	}
+}
+
+// TestRunCompressOnTheCurrentDirectoryItselfBuildsAWorkingCommand is
+// the end-to-end regression test for the bug
+// TestCompressTargetNameUsesDotForTheCurrentDirectoryItself pins in
+// isolation: focusing ".." (the real, live-tested trigger — see
+// Panel.CurrentRowPath) and running Compress must build a command zip
+// can actually satisfy — inspected on the started *exec.Cmd's own Args
+// rather than waited out to completion, the same restraint
+// TestReallyStartCompressJobRunsInThePanelsOwnDirectory already takes
+// in compressjob_test.go (calling Wait here too would race the
+// background job's own goroutine, which already calls it — see that
+// test's own doc comment).
+func TestRunCompressOnTheCurrentDirectoryItselfBuildsAWorkingCommand(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.panel.focusRow(0) // the ".." row
+	r.openCompress()
+	r.compressOutputName = "whole-dir"
+	r.compressFormatIndex = 0 // zip
+
+	r.runCompress()
+
+	job := r.compressJob
+	if job == nil {
+		t.Fatal("runCompress did not start a background job")
+	}
+	defer r.cancelCompressJob()
+
+	command := strings.Join(job.cmd.Args, " ")
+	if !strings.Contains(command, "zip -r 'whole-dir.zip' '.'") {
+		t.Errorf("command = %q, want it to compress '.' rather than the directory's own base name", command)
+	}
+}
+
 // TestOpenCompressPopulatesTargetsAndDefaultName pins openCompress' own
 // basic contract against a real fixture: it opens the dialog and seeds
 // its own mirrors from the real current selection.

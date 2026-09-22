@@ -391,15 +391,35 @@ func (r *Root) newCompressContentLayout() *tview.Flex {
 	return layout
 }
 
+// compressTargetName is one compress target's own name, as it should
+// appear in the shell command line run with cmd.Dir already set to
+// destDir (see runCompress) — target's own base name for an ordinary
+// file or subdirectory, or "." for the one case that base name would be
+// wrong: target *is* destDir itself, reached by selecting the current
+// directory as a whole via the cursor sitting on ".." (see
+// Panel.CurrentRowPath's own doc comment on why that row's path is the
+// current directory, not its parent). "bt-verify-dir" (the directory's
+// own name) doesn't exist as an entry *inside* "bt-verify-dir" itself —
+// a real, live-tested failure ("zip warning: name not matched") this
+// case needs "." for instead, the same relative name a real shell
+// prompt would use to mean "everything right here".
+func compressTargetName(target, destDir string) string {
+	if target == destDir {
+		return "."
+	}
+	return filepath.Base(target)
+}
+
 // runCompress is compressButtons' own "Compress": refuses an empty
 // name or one that would collide with a file that already exists
 // (never silently overwriting — the same "kein Datenverlust" principle
 // every destructive-adjacent action in this app already follows),
 // checks the chosen format's own required tools, then hands the real
-// command line to a real shell with the real terminal attached (see
-// runArchiveCommand) — the same "show the real tool's own output,
-// don't hide it behind a custom progress bar" approach Rsync's own
-// "Run" already takes, reused rather than inventing a second one here.
+// command line to compressjob.go's own background engine (see
+// startCompressJob) — the same "runs behind the scenes, the tab
+// re-renders once it's done" shape Copy/Cut/Paste already have, per the
+// user's own explicit request that Compress not take over the whole
+// screen the way Rsync's own foreground "Run" does.
 func (r *Root) runCompress() {
 	format := archiveFormats()[r.compressFormatIndex]
 	name := strings.TrimSpace(r.compressOutputName)
@@ -407,7 +427,8 @@ func (r *Root) runCompress() {
 		r.showError(fmt.Errorf("compress: an output name is required"))
 		return
 	}
-	outPath := filepath.Join(r.panel.path, name+format.ext)
+	destDir := r.panel.path
+	outPath := filepath.Join(destDir, name+format.ext)
 	if _, err := os.Stat(outPath); err == nil {
 		r.showError(fmt.Errorf("compress: %s already exists — pick a different name", filepath.Base(outPath)))
 		return
@@ -419,50 +440,18 @@ func (r *Root) runCompress() {
 
 	names := make([]string, len(r.compressTargets))
 	for i, t := range r.compressTargets {
-		names[i] = shellQuoteArg(filepath.Base(t))
+		names[i] = shellQuoteArg(compressTargetName(t, destDir))
 	}
 	command := format.compress(shellQuoteArg(name+format.ext), names)
 
 	r.hideOverlay()
-	if err := r.runArchiveCommand(command); err != nil {
-		r.showError(fmt.Errorf("compress: %w", err))
-		return
-	}
-	r.reloadPanel(nil)
-}
-
-// runArchiveCommand runs a real, already fully-formed shell command
-// line (built by Compress/Extract — may itself contain a pipe, e.g.
-// "tar -cf - ... | gzip > out.tar.gz") with the real terminal attached
-// — the same "suspend the TUI, attach the real terminal, echo the
-// command first" approach runShellCommandFullScreen already
-// establishes for Rsync's own "Run" and the embedded bash line, reused
-// here rather than invented fresh. Unlike that function (which owns its
-// own error handling end to end and never reports back), this returns
-// the result instead: extractCurrentArchive's own "delete the original
-// afterward" step needs to know whether extraction actually succeeded
-// before deciding what to do next.
-//
-// cmd.Dir is set the same way runShellCommandFullScreen's own is: a
-// local panel's own current directory, so Compress's own target names
-// (passed in as plain base names, not full paths — see runCompress)
-// resolve against the right place, and a freshly created archive lands
-// there too rather than wherever this process happened to start from.
-func (r *Root) runArchiveCommand(command string) error {
-	var runErr error
-	r.app.Suspend(func() {
-		fmt.Printf("$ %s\n", command)
-		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
-		if r.panel.remote == nil {
-			cmd.Dir = r.panel.path
-		}
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		runErr = cmd.Run()
-		fmt.Print("\n[Press Esc to return to breakthrough]\n")
-		waitForEscape()
+	r.startCompressJob(compressRequest{
+		command:    command,
+		errContext: "compress",
+		verb:       "Compressing",
+		label:      filepath.Base(outPath),
+		destDir:    destDir,
 	})
-	r.app.SetFocus(r.panel.table)
-	return runErr
 }
 
 // extractCurrentArchive is the context menu's "Extract"/"Extract,
@@ -472,7 +461,11 @@ func (r *Root) runArchiveCommand(command string) error {
 // either the archive's own directory or, if a split is currently
 // active, the other pane's own current directory — the same "the other
 // pane is the destination once a split exists" default Rsync/Compare
-// already use (see splitPartner), rather than asking every time.
+// already use (see splitPartner), rather than asking every time. Runs
+// in the background (see startCompressJob) exactly like Compress —
+// finishCompressJob reloads whichever tab(s) show destDir once it's
+// actually done, so there is no "toOtherPane" branch to reload one
+// place or another synchronously here any more.
 //
 // deleteOriginal, once extraction has actually succeeded, moves the
 // original archive to the Trash (never a hard delete outright — see
@@ -497,11 +490,8 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 	}
 
 	destDir := filepath.Dir(archivePath)
-	destTab, toOtherPane := -1, false
 	if partnerIdx, ok := r.splitPartner(); ok {
 		destDir = r.tabs[partnerIdx].path
-		destTab = partnerIdx
-		toOtherPane = true
 	}
 
 	if err := checkTools(format.extractTools); err != nil {
@@ -510,21 +500,17 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 	}
 
 	command := format.extract(shellQuoteArg(archivePath), shellQuoteArg(destDir))
-	if err := r.runArchiveCommand(command); err != nil {
-		r.showError(fmt.Errorf("extract %s: %w", filepath.Base(archivePath), err))
-		return
+	req := compressRequest{
+		command:    command,
+		errContext: fmt.Sprintf("extract %s", filepath.Base(archivePath)),
+		verb:       "Extracting",
+		label:      filepath.Base(archivePath),
+		destDir:    destDir,
 	}
-
-	if toOtherPane {
-		r.showError(r.tabs[destTab].load(r.tabs[destTab].path))
-	}
-	if !toOtherPane || deleteOriginal {
-		r.reloadPanel(nil)
-	}
-
 	if deleteOriginal {
-		r.deleteExtractedArchive(archivePath)
+		req.deleteOriginal = archivePath
 	}
+	r.startCompressJob(req)
 }
 
 // deleteExtractedArchive is extractCurrentArchive's own "delete
@@ -537,11 +523,27 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 // fallback is a real, permanent delete, before ever doing one — the
 // same "irreversible actions must be clearly flagged and confirmed"
 // principle openRemoveConfirm's own confirmation already follows.
+//
+// Reloads whichever open tab shows archivePath's own directory by path
+// (see forEachTab) rather than blindly reloading r.panel — this now
+// always runs well after a backgrounded Extract has finished (see
+// finishCompressJob), by which point the user is free to have switched
+// to a different tab, so "the current panel" and "the archive's own
+// former directory" are no longer guaranteed to be the same thing.
 func (r *Root) deleteExtractedArchive(archivePath string) {
+	sourceDir := filepath.Dir(archivePath)
+	reloadSource := func() {
+		r.forEachTab(func(p *Panel) {
+			if p.path == sourceDir {
+				r.showError(p.load(p.path))
+			}
+		})
+	}
+
 	dir, err := r.trashDir()
 	if err == nil {
 		if err = fsops.MoveToTrash(archivePath, dir); err == nil {
-			r.reloadPanel(nil)
+			reloadSource()
 			return
 		}
 	}
@@ -552,7 +554,7 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 				r.showError(err)
 				return
 			}
-			r.reloadPanel(nil)
+			reloadSource()
 		},
 	)
 }
