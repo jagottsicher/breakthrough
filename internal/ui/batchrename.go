@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -10,6 +12,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // The Batch Rename screen: a full-screen editor, replacing the context
@@ -321,10 +324,58 @@ func (r *Root) captureBatchRenameFieldsMouse(action tview.MouseAction, event *tc
 	return tview.MouseConsumed, nil
 }
 
+// errBatchRenameEmptyFolder is shown when expandLoneDirectoryTarget's
+// sole directory target turns out to have nothing inside it to rename.
+var errBatchRenameEmptyFolder = errors.New("batch rename: this folder has no entries to rename")
+
+// expandLoneDirectoryTarget turns a single directory target into its own
+// immediate contents (one level, not recursive): applying Batch Rename
+// to exactly one folder renames the files and subfolders inside it,
+// rather than the folder itself — a single-item rename that made the
+// whole screen look unusable on a folder (see feedback_list.txt). A
+// folder that's part of a larger selection, or that isn't the sole
+// target, is left as-is: renaming several folders' own names in one
+// pass is still a legitimate use of this screen.
+//
+// Hidden entries are included or excluded exactly as the panel
+// currently shows them (see Panel.showHidden), so what ends up in the
+// preview table matches what's already visible.
+func (r *Root) expandLoneDirectoryTarget(targets []string) ([]string, error) {
+	if len(targets) != 1 {
+		return targets, nil
+	}
+	info, err := os.Stat(targets[0])
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return targets, nil
+	}
+
+	entries, err := fsops.ListDir(targets[0])
+	if err != nil {
+		return nil, err
+	}
+	if !r.panel.showHidden {
+		entries = filterHidden(entries)
+	}
+	if len(entries) == 0 {
+		return nil, errBatchRenameEmptyFolder
+	}
+
+	expanded := make([]string, len(entries))
+	for i, e := range entries {
+		expanded[i] = filepath.Join(targets[0], e.Name)
+	}
+	return expanded, nil
+}
+
 // openBatchRename is the context menu's "Batch rename": opens the
 // screen fresh, for the current checkbox selection (or the current
 // row) — the same target-gathering fallback Sed Replace/Move to
-// Trash/Remove all already share (see selectedOrCurrentPaths).
+// Trash/Remove all already share (see selectedOrCurrentPaths) — except
+// a lone directory target is expanded into its own contents first (see
+// expandLoneDirectoryTarget).
 //
 // Always starts from a blank Rules{} rather than remembering the last
 // session's own settings: a stale "Find: vacation" silently applied to
@@ -342,6 +393,11 @@ func (r *Root) openBatchRename() {
 	}
 	targets := r.selectedOrCurrentPaths()
 	if len(targets) == 0 {
+		return
+	}
+	targets, err := r.expandLoneDirectoryTarget(targets)
+	if err != nil {
+		r.showError(err)
 		return
 	}
 	r.batchRenameTargets = targets

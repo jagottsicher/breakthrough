@@ -600,3 +600,126 @@ func TestBatchRenameTemplateStepRebuildsNamesLive(t *testing.T) {
 		t.Errorf("Template item = %q, want it marked active", main)
 	}
 }
+
+// TestOpenBatchRenameOnALoneFolderExpandsToItsContents pins the fix for
+// feedback: applying Batch Rename to a single folder (nothing else
+// selected) used to make that folder itself the one and only target —
+// a pointless single-item rename. It should instead act on the files
+// (and subfolders) inside it, as if they had been selected directly.
+func TestOpenBatchRenameOnALoneFolderExpandsToItsContents(t *testing.T) {
+	dir := fixtureDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "app-data", "inner.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 1) // app-data, the only folder
+
+	r.openBatchRename()
+
+	want := []string{filepath.Join(dir, "app-data", "inner.txt")}
+	if len(r.batchRenameTargets) != len(want) || r.batchRenameTargets[0] != want[0] {
+		t.Fatalf("targets = %v, want %v (the folder's own contents)", r.batchRenameTargets, want)
+	}
+}
+
+// TestOpenBatchRenameOnAnEmptyFolderShowsAnError pins that an empty lone
+// folder reports an explicit error instead of silently opening the
+// screen with no targets at all.
+func TestOpenBatchRenameOnAnEmptyFolderShowsAnError(t *testing.T) {
+	dir := fixtureDir(t) // app-data starts out empty
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 1) // app-data
+
+	r.openBatchRename()
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+	}
+	if got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " "); !strings.Contains(got, "no entries to rename") {
+		t.Errorf("error text = %q, want it to mention the empty folder", got)
+	}
+}
+
+// TestOpenBatchRenameOnMultipleFoldersLeavesThemAsTargets pins that
+// expansion only applies to a *lone* directory target: two or more
+// folders checked at once are still legitimate Batch Rename targets in
+// their own right (renaming several folders' own names in one pass),
+// so they're left untouched.
+func TestOpenBatchRenameOnMultipleFoldersLeavesThemAsTargets(t *testing.T) {
+	dir := fixtureDir(t)
+	if err := os.Mkdir(filepath.Join(dir, "banana-data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if _, err := r.panel.selectByPattern("*-data", true); err != nil {
+		t.Fatalf("selectByPattern: %v", err)
+	}
+
+	r.openBatchRename()
+
+	want := []string{filepath.Join(dir, "app-data"), filepath.Join(dir, "banana-data")}
+	if len(r.batchRenameTargets) != len(want) {
+		t.Fatalf("targets = %v, want the two folders themselves %v", r.batchRenameTargets, want)
+	}
+}
+
+// TestOpenBatchRenameWithCursorOnDotDotExpandsCurrentDirectory pins that
+// this fix composes with CurrentRowPath's own ".." handling (the cursor
+// on ".." reports the panel's current directory, not its parent — see
+// feedback_list.txt): running Batch Rename from ".." renames the
+// current directory's own contents, not the directory itself.
+func TestOpenBatchRenameWithCursorOnDotDotExpandsCurrentDirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	selectRow(r, 0) // ".."
+
+	r.openBatchRename()
+
+	want := []string{
+		filepath.Join(dir, "app-data"),
+		filepath.Join(dir, "apple.txt"),
+		filepath.Join(dir, "apricot.txt"),
+		filepath.Join(dir, "banana.txt"),
+	}
+	if len(r.batchRenameTargets) != len(want) {
+		t.Fatalf("targets = %v, want the current directory's own contents %v", r.batchRenameTargets, want)
+	}
+}
+
+// TestOpenBatchRenameOnAFolderRespectsShowHidden pins that expanding a
+// lone folder shows exactly what the panel itself shows: toggling
+// hidden files off excludes a dotfile from the expanded targets too.
+func TestOpenBatchRenameOnAFolderRespectsShowHidden(t *testing.T) {
+	dir := fixtureDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "app-data", ".secret"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app-data", "inner.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.showHidden = false
+	selectRow(r, 1) // app-data
+
+	r.openBatchRename()
+
+	want := []string{filepath.Join(dir, "app-data", "inner.txt")}
+	if len(r.batchRenameTargets) != len(want) || r.batchRenameTargets[0] != want[0] {
+		t.Fatalf("targets = %v, want only the visible entry %v", r.batchRenameTargets, want)
+	}
+}

@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 105403,
-      "sha256": "078d169a026dfede0cdeb5c2fa2a5cf1cbbf24aa10c85df74ad914430c1bedd7"
+      "size": 105610,
+      "sha256": "02ba553d055fb4293a4bb057e4665ce42c9fad9e0a767404df647e4f31215d2b"
     },
     {
       "path": "docs/whitepaper.md",
@@ -953,13 +953,13 @@
     },
     {
       "path": "internal/ui/batchrename.go",
-      "size": 34785,
-      "sha256": "901548d15184911495461147ca0beb4ba2def792c09a2f073a97a328cc429ef5"
+      "size": 36649,
+      "sha256": "c96c14836f5427c398525bf4c88d46402736e752a9fbdf1da5f5379b9f0e95b1"
     },
     {
       "path": "internal/ui/batchrename_test.go",
-      "size": 21745,
-      "sha256": "16cae2256f765ad3239b51701aad0b57377b84c80cbe4833aeb320f33f676247"
+      "size": 26283,
+      "sha256": "4aaf707a4630d7a217dd23f24a471a2564dcd4405b189c6621cd584392e6f555"
     },
     {
       "path": "internal/ui/batchrenamecatalog.go",
@@ -1148,8 +1148,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 58329,
-      "sha256": "761c610bc913fc7cffa1500ed71c3d8f00c406db225b29d62964a64c26c513be"
+      "size": 58539,
+      "sha256": "fe524c4ad7e6ff1108140e92b8c785830f090e98f7ea9f01d3474f2491ecd762"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -11384,56 +11384,56 @@
       "file": "internal/ui/batchrename.go",
       "name": "batchRenamePage",
       "kind": "const",
-      "line": 39
+      "line": 42
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameInputPage",
       "kind": "const",
-      "line": 40
+      "line": 43
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenamePresetPage",
       "kind": "const",
-      "line": 41
+      "line": 44
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameFieldsHeight",
       "kind": "const",
-      "line": 47
+      "line": 50
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenamePresetSubdir",
       "kind": "const",
-      "line": 53
+      "line": 56
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameFieldHelpHeight",
       "kind": "const",
-      "line": 61
+      "line": 64
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameActiveMark",
       "kind": "const",
-      "line": 67
+      "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameInactiveMark",
       "kind": "const",
-      "line": 68
+      "line": 71
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11441,7 +11441,7 @@
       "name": "newBatchRenameScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 74
+      "line": 77
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11449,14 +11449,14 @@
       "name": "newBatchRenameButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 183
+      "line": 186
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "buttonSpec",
       "kind": "type",
-      "line": 184
+      "line": 187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11464,7 +11464,7 @@
       "name": "batchRenameButtonList",
       "kind": "method",
       "receiver": "*Root",
-      "line": 210
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11472,14 +11472,14 @@
       "name": "batchRenameFocusRing",
       "kind": "method",
       "receiver": "*Root",
-      "line": 217
+      "line": 220
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameButtonPrimitives",
       "kind": "function",
-      "line": 222
+      "line": 225
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11487,7 +11487,7 @@
       "name": "cycleBatchRenameFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 235
+      "line": 238
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11495,7 +11495,7 @@
       "name": "captureBatchRenameKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 255
+      "line": 258
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11503,7 +11503,7 @@
       "name": "captureBatchRenamePaneArrows",
       "kind": "method",
       "receiver": "*Root",
-      "line": 276
+      "line": 279
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11511,7 +11511,7 @@
       "name": "captureBatchRenameFieldsTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 295
+      "line": 298
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11519,7 +11519,22 @@
       "name": "captureBatchRenameFieldsMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 307
+      "line": 310
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename.go",
+      "name": "errBatchRenameEmptyFolder",
+      "kind": "var",
+      "line": 329
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename.go",
+      "name": "expandLoneDirectoryTarget",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 343
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11527,7 +11542,7 @@
       "name": "openBatchRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 334
+      "line": 385
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11535,7 +11550,7 @@
       "name": "closeBatchRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 383
+      "line": 439
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11543,14 +11558,14 @@
       "name": "renderBatchRenameStepsList",
       "kind": "method",
       "receiver": "*Root",
-      "line": 389
+      "line": 445
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/batchrename.go",
       "name": "batchRenameStepLabel",
       "kind": "function",
-      "line": 407
+      "line": 463
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11558,7 +11573,7 @@
       "name": "refreshBatchRenameStepMarks",
       "kind": "method",
       "receiver": "*Root",
-      "line": 418
+      "line": 474
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11566,7 +11581,7 @@
       "name": "renderBatchRenameFieldHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 431
+      "line": 487
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11574,7 +11589,7 @@
       "name": "currentBatchRenameStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 442
+      "line": 498
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11582,7 +11597,7 @@
       "name": "batchRenameFieldAtRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 452
+      "line": 508
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11590,7 +11605,7 @@
       "name": "renderBatchRenameFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 465
+      "line": 521
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11598,7 +11613,7 @@
       "name": "batchRenameFieldDisplay",
       "kind": "method",
       "receiver": "*Root",
-      "line": 496
+      "line": 552
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11606,7 +11621,7 @@
       "name": "activateBatchRenameFieldRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 514
+      "line": 570
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11614,7 +11629,7 @@
       "name": "cycleBatchRenameChoice",
       "kind": "method",
       "receiver": "*Root",
-      "line": 533
+      "line": 589
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11622,7 +11637,7 @@
       "name": "editBatchRenameField",
       "kind": "method",
       "receiver": "*Root",
-      "line": 556
+      "line": 612
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11630,7 +11645,7 @@
       "name": "renderBatchRenamePreview",
       "kind": "method",
       "receiver": "*Root",
-      "line": 596
+      "line": 652
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11638,7 +11653,7 @@
       "name": "batchRenamePlanInputs",
       "kind": "method",
       "receiver": "*Root",
-      "line": 685
+      "line": 741
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11646,7 +11661,7 @@
       "name": "batchRenamePreviewPathAt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 699
+      "line": 755
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11654,7 +11669,7 @@
       "name": "batchRenamePreviewRowKind",
       "kind": "method",
       "receiver": "*Root",
-      "line": 711
+      "line": 767
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11662,7 +11677,7 @@
       "name": "jumpBatchRenamePreview",
       "kind": "method",
       "receiver": "*Root",
-      "line": 730
+      "line": 786
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11670,7 +11685,7 @@
       "name": "toggleBatchRenamePreviewRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 748
+      "line": 804
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11678,7 +11693,7 @@
       "name": "moveBatchRenamePreviewRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 763
+      "line": 819
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11686,7 +11701,7 @@
       "name": "captureBatchRenamePreviewKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 786
+      "line": 842
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11694,7 +11709,7 @@
       "name": "captureBatchRenamePreviewMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 815
+      "line": 871
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11702,7 +11717,7 @@
       "name": "resetBatchRenameSteps",
       "kind": "method",
       "receiver": "*Root",
-      "line": 836
+      "line": 892
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11710,7 +11725,7 @@
       "name": "confirmApplyBatchRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 853
+      "line": 909
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11718,7 +11733,7 @@
       "name": "undoLastBatchRename",
       "kind": "method",
       "receiver": "*Root",
-      "line": 890
+      "line": 946
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -11943,6 +11958,41 @@
       "name": "TestBatchRenameTemplateStepRebuildsNamesLive",
       "kind": "function",
       "line": 582
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename_test.go",
+      "name": "TestOpenBatchRenameOnALoneFolderExpandsToItsContents",
+      "kind": "function",
+      "line": 609
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename_test.go",
+      "name": "TestOpenBatchRenameOnAnEmptyFolderShowsAnError",
+      "kind": "function",
+      "line": 631
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename_test.go",
+      "name": "TestOpenBatchRenameOnMultipleFoldersLeavesThemAsTargets",
+      "kind": "function",
+      "line": 654
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename_test.go",
+      "name": "TestOpenBatchRenameWithCursorOnDotDotExpandsCurrentDirectory",
+      "kind": "function",
+      "line": 680
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/batchrename_test.go",
+      "name": "TestOpenBatchRenameOnAFolderRespectsShowHidden",
+      "kind": "function",
+      "line": 704
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17722,14 +17772,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -17746,7 +17796,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 920
+      "line": 925
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17754,7 +17804,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 943
+      "line": 948
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17762,7 +17812,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 960
+      "line": 965
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17770,7 +17820,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 976
+      "line": 981
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17778,7 +17828,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 996
+      "line": 1001
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17786,7 +17836,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1012
+      "line": 1017
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17794,7 +17844,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1038
+      "line": 1043
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17802,7 +17852,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1068
+      "line": 1073
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17810,7 +17860,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1086
+      "line": 1091
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31909,5 +31959,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "b413ddd7ec63798b7afa202617b7a6bd144769dff6642b6d492080cfc3131465"
+  "merkle_root": "7a8fd8498cbe3c6819c486abd0a2cf9371917b0f5b0273cfbaa1d15db8172b4c"
 }
