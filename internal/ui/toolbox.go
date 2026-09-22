@@ -97,7 +97,7 @@ func toolboxArgEntry(label, help, promptLabel, prefill, name string, fixedArgs .
 // the "jn"/"jh" screens (openNetworkTools/openHardwareTools) to show only
 // one category at a time. No names at all (the empty call) means "no
 // filter", i.e. the full catalog, the same list toolboxCategories itself
-// returns — the "jj" Toolbox screen's own case.
+// returns.
 func toolboxCategoriesNamed(names ...string) []toolboxCategory {
 	if len(names) == 0 {
 		return toolboxCategories()
@@ -172,8 +172,7 @@ func (dr toolboxDisplayRow) isEntry() bool {
 // list: one header row per category, a blank spacer between two
 // categories (never before the first one), then each category's own
 // entries. The screen currently open (see r.toolboxRows) decides which
-// categories that is — the full catalog for "jj", one single category
-// for "jn"/"jh".
+// categories that is — one single category, for "jn" or "jh".
 func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	var rows []toolboxDisplayRow
 	for i, cat := range categories {
@@ -188,9 +187,9 @@ func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	return rows
 }
 
-// toolboxDisplayRows is toolboxDisplayRowsFor for the whole catalog — the
-// "jj" Toolbox screen's own case, and the one every test not concerned
-// with category filtering exercises directly.
+// toolboxDisplayRows is toolboxDisplayRowsFor for the whole catalog —
+// the one every test not concerned with category filtering exercises
+// directly.
 func toolboxDisplayRows() []toolboxDisplayRow {
 	return toolboxDisplayRowsFor(toolboxCategories())
 }
@@ -261,13 +260,13 @@ func (r *Root) newToolboxScreen() {
 }
 
 // openToolboxScreen shows the Toolbox screen filled with categories and
-// titled title — the one shared mechanism behind "jj" (openToolbox, the
-// whole catalog), "jn" (openNetworkTools, Networking only), and "jh"
-// (openHardwareTools, Hardware only): a single table/rendering
-// implementation, parameterized by which categories it currently shows,
-// rather than three near-identical screens. Rebuilt fresh every time —
-// there is no per-session state here worth remembering across opens the
-// way Options remembers its last category.
+// titled title — the one shared mechanism behind "jn" (openNetworkTools,
+// Networking only) and "jh" (openHardwareTools, Hardware only): a
+// single table/rendering implementation, parameterized by which
+// categories it currently shows, rather than two near-identical
+// screens. Rebuilt fresh every time — there is no per-session state
+// here worth remembering across opens the way Options remembers its
+// last category.
 func (r *Root) openToolboxScreen(title string, categories []toolboxCategory) {
 	r.toolboxRows = toolboxDisplayRowsFor(categories)
 	r.toolboxTitleBar.SetText(" " + title + " ")
@@ -275,15 +274,7 @@ func (r *Root) openToolboxScreen(title string, categories []toolboxCategory) {
 	r.showOverlay(toolboxPage, r.toolboxLayout)
 }
 
-// openToolbox shows the whole Toolbox catalog — every category, one
-// after another.
-func (r *Root) openToolbox() {
-	r.openToolboxScreen("Toolbox", toolboxCategories())
-}
-
-// openNetworkTools shows only the catalog's "Networking" category, per
-// the user's own explicit request to reach it directly rather than
-// scrolling past Hardware (or vice versa) in the combined Toolbox.
+// openNetworkTools shows only the catalog's "Networking" category.
 func (r *Root) openNetworkTools() {
 	r.openToolboxScreen("Network Tools", toolboxCategoriesNamed("Networking"))
 }

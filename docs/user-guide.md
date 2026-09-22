@@ -16,6 +16,8 @@ material, always matching the version you are actually running.
 - [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
 - [Open with…](#open-with)
+- [Compress](#compress)
+- [Extract](#extract)
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
 - [Rsync](#rsync)
@@ -95,7 +97,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) |
+| `j` — tools | `jn` [Toolbox](#toolbox): Network Tools screen · `jh` Toolbox: Hardware Tools screen · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -433,8 +435,10 @@ The menu's own title bar names where you are — "Menu" at the top,
 
 - **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
   (files only), `chown`, `chmod`, `sed`, Batch rename, Undo last
-  rename, Compare, Rsync, Remove (the permanent, asks-first sibling of
-  Move to Trash above), Paste following symlinks.
+  rename, Compare, Rsync, [Compress…](#compress) (`jc`),
+  [Extract](#extract)/"Extract, delete original" (`je`/`jE`, shown only
+  for a recognized archive), Remove (the permanent, asks-first sibling
+  of Move to Trash above), Paste following symlinks.
 - **▸ Selection** — Select all, Deselect all, Select +, Select -
   (checkbox-based, the same these already reach on their own keys).
 - **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
@@ -543,6 +547,63 @@ copy, runs the typed command against it, and uploads the result back
 over the connection only if it actually changed — nothing about a file
 living on another machine needs a different command or a separate
 step.
+
+## Compress
+
+`j` then `c`, or the context menu's **Compress…**. Archives the current
+selection — one file, several files, or a whole directory — into a new
+file right beside it, through a real external tool (never a
+reimplementation of any compression algorithm): `zip`, `tar`, and
+`gzip`/`bzip2`/`xz`/`zstd` for the compressed tar variants.
+
+| Field | Meaning |
+|---|---|
+| Target | Read-only — what this Compress run is for |
+| Format | zip, tar, tar.gz, tar.bz2, tar.xz, or tar.zst |
+| Output name | The archive's own name, without extension — the selected Format's own extension is added automatically |
+
+A live Preview line always shows the exact file name that will be
+created. Compress refuses a name that already exists in the current
+directory rather than silently overwriting it — pick a different one
+instead. Local panels only for now; there is no remote archive-creation
+path yet.
+
+Every compressed tar variant is built as a plain `tar -cf -` piped
+through the real compressor binary (`gzip`/`bzip2`/`xz`/`zstd`), rather
+than relying on tar's own bundled compression support — that varies by
+which `tar` is actually installed (GNU tar vs. macOS/BSD's own
+`bsdtar`), while a plain pipe through the real compressor works
+identically everywhere it's installed. Whichever tool a format needs
+has to actually be on `$PATH` — a missing one is reported by name
+("`zstd` not found on \$PATH — install it first…") rather than a bare,
+buried "command not found".
+
+## Extract
+
+`j` then `e` (keep the original) or `E` (also delete it), or the
+context menu's **Extract**/**Extract, delete original** (both shown
+only once the cursor is actually on a recognized archive). Unpacks the
+whole archive in one step, without first browsing into it — real
+`unzip`/`tar` (piped through the matching decompressor), never a
+reimplementation, the same as [Compress](#compress) above.
+
+The destination depends on whether a split is currently active:
+
+| Split view | Destination |
+|---|---|
+| Off | The archive's own directory ("extract here") |
+| On | The other pane's own current directory — the same default [Rsync](#rsync)/[Compare](#compare) already use once a split exists |
+
+`jE`/"Extract, delete original" additionally moves the original archive
+to the Trash, but only once extraction has actually succeeded. If that
+move fails outright (Trash unavailable, or the move itself errors),
+this never silently leaves the archive behind and never silently
+hard-deletes it either — it asks first, naming plainly that the
+fallback is a real, permanent delete, the same "irreversible actions
+must be clearly flagged and confirmed" principle [Trash, Remove and
+Restore](#trash-remove-and-restore) already follows.
+
+Local panels only for now, the same scope [Compress](#compress) has.
 
 ## Batch rename
 
@@ -817,9 +878,11 @@ breakthrough's own keyboard.
 
 ## Toolbox
 
-`j` then `j`. A full-screen, browsable catalog of external networking
-and hardware tools — never reimplemented, the same "shell out to the
-real tool" approach Rsync and Sed Replace already take. Two categories:
+`j` then `n` (Network Tools) or `j` then `h` (Hardware Tools). A
+full-screen, browsable catalog of external networking and hardware
+tools — never reimplemented, the same "shell out to the real tool"
+approach Rsync and Sed Replace already take. Two categories, each with
+its own dedicated entry point:
 
 - **Networking**: Ping, Nmap scan, IP addresses (`ip addr`), Routing
   table (`route -n`), Sockets (`ss -tulpn`), `getent`, `wget`,
@@ -850,11 +913,9 @@ Not every one of these commands ships by default on every distribution
 installed reports a real "command not found" in its own tool window,
 the same as typing it at a shell would.
 
-`j` then `n` (Network Tools) and `j` then `h` (Hardware Tools) open
-this exact same screen already filtered down to just the Networking or
-just the Hardware category above, for jumping straight to one tool
-without scrolling past the other category's entries first. `jj` itself
-is unchanged and still shows both categories together.
+`jn` and `jh` share the exact same underlying screen — each simply
+opens it pre-filtered to its own category, so reaching one specific
+tool never means scrolling past the other category's entries first.
 
 ## Tool windows
 
