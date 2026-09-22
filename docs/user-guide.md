@@ -97,7 +97,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original |
+| `j` — tools | `jn` [Toolbox](#toolbox): Network Tools screen · `jh` Toolbox: Hardware Tools screen · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -878,9 +878,11 @@ breakthrough's own keyboard.
 
 ## Toolbox
 
-`j` then `j`. A full-screen, browsable catalog of external networking
-and hardware tools — never reimplemented, the same "shell out to the
-real tool" approach Rsync and Sed Replace already take. Two categories:
+`j` then `n` (Network Tools) or `j` then `h` (Hardware Tools). A
+full-screen, browsable catalog of external networking and hardware
+tools — never reimplemented, the same "shell out to the real tool"
+approach Rsync and Sed Replace already take. Two categories, each with
+its own dedicated entry point:
 
 - **Networking**: Ping, Nmap scan, IP addresses (`ip addr`), Routing
   table (`route -n`), Sockets (`ss -tulpn`), `getent`, `wget`,
@@ -911,11 +913,9 @@ Not every one of these commands ships by default on every distribution
 installed reports a real "command not found" in its own tool window,
 the same as typing it at a shell would.
 
-`j` then `n` (Network Tools) and `j` then `h` (Hardware Tools) open
-this exact same screen already filtered down to just the Networking or
-just the Hardware category above, for jumping straight to one tool
-without scrolling past the other category's entries first. `jj` itself
-is unchanged and still shows both categories together.
+`jn` and `jh` share the exact same underlying screen — each simply
+opens it pre-filtered to its own category, so reaching one specific
+tool never means scrolling past the other category's entries first.
 
 ## Tool windows
 

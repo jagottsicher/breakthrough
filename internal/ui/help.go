@@ -92,8 +92,7 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    j  tools    jj Toolbox screen (networking/hardware tools) ·
-                jm Mounts screen (what's mounted right now) ·
+    j  tools    jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jh Hardware Tools screen ·
                 jf Firewall screen (this host's own actual rules) ·
                 jc Compress… · je Extract · jE Extract, delete original
@@ -362,14 +361,14 @@ var helpText = strings.TrimLeft(`
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
 
-[::b]Toolbox screen ("jj")[::-]
+[::b]Toolbox screen ("jn"/"jh")[::-]
 
-  A browsable catalog of real networking and hardware tools — Networking
-  (Ping, Nmap, ip, route, ss, getent, wget, nslookup, dig, netcat, curl,
-  a log-following Tail -f) and Hardware (lsblk, lsusb, lscpu, lsmem,
-  lsdev, hwinfo, inxi, lsscsi) — each one a genuine external command,
-  never reimplemented, the same "shell out to the real tool" approach
-  Rsync and Sed Replace already take.
+  A browsable catalog of real networking and hardware tools — "jn"
+  (Network Tools: Ping, Nmap, ip, route, ss, getent, wget, nslookup,
+  dig, netcat, curl, a log-following Tail -f) and "jh" (Hardware Tools:
+  lsblk, lsusb, lscpu, lsmem, lsdev, hwinfo, inxi, lsscsi) — each one a
+  genuine external command, never reimplemented, the same "shell out to
+  the real tool" approach Rsync and Sed Replace already take.
 
   Up / Down         Move between entries
   Enter             Run the selected tool — asks for one further
@@ -380,12 +379,6 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
-
-  "jn" (Network Tools) and "jh" (Hardware Tools) open this very same
-  screen already filtered down to just the Networking or just the
-  Hardware category, for jumping straight to one tool without scrolling
-  past the other category's entries first. Everything above about
-  Up/Down, Enter, Escape and tool windows applies the same way there.
 
 [::b]Mounts screen ("jm")[::-]
 
@@ -898,7 +891,7 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
-[::b]Tool windows (every entry in the Toolbox screen, "jj")[::-]
+[::b]Tool windows (every entry in the Toolbox screen, "jn"/"jh")[::-]
 
   A small floating window running one command's live output — unlike
   every dialog above, not modal: the panel underneath (and any other

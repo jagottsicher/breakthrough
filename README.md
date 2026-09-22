@@ -468,16 +468,17 @@ terminal.
   bar, queuing behind an already-running background rsync the same way
   a second Paste already queues behind one still in flight. See
   [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
-- Toolbox (`j` then `j`): a full-screen, browsable catalog of built-in
-  networking (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`,
-  `nslookup`, `dig`, netcat, `curl`, a `tail -f` Logviewer) and hardware
-  (`lsblk`, `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`,
-  `lsscsi`) tools — real external commands, never reimplemented, the
-  same approach Rsync above already takes. An entry that needs one — a
-  host, a URL, a database key — asks for it in a small field first;
-  every one of them then streams its live output into its own small,
-  draggable tool window, non-modal so the Toolbox screen and the panel
-  underneath both stay usable while it runs. See
+- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): two
+  full-screen, browsable catalogs of built-in commands — Network Tools
+  (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`, `nslookup`, `dig`,
+  netcat, `curl`, a `tail -f` Logviewer) and Hardware Tools (`lsblk`,
+  `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`, `lsscsi`) — real
+  external commands, never reimplemented, the same approach Rsync above
+  already takes. An entry that needs one — a host, a URL, a database
+  key — asks for it in a small field first; every one of them then
+  streams its live output into its own small, draggable tool window,
+  non-modal so the Toolbox screen and the panel underneath both stay
+  usable while it runs. See
   [docs/user-guide.md](docs/user-guide.md#toolbox) for the full catalog.
 - Mounts (`j` then `m`): a third full-screen catalog, kept deliberately
   separate from the Toolbox above — a read-only, live table of every
@@ -488,11 +489,6 @@ terminal.
   some point since), and flags bind mounts, so it doubles as a quick
   answer to "what will still be here after I reboot this box?" See
   [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
-- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): the
-  same Toolbox screen above, opened already filtered down to just its
-  Networking or just its Hardware catalog, for jumping straight to one
-  tool without scrolling past the other category first. `jj` itself
-  still shows both categories together.
 - Compress (`j` then `c`, or the context menu's "Compress…") and
   Extract (`j` then `e`/`E`, or the context menu's "Extract"/"Extract,
   delete original"): real archive creation and unpacking, through a
@@ -697,9 +693,9 @@ terminal.
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
-covering every setting breakthrough recognizes, a Toolbox screen
-(`jj`) of built-in networking and hardware tools with its own filtered
-Network Tools (`jn`) and Hardware Tools (`jh`) screens, a Mounts
+covering every setting breakthrough recognizes, a Toolbox screen of
+built-in networking and hardware tools with its own Network Tools
+(`jn`) and Hardware Tools (`jh`) screens, a Mounts
 screen (`jm`) showing what's currently mounted and whether it survives a
 reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really

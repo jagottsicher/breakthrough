@@ -234,11 +234,11 @@ type Root struct {
 	toolboxTable    *tview.Table
 	toolboxInput    *tview.InputField
 
-	// toolboxRows is the currently open screen's own row list — the
-	// whole catalog for "jj" (openToolbox), one single category for "jn"
-	// (openNetworkTools) or "jh" (openHardwareTools). One table/rendering
-	// implementation (renderToolbox et al.) driven by whichever rows this
-	// holds, rather than a separate near-identical screen per category.
+	// toolboxRows is the currently open screen's own row list — one
+	// single category, for "jn" (openNetworkTools) or "jh"
+	// (openHardwareTools). One table/rendering implementation
+	// (renderToolbox et al.) driven by whichever rows this holds, rather
+	// than a separate near-identical screen per category.
 	toolboxRows []toolboxDisplayRow
 
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
@@ -1635,8 +1635,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated List" pattern as r.picker above.
 	r.newOptionsScreen()
 
-	// The Toolbox screen (see toolbox.go/openToolbox) — same full-screen
-	// shape as Options, built once here and repopulated on every open.
+	// The Toolbox screen (see toolbox.go/openToolboxScreen) — same
+	// full-screen shape as Options, built once here and repopulated on
+	// every open.
 	r.newToolboxScreen()
 
 	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
