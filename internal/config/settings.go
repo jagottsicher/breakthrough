@@ -191,7 +191,7 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     interpreted — Go's own reference-time layout by default
 //     (duplicate_datetime_strftime = false; format defaults to
 //     "2006-01-02_15-04-05") or, with the toggle on, a strftime-style
-//     format instead (see internal/fsops.strftimeToGoLayout for exactly
+//     format instead (see internal/fsops.StrftimeToGoLayout for exactly
 //     which %-specifiers that mode supports) — the same
 //     "checkbox picks which syntax the text field means" shape the
 //     filter menu's own Glob/Regex toggle already uses, per the user's
@@ -246,6 +246,23 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     verbatim copying is the simpler, more predictable behavior, and
 //     rewriting a symlink's target is itself a change to its meaning that
 //     shouldn't happen without asking.
+//   - remote_archive_confirm_size: opening a zip/tar/... that lives on a
+//     remote SFTP connection has to download it whole first — internal/
+//     archive has no notion of a remote Client at all, and a zip's own
+//     central directory sits at the end of the file regardless, so
+//     there's no way to browse one without the whole thing local anyway
+//     (see internal/ui's remotearchive.go). Below this size, that
+//     download just happens, the same "proactively transparent" way
+//     every other remote operation already does; at or above it, a
+//     confirmation names the real size first, since a large archive over
+//     a slow link can otherwise turn one Enter keypress into a
+//     multi-minute wait with no warning. 10MB by default. The one
+//     setting in this whole file that accepts a unit suffix (see
+//     ParseByteSize/FormatByteSize in bytesize.go) rather than a bare
+//     integer — "10MB" reads far better here than "10485760" ever would,
+//     unlike every other numeric setting, which is a plain count/
+//     percentage/millisecond figure with no unit ambiguity to begin
+//     with.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -262,6 +279,15 @@ type Settings struct {
 	MouseEnabled      bool
 	FilterPersistent  bool
 	ChordTimeoutMS    int
+
+	StatusBarShowUsername bool
+	StatusBarShowMouse    bool
+	StatusBarShowDisk     bool
+	StatusBarShowInodes   bool
+	StatusBarShowKernel   bool
+	StatusBarShowUptime   bool
+	StatusBarShowLoad     bool
+	ShowGitStatus         bool
 
 	DuplicateSeparator        string
 	DuplicateStrategy         string
@@ -281,6 +307,8 @@ type Settings struct {
 	MoveAutoMergeDirectories bool
 	CopyStableSymlinks       bool
 	MoveStableSymlinks       bool
+
+	RemoteArchiveConfirmSize int64
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -306,6 +334,15 @@ func DefaultSettings() Settings {
 		FilterPersistent:  true,
 		ChordTimeoutMS:    4000,
 
+		StatusBarShowUsername: true,
+		StatusBarShowMouse:    true,
+		StatusBarShowDisk:     true,
+		StatusBarShowInodes:   true,
+		StatusBarShowKernel:   true,
+		StatusBarShowUptime:   true,
+		StatusBarShowLoad:     true,
+		ShowGitStatus:         true,
+
 		DuplicateSeparator:        "_",
 		DuplicateStrategy:         "numbered",
 		DuplicateSuffixText:       "copy",
@@ -324,6 +361,8 @@ func DefaultSettings() Settings {
 		MoveAutoMergeDirectories: false,
 		CopyStableSymlinks:       false,
 		MoveStableSymlinks:       false,
+
+		RemoteArchiveConfirmSize: 10 << 20, // 10MB
 	}
 }
 
@@ -380,6 +419,22 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.FilterPersistent)
 	case "chord_timeout_ms":
 		return parseInt(&s.ChordTimeoutMS)
+	case "status_bar_show_username":
+		return parseBool(&s.StatusBarShowUsername)
+	case "status_bar_show_mouse":
+		return parseBool(&s.StatusBarShowMouse)
+	case "status_bar_show_disk":
+		return parseBool(&s.StatusBarShowDisk)
+	case "status_bar_show_inodes":
+		return parseBool(&s.StatusBarShowInodes)
+	case "status_bar_show_kernel":
+		return parseBool(&s.StatusBarShowKernel)
+	case "status_bar_show_uptime":
+		return parseBool(&s.StatusBarShowUptime)
+	case "status_bar_show_load":
+		return parseBool(&s.StatusBarShowLoad)
+	case "show_git_status":
+		return parseBool(&s.ShowGitStatus)
 	case "duplicate_separator":
 		s.DuplicateSeparator = value
 	case "duplicate_strategy":
@@ -414,6 +469,12 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.CopyStableSymlinks)
 	case "move_stable_symlinks":
 		return parseBool(&s.MoveStableSymlinks)
+	case "remote_archive_confirm_size":
+		n, err := ParseByteSize(value)
+		if err != nil {
+			return fmt.Errorf("invalid size for %q: %w", key, err)
+		}
+		s.RemoteArchiveConfirmSize = n
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

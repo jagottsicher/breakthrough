@@ -1,0 +1,233 @@
+// Package ui's own remoteops.go holds the small, single-item remote
+// operations (rename, permanent delete, chmod, new file/new dir) that
+// don't need the full async/progress/conflict machinery
+// remotepaste.go's own transfer engine does — see this project's own
+// phased rollout: Phase 1 (browsing, viewing) shipped first; Phase 2
+// filled in rename/delete/chmod/copy-cut-paste/new-file/new-dir for a
+// remote panel; Edit and Look (see
+// bottombar.go's own editRemoteEntry and viewer.go's own
+// openRemoteLook) stage a local temp copy through remotestage.go's own
+// downloadRemoteToTemp instead of refusing outright, the same way a
+// remote zip/tar now does too (see archivepanel.go). Still
+// deliberately not covered: chown (no remote user/group database to
+// resolve a typed name against — see openChown's own doc comment on
+// why even the *local* text fallback only works because the local
+// account database is right there), Compare, Batch rename, Sed
+// Replace, and Properties as a whole (see openProperties's own doc
+// comment) — each still refuses outright via isRemote's own guard,
+// unchanged from Phase 1.
+package ui
+
+import (
+	"fmt"
+	"os"
+	"path"
+	"strings"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
+)
+
+var errEmptyName = fmt.Errorf("new name must not be empty")
+
+// renameRemote is fsops.Rename's own remote counterpart — same
+// contract (refuses an empty name, a name containing "/", or an
+// existing destination; returns the new full path on success), against
+// a remote Client instead of the real local filesystem. Uses the
+// "path" package throughout, not "path/filepath": a remote path is
+// always POSIX-"/"-separated regardless of whatever OS this copy of
+// breakthrough itself happens to be running on (see remotefs's own
+// package doc comment).
+func renameRemote(client remotefs.Client, p, newName string) (string, error) {
+	if newName == "" {
+		return "", errEmptyName
+	}
+	if strings.ContainsRune(newName, '/') {
+		return "", fmt.Errorf("new name must not contain a path separator: %q", newName)
+	}
+
+	dest := path.Join(path.Dir(p), newName)
+	if _, err := client.Stat(dest); err == nil {
+		return "", fmt.Errorf("%s already exists", dest)
+	}
+	if err := client.Rename(p, dest); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// createFileRemote is fsops.CreateFile's own remote counterpart: an
+// empty file called name, created directly inside dir (the currently
+// browsed remote directory, not p's own parent the way renameRemote's
+// dest is — there's no existing entry to stay alongside here). Same
+// refusals as renameRemote (empty name, a "/" in name, an existing
+// destination).
+func createFileRemote(client remotefs.Client, dir, name string) (string, error) {
+	if name == "" {
+		return "", errEmptyName
+	}
+	if strings.ContainsRune(name, '/') {
+		return "", fmt.Errorf("name must not contain a path separator: %q", name)
+	}
+
+	dest := path.Join(dir, name)
+	if _, err := client.Stat(dest); err == nil {
+		return "", fmt.Errorf("%s already exists", dest)
+	}
+	w, err := client.Create(dest)
+	if err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// createDirRemote is fsops.CreateDir's own remote counterpart — see
+// createFileRemote's own doc comment just above for the shared
+// reasoning (dir, not a parent-of-p; same refusals).
+func createDirRemote(client remotefs.Client, dir, name string) (string, error) {
+	if name == "" {
+		return "", errEmptyName
+	}
+	if strings.ContainsRune(name, '/') {
+		return "", fmt.Errorf("name must not contain a path separator: %q", name)
+	}
+
+	dest := path.Join(dir, name)
+	if _, err := client.Stat(dest); err == nil {
+		return "", fmt.Errorf("%s already exists", dest)
+	}
+	if err := client.Mkdir(dest); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// removeRemoteRecursive deletes p — a single file/symlink/special file
+// outright, or a real directory by first recursively emptying it
+// (depth-first: every child before the directory itself, the same
+// order a real `rm -r` removes in) — since RemoveDirectory/Remove's
+// own SFTP semantics only ever delete one already-empty entry at a
+// time, unlike local fsops.PurgeCompletely's own os.RemoveAll.
+//
+// isDir must be Lstat-true, not resolved-Stat-true: a symlink to a
+// directory must always be unlinked on its own, never recursed into
+// and have its target's contents deleted — the exact same
+// os.Lstat(path).IsDir() distinction fsops.PurgeCompletely's own local
+// implementation already makes, for the same reason. The top-level
+// caller passes the row's own already-known fsops.Entry.Type == TypeDir
+// (see openRemoveConfirmRemote); each recursive step passes
+// child.Type == fsops.TypeDir from ListDir's own Lstat-based listing —
+// deliberately not child.IsDir, which (per its own doc comment on
+// fsops.Entry) is true for a directory *symlink* too, exactly the case
+// this must not recurse into.
+func removeRemoteRecursive(client remotefs.Client, p string, isDir bool) error {
+	if !isDir {
+		return client.Remove(p)
+	}
+
+	children, err := client.ListDir(p)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := removeRemoteRecursive(client, path.Join(p, child.Name), child.Type == fsops.TypeDir); err != nil {
+			return err
+		}
+	}
+	return client.RemoveDirectory(p)
+}
+
+// chmodDirsRecursiveRemote is fsops.ChmodDirsRecursive's own remote
+// counterpart: mode applies to p itself and every directory nested
+// beneath it. Lstat-based via ListDir's own child.Type, so a symlink
+// to a directory is left alone — the same as the local
+// implementation's filepath.WalkDir, which never follows one either.
+func chmodDirsRecursiveRemote(client remotefs.Client, p string, mode os.FileMode) error {
+	if err := client.Chmod(p, mode); err != nil {
+		return err
+	}
+	children, err := client.ListDir(p)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if child.Type != fsops.TypeDir {
+			continue
+		}
+		if err := chmodDirsRecursiveRemote(client, path.Join(p, child.Name), mode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// chmodFilesRecursiveRemote is fsops.ChmodFilesRecursive's own remote
+// counterpart: mode applies to every regular file nested beneath p —
+// never p itself (always a directory being recursed into, never the
+// file being chmod'd), and never a symlink even one resolving to a
+// regular file, matching TypeFile's own exclusion of every symlink
+// type.
+func chmodFilesRecursiveRemote(client remotefs.Client, p string, mode os.FileMode) error {
+	children, err := client.ListDir(p)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		full := path.Join(p, child.Name)
+		switch child.Type {
+		case fsops.TypeDir:
+			if err := chmodFilesRecursiveRemote(client, full, mode); err != nil {
+				return err
+			}
+		case fsops.TypeFile:
+			if err := client.Chmod(full, mode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// remoteInfoFromEntry builds an fsops.Info from a Client.Stat/Lstat
+// result — the Details sidebar's own per-file stat block (see
+// loadDetailsTarget) needs the richer Info shape, not the
+// directory-listing-oriented Entry every remote Client method actually
+// returns (see fsops.Entry's own doc comment on the difference).
+//
+// Owner/Group are deliberately left blank rather than falling back to
+// a numeric uid/gid the way fsops.Stat's own ownerGroup does locally:
+// the SFTP protocol's stat response doesn't carry a raw uid/gid this
+// code currently keeps hold of anywhere past Client.Stat's own
+// adapter, and there is no remote user/group database to resolve a
+// name against regardless (the same limitation openChown's own doc
+// comment already gives for why chown itself stays refused) — an
+// empty field here is honest about that, not a bug to chase down.
+func remoteInfoFromEntry(path string, entry fsops.Entry) fsops.Info {
+	info := fsops.Info{
+		Name:       entry.Name,
+		Path:       path,
+		IsDir:      entry.Type == fsops.TypeDir,
+		Mode:       entry.Mode,
+		Size:       entry.Size,
+		ModTime:    entry.ModTime,
+		Nlink:      entry.Nlink,
+		MountPoint: entry.MountPoint,
+	}
+	switch entry.Type {
+	case fsops.TypeSymlinkFile:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+	case fsops.TypeSymlinkDir:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+		info.LinkIsDir = true
+	case fsops.TypeSymlinkBroken:
+		info.IsSymlink = true
+		info.LinkTarget = entry.LinkTarget
+		info.LinkBroken = true
+	}
+	return info
+}

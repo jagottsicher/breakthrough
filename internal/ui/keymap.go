@@ -132,7 +132,6 @@ func plainCommands() []plainCommand {
 		{key: '/', label: "Filter", action: func(r *Root) { r.openFilterMenu() }},
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
-		{key: 'm', label: "Context menu", quick: true, short: "Menu", action: func(r *Root) { r.MenuShortcut() }},
 		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
@@ -181,6 +180,8 @@ func plainCommands() []plainCommand {
 		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
 		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
+		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
+		{key: 'R', label: "Rsync", action: func(r *Root) { r.openRsync() }},
 		{key: 'G', label: "Go to the last row", action: func(r *Root) { r.panel.focusRow(r.panel.table.GetRowCount() - 1) }},
 		{key: '+', label: "Select by pattern", action: func(r *Root) { r.openSelectPlus() }},
 		{key: '-', label: "Deselect by pattern", action: func(r *Root) { r.openSelectMinus() }},
@@ -219,11 +220,13 @@ func (r *Root) copyCurrentSelection() {
 }
 
 func (r *Root) cutCurrentSelection() {
-	// Cut has nothing to remove afterward — see pasteInto's own doc
-	// comment for the same reasoning at the other end of a Cut. Blocked
-	// here too, not just there, so the clipboard indicator never shows
-	// "Cut: N files" for something a later Paste would then have to
-	// refuse outright.
+	// Cut has nothing to remove afterward inside a read-only archive —
+	// see pasteInto's own doc comment for the same reasoning at the
+	// other end of a Cut. Blocked here too, not just there, so the
+	// clipboard indicator never shows "Cut: N files" for something a
+	// later Paste would then have to refuse outright. No such guard for
+	// a remote panel anymore: remotepaste.go's own engine handles a Cut
+	// landing on, or coming from, a remote connection the same as Copy.
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
 		return
@@ -302,10 +305,38 @@ func chordFamilies() []chordFamily {
 			// ("gr / (root)" — see help.go).
 			{'r', "/ (root)", func(r *Root) { r.showError(r.panel.navigate("/")) }},
 			{'b', "Trashbin", func(r *Root) { r.openTrash() }},
+			// "Connect…" closes the family out, after gr/gb rather than
+			// among gh/gu/gp/gn: it doesn't navigate anywhere by itself,
+			// it opens the connection dropdown (see connectionmenu.go),
+			// the same "go to a whole further place" role gr/gb already
+			// have, just via a dialog instead of an instant jump — the
+			// header's own "@" button (see buildHeaderSpans) is this
+			// same action's mouse equivalent.
+			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
 			{'o', "chown", func(r *Root) { r.openChown() }},
+		}},
+		// "mm" doubles the prefix the same way "gg"/"oo" already do —
+		// opening the context menu, exactly what a bare "m" always did
+		// before this family existed. Per the user's own explicit
+		// request for mnemonic chords to create a new file/directory
+		// without going through the menu at all: "mf"/"md" read as
+		// "make file"/"make dir", both landing directly inside the
+		// active panel's own current directory.
+		//
+		// One accepted side effect, not an oversight: the context
+		// menu's own "Multiply" entry already used "m" as its mnemonic
+		// once the menu is open (see contextmenu.go's own doc comment —
+		// "m opens the menu, mm duplicates"), so reaching it from plain
+		// browsing now takes "mmm" (open the family, open the menu,
+		// then the menu's own Multiply mnemonic) instead of the
+		// previous two keystrokes.
+		{prefix: 'm', name: "menu", quick: true, members: []chordMember{
+			{'m', "Context menu", func(r *Root) { r.MenuShortcut() }},
+			{'f', "New file", func(r *Root) { r.openNewFile() }},
+			{'d', "New dir", func(r *Root) { r.openNewDir() }},
 		}},
 		{prefix: 'z', name: "display", quick: true, members: []chordMember{
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
@@ -328,6 +359,46 @@ func chordFamilies() []chordFamily {
 		{prefix: 'o', name: "options", quick: true, members: []chordMember{
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
+		}},
+		// "jj" doubles the prefix for the family's own single main
+		// destination, the same shape "gg"/"oo" already establish —
+		// opening the Toolbox screen (toolbox.go), a catalog of real
+		// external networking/hardware tools. "j" itself carries no
+		// mnemonic of its own — by the time this family was added, every
+		// other letter already meant something else as either a plain
+		// command or a chord prefix, and "j" (along with "b") was one of
+		// only two still completely free.
+		//
+		// "jm" opens the Mounts screen (mounts.go) — a second, related
+		// full-screen catalog under the same prefix, per the user's own
+		// explicit request to keep it separate from the Toolbox's own
+		// command list rather than folding it in as one more entry
+		// there. Same "one prefix, several distinct destinations" shape
+		// the "o" chord's own "oo"/"om" already establish.
+		//
+		// "jn"/"jh" jump straight to the Toolbox's own "Networking"/
+		// "Hardware" category alone (openNetworkTools/openHardwareTools
+		// in toolbox.go), skipping past the other category entirely —
+		// per the user's own explicit request: by the time the catalog
+		// held enough entries in both categories to scroll through,
+		// reaching one specific tool through the combined "jj" list
+		// meant passing the other category's entries first. "jj" itself
+		// is unchanged and still shows both, for browsing the whole
+		// catalog at once.
+		//
+		// "jf" opens the Firewall screen (firewall.go) — a third,
+		// unrelated full-screen catalog under the same prefix, same "one
+		// prefix, several distinct destinations" shape as "jm"/"jn"/"jh"
+		// above: this host's own actual firewall rules (UFW, nftables, or
+		// iptables, whichever one actually governs traffic), not a list
+		// of commands to run, so it gets its own destination rather than
+		// a Toolbox catalog entry.
+		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
+			{'j', "Toolbox", func(r *Root) { r.openToolbox() }},
+			{'m', "Mounts", func(r *Root) { r.openMounts() }},
+			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
+			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
+			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 		}},
 	}
 }

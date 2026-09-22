@@ -42,9 +42,9 @@ func stripColorTags(s string) string {
 
 func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/a/bb/c", theme)
+	text, spans := buildHeaderSpans("/a/bb/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -57,10 +57,11 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 29, action: actionNavigate, target: "/"},
-		{start: 29, end: 30, action: actionNavigate, target: "/a"},
-		{start: 31, end: 33, action: actionNavigate, target: "/a/bb"},
-		{start: 34, end: 35, action: actionNavigate, target: "/a/bb/c"},
+		{start: 28, end: 31, action: actionOpenConnectionMenu},
+		{start: 32, end: 33, action: actionNavigate, target: "/"},
+		{start: 33, end: 34, action: actionNavigate, target: "/a"},
+		{start: 35, end: 37, action: actionNavigate, target: "/a/bb"},
+		{start: 38, end: 39, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -108,7 +109,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 // tags of its own (see its own doc comment).
 func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, _ := buildHeaderSpans("/a/bb/c", theme)
+	text, _ := buildHeaderSpans("/a/bb/c", theme, false)
 	if visible := stripColorTags(text); !strings.HasPrefix(visible, headerButtonPrefix) {
 		t.Errorf("buildHeaderSpans' own visible text %q does not start with headerButtonPrefix %q", visible, headerButtonPrefix)
 	}
@@ -116,19 +117,19 @@ func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/", theme)
+	text, spans := buildHeaderSpans("/", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
-	// 7 buttons + the root span.
-	if len(spans) != 8 {
-		t.Fatalf("got %d spans, want 8: %+v", len(spans), spans)
+	// 7 nav buttons + the connection button + the root span.
+	if len(spans) != 9 {
+		t.Fatalf("got %d spans, want 9: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 28, end: 29, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 32, end: 33, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -141,9 +142,9 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 // on screen. "文档" is 2 runes but 4 terminal columns.
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/文档/c", theme)
+	text, spans := buildHeaderSpans("/文档/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -156,9 +157,10 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 29, action: actionNavigate, target: "/"},
-		{start: 29, end: 33, action: actionNavigate, target: "/文档"},
-		{start: 34, end: 35, action: actionNavigate, target: "/文档/c"},
+		{start: 28, end: 31, action: actionOpenConnectionMenu},
+		{start: 32, end: 33, action: actionNavigate, target: "/"},
+		{start: 33, end: 37, action: actionNavigate, target: "/文档"},
+		{start: 38, end: 39, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -2201,6 +2203,38 @@ func TestLoadPreservesCursorOnSameDirectoryRefresh(t *testing.T) {
 	}
 }
 
+// TestLoadClampsTheCursorAfterTheRowItWasOnIsDeleted pins a real,
+// reported bug: Table.Clear() (see load's own doc comment on why)
+// never touches tview's own internal selection index, only cell
+// content — so deleting the row the cursor was actually on, then
+// reloading the same directory in place (exactly what Move to
+// Trash/Remove already does), used to leave that index pointing past
+// the end of the now-shorter table. Nothing then highlighted any row
+// at all until some unrelated keypress happened to nudge tview's own
+// Select()-driven clamp into re-validating it — reported as "tab focus
+// away and back after deleting a file, and nothing is selected until
+// pressing Down once first".
+func TestLoadClampsTheCursorAfterTheRowItWasOnIsDeleted(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.panel.focusRow(4) // banana.txt, the last row
+	if err := os.Remove(filepath.Join(dir, "banana.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.panel.load(r.panel.path); err != nil {
+		t.Fatalf("load (refresh): %v", err)
+	}
+
+	row, _ := r.panel.table.GetSelection()
+	if last := r.panel.table.GetRowCount() - 1; row != last {
+		t.Errorf("selected row after deleting the row the cursor was on = %d, want the new last row %d", row, last)
+	}
+}
+
 // TestShowSearchResultsClearsTableAndEntersSearchMode pins
 // showSearchResults' own basic contract: an empty table, searchMode
 // true, p.path itself left completely untouched (see its own doc
@@ -2505,7 +2539,7 @@ func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
 // buildHeaderSpansText is buildHeaderSpans' own text half, for a test
 // that only needs to compare against it, not the spans too.
 func buildHeaderSpansText(abs string, theme config.ResolvedTheme) string {
-	text, _ := buildHeaderSpans(abs, theme)
+	text, _ := buildHeaderSpans(abs, theme, false)
 	return text
 }
 
@@ -3439,5 +3473,37 @@ func TestColumnHeaderNameWidthMatchesDataRows(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestRowAtAndCurrentRowPathOnDotDot pins the ".." row's own fallback
+// in Panel.RowAt and Panel.CurrentRowPath: acting on the row that
+// otherwise reads "up one directory" must resolve to the panel's own
+// current directory, dir — exactly like the filesystem root's own "/"
+// row already does — instead of reporting ok == false the way both
+// functions used to for this one row alone. This directly pins the
+// user's own complaint that chords like "mm" did nothing while the
+// cursor sat on "..".
+func TestRowAtAndCurrentRowPathOnDotDot(t *testing.T) {
+	dir := fixtureDir(t)
+	root, cleanup := drawnRoot(t, dir)
+	defer cleanup()
+
+	ref, ok := root.panel.rowRef(0)
+	if !ok || ref.name != ".." {
+		t.Fatalf("setup: row 0 = (%+v, %v), want the \"..\" row", ref, ok)
+	}
+
+	x, y, ok := findRowPos(root.panel.table, 0, 80, 24)
+	if !ok {
+		t.Fatal("could not locate row 0's screen position")
+	}
+	if path, ok := root.panel.RowAt(x, y); !ok || path != dir {
+		t.Errorf("RowAt(row 0) = (%q, %v), want (%q, true)", path, ok, dir)
+	}
+
+	root.panel.table.Select(0, 0)
+	if row, path, ok := root.panel.CurrentRowPath(); !ok || path != dir || row != 0 {
+		t.Errorf("CurrentRowPath() = (%d, %q, %v), want (0, %q, true)", row, path, ok, dir)
 	}
 }

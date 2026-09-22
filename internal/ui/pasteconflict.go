@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // fsCopy/fsMove are fsops.Copy/fsops.Move, indirected through package
@@ -81,6 +82,12 @@ type queuedPaste struct {
 	// exactly like on pasteJob itself.
 	restoreDests    []string
 	restoreTrashDir string
+
+	// srcClient/destClient mirror pasteJob's own identically-named
+	// fields — nil/nil for an ordinary local Paste or a Restore (Trash
+	// is always local).
+	srcClient  remotefs.Client
+	destClient remotefs.Client
 }
 
 // pasteJob is one Paste's own asynchronous, resumable state — see
@@ -98,6 +105,33 @@ type pasteJob struct {
 
 	cut     bool
 	destDir string
+
+	// srcClient/destClient are nil for an ordinary local Paste — the
+	// same "nil means local" convention remotepaste.go's own
+	// transferSide/clipboardSourceClient/Panel.remote already use
+	// throughout. Set whenever either end of this job is a remote
+	// connection, so pasteWalk/pasteOne/scanPasteBytes/pasteOverlaps can
+	// each pick the right side of transferSide's own local/remote split
+	// without this job needing a second, parallel type — see
+	// remotepaste.go's own package doc comment for the phased rollout
+	// this folds into (conflict resolution now shares the exact same
+	// dialog/queue machinery a local Paste always has; byte-accurate
+	// progress and attribute preservation stay local-only for now, both
+	// clearly called out at their own call sites below).
+	srcClient  remotefs.Client
+	destClient remotefs.Client
+
+	// skippedSymlinks collects a remote-involving job's own symlinks
+	// left untouched (see pasteTransferItem's own doc comment for why —
+	// unlike a local Paste, which always recreates one as a symlink,
+	// there's no single right way to recreate one across two different
+	// machines yet). Always empty for a purely local job. Reported
+	// alongside job.errors in the same end-of-job summary (see
+	// pasteSummaryError) rather than as a silent skip — the same
+	// "explain rather than hide" choice remotePasteSummaryError already
+	// made for the now-superseded remote-only engine this job type
+	// replaces.
+	skippedSymlinks []string
 
 	// restoreDests, when non-nil, is Restore-from-Trash's own per-item
 	// destination list, parallel to items (see Root.restoreSelectionFromTrash):
@@ -338,23 +372,23 @@ type pasteJob struct {
 // queueing the *next job* the same way just extends that one step
 // further out, rather than pretending two independent jobs could ever
 // usefully run at once on top of it.
-func (r *Root) startPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string) {
+func (r *Root) startPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string, srcClient, destClient remotefs.Client) {
 	if len(items) == 0 {
 		return
 	}
 	if r.pasteJob != nil {
-		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir, followSymlinks: followSymlinks, restoreDests: restoreDests, restoreTrashDir: restoreTrashDir})
+		r.pasteQueue = append(r.pasteQueue, queuedPaste{items: items, cut: cut, destDir: destDir, followSymlinks: followSymlinks, restoreDests: restoreDests, restoreTrashDir: restoreTrashDir, srcClient: srcClient, destClient: destClient})
 		r.refreshStatusBar() // the "+N queued" suffix should update immediately, not wait for the next tick
 		return
 	}
-	r.reallyStartPaste(items, cut, destDir, followSymlinks, restoreDests, restoreTrashDir)
+	r.reallyStartPaste(items, cut, destDir, followSymlinks, restoreDests, restoreTrashDir, srcClient, destClient)
 }
 
 // reallyStartPaste is startPaste's own "actually begin" body, split out
 // so advancePasteQueue can start the next queued Paste through exactly
 // the same path once the current one is out of the way, rather than a
 // second, drifting copy of the same setup.
-func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string) {
+func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, followSymlinks bool, restoreDests []string, restoreTrashDir string, srcClient, destClient remotefs.Client) {
 	ctx, cancel := context.WithCancel(context.Background())
 	destDirs := map[string]bool{destDir: true}
 	if restoreDests != nil {
@@ -379,6 +413,8 @@ func (r *Root) reallyStartPaste(items []string, cut bool, destDir string, follow
 		skipAttributes:        skipAttributes,
 		stableSymlinks:        stableSymlinks,
 		autoMergeDirectories:  autoMergeDirectories,
+		srcClient:             srcClient,
+		destClient:            destClient,
 	}
 	r.pasteJob = job
 
@@ -459,7 +495,7 @@ func (r *Root) advancePasteQueue() {
 	}
 	next := r.pasteQueue[0]
 	r.pasteQueue = r.pasteQueue[1:]
-	r.reallyStartPaste(next.items, next.cut, next.destDir, next.followSymlinks, next.restoreDests, next.restoreTrashDir)
+	r.reallyStartPaste(next.items, next.cut, next.destDir, next.followSymlinks, next.restoreDests, next.restoreTrashDir, next.srcClient, next.destClient)
 }
 
 // scanPasteBytes runs once per job, in its own goroutine started
@@ -473,7 +509,23 @@ func (r *Root) advancePasteQueue() {
 // simply switch on once this finishes, whenever that happens to be,
 // with the item-count progress and current file name working from the
 // very first tick regardless.
+//
+// A no-op once either end of job is remote: fsops.TotalBytes only
+// knows how to walk a real local tree. bytesTotal simply stays 0 for
+// the rest of such a job's own run, which every reader already treats
+// exactly the same as "the scan hasn't finished yet" (see
+// pasteJob.bytesTotal's own doc comment) — item-count progress and the
+// current file name keep working regardless; only the byte-based
+// portion of the display is unavailable. A real remote byte-total scan
+// (recursively listing the remote side, summing Size across every
+// entry) is real, deliberately out-of-scope-for-now work, the same
+// class of gap this project already calls out elsewhere for a
+// remote-involving Paste (see remotepaste.go's own package doc
+// comment) rather than something silently forgotten.
 func (r *Root) scanPasteBytes(job *pasteJob, items []string) {
+	if job.srcClient != nil || job.destClient != nil {
+		return
+	}
 	total := fsops.TotalBytes(job.ctx, items)
 	if job.ctx.Err() != nil {
 		return // cancelled or superseded before the scan finished — nothing left to report this to
@@ -566,20 +618,34 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 		// real bug found and fixed at fsops.Copy/Move's own level too, see
 		// fsops.Overlaps' own doc comment for the full reasoning); this is
 		// what makes the item never start at all instead, reported as a
-		// genuine error like any other real failure.
-		if fsops.Overlaps(src, dst) {
+		// genuine error like any other real failure. pasteOverlaps folds
+		// in the identical check for a same-connection remote job too —
+		// see its own doc comment.
+		if pasteOverlaps(job, src, dst) {
 			r.reportPasteOutcome(job, func() {
 				r.recordPasteError(job, fmt.Errorf("%s: source and destination are the same, or one is inside the other", filepath.Base(src)))
 			})
 			continue
 		}
 
-		dstInfo, err := os.Lstat(dst)
+		destSide := transferSide{client: job.destClient}
+		srcSide := transferSide{client: job.srcClient}
+
+		dstInfo, notExist, err := destSide.statOrNotExist(dst)
 		switch {
-		case err == nil:
-			srcInfo, srcErr := os.Lstat(src)
-			if srcErr != nil {
-				r.reportPasteOutcome(job, func() { r.recordPasteError(job, srcErr) })
+		case err != nil:
+			r.reportPasteOutcome(job, func() { r.recordPasteError(job, err) })
+		case notExist:
+			r.safeGo("paste", func() { r.pasteItemDone(job) }, func() {
+				// force is false — no conflict here at all — so mode is
+				// never actually consulted; ReplaceEntirely is just the
+				// harmless, arbitrary placeholder for that.
+				r.pasteOne(job, src, dst, false, fsops.ReplaceEntirely)
+			})
+		default:
+			srcInfo, err := srcSide.lstat(src)
+			if err != nil {
+				r.reportPasteOutcome(job, func() { r.recordPasteError(job, err) })
 				continue
 			}
 			// "Dive into subdir if exists": when both sides of the
@@ -598,15 +664,6 @@ func (r *Root) pasteWalk(job *pasteJob, items []string) {
 			}
 			conflict := pasteConflict{src: src, dst: dst, srcInfo: srcInfo, dstInfo: dstInfo}
 			r.reportPasteOutcome(job, func() { r.pasteConflictFound(job, conflict) })
-		case os.IsNotExist(err):
-			r.safeGo("paste", func() { r.pasteItemDone(job) }, func() {
-				// force is false — no conflict here at all — so mode is
-				// never actually consulted; ReplaceEntirely is just the
-				// harmless, arbitrary placeholder for that.
-				r.pasteOne(job, src, dst, false, fsops.ReplaceEntirely)
-			})
-		default:
-			r.reportPasteOutcome(job, func() { r.recordPasteError(job, err) })
 		}
 	}
 }
@@ -733,6 +790,10 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 	if job.ctx.Err() != nil {
 		return
 	}
+	if job.srcClient != nil || job.destClient != nil {
+		r.pasteOneRemote(job, src, dst, force, mode)
+		return
+	}
 	onFile := func(path string) {
 		job.currentFile.Store(&path)
 		job.bytesBase.Add(job.currentFileSize.Load())
@@ -760,6 +821,72 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
 	default:
 		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, FollowSymlinks: job.followSymlinks, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
+	}
+	job.ioMu.Unlock()
+	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })
+}
+
+// pasteOneRemote is pasteOne's own branch once either end of job is
+// remote — the same Force/Mode contract and job.ioMu/currentFile/
+// bytesBase progress wiring, built on pasteTransferItem instead of
+// fsCopy/fsMove (see its own doc comment for exactly how far that
+// parity goes and where it doesn't yet: no byte-accurate size lookup
+// per file — a remote Stat per file, on top of the one Lstat
+// pasteWalk's own conflict check already paid for it, is real,
+// deliberately out-of-scope-for-now cost this first version doesn't
+// spend — so currentFileSize simply stays 0 here, same graceful
+// degrade scanPasteBytes' own doc comment already describes for
+// bytesTotal; no attribute preservation, since neither transferSide nor
+// the Client interface exposes a "set mtime" call yet, only Chmod, and
+// no followSymlinks — a symlink anywhere in the tree is always skipped,
+// recorded in job.skippedSymlinks, never followed or recreated, the
+// same as remotepaste.go's own now-superseded engine always did.
+//
+// For a Cut, the top-level source is removed only after its own copy
+// genuinely succeeded — removeTransferSource's own Lstat-based,
+// recurse-then-remove shape, exactly what the superseded
+// runRemotePaste already used for the identical reason.
+func (r *Root) pasteOneRemote(job *pasteJob, src, dst string, force bool, mode fsops.OverwriteMode) {
+	srcSide := transferSide{client: job.srcClient}
+	destSide := transferSide{client: job.destClient}
+	onFile := func(path string) {
+		job.currentFile.Store(&path)
+		job.bytesBase.Add(job.currentFileSize.Load())
+		// A real Lstat per file, not job-wide TotalBytes' own full
+		// tree walk up front (see scanPasteBytes' own doc comment on
+		// why that stays local-only): still one real network round
+		// trip per file, but a single one, already paid for by
+		// pasteTransferItem's own srcType lookup moments before this
+		// same call — the one real, live-reported gap this closes is
+		// a large single file (a video, say) that used to show a
+		// permanently empty progress bar and a static filename for its
+		// entire transfer, reading as "stuck" even while genuinely
+		// still copying; the file name alone changing per item was
+		// never enough of a live signal for anyone glancing at the bar
+		// itself rather than reading the text next to it. Best-effort:
+		// a failed lookup leaves size at 0, exactly the previous
+		// always-0 behavior, rather than failing the transfer over a
+		// cosmetic progress detail.
+		var size int64
+		if info, err := srcSide.lstat(path); err == nil {
+			size = info.Size()
+		}
+		job.currentFileSize.Store(size)
+		job.currentFileBytes.Store(0)
+	}
+	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
+
+	job.ioMu.Lock()
+	skipped, err := runPasteTransferItem(srcSide, destSide, src, dst, force, mode, onFile, onBytes, &job.skippedSymlinks)
+	if err == nil && job.cut && !skipped {
+		// !skipped: src itself was a symlink, left untouched — nothing
+		// was actually copied anywhere, so the original must survive
+		// (the same guard runRemotePaste, this engine's now-superseded
+		// predecessor, already applied for the identical reason).
+		err = removeTransferSource(job.srcClient, src)
+		if err != nil {
+			err = fmt.Errorf("copied, but could not remove the original %s: %w", src, err)
+		}
 	}
 	job.ioMu.Unlock()
 	r.app.QueueUpdateDraw(func() { r.applyPasteOneResult(job, src, dst, err) })
@@ -849,13 +976,18 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	// process exits.
 	job.cancel()
 
-	if job.cut && job.restoreDests == nil && len(job.errors) == 0 {
+	if job.cut && job.restoreDests == nil && len(job.errors) == 0 && len(job.skippedSymlinks) == 0 {
 		// job.restoreDests == nil excludes Restore-from-Trash: it also
 		// sets job.cut (it genuinely is a move), but was never sourced
 		// from r.clipboard in the first place — clearing it here would
 		// silently discard an unrelated Copy/Cut the user still has
 		// pending from a completely different action, just because a
 		// Restore happened to finish while it was sitting there.
+		//
+		// len(job.skippedSymlinks) == 0: a skipped symlink was never
+		// actually moved (see pasteOneRemote's own guard) — its original
+		// is still sitting right there, so clearing the clipboard here
+		// would leave it with nothing to paste it anywhere else with.
 		//
 		// Moved away cleanly; nothing left to paste again — goes through
 		// setClipboard (not a bare "r.clipboard = nil"), the same as
@@ -871,7 +1003,7 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	// what this actually touches and why).
 	r.reloadPasteAffectedTabs(job)
 
-	if len(job.errors) > 0 {
+	if len(job.errors) > 0 || len(job.skippedSymlinks) > 0 {
 		r.showError(pasteSummaryError(job))
 	}
 
@@ -888,13 +1020,24 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 // line, the same "don't stack one overlay per failure" shape
 // batchrename's/sedreplace's own multi-file summaries already use.
 func pasteSummaryError(job *pasteJob) error {
-	if len(job.errors) == 1 {
+	if len(job.errors) == 1 && len(job.skippedSymlinks) == 0 {
 		return job.errors[0]
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d of %d items failed:", len(job.errors), job.total)
-	for _, err := range job.errors {
-		fmt.Fprintf(&b, "\n  %s", err)
+	if len(job.errors) > 0 {
+		fmt.Fprintf(&b, "%d of %d items failed:", len(job.errors), job.total)
+		for _, err := range job.errors {
+			fmt.Fprintf(&b, "\n  %s", err)
+		}
+	}
+	if n := len(job.skippedSymlinks); n > 0 {
+		if b.Len() > 0 {
+			b.WriteString("; ")
+		}
+		// Recreating a symlink meaningfully across two different
+		// machines has no single right answer this project has picked
+		// yet — see pasteTransferItem's own doc comment.
+		fmt.Fprintf(&b, "%d symlink(s) skipped (not supported yet for a remote connection)", n)
 	}
 	return fmt.Errorf("%s", b.String())
 }

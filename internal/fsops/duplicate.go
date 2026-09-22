@@ -15,26 +15,31 @@ type DuplicateStrategy int
 
 const (
 	// DuplicateSuffixText appends a fixed piece of text (e.g. "BAK"),
-	// verbatim, exactly once — see ComputeDuplicateName's own doc
-	// comment for what happens if the result already exists.
+	// verbatim — see ComputeDuplicateName's own doc comment for what
+	// happens if the result already exists: it chains, re-appending the
+	// same suffix again ("report.txt_BAK_BAK"), not a single one-shot
+	// attempt.
 	DuplicateSuffixText DuplicateStrategy = iota
 	// DuplicateNumbered appends an incrementing number, starting at 1,
 	// scanning upward until a free name is found.
 	DuplicateNumbered
 	// DuplicateDateTime appends a timestamp — either formatted (see
 	// DuplicateOptions.DateTimeFormat/DateTimeStrftime) or, with
-	// DateTimeUseUnix, a raw Unix timestamp.
+	// DateTimeUseUnix, a raw Unix timestamp. Chains the same way
+	// DuplicateSuffixText does if the result already exists.
 	DuplicateDateTime
 )
 
-// duplicateNumberedScanLimit bounds DuplicateNumbered's own upward scan
-// — not a designed ceiling on how many duplicates someone can
-// reasonably have (100000 numbered duplicates of the same file is not
-// a real scenario this needs to serve), purely a safety net against an
-// unbounded loop if something else about a directory's own state makes
-// every single candidate this ever tries come back "already exists". A
-// var, not a const, so a test can lower it temporarily rather than
-// actually creating 100000 files on disk to exercise the limit itself.
+// duplicateNumberedScanLimit bounds both DuplicateNumbered's own upward
+// scan and DuplicateSuffixText/DuplicateDateTime's own chaining loop —
+// not a designed ceiling on how many duplicates someone can reasonably
+// have (100000 numbered duplicates, or 100000 chained "_BAK"s, of the
+// same file is not a real scenario this needs to serve), purely a
+// safety net against an unbounded loop if something else about a
+// directory's own state makes every single candidate this ever tries
+// come back "already exists". A var, not a const, so a test can lower
+// it temporarily rather than actually creating 100000 files on disk to
+// exercise the limit itself.
 var duplicateNumberedScanLimit = 100000
 
 // DuplicateOptions configures ComputeDuplicateName — see its own field
@@ -61,7 +66,7 @@ type DuplicateOptions struct {
 	// DateTimeFormat is a format string for DuplicateDateTime,
 	// interpreted as a Go reference-time layout (the default) or, with
 	// DateTimeStrftime, as a strftime-style format — see
-	// strftimeToGoLayout's own doc comment for exactly which
+	// StrftimeToGoLayout's own doc comment for exactly which
 	// specifiers that second mode supports. Ignored entirely when
 	// DateTimeUseUnix is set.
 	DateTimeFormat   string
@@ -93,59 +98,72 @@ type DuplicateOptions struct {
 // was, undisturbed, and the new suffix always lands after all of it.
 //
 // This never touches the filesystem beyond checking whether a
-// candidate path already exists (DuplicateNumbered's own scan); it
-// never creates, moves, or copies anything itself — the caller runs an
-// entirely ordinary Copy(src, result, ...) afterward. fsops.Overlaps
-// never has to be taught anything new for this: src and the computed
-// result are always different paths by construction, so the existing
-// "destination is the same as, or inside, the source" refusal in
-// Copy/Move is neither bypassed nor even relevant here.
+// candidate path already exists; it never creates, moves, or copies
+// anything itself — the caller runs an entirely ordinary
+// Copy(src, result, ...) afterward. fsops.Overlaps never has to be
+// taught anything new for this: src and the computed result are always
+// different paths by construction, so the existing "destination is the
+// same as, or inside, the source" refusal in Copy/Move is neither
+// bypassed nor even relevant here.
 //
-// Each strategy computes exactly one candidate and stops there, except
-// DuplicateNumbered, which is the one shape with an obvious "next" step
-// to fall back on:
+// Every strategy scans until it finds a name that doesn't already
+// exist, never just returning an already-taken candidate for the
+// caller's own subsequent Copy to fail on — the same "already exists"
+// friction the user hit repeatedly, once for every strategy but
+// DuplicateNumbered, before this scanned too:
 //
-//   - DuplicateSuffixText and DuplicateDateTime never retry. If the one
-//     candidate each computes already exists, ComputeDuplicateName
-//     returns it anyway — the caller's own subsequent Copy call is what
-//     actually reports "already exists", the same ordinary error any
-//     other conflicting Copy already produces, no special-cased message
-//     needed here. Deliberately no auto-retry loop for either: for
-//     DuplicateSuffixText, running Duplicate a second time on the
-//     result ("xyz.txt_BAK") produces "xyz.txt_BAK_BAK" by applying the
-//     exact same one-shot rule again to the new name, which is the
-//     intended way repeated suffixes ever arise — not an internal loop
-//     within a single call. For DuplicateDateTime, there's no natural
-//     "next" timestamp to fall back on the way there's an obvious next
-//     number.
+//   - DuplicateSuffixText and DuplicateDateTime chain: if the candidate
+//     built from src's own basename plus one suffix already exists,
+//     the same suffix is computed and appended again onto that
+//     candidate ("report.txt_BAK" taken → try "report.txt_BAK_BAK" →
+//     "report.txt_BAK_BAK_BAK" → ...), continuing until a free name
+//     turns up. For DuplicateDateTime this calls duplicateSuffix fresh
+//     on every attempt, so a slower-moving format (a whole-second or
+//     whole-day layout) genuinely retries with "now" rather than
+//     looping forever on an identical string; a fast, tight loop (the
+//     "Number of duplicates" > 1 case, all within the same instant)
+//     still terminates, because each chained attempt's own candidate
+//     string is strictly longer than the last, so it can never equal an
+//     already-tried one.
 //   - DuplicateNumbered scans upward from 1, returning the first
 //     candidate that doesn't already exist — the ordinary, unsurprising
 //     behavior a "duplicate" feature needs so it keeps working once a
-//     few numbered duplicates already exist, capped at
-//     duplicateNumberedScanLimit purely as a runaway-loop safety net.
+//     few numbered duplicates already exist.
+//
+// Both loops are capped at duplicateNumberedScanLimit purely as a
+// runaway-loop safety net, not a realistic ceiling either shape expects
+// to ever hit.
 func ComputeDuplicateName(src string, opts DuplicateOptions) (string, error) {
 	dir := filepath.Dir(src)
 	base := filepath.Base(src)
 
-	if opts.Strategy != DuplicateNumbered {
+	if opts.Strategy == DuplicateNumbered {
+		for n := 1; n <= duplicateNumberedScanLimit; n++ {
+			numStr := strconv.Itoa(n)
+			if opts.NumberPadding > 0 {
+				numStr = fmt.Sprintf("%0*d", opts.NumberPadding, n)
+			}
+			candidate := filepath.Join(dir, base+opts.Separator+numStr)
+			if _, err := os.Lstat(candidate); os.IsNotExist(err) {
+				return candidate, nil
+			}
+		}
+		return "", fmt.Errorf("fsops: no free numbered name found for %s after %d attempts", src, duplicateNumberedScanLimit)
+	}
+
+	name := base
+	for n := 0; n < duplicateNumberedScanLimit; n++ {
 		suffix, err := duplicateSuffix(opts)
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(dir, base+opts.Separator+suffix), nil
-	}
-
-	for n := 1; n <= duplicateNumberedScanLimit; n++ {
-		numStr := strconv.Itoa(n)
-		if opts.NumberPadding > 0 {
-			numStr = fmt.Sprintf("%0*d", opts.NumberPadding, n)
-		}
-		candidate := filepath.Join(dir, base+opts.Separator+numStr)
+		name += opts.Separator + suffix
+		candidate := filepath.Join(dir, name)
 		if _, err := os.Lstat(candidate); os.IsNotExist(err) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("fsops: no free numbered name found for %s after %d attempts", src, duplicateNumberedScanLimit)
+	return "", fmt.Errorf("fsops: no free name found for %s after chaining its own suffix %d times", src, duplicateNumberedScanLimit)
 }
 
 // duplicateSuffix computes the non-numbered strategies' own one-shot
@@ -169,7 +187,7 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 		layout := opts.DateTimeFormat
 		if opts.DateTimeStrftime {
 			var err error
-			layout, err = strftimeToGoLayout(opts.DateTimeFormat)
+			layout, err = StrftimeToGoLayout(opts.DateTimeFormat)
 			if err != nil {
 				return "", err
 			}
@@ -180,11 +198,12 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 	}
 }
 
-// strftimeToGoLayout translates a commonly-used subset of strftime's
+// StrftimeToGoLayout translates a commonly-used subset of strftime's
 // own %-directives into Go's reference-time layout equivalent — just
-// enough for a duplicate's own date/time suffix, not the full strftime
-// specification: no locale-dependent %c/%x/%X, no week-number fields,
-// nothing beyond the directives below.
+// enough for a duplicate's own date/time suffix (and, since it's
+// exported, Batch Rename's own {date} token — see internal/batchrename),
+// not the full strftime specification: no locale-dependent %c/%x/%X,
+// no week-number fields, nothing beyond the directives below.
 //
 // GNU's "%-" no-padding variant (e.g. "%-d" instead of "%d") is
 // supported for every field where Go itself has a distinct unpadded
@@ -195,7 +214,7 @@ func duplicateSuffix(opts DuplicateOptions) (string, error) {
 // regardless ("05", never "5") — a cosmetic gap in Go's own layout
 // system, not something worth writing custom formatting code to work
 // around for one digit.
-func strftimeToGoLayout(format string) (string, error) {
+func StrftimeToGoLayout(format string) (string, error) {
 	var b strings.Builder
 	i := 0
 	for i < len(format) {
@@ -228,7 +247,7 @@ func strftimeToGoLayout(format string) (string, error) {
 	return b.String(), nil
 }
 
-// strftimeLayout is strftimeToGoLayout's own per-specifier lookup,
+// strftimeLayout is StrftimeToGoLayout's own per-specifier lookup,
 // split out so its own table is easy to scan and extend on its own.
 func strftimeLayout(spec byte, noPad bool) (string, bool) {
 	switch spec {
@@ -247,7 +266,7 @@ func strftimeLayout(spec byte, noPad bool) (string, bool) {
 		}
 		return "02", true
 	case 'H':
-		return "15", true // see strftimeToGoLayout's own doc comment: no unpadded 24h token exists in Go
+		return "15", true // see StrftimeToGoLayout's own doc comment: no unpadded 24h token exists in Go
 	case 'I':
 		if noPad {
 			return "3", true

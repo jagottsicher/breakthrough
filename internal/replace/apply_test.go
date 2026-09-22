@@ -199,3 +199,35 @@ func TestApplyContinuesPastOneFailure(t *testing.T) {
 		t.Errorf("ok.txt content = %q, want %q", data, "after\n")
 	}
 }
+
+func TestLooksBinaryFileMatchesLooksBinaryOnTheSameContent(t *testing.T) {
+	dir := t.TempDir()
+	text := filepath.Join(dir, "text.txt")
+	mustWriteFile(t, text, "just plain text\n")
+	if got, err := LooksBinaryFile(text); err != nil || got {
+		t.Errorf("LooksBinaryFile(text) = %v, %v; want false, nil", got, err)
+	}
+
+	bin := filepath.Join(dir, "bin.dat")
+	if err := os.WriteFile(bin, []byte("abc\x00def"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := LooksBinaryFile(bin); err != nil || !got {
+		t.Errorf("LooksBinaryFile(bin) = %v, %v; want true, nil", got, err)
+	}
+}
+
+func TestLooksBinaryFileOnAnEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty.txt")
+	mustWriteFile(t, empty, "")
+	if got, err := LooksBinaryFile(empty); err != nil || got {
+		t.Errorf("LooksBinaryFile(empty) = %v, %v; want false, nil", got, err)
+	}
+}
+
+func TestLooksBinaryFileErrorsOnAMissingFile(t *testing.T) {
+	if _, err := LooksBinaryFile(filepath.Join(t.TempDir(), "nope")); err == nil {
+		t.Error("expected an error for a nonexistent file")
+	}
+}

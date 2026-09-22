@@ -184,7 +184,7 @@ func extractZipFile(f *zip.File, destDir, rel string) error {
 	if mode == 0 {
 		mode = 0o644
 	}
-	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	out, err := createOverwriting(dest, mode)
 	if err != nil {
 		return err
 	}
@@ -199,6 +199,29 @@ func extractZipFile(f *zip.File, destDir, rel string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// createOverwriting opens dest for writing, freshly created with mode
+// — silently replacing whatever was there before, matching this
+// package's own already-documented "a name already present at destDir
+// is silently overwritten" contract (see Extract's own doc comment).
+//
+// Removes an existing dest first rather than opening with O_TRUNC on
+// top of it: a member's own stored mode is often read-only (no owner
+// write bit — common for a file an archive deliberately marks
+// non-writable, e.g. a license or a build artifact), and open() only
+// skips the requested-access check against a file's own mode when
+// that file is genuinely new — reopening an *existing* file for
+// O_WRONLY still has to satisfy its current permissions first. A real,
+// reported bug: extracting such a member a second time onto its own
+// previous copy failed with "permission denied" for exactly this
+// reason, even though overwriting it at all was already this
+// package's own intended behavior.
+func createOverwriting(dest string, mode os.FileMode) (*os.File, error) {
+	if err := os.Remove(dest); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 }
 
 // extractTar streams once through archivePath's own tar body (see
@@ -255,7 +278,7 @@ func extractTarFile(tr *tar.Reader, hdr *tar.Header, destDir, rel string) error 
 	if mode == 0 {
 		mode = 0o644
 	}
-	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	out, err := createOverwriting(dest, mode)
 	if err != nil {
 		return err
 	}

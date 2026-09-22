@@ -46,7 +46,7 @@ terminal.
   mount point, or `..` itself — gets its own name highlighted dark
   yellow (just the name, not the trailing `/` or a symlink's `-> target`
   arrow), so folders stand out from plain files at a glance. Beyond
-  that, a name's own text color also tells them apart: green for
+  that, a name's own text color also tells them apart: dark green for
   executable, red for a broken symlink, a darker red for anything the
   current user can't actually read (checked with a real permission
   check, not just Mode's bits — a `/proc` entry included), cyan for a
@@ -158,18 +158,20 @@ terminal.
   field focused, since a Ctrl combination safely can where a plain
   letter never can — was deliberately retired anyway in favor of `om`
   above, a considered trade-off rather than an oversight.
-- A context menu on `m` or right-click, showing only what actually
-  applies right now rather than a fixed list of everything it can ever
-  do: Look, Edit (dropped for a directory), Rename, Copy/Cut/Multiply,
-  Paste (only once the clipboard has something in it), Move to Trash,
-  Properties (editable — name, permissions, click a bit or type the
-  octal value directly, owner and group via a scrollable picker of
-  every local user/group, modified date and time), plus three `▸`
-  submenus that replace the list in place when chosen (Windows
-  Explorer's own cascading-menu idea, without needing room to open
-  beside it): "More actions" (`tail -f`, chown, chmod, Sed Replace,
-  Batch rename, Undo last rename, Remove), "Selection" (Select
-  all/Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
+- A context menu on `mm` (the `m` chord's own doubled prefix, the same
+  "gg"/"oo" shape every other family uses for its main destination) or
+  right-click, showing only what actually applies right now rather than
+  a fixed list of everything it can ever do: Look, Edit, Open with…
+  (both dropped for a directory), Rename, Copy/Cut/Multiply, Paste (only
+  once the clipboard has something in it), Move to Trash, Properties (editable — name,
+  permissions, click a bit or type the octal value directly, owner and
+  group via a scrollable picker of every local user/group, modified
+  date and time), plus three `▸` submenus that replace the list in
+  place when chosen (Windows Explorer's own cascading-menu idea,
+  without needing room to open beside it): "More actions" (New file,
+  New dir, `tail -f`, chown, chmod, Sed Replace, Batch rename, Undo
+  last rename, Compare, Rsync, Remove), "Selection" (Select all/
+  Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
   or Left arrow step back out one level at a time. Browsing the Trash
@@ -178,9 +180,14 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `m` again (`mm`) does
-  too, for Multiply specifically — the one entry with no plain-key
-  equivalent of its own, since it only ever opens from here.
+  entry isn't currently showing does nothing. `m`/`o` again (`mmm`/`mmo`
+  from plain browsing) do too, for Multiply and Open with… — the two
+  entries with no plain-key equivalent of their own, since neither ever
+  opens from anywhere but here. `mf`/`md` reach New file/New dir directly from plain
+  browsing, without opening the menu at all — both create their new
+  entry directly inside the active panel's own current directory
+  (remote-aware the same way Rename already is), prompting only for a
+  name.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -358,6 +365,15 @@ terminal.
   Behavior → Duplicate) — the one setting group in this whole app that
   adapts itself this way — but only once "Duplicate" is actually
   pressed; Cancel never touches the sticky default.
+- Open with… (context menu, files only): runs any program you type
+  against the selected file instead of always the configured editor —
+  prefilled with whatever you typed last time, handed to your real
+  shell exactly as typed (so a multi-word command with its own flags,
+  like `libreoffice --writer` or `code -w`, works the same as at a real
+  shell prompt). Works for a remote file exactly like Edit already
+  does: downloads a local temp copy, runs the typed command against it,
+  and uploads the result back over the connection only if it actually
+  changed.
 - Sed Replace (`E`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
@@ -375,7 +391,10 @@ terminal.
 - Batch rename (context menu): renames a whole selection through a fixed
   pipeline of steps — Search & Replace (literal or regex), Case
   (UPPER/lower/Title/Sentence), Trim (drop N characters off either end),
-  Numbering (a zero-padded counter as prefix or suffix), and Extension
+  Template (rebuild the name from `{name}`, `{ext}`, `{counter}`,
+  `{parent}` and `{date}` tokens — `{parent}_{date}_{counter}` turns
+  `IMG_0042.JPG` into `Holiday_2026-03-09_001.JPG`), Numbering (a
+  zero-padded counter as prefix or suffix), and Extension
   (lower/upper/remove/replace) — with the steps listed down the left and
   the selected one's own settings on the right. A step left alone does
   nothing; there is no separate on/off switch to also remember. Search &
@@ -383,13 +402,96 @@ terminal.
   Extension only ever touches the extension, so a case transform can't
   quietly rewrite `.JPG` behind your back. The whole selection is
   previewed live, old name beside new, updated on every keystroke rather
-  than behind a "Preview" button — unchanged rows dimmed, and any
-  collision (two files landing on the same new name, or a name already
-  taken on disk) shown in red with the reason, right where it would
-  happen. Nothing is written until Rename is confirmed, and "Undo last
-  rename" reverses the whole batch afterwards. See
-  [docs/user-guide.md](docs/user-guide.md#batch-rename) for the step
-  reference.
+  than behind a "Preview" button — unchanged rows dimmed, a `●` beside
+  each step that currently changes something, a help line explaining
+  the selected setting, and any collision (two files landing on the
+  same new name, or a name already taken by something that isn't moving
+  out of the way) shown in red with the reason, right where it would
+  happen. A rename *chain* (`1.txt`→`2.txt` while `2.txt`→`3.txt`, or
+  an outright swap) is not a collision: the renames run in the order
+  that makes it work, through a temporary name where needed. Case-only
+  renames work on case-insensitive filesystems too, regex replacements
+  accept `$1` or sed-style `\1`, and a folder's name is never split at
+  its dot unless you ask. In the preview, `Space` skips a row (it's
+  neither renamed nor numbered), `u`/`d` arrange the numbering order by
+  hand, `n`/`p` and `c`/`C` jump between changes and conflicts;
+  Numbering can also count by name or by modification time, forwards
+  or reversed. A whole pipeline can be saved as a named preset and
+  loaded back later — plain JSON files under
+  `~/.config/breakthrough/rename-presets/`. Nothing is written until
+  Rename is confirmed, and "Undo last rename" reverses the whole batch
+  afterwards. See [docs/user-guide.md](docs/user-guide.md#batch-rename)
+  for the step reference.
+- Compare (`C`, or the context menu): "are these two things the same,
+  and if not, what's different" — for two files (mark them, or use
+  split view with the cursor on one in each pane) or two whole
+  directory trees. Two files get size/modified side by side plus an
+  immediate verdict from the same size+time heuristic `rsync`'s own
+  default sync mode uses, an on-demand SHA-256 hash for a certain
+  answer, and a real line-by-line diff (the system's own `diff(1)`,
+  shown through the existing Look pager) for text. Two directories get
+  a full screen listing every difference and every one-sided path — a
+  one-sided directory is one row, never descended into, so an old
+  backup folder doesn't turn into thousands of lines — with a key to
+  switch between the quick check and a real hash, and to copy a
+  one-sided item across after asking. See
+  [docs/user-guide.md](docs/user-guide.md#compare) for the details.
+- Rsync (`R`, or the context menu): a real `rsync(1)` invocation, built
+  from a small dialog rather than typed by hand — Source/Destination
+  (pre-filled from the current selection or panel, and the split
+  view's own other pane where one's open), Archive/Compress/Delete/Dry
+  run as a toggle list, and — the one choice this dialog makes
+  impossible to get wrong by accident — an explicit "Copy the folder's
+  contents in (not the folder itself)" switch, instead of leaving that
+  distinction to whether a trailing "/" happened to be typed on the
+  source path the way a bare `rsync` invocation always has. Source/
+  Destination already know about a tab's own SFTP connection: pre-
+  filled as `user@host:path` instead of a bare local one when that tab
+  is currently connected, its own port carried through to a real
+  `-e 'ssh -p PORT'` flag rather than guessed — the same applies to an
+  address typed straight in by hand for a host never connected to via
+  the Connect dialog at all, recognized by rsync's own real
+  disambiguation rule (a colon before the first "/" names a host).
+  Syncing between two remote hosts at once shows a warning line: `rsync
+  -e ssh` has no server-to-server mode of its own, every byte still
+  relays through this machine over two separate ssh connections, never
+  directly between the two remote ends. A live preview line shows the
+  exact command that would run, `--delete` called out in its own
+  warning color the moment it's turned on, right up until either button
+  runs it for real: "Run" hands it to a real `rsync` process with the
+  real terminal attached, the same way the embedded bash line already
+  runs anything that benefits from one, so `--info=progress2`'s own
+  live progress line renders correctly; "Run in background" instead
+  keeps breakthrough itself fully usable — Copy/Cut/Paste included, at
+  the same time — while its own live percentage shows in the status
+  bar, queuing behind an already-running background rsync the same way
+  a second Paste already queues behind one still in flight. See
+  [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
+- Toolbox (`j` then `j`): a full-screen, browsable catalog of built-in
+  networking (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`,
+  `nslookup`, `dig`, netcat, `curl`, a `tail -f` Logviewer) and hardware
+  (`lsblk`, `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`,
+  `lsscsi`) tools — real external commands, never reimplemented, the
+  same approach Rsync above already takes. An entry that needs one — a
+  host, a URL, a database key — asks for it in a small field first;
+  every one of them then streams its live output into its own small,
+  draggable tool window, non-modal so the Toolbox screen and the panel
+  underneath both stay usable while it runs. See
+  [docs/user-guide.md](docs/user-guide.md#toolbox) for the full catalog.
+- Mounts (`j` then `m`): a third full-screen catalog, kept deliberately
+  separate from the Toolbox above — a read-only, live table of every
+  currently mounted filesystem (real storage only, pseudo filesystems
+  like `proc`/`sysfs`/`tmpfs` left out), built from the real `findmnt`
+  command. Cross-references each mount's own target against `/etc/fstab`
+  to mark it "Persistent" (survives a reboot) or not (mounted by hand at
+  some point since), and flags bind mounts, so it doubles as a quick
+  answer to "what will still be here after I reboot this box?" See
+  [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
+- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): the
+  same Toolbox screen above, opened already filtered down to just its
+  Networking or just its Hardware catalog, for jumping straight to one
+  tool without scrolling past the other category first. `jj` itself
+  still shows both categories together.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -420,10 +522,10 @@ terminal.
   (`x`), Paste (`v`), Move to Trash (`d`), toggle hidden files (`.` —
   labeled Hide or Unhide, whichever it would do next, not whichever
   state you're currently in), Properties (`i`), Details sidebar (`I`),
-  context menu (`m`), Split view (`s`), the tab switcher (`t`), Look
-  (`l`), and Help (`?`), plus the three chord families marked with an
-  ellipsis to show they lead to more keys (`g…` go, `p…` permissions,
-  `z…` display toggles) — every member of an open chord's own legend is
+  Split view (`s`), the tab switcher (`t`), Look (`l`), and Help (`?`),
+  plus the six chord families marked with an ellipsis to show they
+  lead to more keys (`g…` go, `p…` permissions, `m…` menu, `z…` display
+  toggles, `o…` options, `j…` tools) — every member of an open chord's own legend is
   clickable too, the same highlighted-key treatment, so pointing at one
   works as well as typing its second letter. A few of these change
   meaning while actually browsing the
@@ -441,11 +543,88 @@ terminal.
   Hidden-files/size-format/mtime-format toggles are remembered across
   restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
-  current user, disk and inode usage for the directory on screen, the
+  current user (green, red while running as root), disk space
+  (`free/total`) and inode usage (`used/total`) for the directory on
+  screen — each with its own fixed color and a green/orange/red
+  percentage (under 80% / 80%+ / 90%+) — git status (`git:(branch)
+  ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts`, the same
+  phrasing several zsh prompt themes already use, green/orange/red for
+  clean/dirty/conflicted, shown only inside a git repository), the
   running kernel (`uname -r`), uptime and load average where the
   platform exposes them (Linux's own `/proc/uptime` and
-  `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong),
-  and a clock.
+  `/proc/loadavg` — quietly omitted elsewhere rather than shown wrong;
+  load's own three numbers are colored against this machine's core
+  count, not as raw, meaningless-alone figures), and a clock. Every one
+  of those eight segments can be switched off on its own from Options
+  → Status bar. See
+  [docs/user-guide.md](docs/user-guide.md#status-bar) for the full
+  breakdown. The real filesystem root shows a selectable "/" row in
+  place of the usual `..`; selecting it and opening the Details
+  sidebar (`I`) shows a much fuller version of this same overview —
+  plus memory, swap, open file handles, mounted filesystems, process
+  count, network interfaces and logged-in sessions, in the same colors
+  and green/orange/red scale — while every other entry under "/" still
+  gets its own ordinary per-file Details. On a remote connection's own
+  "/" this describes *that* machine instead, sourced straight from its
+  own `/proc`/`/etc/os-release` over the same connection, no separate
+  command-execution channel needed — except logged-in sessions, which
+  does need one and is simply left out remotely. Selecting any other directory
+  that's part of a git repository adds that same git status line as
+  its own section there too, fetched a moment after the cursor settles
+  and cancelled if it moves on, so scrolling through a long list of
+  directories never queues up one `git status` per row. See
+  [docs/user-guide.md](docs/user-guide.md#the-details-sidebar) for the
+  full field list.
+- Remote connections (SFTP): a compact `@` button sits right before the
+  path itself in the header — muted for a plain local panel, a slow
+  pulse toward a lighter green and back once connected (never dipping
+  toward black — that reads as "still searching for a signal", not a
+  settled, already-alive connection) — opening a dropdown (also
+  reachable via the `g` chord's own `gc`), styled and shaped like the
+  tab switcher: + New connection plus recent history, each row its own
+  independently clickable cells rather than markup-colored text — bright
+  green for the one active in this panel, a matte dimmer green for one
+  that has connected successfully before but isn't active now, red for
+  one that used to work and just failed (a connection that has *never*
+  once succeeded isn't added to history at all — only ever going to show
+  up red is clutter, not a useful shortcut). The active row's own
+  trailing `⏏` (or the "e" key) disconnects, right next to the `✕` (or
+  "x"/Delete) every row already has to drop it out of history — every
+  other history row carries a `✎` in that same spot instead ("e" there
+  too), opening the Connect dialog prefilled from it without immediately
+  retrying, so a saved Host/Port/User can be fixed before reconnecting.
+  Connecting dials in the background with a live progress line;
+  authentication tries an `ssh-agent` first, then the usual default key
+  files (`~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`), then a typed
+  password as the last resort. Host keys are checked against the real
+  `~/.ssh/known_hosts` — an unknown host raises a trust-on-first-use
+  prompt, exactly like a real `ssh` client's own "authenticity of host"
+  question, while a host whose key *changed* is always rejected
+  outright, no prompt, no bypass. Once connected, the panel browses the
+  remote filesystem exactly like a local one — same columns, same
+  sorting, same navigation, and Details/status-bar Disk+Inodes/System
+  Info at "/" all describe the *remote* machine, not this one. Rename,
+  permanent delete, chmod (including its recursive dirs/files options),
+  and Copy/Cut/Paste all work against a remote target too, through the
+  exact same Overwrite/Merge/Skip conflict dialog a purely local Paste
+  already has, rather than an older engine that just refused outright
+  the moment a destination already existed; "d" (Move to Trash) explains
+  why it switches straight to a permanent-delete confirmation instead,
+  since a remote session has no trash to move into. Look and Edit stage a real local temp copy
+  behind the scenes and hand it to the ordinary built-in viewer/
+  external pager/$VISUAL/$EDITOR unchanged — Edit only uploads it back
+  if it actually changed. Opening a zip/tar that itself lives on a
+  remote connection downloads and browses it the same transparent way;
+  above a configurable size (Options → Remote connections, KB/MB/GB,
+  10MB by default) it asks first, naming the real size. Copying a
+  member back *out* of a remote archive works too, straight from the
+  local temp copy already downloaded to browse it — to a local
+  destination directly, or to another remote directory via a local
+  staging round trip. Still refused with a clear message for now:
+  chown, Compare, Batch rename, Sed Replace, and Properties as a
+  whole. See
+  [docs/user-guide.md](docs/user-guide.md#remote-connections-sftp) for
+  the full picture.
 - Color schemes: JSON files under `colorschemes/` in either config tier
   (see below), switchable live from the Options screen (the `o` chord's
   own `oo`) — no restart needed, and the pick is remembered for next
@@ -501,10 +680,16 @@ terminal.
 
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
-archive browsing, Sed Replace, Batch rename, and a full Options screen
-covering every setting breakthrough recognizes. Progress bars for
-long-running file operations and a set of built-in networking/hardware
-tool windows are what's planned next — see
+archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
+covering every setting breakthrough recognizes, a Toolbox screen
+(`jj`) of built-in networking and hardware tools with its own filtered
+Network Tools (`jn`) and Hardware Tools (`jh`) screens, a Mounts
+screen (`jm`) showing what's currently mounted and whether it survives a
+reboot, and a Firewall screen (`jf`) showing this host's own actual
+firewall rules (UFW, nftables, or iptables — whichever one really
+governs traffic), including which rules shadow each other. Progress bars
+for long-running file operations are what's
+planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).

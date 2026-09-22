@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,6 +21,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
@@ -216,6 +219,13 @@ type Panel struct {
 	filterMenuBtn    *tview.TextView
 	onOpenFilterMenu func()
 
+	// onOpenConnectionMenu is Root's own wiring for the header's
+	// connection button (see buildHeaderSpans/actionOpenConnectionMenu,
+	// and Root.openConnectionMenu in connectionmenu.go) — Panel has no
+	// direct reference to Root, the same reason onOpenFilterMenu/
+	// onExpandDetails both exist.
+	onOpenConnectionMenu func()
+
 	// detailsExpandBtn sits right after filterMenuBtn in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
@@ -273,6 +283,30 @@ type Panel struct {
 	// resolveArchiveState is what tells the two apart when it matters.
 	path string
 
+	// remote is nil for an ordinary local panel; set, path is a POSIX
+	// path against remote's own filesystem instead of this machine's —
+	// load()'s own ListDir call branches on this, and every other
+	// fsops-touching operation this project's own file-operation
+	// screens offer is scoped to a local panel only for now (see
+	// internal/remotefs's own package doc for why SFTP is the only
+	// remote protocol this covers so far). remoteConn is remote's own
+	// connection identity, purely for display (the header's connection
+	// button, see buildHeaderSpans) and for recording history (see
+	// remotefs.RecordAttempt) — never consulted to decide behavior.
+	//
+	// Each tab owns a whole real *Panel (see tabs.go's own doc
+	// comment), so this — like every other field here — is already
+	// correctly scoped per tab without anything further: connecting one
+	// tab to a remote host never affects any other tab's own panel.
+	//
+	// connectRemote/disconnectRemote both reset history to a single
+	// fresh entry rather than trying to carry it across the switch —
+	// mixing a local path and a remote one in the same back/forward
+	// stack would mean navigate() can no longer tell which filesystem a
+	// given history entry even belongs to.
+	remote     remotefs.Client
+	remoteConn remotefs.Connection
+
 	// archivePath is the real, on-disk archive file currently being
 	// browsed into — "" whenever path is an ordinary real directory.
 	// archiveEntries is that same archive's own full, flat member
@@ -286,6 +320,28 @@ type Panel struct {
 	// archive at all (see resolveArchiveState).
 	archivePath    string
 	archiveEntries []archive.Entry
+
+	// archiveLocalPath/archiveRemoteClient are set only while archivePath
+	// itself actually names a *remote* archive — archivePath still holds
+	// the real remote path (what's shown in the header/breadcrumb and
+	// used for the virtual "inside the archive" navigation, exactly as
+	// it always has), while archiveLocalPath is the local, downloaded
+	// temp copy archive.List/archive.Children/archive.Extract actually
+	// read bytes from (see archiveReadPath) — neither of those has any
+	// notion of a remotefs.Client, only ever a real path on this
+	// machine. archiveRemoteClient records which connection it came
+	// from, both to know this archive session *is* remote at all
+	// (archiveLocalPath alone being non-empty would already imply it,
+	// but naming the client explicitly reads clearer at every call site
+	// than inferring it from "some other field happens to be set") and
+	// for enterRemoteArchive's own re-entry check when navigating
+	// between two remote archives back to back. Both reset to their
+	// zero value in the exact same places archivePath/archiveEntries
+	// already are (see leavingArchive) — cleaning up archiveLocalPath's
+	// own temp file first, unlike those two, since nothing else ever
+	// removes it.
+	archiveLocalPath    string
+	archiveRemoteClient remotefs.Client
 
 	// selected holds the absolute paths currently checked in the checkbox
 	// column. Reset on every successful load() — selection is scoped to
@@ -509,6 +565,21 @@ type Panel struct {
 	// wired it up.
 	onOpenFile func()
 
+	// onEnterRemoteArchive reports activateRow landing on a recognized
+	// archive file (see archive.Classify) while this Panel is connected
+	// remotely — Root wires this to enterRemoteArchive, which stats the
+	// real remote size, downloads it (asking first above
+	// remote_archive_confirm_size — see config.Settings' own doc
+	// comment), and only then actually navigates in. Never fires for a
+	// local archive, which enters directly through the ordinary
+	// p.navigate path instead — see activateRow's own dispatch. No path
+	// parameter, the same "cursor's already on the right row" shape
+	// onOpenFile already has. Left nil the same as onOpenFile if
+	// nothing's wired it up (e.g. a test constructing a Panel directly
+	// — those exercise enterRemoteArchive itself, or the lower-level
+	// pieces it calls, rather than depending on this callback firing).
+	onEnterRemoteArchive func()
+
 	// onDescribeRows lets Root override display names and Modified-
 	// column times for the directory load() is about to render, plus
 	// what the Modified column itself should be called while doing so
@@ -544,14 +615,15 @@ type rowDescription struct {
 type headerAction int
 
 const (
-	actionNavigate headerAction = iota // go to target
-	actionStart                        // go to the directory breakthrough was launched from
-	actionRoot                         // go to the filesystem root ("/")
-	actionHome                         // go to the user's home directory
-	actionBack                         // step back in history
-	actionForward                      // step forward in history
-	actionUp                           // go up one level (the parent directory)
-	actionReload                       // re-read the current directory from disk
+	actionNavigate           headerAction = iota // go to target
+	actionStart                                  // go to the directory breakthrough was launched from
+	actionRoot                                   // go to the filesystem root ("/")
+	actionHome                                   // go to the user's home directory
+	actionBack                                   // step back in history
+	actionForward                                // step forward in history
+	actionUp                                     // go up one level (the parent directory)
+	actionReload                                 // re-read the current directory from disk
+	actionOpenConnectionMenu                     // open the connection dropdown (see connectionmenu.go)
 )
 
 // headerSpan is one clickable region in the header's display text:
@@ -1084,6 +1156,15 @@ func (p *Panel) load(dir string) error {
 	if p.leavingArchive(abs) {
 		p.archivePath = ""
 		p.archiveEntries = nil
+		if p.archiveLocalPath != "" {
+			// The downloaded temp copy a remote archive was staged into
+			// (see enterRemoteArchive) — nothing else ever removes it,
+			// unlike archivePath/archiveEntries, which are just in-memory
+			// state with nothing on disk to clean up.
+			_ = os.Remove(p.archiveLocalPath)
+			p.archiveLocalPath = ""
+		}
+		p.archiveRemoteClient = nil
 	}
 
 	// resolveArchiveState (see its own doc comment) is what lets
@@ -1092,12 +1173,26 @@ func (p *Panel) load(dir string) error {
 	// file, or a subdirectory already inside one: load() itself is the
 	// one place that has to know the difference, everything upstream of
 	// it (navigate, the ".." row, Root's tab/history plumbing) just
-	// keeps treating abs as an ordinary path.
+	// keeps treating abs as an ordinary path. resolveRemoteArchiveState
+	// is that same idea's remote-panel counterpart (see its own doc
+	// comment on why it's narrower) — a connected panel can still browse
+	// into a recognized archive file, just always by way of
+	// enterRemoteArchive's own real download first (see
+	// Panel.onEnterRemoteArchive), never cold from this switch alone.
 	var entries []fsops.Entry
-	if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
-		entries, err = p.loadArchiveEntries(archivePath, internalDir)
-	} else {
-		entries, err = fsops.ListDir(abs)
+	switch {
+	case p.remote != nil:
+		if archivePath, internalDir, ok := p.resolveRemoteArchiveState(abs); ok {
+			entries, err = p.loadArchiveEntries(archivePath, internalDir)
+		} else {
+			entries, err = p.remote.ListDir(abs)
+		}
+	default:
+		if archivePath, internalDir, ok := p.resolveArchiveState(abs); ok {
+			entries, err = p.loadArchiveEntries(archivePath, internalDir)
+		} else {
+			entries, err = fsops.ListDir(abs)
+		}
 	}
 	if err != nil {
 		return err
@@ -1165,13 +1260,22 @@ func (p *Panel) load(dir string) error {
 	p.filterMatchesNothing = len(entries) == 0 && beforeFilterCount > 0
 	applySortPreference(entries, p.sortKey, p.sortDescending)
 
+	// Captured before Clear() below, for the same-directory reload
+	// branch further down: Table.Clear() only ever touches cell
+	// content, never tview's own internal selection index, so this is
+	// still whatever row the cursor was actually on a moment ago —
+	// including a row that's no longer valid once entries has fewer
+	// rows than before (see that branch's own doc comment for why that
+	// matters).
+	curRow, _ := p.table.GetSelection()
+
 	p.table.Clear()
 	p.selected = make(map[string]bool)
 	p.lastNameClickRow = -1 // see its own doc comment: a rebuilt table's row indices mean something new
 	p.endShiftSelect()
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs, p.theme)
+	text, spans := buildHeaderSpans(abs, p.theme, p.remote != nil)
 	p.header.SetText(text)
 	p.headerSpans = spans
 	p.renderFilterMenuBtn()
@@ -1185,6 +1289,22 @@ func (p *Panel) load(dir string) error {
 	row := 0
 	if parent := filepath.Dir(abs); parent != abs {
 		p.addRow(row, rowRef{path: parent, name: "..", isDir: true, checkable: false, entryType: fsops.TypeDir})
+		row++
+	} else {
+		// The real filesystem root has no parent to go "up" to (see the
+		// ".." branch above — filepath.Dir("/") is "/" itself), so there
+		// used to be no leading row here at all. Show "/" itself instead,
+		// selecting it the ordinary way (cursor/click, not a name-based
+		// special case): Details ("I") shows System Info specifically
+		// when *this* row is the current selection (see
+		// Root.showingSystemInfo, which just compares against this row's
+		// own path — "/" — like it would for any other entry), never
+		// merely for being somewhere under "/" — the surrounding
+		// directory's real entries (etc, home, usr, ...) get their own
+		// ordinary per-file Details exactly like anywhere else.
+		// checkable: false for the same reason ".." is: not a file
+		// operation target.
+		p.addRow(row, rowRef{path: abs, name: "/", isDir: true, checkable: false, entryType: fsops.TypeDir})
 		row++
 	}
 	for _, e := range entries {
@@ -1247,6 +1367,30 @@ func (p *Panel) load(dir string) error {
 		// entirely rather than depending on it to happen to fire.
 		p.table.SetOffset(0, 0)
 		p.focusRow(0) // top of the listing — see this func's own doc comment
+	} else if last := p.table.GetRowCount() - 1; curRow > last {
+		// Same directory reloading in place (a Trash/Remove, a "zr"
+		// manual refresh, ...) with the cursor left sitting past the
+		// last row that still exists — Table.Clear() above never
+		// adjusts tview's own internal selection index for a row count
+		// that may have just shrunk, e.g. deleting the last row the
+		// cursor was actually on. Left untouched, tview then has no
+		// valid row left to highlight at all, and nothing fixes that on
+		// its own until some unrelated keypress happens to nudge
+		// tview's own Select()-driven clamp into re-validating it. A
+		// real, reported bug: delete a file, tab focus away and back,
+		// and the panel shows no selection whatsoever until pressing
+		// Down once first.
+		//
+		// Deliberately only the out-of-range case, not every
+		// same-directory reload: a rename (say) can leave curRow still
+		// perfectly in range while pointing at a different file than
+		// before, since the renamed entry itself moved to wherever its
+		// new name now sorts — re-selecting unconditionally here would
+		// fire the table's own SetSelectionChangedFunc and clobber
+		// whatever finishRename's own refreshDetailsIfShowing just set
+		// moments earlier for the file's real new path, with whatever
+		// this numeric row happens to show post-reorder instead.
+		p.focusRowClamped(last)
 	}
 
 	if p.onLoad != nil {
@@ -1390,7 +1534,7 @@ func (p *Panel) setSearchStatus(text string) {
 	prefix := text + separator
 	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
 
-	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme)
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme, p.remote != nil)
 	p.header.SetText(prefix + breadcrumbText)
 
 	spans := make([]headerSpan, len(breadcrumbSpans))
@@ -1993,7 +2137,11 @@ func (p *Panel) setRowCells(row int, ref rowRef, focused bool) {
 	// can protect it: a trailing "/" or " -> target" says what kind of
 	// entry this is, which a shortened name alone no longer does.
 	suffix := ""
-	if ref.entryType == fsops.TypeDir {
+	if ref.entryType == fsops.TypeDir && ref.name != "/" {
+		// ref.name != "/": the real filesystem root's own self-row (see
+		// Panel.load's own doc comment on it) is already named "/" in
+		// full — appending the ordinary directory suffix on top would
+		// print "//" instead.
 		suffix = "/"
 	}
 	if ref.linkTarget != "" {
@@ -2706,6 +2854,37 @@ func (p *Panel) SelectedPaths() []string {
 	return paths
 }
 
+// SelectedPathsInDisplayOrder is SelectedPaths in the order the rows
+// are actually shown — top to bottom under the current sort — rather
+// than the selection map's own arbitrary one. For a caller where order
+// carries meaning (Batch Rename's numbering counts "as listed"), the
+// map order would silently hand out numbers at random. A selected path
+// that's no longer on screen (filtered out since it was ticked) is
+// appended after the visible ones, so nothing selected is lost.
+func (p *Panel) SelectedPathsInDisplayOrder() []string {
+	paths := make([]string, 0, len(p.selected))
+	seen := make(map[string]bool, len(p.selected))
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		ref, ok := p.rowRef(row)
+		if !ok || !p.selected[ref.path] || seen[ref.path] {
+			continue
+		}
+		seen[ref.path] = true
+		paths = append(paths, ref.path)
+	}
+	if len(paths) < len(p.selected) {
+		var rest []string
+		for path := range p.selected {
+			if !seen[path] {
+				rest = append(rest, path)
+			}
+		}
+		sort.Strings(rest)
+		paths = append(paths, rest...)
+	}
+	return paths
+}
+
 // captureTableKey handles the keys the table needs beyond its built-in
 // navigation: Space toggles the checkbox on the currently selected row,
 // the same action a click on that row's checkbox performs; Shift+Up/
@@ -2899,6 +3078,12 @@ func (p *Panel) activateRow(row int) (handledSelection bool) {
 		// navigable file here, same as any other.
 		if p.archivePath == "" {
 			if _, ok := archive.Classify(ref.path); ok {
+				if p.remote != nil {
+					if p.onEnterRemoteArchive != nil {
+						p.onEnterRemoteArchive()
+					}
+					return true
+				}
 				p.reportError(p.navigate(ref.path))
 				return true
 			}
@@ -2928,8 +3113,18 @@ func (p *Panel) nameCellRect(row int) (x, y, width int, ok bool) {
 
 // RowAt returns the absolute path of the entry at screen position (x, y),
 // or ok=false if that position isn't a selectable entry — outside the
-// table, past the last row, or the ".." row, which isn't a file operation
-// target. Used by Root to find which entry was right-clicked.
+// table or past the last row. The ".." row reports the panel's own
+// current directory (p.path), not ref.path (which for that row holds the
+// *parent* directory it navigates to) — the same "acting on this row
+// means acting on the directory it stands for" reasoning the filesystem
+// root's own leading row already relies on (see Panel.load's own "/"
+// branch, which has always pointed straight at p.path this way). Per the
+// user's own explicit request: almost every action reads as obviously
+// about "this folder" when the cursor sits on "..", not about its
+// parent, and every one of them already has to tolerate an ordinary
+// directory row's own path flowing through here regardless — "." is not
+// a new capability, just no longer a uniquely excluded one. Used by Root
+// to find which entry was right-clicked.
 func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 	row, ok := p.rowIndexAt(x, y)
 	if !ok {
@@ -2937,7 +3132,7 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 	}
 	ref, _ := p.rowRef(row) // rowIndexAt already confirmed this succeeds
 	if ref.name == ".." {
-		return "", false
+		return p.path, true
 	}
 	return ref.path, true
 }
@@ -2946,16 +3141,38 @@ func (p *Panel) RowAt(x, y int) (path string, ok bool) {
 // path of whichever entry the table's own cursor (arrow-key navigation)
 // currently sits on, rather than one under a screen position. Used by
 // Root's keyboard-triggered actions ("e" Edit, "r" Rename, "i"
-// Properties) that have no right-clicked position to work from. ok is
-// false for the ".." row (not a file operation target, matching RowAt)
-// or an empty table.
+// Properties, the "m" chord's own context menu, ...) that have no
+// right-clicked position to work from. The ".." row reports the panel's
+// own current directory — see RowAt's own doc comment for why. ok is
+// false only for a genuinely empty table.
 func (p *Panel) CurrentRowPath() (row int, path string, ok bool) {
 	row, _ = p.table.GetSelection()
 	ref, ok := p.rowRef(row)
-	if !ok || ref.name == ".." {
+	if !ok {
 		return 0, "", false
 	}
+	if ref.name == ".." {
+		return row, p.path, true
+	}
 	return row, ref.path, true
+}
+
+// rowRefForPath finds path's own already-loaded rowRef, if it's
+// currently a visible row — a linear scan, the same cost
+// SelectedPathsInDisplayOrder already pays for the identical reason:
+// this project has no separate path-to-row index, and a panel's own
+// row count never gets large enough for that to matter. Returns
+// ok=false for a selected-but-currently-filtered-out path the same way
+// that function's own fallback branch already accepts as a real
+// possibility — callers here only ever use this for a cheap "is it a
+// directory" hint and have a safe default to fall back on.
+func (p *Panel) rowRefForPath(path string) (rowRef, bool) {
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok && ref.path == path {
+			return ref, true
+		}
+	}
+	return rowRef{}, false
 }
 
 // rowIndexAt returns the row index at screen position (x, y), or
@@ -3214,6 +3431,81 @@ func (p *Panel) navigateAndSelect(target string) error {
 	return nil
 }
 
+// connectRemote attaches client — already dialed and authenticated,
+// see remotefs.Dial — to p as conn's own session, replacing whatever
+// local or previously-remote state this tab had, and navigates to
+// client's own Root(). History resets to a single fresh entry rather
+// than trying to carry the old one across: mixing a path from the
+// filesystem being left behind into the new session's own
+// back/forward stack would leave navigate() with no way to tell which
+// Client a given historyEntry even belongs to (see the struct's own
+// doc comment on remote/remoteConn).
+//
+// The connection attempt itself — remotefs.Dial, any credential
+// prompting, remotefs.RecordAttempt — is entirely the caller's own
+// responsibility (see connectdialog.go); this only ever runs once
+// that has already succeeded.
+func (p *Panel) connectRemote(client remotefs.Client, conn remotefs.Connection) error {
+	if p.remote != nil {
+		_ = p.remote.Close()
+	}
+	p.remote = client
+	p.remoteConn = conn
+	p.history = nil
+	if err := p.load(client.Root()); err != nil {
+		return err
+	}
+	p.pushHistoryEntry(historyEntry{path: p.path})
+	return nil
+}
+
+// disconnectRemote closes the active remote session, if any, and
+// returns this tab to browsing the local machine at the user's own
+// home directory — the same "somewhere sane, not wherever the remote
+// session happened to leave off" landing spot a freshly opened tab
+// already starts from (see actionHome). A no-op if this tab was never
+// connected to begin with.
+func (p *Panel) disconnectRemote() error {
+	if p.remote == nil {
+		return nil
+	}
+	_ = p.remote.Close()
+	p.remote = nil
+	p.remoteConn = remotefs.Connection{}
+	p.history = nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/"
+	}
+	if err := p.load(home); err != nil {
+		return err
+	}
+	p.pushHistoryEntry(historyEntry{path: p.path})
+	return nil
+}
+
+// isRemote reports whether p is currently attached to a remote session
+// — the same "browsing-mode gate" role inArchiveView already has for
+// archive browsing, and checked at exactly the same call sites for
+// exactly the same reason: rename, edit, chmod/chown, Copy/Cut/Paste,
+// Move to Trash/Remove, Compare, Batch Rename, and Sed Replace all
+// eventually make a real fsops call against a plain path string, which
+// would silently target the wrong filesystem (this machine's, not
+// remote's own) if any of them ran here unguarded — there's no
+// mechanism yet for the clipboard, batch rename, or any of the rest to
+// know a path belongs to a remote session rather than this one. Only
+// browsing, viewing, and disconnecting are supported against a remote
+// session so far (see remote's own doc comment on the struct).
+func (p *Panel) isRemote() bool {
+	return p.remote != nil
+}
+
+// errNotSupportedRemote is what every action guarded by isRemote
+// reports instead of proceeding — one shared message, the same
+// convention errNotSupportedInArchive already establishes for its own,
+// structurally identical guard.
+var errNotSupportedRemote = errors.New("not supported yet for a remote connection — browsing and viewing work, everything that changes files doesn't yet")
+
 // reportError hands err to whoever is displaying errors, if anyone is.
 // A nil error is ignored, so callers can pass a result through directly.
 func (p *Panel) reportError(err error) {
@@ -3346,6 +3638,99 @@ var headerButtons = []struct {
 // gap between two distinct buttons rather than part of either one.
 const headerButtonSeparator = " "
 
+// connectionButtonGlyph is the header's own connection-status button —
+// the "dropdown directly before the folder name" the user asked for
+// (see connectionmenu.go/connectdialog.go for the rest of that
+// feature) — always this exact one glyph regardless of connection
+// state, so its column width never changes and headerButtonPrefix
+// never needs to account for more than one fixed width here (only the
+// color varies — see buildHeaderSpans). "@" rather than a
+// server/plug-style pictograph: it's the one character already
+// universally understood as "user at host" (as in `ssh user@host`
+// itself), renders identically on every terminal (plain ASCII, unlike
+// most pictographs), and needs no legend of its own.
+const connectionButtonGlyph = "@"
+
+// connectionGlowNow is time.Now, a package-level var so a test can
+// pin it to a fixed instant — the same substitution shape isRoot/
+// hashFile already establish for other real-world effects a test needs
+// to control rather than actually depend on (here, the wall clock a
+// live connection's glow animates against).
+var connectionGlowNow = time.Now
+
+// connectionGlowPeriod/connectionGlowPeakBlend shape the header's own
+// "@" button while connected: a slow, single pulse toward
+// theme.EntryExecutable's own lighter self and back to rest, once every
+// connectionGlowPeriod — never dipping below the base color at all.
+//
+// Deliberately one-directional (brighten only, resting exactly at the
+// base color rather than swinging past it toward black): an earlier
+// design also darkened on the other half of the cycle, which read, per
+// the user's own explicit report, as a "still trying to connect"
+// searching-for-signal pulse rather than a settled, already-connected
+// one — dipping toward black is what a modem/router's own "no link
+// yet" light does, not what a steady, healthy connection should look
+// like. The earlier all-the-way-to-black swing existed to survive a
+// non-truecolor terminal's color quantization (see this constant's own
+// git history); connectionGlowPeakBlend alone is still wide enough for
+// that — the point being fixed here is which direction the swing goes
+// in, not how far. Sampled once per second (see
+// Root.refreshActivePanelHeaderGlow, driven by the same ticker
+// StartClock's own clock/System Info refresh already uses), not its
+// own faster ticker: a three-second period still reads clearly at one
+// sample a second, and adding a second background ticker just for
+// this would cost a further goroutine and redraw cadence for a purely
+// cosmetic effect.
+const (
+	connectionGlowPeriod    = 3 * time.Second
+	connectionGlowPeakBlend = 0.85
+)
+
+// connectionGlowColor is the header's own connection-button color for
+// this instant: theme.MutedTextColor while local (nothing to animate),
+// or theme.EntryExecutable easing up to a lighter variant of itself and
+// back while connected. (1-cos(x))/2 rather than a plain sine: it
+// stays non-negative throughout, so the color only ever brightens off
+// the base and returns to it — exactly the "resting, connected, alive"
+// pulse this is meant to read as (see this file's own doc comment on
+// connectionGlowPeriod for why never dipping below the base color at
+// all is the point) — while still easing smoothly through both the
+// rest point and the peak rather than reversing direction with a sharp
+// corner at either one.
+func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Time) tcell.Color {
+	if !connected {
+		return theme.MutedTextColor
+	}
+	period := connectionGlowPeriod.Seconds()
+	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
+	brightness := (1 - math.Cos(2*math.Pi*phase)) / 2 // 0 (rest) .. 1 (peak) .. 0 (rest)
+	return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
+}
+
+// colorWhite/colorBlack are blendToward's own two endpoints — named
+// rather than written inline at each call site, since "toward white"/
+// "toward black" is the whole point of picking one over the other.
+var (
+	colorWhite = tcell.NewRGBColor(255, 255, 255)
+	colorBlack = tcell.NewRGBColor(0, 0, 0)
+)
+
+// blendToward mixes c toward target by fraction t (0 = c itself, 1 =
+// target), clamped to [0, 1] so a caller's own math (a sine wave's
+// rounding, say) can never overshoot into an invalid color.
+func blendToward(c, target tcell.Color, t float64) tcell.Color {
+	switch {
+	case t < 0:
+		t = 0
+	case t > 1:
+		t = 1
+	}
+	cr, cg, cb := c.RGB()
+	tr, tg, tb := target.RGB()
+	lerp := func(from, to int32) int32 { return from + int32(float64(to-from)*t) }
+	return tcell.NewRGBColor(lerp(cr, tr), lerp(cg, tg), lerp(cb, tb))
+}
+
 // headerButtonPrefix is the plain-text form of the six nav buttons
 // plus their separators — see buildHeaderSpans for the colored,
 // clickable version actually drawn in the header. Reused by
@@ -3363,6 +3748,7 @@ var headerButtonPrefix = func() string {
 	for _, btn := range headerButtons {
 		b.WriteString(" " + btn.glyph + " " + headerButtonSeparator)
 	}
+	b.WriteString(" " + connectionButtonGlyph + " " + headerButtonSeparator)
 	return b.String()
 }()
 
@@ -3392,7 +3778,7 @@ var headerButtonPrefix = func() string {
 // between two buttons, or in empty space after the path) is handled by
 // captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, spans []headerSpan) {
+func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
@@ -3405,6 +3791,23 @@ func buildHeaderSpans(abs string, theme config.ResolvedTheme) (text string, span
 		b.WriteString(headerButtonSeparator)
 		col++
 	}
+
+	// The connection button: same padded-button shape as the seven
+	// above, but its own foreground color (not just the shared
+	// ButtonBackground) carries the state — muted for a plain local
+	// panel, a slow breathing glow around the same "healthy" green
+	// username/git-status/disk-percent already use elsewhere in this
+	// app (see bottombar.go/gitstatus.go) once a remote session is
+	// attached — a flat, unmoving green wasn't a clear enough "this is
+	// live right now" signal on its own, per the user's own explicit
+	// report.
+	connColor := connectionGlowColor(theme, connected, connectionGlowNow())
+	connStart := col
+	fmt.Fprintf(&b, "[%s:%s:] %s [-:-:-]", colorTag(connColor), keyBG, connectionButtonGlyph)
+	col += 1 + tview.TaggedStringWidth(connectionButtonGlyph) + 1
+	spans = append(spans, headerSpan{start: connStart, end: col, action: actionOpenConnectionMenu})
+	b.WriteString(headerButtonSeparator)
+	col++
 
 	rootStart := col
 	b.WriteString("/")
@@ -3492,12 +3895,23 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// discoverable as a click target in the first place.
 		p.reportError(p.navigate("/"))
 	case actionHome:
+		// A connected panel's own "home" is the remote account's own
+		// home directory (Root(), fixed for the session's whole
+		// lifetime — see Client's own doc comment), not this machine's.
+		if p.remote != nil {
+			p.reportError(p.navigate(p.remote.Root()))
+			return
+		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			p.reportError(err)
 			return
 		}
 		p.reportError(p.navigate(home))
+	case actionOpenConnectionMenu:
+		if p.onOpenConnectionMenu != nil {
+			p.onOpenConnectionMenu()
+		}
 	case actionBack:
 		p.back()
 	case actionForward:

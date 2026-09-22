@@ -13,16 +13,26 @@ material, always matching the version you are actually running.
 - [Tabs](#tabs)
 - [Split view](#split-view)
 - [The context menu](#the-context-menu)
+- [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
+- [Open with…](#open-with)
 - [Batch rename](#batch-rename)
+- [Compare](#compare)
+- [Rsync](#rsync)
+- [Toolbox](#toolbox)
+- [Tool windows](#tool-windows)
+- [Mounts](#mounts)
+- [Firewall](#firewall)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
 - [The Details sidebar](#the-details-sidebar)
+- [Remote connections (SFTP)](#remote-connections-sftp)
 - [Properties](#properties)
 - [Copy, Cut and Paste](#copy-cut-and-paste)
 - [Trash, Remove and Restore](#trash-remove-and-restore)
 - [The command line](#the-command-line)
+- [Status bar](#status-bar)
 - [Options and configuration](#options-and-configuration)
 - [Settings reference](#settings-reference)
 - [Keyboard reference](#keyboard-reference)
@@ -44,13 +54,14 @@ dialog open.
 | `x` | Cut | `D` | Remove permanently | `I` | Details sidebar |
 | `v` | Paste | `u` | Undo last rename | `l` | Look |
 | `r` | Rename | `e` | Edit | `/` | Filter |
-| `m` | Context menu | `f` | Find | `.` | Toggle hidden files |
+| | | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
 | `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
 | `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
 | `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
-| `?` | This help | `:` | Bash command line | | |
+| `?` | This help | `:` | Bash command line | `C` | Compare |
+| `R` | Rsync | | | | |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
@@ -78,10 +89,13 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
 | `p` — permissions | `pm` chmod · `po` chown |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
+| `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
+| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -92,12 +106,12 @@ second letter if you'd rather point at it.
 
 **The button bar** below the command line always shows a curated subset
 of these keys as a quick legend — Copy/Cut/Paste, Move to Trash,
-Properties, Details, the context menu, Split, the tab switcher, Look,
-Help, and the three chord families — with the actual key to press set
-off by its own background color, one space either side, so the
-letter-to-action mapping is easy to scan at a glance. Every other key
-still works exactly the same whether or not it's shown there; `?`
-documents all of them.
+Properties, Details, Split, the tab switcher, Look, Help, and the six
+chord families — with the actual key to press set off by its own
+background color, one space either side, so the letter-to-action
+mapping is easy to scan at a glance. Every other key still works
+exactly the same whether or not it's shown there; `?` documents all of
+them.
 
 **No function keys anywhere in the application.** Every F-key is free
 for your terminal or window manager to use however it likes. A handful
@@ -174,6 +188,15 @@ glyph's own single column. Root (`/`) sits right after Start and jumps
 to the filesystem root — the breadcrumb's own leading "/" already
 links there too, but as a plain, easy-to-miss character; Root gives
 that same destination a proper, styled button of its own.
+
+Right after Reload, one more button — `@` — sits directly before the
+path itself: muted for an ordinary local panel, a slow green breathing
+glow — brightening and dimming on a roughly three-second cycle, never a
+flat, unmoving color — once connected to a remote host, so a live
+connection is unmistakably visible at a glance rather than just another
+static indicator. Clicking it (or the `g` chord's own `gc`) opens the
+connection dropdown — see [Remote connections
+(SFTP)](#remote-connections-sftp) below for the whole feature.
 
 ### Filtering
 
@@ -253,7 +276,7 @@ cleared and re-enabled, size/modified-time switched off and cleared),
 so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
-for anything `Enter` navigates into, green for executable, red for a
+for anything `Enter` navigates into, dark green for executable, red for a
 broken symlink, darker red for something you can't read, cyan for a
 symlink to a file, orange for a socket/FIFO/device, magenta for a
 recognized archive, dim gray for a dotfile.
@@ -348,7 +371,8 @@ single-pane rather than restoring half a layout.
 
 ## The context menu
 
-`m`, or right-click anywhere in the listing.
+`mm` (the `m` chord's own doubled prefix — see [the chords
+table](#the-keyboard-layer)), or right-click anywhere in the listing.
 
 Only what actually applies right now is shown — not a fixed list of
 everything the menu can ever do. On a plain file, that's:
@@ -356,6 +380,7 @@ everything the menu can ever do. On a plain file, that's:
 ```
 Look
 Edit
+Open with…
 Rename
 Copy
 Cut
@@ -367,21 +392,24 @@ Properties
 ▸ Tabs & Split
 ```
 
-A few of these come and go on their own: **Edit** (and, one level into
-"More actions", **tail -f**) drop out entirely for a directory — neither
-means anything there. **Paste** only appears once Copy or Cut has
-actually put something in the clipboard. Inside "Tabs & Split",
-**Split orientation** and **Swap panes** only show up once a split is
-actually active — there's nothing to orient or swap before that.
+A few of these come and go on their own: **Edit** and **Open with…**
+(and, one level into "More actions", **tail -f**) drop out entirely for
+a directory — none of the three mean anything there. **Paste** only
+appears once Copy or Cut has actually put something in the clipboard.
+Inside "Tabs & Split", **Split orientation** and **Swap panes** only
+show up once a split is actually active — there's nothing to orient or
+swap before that.
 
 Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Look**/**Edit**/**Rename**/**Copy**/**Cut**/**Move to Trash**/
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing. `m` again (`mm`) fires **Multiply** the same way — the one
-entry here with no plain-key shortcut of its own to mirror, since it
-only ever opens from this menu — see [Multiply](#multiply).
+nothing. `m`/`o` again (`mmm`/`mmo` from plain browsing) fire
+**Multiply**/**Open with…** the same way — the two entries here with no
+plain-key shortcut of their own to mirror, since neither ever opens
+from anywhere but this menu — see [Multiply](#multiply) and [Open
+with…](#open-with).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -403,9 +431,10 @@ arrow does the same, alongside clicking or selecting `◂ Back` itself.
 The menu's own title bar names where you are — "Menu" at the top,
 "Menu › Selection" one level in.
 
-- **▸ More actions** — `tail -f` (files only), `chown`, `chmod`, `sed`,
-  Batch rename, Undo last rename, Remove (the permanent, asks-first
-  sibling of Move to Trash above).
+- **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
+  (files only), `chown`, `chmod`, `sed`, Batch rename, Undo last
+  rename, Compare, Rsync, Remove (the permanent, asks-first sibling of
+  Move to Trash above), Paste following symlinks.
 - **▸ Selection** — Select all, Deselect all, Select +, Select -
   (checkbox-based, the same these already reach on their own keys).
 - **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
@@ -418,9 +447,26 @@ live at the bottom of this menu are Options-screen and keyboard-only
 now (`.` and the `z` chord) — they're a view setting for the whole
 panel, not an action on whatever the menu was opened for.
 
+## New file and New dir
+
+`mf`/`md`, or the context menu's **"More actions" → "New file"/"New
+dir"**. Prompts for a name and creates an empty file (`mf`, the same as
+a bare `touch`) or an empty directory (`md`, the same as a bare
+`mkdir`) directly inside the active panel's own current directory —
+neither depends on a selection or the cursor's own row, so both work
+the same whether the cursor sits on a real entry or on `..`.
+
+Refuses an empty name, a name containing a path separator (this only
+ever creates directly inside the current directory, not somewhere
+nested), or an existing destination — the same three refusals Rename
+already has. Works the same way against a remote connection (see
+[Remote connections (SFTP)](#remote-connections-sftp)): the new file or
+directory is created through that connection instead of on this
+machine, without needing to leave the panel.
+
 ## Multiply
 
-`mm` (`m` opens the context menu, `m` again fires this one directly),
+`mmm` (`mm` opens the context menu, `m` again fires this one directly),
 or the context menu's **Multiply**.
 
 Creates one or more copies of the current selection right beside it.
@@ -473,10 +519,39 @@ Duplicate (see [Settings reference](#settings-reference)). This only
 happens once **Duplicate** is actually pressed; editing a field and
 then **Cancel** never touches the sticky default at all.
 
+## Open with…
+
+The context menu's **Open with…** (files only) — runs any program you
+type against the selected file, instead of always the configured
+editor (see [The keyboard layer](#the-keyboard-layer) for `e`/Edit).
+Prefilled with whatever you typed last time, so opening the next file
+with the same program takes one Enter, not a full retype.
+
+Whatever you type is handed to your real shell exactly as written — a
+multi-word command with its own flags (`libreoffice --writer`,
+`code -w`) works the same as typing it at a shell prompt would, the
+same "hand it to a real shell, don't re-parse shell syntax by hand"
+principle [Rsync](#rsync)'s own "Extra flags" field already follows. A
+GUI program takes over the screen the same way a terminal editor does,
+until it's closed; append `&` to background it instead, exactly as at
+a real shell — there's no separate "run detached" mode to pick between,
+just the one typed command.
+
+Works for a remote file exactly like Edit already does (see [Remote
+connections (SFTP)](#remote-connections-sftp)): downloads a local temp
+copy, runs the typed command against it, and uploads the result back
+over the connection only if it actually changed — nothing about a file
+living on another machine needs a different command or a separate
+step.
+
 ## Batch rename
 
 Renames a whole selection through a fixed pipeline, with a live preview
 of the result. Reached from the context menu's "Batch rename".
+
+Applying it to a single folder (nothing else selected) renames the
+files and subfolders *inside* it, not the folder itself — multi-select
+several items first if you want to rename them, folders included.
 
 The screen has the steps down the left, the selected step's own settings
 on the right, and the preview underneath.
@@ -489,20 +564,33 @@ on the right, and the preview underneath.
 | `Tab` / `Shift`+`Tab` | cycle steps → settings → preview → buttons |
 | `Escape` | close without renaming anything |
 
+In the preview itself:
+
+| Key | Action |
+|---|---|
+| `Space` (or a click on the `●`) | skip this row / take it back in — a skipped file is neither renamed nor counted by Numbering |
+| `u` / `d` | move this row up / down — arranges the numbering order by hand ("Count in" switches to "As listed") |
+| `n` / `p` | jump to the next / previous row that changes |
+| `c` / `C` | jump to the next / previous conflict |
+
 ### The steps
 
 They always run in this order, and a step left at its default does
-nothing — there is no separate on/off switch to also set.
+nothing — there is no separate on/off switch to also set. A `●` in front
+of a step's name in the list means it currently changes something, so
+the shape of the whole pipeline is readable at a glance. A help line
+under the settings explains whichever setting is selected.
 
 | Step | Settings | Notes |
 |---|---|---|
-| **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `$2`, … for captured groups |
+| **Search & Replace** | Find, Replace with, Regex | Literal text by default. With Regex on, Find is a [Go regular expression](https://pkg.go.dev/regexp/syntax) and Replace can use `$1`, `${1}` or sed-style `\1` for captured groups |
 | **Case** | Unchanged / UPPERCASE / lowercase / Title Case / Sentence case | Title Case treats a run of letters *and digits* as one word, so `v2` stays `V2` |
 | **Trim** | characters off the front, off the back | Counted in characters, not bytes, so accented and non-Latin names are never cut mid-character |
-| **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits | Zero-padded to Digits, joined with `-`. Counts in the order the preview lists the files. A number wider than Digits is never truncated |
-| **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to… | "Set to…" uses the field below it; a leading dot is optional |
+| **Template** | Template, Date format, Date format uses strftime | Off while empty. Rebuilds the name from a pattern: `{name}` (as it stands after the three steps above), `{ext}` (without the dot), `{counter}` (Numbering's counter — Start/Step/Digits apply even with Position = None), `{parent}` (the folder's name), `{date}` (modification date). Anything else is literal; unknown `{...}` stays as typed. `{date}` prints per "Date format": a Go layout (`2006-01-02 15:04`) or, with the switch on, strftime (`%Y-%m-%d`) — the same choice and the same directives as Duplicate/Multiply; empty means `2006-01-02` |
+| **Numbering** | Position (None/Prefix/Suffix), Start at, Step, Digits, Count in, Reversed | Zero-padded to Digits, joined with `-`. "Count in" picks which file gets the first number — as listed in the preview (the panel's own order, rearrangeable with `u`/`d`), by name, or by modification time (oldest first) — and "Reversed" flips that. Skipped rows don't take a number. A number wider than Digits is never truncated |
+| **Extension** | Keep / lowercase / UPPERCASE / Remove / Set to…, Treat folder names as having extensions too | "Set to…" uses the field below it; a leading dot is optional. Folders are off by default: `my.project` is one name with no extension, so no step ever splits it at the dot — switch the last setting on to treat folders like files |
 
-Steps 1–4 only ever touch the name; step 5 only ever touches the
+Steps 1–5 only ever touch the name; step 6 only ever touches the
 extension. So a Case transform can't quietly rewrite `.JPG`, and a
 Search & Replace for `jpg` won't reach into it either — use the
 Extension step for that.
@@ -520,11 +608,38 @@ renaming has no file contents to read and nothing to wait for.
 - **Changed** rows show the new name in full color.
 - **Unchanged** rows are dimmed and marked `(unchanged)`.
 - **Conflicts** are red, with the reason: either two files in the batch
-  would land on the same new name, or the new name is already taken on
-  disk. Conflicting files are simply left out of the rename — the rest
-  still goes through.
+  would land on the same new name, or the new name is already taken by
+  something that isn't moving out of the way. Conflicting files are
+  simply left out of the rename — the rest still goes through.
 
 The status line underneath counts all three.
+
+Two things that look like conflicts but aren't:
+
+- **Rename chains.** Trimming `1-a.txt`, `2-a.txt` and numbering them
+  from 2 turns `1-a.txt` into `2-a.txt` — a name that exists, but whose
+  owner is itself becoming `3-a.txt`. That's allowed: the renames run in
+  whatever order makes it work (here `2-a.txt` moves first), and a chain
+  that closes into a swap goes through a temporary name in the same
+  directory. Only a destination that *stays* occupied is a real conflict.
+- **Case-only renames.** `Readme.TXT` → `readme.txt` works even on a
+  filesystem that ignores case (macOS, Windows shares), where the new
+  name technically "already exists" — because it's the same file.
+
+### Presets
+
+A pipeline worth building once is worth keeping: **Save preset…** stores
+every step's settings under a name, **Load preset…** lists what's saved
+(`Enter` loads one, replacing the current settings; `d` deletes one after
+asking). Saving under an existing name asks before replacing it.
+
+Presets are plain JSON files, one per preset, in
+`~/.config/breakthrough/rename-presets/` (`$XDG_CONFIG_HOME/breakthrough/rename-presets/`
+if that variable is set) — readable, diffable, and easy to copy to another
+machine or drop into version control. Enum settings are stored by name
+(`"case": "title"`, `"number_order": "by-mtime"`), not by number; a file
+that names something unknown is skipped with an error and doesn't take the
+other presets down with it.
 
 ### Applying and undoing
 
@@ -535,6 +650,294 @@ Afterwards, the context menu's **"Undo last rename"** reverses the
 entire batch in one go — one level deep, cleared once used. Renaming
 never crosses filesystems (a new name always lands in the same
 directory), so there is no partial-move case to recover from.
+
+## Compare
+
+`C` answers "are these two things the same, and if not, what's
+different" — for two files, or two whole directory trees. Reached from
+the file panel (`C`) or the context menu's **"More actions" → "Compare"**.
+
+### Picking what to compare
+
+Needs exactly two things, gathered from whatever's already on screen —
+no separate picker dialog:
+
+- **Two entries marked** (checkbox, either order) in the current panel.
+- **Split view** (`s`), nothing marked at all: the cursor position in
+  each pane stands in for the two things.
+
+Anything else — fewer than two marked and no split — is refused with a
+message explaining which of the two to do instead. A file compared
+against a directory is refused the same way; compare two files, or two
+directories.
+
+### Two files
+
+A small overlay: size and modification time side by side, with an
+immediate verdict from the same "quick check" heuristic `rsync`'s own
+default sync mode uses —
+
+- **Different** the moment sizes disagree.
+- **Probably identical** when size *and* modification time both agree.
+- **Uncertain** when only the size does. Same size, different time is a
+  real, common case (touched, re-saved, copied without preserving
+  timestamps) that this heuristic genuinely can't resolve on its own.
+
+**Compute hash** settles it for certain — SHA-256, cancellable, the same
+progress animation Properties' own hashing shows — and always wins over
+the heuristic once it has run. **Show diff** opens a real line-by-line
+comparison through the system's own `diff(1)` in the Look pager (colored
+exactly like any other diff), disabled for a binary pair or when
+`diff(1)` isn't installed.
+
+### Two directories
+
+A full screen listing every path that differs, plus every path that
+exists on only one side. A directory that's one-sided is shown once,
+never descended into — an old, untouched backup folder is one row, not
+thousands of them.
+
+| Key | Action |
+|---|---|
+| `Enter` | open a differing text pair in the diff view |
+| `c` | copy the selected one-sided item to the other side, after asking |
+| `m` | switch between the quick size+time check and a real hash comparison, and re-scan |
+| `i` | show/hide rows that compared identical (hidden by default) |
+| `Esc` | close |
+
+The status line tallies how many rows differ, are one-sided, uncertain,
+identical, or errored (a permission-denied directory along the way, for
+instance — reported, not fatal to the rest of the walk).
+
+## Rsync
+
+`R`, or the context menu's **"More actions" → "Rsync"**. Builds a real
+`rsync(1)` invocation from a small dialog, rather than typing one by
+hand — never reimplements any of rsync's own transfer logic, the same
+"shell out to the real tool" approach this app already takes for
+`du`/`df`/`grep`/`sed`/`find`.
+
+### The dialog
+
+- **Source** defaults to the single currently selected item, or the
+  active panel's own directory if nothing (or more than one thing) is
+  marked.
+- **Destination** defaults to split view's own other pane, when one is
+  open — the one case where "the other side" is unambiguous — and is
+  otherwise left blank on purpose: guessing a destination for a
+  command that can permanently delete files (see `--delete` below) is
+  worse than asking. Both fields accept a plain local path, or a
+  `user@host:path`/`host:path` remote one exactly the way a real
+  `rsync` or `ssh` command line would — typed by hand, or filled in for
+  you automatically: if the tab a field defaults from is currently
+  connected via the Connect dialog (see [Remote connections
+  (SFTP)](#remote-connections-sftp)), the field opens already showing
+  `user@host:path` instead of a bare local one, and that connection's
+  own port (if it isn't the default 22) travels through to a real
+  `-e 'ssh -p PORT'` flag automatically — something rsync's own compact
+  `host:path` syntax has no room to express on its own, and which is
+  otherwise lost the moment you edit the field to anything other than
+  exactly what was filled in (there's no way to know a non-default port
+  from typed text alone, the same as a bare `ssh host` wouldn't either).
+  Syncing between two remote endpoints at once — whether both came from
+  connected tabs, one did, or both were typed by hand — shows a warning
+  line beneath the preview: `rsync -e ssh` has no server-to-server
+  transfer mode of its own, so every byte still relays through this
+  machine over two separate ssh connections, never directly between the
+  two remote hosts, which can matter a lot over a slow local link.
+- **Copy the folder's contents in (not the folder itself)** is the one
+  choice this dialog makes explicit rather than implicit: real `rsync`
+  decides this from whether the *source* path ends in a trailing
+  `/` — `rsync -a src/ dst/` copies `src`'s own children into `dst`,
+  while `rsync -a src dst/` creates `dst/src` instead. A single,
+  easy-to-miss character silently deciding between two very different
+  outcomes is exactly the kind of trap this toggle exists to remove —
+  off by default, matching how this app's own ordinary Copy/Paste
+  already behaves (a new folder inside the destination, not a
+  content-merge). Turning it on (or off again) also adds (or removes)
+  that same trailing `/` on the Source field itself, not just in the
+  live preview below — so the field always shows exactly what's about
+  to run, never something that quietly disagrees with the preview.
+  Opening the dialog on a single *file* (the cursor's own row, or one
+  marked item) puts that file itself into Source — obviously only it
+  is meant to sync. "Contents" has no meaning for a plain file the way
+  it does for a directory, so turning this on then instead substitutes
+  the file's own parent directory (still with the trailing `/`); turning
+  it back off restores the exact file the dialog originally opened on,
+  not just that directory with the slash removed again.
+- **Archive mode** (`-a`, on by default), **Compress** (`-z`),
+  **Delete extraneous files from destination** (`--delete`, off by
+  default — the one flag here that can permanently remove files that
+  no longer exist in Source), and **Dry run** (`-n`, report what would
+  happen, change nothing) are each their own toggle row.
+- **Exclude** takes one or more comma-separated patterns
+  (`--exclude=PATTERN`, one per entry). **Extra flags** is a free-text
+  escape hatch for anything else real rsync understands — spliced into
+  the real command exactly as typed, the same "hand it to a real shell,
+  don't re-parse shell syntax by hand" principle Edit's own
+  `$VISUAL`/`$EDITOR` invocation already follows.
+
+A live preview line always shows the exact command that would actually
+run, updated on every keystroke and every toggle — `--delete` in its
+own warning color the moment it's on, so it never blends into the rest
+of the line unnoticed.
+
+### Running it
+
+**Run** hands the previewed command to a real `rsync` process with the
+real terminal attached — the same way the embedded bash line already
+runs anything that benefits from a directly attached terminal rather
+than a background task, since `--info=progress2`'s own live,
+carriage-return-driven progress line needs one to render correctly.
+Press Esc once it's done to return to breakthrough; the panel reloads
+automatically. Source and Destination are both required — Run refuses
+outright, before ever reaching a real shell, if either is empty (an
+empty, unquoted shell argument doesn't produce a plain "missing
+argument" error the way you'd expect — it silently vanishes from the
+argument list instead, shifting everything after it).
+
+**Run in background** runs the exact same command without taking over
+the terminal at all: breakthrough itself stays fully usable the whole
+time — Copy/Cut/Paste included, running at the same time if you start
+one — while a live "rsync N% ▀▀▀▀▀▀▀▀▀▀ rate elapsed" segment tracks
+progress in the status bar, parsed straight from rsync's own
+`--info=progress2` output (which is why that flag is always on,
+whichever way you run it). Only one background rsync runs at a time; a
+second one asked for while one is still going queues behind it, the
+same way a second Paste already queues behind one still copying.
+`Ctrl+C`/`Ctrl+Delete` cancels a running background rsync the same key
+that already cancels a running Paste — both, if both happen to be
+running at once. The one thing this path can't do that Run's own
+directly-attached terminal can: answer an interactive prompt — an
+`ssh` connection whose host key isn't already trusted, or one that
+still needs a typed password, fails fast with a real, reported error
+instead of hanging with no visible prompt at all, since a backgrounded
+rsync's own stdin deliberately reads from nothing rather than from
+breakthrough's own keyboard.
+
+## Toolbox
+
+`j` then `j`. A full-screen, browsable catalog of external networking
+and hardware tools — never reimplemented, the same "shell out to the
+real tool" approach Rsync and Sed Replace already take. Two categories:
+
+- **Networking**: Ping, Nmap scan, IP addresses (`ip addr`), Routing
+  table (`route -n`), Sockets (`ss -tulpn`), `getent`, `wget`,
+  `nslookup`, `dig`, netcat (`nc`), `curl`, and a Logviewer that runs a
+  real `tail -f` on a file you name (defaulting to `/var/log/syslog`).
+- **Hardware**: Block devices (`lsblk -f`), USB devices (`lsusb`), CPU
+  info (`lscpu`), Memory devices (`lsmem`), Kernel devices (`lsdev`),
+  Hardware summary (`hwinfo --short`), System overview (`inxi -Fxz`),
+  and SCSI devices (`lsscsi`).
+
+`Up`/`Down` move between entries, `Enter` (or a click) runs the one
+selected. An entry that needs further input — a host for Ping, a URL
+for `curl`, a database and key for `getent`, and so on — asks for it
+first in a small field floated on top of the screen; leaving it empty
+and pressing `Escape` cancels without running anything. Whatever you
+type for one of these is split on whitespace and appended to the
+command as-is, so `curl`'s own prompt happily accepts extra flags
+(`-I https://example.com`), not just a bare URL.
+
+Every tool's output opens in its own tool window (see [Tool
+windows](#tool-windows) below), floating on top of the Toolbox screen
+rather than replacing it. That means you can start Ping, then pick
+another entry right after — each tool keeps running independently
+until you close its window or the command finishes on its own.
+
+Not every one of these commands ships by default on every distribution
+(`lsdev`, `hwinfo`, and `inxi` especially vary) — running one that isn't
+installed reports a real "command not found" in its own tool window,
+the same as typing it at a shell would.
+
+`j` then `n` (Network Tools) and `j` then `h` (Hardware Tools) open
+this exact same screen already filtered down to just the Networking or
+just the Hardware category above, for jumping straight to one tool
+without scrolling past the other category's entries first. `jj` itself
+is unchanged and still shows both categories together.
+
+## Tool windows
+
+A small, freely positioned window showing one command's own live
+output — what every Toolbox entry (see [Toolbox](#toolbox) above)
+actually opens. Unlike every other dialog in this app, it is
+deliberately not modal: the panel underneath, the Toolbox screen if
+it's still open, and any other tool window all stay fully usable while
+this one floats on top of them.
+
+| Action | Effect |
+|---|---|
+| `Escape` | Close it, stopping the process first if it's still running |
+| Drag the title bar | Move the window; `Alt`+arrow keys do the same |
+| Click the title bar's `✕` | Close it, same as `Escape` |
+| Drag the bottom-right `◢` | Resize it by hand |
+| Arrow keys / `PageUp`/`PageDown` / mouse wheel | Scroll the output once it's longer than the window currently shows |
+
+Left alone, a tool window auto-fits its own width to whatever it's
+currently showing — growing the moment a long line arrives, shrinking
+back once that line scrolls out of view — until the resize handle is
+ever dragged by hand, which turns that auto-fit off for that window for
+good. A window that finishes on its own (the command exits) says so
+right in its own content area instead of closing itself, so its last
+output stays readable until you close it yourself.
+
+## Mounts
+
+`j` then `m`. A third full-screen catalog, alongside Options and the
+Toolbox, kept deliberately separate from the Toolbox's own command list:
+a read-only, live table of every currently mounted filesystem, rather
+than a list of commands to run.
+
+Built entirely from the real `findmnt` command (never reimplemented,
+never a hand-rolled `/etc/fstab` parser): one call for what's actually
+mounted right now (real storage only — `proc`, `sysfs`, `tmpfs` and
+other pseudo filesystems are left out), a second for what `/etc/fstab`
+itself configures, cross-referenced by mountpoint. Six columns: Target,
+Source, Type, Bind, Persistent, and Options.
+
+- **Bind** marks a bind mount — the same underlying filesystem attached
+  a second time at another path (`mount --bind`).
+- **Persistent** marks a mount whose mountpoint is also configured in
+  `/etc/fstab` — it will still be there after a reboot. One without it
+  was mounted by hand (or by something other than the boot-time fstab
+  pass) at some point since, and is shown in a warning color so it
+  stands out at a glance — the whole reason this column exists.
+
+`Up`/`Down` move between mounts, `r` re-reads the live mount table (a
+USB stick plugged in, or a network share that dropped, while this
+screen is open won't otherwise be noticed on its own), `Escape` closes
+it. Read-only for now — no mount/unmount actions yet.
+
+## Firewall
+
+`j` then `f`. A fourth full-screen catalog, alongside Options, the
+Toolbox, and Mounts: a read-only, live view of this host's own actual
+firewall rules.
+
+Exactly one backend is read — UFW if it's active, otherwise nftables if
+it has any rules, otherwise iptables, otherwise none — never more than
+one, since on a modern system these are different front ends onto the
+same underlying rules, and reading more than one would double-count.
+Built entirely from the real `ufw`, `nft`, and `iptables-save` commands,
+never reimplemented.
+
+Rules are grouped into "Incoming" and "Outgoing" sections, listed in the
+exact order each is actually evaluated — first match wins, so a rule
+further down a section only ever applies once every rule above it has
+already been ruled out. Columns: `#` (evaluation order), Dir, Action,
+Proto, Port, Source, Destination, Interface, and Note.
+
+- **Allow** rules and **Deny**/**Reject** rules are colored apart (green
+  vs. red) for a quick scan of what's actually open.
+- A rule already fully covered by an earlier, broader-or-equal rule in
+  its own section can never actually fire — it's shown dimmed, with a
+  "shadowed by #N (...)" note explaining which earlier rule makes it
+  unreachable and what that rule itself does.
+
+`Up`/`Down` move between rules, `r` re-reads the live rules, `Escape`
+closes it. Read-only for now — building a new rule, and testing "what
+happens to a request on port X from IP Y" without needing to know any
+firewall-specific syntax, are planned next.
 
 ## Sed Replace
 
@@ -609,6 +1012,8 @@ through the real `tail -f`.
 tab strip. A live, read-only panel on the right that follows the
 cursor.
 
+### Per-file view
+
 It shows the full stat block (type, permissions, owner, group, size,
 timestamps, path), and on demand:
 
@@ -627,6 +1032,66 @@ it closed first — pressing `h` there fills in Properties' own hash
 section instead of Details', so it never fills in a window you can't
 see.
 
+### Git status
+
+Selecting a real directory that's part of a git repository (any
+directory inside one, not just its own root — git itself resolves
+that the same way `git status` typed there directly would) adds its
+own section right below the stat block: the same `git:(branch)
+⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` line and
+green/orange/red coloring the [status bar's own git
+segment](#status-bar) shows, just for whichever directory is currently
+selected rather than the one the panel itself is showing. Nothing
+shown for a plain file — this is directory-only — or outside a git
+repository, or with the `show_git_status` setting off.
+
+Fetched a moment after the cursor actually stops on a directory (the
+same short debounce the image/PDF preview above uses), and cancelled
+outright the instant the cursor moves on, so holding an arrow key down
+through a long list of directories never queues up one `git status`
+invocation per row.
+
+### System Info (selecting "/" itself)
+
+The real filesystem root shows a selectable "/" row of its own, in
+place of the usual `..` (there's no parent to go "up" to there).
+Selecting that row and opening Details replaces the whole per-file
+view above with an overview of the machine itself instead. Every
+other entry under "/" (`etc`, `home`, `usr`, ...) still gets its own
+ordinary per-file Details exactly like anywhere else — System Info is
+only ever for the "/" row itself, never for merely being somewhere
+under it. The title bar switches to "System Info" to match, and
+switches back to "Details" the instant the selection moves off that
+row.
+
+| Field | Source | Color |
+|---|---|---|
+| Host, OS, Architecture, CPU | `os.Hostname`, `/etc/os-release`, `uname -m`, `/proc/cpuinfo` + core count | Amber |
+| Kernel | `uname -r` | Gold — the same color it has in the status bar |
+| Uptime | `/proc/uptime` | Teal — same as the status bar |
+| Load | `/proc/loadavg`, each number scaled against this machine's own core count | Slate blue label, numbers green/orange/red |
+| Memory, Swap | `/proc/meminfo` (`MemTotal`/`MemAvailable`, `SwapTotal`/`SwapFree`) | Rose / terracotta, percentage green/orange/red |
+| Disk, Inodes | the root filesystem's own usage (same source as the status bar) | Blue / violet — same as the status bar |
+| Open files | `/proc/sys/fs/file-nr` (allocated vs. `fs.file-max`) | Cyan, percentage green/orange/red |
+| Mounted filesystems, Processes, Network interfaces, Logged-in sessions | `/proc/mounts`, `/proc` PIDs, `/proc/net/dev`, `who` | Muted blue-grey (plain counts, no threshold) |
+
+Every percentage here — memory, swap, disk, inodes, open files, and
+each of the three load numbers — follows the exact same scale the
+status bar uses: green under 80%, orange from 80%, red from 90%. Load
+average has no percentage of its own to work with, so it's scaled
+against `runtime.NumCPU()` instead — a load of 2 is idle on a 16-core
+machine and badly overloaded on a 2-core one.
+
+Deliberately nothing that needs a package installed beyond what this
+app already assumes elsewhere (`uname`, `who`) — which is exactly why
+there's no CPU temperature: unlike everything above, it has no such
+universal built-in source (that needs `lm-sensors` or a vendor tool,
+neither ever assumed present). A field whose source doesn't exist on
+this platform (anything without `/proc`, or without a given command)
+is quietly left out of its own line, same as the status bar's own
+kernel/uptime/load segments. Refreshes once a second, the same ticker
+the status bar's own clock uses.
+
 Images and PDFs get an inline preview with its own click zone for
 fullscreen. Previews load in the background and only once the cursor has
 rested briefly, so holding an arrow key through a directory costs
@@ -636,6 +1101,183 @@ running. Only the stat block is read synchronously — one syscall, and
 it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.
+
+## Remote connections (SFTP)
+
+The `@` button right before the path itself (see [The path
+bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
+for browsing a directory tree on another machine over SFTP, exactly the
+way SSH itself already reaches it. Muted while a panel is local; once
+connected it pulses gently toward a lighter green and back, never
+dipping darker than its resting color — a settled, alive connection,
+not a "still trying to reach it" search light.
+
+The dropdown itself is a table, styled like the tab switcher: each row
+is its own set of clickable cells rather than markup-colored text
+glued into one string. It lists, in order: **+ New connection**, then
+recent history — most recently used first, colored by state: bright
+green for the connection currently active in this panel, a matte,
+dimmer green for one that has connected successfully before but isn't
+active right now, red for one that used to connect and just failed. A
+connection that has *never* once succeeded isn't added to history at
+all, even after a failed attempt — an entry that could only ever show
+up red isn't a useful "reconnect to this" shortcut, just clutter.
+Selecting a history entry (anywhere but its own trailing cells)
+reopens the Connect dialog prefilled from it and immediately retries —
+nothing about *how* it authenticated is ever remembered (see
+Authentication below), so a connection that needs a typed password
+will stop there with the dialog open, ready for it. Every history row
+ends with a small "✕" cell — click it (or press `x` or Delete while
+that row is highlighted) to drop just that one entry out of history,
+without ever connecting to it. The one row that's this panel's own
+active connection additionally carries a leading "⏏" cell — click it
+(or press `e` while that row is highlighted) to disconnect; there's no
+separate "Disconnect" row anymore. Every *other* history row carries a
+"✎" there instead — click it (or press `e`) to open the Connect dialog
+prefilled from that entry without immediately retrying it, so a saved
+Host/Port/User can be fixed first (a typo, a port that's since
+changed) rather than only ever being retyped as a brand-new connection
+or fired off exactly as saved.
+
+**+ New connection** opens a small form: Host, Port (blank means 22),
+User (blank means this machine's own local username, the same
+assumption a bare `ssh host` already makes), and Password — tried only
+as a last resort, see below. Connecting runs in the background with a
+"Connecting…" progress line in place of the buttons; Enter in the
+Password field submits the form outright, the same as clicking
+Connect.
+
+### Authentication
+
+Tried in this order, the same as a real `ssh` client:
+
+1. A running `ssh-agent` (`$SSH_AUTH_SOCK`), if any keys are loaded.
+2. The conventional default identity files, in this order:
+   `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` — whichever exist and are
+   unencrypted. An *encrypted* default key without a running agent
+   holding it isn't usable here yet — this first release doesn't ask
+   for a key's own passphrase inline, only for the account's password
+   itself (the next step).
+3. The Connect form's own Password field, if anything was typed into
+   it.
+
+### Host keys
+
+Checked against the real `~/.ssh/known_hosts` — the exact same file
+and format `ssh`/`scp`/`sftp` themselves already read and write, so a
+host trusted from a terminal session is trusted here too, and vice
+versa. A host whose key isn't in there yet raises its own prompt —
+"Unknown host key for `host` (`type` `fingerprint`) — trust it and
+connect?" — the same trust-on-first-use question a real `ssh` client
+asks interactively; accepting appends it to `known_hosts` so it's only
+ever asked once per host. A host whose key has *changed* since it was
+last trusted is always rejected outright instead, with no prompt and
+no way to bypass it — that's exactly the shape a machine-in-the-middle
+attack produces, not something a "trust anyway" button should ever be
+offered for.
+
+### What works so far, and what doesn't yet
+
+Once connected, the panel browses the remote filesystem exactly like a
+local one: same columns, same sorting, the Home button (`~`) goes to
+the remote account's own home directory instead of this machine's.
+
+Look (`l`), Edit (`e`), and [Open with…](#open-with) all stage the file
+into a real local temp copy first (there's no other way to hand it to
+the built-in viewer, an external pager, `$VISUAL`/`$EDITOR`, or a typed
+"Open with…" command — none of them have any notion of a remote
+connection) and remove that copy again once they're done with it. Edit
+and Open with… specifically only upload it back if it actually
+changed, compared by its own mtime and size, not a second full read —
+opening a file, looking at it, and closing the program without
+touching anything never writes back to the remote copy at all. A PDF's
+own staged copy sticks around for as long as Look stays open, since
+page turns keep reading from it on demand; everything else is removed
+the moment its content is rendered.
+
+Rename (`r`), permanent delete (`d`/`D` — see below), chmod (the `p`
+chord's own `pm`, including its recursive dirs/files options), and
+Copy/Cut/Paste all work against a remote target the same way they do
+locally. `d` ("Move to Trash") redirects straight to the same
+permanent-delete confirmation `D` already uses instead: a remote
+session has no trash of its own to move into — the confirmation itself
+says so ("A remote connection has no trash to move … into — permanently
+delete instead?"), since `d` means something reversible everywhere
+else in this app and silently switching that to a permanent delete
+would otherwise be an easy trap. `D` skips that explanation: it
+already means "permanently delete" on its own. Paste dispatches by
+which side (or both) is remote: uploading, downloading, or copying/
+moving between two remote directories all work, including across two
+different connections at once, through the exact same [conflict
+dialog](#copy-cut-and-paste) a purely local Paste already has —
+Overwrite, Merge, Skip, every "all"/"if newer"/"if not empty" variant
+included — rather than an older, simpler engine that just refused
+outright the moment a destination already existed. A symlink anywhere
+in a copied tree is still skipped outright rather than followed or
+recreated on the other end ("following symlinks" isn't offered as a
+Paste option here; a "N symlink(s) skipped" summary reports it plainly
+once the Paste finishes, rather than passing by silently). The live
+progress bar's current-file half is real: it reads that file's own
+actual size before copying it, the same as a purely local Paste, so a
+single large file's progress still moves visibly instead of sitting
+frozen at 0 for its entire transfer. The job-wide byte total (and the
+ETA it drives) stays item-count only, though, since sizing a whole
+remote tree up front costs a full recursive listing this first version
+doesn't spend — that one omits the byte count it can't cheaply know
+rather than pretending to have it. Permissions/ownership/modification
+time are not preserved on a
+remote-involving Paste the way a purely local one always preserves
+them, and a move between two ends of the exact same live connection
+still copies the file across the connection and then deletes the
+original, rather than a single, wire-free server-side rename.
+
+Details (`i`/`I`), the status bar's own Disk/Inodes segment, and
+System Info at the remote's own "/" all describe *that* machine now,
+not this one — Details through the same Stat call every other
+per-file view already needs, Disk/Inodes through the
+`statvfs@openssh.com` SFTP extension every real OpenSSH server
+supports, and System Info by reading straight from the remote's own
+`/proc`/`/etc/os-release` over the same connection (no separate
+command-execution channel needed for any of that) — except logged-in
+sessions, which does need one and is simply left off remotely, the
+same "one less line" treatment a source this project can't reach at
+all already gets elsewhere.
+
+Opening a zip/tar/... that itself lives on a remote connection
+downloads it into a local temp copy first — there's no way around
+that: a zip's own central directory sits at the end of the file
+regardless of where it lives, so browsing one means having the whole
+thing local either way. Below **Confirm before downloading archives
+over** (Options → Remote connections, a size typed as e.g. "10MB",
+"500KB", or "1GB" — 10MB by default), that download just happens on
+its own, the same proactively-transparent way every other remote
+operation here already works; at or above it, a confirmation names the
+real size first, so a large archive over a slow link can't turn one
+Enter keypress into an unexpected, unwarned multi-minute wait.
+Everything about browsing it afterward — navigating in and out,
+Copy'ing a member to a real destination — works the same as a local
+archive, member-marked-inside-a-remote-archive case included: the
+local temp copy already downloaded to browse it is right there, so
+Copy'ing a marked member back out just extracts from that same copy,
+exactly like a local archive would. Pasting into a real local
+directory extracts straight there; pasting into another remote
+directory (same connection or a different one) extracts into a
+throwaway local temp directory first and uploads the result, the same
+way an ordinary local-source Paste to a remote destination already
+does. Cut is refused either way, same as for a local archive member —
+there's no writing back into a read-only archive to make the "move"
+half of it real.
+
+Everything else that changes files does not yet: chown, Compare, Batch
+rename, Sed Replace, and Properties as a whole (its own Save button
+combines Name/Permissions with Owner/Group and Modified/hash into one
+action, and only some of those are remote-aware yet) all refuse
+outright with a clear message — chown specifically because there's no
+remote user/group database to resolve a typed name against, the rest
+because they'd need a real remote command-execution channel this
+project doesn't have. Disconnecting (the active row's own "⏏" in the
+dropdown, or `e` while it's highlighted) closes the session and
+returns the panel to browsing this machine's own home directory.
 
 ## Properties
 
@@ -1039,6 +1681,51 @@ While the command line has focus it keeps the keys it needs for
 readline-style editing, so global shortcuts that would collide with them
 fall through to it. `Escape` or a click on the panel gets you back out.
 
+## Status bar
+
+The bottom line, purely informational — nothing on it is clickable.
+Left to right: whatever's actually staged or in flight (a chord
+countdown, a running Paste's progress, or the clipboard's own contents
+— see [Copy, Cut and Paste](#copy-cut-and-paste)), then eight segments,
+each independently switchable off (see [Options and
+configuration](#options-and-configuration) below), and finally a clock.
+
+| Segment | Shows | Color |
+|---|---|---|
+| Username | The current user | Green — red while running as root |
+| Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
+| Disk space | `Disk free <free>/<total> (<percent>%)` for the current directory's own filesystem | Blue, percentage green/orange/red |
+| Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem | Violet, percentage green/orange/red |
+| Git status | `git:(branch) ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` for the current directory, only while it's part of a git repository | Green (clean) / orange (dirty) / red (conflicts) |
+| Kernel version | `uname -r`'s own output | Gold |
+| Uptime | `up <days> <HH:MM>` (Linux's own `/proc/uptime`) | Teal |
+| Load average | The 1/5/15-minute load average (Linux's own `/proc/loadavg`) | Slate blue label, each number green/orange/red |
+
+Disk space and inode usage deliberately read in opposite directions:
+disk space as **free**/total (how much room is left, the number you
+check before starting something large), inode usage as **used**/total
+(how many you've used up — inode exhaustion creeps up from zero, not
+down from the total, so that's the direction worth watching).
+
+Every percentage — disk, inodes, and each of the three load numbers —
+uses the same green/orange/red scale: green under 80%, orange from
+80%, red from 90%. Load average has no natural percentage of its own,
+so it's scaled against this machine's own core count instead (a load
+of 2 means idle on a 16-core machine, overloaded on a 2-core one) —
+the raw number alone from the old status bar told you nothing without
+doing that division yourself.
+
+Kernel version, uptime, and load average are quietly omitted on a
+platform that doesn't expose them (anything without `/proc/uptime` or
+`/proc/loadavg`, or without `uname` at all) rather than shown wrong.
+Git status is likewise omitted entirely outside a git repository, or
+without `git` itself on `$PATH` — its phrasing ("git:(branch)") is the
+same one several popular zsh prompt themes already use, and it drops
+each figure that's zero rather than padding the line with "+0"s. A
+figure that's zero across the board (a totally clean tree with an
+up-to-date upstream, or no upstream at all) shows as just the branch
+name on its own.
+
 ## Options and configuration
 
 The `o` chord's own `oo` (`o` then `o` again — see [The keyboard
@@ -1108,6 +1795,14 @@ Every key breakthrough recognizes, with its default:
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
 | `chord_timeout_ms` | `4000` | How long, in milliseconds, a chord's second key stays live for |
+| `status_bar_show_username` | `true` | Show the current username in the status bar |
+| `status_bar_show_mouse` | `true` | Show the "Mouse on"/"Mouse off" segment in the status bar |
+| `status_bar_show_disk` | `true` | Show free/total disk space for the current directory in the status bar |
+| `status_bar_show_inodes` | `true` | Show used/total inode count for the current directory in the status bar |
+| `status_bar_show_kernel` | `true` | Show the running kernel version (`uname -r`) in the status bar |
+| `status_bar_show_uptime` | `true` | Show system uptime in the status bar, where the platform exposes it |
+| `status_bar_show_load` | `true` | Show the 1/5/15-minute load average in the status bar, where the platform exposes it |
+| `show_git_status` | `true` | Show git status (branch, changes, ahead/behind) in the status bar and the Details sidebar |
 | `copy_preserve_attributes` | `true` | Copy jobs carry the source's permissions/ownership/mtime over to the destination |
 | `move_preserve_attributes` | `true` | Move jobs carry the source's permissions/ownership/mtime over to the destination |
 | `copy_follow_symlinks` | `false` | Copy jobs dereference a symlink by default instead of recreating it as a link |
@@ -1131,6 +1826,7 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count` | `1` | How many duplicates one Multiply run creates at once |
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
+| `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
 
 ## Keyboard reference
 

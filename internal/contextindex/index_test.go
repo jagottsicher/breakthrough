@@ -56,6 +56,33 @@ func TestBuildSkipsGitEntryWhenItIsAPlainFile(t *testing.T) {
 	}
 }
 
+// TestBuildSkipsRootLevelBinDirectory pins a real, previously-unnoticed
+// gap: nothing excluded bin/ (GoReleaser's/a local `go build -o
+// bin/...`'s own gitignored output) before, so a binary someone
+// happened to have built locally silently ended up in the committed
+// index — caught only once CI's own fresh checkout, with no such
+// binary lying around, regenerated a different one and the two
+// disagreed.
+func TestBuildSkipsRootLevelBinDirectory(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.test/app\n")
+	mustWrite(t, filepath.Join(root, "README.md"), "context\n")
+	mustWrite(t, filepath.Join(root, "bin/app"), "not a real binary, just test content\n")
+
+	index, err := Build(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range index.Files {
+		if file.Path == "bin/app" {
+			t.Fatalf("expected bin/app to be excluded, got it indexed: %#v", file)
+		}
+	}
+	if len(index.Files) != 2 {
+		t.Fatalf("expected only go.mod and README.md to be indexed, got %#v", index.Files)
+	}
+}
+
 func TestMerkleRootChangesWithFileContent(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "go.mod"), "module example.test/app\n")

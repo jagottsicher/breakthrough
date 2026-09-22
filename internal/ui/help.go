@@ -38,13 +38,14 @@ var helpText = strings.TrimLeft(`
   x   Cut               D   Remove permanently    I   Details sidebar
   v   Paste             u   Undo last rename       h  Compute hashes
   r   Rename            e   Edit                   k  Directory size
-  m   Context menu      f   Find                   M  Image metadata
+  f   Find                   M  Image metadata
   n   New tab           w   Close tab             l   Look
   s   Split view                                  t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
                                                    +/- Select/deselect
                                                        by pattern
   B   Batch rename       E  Sed Replace           G   Go to last row
+  C   Compare            R  Rsync
   q   Quit                ? This help              :  Bash command line
 
   h/k/M target whichever of Properties/Details is relevant (Properties
@@ -82,13 +83,19 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin
+                gr / (root) · gb Trashbin · gc Connect…
     p  perms    pm chmod · po chown
+    m  menu     mm Context menu (what a bare "m" always opened before
+                this family existed) · mf New file · md New dir
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
+    j  tools    jj Toolbox screen (networking/hardware tools) ·
+                jm Mounts screen (what's mounted right now) ·
+                jn Network Tools screen · jh Hardware Tools screen ·
+                jf Firewall screen (this host's own actual rules)
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -143,18 +150,21 @@ var helpText = strings.TrimLeft(`
   Click, pause,   Rename — the pause is deliberately generous (about a
   click again     second), so an unhurried second click still counts;
                   slower than that is just a fresh first click again
-  Right-click     Context menu (Look, Rename, Edit, Copy, Cut, Multiply,
-                  Paste, Move to Trash, Properties, and submenus for
-                  rarer actions — tail -f/chown/chmod/sed/Batch
-                  rename/Undo last rename/Remove/Paste following
-                  symlinks, Selection, Tabs & Split). "m" opens the
-                  same menu from the keyboard. Once it's open,
+  Right-click     Context menu (Look, Rename, Edit, Open with…, Copy,
+                  Cut, Multiply, Paste, Move to Trash, Properties, and
+                  submenus for rarer actions — New file/New dir/tail -f/
+                  chown/chmod/sed/Batch rename/Undo last rename/Remove/
+                  Paste following symlinks, Selection, Tabs & Split).
+                  "mm" opens the same menu from the keyboard (see the
+                  "m" chord above). Once it's open,
                   "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
                   seven already have on their own — fire that entry
                   directly, without arrowing down to it first. "m"
-                  again ("mm") does too, for Multiply specifically —
-                  the one entry with no plain-key equivalent of its
-                  own to mirror, since it only ever opens from here.
+                  again (so "mmm" from plain browsing) does too, for
+                  Multiply, and "o" for Open with… — both have no
+                  plain-key equivalent of their own to mirror, since
+                  neither ever opens anywhere but here, so each just
+                  uses its own first letter instead.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -164,6 +174,86 @@ var helpText = strings.TrimLeft(`
   currently selected. The "<" button at the far end of the path bar
   (right after the tab strip) expands it the same way "I" does; once
   open, the ">" button in its own top-right corner collapses it again.
+
+  The real filesystem root ("/") shows a selectable "/" row of its own
+  in place of the usual ".." (there's no parent to go "up" to there) —
+  selecting *that* row and opening Details shows "System Info" instead
+  of a per-file stat block: an overview of the machine itself. Every
+  other entry under "/" (etc, home, usr, ...) still gets its own
+  ordinary per-file Details exactly like anywhere else — System Info
+  is only ever for the "/" row itself, not for merely being somewhere
+  under it. Host/OS/kernel/architecture/CPU, uptime/load/memory/swap/
+  disk/inodes/open file handles (colored green/orange/red under 80% /
+  from 80% / from 90%, same as the status bar's own scale — see its
+  own help section above), and plain counts (mounted filesystems,
+  processes, network interfaces, logged-in sessions) — everything a
+  standard Linux install already exposes via /proc, os-release, or a
+  POSIX command (uname, who) already installed everywhere, nothing
+  needing an extra tool (no CPU temperature, for instance — unlike
+  everything else here, it has no such universal source). Refreshes
+  once a second, the same ticker the status bar's own clock uses, so
+  it never sits there showing a minute-old load average.
+
+  Selecting a real directory that's part of a git repository (any
+  directory inside one, not just its own root) adds a git status
+  section right below the stat block — the same "git:(branch)
+  ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts" line and
+  green/orange/red coloring the status bar's own git segment already
+  shows (see above), just for whichever directory is currently
+  selected rather than the one the panel itself is showing. Nothing
+  shown for a plain file, or outside a git repository. Fetched a
+  moment after the cursor actually stops on a directory, the same
+  cursor-rests-briefly-first debounce the image/PDF preview above
+  already uses, so holding an arrow key down through a long list of
+  directories costs nothing.
+
+  The "@" button right before the path (or "gc") opens a dropdown to
+  browse another machine over SFTP — muted for a local panel, a slow
+  pulse toward a lighter green and back (never darker than at rest)
+  once connected. + New connection plus recent history in a table like
+  the tab switcher (bright green = active here, matte dimmer green =
+  worked before, red = used to work and just failed — a connection
+  that has never once succeeded isn't added to history at all; "x"/
+  Delete or a row's own trailing "✕" cell drops one entry out of
+  history; the active row's own leading "⏏" cell, or "e", disconnects
+  — no separate "Disconnect" row anymore. Every other history row shows
+  "✎" there instead: opens the Connect dialog prefilled from that entry
+  without dialing it immediately, so a saved Host/Port/User can be
+  fixed before reconnecting, rather than only ever being retyped from
+  scratch or fired off as-is — "e" on that row does the same). Auth
+  tries an ssh-agent, then
+  ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
+  password; host keys are checked against ~/.ssh/known_hosts, with a
+  trust-on-first-use prompt for an unknown one and an outright refusal,
+  no prompt, for one that changed. Browsing, rename, permanent delete,
+  chmod, and Copy/Cut/Paste all work once connected ("d" redirects
+  straight to the same permanent-delete confirmation "D" uses — no
+  remote trash exists to move into instead). A remote-involving Paste
+  shares the exact same Overwrite/Merge/Skip conflict dialog a local
+  one has, rather than refusing outright the moment a destination
+  already exists; it doesn't yet preserve permissions/times or follow a
+  symlink instead of skipping it — still local-only for now. The
+  progress bar shows a real, live current-file size once it starts
+  copying a given file, the same as a local Paste, but the job-wide
+  byte total (and the ETA it drives) stays item-count only, since
+  sizing a whole remote tree up front costs a full recursive listing
+  this first version doesn't spend. Look, Edit, and Open with… all
+  stage a real local temp copy behind the scenes for the ordinary
+  built-in viewer/external pager/$VISUAL/$EDITOR/typed command to use
+  unchanged — Edit and Open with… only upload it back if it actually
+  changed. Opening a zip/tar
+  that lives on the connection downloads and browses it the same
+  transparent way, asking first above a configurable size (Options ->
+  Remote connections, e.g. "10MB"). Copy'ing a member back out of one
+  works too, straight from the local temp copy already downloaded to
+  browse it — to a real local directory directly, or to another
+  remote directory (same connection or a different one) via a local
+  staging round trip; Cut is refused either way, same as for a local
+  archive member. Details, status-bar Disk/Inodes, and System Info at
+  "/" all
+  describe the remote machine, not this one, once connected. chown,
+  Compare, Batch rename, Sed Replace, and Properties as a whole still
+  refuse outright for now.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
@@ -215,6 +305,35 @@ var helpText = strings.TrimLeft(`
   sidebar that isn't one of its own click zones also focuses it, the
   same way.
 
+[::b]Status bar (the bottom line, purely informational)[::-]
+
+  Left to right, whatever's actually staged or in flight (a pending
+  chord's countdown, a running Paste's progress, or the clipboard's own
+  contents), then: username (green, red while running as root), Mouse
+  on/off, disk space, inode usage, git status, kernel version, uptime,
+  load average, and a clock. Disk and inode usage, git, kernel, uptime
+  and load each have their own fixed color so they stand out from one
+  another at a glance.
+
+  Disk space reads "free/total" — how much room is left; inode usage
+  reads "used/total" — how many you've used up, since that's the
+  direction that actually creeps toward trouble. Both percentages are
+  green under 80%, orange from 80%, red from 90%. Load average colors
+  each of its three numbers the same way, scaled against this machine's
+  own core count (a load of 2 is idle on 16 cores, overloaded on 2)
+  rather than as a raw, meaningless-on-its-own number.
+
+  Git status ("git:(branch) ⇡ahead ⇣behind +staged !unstaged
+  ?untracked =conflicts", the same phrasing several zsh prompt themes
+  already use) shows only while the current directory is actually part
+  of a git repository — quietly nothing otherwise. Green while clean,
+  orange the moment anything's staged, unstaged, or untracked, red the
+  instant there's a real merge conflict; a figure that's zero is left
+  out entirely rather than shown as "+0".
+
+  Every one of these eight segments can be turned off individually —
+  see "oo" → Status bar below.
+
 [::b]Options screen ("oo")[::-]
 
   Categories down the left, that category's settings on the right.
@@ -241,6 +360,74 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+
+[::b]Toolbox screen ("jj")[::-]
+
+  A browsable catalog of real networking and hardware tools — Networking
+  (Ping, Nmap, ip, route, ss, getent, wget, nslookup, dig, netcat, curl,
+  a log-following Tail -f) and Hardware (lsblk, lsusb, lscpu, lsmem,
+  lsdev, hwinfo, inxi, lsscsi) — each one a genuine external command,
+  never reimplemented, the same "shell out to the real tool" approach
+  Rsync and Sed Replace already take.
+
+  Up / Down         Move between entries
+  Enter             Run the selected tool — asks for one further
+                     argument first (a host, a URL, ...) if it needs one
+  Escape            Close the Toolbox screen
+
+  Every tool's output opens in its own tool window (see "Tool windows"
+  below), floating on top of this screen rather than replacing it — pick
+  another tool, or press Escape to get back to browsing, without losing
+  anything already running.
+
+  "jn" (Network Tools) and "jh" (Hardware Tools) open this very same
+  screen already filtered down to just the Networking or just the
+  Hardware category, for jumping straight to one tool without scrolling
+  past the other category's entries first. Everything above about
+  Up/Down, Enter, Escape and tool windows applies the same way there.
+
+[::b]Mounts screen ("jm")[::-]
+
+  A read-only, live view of every currently mounted filesystem — real
+  storage only (pseudo filesystems like proc/sysfs/tmpfs are left out),
+  via the real findmnt command, never reimplemented.
+
+  Up / Down         Move between mounts
+  r                 Re-read the live mount table
+  Escape            Close the Mounts screen
+
+  "Bind" marks a bind mount (the same underlying filesystem attached a
+  second time at another path). "Persistent" marks a mount also
+  configured in /etc/fstab — it will still be there after a reboot; one
+  without it was mounted by hand (or by something other than the
+  boot-time fstab pass) at some point since, shown in a warning color so
+  it stands out at a glance.
+
+[::b]Firewall screen ("jf")[::-]
+
+  A read-only, live view of this host's own actual firewall rules —
+  whichever single backend really governs traffic right now (UFW,
+  nftables, or iptables, in that preference order; only one is ever read,
+  since on a modern system they're different front ends onto the same
+  underlying rules, and reading more than one would double-count), via
+  the real ufw/nft/iptables-save commands, never reimplemented.
+
+  Up / Down         Move between rules
+  r                 Re-read the live firewall rules
+  Escape            Close the Firewall screen
+
+  Rules are shown grouped into "Incoming" and "Outgoing", in the exact
+  order each is actually evaluated — first match wins, so within a
+  section a rule further down only ever applies once every rule above it
+  has already been ruled out. A rule already fully covered by an earlier,
+  broader-or-equal one in its own section can never actually fire; it's
+  shown dimmed with a "shadowed by #N (...)" note instead of looking just
+  as active as one that does. Allow rules and deny/reject rules are
+  colored apart for a quick scan of what's actually open.
+
+  Building a new rule, and testing "what happens to a request on port X
+  from IP Y" without needing to know any firewall-specific syntax, are
+  not part of this first, read-only cut.
 
 [::b]Split view ("s")[::-]
 
@@ -282,6 +469,11 @@ var helpText = strings.TrimLeft(`
   preview of every selected file underneath — updated on every change,
   no separate "Preview" button to press first.
 
+  Applied to a single folder (nothing else selected), it renames the
+  files and subfolders inside that folder, not the folder itself.
+  Select several items first to rename them directly, folders
+  included.
+
   Left / Right      Move between the steps and the settings
   Up / Down         Move between steps, or between one step's settings
   Enter / Space     Change the selected setting — toggles a yes/no
@@ -291,20 +483,152 @@ var helpText = strings.TrimLeft(`
                     and the buttons underneath them
   Escape            Close without renaming anything
 
+  In the preview:
+  Space             Skip this row (or take it back in) — a skipped
+                    file isn't renamed and doesn't take a number
+  u / d             Move this row up / down: the numbering order, by
+                    hand ("Count in" switches to "As listed")
+  n / p             Jump to the next / previous row that changes
+  c / C             Jump to the next / previous conflict
+
   The steps always run in this order: Search & Replace, Case, Trim,
-  Numbering, Extension — a step left at its default setting does
-  nothing, there's no separate on/off switch to also set. Search &
+  Template, Numbering, Extension — a step left at its default setting does
+  nothing, there's no separate on/off switch to also set; a ● in front
+  of a step's name means it currently changes something. A line under
+  the settings explains whichever setting is selected. Search &
   Replace and Case only ever touch the name, never the extension;
-  Extension only ever touches the extension.
+  Extension only ever touches the extension. With "Regex" on, the
+  replacement may use $1 / ${1} / \1 for capture groups. A folder's
+  name is never split at its last dot unless "Treat folder names as
+  having extensions too" is on — "my.project" stays "my.project".
 
   The preview shows every selected file, changed or not: an unchanged
-  name is dimmed, a conflict (would collide with another renamed file,
-  or with something already on disk) is shown in red with why, right
-  where it's about to happen — nothing is written until "Rename" is
-  pressed and confirmed. "Reset all steps" clears the whole pipeline
-  without closing the screen; "Undo last rename" (context menu, right
-  below "Batch rename") reverses whatever the last confirmed rename
-  actually did.
+  name is dimmed, a conflict (would collide with something that isn't
+  moving out of the way, on disk or in the same batch) is shown in
+  red with why, right where it's about to happen — nothing is written
+  until "Rename" is pressed and confirmed. A rename *chain* is fine:
+  if 2.txt becomes 3.txt while 1.txt becomes 2.txt (or two names swap
+  outright), the renames run in the order that makes it work, through
+  a temporary name where needed. A rename that only changes letter
+  case is fine too, even where the filesystem ignores case. "Reset all
+  steps" clears the whole pipeline without closing the screen; "Undo
+  last rename" (context menu, right below "Batch rename") reverses
+  whatever the last confirmed rename actually did.
+
+  Template rebuilds the name from a pattern: {name} (as it stands after
+  the steps before it), {ext}, {counter} (Numbering's own counter),
+  {parent} (the folder's name) and {date} (modification date, printed
+  per "Date format" — a Go layout, or strftime with the switch on, the
+  same choice Duplicate offers). "{parent}_{date}_{counter}" turns
+  IMG_0042.JPG into Holiday_2026-03-09_001.JPG. Anything else in the
+  pattern is literal.
+
+  Numbering counts in the order the preview shows — "Count in" picks
+  that order (as listed, by name, by modification time), "Reversed"
+  flips it, and u/d in the preview arrange it by hand.
+
+  "Save preset..." keeps the whole pipeline under a name; "Load
+  preset..." lists the saved ones (Enter loads, d deletes after
+  asking). Presets are plain JSON files, one per preset, under
+  ~/.config/breakthrough/rename-presets/ (or $XDG_CONFIG_HOME) — easy
+  to copy to another machine or keep in version control.
+
+[::b]Compare ("C")[::-]
+
+  Answers "are these the same, and if not, what's different" — for
+  two files, or two whole directory trees. Needs exactly two things to
+  compare: mark two entries (in either order — they're compared in
+  the order they're listed), or open split view ("s") and put the
+  cursor on one entry in each pane, nothing marked at all.
+
+  Two files opens a small overlay: size and modification time side by
+  side, with an immediate verdict — "Different" the moment sizes
+  disagree, "Probably identical" when size and time both agree,
+  "Uncertain" when only the size does (same size, different time is a
+  real, common case: touched, re-saved, or copied without preserving
+  timestamps — this heuristic genuinely can't tell). "Compute hash"
+  settles it for certain (SHA-256, cancellable, the same progress
+  animation Properties' own hashing shows); "Show diff" opens a real
+  line-by-line comparison through the system's own diff(1) in the
+  Look pager (red/green, the same as any other diff), disabled for a
+  binary pair or when diff(1) isn't installed.
+
+  Two directories opens a full screen: every path that differs, plus
+  every path that exists on only one side — a directory that's
+  one-sided is shown once, never descended into, so an old untouched
+  backup folder is one row, not thousands. Identical rows are hidden
+  by default ("i" shows them too). "m" switches between the same
+  quick size+time check the file overlay uses and a real hash
+  comparison, re-scanning either way. Enter on a differing text pair
+  opens the same diff view as above; "c" copies a one-sided item
+  across to the other side, after asking.
+
+[::b]Rsync ("R")[::-]
+
+  Builds and runs a real rsync(1) command — the actual system binary,
+  not a reimplementation — for anything too big or too fussy to trust
+  to Copy/Paste: a huge tree, a flaky link worth resuming, a job that
+  needs --delete or an exclude list. Opens with Source pre-filled from
+  the current selection's single entry (or the panel's own directory
+  with nothing selected) and, if a split view is open, Destination
+  pre-filled from the other pane — the one case where "the other
+  side" is unambiguous. If the tab a field defaults from is currently
+  connected via the Connect dialog, that field opens already showing
+  "user@host:path" instead of a bare local one, and the connection's
+  own port (when it isn't the default 22) travels through to a real
+  -e 'ssh -p PORT' flag automatically — lost again the moment the
+  field is edited to anything other than exactly what was filled in,
+  since there's no way to know a non-default port from typed text
+  alone. Either field also accepts a typed "user@host:path" for a
+  remote endpoint never connected to at all, exactly as rsync itself
+  would expect. Syncing between two remote endpoints at once shows a
+  warning line beneath the preview: rsync -e ssh has no server-to-
+  server transfer mode of its own, so every byte still relays through
+  this machine over two separate ssh connections, never directly
+  between the two remote hosts.
+
+  The toggle "Copy the folder's contents in (not the folder itself)"
+  turns rsync's own classic, easy-to-get-wrong trailing-slash-on-
+  source ambiguity into one explicit, named choice instead of a typo
+  risk. Off by default — the source folder itself lands inside the
+  destination, matching how this app's own Copy/Paste already
+  behaves; switching it on copies only what's inside the source
+  folder, into the destination directly. Flipping it also adds or
+  removes that same trailing "/" on the Source field itself, not just
+  in the live preview below. Opened on a single file instead of a
+  folder, turning it on substitutes that file's own parent directory
+  (still with the trailing "/") rather than appending one to a
+  filename, since "contents" has no meaning for a plain file — turning
+  it back off restores the exact original file, not just that
+  directory with the slash removed.
+
+  Further toggles: Archive mode (-a, permissions/times/symlinks
+  preserved — on by default), Compress data in transit (-z), Delete
+  extraneous files from the destination (--delete — the one flag here
+  that can permanently remove files at the destination, so it's shown
+  in warning color the moment it's on, both in the toggle row and in
+  the live preview below), and Dry run (-n, shows what would happen
+  without changing anything). Exclude takes comma-separated patterns,
+  each becoming its own --exclude=...; Extra flags appends any further
+  raw rsync flags verbatim, for anything the toggles above don't cover.
+
+  The exact command about to run is shown live underneath, updating on
+  every keystroke and every toggle — never a guess, always the literal
+  shell-quoted command line. "Run" suspends breakthrough the same way
+  Edit or the bash command line already do and hands the real terminal
+  to rsync, so its own --info=progress2 live progress renders exactly
+  as it would from a shell; breakthrough resumes and reloads the panel
+  once it exits. "Run in background" instead keeps breakthrough fully
+  usable the whole time — Copy/Cut/Paste included, running at the same
+  time if you start one — showing a live "rsync N%" percentage in the
+  status bar instead, parsed from that same --info=progress2 output;
+  only one background rsync runs at a time, a second one asked for
+  queues behind it the same way a second Paste already does. Ctrl+C/
+  Ctrl+Delete cancels a running background rsync, the same key that
+  already cancels a running Paste. The one thing it can't do that "Run"
+  can: answer an interactive prompt — an untrusted ssh host key or a
+  password prompt fails fast with a real error instead of hanging,
+  since its own stdin deliberately reads from nothing.
 
 [::b]Tabs[::-]
 
@@ -388,7 +712,7 @@ var helpText = strings.TrimLeft(`
   Permission bits and the octal value field work exactly like
   Properties' own above, for both the Directory and Files rows.
 
-[::b]Multiply dialog ("mm", or context menu's "Multiply")[::-]
+[::b]Multiply dialog ("mmm", or context menu's "Multiply")[::-]
 
   Creates one or more copies of the selection right beside it, each
   named by the current strategy — an ordinary Copy underneath (works on
@@ -437,6 +761,22 @@ var helpText = strings.TrimLeft(`
   setting group in this whole app that adapts itself this way, per its
   own explicit design. Only on actually pressing "Duplicate": editing a
   field and then Cancel never touches the sticky default at all.
+
+[::b]Open with… (context menu, files only)[::-]
+
+  Runs any program you type against the selected file, instead of
+  always the configured editor (see "e" above) — prefilled with
+  whatever you typed last time. Whatever you type is handed to your
+  real shell exactly as written, so a multi-word command with its own
+  flags ("libreoffice --writer", "code -w") works the same as typing it
+  at a shell prompt would. A GUI program takes over the screen the same
+  way a terminal editor does until it's closed; append "&" to the typed
+  command to background it instead, exactly as at a real shell.
+
+  Works for a remote file exactly like Edit already does: downloads a
+  local temp copy, runs the typed command against it, and uploads the
+  result back over the connection only if it actually changed —
+  nothing extra to do differently for a file on another machine.
 
 [::b]Search dialog ("f")[::-]
 
@@ -531,7 +871,7 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
-[::b]Tool windows (context menu's "Ping (test)", more to come)[::-]
+[::b]Tool windows (every entry in the Toolbox screen, "jj")[::-]
 
   A small floating window running one command's live output — unlike
   every dialog above, not modal: the panel underneath (and any other

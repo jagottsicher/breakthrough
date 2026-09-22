@@ -121,6 +121,13 @@ func contextMenuTree() []menuEntry {
 		// menu's own most-likely-wanted default.
 		{label: "Look", mnemonic: 'l', action: func(r *Root) { r.lookCurrentEntry() }},
 		{label: "Edit", visible: menuTargetIsFile, mnemonic: 'e', action: func(r *Root) { r.editCurrentEntry() }},
+		// No plain-key equivalent to mirror — this only ever opens from
+		// here — so, like "Multiply", its mnemonic is just its own first
+		// letter (see menuEntry.mnemonic's own doc comment on that
+		// exception). Works for a remote file exactly like Edit does:
+		// download, run the typed command against the local copy,
+		// upload back only if it changed (see openCurrentEntryWith).
+		{label: "Open with…", visible: menuTargetIsFile, mnemonic: 'o', action: func(r *Root) { r.openCurrentEntryWith() }},
 		{label: "Rename", mnemonic: 'r', action: func(r *Root) { r.openRename() }},
 		{label: "Copy", mnemonic: 'c', action: func(r *Root) { r.copyToClipboard() }},
 		{label: "Cut", mnemonic: 'x', action: func(r *Root) { r.cutToClipboard() }},
@@ -132,12 +139,22 @@ func contextMenuTree() []menuEntry {
 		{label: "Move to Trash", mnemonic: 'd', action: func(r *Root) { r.moveSelectionToTrash() }},
 		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
 		{label: "More actions", submenu: []menuEntry{
+			// "f"/"d" match the "mf"/"md" chord that reaches these same
+			// two actions directly from plain browsing (see keymap.go's
+			// own "m" family) — act on the active panel's own current
+			// directory, not on whatever's selected, so unlike most of
+			// this submenu they need no visibility check tied to the
+			// target row at all.
+			{label: "New file", mnemonic: 'f', action: func(r *Root) { r.openNewFile() }},
+			{label: "New dir", mnemonic: 'd', action: func(r *Root) { r.openNewDir() }},
 			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
 			{label: "chmod", action: func(r *Root) { r.openChmod() }},
 			{label: "sed", action: func(r *Root) { r.openSedReplace() }},
 			{label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 			{label: "Undo last rename", action: func(r *Root) { r.undoLastBatchRename() }},
+			{label: "Compare", action: func(r *Root) { r.openCompare() }},
+			{label: "Rsync", action: func(r *Root) { r.openRsync() }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the

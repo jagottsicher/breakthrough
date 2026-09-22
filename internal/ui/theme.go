@@ -298,12 +298,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.batchRenameHint.SetTextColor(theme.MutedTextColor)
 
 		r.batchRenameFieldsTable.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
+		r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
 		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetTextColor(theme.TextColor)
 
 		styleInput(r.batchRenameInput, theme, true)
 		r.batchRenameInput.SetLabelColor(theme.TextColor)
+
+		styleList(r.batchRenamePresetList, theme)
+		r.batchRenamePresetTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.batchRenamePresetTitleBar.SetTextColor(theme.TextColor)
 
 		for _, b := range r.batchRenameButtonList() {
 			styleButton(b, theme)
@@ -319,6 +325,40 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		// at render time, not looked up live at draw time.
 		r.renderBatchRenameFields()
 		r.renderBatchRenamePreview()
+	}
+
+	if r.toolboxTable != nil {
+		r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — the Toolbox screen has exactly one
+		// focusable widget (its own table), never itself the base a
+		// further overlay stacks on top of in a way that should dim it,
+		// the same reasoning optionsTitleBar's own fixed
+		// FocusedBackground already follows.
+		r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.toolboxTitleBar.SetTextColor(theme.TextColor)
+		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
+		r.toolboxHint.SetTextColor(theme.MutedTextColor)
+
+		styleInput(r.toolboxInput, theme, true)
+		r.toolboxInput.SetLabelColor(theme.TextColor)
+
+		r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
+	if r.mountsTable != nil {
+		r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
+		// fixed FocusedBackground just above follows.
+		r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.mountsTitleBar.SetTextColor(theme.TextColor)
+		r.mountsHint.SetBackgroundColor(theme.InputBackground)
+		r.mountsHint.SetTextColor(theme.MutedTextColor)
+
+		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 	}
 
 	if r.searchTop != nil {
@@ -417,6 +457,34 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sedTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sedTitleBar.SetTextColor(theme.TextColor)
 
+	r.connectForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectForm.SetLabelColor(theme.TextColor)
+	r.connectForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.connectForm.SetFieldTextColor(theme.TextColor)
+	r.connectStatus.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.connectCancelBtn, theme)
+	styleButton(r.connectConnectBtn, theme)
+	r.connectTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.connectTitleBar.SetTextColor(theme.TextColor)
+
+	styleList(r.hostKeyConfirmDialog, theme)
+	r.hostKeyConfirmTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.hostKeyConfirmTitleBar.SetTextColor(theme.TextColor)
+
+	// Styled like the tab switcher (see its own identical block above),
+	// not styleList: this is a Table now, per the user's own explicit
+	// request to match the tabs list's own style/color/table shape.
+	// SurfaceBackground on the title bar, not FocusedBackground — the
+	// same reasoning filterMenuTitleBar's own doc comment gives: a small
+	// dropdown anchored under a header button, not a full centered modal
+	// dialog.
+	r.connectionMenuTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectionMenuTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	r.connectionMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
+	r.connectionMenuTitleBar.SetTextColor(theme.Text)
+
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.duplicateForm.SetLabelColor(theme.TextColor)
 	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
@@ -458,6 +526,23 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// confirmDialogTitleBar/chmodTitleBar/sedTitleBar already follow.
 	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.duplicateTitleBar.SetTextColor(theme.TextColor)
+
+	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncForm.SetLabelColor(theme.TextColor)
+	r.rsyncForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.rsyncForm.SetFieldTextColor(theme.TextColor)
+	styleList(r.rsyncFlagsList, theme)
+	r.rsyncPreviewView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncPreviewView.SetTextColor(theme.TextColor)
+	r.rsyncHintView.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncHintView.SetTextColor(theme.TextColor)
+	r.rsyncSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsyncCancelBtn, theme)
+	styleButton(r.rsyncRunBtn, theme)
+	styleButton(r.rsyncRunBackgroundBtn, theme)
+	r.rsyncTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.rsyncTitleBar.SetTextColor(theme.TextColor)
 
 	r.sedPreviewStatus.SetBackgroundColor(theme.SurfaceBackground)
 	r.sedPreviewStatus.SetTextColor(theme.TextColor)
