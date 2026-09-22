@@ -454,7 +454,11 @@ terminal.
   `-e 'ssh -p PORT'` flag rather than guessed — the same applies to an
   address typed straight in by hand for a host never connected to via
   the Connect dialog at all, recognized by rsync's own real
-  disambiguation rule (a colon before the first "/" names a host).
+  disambiguation rule (a colon before the first "/" names a host). Two
+  buttons, "Pick source tab…"/"Pick destination tab…", open a list of
+  every currently open tab as an alternative to typing or trusting that
+  one-shot default — picking one fills the field exactly as if Rsync
+  had been opened fresh from that tab, connection included.
   Syncing between two remote hosts at once shows a warning line: `rsync
   -e ssh` has no server-to-server mode of its own, every byte still
   relays through this machine over two separate ssh connections, never
