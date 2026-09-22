@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // TestArchiveFormatForRecognizesEveryExtension pins every extension
@@ -210,8 +213,8 @@ func TestRunCompressOnTheCurrentDirectoryItselfBuildsAWorkingCommand(t *testing.
 	defer r.cancelCompressJob()
 
 	command := strings.Join(job.cmd.Args, " ")
-	if !strings.Contains(command, "zip -r 'whole-dir.zip' '.'") {
-		t.Errorf("command = %q, want it to compress '.' rather than the directory's own base name", command)
+	if !strings.Contains(command, "zip -r '") || !strings.HasSuffix(command, "whole-dir.zip' '.'") {
+		t.Errorf("command = %q, want it to compress '.' into whole-dir.zip rather than the directory's own base name", command)
 	}
 }
 
@@ -423,5 +426,242 @@ func TestDeleteExtractedArchiveAsksBeforeAHardDeleteWhenTrashFails(t *testing.T)
 	got := r.confirmDialogTitleBar.GetText(true)
 	if !strings.Contains(got, "Trash failed") || !strings.Contains(got, "delete it completely") {
 		t.Errorf("confirmation message = %q, want it to name the Trash failure and the permanent-delete fallback", got)
+	}
+}
+
+// newTestFakeRemote builds a fakeRemoteClient with an already-
+// initialized entries map — Mkdir/Create both assign into it directly
+// (see fakeRemoteClient's own Close/Mkdir), which panics on a nil map,
+// unlike the zero-value-friendly local filesystem this package's own
+// remote tests otherwise mirror.
+func newTestFakeRemote(root string) *fakeRemoteClient {
+	return &fakeRemoteClient{root: root, entries: map[string][]fsops.Entry{root: nil}}
+}
+
+// TestUploadCompressedFileUploadsAndRemovesTheLocalStagingCopy pins
+// uploadCompressedFile's own whole contract: the real bytes land at
+// destPath on the fake remote client, and the local staging file is
+// gone afterward regardless — its only reason to exist was to get
+// uploaded.
+func TestUploadCompressedFileUploadsAndRemovesTheLocalStagingCopy(t *testing.T) {
+	dir := t.TempDir()
+	localPath := filepath.Join(dir, "archive.zip")
+	if err := os.WriteFile(localPath, []byte("zip bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remote := newTestFakeRemote("/remote")
+
+	if err := uploadCompressedFile(localPath, remote, "/remote/archive.zip"); err != nil {
+		t.Fatalf("uploadCompressedFile: %v", err)
+	}
+
+	if got := string(remote.content["/remote/archive.zip"]); got != "zip bytes" {
+		t.Errorf("uploaded content = %q, want %q", got, "zip bytes")
+	}
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Errorf("Stat(localPath) after upload: err = %v, want a not-exist error", err)
+	}
+}
+
+// TestUploadCompressedFileRefusesAnExistingRemoteFileAndStillCleansUp
+// pins copyTransferItem's own "never silently overwrite" policy
+// reaching all the way through this wiring, and that the local staging
+// copy is still removed even when the upload itself fails — leaving it
+// behind would just be an orphaned temp file nobody will ever act on
+// again.
+func TestUploadCompressedFileRefusesAnExistingRemoteFileAndStillCleansUp(t *testing.T) {
+	dir := t.TempDir()
+	localPath := filepath.Join(dir, "archive.zip")
+	if err := os.WriteFile(localPath, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remote := newTestFakeRemote("/remote")
+	remote.entries["/remote"] = []fsops.Entry{{Name: "archive.zip", Type: fsops.TypeFile}}
+	remote.content = map[string][]byte{"/remote/archive.zip": []byte("already there")}
+
+	err := uploadCompressedFile(localPath, remote, "/remote/archive.zip")
+
+	if err == nil {
+		t.Fatal("uploadCompressedFile should refuse an already-existing remote file")
+	}
+	if got := string(remote.content["/remote/archive.zip"]); got != "already there" {
+		t.Errorf("existing remote content = %q, want it untouched", got)
+	}
+	if _, statErr := os.Stat(localPath); !os.IsNotExist(statErr) {
+		t.Errorf("Stat(localPath) after a failed upload: err = %v, want a not-exist error", statErr)
+	}
+}
+
+// TestUploadExtractedTreeUploadsEveryTopLevelEntryAndRemovesTempDir
+// pins uploadExtractedTree's own whole contract for the common,
+// no-conflict case: every entry directly inside tempDir lands at the
+// matching name under destPanel's own remote directory, and tempDir
+// itself is gone afterward.
+func TestUploadExtractedTreeUploadsEveryTopLevelEntryAndRemovesTempDir(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "a.txt"), []byte("A"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(tempDir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "sub", "b.txt"), []byte("B"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remote := newTestFakeRemote("/remote")
+	destPanel := &Panel{path: "/remote/dest", remote: remote, remoteConn: remotefs.Connection{Host: "example.com"}}
+	remote.entries["/remote/dest"] = nil
+
+	if err := uploadExtractedTree(tempDir, destPanel); err != nil {
+		t.Fatalf("uploadExtractedTree: %v", err)
+	}
+
+	if got := string(remote.content["/remote/dest/a.txt"]); got != "A" {
+		t.Errorf("a.txt content = %q, want %q", got, "A")
+	}
+	if got := string(remote.content["/remote/dest/sub/b.txt"]); got != "B" {
+		t.Errorf("sub/b.txt content = %q, want %q", got, "B")
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Errorf("Stat(tempDir) after upload: err = %v, want a not-exist error", err)
+	}
+}
+
+// TestUploadExtractedTreeRefusesBeforeUploadingAnythingOnAnyConflict
+// pins the "no partial extraction on the remote end" guarantee: every
+// top-level entry is checked for a conflict before any of them are
+// actually uploaded, so a collision on the *second* entry must still
+// leave the *first* one untouched on the remote side.
+func TestUploadExtractedTreeRefusesBeforeUploadingAnythingOnAnyConflict(t *testing.T) {
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "a.txt"), []byte("A"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "b.txt"), []byte("B"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remote := newTestFakeRemote("/remote")
+	destPanel := &Panel{path: "/remote/dest", remote: remote, remoteConn: remotefs.Connection{Host: "example.com"}}
+	// "b.txt" (the second entry ListDir would return — see
+	// fakeRemoteClient.ListDir's own case-insensitive sort) already
+	// exists remotely; "a.txt" does not.
+	remote.entries["/remote/dest"] = []fsops.Entry{{Name: "b.txt", Type: fsops.TypeFile}}
+	remote.content = map[string][]byte{"/remote/dest/b.txt": []byte("already there")}
+
+	err := uploadExtractedTree(tempDir, destPanel)
+
+	if err == nil {
+		t.Fatal("uploadExtractedTree should refuse when any top-level entry already exists remotely")
+	}
+	if _, uploaded := remote.content["/remote/dest/a.txt"]; uploaded {
+		t.Error("a.txt should never have been uploaded once b.txt was found to conflict")
+	}
+	if got := string(remote.content["/remote/dest/b.txt"]); got != "already there" {
+		t.Errorf("existing remote content = %q, want it untouched", got)
+	}
+}
+
+// TestNewCompressTempFileReturnsAFreshNonExistentPath pins
+// newCompressTempFile's own contract: a real, unique path ending in
+// ext, but not itself left behind as an (empty, invalid-as-an-archive)
+// file — see its own doc comment for why that matters specifically for
+// zip.
+func TestNewCompressTempFileReturnsAFreshNonExistentPath(t *testing.T) {
+	got, err := newCompressTempFile(".tar.bz2")
+	if err != nil {
+		t.Fatalf("newCompressTempFile: %v", err)
+	}
+	if !strings.HasSuffix(got, ".tar.bz2") {
+		t.Errorf("newCompressTempFile(.tar.bz2) = %q, want it to end in .tar.bz2", got)
+	}
+	if _, err := os.Stat(got); !os.IsNotExist(err) {
+		t.Errorf("Stat(%s): err = %v, want a not-exist error (nothing left behind)", got, err)
+	}
+}
+
+// TestRunCompressToRemoteRefusesAnAlreadyExistingRemoteFile pins the
+// pre-check that keeps this path consistent with the local one:
+// refused before ever running a real compress command, the same
+// "never silently overwrite" guarantee TestRunCompressRefusesAn
+// AlreadyExistingOutputFile already pins for a local destination.
+func TestRunCompressToRemoteRefusesAnAlreadyExistingRemoteFile(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+	r.newTabHere()
+	remote := newTestFakeRemote("/remote")
+	remote.entries["/remote"] = []fsops.Entry{{Name: "a.txt.zip", Type: fsops.TypeFile}}
+	remote.content = map[string][]byte{"/remote/a.txt.zip": []byte("already there")}
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "example.com"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0) // back to the original, local tab — the source
+	_ = dir
+	r.splitWithTab(1) // the remote tab becomes this one's own split partner
+	r.openCompress()
+
+	r.runCompress()
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+	}
+	if r.compressJob != nil {
+		t.Error("no job should have started once the remote destination already had a colliding file")
+	}
+}
+
+// TestExtractCurrentArchiveToRemoteExtractsLocallyFirst pins
+// extractCurrentArchiveToRemote's own dispatch: the real shell command
+// still targets a local temp directory (no real shell command can
+// write directly to an SFTP path — see its own doc comment), never
+// destPanel's own remote-looking path string.
+func TestExtractCurrentArchiveToRemoteExtractsLocallyFirst(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+	archivePath := filepath.Join(dir, "bundle.zip")
+	if err := os.WriteFile(archivePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.panel.load(dir); err != nil {
+		t.Fatal(err)
+	}
+	focusRowNamed(t, r.panel, "bundle.zip")
+
+	r.newTabHere()
+	remote := newTestFakeRemote("/remote")
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "example.com"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0)
+	focusRowNamed(t, r.panel, "bundle.zip")
+	r.splitWithTab(1)
+
+	r.extractCurrentArchive(false)
+
+	job := r.compressJob
+	if job == nil {
+		t.Fatal("extractCurrentArchive did not start a background job")
+	}
+	defer r.cancelCompressJob()
+	command := strings.Join(job.cmd.Args, " ")
+	if strings.Contains(command, "/remote") {
+		t.Errorf("command = %q, should target a local temp directory, never the remote-looking destination path", command)
+	}
+	if !strings.Contains(command, os.TempDir()) {
+		t.Errorf("command = %q, want it to extract into a local temp directory", command)
+	}
+}
+
+// focusRowNamed moves p's own table cursor onto the row named name —
+// t.Fatal if there isn't one, since every caller here treats that as a
+// broken test setup rather than something to keep going past.
+func focusRowNamed(t *testing.T, p *Panel, name string) {
+	t.Helper()
+	for row := 0; ; row++ {
+		ref, ok := p.rowRef(row)
+		if !ok {
+			t.Fatalf("%q not found in the panel", name)
+		}
+		if ref.name == name {
+			p.focusRow(row)
+			return
+		}
 	}
 }
