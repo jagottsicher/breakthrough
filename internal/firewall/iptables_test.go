@@ -1,6 +1,9 @@
 package firewall
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // realIPTablesSave is confirmed against real `iptables-save` output shape:
 // a *filter section with chain policy lines, INPUT/OUTPUT/FORWARD rules
@@ -101,5 +104,84 @@ func TestParseIPTablesPortSpec(t *testing.T) {
 		if err == nil && (from != c.wantFrom || to != c.wantTo) {
 			t.Errorf("parseIPTablesPortSpec(%q) = %d, %d; want %d, %d", c.in, from, to, c.wantFrom, c.wantTo)
 		}
+	}
+}
+
+// TestIPTablesAddRuleCommandBuildsTheRealInvocation mirrors
+// TestUFWAddRuleCommandBuildsTheRealInvocation for iptables' own
+// vocabulary and flag order.
+func TestIPTablesAddRuleCommandBuildsTheRealInvocation(t *testing.T) {
+	spec := NewRuleSpec{
+		Direction: DirectionIn, Action: ActionDeny,
+		Protocol: "tcp", PortFrom: 22, PortTo: 22,
+		Source: "203.0.113.0/24", Interface: "eth0",
+	}
+	got, err := IPTablesAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("IPTablesAddRuleCommand: %v", err)
+	}
+	want := "iptables -A INPUT -p tcp -s 203.0.113.0/24 -i eth0 --dport 22 -j DROP"
+	if got != want {
+		t.Errorf("IPTablesAddRuleCommand = %q, want %q", got, want)
+	}
+}
+
+// TestIPTablesAddRuleCommandUsesOutInterfaceFlagForOutgoing pins that
+// an Interface on an outbound rule renders as "-o", never "-i" — the
+// same direction-dependent flag parseIPTablesRuleFields' own read side
+// already assumes (see ParseIPTablesSave's own chain-based Direction).
+func TestIPTablesAddRuleCommandUsesOutInterfaceFlagForOutgoing(t *testing.T) {
+	spec := NewRuleSpec{Direction: DirectionOut, Interface: "eth0"}
+	got, err := IPTablesAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("IPTablesAddRuleCommand: %v", err)
+	}
+	if !strings.Contains(got, "-o eth0") || strings.Contains(got, "-i eth0") {
+		t.Errorf("IPTablesAddRuleCommand = %q, want \"-o eth0\", not \"-i eth0\"", got)
+	}
+}
+
+// TestIPTablesAddRuleCommandRendersAPortRangeWithAColon pins the one
+// place iptables' own port-range notation differs from ufw's (see
+// TestUFWAddRuleCommandRendersAPortRangeWithADash).
+func TestIPTablesAddRuleCommandRendersAPortRangeWithAColon(t *testing.T) {
+	spec := NewRuleSpec{Protocol: "tcp", PortFrom: 6000, PortTo: 6063}
+	got, err := IPTablesAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("IPTablesAddRuleCommand: %v", err)
+	}
+	if !strings.Contains(got, "--dport 6000:6063") {
+		t.Errorf("IPTablesAddRuleCommand = %q, want it to contain %q", got, "--dport 6000:6063")
+	}
+}
+
+// TestIPTablesAddRuleCommandRefusesAPortWithNoProtocol pins a real
+// iptables constraint this package would otherwise just hand to a
+// shell to fail on with a far less legible error: --dport always
+// requires an explicit -p tcp/-p udp naming which protocol it matches
+// against first.
+func TestIPTablesAddRuleCommandRefusesAPortWithNoProtocol(t *testing.T) {
+	spec := NewRuleSpec{PortFrom: 22, PortTo: 22}
+	if _, err := IPTablesAddRuleCommand(spec); err == nil {
+		t.Error("IPTablesAddRuleCommand should refuse a port with no protocol set")
+	}
+}
+
+// TestIPTablesDeleteRuleCommandUsesTheDeleteFlag pins the rollback's
+// own exact shape: byte-for-byte the same as AddRuleCommand except
+// "-D" in place of "-A", never a separately re-derived command line.
+func TestIPTablesDeleteRuleCommandUsesTheDeleteFlag(t *testing.T) {
+	spec := NewRuleSpec{Direction: DirectionIn, Action: ActionAllow, Protocol: "tcp", PortFrom: 22, PortTo: 22}
+	add, err := IPTablesAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("IPTablesAddRuleCommand: %v", err)
+	}
+	del, err := IPTablesDeleteRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("IPTablesDeleteRuleCommand: %v", err)
+	}
+	want := strings.Replace(add, "-A INPUT", "-D INPUT", 1)
+	if del != want {
+		t.Errorf("IPTablesDeleteRuleCommand = %q, want %q", del, want)
 	}
 }

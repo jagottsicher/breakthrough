@@ -183,3 +183,78 @@ func parsePortList(s string) (ports []int, proto string, ok bool) {
 	}
 	return ports, proto, true
 }
+
+// ufwActionWord renders spec.Action the way a real ufw command line
+// expects it — the same three words ParseUFWStatusVerbose already
+// reads back (see parseUFWRuleLine's own switch), so a rule this
+// package adds and one it merely reports can never disagree on
+// vocabulary.
+func ufwActionWord(a Action) string {
+	switch a {
+	case ActionDeny:
+		return "deny"
+	case ActionReject:
+		return "reject"
+	default:
+		return "allow"
+	}
+}
+
+// UFWAddRuleCommand builds the real `ufw` command line that would add
+// spec as a new rule — see NewRuleSpec's own doc comment for what it
+// describes, and this package's own doc comment for why a real
+// external command, never a netlink/rule-file reimplementation. Port,
+// if any, always attaches to "to" (the destination side): the same
+// convention ParseUFWStatusVerbose's own read side already assumes (a
+// port only ever comes from `ufw status verbose`'s "To" column — see
+// parseUFWRuleLine), which keeps the two directions symmetric rather
+// than inventing a second, from-side notation this package would then
+// also have to parse back.
+func UFWAddRuleCommand(spec NewRuleSpec) (string, error) {
+	if err := spec.Validate(); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString("ufw ")
+	b.WriteString(ufwActionWord(spec.Action))
+	if spec.Direction == DirectionOut {
+		b.WriteString(" out")
+	} else {
+		b.WriteString(" in")
+	}
+	if spec.Interface != "" {
+		fmt.Fprintf(&b, " on %s", spec.Interface)
+	}
+	from := spec.Source
+	if from == "" {
+		from = "any"
+	}
+	fmt.Fprintf(&b, " from %s", from)
+	to := spec.Destination
+	if to == "" {
+		to = "any"
+	}
+	fmt.Fprintf(&b, " to %s", to)
+	if !spec.HasAnyPort() {
+		fmt.Fprintf(&b, " port %s", portRangeArg(spec.PortFrom, spec.PortTo, "-"))
+	}
+	if spec.Protocol != "" {
+		fmt.Fprintf(&b, " proto %s", spec.Protocol)
+	}
+	return b.String(), nil
+}
+
+// UFWDeleteRuleCommand builds the exact command that reverses
+// UFWAddRuleCommand's own — ufw's real "delete" verb takes the very
+// same rule specification back, prefixed right after "ufw " (`man ufw`:
+// "ufw delete RULE"), so there is no separate rule syntax to build or
+// keep in sync here. This is the rollback feature_ideas.txt's own
+// "Selbstaussperr-Schutz" calls once a rule it just applied turns out
+// to have cut off the very session that applied it.
+func UFWDeleteRuleCommand(spec NewRuleSpec) (string, error) {
+	add, err := UFWAddRuleCommand(spec)
+	if err != nil {
+		return "", err
+	}
+	return strings.Replace(add, "ufw ", "ufw delete ", 1), nil
+}

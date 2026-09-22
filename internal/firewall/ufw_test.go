@@ -1,6 +1,9 @@
 package firewall
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestUFWActive(t *testing.T) {
 	if !UFWActive("Status: active\n\nTo  Action  From\n") {
@@ -133,4 +136,86 @@ func intSliceEqual(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+// TestUFWAddRuleCommandBuildsTheRealInvocation pins the exact command
+// line a fully-specified rule turns into — a real, reproducible bug
+// here would either silently do nothing (a syntax error `ufw` itself
+// rejects) or, worse, apply a rule broader or narrower than what the
+// form actually asked for.
+func TestUFWAddRuleCommandBuildsTheRealInvocation(t *testing.T) {
+	spec := NewRuleSpec{
+		Direction: DirectionIn, Action: ActionDeny,
+		Protocol: "tcp", PortFrom: 22, PortTo: 22,
+		Source: "203.0.113.0/24", Interface: "eth0",
+	}
+	got, err := UFWAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("UFWAddRuleCommand: %v", err)
+	}
+	want := "ufw deny in on eth0 from 203.0.113.0/24 to any port 22 proto tcp"
+	if got != want {
+		t.Errorf("UFWAddRuleCommand = %q, want %q", got, want)
+	}
+}
+
+// TestUFWAddRuleCommandDefaultsEverythingUnsetToAny pins the minimal
+// case: nothing but Direction/Action set, source/destination/interface/
+// protocol/port all left at their own zero value.
+func TestUFWAddRuleCommandDefaultsEverythingUnsetToAny(t *testing.T) {
+	spec := NewRuleSpec{Direction: DirectionOut, Action: ActionAllow}
+	got, err := UFWAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("UFWAddRuleCommand: %v", err)
+	}
+	want := "ufw allow out from any to any"
+	if got != want {
+		t.Errorf("UFWAddRuleCommand = %q, want %q", got, want)
+	}
+}
+
+// TestUFWAddRuleCommandRendersAPortRangeWithADash pins the one place
+// ufw's own port-range notation differs from iptables' (see
+// TestIPTablesAddRuleCommandRendersAPortRangeWithAColon).
+func TestUFWAddRuleCommandRendersAPortRangeWithADash(t *testing.T) {
+	spec := NewRuleSpec{PortFrom: 6000, PortTo: 6063}
+	got, err := UFWAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("UFWAddRuleCommand: %v", err)
+	}
+	if !strings.Contains(got, "port 6000-6063") {
+		t.Errorf("UFWAddRuleCommand = %q, want it to contain %q", got, "port 6000-6063")
+	}
+}
+
+// TestUFWAddRuleCommandRefusesAnInvalidPortRange pins that this never
+// reaches a real shell command for a spec NewRuleSpec.Validate itself
+// already rejects.
+func TestUFWAddRuleCommandRefusesAnInvalidPortRange(t *testing.T) {
+	spec := NewRuleSpec{PortFrom: 100, PortTo: 50}
+	if _, err := UFWAddRuleCommand(spec); err == nil {
+		t.Error("UFWAddRuleCommand should refuse an inverted port range")
+	}
+}
+
+// TestUFWDeleteRuleCommandInsertsDeleteRightAfterUFW pins the
+// rollback's own exact shape: ufw's real "delete" verb takes the same
+// rule specification straight back, so this must be byte-for-byte
+// UFWAddRuleCommand's own output with "delete " spliced in right after
+// "ufw ", never a separately re-derived command line that could drift
+// from what was actually applied.
+func TestUFWDeleteRuleCommandInsertsDeleteRightAfterUFW(t *testing.T) {
+	spec := NewRuleSpec{Direction: DirectionIn, Action: ActionAllow, PortFrom: 22, PortTo: 22, Protocol: "tcp"}
+	add, err := UFWAddRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("UFWAddRuleCommand: %v", err)
+	}
+	del, err := UFWDeleteRuleCommand(spec)
+	if err != nil {
+		t.Fatalf("UFWDeleteRuleCommand: %v", err)
+	}
+	want := strings.Replace(add, "ufw ", "ufw delete ", 1)
+	if del != want {
+		t.Errorf("UFWDeleteRuleCommand = %q, want %q", del, want)
+	}
 }

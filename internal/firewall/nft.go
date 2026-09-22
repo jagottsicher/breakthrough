@@ -295,3 +295,16 @@ func nftPortSpec(right json.RawMessage) (nftPortSpecResult, error) {
 	}
 	return nftPortSpecResult{}, fmt.Errorf("expected a port, range, or set, got %s", right)
 }
+
+// NFTAddRuleCommand always refuses — unlike ufw's own implicit default
+// or iptables' conventional INPUT/OUTPUT chains, a real nftables
+// ruleset's table and chain names are entirely up to whoever set it
+// up, with no convention this package could safely guess at without a
+// real risk of adding a rule to a chain packets never actually
+// traverse — which would look like it worked while quietly doing
+// nothing. Reported plainly rather than attempted, the same "explain
+// rather than guess wrong" principle checkTools already follows for a
+// missing archive tool elsewhere in this app.
+func NFTAddRuleCommand(NewRuleSpec) (string, error) {
+	return "", fmt.Errorf("nftables: adding rules through this screen isn't supported yet — its own table/chain layout varies per host with no safe default to guess; use \"nft\" by hand, or switch this host to ufw or iptables for the rule builder")
+}
