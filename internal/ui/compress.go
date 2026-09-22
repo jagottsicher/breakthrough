@@ -391,6 +391,25 @@ func (r *Root) newCompressContentLayout() *tview.Flex {
 	return layout
 }
 
+// compressTargetName is one compress target's own name, as it should
+// appear in the shell command line run with cmd.Dir already set to
+// destDir (see runCompress) — target's own base name for an ordinary
+// file or subdirectory, or "." for the one case that base name would be
+// wrong: target *is* destDir itself, reached by selecting the current
+// directory as a whole via the cursor sitting on ".." (see
+// Panel.CurrentRowPath's own doc comment on why that row's path is the
+// current directory, not its parent). "bt-verify-dir" (the directory's
+// own name) doesn't exist as an entry *inside* "bt-verify-dir" itself —
+// a real, live-tested failure ("zip warning: name not matched") this
+// case needs "." for instead, the same relative name a real shell
+// prompt would use to mean "everything right here".
+func compressTargetName(target, destDir string) string {
+	if target == destDir {
+		return "."
+	}
+	return filepath.Base(target)
+}
+
 // runCompress is compressButtons' own "Compress": refuses an empty
 // name or one that would collide with a file that already exists
 // (never silently overwriting — the same "kein Datenverlust" principle
@@ -421,7 +440,7 @@ func (r *Root) runCompress() {
 
 	names := make([]string, len(r.compressTargets))
 	for i, t := range r.compressTargets {
-		names[i] = shellQuoteArg(filepath.Base(t))
+		names[i] = shellQuoteArg(compressTargetName(t, destDir))
 	}
 	command := format.compress(shellQuoteArg(name+format.ext), names)
 
