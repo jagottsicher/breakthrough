@@ -565,10 +565,23 @@ reimplementation of any compression algorithm): `zip`, `tar`, and
 | Output name | The archive's own name, without extension — the selected Format's own extension is added automatically |
 
 A live Preview line always shows the exact file name that will be
-created. Compress refuses a name that already exists in the current
-directory rather than silently overwriting it — pick a different one
-instead. Local panels only for now; there is no remote archive-creation
-path yet.
+created. Compress refuses a name that already exists at the destination
+rather than silently overwriting it — pick a different one instead.
+
+The destination depends on whether a split is currently active — the
+same rule [Extract](#extract) below already follows:
+
+| Split view | Destination |
+|---|---|
+| Off | The current directory, right beside the selection |
+| On | The other pane's own current directory — the same default [Rsync](#rsync)/[Compare](#compare) already use once a split exists |
+
+The panel doing the selecting has to be local — there is no remote
+source path yet. The *destination* may be a remote SFTP connection,
+though: the real archive tool still only ever runs locally, into a
+throwaway local staging copy, which is then uploaded to the connected
+pane — its own separate "Uploading" stage, shown in the status bar
+alongside "Compressing" once the local half is done.
 
 Every compressed tar variant is built as a plain `tar -cf -` piped
 through the real compressor binary (`gzip`/`bzip2`/`xz`/`zstd`), rather
@@ -610,7 +623,13 @@ fallback is a real, permanent delete, the same "irreversible actions
 must be clearly flagged and confirmed" principle [Trash, Remove and
 Restore](#trash-remove-and-restore) already follows.
 
-Local panels only for now, the same scope [Compress](#compress) has.
+The archive itself has to sit on a local panel, the same scope limit
+[Compress](#compress) above has. The *destination* pane may be a remote
+SFTP connection, though: extraction still only ever happens locally,
+into a throwaway temp directory, which is then uploaded to the
+connected pane — its own separate "Uploading" stage, shown in the
+status bar once the local extraction is done. `jE`'s own Trash step
+only runs once that upload has actually succeeded.
 
 Runs in the background exactly like [Compress](#compress) above — no
 terminal, a status bar spinner instead, and whichever tab shows the

@@ -787,21 +787,29 @@ var helpText = strings.TrimLeft(`
 [::b]Compress ("jc", or context menu's "Compress…")[::-]
 
   Archives the current selection — one file, several files, or a whole
-  directory — into a new file right beside it, via a real external tool
+  directory — into a new file right beside it, or, once a split is
+  active, straight into the other pane's own directory instead (the
+  same default Rsync/Compare already use), via a real external tool
   (zip, tar, gzip, bzip2, xz, or zstd — never a reimplementation). Pick
   a Format, type an Output name (the extension is added automatically);
   the live Preview line shows exactly what will be created. Refuses a
-  name that already exists rather than overwriting it. Local panels
-  only for now.
+  name that already exists at the destination rather than overwriting
+  it.
 
   Whichever tool the chosen format needs (zip/unzip, tar, gzip, bzip2,
   xz, zstd) has to actually be installed — a missing one reports
   exactly which, rather than a bare "command not found".
 
+  The panel doing the selecting has to be local. The destination may be
+  a remote SFTP connection, though: compressing still only ever happens
+  locally, into a throwaway staging copy, which is then uploaded to the
+  connected pane — its own "Uploading" stage, shown right after
+  "Compressing" in the status bar.
+
   Runs in the background, the same way Copy/Cut/Paste already do — no
-  terminal takes over the screen, and the current directory reloads on
-  its own once the archive is actually done (see the status bar for a
-  spinner and elapsed time while it runs; Ctrl+C cancels it).
+  terminal takes over the screen, and the destination reloads on its
+  own once it's actually done (see the status bar for a spinner and
+  elapsed time while it runs; Ctrl+C cancels it).
 
 [::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
 
@@ -809,15 +817,19 @@ var helpText = strings.TrimLeft(`
   first entering it — into the archive's own directory, or, if a split
   is currently active, straight into the other pane's own current
   directory instead (the same default Rsync/Compare already use once a
-  split exists). "jE" additionally moves the original archive to the
-  Trash once extraction has actually succeeded — if that fails (Trash
-  unavailable, or the move itself errors), asks first, naming plainly
-  that the fallback is a real, permanent delete, rather than either
-  silently leaving the archive behind or deleting it without asking.
+  split exists) — local or, extracting locally into a throwaway temp
+  directory first and uploading it, a remote SFTP connection. "jE"
+  additionally moves the original archive to the Trash once extraction
+  has actually succeeded (landed on the real destination, upload
+  included) — if that fails (Trash unavailable, or the move itself
+  errors), asks first, naming plainly that the fallback is a real,
+  permanent delete, rather than either silently leaving the archive
+  behind or deleting it without asking.
 
   Runs in the background exactly like Compress above — no terminal, a
-  status bar spinner instead, and whichever tab shows the destination
-  reloads once it's done.
+  status bar spinner instead ("Uploading" too, once the destination is
+  remote), and whichever tab shows the destination reloads once it's
+  done.
 
 [::b]Search dialog ("f")[::-]
 
