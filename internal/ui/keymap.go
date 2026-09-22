@@ -333,10 +333,35 @@ func chordFamilies() []chordFamily {
 		// browsing now takes "mmm" (open the family, open the menu,
 		// then the menu's own Multiply mnemonic) instead of the
 		// previous two keystrokes.
+		//
+		// "mo"/"mt"/"mA" close this family's own remaining gap, per the
+		// user's own explicit request that a chord reach everything the
+		// context menu can: cross-checked against every entry in
+		// contextMenuTree (see contextmenu.go), exactly three actions
+		// had no plain-letter or chord equivalent anywhere in this file
+		// at all — "Open with…", "tail -f", and "Deselect all" — and
+		// this is where all three land, the same "menu" category
+		// "mf"/"md" already belong to (Multiply above is a fourth,
+		// deliberately left as the documented "mmm" exception rather
+		// than a fourth member here, since its own natural key, "m", is
+		// already this family's own prefix key for opening the real
+		// menu). "mo" mirrors "Open with…"'s own mnemonic inside the
+		// menu itself ('o' — see menuEntry.mnemonic in contextmenu.go);
+		// "mt" is new there too (tail -f had no mnemonic of its own
+		// before this). "mA" is deliberately not "mu": plain "u" already
+		// means Undo elsewhere, and reusing it here for the unrelated,
+		// opposite-of-"Select all" action invites exactly the mix-up
+		// this whole layer exists to avoid — capital "A" instead reads
+		// as "a"'s own bigger/inverse sibling, the same lower/uppercase
+		// pairing convention plainCommands' own c/C, d/D, e/E, v/V pairs
+		// already use.
 		{prefix: 'm', name: "menu", quick: true, members: []chordMember{
 			{'m', "Context menu", func(r *Root) { r.MenuShortcut() }},
 			{'f', "New file", func(r *Root) { r.openNewFile() }},
 			{'d', "New dir", func(r *Root) { r.openNewDir() }},
+			{'o', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
+			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
+			{'A', "Deselect all", func(r *Root) { r.panel.deselectAll() }},
 		}},
 		{prefix: 'z', name: "display", quick: true, members: []chordMember{
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},

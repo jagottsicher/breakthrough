@@ -327,6 +327,16 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
+	// A backgrounded Compress/Extract's own progress — the same
+	// independent-segment treatment as rsync just above, and for the
+	// same reason: a separate process tree, free to run alongside
+	// either of the other two (see compressjob.go's own package doc
+	// comment).
+	if r.compressJob != nil {
+		write(compressProgressText(r.compressJob, len(r.compressQueue)))
+		sep()
+	}
+
 	// Every segment from here on is independently toggle-able (Options
 	// → Status bar — see optioncatalog.go), per the user's own explicit
 	// request: someone who never looks at load average, say, gets to
@@ -666,6 +676,23 @@ func rsyncProgressText(job *rsyncJob, queued int) string {
 		fmt.Fprintf(&b, " (+%d queued)", queued)
 	}
 	return b.String()
+}
+
+// compressProgressText renders buildStatusBar's own backgrounded
+// Compress/Extract segment (see compressjob.go's own package doc
+// comment) — a spinner (reusing hashAnimationFrames, the same visual
+// language pasteProgressText's own uses), since none of zip/tar/gzip/
+// bzip2/xz/zstd offer a percentage to show the way rsync's own
+// --info=progress2 does, the elapsed time, and the archive's own base
+// name.
+func compressProgressText(job *compressJob, queued int) string {
+	spinner := hashAnimationFrames[job.animFrame%len(hashAnimationFrames)]
+	elapsed := time.Since(job.startedAt).Round(time.Second)
+	text := fmt.Sprintf("%s %s %s (%s)", spinner, job.verb, job.label, elapsed)
+	if queued > 0 {
+		text += fmt.Sprintf(" (+%d queued)", queued)
+	}
+	return text
 }
 
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"

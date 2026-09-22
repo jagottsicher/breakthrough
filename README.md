@@ -181,14 +181,16 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `m`/`o` again (`mmm`/`mmo`
-  from plain browsing) do too, for Multiply and Open with… — the two
-  entries with no plain-key equivalent of their own, since neither ever
-  opens from anywhere but here. `mf`/`md` reach New file/New dir directly from plain
-  browsing, without opening the menu at all — both create their new
-  entry directly inside the active panel's own current directory
-  (remote-aware the same way Rename already is), prompting only for a
-  name.
+  entry isn't currently showing does nothing. `o`/`t`/`A` do too, for
+  Open with…, `tail -f`, and Deselect all — all three also directly
+  reachable as `mo`/`mt`/`mA` from plain browsing, without opening the
+  menu at all. `m` again (`mmm` from plain browsing) fires Multiply,
+  the one entry with no keyboard route of its own anywhere else, since
+  its own natural letter is already this chord's own prefix key.
+  `mf`/`md` reach New file/New dir directly from plain browsing too,
+  without opening the menu at all — both create their new entry
+  directly inside the active panel's own current directory (remote-aware
+  the same way Rename already is), prompting only for a name.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -503,7 +505,9 @@ terminal.
   Rsync/Compare already use. `jE` additionally moves the original
   archive to the Trash once extraction has actually succeeded — asking
   first, and naming the fallback plainly as a real permanent delete, if
-  that ever fails outright.
+  that ever fails outright. Both run in the background, the same as
+  Copy/Cut/Paste — no terminal takes over the screen, and the affected
+  directory reloads on its own once the archive tool is actually done.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual

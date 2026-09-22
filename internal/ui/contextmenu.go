@@ -147,7 +147,10 @@ func contextMenuTree() []menuEntry {
 			// target row at all.
 			{label: "New file", mnemonic: 'f', action: func(r *Root) { r.openNewFile() }},
 			{label: "New dir", mnemonic: 'd', action: func(r *Root) { r.openNewDir() }},
-			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
+			// mnemonic 't', added alongside the "m" chord's own new "mt"
+			// member (see keymap.go) — matches this action's own new
+			// keyboard-only route rather than an unrelated letter.
+			{label: "tail -f", visible: menuTargetIsFile, mnemonic: 't', action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
 			{label: "chmod", action: func(r *Root) { r.openChmod() }},
 			{label: "sed", action: func(r *Root) { r.openSedReplace() }},
@@ -184,7 +187,12 @@ func contextMenuTree() []menuEntry {
 		}},
 		{label: "Selection", submenu: []menuEntry{
 			{label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
-			{label: "Deselect all", action: func(r *Root) { r.panel.deselectAll() }},
+			// mnemonic 'A', added alongside the "m" chord's own new "mA"
+			// member (see keymap.go) — capital, matching that member's
+			// own reasoning: plain "a" already means "Select all"
+			// itself, both outside this menu and as this very entry's
+			// own sibling just above.
+			{label: "Deselect all", mnemonic: 'A', action: func(r *Root) { r.panel.deselectAll() }},
 			{label: "Select +", action: func(r *Root) { r.openSelectPlus() }},
 			{label: "Select -", action: func(r *Root) { r.openSelectMinus() }},
 		}},
