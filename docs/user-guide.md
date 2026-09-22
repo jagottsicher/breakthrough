@@ -97,7 +97,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jn` [Toolbox](#toolbox): Network Tools screen · `jh` Toolbox: Hardware Tools screen · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key

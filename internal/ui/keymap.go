@@ -385,47 +385,48 @@ func chordFamilies() []chordFamily {
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
+		// "j" itself carries no mnemonic of its own — by the time this
+		// family was added, every other letter already meant something
+		// else as either a plain command or a chord prefix, and "j"
+		// (along with "b") was one of only two still completely free.
+		//
+		// Ordered by the user's own explicit reordering request rather
+		// than by when each member was added: "jc"/"je"/"jE" (Compress
+		// and Extract are tools too, not a fourth full-screen catalog)
+		// lead, ahead of the four full-screen catalogs that follow.
+		//
+		// "jm" opens the Mounts screen (mounts.go) — a full-screen
+		// catalog under this prefix, kept separate from the Toolbox's
+		// own command list rather than folded in as one more entry
+		// there, per the user's own explicit request. Same "one prefix,
+		// several distinct destinations" shape the "o" chord's own
+		// "oo"/"om" already establish.
+		//
 		// "jn"/"jh" open the Toolbox's own "Networking"/"Hardware"
 		// category (openNetworkTools/openHardwareTools in toolbox.go) —
 		// the only two ways into the Toolbox catalog; there is no
-		// combined "browse both at once" entry. "j" itself carries no
-		// mnemonic of its own — by the time this family was added, every
-		// other letter already meant something else as either a plain
-		// command or a chord prefix, and "j" (along with "b") was one of
-		// only two still completely free.
+		// combined "browse both at once" entry.
 		//
-		// "jm" opens the Mounts screen (mounts.go) — a second, related
-		// full-screen catalog under the same prefix, per the user's own
-		// explicit request to keep it separate from the Toolbox's own
-		// command list rather than folding it in as one more entry
-		// there. Same "one prefix, several distinct destinations" shape
-		// the "o" chord's own "oo"/"om" already establish.
-		//
-		// "jf" opens the Firewall screen (firewall.go) — a third,
-		// unrelated full-screen catalog under the same prefix, same "one
-		// prefix, several distinct destinations" shape as "jm"/"jn"/"jh"
-		// above: this host's own actual firewall rules (UFW, nftables, or
-		// iptables, whichever one actually governs traffic), not a list
-		// of commands to run, so it gets its own destination rather than
-		// a Toolbox catalog entry.
+		// "jf" opens the Firewall screen (firewall.go) — a further,
+		// unrelated full-screen catalog under the same prefix: this
+		// host's own actual firewall rules (UFW, nftables, or iptables,
+		// whichever one actually governs traffic), not a list of
+		// commands to run, so it gets its own destination rather than a
+		// Toolbox catalog entry.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
-			{'m', "Mounts", func(r *Root) { r.openMounts() }},
-			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
-			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
-			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
-			// "jc"/"je"/"jE" belong here rather than a chord family of
-			// their own, per the user's own explicit call: Compress and
-			// Extract are tools too, the same category "jn"/"jh"
-			// already cover, not a fourth full-screen catalog like
-			// "jm"/"jf". "jE" is this family's own first capitalized
-			// member — the same "bigger, more consequential sibling"
-			// convention the plain-letter layer's own d/D and v/V pairs
-			// already use, just spelled as a chord's own second key
-			// instead of a whole separate top-level letter, since there
-			// was no letter left to spare for a fourth verb here.
+			// "jE" is this family's own first capitalized member — the
+			// same "bigger, more consequential sibling" convention the
+			// plain-letter layer's own d/D and v/V pairs already use,
+			// just spelled as a chord's own second key instead of a
+			// whole separate top-level letter, since there was no
+			// letter left to spare for a fourth verb here.
 			{'c', "Compress…", func(r *Root) { r.openCompress() }},
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
 			{'E', "Extract, delete original", func(r *Root) { r.extractCurrentArchive(true) }},
+			{'m', "Mounts", func(r *Root) { r.openMounts() }},
+			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
+			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
+			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 		}},
 	}
 }
