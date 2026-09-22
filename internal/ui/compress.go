@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // Compress and Extract: real archive creation and unpacking, both
@@ -204,18 +206,24 @@ func checkTools(names []string) error {
 // current selection (one file, several files, or a whole directory —
 // selectedOrCurrentPaths, the same target set Copy/Cut/Multiply already
 // use) into a new file right beside it, via a real external tool
-// chosen from the Format dropdown.
+// chosen from the Format dropdown, or — once a split is active — into
+// the other pane's own directory instead (see runCompress), the same
+// default Extract already uses (see splitPartner).
 //
-// Local panels only for now, the same scope Rsync's own Source/
-// Destination fields default to before a connection is involved —
-// there is no remote archive-creation path yet.
+// The active panel itself (where the selection actually lives) has to
+// be local: there is no remote source path yet — compressing a
+// selection that lives on a remote connection would first need to
+// download all of it, the same larger, separate scope
+// enterRemoteArchive's own "browse into a remote archive" already
+// carved out for itself rather than folding into this feature. The
+// *destination* may be remote, though — see runCompressToRemote.
 func (r *Root) openCompress() {
 	if r.panel.inArchiveView() {
 		r.showError(errNotSupportedInArchive)
 		return
 	}
 	if r.panel.remote != nil {
-		r.showError(fmt.Errorf("compress: remote panels aren't supported yet"))
+		r.showError(fmt.Errorf("compress: this panel must be local (the destination pane may be remote, once a split is active)"))
 		return
 	}
 	targets := r.selectedOrCurrentPaths()
@@ -411,15 +419,20 @@ func compressTargetName(target, destDir string) string {
 }
 
 // runCompress is compressButtons' own "Compress": refuses an empty
-// name or one that would collide with a file that already exists
-// (never silently overwriting — the same "kein Datenverlust" principle
-// every destructive-adjacent action in this app already follows),
-// checks the chosen format's own required tools, then hands the real
-// command line to compressjob.go's own background engine (see
-// startCompressJob) — the same "runs behind the scenes, the tab
-// re-renders once it's done" shape Copy/Cut/Paste already have, per the
-// user's own explicit request that Compress not take over the whole
-// screen the way Rsync's own foreground "Run" does.
+// name, checks the chosen format's own required tools, then either
+// hands the real command line straight to compressjob.go's own
+// background engine (see startCompressJob) — the same "runs behind the
+// scenes, the tab re-renders once it's done" shape Copy/Cut/Paste
+// already have — or, once a split is active and the other pane is a
+// remote connection, routes through runCompressToRemote instead (see
+// its own doc comment).
+//
+// destPanel is the split partner's own panel once a split is active
+// (the same default extractCurrentArchive already uses — see
+// splitPartner), or r.panel itself otherwise: "compress into the other
+// pane" only where there's a genuine "other pane" to mean, exactly the
+// existing "no split, no guessing" reasoning defaultRsyncDestination's
+// own doc comment already gives.
 func (r *Root) runCompress() {
 	format := archiveFormats()[r.compressFormatIndex]
 	name := strings.TrimSpace(r.compressOutputName)
@@ -427,22 +440,42 @@ func (r *Root) runCompress() {
 		r.showError(fmt.Errorf("compress: an output name is required"))
 		return
 	}
-	destDir := r.panel.path
-	outPath := filepath.Join(destDir, name+format.ext)
-	if _, err := os.Stat(outPath); err == nil {
-		r.showError(fmt.Errorf("compress: %s already exists — pick a different name", filepath.Base(outPath)))
-		return
+
+	sourceDir := r.panel.path
+	destPanel := r.panel
+	if partnerIdx, ok := r.splitPartner(); ok {
+		destPanel = r.tabs[partnerIdx]
 	}
+	outputName := name + format.ext
+
 	if err := checkTools(format.compressTools); err != nil {
 		r.showError(fmt.Errorf("compress: %w", err))
 		return
 	}
 
+	if destPanel.remote != nil {
+		r.runCompressToRemote(format, outputName, sourceDir, destPanel)
+		return
+	}
+
+	destDir := destPanel.path
+	outPath := filepath.Join(destDir, outputName)
+	if _, err := os.Stat(outPath); err == nil {
+		r.showError(fmt.Errorf("compress: %s already exists — pick a different name", filepath.Base(outPath)))
+		return
+	}
+
 	names := make([]string, len(r.compressTargets))
 	for i, t := range r.compressTargets {
-		names[i] = shellQuoteArg(compressTargetName(t, destDir))
+		names[i] = shellQuoteArg(compressTargetName(t, sourceDir))
 	}
-	command := format.compress(shellQuoteArg(name+format.ext), names)
+	// outPath, not just outputName: cmd.Dir (set to sourceDir — see
+	// reallyStartCompressJob) has to stay the *source* directory so the
+	// target names above resolve correctly, so the archive's own
+	// destination — sourceDir itself, or a different local pane's own
+	// directory once a split is active — needs its full path spelled
+	// out instead of relying on cmd.Dir to supply it.
+	command := format.compress(shellQuoteArg(outPath), names)
 
 	r.hideOverlay()
 	r.startCompressJob(compressRequest{
@@ -452,6 +485,112 @@ func (r *Root) runCompress() {
 		label:      filepath.Base(outPath),
 		destDir:    destDir,
 	})
+}
+
+// runCompressToRemote is runCompress' own remote-destination path:
+// compresses locally into a throwaway temp file (no real shell command
+// can write directly to an SFTP path), then, once that succeeds,
+// uploads it to destPanel's own remote directory (see
+// compressRequest.onSuccess) — its own separate background stage, with
+// its own "Uploading" status-bar entry, rather than one job silently
+// doing two unrelated things. Refuses up front, before compressing
+// anything, if a file already exists at the remote destination — the
+// same "never silently overwrite" refusal the local path already
+// makes, just checked with transferSide.exists instead of os.Stat.
+func (r *Root) runCompressToRemote(format archiveFormat, outputName, sourceDir string, destPanel *Panel) {
+	remote := destPanel.remote
+	destSide := transferSide{client: remote}
+	destPath := destSide.join(destPanel.path, outputName)
+	if destSide.exists(destPath) {
+		r.showError(fmt.Errorf("compress: %s already exists on %s — pick a different name", outputName, destPanel.remoteConn.Label()))
+		return
+	}
+
+	tempPath, err := newCompressTempFile(format.ext)
+	if err != nil {
+		r.showError(fmt.Errorf("compress: %w", err))
+		return
+	}
+
+	names := make([]string, len(r.compressTargets))
+	for i, t := range r.compressTargets {
+		names[i] = shellQuoteArg(compressTargetName(t, sourceDir))
+	}
+	command := format.compress(shellQuoteArg(tempPath), names)
+
+	r.hideOverlay()
+	r.startCompressJob(compressRequest{
+		command:    command,
+		errContext: "compress",
+		verb:       "Compressing",
+		label:      outputName,
+		onSuccess: func(r *Root) {
+			r.startCompressUpload(tempPath, destPanel, destPath, outputName)
+		},
+	})
+}
+
+// newCompressTempFile reserves a real, unique temporary path for a
+// compress-to-remote stage's own local staging copy, then removes it
+// again immediately — this only ever needs the *name*, never the
+// (empty) file os.CreateTemp itself creates: zip in particular treats
+// an already-existing target as an archive to update rather than
+// create fresh, which an empty, invalid placeholder file would only
+// confuse. The same real, unique-name-then-remove idiom
+// downloadRemoteToTemp's own os.CreateTemp call establishes, just
+// without that one's own subsequent write.
+func newCompressTempFile(ext string) (string, error) {
+	f, err := os.CreateTemp("", "breakthrough-compress-*"+ext)
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return name, nil
+}
+
+// startCompressUpload is runCompressToRemote's own follow-on stage,
+// started only once the local compress itself has actually succeeded
+// (see its own onSuccess) — runs uploadCompressedFile in the
+// background, then reloads whichever tab shows destPanel's own
+// directory once the upload succeeds.
+func (r *Root) startCompressUpload(localPath string, destPanel *Panel, destPath, label string) {
+	remote := destPanel.remote
+	r.startCompressJob(compressRequest{
+		errContext: "compress",
+		verb:       "Uploading",
+		label:      label,
+		goFunc:     func(context.Context) error { return uploadCompressedFile(localPath, remote, destPath) },
+		onSuccess: func(r *Root) {
+			r.forEachTab(func(p *Panel) {
+				if p.remote == remote && p.path == destPanel.path {
+					r.showError(p.load(p.path))
+				}
+			})
+		},
+	})
+}
+
+// uploadCompressedFile is startCompressUpload's own synchronous core —
+// split out so a test can call it directly against a fake
+// remotefs.Client, without needing to run the enclosing background job
+// machinery at all (the same reasoning watchAndWaitRsync's own doc
+// comment in rsyncjob.go gives for its identical split — this project's
+// own tests never run a real Application event loop, and
+// reallyStartCompressGoFunc's own r.app.QueueUpdateDraw call needs one
+// to mean anything for a job that's actually still in flight).
+//
+// Uploads localPath to destPath via copyTransferItem (the same
+// recursive local↔remote transfer primitive Copy/Cut/Paste's own
+// remote engine already uses — see remotepaste.go's own package doc
+// comment), and removes the local staging copy regardless of outcome —
+// its only reason to exist was to get uploaded.
+func uploadCompressedFile(localPath string, remote remotefs.Client, destPath string) error {
+	defer func() { _ = os.Remove(localPath) }()
+	var skipped []transferSkip
+	_, err := copyTransferItem(transferSide{}, transferSide{client: remote}, localPath, destPath, &skipped)
+	return err
 }
 
 // extractCurrentArchive is the context menu's "Extract"/"Extract,
@@ -467,6 +606,12 @@ func (r *Root) runCompress() {
 // actually done, so there is no "toOtherPane" branch to reload one
 // place or another synchronously here any more.
 //
+// The archive itself has to sit on a local panel: there is no remote
+// source path yet, the same scope limit openCompress' own doc comment
+// explains in full. The *destination* may be remote, once a split is
+// active and the other pane is a connected tab — see
+// extractCurrentArchiveToRemote.
+//
 // deleteOriginal, once extraction has actually succeeded, moves the
 // original archive to the Trash (never a hard delete outright — see
 // deleteExtractedArchive for what happens if that fails).
@@ -476,7 +621,7 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 		return
 	}
 	if r.panel.remote != nil {
-		r.showError(fmt.Errorf("extract: remote archives aren't supported yet"))
+		r.showError(fmt.Errorf("extract: this panel must be local (the destination pane may be remote, once a split is active)"))
 		return
 	}
 	_, archivePath, ok := r.panel.CurrentRowPath()
@@ -489,9 +634,9 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 		return
 	}
 
-	destDir := filepath.Dir(archivePath)
+	destPanel := r.panel
 	if partnerIdx, ok := r.splitPartner(); ok {
-		destDir = r.tabs[partnerIdx].path
+		destPanel = r.tabs[partnerIdx]
 	}
 
 	if err := checkTools(format.extractTools); err != nil {
@@ -499,6 +644,12 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 		return
 	}
 
+	if destPanel.remote != nil {
+		r.extractCurrentArchiveToRemote(format, archivePath, destPanel, deleteOriginal)
+		return
+	}
+
+	destDir := destPanel.path
 	command := format.extract(shellQuoteArg(archivePath), shellQuoteArg(destDir))
 	req := compressRequest{
 		command:    command,
@@ -511,6 +662,97 @@ func (r *Root) extractCurrentArchive(deleteOriginal bool) {
 		req.deleteOriginal = archivePath
 	}
 	r.startCompressJob(req)
+}
+
+// extractCurrentArchiveToRemote is extractCurrentArchive's own remote-
+// destination path: extracts locally into a throwaway temp directory
+// (no real shell command can write directly to an SFTP path), then,
+// once that succeeds, uploads what it produced into destPanel's own
+// remote directory (see startExtractUpload) — its own separate
+// background stage, with its own "Uploading" status-bar entry, rather
+// than one job silently doing two unrelated things.
+func (r *Root) extractCurrentArchiveToRemote(format archiveFormat, archivePath string, destPanel *Panel, deleteOriginal bool) {
+	tempDir, err := os.MkdirTemp("", "breakthrough-extract-*")
+	if err != nil {
+		r.showError(fmt.Errorf("extract: %w", err))
+		return
+	}
+
+	command := format.extract(shellQuoteArg(archivePath), shellQuoteArg(tempDir))
+	r.startCompressJob(compressRequest{
+		command:    command,
+		errContext: fmt.Sprintf("extract %s", filepath.Base(archivePath)),
+		verb:       "Extracting",
+		label:      filepath.Base(archivePath),
+		onSuccess: func(r *Root) {
+			r.startExtractUpload(tempDir, destPanel, archivePath, deleteOriginal)
+		},
+	})
+}
+
+// startExtractUpload is extractCurrentArchiveToRemote's own follow-on
+// stage: runs uploadExtractedTree in the background, then, once it
+// succeeds, reloads whichever tab shows destPanel's own directory and
+// runs deleteOriginal's own Trash step — only now that the whole
+// extraction has actually landed on the real remote destination, the
+// same "only after a real success" guarantee the local path already
+// gives.
+func (r *Root) startExtractUpload(tempDir string, destPanel *Panel, archivePath string, deleteOriginal bool) {
+	remote := destPanel.remote
+	r.startCompressJob(compressRequest{
+		errContext: fmt.Sprintf("extract %s", filepath.Base(archivePath)),
+		verb:       "Uploading",
+		label:      filepath.Base(archivePath),
+		goFunc:     func(context.Context) error { return uploadExtractedTree(tempDir, destPanel) },
+		onSuccess: func(r *Root) {
+			r.forEachTab(func(p *Panel) {
+				if p.remote == remote && p.path == destPanel.path {
+					r.showError(p.load(p.path))
+				}
+			})
+			if deleteOriginal {
+				r.deleteExtractedArchive(archivePath)
+			}
+		},
+	})
+}
+
+// uploadExtractedTree is startExtractUpload's own synchronous core —
+// split out so a test can call it directly against a fake
+// remotefs.Client, the same reasoning uploadCompressedFile's own doc
+// comment gives.
+//
+// Uploads every entry directly inside tempDir into destPanel's own
+// remote directory via copyTransferItem — one call per top-level
+// entry, never the temp directory itself, which would try to create
+// destPanel's own already-existing directory anew and fail outright.
+// Every entry is checked for a remote conflict before any of them are
+// actually uploaded, so a name collision partway through never leaves
+// the remote destination half-extracted. tempDir is removed afterward
+// regardless of outcome — its only reason to exist was to get
+// uploaded.
+func uploadExtractedTree(tempDir string, destPanel *Panel) error {
+	defer func() { _ = os.RemoveAll(tempDir) }()
+	local := transferSide{}
+	dest := transferSide{client: destPanel.remote}
+	children, err := local.list(tempDir)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if dest.exists(dest.join(destPanel.path, child.Name)) {
+			return fmt.Errorf("%s already exists on %s", child.Name, destPanel.remoteConn.Label())
+		}
+	}
+	var skipped []transferSkip
+	for _, child := range children {
+		srcPath := local.join(tempDir, child.Name)
+		destPath := dest.join(destPanel.path, child.Name)
+		if _, err := copyTransferItem(local, dest, srcPath, destPath, &skipped); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // deleteExtractedArchive is extractCurrentArchive's own "delete
