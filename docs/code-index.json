@@ -1023,13 +1023,13 @@
     },
     {
       "path": "internal/ui/compress.go",
-      "size": 20560,
-      "sha256": "5538e95c5328da488bff05a6c66185ff31d66acee9237105db4f05d60f519f97"
+      "size": 21527,
+      "sha256": "b88a1a034afd1bfa18e24c63c9e13b256ee544a32d93a620c33c4e640ed8de2f"
     },
     {
       "path": "internal/ui/compress_test.go",
-      "size": 14103,
-      "sha256": "6b5f63b97b1224c2e9c8f8370a4c88a659eed47a240f7965f944e6b1f3030001"
+      "size": 16488,
+      "sha256": "12d9d5f72f1249907d426b8aff3b24bba19d6f5eca7075a716accad243218b90"
     },
     {
       "path": "internal/ui/compressjob.go",
@@ -14853,10 +14853,17 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress.go",
+      "name": "compressTargetName",
+      "kind": "function",
+      "line": 406
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress.go",
       "name": "runCompress",
       "kind": "method",
       "receiver": "*Root",
-      "line": 404
+      "line": 423
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14864,7 +14871,7 @@
       "name": "extractCurrentArchive",
       "kind": "method",
       "receiver": "*Root",
-      "line": 454
+      "line": 473
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14872,7 +14879,7 @@
       "name": "deleteExtractedArchive",
       "kind": "method",
       "receiver": "*Root",
-      "line": 514
+      "line": 533
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -14940,65 +14947,86 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
+      "name": "TestCompressTargetNameUsesDotForTheCurrentDirectoryItself",
+      "kind": "function",
+      "line": 172
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
+      "name": "TestCompressTargetNameUsesTheBaseNameOtherwise",
+      "kind": "function",
+      "line": 180
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
+      "name": "TestRunCompressOnTheCurrentDirectoryItselfBuildsAWorkingCommand",
+      "kind": "function",
+      "line": 197
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
       "name": "TestOpenCompressPopulatesTargetsAndDefaultName",
-      "kind": "function",
-      "line": 168
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/compress_test.go",
-      "name": "TestOpenCompressRefusedOnRemotePanel",
-      "kind": "function",
-      "line": 189
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/compress_test.go",
-      "name": "TestRunCompressRefusesAnEmptyOutputName",
-      "kind": "function",
-      "line": 205
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/compress_test.go",
-      "name": "TestRunCompressRefusesAnAlreadyExistingOutputFile",
       "kind": "function",
       "line": 221
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
+      "name": "TestOpenCompressRefusedOnRemotePanel",
+      "kind": "function",
+      "line": 242
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
+      "name": "TestRunCompressRefusesAnEmptyOutputName",
+      "kind": "function",
+      "line": 258
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
+      "name": "TestRunCompressRefusesAnAlreadyExistingOutputFile",
+      "kind": "function",
+      "line": 274
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compress_test.go",
       "name": "TestExtractCurrentArchiveRefusesAnUnrecognizedFile",
       "kind": "function",
-      "line": 250
+      "line": 303
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
       "name": "TestExtractCurrentArchiveRefusedOnRemotePanel",
       "kind": "function",
-      "line": 266
+      "line": 319
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
       "name": "TestMenuTargetIsArchiveMatchesOnlyRealArchiveFiles",
       "kind": "function",
-      "line": 283
+      "line": 336
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
       "name": "TestDeleteExtractedArchiveMovesItToTrashOnSuccess",
       "kind": "function",
-      "line": 336
+      "line": 389
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compress_test.go",
       "name": "TestDeleteExtractedArchiveAsksBeforeAHardDeleteWhenTrashFails",
       "kind": "function",
-      "line": 361
+      "line": 414
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -18205,14 +18233,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -32384,5 +32412,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "e116f10695ab9851aeefada3c8864cbc94e663a29dbb869f72cce52e24f74f2b"
+  "merkle_root": "1f2aa98a4f276c1f14d7e218d0c6d7c265053f6c739875825bb8798a7e94f500"
 }
