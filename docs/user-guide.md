@@ -549,6 +549,10 @@ step.
 Renames a whole selection through a fixed pipeline, with a live preview
 of the result. Reached from the context menu's "Batch rename".
 
+Applying it to a single folder (nothing else selected) renames the
+files and subfolders *inside* it, not the folder itself — multi-select
+several items first if you want to rename them, folders included.
+
 The screen has the steps down the left, the selected step's own settings
 on the right, and the preview underneath.
 

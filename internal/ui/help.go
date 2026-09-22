@@ -469,6 +469,11 @@ var helpText = strings.TrimLeft(`
   preview of every selected file underneath — updated on every change,
   no separate "Preview" button to press first.
 
+  Applied to a single folder (nothing else selected), it renames the
+  files and subfolders inside that folder, not the folder itself.
+  Select several items first to rename them directly, folders
+  included.
+
   Left / Right      Move between the steps and the settings
   Up / Down         Move between steps, or between one step's settings
   Enter / Space     Change the selected setting — toggles a yes/no
