@@ -36,6 +36,7 @@ material, always matching the version you are actually running.
 - [The command line](#the-command-line)
 - [Status bar](#status-bar)
 - [Options and configuration](#options-and-configuration)
+- [Activity log](#activity-log)
 - [Settings reference](#settings-reference)
 - [Keyboard reference](#keyboard-reference)
 
@@ -1880,6 +1881,34 @@ list settings you don't want to change. Booleans accept
 A malformed line costs that one setting and is reported at startup — it
 never stops breakthrough from starting.
 
+## Activity log
+
+Off by default. Turn it on under Options → Activity log with `log_level`:
+`off`, `errors`, `actions`, `detailed`, or `debug` — each level records
+everything the one before it does, plus more. `actions` is the level
+most people want: one line per real, state-changing action (a Copy, a
+Rename, a chmod, a Compress, a Rsync run, an SFTP connect…), enough to
+answer "what did I actually do with breakthrough" after the fact, and a
+future Undo's own foundation. `errors` alone still records a failed
+action even with everything else dialed down; `detailed` adds each
+file within a batch; `debug` adds internal diagnostic detail.
+
+Independently of the level, seven categories — File operations,
+Permission changes, Archives, Sed Replace/Batch Rename, Rsync, Remote
+connections/transfers, and Shell — can each be switched off on their
+own, so you can log everything about, say, permission changes while
+staying silent about the shell.
+
+The log itself is a plain, one-line-per-entry text file, greppable with
+ordinary tools (`tail -f`, `grep`, `less`): `/var/log/breakthrough/
+breakthrough.log` if that directory is writable, otherwise the same
+per-user state directory the crash log already uses (see [Config file
+format and locations](#config-file-format-and-locations)), with a
+one-time notice the first time that fallback happens. Append-only —
+breakthrough never rotates or truncates it; that is `logrotate`'s job.
+
+There is no in-app viewer yet — read it directly for now.
+
 ## Settings reference
 
 Every key breakthrough recognizes, with its default:
@@ -1927,6 +1956,14 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 | `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
+| `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
+| `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
+| `log_category_permissions` | `true` | Log permission changes (chmod, chown) |
+| `log_category_archive` | `true` | Log Compress/Extract |
+| `log_category_textops` | `true` | Log Sed Replace and Batch Rename |
+| `log_category_rsync` | `true` | Log Rsync runs |
+| `log_category_remote` | `true` | Log remote connections and SFTP transfers |
+| `log_category_shell` | `true` | Log the bash line, "Open with…", and Edit |
 
 ## Keyboard reference
 

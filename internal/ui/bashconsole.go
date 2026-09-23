@@ -11,6 +11,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"golang.org/x/term"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 // bashHintText is bashHint's own fixed content — a single-row, always-
@@ -537,7 +539,7 @@ func (r *Root) runBashCommand(command string) {
 		return
 	}
 
-	r.runShellCommandFullScreen(command)
+	r.runShellCommandFullScreen(command, activitylog.CategoryShell)
 }
 
 // runShellCommandFullScreen suspends the TUI (see
@@ -590,7 +592,7 @@ func (r *Root) runBashCommand(command string) {
 //
 // The panel reloads once the command exits, in case it changed anything
 // in the directory currently on screen.
-func (r *Root) runShellCommandFullScreen(command string) {
+func (r *Root) runShellCommandFullScreen(command string, category activitylog.Category) {
 	var runErr error
 	r.app.Suspend(func() {
 		fmt.Printf("$ %s\n", command)
@@ -612,9 +614,11 @@ func (r *Root) runShellCommandFullScreen(command string) {
 	r.bashLine.SetText("", true)
 	r.app.SetFocus(r.panel.table)
 	if runErr != nil {
+		r.activityLog.Error(category, fmt.Sprintf("%s: %v", command, runErr))
 		r.showError(fmt.Errorf("%s: %w", command, runErr))
 		return
 	}
+	r.activityLog.Action(category, fmt.Sprintf("ran: %s", command))
 	r.showError(r.panel.load(r.panel.path))
 }
 

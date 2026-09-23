@@ -12,6 +12,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -132,6 +133,17 @@ type pasteJob struct {
 	// made for the now-superseded remote-only engine this job type
 	// replaces.
 	skippedSymlinks []string
+
+	// succeeded counts items actually copied/moved/restored so far —
+	// incremented once per applyPasteOneResult's own success path.
+	// Distinct from remaining (counts down regardless of outcome) and
+	// errors (only genuine failures): a conflict resolved as Skip, or
+	// as a no-op "if newer"/"if not empty" (see resolveConflictAsync),
+	// settles the item via pasteItemDone directly without ever landing
+	// here, so neither of those already-existing counters alone can
+	// tell finishPasteJob how many items to report as a real state
+	// change in the activity log.
+	succeeded int
 
 	// restoreDests, when non-nil, is Restore-from-Trash's own per-item
 	// destination list, parallel to items (see Root.restoreSelectionFromTrash):
@@ -900,6 +912,32 @@ func (r *Root) pasteOneRemote(job *pasteJob, src, dst string, force bool, mode f
 // loop, the same reason detailssidebar.go's own computeDetailsDirSize
 // leaves its result-handling untestable through the goroutine and pins
 // it directly instead (see TestComputeDetailsDirSizeStoresResult).
+// pasteLogCategory is the activity log category a job's own items log
+// under: CategoryRemote whenever either side is a remote connection
+// (an SFTP transfer, regardless of direction), CategoryFileOps for a
+// purely local job — matching srcClient/destClient's own "nil means
+// local" convention (see pasteJob's own doc comment).
+func pasteLogCategory(job *pasteJob) activitylog.Category {
+	if job.srcClient != nil || job.destClient != nil {
+		return activitylog.CategoryRemote
+	}
+	return activitylog.CategoryFileOps
+}
+
+// pasteLogVerb is the past-tense verb a job's own activity log lines
+// use — Restore-from-Trash and Cut both also set job.cut (see
+// restoreDests' own doc comment), so restoreDests is checked first.
+func pasteLogVerb(job *pasteJob) string {
+	switch {
+	case job.restoreDests != nil:
+		return "restored"
+	case job.cut:
+		return "moved"
+	default:
+		return "copied"
+	}
+}
+
 func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 	if job.ctx.Err() != nil {
 		return
@@ -908,6 +946,8 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 		r.recordPasteError(job, err)
 		return
 	}
+	job.succeeded++
+	r.activityLog.Detail(pasteLogCategory(job), fmt.Sprintf("%s %q -> %q", pasteLogVerb(job), src, dst))
 	if job.cut {
 		// Only for a successful Move, not Copy: src is untouched by a
 		// copy (still exactly what Details would already be showing, if
@@ -937,6 +977,7 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 // this item's outcome as final.
 func (r *Root) recordPasteError(job *pasteJob, err error) {
 	job.errors = append(job.errors, err)
+	r.activityLog.Error(pasteLogCategory(job), fmt.Sprintf("%s: %v", pasteLogVerb(job), err))
 	r.pasteItemDone(job)
 }
 
@@ -968,6 +1009,9 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 		return // already superseded/cancelled — see cancelPasteJob
 	}
 	r.pasteJob = nil
+	if job.succeeded > 0 {
+		r.activityLog.Action(pasteLogCategory(job), fmt.Sprintf("%s %d item(s)", pasteLogVerb(job), job.succeeded))
+	}
 	// Stops pasteWorker/animatePasteProgress (both select on job.ctx.Done()
 	// — see their own doc comments): there's nothing left in job.work by
 	// this point (every item already has a final outcome, or this

@@ -9,6 +9,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/session"
@@ -133,10 +134,16 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 	}
 
 	var firstErr error
+	moved := 0
 	for _, src := range targets {
-		if err := fsops.MoveToTrash(src, dir); err != nil && firstErr == nil {
-			firstErr = err
-		} else if err == nil {
+		if err := fsops.MoveToTrash(src, dir); err != nil {
+			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("move to trash %q: %v", src, err))
+			if firstErr == nil {
+				firstErr = err
+			}
+		} else {
+			moved++
+			r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("moved %q to trash", src))
 			// Cleared ("") rather than followed to its real new location:
 			// that's an obscure, hash-named path under trashDir, not
 			// somewhere worth showing Details pointed at — "(nothing
@@ -145,6 +152,9 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 			// showing simply isn't at src any more.
 			r.refreshDetailsIfShowing(src, "")
 		}
+	}
+	if moved > 0 {
+		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved %d item(s) to trash", moved))
 	}
 	r.panel.deselectAll()
 	r.reloadPanel(firstErr)
@@ -217,12 +227,21 @@ func (r *Root) openRemoveConfirm() {
 	}
 	r.openPurgeConfirm(removeConfirmMessage(targets), func() {
 		var firstErr error
+		removed := 0
 		for _, target := range targets {
-			if err := fsops.PurgeCompletely(target); err != nil && firstErr == nil {
-				firstErr = err
-			} else if err == nil {
+			if err := fsops.PurgeCompletely(target); err != nil {
+				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove %q: %v", target, err))
+				if firstErr == nil {
+					firstErr = err
+				}
+			} else {
+				removed++
+				r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %q", target))
 				r.refreshDetailsIfShowing(target, "") // permanently gone — see refreshDetailsIfShowing's own doc comment
 			}
+		}
+		if removed > 0 {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d item(s)", removed))
 		}
 		r.panel.deselectAll()
 		r.reloadPanel(firstErr)
@@ -260,19 +279,29 @@ func (r *Root) openRemoveConfirmRemote(remote remotefs.Client, targets []string,
 	}
 	r.openPurgeConfirm(message, func() {
 		var firstErr error
+		removed := 0
 		for _, target := range targets {
 			entry, err := remote.Lstat(target)
 			if err != nil {
+				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
 				if firstErr == nil {
 					firstErr = err
 				}
 				continue
 			}
-			if err := removeRemoteRecursive(remote, target, entry.Type == fsops.TypeDir); err != nil && firstErr == nil {
-				firstErr = err
-			} else if err == nil {
+			if err := removeRemoteRecursive(remote, target, entry.Type == fsops.TypeDir); err != nil {
+				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("remove remote %q: %v", target, err))
+				if firstErr == nil {
+					firstErr = err
+				}
+			} else {
+				removed++
+				r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed remote %q", target))
 				r.refreshDetailsIfShowing(target, "")
 			}
+		}
+		if removed > 0 {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %d remote item(s)", removed))
 		}
 		r.panel.deselectAll()
 		r.reloadPanel(firstErr)
@@ -387,7 +416,12 @@ func (r *Root) openEmptyTrashConfirm() {
 	}
 
 	r.openPurgeConfirm(fmt.Sprintf("Permanently empty the trash (%d items)?", len(items)), func() {
-		_, err := fsops.EmptyTrash(dir)
+		n, err := fsops.EmptyTrash(dir)
+		if err != nil {
+			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("empty trash: %v", err))
+		} else {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("emptied trash (%d item(s))", n))
+		}
 		r.reloadPanel(err)
 	})
 }

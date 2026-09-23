@@ -6,6 +6,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 // TestOpenCurrentEntryWithPromptsForCommand pins that "Open with…"
@@ -98,6 +100,32 @@ func TestOpenCurrentEntryWithEmptySubmissionRemembersNothing(t *testing.T) {
 
 // TestOpenCurrentEntryWithOnALocalPanelDoesNotError mirrors
 // TestPlainKeyEditRunsEditAction's own reasoning for the local path.
+// TestOpenCurrentEntryWithLogsAnAction pins openCurrentEntryWith's own
+// activity-log instrumentation via runCommandOnFileAndReload.
+// app.Suspend is a no-op here (no real screen behind r.app), so this
+// only pins the logging wiring on the "command exited 0" path, not that
+// "less" actually ran — the same acknowledged limitation
+// TestPlainKeyEditRunsEditAction's own doc comment notes in
+// bottombar_test.go.
+func TestOpenCurrentEntryWithLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1)
+	readLog := attachTestActivityLog(t, r)
+
+	r.openCurrentEntryWith()
+	r.prompt.SetText("less")
+	r.finishPrompt(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryShell)) || !strings.Contains(got, "ran less on") {
+		t.Errorf("log = %q, want a shell entry about running less", got)
+	}
+}
+
 func TestOpenCurrentEntryWithOnALocalPanelDoesNotError(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
