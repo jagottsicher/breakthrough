@@ -13,6 +13,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -181,6 +182,25 @@ type Root struct {
 	theme        config.ResolvedTheme
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
+
+	// activityLog is the optional activity log's own live sink (see
+	// internal/activitylog's own doc comment) — built once at startup
+	// from settings, and rebuilt (see reopenActivityLog) whenever
+	// Options changes LogLevel or a log_category_* toggle, since the
+	// Logger itself holds an immutable snapshot of both rather than
+	// reading r.settings live on every call. Never nil itself (see
+	// newActivityLogger), even with logging off — its own methods are
+	// all nil-receiver-safe regardless, the same convention every call
+	// site relies on to log unconditionally without asking "is logging
+	// even on" first.
+	activityLog *activitylog.Logger
+	// activityLogFallbackWarned tracks whether this run has already
+	// told the user once that /var/log/breakthrough isn't writable and
+	// logging fell back to a per-user directory instead (see
+	// newActivityLogger) — shown once per run, not repeated every time
+	// Options reopens the log (a category toggle, say) with the same
+	// unchanged fallback still in effect.
+	activityLogFallbackWarned bool
 
 	// settingOrigins says, per config key, which tier the value
 	// currently in force actually came from (see config.Origin) — shown
@@ -1843,6 +1863,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	if notice := r.pruneTrashAtStartup(); notice != "" {
 		startupNotices = append(startupNotices, notice)
 	}
+	logger, activityLogNotice := r.newActivityLogger()
+	r.activityLog = logger
+	if activityLogNotice != "" {
+		startupNotices = append(startupNotices, activityLogNotice)
+	}
 	if len(startupNotices) > 0 {
 		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
 	}
@@ -2649,6 +2674,7 @@ func (r *Root) setMouseEnabled(enabled bool) {
 // user never actually chose to leave behind.
 func (r *Root) confirmQuit() {
 	r.saveTabs()
+	_ = r.activityLog.Close()
 	r.app.Stop()
 }
 
