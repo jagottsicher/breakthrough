@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 57165,
-      "sha256": "d43027ec1deebd435bbff2e1b71a2e40212f94f00343ea6a4fb83495303c7660"
+      "size": 58022,
+      "sha256": "73bcadbaf6d781cbcd8a4c37357d0c3cd7871148a3932b774504e0c78e81ea8a"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 110995,
-      "sha256": "9d97c383b15bc2b4929e86036c0a63b790e71a5057deb3eae6cca133a5f084b4"
+      "size": 113167,
+      "sha256": "6bbbf7be64b6b30a8b77b3aa1326b8a6baadca001fa223788139653621c128f5"
     },
     {
       "path": "docs/whitepaper.md",
@@ -33861,5 +33861,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "1a93c8faaebcc586a4d9d1d36d555db4b018bde7310116c31c74c7b8284874a8"
+  "merkle_root": "ec310b510949803d32fd7b44496f1fd5f789922965336bf706796a3c16930cb8"
 }
