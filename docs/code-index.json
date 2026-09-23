@@ -1108,13 +1108,13 @@
     },
     {
       "path": "internal/ui/compressjob.go",
-      "size": 13655,
-      "sha256": "c5b023da23c17c1dce3bb0dcf4e21a119b29e3d4349138cfb254773318721273"
+      "size": 15066,
+      "sha256": "42da0cdd60a90ec2dced9f9cd1b8741773eb5ad73a0af261e3aefa603945a4e4"
     },
     {
       "path": "internal/ui/compressjob_test.go",
-      "size": 10128,
-      "sha256": "72ede4c294cd22a9544e24267d3507e4a87a9528eeebe72a6d7a41dd40fd1853"
+      "size": 11397,
+      "sha256": "c8ca681d8a6adda68c9d744399a42ca3d3d8f962d722bbfba6e451a54fd64ff1"
     },
     {
       "path": "internal/ui/connectdialog.go",
@@ -16177,14 +16177,14 @@
       "file": "internal/ui/compressjob.go",
       "name": "compressJob",
       "kind": "type",
-      "line": 45
+      "line": 65
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compressjob.go",
       "name": "compressRequest",
       "kind": "type",
-      "line": 97
+      "line": 117
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16192,7 +16192,7 @@
       "name": "startCompressJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 122
+      "line": 142
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16200,7 +16200,7 @@
       "name": "reallyStartCompressJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 138
+      "line": 158
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16208,7 +16208,7 @@
       "name": "reallyStartCompressGoFunc",
       "kind": "method",
       "receiver": "*Root",
-      "line": 210
+      "line": 233
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16216,14 +16216,14 @@
       "name": "finishCompressJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 242
+      "line": 265
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compressjob.go",
       "name": "compressPastTenseVerb",
       "kind": "function",
-      "line": 280
+      "line": 303
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16231,7 +16231,7 @@
       "name": "cancelCompressJob",
       "kind": "method",
       "receiver": "*Root",
-      "line": 290
+      "line": 313
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16239,7 +16239,7 @@
       "name": "advanceCompressQueue",
       "kind": "method",
       "receiver": "*Root",
-      "line": 300
+      "line": 323
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16247,7 +16247,7 @@
       "name": "animateCompressProgress",
       "kind": "method",
       "receiver": "*Root",
-      "line": 316
+      "line": 339
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -16336,9 +16336,16 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/compressjob_test.go",
+      "name": "TestReallyStartCompressJobSetsSid",
+      "kind": "function",
+      "line": 264
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/compressjob_test.go",
       "name": "TestCompressProgressText",
       "kind": "function",
-      "line": 258
+      "line": 287
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -32993,14 +33000,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinWidth",
+      "name": "viewerMinHeight",
       "kind": "const",
       "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinHeight",
+      "name": "viewerMinWidth",
       "kind": "const",
       "line": 24
     },
@@ -33896,5 +33903,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "b2dfa8c678b267f87d7df7daeec20ca087f4cf1f3dfdb73908b823d0e2a8933e"
+  "merkle_root": "6dc22ace078fab4ae301bae85888357fc1106d45ee90aed5775b067981c8a385"
 }
