@@ -14,6 +14,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -791,6 +792,128 @@ func newRestoreTestJob(r *Root, restoreDests []string, restoreTrashDir string, t
 	}
 	r.pasteJob = job
 	return job
+}
+
+// TestApplyPasteOneResultLogsACopyAndFinishPasteJobLogsTheSummary pins
+// applyPasteOneResult/finishPasteJob's own activity-log instrumentation
+// for an ordinary (non-cut, non-restore) Paste — a Detail line per item
+// and one Action summary line once the job's own last item lands,
+// mirroring TestFinishPasteJobReloadsEveryOpenTabShowingDestDir's own
+// direct-call shape (see newPasteTestJob's own doc comment for why this
+// bypasses startPaste/pasteWalk's own goroutine entirely).
+func TestApplyPasteOneResultLogsACopyAndFinishPasteJobLogsTheSummary(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(destDir, "apple.txt")
+	r.applyPasteOneResult(job, src, dst, nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) {
+		t.Errorf("log = %q, want a fileops entry", got)
+	}
+	if !strings.Contains(got, fmt.Sprintf("copied %q -> %q", src, dst)) {
+		t.Errorf("log = %q, want a Detail line for the copied item", got)
+	}
+	if !strings.Contains(got, "copied 1 item(s)") {
+		t.Errorf("log = %q, want finishPasteJob's own Action summary", got)
+	}
+}
+
+// TestApplyPasteOneResultLogsAMove is the Cut/Move counterpart —
+// "moved", not "copied".
+func TestApplyPasteOneResultLogsAMove(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	job := newPasteTestJob(r, true, destDir, 1)
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(destDir, "apple.txt")
+	r.applyPasteOneResult(job, src, dst, nil)
+
+	got := readLog()
+	if !strings.Contains(got, fmt.Sprintf("moved %q -> %q", src, dst)) || !strings.Contains(got, "moved 1 item(s)") {
+		t.Errorf("log = %q, want Detail and Action lines using \"moved\"", got)
+	}
+}
+
+// TestRecordPasteErrorLogsAnError pins recordPasteError's own Error-level
+// entry — the one call site every genuine per-item Paste failure goes
+// through, whether reported via applyPasteOneResult or one of
+// pasteWalk's own direct calls (see recordPasteError's own doc comment).
+func TestRecordPasteErrorLogsAnError(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	r.recordPasteError(job, fmt.Errorf("boom"))
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "boom") {
+		t.Errorf("log = %q, want a fileops error entry mentioning the failure", got)
+	}
+}
+
+// TestApplyPasteOneResultLogsARestore is Restore-from-Trash's own
+// verb — "restored", not "moved", even though job.cut is also true for
+// a restore job (see pasteLogVerb's own doc comment).
+func TestApplyPasteOneResultLogsARestore(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	dst := filepath.Join(dir, "restored.txt")
+	job := newRestoreTestJob(r, []string{dst}, filepath.Join(dir, "trash"), 1)
+	r.applyPasteOneResult(job, filepath.Join(dir, "trash", "files", "restored.txt"), dst, nil)
+
+	got := readLog()
+	if !strings.Contains(got, "restored ") || !strings.Contains(got, "restored 1 item(s)") {
+		t.Errorf("log = %q, want Detail and Action lines using \"restored\"", got)
+	}
+}
+
+// TestApplyPasteOneResultLogsUnderRemoteWhenEitherSideIsRemote pins
+// pasteLogCategory's own "remote wins" rule: an SFTP transfer logs as
+// CategoryRemote, not CategoryFileOps, regardless of which side
+// (source or destination) is the remote one.
+func TestApplyPasteOneResultLogsUnderRemoteWhenEitherSideIsRemote(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	job.destClient = &fakeRemoteClient{}
+	r.applyPasteOneResult(job, "/remote/a.txt", filepath.Join(destDir, "a.txt"), nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRemote)) {
+		t.Errorf("log = %q, want a remote entry once destClient is set", got)
+	}
+	if strings.Contains(got, string(activitylog.CategoryFileOps)) {
+		t.Errorf("log = %q, want no fileops entry once either side is remote", got)
+	}
 }
 
 // TestFinishPasteJobReloadsEveryOpenTabShowingDestDir pins the user's

@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -468,6 +469,28 @@ func TestRunRsyncRefusesAnEmptySourceOrDestination(t *testing.T) {
 	got := strings.ReplaceAll(r.errorView.GetText(true), "\n", " ")
 	if !strings.Contains(got, "required") {
 		t.Errorf("error text = %q, want it to explain that both fields are required", got)
+	}
+}
+
+// TestRunRsyncLogsAnAction pins runRsync's own activity-log
+// instrumentation via runShellCommandFullScreen. app.Suspend is a no-op
+// here (no real screen behind r.app — see runShellCommandFullScreen's
+// own doc comment), so this only pins that a successful run logs
+// correctly, the same acknowledged limitation
+// TestPlainKeyEditRunsEditAction's own doc comment already notes for
+// Edit — not that rsync itself actually ran.
+func TestRunRsyncLogsAnAction(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(filepath.Join(dir, "a.txt"))
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "b.txt"))
+	readLog := attachTestActivityLog(t, r)
+
+	r.runRsync()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRsync)) || !strings.Contains(got, "ran: ") {
+		t.Errorf("log = %q, want an rsync entry", got)
 	}
 }
 

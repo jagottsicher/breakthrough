@@ -12,6 +12,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -791,6 +792,36 @@ func TestRunDuplicateRejectsCountAboveMax(t *testing.T) {
 	}
 	if r.settings.DuplicateSeparator != before {
 		t.Error("a rejected count must not have applied/persisted anything")
+	}
+}
+
+// TestFinishDuplicateLogsAnAction pins finishDuplicate's own success
+// path — split out from runDuplicate specifically so it's directly,
+// synchronously testable (see its own doc comment), the same reasoning
+// finishCompressJob/finishRsyncJob's own direct-call tests already
+// follow.
+func TestFinishDuplicateLogsAnAction(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishDuplicate(3, nil, 1)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "duplicated 3 item(s) from 1 target(s)") {
+		t.Errorf("log = %q, want a fileops entry about the 3 duplicates", got)
+	}
+}
+
+// TestFinishDuplicateLogsAnError is the failure counterpart.
+func TestFinishDuplicateLogsAnError(t *testing.T) {
+	r, _, _ := newTestRootWithDuplicateFile(t, "hello\n")
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishDuplicate(1, errors.New("boom"), 2)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "boom") {
+		t.Errorf("log = %q, want a fileops error entry mentioning the failure", got)
 	}
 }
 
