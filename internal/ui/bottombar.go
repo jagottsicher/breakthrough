@@ -1514,18 +1514,32 @@ func (r *Root) StartClock() (stop func()) {
 // to force a redraw a plain, unconnected header never needs.
 func (r *Root) refreshActivePanelHeaderGlow() {
 	p := r.panel
-	if p == nil || p.remote == nil {
+	if p == nil {
 		return
 	}
-	if p.searchMode {
-		// setSearchStatus rebuilds the breadcrumb half of the combined
-		// text via buildHeaderSpans itself, the same as the plain
-		// branch below — reusing it here rather than duplicating that
-		// call keeps the two paths from ever drifting apart.
-		p.setSearchStatus(p.searchStatusText)
-		return
+	if p.remote != nil {
+		if p.searchMode {
+			// setSearchStatus rebuilds the breadcrumb half of the
+			// combined text via buildHeaderSpans itself, the same as
+			// the plain branch below — reusing it here rather than
+			// duplicating that call keeps the two paths from ever
+			// drifting apart.
+			p.setSearchStatus(p.searchStatusText)
+		} else {
+			text, spans := buildHeaderSpans(p.path, p.theme, true)
+			p.header.SetText(text)
+			p.headerSpans = spans
+		}
 	}
-	text, spans := buildHeaderSpans(p.path, p.theme, true)
-	p.header.SetText(text)
-	p.headerSpans = spans
+	// The filter-menu button's own "Nx" glow (see renderFilterMenuBtn)
+	// needs the exact same once-a-second nudge to keep advancing while
+	// sitting idle with a filter active, for the same reason the "@"
+	// button above does — independent of it, since a panel can have
+	// both a remote connection and an active filter at once. Skipped
+	// while filterMatchesNothing: that state deliberately stays a flat,
+	// unmoving red (see renderFilterMenuBtn's own doc comment), so
+	// there's no glow phase to advance there either.
+	if p.activeFilterCount() > 0 && !p.filterMatchesNothing {
+		p.renderFilterMenuBtn()
+	}
 }

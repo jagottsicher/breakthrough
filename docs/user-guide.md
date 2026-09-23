@@ -204,14 +204,18 @@ connection dropdown — see [Remote connections
 ### Filtering
 
 Click the "Y" button near the right edge of the path bar, or press
-`/`, to open a small dropdown with three rows, all combinable. An "Nx"
+`/`, to open a small dropdown with three rows, all combinable, plus a
+fourth "Exclude dirs" option that applies to all three at once. An "Nx"
 count appears right before the button once one or more filters are
-actually narrowing the listing (omitted while none are) — and turns
-bright red if a filter is currently hiding *everything* a directory
-would otherwise show, which otherwise looks exactly like a genuinely
-empty folder (a filter carried over from browsing somewhere else
-entirely, say, after `filter_persistent` — see below — brought it along
-into a directory it was never meant to apply to).
+actually narrowing the listing (omitted while none are) — glowing the
+same slow green breathing pulse the header's own "@" connection button
+uses (see [Remote connections (SFTP)](#remote-connections-sftp) above)
+— and turns solid red instead if a filter is currently hiding
+*everything* a directory would otherwise show, which otherwise looks
+exactly like a genuinely empty folder (a filter carried over from
+browsing somewhere else entirely, say, after `filter_persistent` — see
+below — brought it along into a directory it was never meant to apply
+to).
 
 - **Glob/regex filter** — the same live, type-to-narrow filter this app
   has always had, now living in the dropdown instead of always taking
@@ -238,6 +242,13 @@ into a directory it was never meant to apply to).
   off the `before`/`after`/`between` keyword entirely and just typing a
   relative moment on its own — `last 7 days`, or plain `7 days` — is
   shorthand for "modified within that span", the most common case.
+- **Exclude dirs** — a single on/off switch below the three filters
+  above, applying to all of them at once rather than being a filter of
+  its own: while it's on, a directory is never hidden by any of the
+  three, however it would otherwise have matched (or failed to match)
+  — only plain files are ever actually filtered. Not counted toward the
+  "Nx" indicator itself, since it has nothing of its own to match
+  against.
 
 Typing into the size or modified-time field auto-activates its own
 checkbox, exactly the way typing into the glob field already does —
@@ -250,13 +261,14 @@ listing into a confusing state.
 
 The dropdown stays open while you tick or fill in more than one of
 these — narrowing by name, size, and modified time all at once is the
-point. `Tab`/`Shift+Tab` cycle keyboard focus through all seven of its
+point. `Tab`/`Shift+Tab` cycle keyboard focus through all eight of its
 own pieces — the glob checkbox, its Glob/Regex button, the pattern
 field, the size checkbox, the size expression field, the modified-time
-checkbox, and the modified-time expression field, wrapping back to the
-first — `Space` or `Enter` toggles whichever checkbox currently has
-focus, and `Escape` closes the whole dropdown from any of them, the
-same as clicking elsewhere or `Ctrl`+`C` already did.
+checkbox, the modified-time expression field, and the "Exclude dirs"
+checkbox, wrapping back to the first — `Space` or `Enter` toggles
+whichever checkbox currently has focus, and `Escape` closes the whole
+dropdown from any of them, the same as clicking elsewhere or `Ctrl`+`C`
+already did.
 
 `/` itself, pressed again once the dropdown is already open, is a
 faster way to reach the size or modified-time field specifically: it
@@ -268,15 +280,15 @@ safe to repurpose from typing a literal `/`: a bare filename can never
 contain one (it's the OS's own path separator), so none of these three
 expressions — a glob pattern, a size comparison, or a modified-time
 one — could ever legitimately need to type it. By default (the
-`filter_persistent` setting, see the reference below), all three carry
+`filter_persistent` setting, see the reference below), all four carry
 straight over when you navigate to a different directory — browsing a
 whole tree with the same filter switched on is the point, and the "Nx"
 count in the path bar is what keeps a still-active filter from going
 unnoticed while you do. Set `filter_persistent = false` to go back to
 the original behavior instead: navigating to a different directory
-resets all three back to their own defaults (the glob/regex filter
-cleared and re-enabled, size/modified-time switched off and cleared),
-so every new directory starts unfiltered.
+resets all four back to their own defaults (the glob/regex filter
+cleared and re-enabled, size/modified-time switched off and cleared,
+"Exclude dirs" switched off), so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, dark green for executable, red for a
