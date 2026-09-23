@@ -1869,7 +1869,29 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		startupNotices = append(startupNotices, activityLogNotice)
 	}
 	if len(startupNotices) > 0 {
-		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
+		notice := strings.Join(startupNotices, "\n\n")
+		// Deferred via QueueUpdateDraw, not called directly: NewRoot runs
+		// entirely before cmd/breakthrough ever calls
+		// Application.SetRoot/Run, so Root's own rect (and the panel's)
+		// is still tview.Box's uninitialized 15x10 default here, not the
+		// real terminal size — a direct showError call centers and sizes
+		// itself against that tiny placeholder instead of the screen, a
+		// real, reported bug (a notice landing wrapped to a handful of
+		// columns in the terminal's top-left corner). QueueUpdateDraw's
+		// own send blocks until Application.Run's event loop actually
+		// starts servicing it, which is only after Run's own first
+		// a.draw() call has already resized Root to the real screen size
+		// (see Application.Run's own "draw the screen for the first
+		// time" step, verified directly against tview's own
+		// application.go) — the first genuinely correct moment to size
+		// anything against the whole screen. Calling showOverlay
+		// synchronously from inside handleBeforeDraw instead (tried and
+		// rejected) deadlocks: Pages.ShowPage focuses the shown page,
+		// which calls Application.SetFocus, which needs the exact lock
+		// Application.draw is still holding while handleBeforeDraw runs.
+		r.safeGo("startup notice", nil, func() {
+			r.app.QueueUpdateDraw(func() { r.showError(fmt.Errorf("%s", notice)) })
+		})
 	}
 
 	return r, nil
@@ -2305,6 +2327,19 @@ func (r *Root) closeAllOverlays() {
 // mechanism in the first place. Scoped to
 // Properties and to Details alone — every other overlay, and every
 // other button-bar click, still gets the ordinary handling below.
+//
+// The rename field (renamePage) is a fourth exception, and the only one
+// that changes *what* an outside click does rather than whether it does
+// anything at all: it commits the name currently typed (via
+// finishRename(tcell.KeyEnter), the exact same path Enter itself
+// already takes) instead of the ordinary hideOverlay below, which would
+// discard it — per the user's own explicit request that a click
+// anywhere outside the field behave the same as pressing Enter, so
+// Enter is never the *only* way to confirm a rename. A click still
+// inside the field itself never reaches here at all (see the
+// primitiveContains check above) and keeps moving the cursor exactly as
+// before — deliberately left alone, since that in-field click was never
+// part of what was reported as awkward here.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
@@ -2334,6 +2369,10 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		}
 		if r.activePage == pasteConflictPage {
 			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
+		}
+		if r.activePage == renamePage {
+			r.finishRename(tcell.KeyEnter) // commits, same as Enter — see this function's own doc comment above
+			return tview.MouseConsumed, nil
 		}
 		r.hideOverlay()
 	}
