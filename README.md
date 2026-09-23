@@ -65,10 +65,12 @@ terminal.
   to `…` and Modified disappeared off the right edge entirely.
 - A live filter, tucked behind a compact "Y" button in the top row (an
   "Nx" count appears right before it once one or more are actually
-  narrowing the listing, turning bright red instead if one is currently
-  hiding everything a directory would otherwise show): click it, or
-  press `/`, to open a small dropdown with three independently
-  combinable rows, each narrowing the listing live as you type:
+  narrowing the listing — glowing the same slow green breathing pulse
+  the header's own "@" connection button uses (see below), or turning
+  solid red instead if one is currently hiding everything a directory
+  would otherwise show): click it, or press `/`, to open a small
+  dropdown with three independently combinable rows, each narrowing the
+  listing live as you type:
   - **Glob/regex** — the original filter, with a Glob/Regex toggle for
     how the pattern is interpreted and its own checkbox to switch it
     off without losing what's typed.
@@ -83,16 +85,22 @@ terminal.
     expression on its own (`last 7 days`) means "modified within
     that span".
 
+  A fourth row, **Exclude dirs**, sits below all three: not a filter of
+  its own, but a single on/off switch that applies to all three at
+  once — while on, a directory is never hidden by any of them, however
+  it would otherwise have matched (or failed to match); only plain
+  files are ever actually filtered.
+
   Typing into any field auto-activates its own row, the same way it
-  already did for glob. `Tab`/`Shift+Tab` cycle through all seven of
+  already did for glob. `Tab`/`Shift+Tab` cycle through all eight of
   the dropdown's own pieces (checkbox + field for size and
-  modified-time, checkbox + mode button + field for glob),
-  `Space`/`Enter` toggles whichever checkbox has focus, `/` — once the
-  dropdown is already open — jumps straight to the next of the three
-  fields instead (the same "press it again to advance further" trick
-  `Ctrl+T` already does for the tab switcher; safe to repurpose since a
-  bare filename can never contain `/` in the first place), and `Escape`
-  closes it from any of them.
+  modified-time, checkbox + mode button + field for glob, plus the
+  "Exclude dirs" checkbox), `Space`/`Enter` toggles whichever checkbox
+  has focus, `/` — once the dropdown is already open — jumps straight
+  to the next of the three fields instead (the same "press it again to
+  advance further" trick `Ctrl+T` already does for the tab switcher;
+  safe to repurpose since a bare filename can never contain `/` in the
+  first place), and `Escape` closes it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go

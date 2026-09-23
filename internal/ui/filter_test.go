@@ -30,7 +30,7 @@ func entryNames(entries []fsops.Entry) []string {
 
 func TestFilterByTextEmptyIsNoop(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "", false, true)
+	got := filterByText(entries, "", false, true, false)
 	if len(got) != 2 {
 		t.Errorf("filterByText with empty filterText = %v, want all entries kept", entryNames(got))
 	}
@@ -39,18 +39,18 @@ func TestFilterByTextEmptyIsNoop(t *testing.T) {
 func TestFilterByTextGlobMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "*.txt", false, true)
+	got := filterByText(entries, "*.txt", false, true, false)
 	if len(got) != 3 {
 		t.Errorf("filterByText(*.txt) = %v, want all 3 kept", entryNames(got))
 	}
 
-	got = filterByText(entries, "ap*", false, true)
+	got = filterByText(entries, "ap*", false, true, false)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(ap*) = %v, want %v", entryNames(got), want)
 	}
 
-	got = filterByText(entries, "banana.txt", false, true)
+	got = filterByText(entries, "banana.txt", false, true, false)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(banana.txt) (exact, no wildcard) = %v, want just banana.txt", entryNames(got))
 	}
@@ -58,7 +58,7 @@ func TestFilterByTextGlobMode(t *testing.T) {
 	// No wildcard, not an exact name either: filepath.Match anchors the
 	// whole name, the same as Select+/- already relies on — "an"
 	// (contained in "banana.txt") should not match it.
-	got = filterByText(entries, "an", false, true)
+	got = filterByText(entries, "an", false, true, false)
 	if len(got) != 0 {
 		t.Errorf("filterByText(an) = %v, want none — glob mode is anchored, not substring", entryNames(got))
 	}
@@ -70,7 +70,7 @@ func TestFilterByTextGlobMode(t *testing.T) {
 // pattern filterText holds, the same as if it were empty.
 func TestFilterByTextInactiveIsNoopEvenWithText(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "ap*", false, false)
+	got := filterByText(entries, "ap*", false, false, false)
 	if len(got) != len(entries) {
 		t.Errorf("filterByText with active=false = %v, want every entry kept despite a real pattern", entryNames(got))
 	}
@@ -78,7 +78,7 @@ func TestFilterByTextInactiveIsNoopEvenWithText(t *testing.T) {
 
 func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "[", false, true) // unterminated character class
+	got := filterByText(entries, "[", false, true, false) // unterminated character class
 	if len(got) != len(entries) {
 		t.Errorf("filterByText([) = %v, want every entry kept (malformed pattern treated as no filter yet)", entryNames(got))
 	}
@@ -87,7 +87,7 @@ func TestFilterByTextGlobInvalidPatternKeepsEverything(t *testing.T) {
 func TestFilterByTextRegexMode(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "apricot.txt"}, {Name: "banana.txt"}}
 
-	got := filterByText(entries, "^ap", true, true)
+	got := filterByText(entries, "^ap", true, true, false)
 	want := []string{"apple.txt", "apricot.txt"}
 	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
 		t.Errorf("filterByText(^ap, regex) = %v, want %v", entryNames(got), want)
@@ -95,7 +95,7 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 	// Unlike glob mode, regexp.MatchString is unanchored by default —
 	// substring matching is exactly what a bare regex like "an" does.
-	got = filterByText(entries, "an", true, true)
+	got = filterByText(entries, "an", true, true, false)
 	if len(got) != 1 || got[0].Name != "banana.txt" {
 		t.Errorf("filterByText(an, regex) = %v, want just banana.txt", entryNames(got))
 	}
@@ -103,15 +103,32 @@ func TestFilterByTextRegexMode(t *testing.T) {
 
 func TestFilterByTextRegexInvalidPatternKeepsEverything(t *testing.T) {
 	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
-	got := filterByText(entries, "(unclosed", true, true)
+	got := filterByText(entries, "(unclosed", true, true, false)
 	if len(got) != len(entries) {
 		t.Errorf("filterByText((unclosed, regex) = %v, want every entry kept (invalid regex treated as no filter yet)", entryNames(got))
 	}
 }
 
+// TestFilterByTextExcludeDirsKeepsDirectoriesRegardless pins
+// Panel.filterExcludeDirs' own contract: a directory is kept
+// unconditionally while it's on, whether or not it would otherwise have
+// matched the pattern — only plain files are actually filtered.
+func TestFilterByTextExcludeDirsKeepsDirectoriesRegardless(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "apple.txt"},
+		{Name: "banana.txt"},
+		{Name: "zzz-dir", IsDir: true},
+	}
+	got := filterByText(entries, "ap*", false, true, true)
+	want := []string{"apple.txt", "zzz-dir"}
+	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
+		t.Errorf("filterByText(ap*, excludeDirs) = %v, want %v", entryNames(got), want)
+	}
+}
+
 func TestFilterBySizeEmptyIsNoop(t *testing.T) {
 	entries := []fsops.Entry{{Name: "small.txt", Size: 10}, {Name: "big.txt", Size: 10_000_000}}
-	got := filterBySize(entries, "", true)
+	got := filterBySize(entries, "", true, false)
 	if len(got) != 2 {
 		t.Errorf("filterBySize with an empty expression = %v, want all entries kept", entryNames(got))
 	}
@@ -119,7 +136,7 @@ func TestFilterBySizeEmptyIsNoop(t *testing.T) {
 
 func TestFilterBySizeInactiveIsNoopEvenWithExpression(t *testing.T) {
 	entries := []fsops.Entry{{Name: "small.txt", Size: 10}, {Name: "big.txt", Size: 10_000_000}}
-	got := filterBySize(entries, "> 1m", false)
+	got := filterBySize(entries, "> 1m", false, false)
 	if len(got) != 2 {
 		t.Errorf("filterBySize with active=false = %v, want every entry kept despite a real expression", entryNames(got))
 	}
@@ -131,7 +148,7 @@ func TestFilterBySizeNarrowsByComparison(t *testing.T) {
 		{Name: "medium.txt", Size: 500 * 1024},
 		{Name: "big.txt", Size: 5 * 1024 * 1024},
 	}
-	got := filterBySize(entries, "> 1m", true)
+	got := filterBySize(entries, "> 1m", true, false)
 	if len(got) != 1 || got[0].Name != "big.txt" {
 		t.Errorf("filterBySize(> 1m) = %v, want just big.txt", entryNames(got))
 	}
@@ -142,16 +159,31 @@ func TestFilterBySizeInvalidExpressionKeepsEverything(t *testing.T) {
 	// ">" alone (no number yet) is exactly the mid-keystroke shape this
 	// no-op contract exists for — someone about to type "> 1m" passes
 	// through this incomplete state on the way there.
-	got := filterBySize(entries, ">", true)
+	got := filterBySize(entries, ">", true, false)
 	if len(got) != len(entries) {
 		t.Errorf("filterBySize(>) = %v, want every entry kept (incomplete expression treated as no filter yet)", entryNames(got))
+	}
+}
+
+// TestFilterBySizeExcludeDirsKeepsDirectoriesRegardless mirrors
+// TestFilterByTextExcludeDirsKeepsDirectoriesRegardless for the size row.
+func TestFilterBySizeExcludeDirsKeepsDirectoriesRegardless(t *testing.T) {
+	entries := []fsops.Entry{
+		{Name: "small.txt", Size: 10},
+		{Name: "big.txt", Size: 10_000_000},
+		{Name: "some-dir", IsDir: true, Size: 10},
+	}
+	got := filterBySize(entries, "> 1m", true, true)
+	want := []string{"big.txt", "some-dir"}
+	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
+		t.Errorf("filterBySize(> 1m, excludeDirs) = %v, want %v", entryNames(got), want)
 	}
 }
 
 func TestFilterByMtimeEmptyIsNoop(t *testing.T) {
 	now := time.Now()
 	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
-	got := filterByMtime(entries, "", true, now)
+	got := filterByMtime(entries, "", true, now, false)
 	if len(got) != 2 {
 		t.Errorf("filterByMtime with an empty expression = %v, want all entries kept", entryNames(got))
 	}
@@ -160,7 +192,7 @@ func TestFilterByMtimeEmptyIsNoop(t *testing.T) {
 func TestFilterByMtimeInactiveIsNoopEvenWithExpression(t *testing.T) {
 	now := time.Now()
 	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
-	got := filterByMtime(entries, "last 7 days", false, now)
+	got := filterByMtime(entries, "last 7 days", false, now, false)
 	if len(got) != 2 {
 		t.Errorf("filterByMtime with active=false = %v, want every entry kept despite a real expression", entryNames(got))
 	}
@@ -172,7 +204,7 @@ func TestFilterByMtimeNarrowsByComparison(t *testing.T) {
 		{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)},
 		{Name: "recent.txt", ModTime: now.Add(-2 * 24 * time.Hour)},
 	}
-	got := filterByMtime(entries, "last 7 days", true, now)
+	got := filterByMtime(entries, "last 7 days", true, now, false)
 	if len(got) != 1 || got[0].Name != "recent.txt" {
 		t.Errorf("filterByMtime(last 7 days) = %v, want just recent.txt", entryNames(got))
 	}
@@ -181,9 +213,26 @@ func TestFilterByMtimeNarrowsByComparison(t *testing.T) {
 func TestFilterByMtimeInvalidExpressionKeepsEverything(t *testing.T) {
 	now := time.Now()
 	entries := []fsops.Entry{{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)}, {Name: "new.txt", ModTime: now}}
-	got := filterByMtime(entries, "sometime soon-ish", true, now)
+	got := filterByMtime(entries, "sometime soon-ish", true, now, false)
 	if len(got) != len(entries) {
 		t.Errorf("filterByMtime(garbage) = %v, want every entry kept (unparseable expression treated as no filter yet)", entryNames(got))
+	}
+}
+
+// TestFilterByMtimeExcludeDirsKeepsDirectoriesRegardless mirrors
+// TestFilterByTextExcludeDirsKeepsDirectoriesRegardless for the
+// modified-time row.
+func TestFilterByMtimeExcludeDirsKeepsDirectoriesRegardless(t *testing.T) {
+	now := time.Now()
+	entries := []fsops.Entry{
+		{Name: "old.txt", ModTime: now.Add(-365 * 24 * time.Hour)},
+		{Name: "recent.txt", ModTime: now.Add(-2 * 24 * time.Hour)},
+		{Name: "old-dir", IsDir: true, ModTime: now.Add(-365 * 24 * time.Hour)},
+	}
+	got := filterByMtime(entries, "last 7 days", true, now, true)
+	want := []string{"recent.txt", "old-dir"}
+	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
+		t.Errorf("filterByMtime(last 7 days, excludeDirs) = %v, want %v", entryNames(got), want)
 	}
 }
 
@@ -357,6 +406,7 @@ func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	r.panel.filterSizeText = "> 1m"
 	r.panel.filterMtimeActive = true
 	r.panel.filterMtimeText = "last 7 days"
+	r.panel.filterExcludeDirs = true
 
 	sub := filepath.Join(dir, "app-data")
 	if err := r.panel.navigate(sub); err != nil {
@@ -373,6 +423,9 @@ func TestFilterPersistsAcrossNavigationByDefault(t *testing.T) {
 	}
 	if !r.panel.filterMtimeActive || r.panel.filterMtimeText != "last 7 days" {
 		t.Errorf("modified-time filter after navigating = active %v, text %q, want unchanged (active, %q)", r.panel.filterMtimeActive, r.panel.filterMtimeText, "last 7 days")
+	}
+	if !r.panel.filterExcludeDirs {
+		t.Error("filterExcludeDirs after navigating to a new directory = false, want unchanged true (persistent by default)")
 	}
 }
 
@@ -399,6 +452,7 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	r.panel.filterSizeText = "> 1m"
 	r.panel.filterMtimeActive = true
 	r.panel.filterMtimeText = "last 7 days"
+	r.panel.filterExcludeDirs = true
 
 	// Same-directory refresh (what toggling hidden files does under the
 	// hood) must not touch the filter either way.
@@ -414,6 +468,9 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	if r.panel.filterSizeText != "> 1m" || r.panel.filterMtimeText != "last 7 days" {
 		t.Errorf("size/modified-time text after a same-directory refresh = %q/%q, want unchanged", r.panel.filterSizeText, r.panel.filterMtimeText)
 	}
+	if !r.panel.filterExcludeDirs {
+		t.Error("filterExcludeDirs after a same-directory refresh = false, want unchanged true")
+	}
 
 	// Navigating to a different directory must clear it, since
 	// filterPersistent is false here.
@@ -426,6 +483,9 @@ func TestFilterResetsOnNavigationWhenNotPersistent(t *testing.T) {
 	}
 	if got := r.panel.filterField.GetText(); got != "" {
 		t.Errorf("filterField text after navigating to a new directory = %q, want cleared", got)
+	}
+	if r.panel.filterExcludeDirs {
+		t.Error("filterExcludeDirs after navigating to a new directory = true, want cleared")
 	}
 	if r.panel.filterSizeActive || r.panel.filterSizeText != "" {
 		t.Errorf("size filter after navigating = active %v, text %q, want cleared", r.panel.filterSizeActive, r.panel.filterSizeText)
