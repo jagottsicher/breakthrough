@@ -11,20 +11,23 @@ const filterMenuPage = "filter-menu"
 
 // filterMenuLabelWidth/filterMenuExprWidth/filterMenuWidth/Height are
 // the dropdown's own fixed size: a one-row title bar over three
-// fixed-height rows (glob/regex, size, modified-time). filterMenuWidth
-// is sized off the size/modified-time rows now, not the glob row —
-// "Modified time filter" (the longer of their two labels) plus its own
-// checkbox glyph and a space is filterMenuLabelWidth wide, with a
-// little breathing room to spare before filterMenuExprWidth's own
-// expression field starts; the glob row's own filterField simply
-// stretches to fill whatever that leaves (see renderFilterMenu's own
-// proportional AddItem for it) rather than needing a width constant of
-// its own to stay in sync with these two.
+// fixed-height filter rows (glob/regex, size, modified-time) plus one
+// more, "Exclude dirs" — a modifier that applies to all three rather
+// than a filter of its own, kept the same fixed height below them
+// rather than folded into any single one. filterMenuWidth is sized off
+// the size/modified-time rows now, not the glob row — "Modified time
+// filter" (the longer of their two labels) plus its own checkbox glyph
+// and a space is filterMenuLabelWidth wide, with a little breathing
+// room to spare before filterMenuExprWidth's own expression field
+// starts; the glob row's own filterField simply stretches to fill
+// whatever that leaves (see renderFilterMenu's own proportional AddItem
+// for it) rather than needing a width constant of its own to stay in
+// sync with these two.
 const (
 	filterMenuLabelWidth = 25
 	filterMenuExprWidth  = 22
 	filterMenuWidth      = filterMenuLabelWidth + filterMenuExprWidth + 2
-	filterMenuHeight     = 4
+	filterMenuHeight     = 5
 )
 
 // openFilterMenu shows the filter-menu dropdown for the currently
@@ -96,21 +99,21 @@ func filterMenuRowStyle(row *tview.TextView, theme config.ResolvedTheme, focused
 	row.SetBackgroundColor(bg)
 }
 
-// filterMenuCheckboxCapture is the InputCapture shared by all three of
-// the filter-menu's own checkbox-style rows (globCheckbox, and the size/
-// modified-time rows' own checkboxes — see renderFilterMenu/
-// newFilterMenuFieldRow): Space or Enter toggles the row, Down/Tab
-// moves keyboard focus to the next stop in the dropdown's own order,
-// Up/Backtab to the previous one, "/" jumps straight to the next real
-// filter field (see nextField's own doc comment in renderFilterMenu),
-// and Escape closes the whole dropdown. Consumes every one of these
-// outright — unlike filterRegexBtn/filterField (real tview widgets
-// whose own native handling for some of these keys is worth
-// preserving alongside this), a plain TextView has no native behavior
-// here worth keeping: Enter/Tab/Backtab/Escape only ever reach its own
-// (here, deliberately never set) DoneFunc, and Space/Down/Up do
+// filterMenuCheckboxCapture is the InputCapture shared by all four of
+// the filter-menu's own checkbox-style rows (globCheckbox, the size/
+// modified-time rows' own checkboxes, and excludeDirsCheckbox — see
+// renderFilterMenu/newFilterMenuFieldRow): Space or Enter toggles the
+// row, Down/Tab moves keyboard focus to the next stop in the dropdown's
+// own order, Up/Backtab to the previous one, "/" jumps straight to the
+// next real filter field (see nextField's own doc comment in
+// renderFilterMenu), and Escape closes the whole dropdown. Consumes
+// every one of these outright — unlike filterRegexBtn/filterField (real
+// tview widgets whose own native handling for some of these keys is
+// worth preserving alongside this), a plain TextView has no native
+// behavior here worth keeping: Enter/Tab/Backtab/Escape only ever reach
+// its own (here, deliberately never set) DoneFunc, and Space/Down/Up do
 // nothing at all unless the view is scrollable, which none of these
-// three rows are.
+// four rows are.
 //
 // A real, user-reported gap this closes: before this existed, the
 // dropdown had no keyboard path in or out at all beyond typing into
@@ -148,18 +151,18 @@ func filterMenuCheckboxCapture(this tview.Primitive, toggle func(), moveFocus fu
 // itself owns neither.
 //
 // Also wires up the whole dropdown's own keyboard focus-cycling and
-// closing, fresh on every render: order lists its seven genuinely
+// closing, fresh on every render: order lists its eight genuinely
 // different focusable pieces in the same order Tab moves through them
 // (glob checkbox, glob/regex mode button, glob pattern field, size
 // checkbox, size expression field, modified-time checkbox,
-// modified-time expression field, wrapping back to the first) — tview
-// has no built-in way to cycle Tab between Primitives of different
-// types on its own, so this is hand-rolled the same way chmoddialog.go
-// already hand-rolls its own multi-field Tab-cycling, for the same
-// reason. moveFocus/closeMenu are built once per render and closed
-// over by every row's own InputCapture/SetDoneFunc/SetExitFunc below,
-// rather than needing any of this stored on Root or Panel longer than
-// one render's own lifetime.
+// modified-time expression field, the "Exclude dirs" checkbox,
+// wrapping back to the first) — tview has no built-in way to cycle Tab
+// between Primitives of different types on its own, so this is hand-
+// rolled the same way chmoddialog.go already hand-rolls its own multi-
+// field Tab-cycling, for the same reason. moveFocus/closeMenu are built
+// once per render and closed over by every row's own InputCapture/
+// SetDoneFunc/SetExitFunc below, rather than needing any of this stored
+// on Root or Panel longer than one render's own lifetime.
 //
 // filterField's own SetDoneFunc is (re)installed here rather than once
 // in NewPanel, on purpose: NewPanel has no closeMenu/moveFocus of its
@@ -373,6 +376,38 @@ func (r *Root) renderFilterMenu() {
 	})
 	order = append(order, mtimeField)
 
+	// excludeDirsCheckbox is the dropdown's own fourth row — a single
+	// on/off toggle applying to all three filters above rather than a
+	// filter of its own (see Panel.filterExcludeDirs' own doc comment),
+	// so it's a plain checkbox+label TextView spanning the whole row,
+	// the same shape globCheckbox itself uses, rather than a checkbox
+	// paired with its own expression field the way the size/modified-
+	// time rows are.
+	excludeDirsCheckbox := tview.NewTextView().SetDynamicColors(true)
+	filterMenuRowStyle(excludeDirsCheckbox, panel.theme, false)
+	renderExcludeDirsCheckbox := func() {
+		excludeDirsCheckbox.SetText(checkboxText(panel.filterExcludeDirs) + " Exclude dirs")
+	}
+	renderExcludeDirsCheckbox()
+	toggleExcludeDirs := func() {
+		panel.filterExcludeDirs = !panel.filterExcludeDirs
+		renderExcludeDirsCheckbox()
+		panel.reportError(panel.load(panel.path))
+	}
+	excludeDirsCheckbox.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if !excludeDirsCheckbox.InRect(event.Position()) {
+			return action, event
+		}
+		if action == tview.MouseLeftClick {
+			toggleExcludeDirs()
+		}
+		return tview.MouseConsumed, nil
+	})
+	excludeDirsCheckbox.SetFocusFunc(func() { filterMenuRowStyle(excludeDirsCheckbox, panel.theme, true) })
+	excludeDirsCheckbox.SetBlurFunc(func() { filterMenuRowStyle(excludeDirsCheckbox, panel.theme, false) })
+	excludeDirsCheckbox.SetInputCapture(filterMenuCheckboxCapture(excludeDirsCheckbox, toggleExcludeDirs, moveFocus, nextField, closeMenu))
+	order = append(order, excludeDirsCheckbox)
+
 	// nextField's own target list, now that all three fields exist —
 	// see its own doc comment further up for why filling this in only
 	// now (rather than needing it complete at closure-creation time) is
@@ -385,7 +420,8 @@ func (r *Root) renderFilterMenu() {
 		AddItem(r.filterMenuTitleBar, 1, 0, false).
 		AddItem(globRow, 1, 0, true).
 		AddItem(sizeRow, 1, 0, false).
-		AddItem(mtimeRow, 1, 0, false)
+		AddItem(mtimeRow, 1, 0, false).
+		AddItem(excludeDirsCheckbox, 1, 0, false)
 }
 
 // newFilterMenuFieldRow builds one of the filter-menu's size/modified-

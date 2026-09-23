@@ -273,10 +273,12 @@ var helpText = strings.TrimLeft(`
   path itself to type a new one (Tab completes it, Enter goes); click
   a column heading to sort by it; click the "Y" button near the right
   edge of the path bar (an "Nx" count appears before it once one or
-  more are actually narrowing the listing, turning red if a filter is
-  hiding everything a directory would otherwise show) — or press "/" —
-  to open the filter dropdown, three independently combinable (AND)
-  rows, each narrowing the listing live as you type:
+  more are actually narrowing the listing — glowing the same slow
+  green breathing pulse the header's own "@" connection button uses,
+  or turning solid red instead if a filter is hiding everything a
+  directory would otherwise show) — or press "/" — to open the filter
+  dropdown, three independently combinable (AND) rows, each narrowing
+  the listing live as you type:
 
     Glob/regex      type to narrow the list live; its own button
                     switches glob/regex, its own checkbox disables it
@@ -291,12 +293,18 @@ var helpText = strings.TrimLeft(`
                     minutes") — sec/min/hour/day/week/month/year,
                     singular or plural
 
+  A fourth row, "Exclude dirs", sits below all three: not a filter of
+  its own, but a single on/off switch that applies to all three at
+  once — while on, a directory is never hidden by any of them, however
+  it would otherwise have matched (or failed to match); only plain
+  files are ever actually filtered.
+
   Typing into a field auto-activates its own row. Tab/Shift+Tab cycle
-  all seven of the dropdown's own pieces; "/" — once the dropdown is
+  all eight of the dropdown's own pieces; "/" — once the dropdown is
   already open — jumps straight to the next of the three fields
   instead, the same "press it again to advance further" trick Ctrl+T
   uses for the tab switcher. Escape closes it. By default
-  (filter_persistent) all three carry over across a directory change,
+  (filter_persistent) all four carry over across a directory change,
   so browsing a whole tree with the same filter on is the normal way
   to use it; set filter_persistent = false to have every new directory
   start unfiltered instead.
