@@ -309,6 +309,33 @@ type Settings struct {
 	MoveStableSymlinks       bool
 
 	RemoteArchiveConfirmSize int64
+
+	// LogLevel is the activity log's own single detail dial — "off"
+	// (the default; see internal/activitylog's own doc comment for why
+	// this stays opt-in), "errors", "actions", "detailed", or "debug",
+	// each a strict superset of the one before it. Stored and parsed as
+	// a plain string, the same "no enum validation at this layer"
+	// convention Pager already follows — internal/activitylog.ParseLevel
+	// is what actually interprets it, defaulting to "off" for anything
+	// this doesn't recognize (an empty value, a typo, or a config file
+	// predating this feature).
+	LogLevel string
+
+	// LogCategory* are independent on/off switches within whatever
+	// LogLevel is otherwise configured — the user's own explicit
+	// request to be able to turn "the individual things" off inside a
+	// level, not just move the level's own single dial. Each mirrors
+	// one of internal/activitylog's own Category values (see its own
+	// doc comment for what each actually covers); all default to true,
+	// so turning LogLevel up from "off" starts by logging everything at
+	// that level, not nothing.
+	LogCategoryFileOps     bool
+	LogCategoryPermissions bool
+	LogCategoryArchive     bool
+	LogCategoryTextOps     bool
+	LogCategoryRsync       bool
+	LogCategoryRemote      bool
+	LogCategoryShell       bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -363,6 +390,15 @@ func DefaultSettings() Settings {
 		MoveStableSymlinks:       false,
 
 		RemoteArchiveConfirmSize: 10 << 20, // 10MB
+
+		LogLevel:               "off",
+		LogCategoryFileOps:     true,
+		LogCategoryPermissions: true,
+		LogCategoryArchive:     true,
+		LogCategoryTextOps:     true,
+		LogCategoryRsync:       true,
+		LogCategoryRemote:      true,
+		LogCategoryShell:       true,
 	}
 }
 
@@ -475,6 +511,22 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.RemoteArchiveConfirmSize = n
+	case "log_level":
+		s.LogLevel = value
+	case "log_category_fileops":
+		return parseBool(&s.LogCategoryFileOps)
+	case "log_category_permissions":
+		return parseBool(&s.LogCategoryPermissions)
+	case "log_category_archive":
+		return parseBool(&s.LogCategoryArchive)
+	case "log_category_textops":
+		return parseBool(&s.LogCategoryTextOps)
+	case "log_category_rsync":
+		return parseBool(&s.LogCategoryRsync)
+	case "log_category_remote":
+		return parseBool(&s.LogCategoryRemote)
+	case "log_category_shell":
+		return parseBool(&s.LogCategoryShell)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
