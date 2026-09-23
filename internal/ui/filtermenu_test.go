@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -9,10 +10,11 @@ import (
 
 // filterMenuRow retrieves one of filterMenuLayout's own rows by index —
 // 0 is the title bar, 1 the glob/regex row (itself a Flex — see
-// filterMenuGlobCheckbox), 2 size, 3 modified-time — the same
-// GetItem-based access every test below uses instead of needing extra
-// Root fields for widgets renderFilterMenu otherwise only ever keeps as
-// local variables.
+// filterMenuGlobCheckbox), 2 size, 3 modified-time, 4 the "Exclude
+// dirs" checkbox (a plain *tview.TextView, not a Flex — see
+// filterMenuExcludeDirsCheckbox) — the same GetItem-based access every
+// test below uses instead of needing extra Root fields for widgets
+// renderFilterMenu otherwise only ever keeps as local variables.
 func filterMenuRow(t *testing.T, r *Root, index int) tview.Primitive {
 	t.Helper()
 	if index >= r.filterMenuLayout.GetItemCount() {
@@ -66,6 +68,19 @@ func filterMenuFieldRowField(t *testing.T, r *Root, rowIndex int) *tview.InputFi
 		t.Fatalf("row %d item 1 is not a *tview.InputField (the expression field)", rowIndex)
 	}
 	return field
+}
+
+// filterMenuExcludeDirsCheckbox retrieves the "Exclude dirs" row itself
+// — unlike the glob/size/modified-time rows, it's a plain *tview.TextView
+// spanning the whole row (checkbox + label, no separate field), not a
+// Flex to reach one level deeper into.
+func filterMenuExcludeDirsCheckbox(t *testing.T, r *Root) *tview.TextView {
+	t.Helper()
+	checkbox, ok := filterMenuRow(t, r, 4).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 4 is not a *tview.TextView (the \"Exclude dirs\" checkbox)")
+	}
+	return checkbox
 }
 
 // click simulates a real left-click on p by going through its own
@@ -170,7 +185,7 @@ func TestClickingMtimeRowDoesNotToggleSizeRow(t *testing.T) {
 // up with a title bar plus all three rows (glob/regex, size,
 // modified-time), each already reflecting the active panel's own
 // current toggle state.
-func TestOpenFilterMenuShowsAllThreeRows(t *testing.T) {
+func TestOpenFilterMenuShowsAllFourRows(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -182,8 +197,8 @@ func TestOpenFilterMenuShowsAllThreeRows(t *testing.T) {
 	if r.activePage != filterMenuPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, filterMenuPage)
 	}
-	if got := r.filterMenuLayout.GetItemCount(); got != 4 {
-		t.Fatalf("filterMenuLayout has %d items, want 4 (title bar + 3 rows)", got)
+	if got := r.filterMenuLayout.GetItemCount(); got != 5 {
+		t.Fatalf("filterMenuLayout has %d items, want 5 (title bar + 4 rows)", got)
 	}
 	if got, want := r.filterMenuTitleBar.GetText(true), " Filters "; got != want {
 		t.Errorf("filterMenuTitleBar text = %q, want %q", got, want)
@@ -208,6 +223,11 @@ func TestOpenFilterMenuShowsAllThreeRows(t *testing.T) {
 	}
 	if got := filterMenuFieldRowField(t, r, 3).GetText(); got != "" {
 		t.Errorf("modified-time field = %q, want empty (nothing typed yet)", got)
+	}
+
+	excludeDirsCheckbox := filterMenuExcludeDirsCheckbox(t, r)
+	if got, want := excludeDirsCheckbox.GetText(true), checkboxText(false)+" Exclude dirs"; got != want {
+		t.Errorf("exclude-dirs checkbox = %q, want %q", got, want)
 	}
 }
 
@@ -238,6 +258,102 @@ func TestFilterMenuGlobCheckboxTogglesActiveAndReloads(t *testing.T) {
 	}
 	if got := r.panel.table.GetRowCount(); got != 5 { // ".." + all 4 real entries, filter now inactive
 		t.Errorf("row count after disabling the filter = %d, want 5 (every entry back)", got)
+	}
+}
+
+// TestFilterMenuExcludeDirsCheckboxTogglesActiveAndReloads mirrors
+// TestFilterMenuGlobCheckboxTogglesActiveAndReloads for the new
+// "Exclude dirs" row.
+func TestFilterMenuExcludeDirsCheckboxTogglesActiveAndReloads(t *testing.T) {
+	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterField.SetText("apple.txt")
+	if got := r.panel.table.GetRowCount(); got != 2 { // ".." + apple.txt — app-data doesn't match either
+		t.Fatalf("setup: row count = %d, want 2 (filtered to just apple.txt)", got)
+	}
+
+	r.openFilterMenu()
+	click(filterMenuExcludeDirsCheckbox(t, r))
+
+	if !r.panel.filterExcludeDirs {
+		t.Error("filterExcludeDirs should be true after clicking the checkbox once")
+	}
+	if r.activePage != filterMenuPage {
+		t.Error("the dropdown should stay open after toggling this row")
+	}
+	if got := r.panel.table.GetRowCount(); got != 3 { // ".." + apple.txt + app-data (kept regardless, it's a directory)
+		t.Errorf("row count after enabling exclude-dirs = %d, want 3 (app-data kept despite not matching)", got)
+	}
+}
+
+// TestFilterMenuExcludeDirsKeepsDirectoriesButStillFiltersFiles is the
+// end-to-end pin for Panel.filterExcludeDirs' own whole point: while on,
+// a directory that would otherwise have been hidden by an active filter
+// stays visible, but a plain file still gets filtered exactly as
+// before.
+func TestFilterMenuExcludeDirsKeepsDirectoriesButStillFiltersFiles(t *testing.T) {
+	dir := fixtureDir(t) // apple.txt, apricot.txt, banana.txt, app-data/
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterExcludeDirs = true
+	r.panel.filterField.SetText("apple.txt")
+
+	names := make(map[string]bool)
+	for row := 0; row < r.panel.table.GetRowCount(); row++ {
+		if ref, ok := r.panel.rowRef(row); ok {
+			names[ref.name] = true
+		}
+	}
+	if !names["apple.txt"] || !names["app-data"] {
+		t.Errorf("expected both apple.txt (matches) and app-data (a directory, kept regardless), got %v", names)
+	}
+	if names["apricot.txt"] || names["banana.txt"] {
+		t.Errorf("apricot.txt/banana.txt are plain files that don't match — should still be filtered out, got %v", names)
+	}
+}
+
+// TestFilterMenuExcludeDirsNotCountedTowardIndicator pins
+// Panel.filterExcludeDirs' own doc comment: it's a modifier of the
+// other three filters, never a fourth one counted in its own right —
+// switching it on alone, with none of the three real filters active,
+// must not make the "Nx" indicator appear at all.
+func TestFilterMenuExcludeDirsNotCountedTowardIndicator(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterGlobActive = false // the one filter active by default — turn it off too
+	r.panel.filterExcludeDirs = true
+	r.panel.renderFilterMenuBtn()
+
+	if got := r.panel.filterMenuBtn.GetText(true); containsSubstring(got, "x") {
+		t.Errorf("filterMenuBtn text = %q, want no count indicator — exclude-dirs alone activates nothing", got)
+	}
+}
+
+// TestFilterMenuExcludeDirsStateSurvivesReopen mirrors
+// TestFilterMenuStateSurvivesReopen for the new row.
+func TestFilterMenuExcludeDirsStateSurvivesReopen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openFilterMenu()
+	click(filterMenuExcludeDirsCheckbox(t, r))
+	r.hideOverlay()
+
+	r.openFilterMenu()
+	checkbox := filterMenuExcludeDirsCheckbox(t, r)
+	if got, want := checkbox.GetText(true), checkboxText(true)+" Exclude dirs"; got != want {
+		t.Errorf("exclude-dirs checkbox after reopening = %q, want %q (state should have survived)", got, want)
 	}
 }
 
@@ -372,6 +488,33 @@ func TestFilterMatchesNothingColorsIndicatorRed(t *testing.T) {
 	}
 	if got := r.panel.filterMenuBtn.GetText(true); !containsSubstring(got, "1x") {
 		t.Errorf("filterMenuBtn text = %q, want it to still contain \"1x\"", got)
+	}
+}
+
+// TestRenderFilterMenuBtnGlowsWhenAFilterIsActive pins the user's own
+// explicit request: while a filter is genuinely narrowing the listing
+// (and not hiding everything outright — see
+// TestFilterMatchesNothingColorsIndicatorRed for that other case), "Nx"
+// carries the exact same breathing-glow color the header's own "@"
+// connection button already uses (see connectionGlowColor), not a flat,
+// easy-to-miss neutral one.
+func TestRenderFilterMenuBtnGlowsWhenAFilterIsActive(t *testing.T) {
+	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	orig := connectionGlowNow
+	connectionGlowNow = func() time.Time { return fixed }
+	t.Cleanup(func() { connectionGlowNow = orig })
+
+	r.panel.filterField.SetText("ap*") // matches apple.txt/apricot.txt — not "matches nothing"
+
+	wantColor := connectionGlowColor(r.panel.theme, true, fixed)
+	wantTag := "[" + colorTag(wantColor) + "::]"
+	if got := r.panel.filterMenuBtn.GetText(false); !containsSubstring(got, wantTag) {
+		t.Errorf("filterMenuBtn raw text = %q, want it to contain the glow color tag %q", got, wantTag)
 	}
 }
 
@@ -621,7 +764,7 @@ func TestSlashViaHandlePlainKeyDoesNotReopenAnAlreadyOpenDropdown(t *testing.T) 
 // outright the way every one of them used to. Grew from five stops to
 // seven once the size/modified-time rows gained their own real
 // expression fields alongside their checkboxes.
-func TestFilterMenuTabCyclesFocusThroughAllSevenStops(t *testing.T) {
+func TestFilterMenuTabCyclesFocusThroughAllEightStops(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -642,6 +785,7 @@ func TestFilterMenuTabCyclesFocusThroughAllSevenStops(t *testing.T) {
 	sizeField := filterMenuFieldRowField(t, r, 2)
 	mtimeCheckbox := filterMenuFieldRowCheckbox(t, r, 3)
 	mtimeField := filterMenuFieldRowField(t, r, 3)
+	excludeDirsCheckbox := filterMenuExcludeDirsCheckbox(t, r)
 
 	if !r.panel.filterField.HasFocus() {
 		t.Fatal("setup: filterField should have initial focus when the dropdown opens")
@@ -671,8 +815,13 @@ func TestFilterMenuTabCyclesFocusThroughAllSevenStops(t *testing.T) {
 	}
 
 	mtimeField.InputHandler()(tab, noop)
+	if !excludeDirsCheckbox.HasFocus() {
+		t.Error("Tab from the modified-time expression field should move focus to the exclude-dirs checkbox")
+	}
+
+	excludeDirsCheckbox.InputHandler()(tab, noop)
 	if !globCheckbox.HasFocus() {
-		t.Error("Tab from the modified-time expression field should wrap back to the glob checkbox")
+		t.Error("Tab from the exclude-dirs checkbox should wrap back to the glob checkbox")
 	}
 
 	globCheckbox.InputHandler()(tab, noop)

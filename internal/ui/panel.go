@@ -159,6 +159,24 @@ type Panel struct {
 	filterSizeActive  bool
 	filterMtimeActive bool
 
+	// filterExcludeDirs is the filter-menu's own fourth row, below the
+	// three filter rows themselves rather than a fourth one of its own:
+	// a single on/off toggle that applies to all three at once — glob,
+	// size, and modified-time — per the user's own explicit request.
+	// While on, a directory is never hidden by any of the three, however
+	// it would otherwise have matched (or failed to match) each one's
+	// own expression; only plain files are ever actually filtered.
+	// Passed straight through to filterByText/filterBySize/filterByMtime
+	// as their own excludeDirs parameter (see their shared doc comment
+	// on why a directory short-circuits to "always visible" ahead of the
+	// real match check there), not folded into filterGlobActive/
+	// filterSizeActive/filterMtimeActive themselves: unlike those three,
+	// this one has nothing of its own to match against, so it was never
+	// a fourth filter in the same sense — just a modifier of how the
+	// other three apply. Not counted in renderFilterMenuBtn's own "Nx"
+	// indicator for exactly that reason.
+	filterExcludeDirs bool
+
 	// filterSizeText/filterMtimeText are the size/modified-time rows'
 	// own expression fields — internal/filterexpr's own syntax (see its
 	// doc comment), parsed and matched by filterBySize/filterByMtime.
@@ -1247,11 +1265,12 @@ func (p *Panel) load(dir string) error {
 		p.filterMtimeActive = false
 		p.filterSizeText = ""
 		p.filterMtimeText = ""
+		p.filterExcludeDirs = false
 	}
 	beforeFilterCount := len(entries)
-	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive)
-	entries = filterBySize(entries, p.filterSizeText, p.filterSizeActive)
-	entries = filterByMtime(entries, p.filterMtimeText, p.filterMtimeActive, time.Now())
+	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive, p.filterExcludeDirs)
+	entries = filterBySize(entries, p.filterSizeText, p.filterSizeActive, p.filterExcludeDirs)
+	entries = filterByMtime(entries, p.filterMtimeText, p.filterMtimeActive, time.Now(), p.filterExcludeDirs)
 	// See filterMatchesNothing's own doc comment: beforeFilterCount > 0
 	// is what tells "the filter hid everything" apart from "this
 	// directory is simply empty" — filterByText itself is a no-op on an
@@ -1741,7 +1760,19 @@ func filterModeLabel(regex bool) string {
 // at "Nx" in a color already meaningful elsewhere as "something's
 // wrong" is far more likely to register than noticing a small, neutral
 // count is present at all.
-func (p *Panel) renderFilterMenuBtn() {
+// activeFilterCount is how many of the filter-menu's three real filter
+// rows (glob, size, modified-time) are genuinely narrowing the listing
+// right now — matching filterByText/filterBySize/filterByMtime's own
+// real no-op condition (see their own doc comments): a row ticked on
+// with its own expression field still empty doesn't count, the same as
+// the glob row's own checkbox with nothing typed into it. Shared by
+// renderFilterMenuBtn (what the "Nx" indicator itself shows) and
+// refreshActivePanelHeaderGlow (whether there's a glow animation to
+// keep advancing at all), rather than each recomputing this
+// independently. filterExcludeDirs is deliberately not part of this
+// count — see its own doc comment on Panel for why it was never a
+// fourth filter in the same sense the other three are.
+func (p *Panel) activeFilterCount() int {
 	count := 0
 	if p.filterGlobActive && p.filterText != "" {
 		count++
@@ -1752,12 +1783,30 @@ func (p *Panel) renderFilterMenuBtn() {
 	if p.filterMtimeActive && p.filterMtimeText != "" {
 		count++
 	}
+	return count
+}
+
+func (p *Panel) renderFilterMenuBtn() {
+	count := p.activeFilterCount()
 
 	prefix := ""
 	if count > 0 {
 		prefix = fmt.Sprintf("%dx", count)
-		if p.filterMatchesNothing {
+		switch {
+		case p.filterMatchesNothing:
 			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(p.theme.EntryError), prefix)
+		default:
+			// The same breathing glow the header's own "@" connection
+			// button uses (see connectionGlowColor) once a filter is
+			// genuinely narrowing the listing — per the user's own
+			// explicit request that "Nx" read as just as alive/current a
+			// signal as a live remote connection already does, rather
+			// than sitting there in a flat, easy-to-miss neutral color.
+			// refreshActivePanelHeaderGlow's own once-a-second tick is
+			// what actually advances this over time; a call from here
+			// alone would only ever show whatever phase the glow happens
+			// to be in at the moment something else caused a redraw.
+			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(connectionGlowColor(p.theme, true, connectionGlowNow())), prefix)
 		}
 	}
 
@@ -1787,7 +1836,12 @@ func (p *Panel) renderFilterMenuBtn() {
 // keystroke, so an incomplete regex (or a malformed glob like an
 // unterminated "[") is an expected, transient state while typing, not
 // something worth interrupting for.
-func filterByText(entries []fsops.Entry, filterText string, filterRegex, active bool) []fsops.Entry {
+// excludeDirs, shared by filterByText/filterBySize/filterByMtime, is
+// Panel.filterExcludeDirs (see its own doc comment): while true, a
+// directory is appended to visible unconditionally, ahead of (and
+// regardless of the outcome of) each function's own real match check —
+// only a plain file is ever actually filtered.
+func filterByText(entries []fsops.Entry, filterText string, filterRegex, active, excludeDirs bool) []fsops.Entry {
 	if !active || filterText == "" {
 		return entries
 	}
@@ -1817,6 +1871,10 @@ func filterByText(entries []fsops.Entry, filterText string, filterRegex, active 
 
 	visible := entries[:0] // reuses entries' backing array, same as filterHidden
 	for _, e := range entries {
+		if excludeDirs && e.IsDir {
+			visible = append(visible, e)
+			continue
+		}
 		if match(e.Name) {
 			visible = append(visible, e)
 		}
@@ -1832,7 +1890,7 @@ func filterByText(entries []fsops.Entry, filterText string, filterRegex, active 
 // matters for exactly the same reason it does there, an expression
 // still being typed (e.g. "> 1" before a unit follows) is an expected,
 // transient state, not something worth interrupting the listing over.
-func filterBySize(entries []fsops.Entry, expr string, active bool) []fsops.Entry {
+func filterBySize(entries []fsops.Entry, expr string, active, excludeDirs bool) []fsops.Entry {
 	if !active || expr == "" {
 		return entries
 	}
@@ -1842,6 +1900,10 @@ func filterBySize(entries []fsops.Entry, expr string, active bool) []fsops.Entry
 	}
 	visible := entries[:0]
 	for _, e := range entries {
+		if excludeDirs && e.IsDir {
+			visible = append(visible, e)
+			continue
+		}
 		if f.Match(e.Size) {
 			visible = append(visible, e)
 		}
@@ -1857,7 +1919,7 @@ func filterBySize(entries []fsops.Entry, expr string, active bool) []fsops.Entry
 // read here via time.Now(), so every relative clause in a single
 // load() call measures itself against the same instant regardless of
 // how long filtering the whole listing actually takes.
-func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Time) []fsops.Entry {
+func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Time, excludeDirs bool) []fsops.Entry {
 	if !active || expr == "" {
 		return entries
 	}
@@ -1867,6 +1929,10 @@ func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Tim
 	}
 	visible := entries[:0]
 	for _, e := range entries {
+		if excludeDirs && e.IsDir {
+			visible = append(visible, e)
+			continue
+		}
 		if f.Match(e.ModTime) {
 			visible = append(visible, e)
 		}
