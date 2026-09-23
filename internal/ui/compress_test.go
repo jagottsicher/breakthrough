@@ -8,6 +8,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -426,6 +427,60 @@ func TestDeleteExtractedArchiveAsksBeforeAHardDeleteWhenTrashFails(t *testing.T)
 	got := r.confirmDialogTitleBar.GetText(true)
 	if !strings.Contains(got, "Trash failed") || !strings.Contains(got, "delete it completely") {
 		t.Errorf("confirmation message = %q, want it to name the Trash failure and the permanent-delete fallback", got)
+	}
+}
+
+func TestDeleteExtractedArchiveLogsAnActionOnSuccess(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+	archivePath := filepath.Join(dir, "bundle.zip")
+	if err := os.WriteFile(archivePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.deleteExtractedArchive(archivePath)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "moved extracted archive") {
+		t.Errorf("log = %q, want a fileops entry about the archive moving to trash", got)
+	}
+}
+
+// TestDeleteExtractedArchiveLogsAnActionAfterAConfirmedHardDelete forces
+// the Trash step to fail (a plain file sitting where the trash's own
+// "trash" directory needs to be created — see ensureTrashSkeleton) while
+// leaving the real archive file in place, unlike
+// TestDeleteExtractedArchiveAsksBeforeAHardDeleteWhenTrashFails' own
+// "archive already gone" trick, which would make the confirmed hard
+// delete itself fail too instead of actually succeeding.
+func TestDeleteExtractedArchiveLogsAnActionAfterAConfirmedHardDelete(t *testing.T) {
+	r, dir, _ := newTestRootWithFile(t)
+	r.settings.TrashPersistent = true
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	if err := os.MkdirAll(filepath.Join(dataHome, "breakthrough"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataHome, "breakthrough", "trash"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(dir, "bundle.zip")
+	if err := os.WriteFile(archivePath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r.deleteExtractedArchive(archivePath)
+	if r.activePage != confirmPage {
+		t.Fatalf("setup: activePage = %q, want the confirmation dialog", r.activePage)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.confirmDialog.SetCurrentItem(0)
+	r.resolvePurgeConfirmByCurrentFocus(t)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "permanently deleted extracted archive") {
+		t.Errorf("log = %q, want a fileops entry about the confirmed hard delete", got)
 	}
 }
 

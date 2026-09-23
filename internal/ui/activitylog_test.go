@@ -8,6 +8,35 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
+// attachTestActivityLog points r.activityLog at a real, freshly opened
+// log file — LevelDebug, every category on, so nothing this package's
+// own instrumentation logs is ever filtered out here — and returns a
+// function that rereads its current contents. Used throughout this
+// package's own tests to assert on exactly what a real action logged,
+// the same append-only text format production code writes, never a
+// mock of Logger itself.
+func attachTestActivityLog(t *testing.T, r *Root) func() string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "activity.log")
+	w, err := activitylog.OpenWriter(path)
+	if err != nil {
+		t.Fatalf("OpenWriter: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	categories := make(map[activitylog.Category]bool, len(activitylog.Categories()))
+	for _, c := range activitylog.Categories() {
+		categories[c] = true
+	}
+	r.activityLog = activitylog.New(activitylog.LevelDebug, categories, w)
+	return func() string {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		return string(got)
+	}
+}
+
 // isolateActivityLogPaths points activitylog.SystemLogDir at a fresh,
 // writable subdirectory of a temp dir (never the real
 // /var/log/breakthrough) and isolates $XDG_STATE_HOME too, so none of

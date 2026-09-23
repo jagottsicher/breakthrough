@@ -3,12 +3,15 @@ package ui
 import (
 	"os"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"golang.org/x/term"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 // TestCaptureBashLineKeyEnterVsNewline pins captureBashLineKey's own
@@ -204,6 +207,27 @@ func TestBashLineAtFirstLastLine(t *testing.T) {
 // last; a multi-line buffer only recalls history at the actual
 // boundary, leaving Up/Down at any other line unconsumed for TextArea's
 // own default cursor-movement handling.
+// TestRunBashCommandLogsAnAction pins runBashCommand's own activity-log
+// instrumentation, threaded through runShellCommandFullScreen — the
+// same acknowledged Suspend-is-a-no-op limitation
+// TestCaptureBashLineKeyEnterVsNewline's own doc comment already notes.
+func TestRunBashCommandLogsAnAction(t *testing.T) {
+	isolateHistoryFile(t)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.runBashCommand("echo hi")
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryShell)) || !strings.Contains(got, "ran: echo hi") {
+		t.Errorf("log = %q, want a shell entry about the command", got)
+	}
+}
+
 func TestCaptureBashLineKeyUpDownRecallHistoryAtBoundaries(t *testing.T) {
 	isolateHistoryFile(t)
 	dir := fixtureDir(t)
