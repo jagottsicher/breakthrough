@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 func newTestRootForCompressJob(t *testing.T) *Root {
@@ -59,6 +61,60 @@ func TestFinishCompressJobReportsARealError(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q for a genuine failure", r.activePage, errorPage)
+	}
+}
+
+// TestFinishCompressJobLogsAnAction pins finishCompressJob's own
+// activity-log instrumentation on success — compressPastTenseVerb turns
+// job.verb's own present-continuous spelling into the past tense the
+// log line uses.
+func TestFinishCompressJobLogsAnAction(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Compressing", label: "archive.zip"}
+	r.compressJob = job
+
+	r.finishCompressJob(job, nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryArchive)) || !strings.Contains(got, "compressed archive.zip") {
+		t.Errorf("log = %q, want an archive entry about the completed compress", got)
+	}
+}
+
+// TestFinishCompressJobLogsAnError is the failure counterpart —
+// "Extracting" this time, to also pin the verb mapping for Extract.
+func TestFinishCompressJobLogsAnError(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Extracting", label: "archive.zip"}
+	r.compressJob = job
+
+	r.finishCompressJob(job, errors.New("boom"))
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryArchive)) || !strings.Contains(got, "extracted archive.zip: boom") {
+		t.Errorf("log = %q, want an archive error entry mentioning the failure", got)
+	}
+}
+
+// TestFinishCompressJobDoesNotLogWhenCancelled mirrors
+// TestFinishCompressJobSuppressesErrorWhenCancelled: a cancelled job's
+// own wait-error is expected, not a real outcome worth logging either.
+func TestFinishCompressJobDoesNotLogWhenCancelled(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &compressJob{ctx: ctx, cancel: cancel, destDir: r.panel.path, verb: "Compressing", label: "archive.zip"}
+	r.compressJob = job
+
+	cancel() // simulate cancelCompressJob already having run
+	r.finishCompressJob(job, errors.New("signal: killed"))
+
+	if got := readLog(); got != "" {
+		t.Errorf("log = %q, want nothing logged for a cancelled job", got)
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -1084,11 +1086,21 @@ func (r *Root) cancelChmodDialog() {
 // one, if any, Details actually happens to be showing.
 func (r *Root) applyChmodDialog() {
 	var firstErr error
+	changed := 0
 	for _, target := range r.chmodTargets {
-		if err := r.applyChmodToTarget(target); err != nil && firstErr == nil {
-			firstErr = err
+		if err := r.applyChmodToTarget(target); err != nil {
+			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
+			if firstErr == nil {
+				firstErr = err
+			}
+		} else {
+			changed++
+			r.activityLog.Detail(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q to %04o", target, r.stagedChmodMode&os.ModePerm))
 		}
 		r.refreshDetailsIfShowing(target, target)
+	}
+	if changed > 0 {
+		r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %d item(s) to %04o", changed, r.stagedChmodMode&os.ModePerm))
 	}
 
 	r.hideOverlay()

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -312,10 +314,12 @@ func (r *Root) finishConnect(panel *Panel, conn remotefs.Connection, client remo
 	r.cancelConnectAttempt()
 	if err != nil {
 		_ = remotefs.RecordAttempt(conn, true)
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("connect to %s: %v", conn.Label(), err))
 		r.setConnectStatus(err.Error(), r.theme.CriticalText)
 		return
 	}
 	_ = remotefs.RecordAttempt(conn, false)
+	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("connected to %s", conn.Label()))
 
 	if !r.hasTab(panel) {
 		// The tab this connection was meant for closed while Dial was

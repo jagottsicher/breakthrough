@@ -3103,9 +3103,11 @@ func (r *Root) finishRename(key tcell.Key) {
 		newPath, err = fsops.Rename(r.target, newName)
 	}
 	if err != nil {
+		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
 		r.showError(err)
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
 	r.refreshDetailsIfShowing(r.target, newPath)
 	r.showError(r.panel.load(r.panel.path))
 }
@@ -3540,9 +3542,11 @@ func (r *Root) openChown() {
 // failure — the common tail of every path through openChown.
 func (r *Root) applyChown(target string, uid, gid int) {
 	if err := fsops.Chown(target, uid, gid); err != nil {
+		r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
 		r.showError(err)
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
 	r.refreshDetailsIfShowing(target, target)
 	r.showError(r.panel.load(r.panel.path))
 }

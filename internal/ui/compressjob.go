@@ -34,7 +34,10 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 // compressJob is one backgrounded Compress or Extract run's own async
@@ -248,8 +251,10 @@ func (r *Root) finishCompressJob(job *compressJob, err error) {
 
 	switch {
 	case err != nil && !wasCancelled:
+		r.activityLog.Error(activitylog.CategoryArchive, fmt.Sprintf("%s %s: %v", compressPastTenseVerb(job.verb), job.label, err))
 		r.showError(err)
 	case !wasCancelled:
+		r.activityLog.Action(activitylog.CategoryArchive, fmt.Sprintf("%s %s", compressPastTenseVerb(job.verb), job.label))
 		r.forEachTab(func(p *Panel) {
 			if p.path == job.destDir {
 				r.showError(p.load(p.path))
@@ -264,6 +269,19 @@ func (r *Root) finishCompressJob(job *compressJob, err error) {
 	}
 	r.refreshStatusBar()
 	r.advanceCompressQueue()
+}
+
+// compressPastTenseVerb turns a compressJob's own present-continuous
+// verb (the status bar's own leading word — "Compressing"/"Extracting"/
+// "Uploading") into the past tense the activity log's completed-action
+// lines use — every verb this file ever sets ends in "-ing" and drops
+// it cleanly ("Compressing" -> "compressed"), so no per-verb table is
+// needed.
+func compressPastTenseVerb(verb string) string {
+	if base, ok := strings.CutSuffix(verb, "ing"); ok {
+		return strings.ToLower(base) + "ed"
+	}
+	return strings.ToLower(verb)
 }
 
 // cancelCompressJob stops a running backgrounded Compress/Extract, if

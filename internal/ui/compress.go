@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -785,6 +786,7 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 	dir, err := r.trashDir()
 	if err == nil {
 		if err = fsops.MoveToTrash(archivePath, dir); err == nil {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved extracted archive %q to trash", archivePath))
 			reloadSource()
 			return
 		}
@@ -793,9 +795,11 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 		fmt.Sprintf("Moving %q to Trash failed (%v) — delete it completely instead?", filepath.Base(archivePath), err),
 		func() {
 			if err := fsops.PurgeCompletely(archivePath); err != nil {
+				r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("delete extracted archive %q: %v", archivePath, err))
 				r.showError(err)
 				return
 			}
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently deleted extracted archive %q", archivePath))
 			reloadSource()
 		},
 	)

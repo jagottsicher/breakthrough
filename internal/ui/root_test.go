@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
@@ -587,6 +588,44 @@ func TestFinishRenameRefreshesDetailsShowingSameFile(t *testing.T) {
 	}
 }
 
+func TestFinishRenameLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	readLog := attachTestActivityLog(t, r)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("renamed.txt")
+	r.finishRename(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, `renamed "`+filepath.Join(dir, "apple.txt")+`" to "renamed.txt"`) {
+		t.Errorf("log = %q, want a fileops entry about the rename", got)
+	}
+}
+
+func TestFinishRenameLogsAnErrorWhenTheNewNameAlreadyExists(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	readLog := attachTestActivityLog(t, r)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("banana.txt")
+	r.finishRename(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "already exists") {
+		t.Errorf("log = %q, want a fileops error entry about the name collision", got)
+	}
+}
+
 // TestChownViaPromptNoopToOwnUser is Chown's counterpart, kept privilege-
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
 // ownership to anyone else needs root, but chowning to the process's own
@@ -649,6 +688,41 @@ func TestApplyChownRefreshesDetailsShowingSameFile(t *testing.T) {
 	}
 	if r.detailsMetadataState != "" {
 		t.Error("detailsMetadataState should have been reset by loadDetailsTarget — Details wasn't actually reloaded")
+	}
+}
+
+func TestApplyChownLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.applyChown(path, os.Getuid(), os.Getgid())
+
+	got := readLog()
+	want := fmt.Sprintf("changed owner/group of %q to %d:%d", path, os.Getuid(), os.Getgid())
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) || !strings.Contains(got, want) {
+		t.Errorf("log = %q, want a permissions entry: %q", got, want)
+	}
+}
+
+func TestApplyChownLogsAnErrorForAMissingTarget(t *testing.T) {
+	dir := fixtureDir(t)
+	missing := filepath.Join(dir, "does-not-exist")
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.applyChown(missing, os.Getuid(), os.Getgid())
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) {
+		t.Errorf("log = %q, want a permissions error entry for the missing target", got)
 	}
 }
 

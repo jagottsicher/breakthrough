@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -339,8 +342,14 @@ func (r *Root) disconnectConnectionRow(row int) bool {
 	if row < 0 || row != r.connectionMenuActiveRow {
 		return false
 	}
+	label := r.panel.remoteConn.Label()
 	r.hideOverlay()
-	r.showError(r.panel.disconnectRemote())
+	if err := r.panel.disconnectRemote(); err != nil {
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("disconnect from %s: %v", label, err))
+		r.showError(err)
+	} else {
+		r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("disconnected from %s", label))
+	}
 	return true
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
@@ -767,7 +768,7 @@ func (r *Root) runRsync() {
 		return
 	}
 	r.hideOverlay()
-	r.runShellCommandFullScreen(job.Command())
+	r.runShellCommandFullScreen(job.Command(), activitylog.CategoryRsync)
 }
 
 // runRsyncBackground is the "Run in background" button's own action —

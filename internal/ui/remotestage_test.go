@@ -4,9 +4,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -248,6 +250,38 @@ func TestFinishRemoteEditUploadsWhenTheFileChanged(t *testing.T) {
 
 	if got := string(client.content["/remote/b.txt"]); got != "edited content" {
 		t.Errorf("remote content = %q, want the edited content uploaded back", got)
+	}
+}
+
+func TestFinishRemoteEditLogsAnActionWhenUploaded(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	client.content = map[string][]byte{"/remote/b.txt": []byte("original")}
+
+	localPath := filepath.Join(t.TempDir(), "b.txt")
+	if err := os.WriteFile(localPath, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(localPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(localPath, []byte("edited content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := before.ModTime().Add(time.Second)
+	if err := os.Chtimes(localPath, later, later); err != nil {
+		t.Fatal(err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	if err := r.finishRemoteEdit(client, "/remote/b.txt", localPath, before); err != nil {
+		t.Fatalf("finishRemoteEdit: %v", err)
+	}
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRemote)) || !strings.Contains(got, "uploaded changes to /remote/b.txt") {
+		t.Errorf("log = %q, want a remote entry about the upload", got)
 	}
 }
 

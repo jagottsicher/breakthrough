@@ -701,6 +701,19 @@ terminal.
   one. An archive found *inside* another is never opened this way
   automatically — it stays a plain file, extracted whole if you copy it
   out.
+- Activity log: off by default, turned on under Options with a single
+  `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
+  superset of the one before it — plus seven independent on/off
+  categories (file operations, permissions, archives, Sed Replace/Batch
+  Rename, Rsync, remote connections/transfers, shell) so you can dial
+  detail up or down per subsystem rather than all at once. Plain,
+  greppable text, one line per entry, written to
+  `/var/log/breakthrough/breakthrough.log` where that's writable or the
+  same per-user directory the crash log already uses otherwise —
+  `actions` records every real, state-changing action (Copy, Rename,
+  chmod, Compress, a Rsync run, an SFTP connect…), enough to answer
+  "what did I actually do with breakthrough" after the fact, and the
+  foundation a future Undo will build on.
 
 ## Status
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"archive/zip"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
@@ -291,6 +293,45 @@ func TestCopyPasteExtractsMarkedArchiveEntry(t *testing.T) {
 	}
 	if string(got) != "package lib\n" {
 		t.Errorf("dest/src/lib/util.go content = %q, want %q", got, "package lib\n")
+	}
+}
+
+// TestFinishExtractClipboardArchiveLogsAnAction pins
+// finishExtractClipboardArchive's own success path — split out from
+// extractClipboardArchive specifically so it's directly, synchronously
+// testable (see its own doc comment) rather than needing a running
+// Application to drain the real QueueUpdateDraw hand-off.
+func TestFinishExtractClipboardArchiveLogsAnAction(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishExtractClipboardArchive("sample.zip", 2, dir, nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryArchive)) || !strings.Contains(got, "extracted 2 item(s) from sample.zip") {
+		t.Errorf("log = %q, want an archive entry about the 2 extracted items", got)
+	}
+}
+
+// TestFinishExtractClipboardArchiveLogsAnError is the failure
+// counterpart.
+func TestFinishExtractClipboardArchiveLogsAnError(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishExtractClipboardArchive("sample.zip", 2, dir, errors.New("boom"))
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryArchive)) || !strings.Contains(got, "boom") {
+		t.Errorf("log = %q, want an archive error entry mentioning the failure", got)
 	}
 }
 
