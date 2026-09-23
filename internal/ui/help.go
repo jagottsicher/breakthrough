@@ -942,9 +942,14 @@ var helpText = strings.TrimLeft(`
                            running
   Drag the title bar       Move the window; Alt+arrow keys do the same
   Click the title bar's ✕  Close it, same as Escape
-  Drag the bottom-right ◢  Resize it — the title, its own close button,
-                           and one content row plus the handle's own
-                           row are the smallest it'll ever get
+  Click the title bar's ⭯  Reload: run the same command again with the
+                           same arguments, clearing the window first —
+                           if it's still running, that run is stopped
+                           first
+  Drag the bottom-right ◢  Resize it — the title, its own reload and
+                           close buttons, and one content row plus the
+                           handle's own row are the smallest it'll ever
+                           get
   Arrow keys/PageUp/       Scroll the output once it's longer than the
   PageDown/mouse wheel     window currently shows
 

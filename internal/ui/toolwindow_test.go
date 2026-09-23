@@ -302,6 +302,52 @@ func TestToolWindowCloseButtonClosesWindow(t *testing.T) {
 	}
 }
 
+// TestToolWindowReloadButtonRestartsTheCommand pins the user's own
+// explicit request for a reload button immediately left of the close
+// glyph (see toolWindowReloadButtonCol/Draw): clicking exactly that
+// cell cancels whatever was running before (harmless if it had already
+// finished), clears this window's own content back to empty, and bumps
+// generation — the fresh run's own real process/goroutine setup is
+// exercised the same way TestOpenToolCommandRegistersRunningWindow's
+// own doc comment explains (asynchronous, not drained here).
+func TestToolWindowReloadButtonRestartsTheCommand(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	tw := newToolWindow(r, "tw", "test")
+	tw.name = "echo"
+	tw.args = []string{"hello"}
+	tw.generation = 1
+	cancelledOld := false
+	tw.cancel = func() { cancelledOld = true }
+	tw.appendStatus("stale content from a previous run")
+	r.toolWindows = append(r.toolWindows, tw)
+	r.AddPage("tw", tw, false, true)
+	tw.SetRect(10, 5, 40, 10)
+
+	handler := tw.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(46, 5, tcell.Button1, 0), func(tview.Primitive) {}) // toolWindowReloadButtonCol(10, 40) = 46
+
+	if !cancelledOld {
+		t.Error("clicking reload should cancel whatever was running before")
+	}
+	if tw.generation != 2 {
+		t.Errorf("generation = %d, want 2 (bumped by the fresh start)", tw.generation)
+	}
+	if got := tw.content.GetText(true); got != "" {
+		t.Errorf("content = %q, want cleared", got)
+	}
+	if tw.dragging {
+		t.Error("clicking the reload button should not also start a move-drag")
+	}
+	if tw.closed {
+		t.Error("clicking reload should not close the window")
+	}
+	tw.close() // stop the freshly (re)started process rather than leaving it running past the test
+}
+
 // TestToolWindowResizeHandleDragResizesWindow pins the user's own
 // explicit request for a resize handle in the footer row's own
 // bottom-right corner (the toolWindowResizeGlyph drawn there — see
