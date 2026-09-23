@@ -13,14 +13,33 @@
 // Paste already do, rather than borrowing Rsync's own foreground "Run"
 // path (see runShellCommandFullScreen).
 //
-// No pty and no Setsid, unlike reallyStartRsyncBackground: both exist
-// there solely to give rsync's own stdout a terminal to keep it
-// line-buffered, and Setsid solely to keep that pty from fighting
-// breakthrough's own controlling terminal over job control (see its own
-// doc comment for the SIGTTOU story in full). Neither applies here —
-// stdout/stderr both go to a plain in-memory buffer, so the child never
-// has a file descriptor referring to any real terminal at all, and
-// there is nothing for it to contend with.
+// No pty, unlike reallyStartRsyncBackground: stdout/stderr both go to a
+// plain in-memory buffer here, not a terminal rsync's own live progress
+// needs to stay line-buffered.
+//
+// Setsid is still needed regardless, and for exactly the same reason
+// reallyStartRsyncBackground's own doc comment already gives in full: a
+// real, reported bug (the user's own "das Programm scheint einfach
+// ausgestiegen zu sein... bei Mausbewegung nur noch Zeichencodes
+// angezeigt", and, independently, "ich glaube breakthrough wird
+// irgendwie gestoppt und als job in den Hintergrund verschoben" —
+// exactly what happened). fullScreenShellArgs' own "-i" makes the child
+// an *interactive* shell regardless of what its stdout/stderr are
+// redirected to — job-control setup (tcsetpgrp and friends) happens
+// against /dev/tty, opened directly, never against fd 1/2 — so a plain
+// buffer in place of rsyncjob.go's own pty was never the part that
+// mattered. Without Setsid, that child still inherits breakthrough's
+// own session and controlling terminal, tries to become its own
+// foreground process group there, and the kernel's answer is SIGTTOU
+// sent to the whole process group — including breakthrough itself,
+// which promptly stops (bash's own job control then reports it as
+// "[1]+ Stopped", exactly the terminal-visible symptom reported: the
+// whole app appears to freeze/exit, dropping back to a shell prompt
+// behind it, with mouse reporting left enabled and never disabled since
+// breakthrough's own shutdown path never ran). Setsid gives the child
+// its own new session with no controlling terminal to fight over in
+// the first place — see reallyStartRsyncBackground's own doc comment
+// for the rest of this exact mechanism.
 //
 // Deliberately still just one Compress/Extract job at a time, queued
 // the same way a second background rsync already queues behind a
@@ -35,6 +54,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
@@ -143,6 +163,9 @@ func (r *Root) reallyStartCompressJob(req compressRequest) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, userShell(), fullScreenShellArgs(req.command)...)
+	// See this file's own package doc comment for why this is needed at
+	// all — a real, reported bug, not a defensive guess.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Only ever a real local directory: a subprocess-backed stage is
 	// always the actual zip/tar/... invocation, which only ever runs
 	// against locally-staged files even once either endpoint is remote

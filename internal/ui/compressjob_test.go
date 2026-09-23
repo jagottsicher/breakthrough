@@ -251,6 +251,35 @@ func TestReallyStartCompressJobRunsInThePanelsOwnDirectory(t *testing.T) {
 	r.cancelCompressJob() // don't leave a real process running past this test
 }
 
+// TestReallyStartCompressJobSetsSid pins a real, reported bug: without
+// Setsid, the child — an *interactive* shell, per fullScreenShellArgs'
+// own "-i" — inherits breakthrough's own session and controlling
+// terminal, tries its own job-control setup against it, and the
+// kernel's answer is SIGTTOU sent to the whole process group,
+// including breakthrough itself, which promptly stops (bash's own job
+// control then reports it as "[1]+ Stopped", exactly the reported
+// "the whole app just seems to quit" symptom) — see this file's own
+// package doc comment for the full mechanism, already fixed for Rsync's
+// own identical background-job shape in reallyStartRsyncBackground.
+func TestReallyStartCompressJobSetsSid(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+
+	r.reallyStartCompressJob(compressRequest{
+		command:    "true",
+		errContext: "compress",
+		verb:       "Compressing",
+		label:      "test.zip",
+		destDir:    r.panel.path,
+	})
+	if r.compressJob == nil {
+		t.Fatal("reallyStartCompressJob did not start a job")
+	}
+	if r.compressJob.cmd.SysProcAttr == nil || !r.compressJob.cmd.SysProcAttr.Setsid {
+		t.Error("cmd.SysProcAttr.Setsid = false, want true")
+	}
+	r.cancelCompressJob() // don't leave a real process running past this test
+}
+
 // TestCompressProgressText pins compressProgressText's own shape: the
 // verb, the label, and the queued-count suffix only once there actually
 // is one — the same "don't show (+0 queued)" rule
