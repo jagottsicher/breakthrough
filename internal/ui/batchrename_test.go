@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 )
 
@@ -238,6 +239,22 @@ func TestConfirmApplyBatchRenameRenamesAndReloadsThePanel(t *testing.T) {
 	}
 }
 
+func TestConfirmApplyBatchRenameLogsAnAction(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenameRules.Find = "apple"
+	r.batchRenameRules.Replace = "pear"
+	readLog := attachTestActivityLog(t, r)
+
+	r.confirmApplyBatchRename()
+	r.confirmDialog.SetCurrentItem(0)
+	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryTextOps)) || !strings.Contains(got, "batch renamed 1 file(s)") {
+		t.Errorf("log = %q, want a textops entry about the batch rename", got)
+	}
+}
+
 func TestConfirmApplyBatchRenameWithNoChangesDoesNothing(t *testing.T) {
 	r, _ := newBatchRenameRoot(t) // zero Rules: nothing would change
 
@@ -263,6 +280,23 @@ func TestUndoLastBatchRenameReversesTheLastApply(t *testing.T) {
 	}
 	if len(r.batchRenameUndo) != 0 {
 		t.Errorf("batchRenameUndo should be cleared after use, got %+v", r.batchRenameUndo)
+	}
+}
+
+func TestUndoLastBatchRenameLogsAnAction(t *testing.T) {
+	r, _ := newBatchRenameRoot(t)
+	r.batchRenameRules.Find = "apple"
+	r.batchRenameRules.Replace = "pear"
+	r.confirmApplyBatchRename()
+	r.confirmDialog.SetCurrentItem(0)
+	r.confirmDialog.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+	readLog := attachTestActivityLog(t, r)
+
+	r.undoLastBatchRename()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryTextOps)) || !strings.Contains(got, "undid batch rename of 1 file(s)") {
+		t.Errorf("log = %q, want a textops entry about the undo", got)
 	}
 }
 

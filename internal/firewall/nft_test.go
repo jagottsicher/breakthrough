@@ -1,6 +1,9 @@
 package firewall
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // realNFTRuleset is confirmed against real `nft -j list ruleset` output
 // shape: a metainfo header (ignored), a table, base chains hooked to
@@ -130,5 +133,20 @@ func TestParseNFTRulesetEmptyRuleset(t *testing.T) {
 func TestParseNFTRulesetInvalidJSON(t *testing.T) {
 	if _, err := ParseNFTRuleset([]byte("not json")); err == nil {
 		t.Error("expected an error for invalid JSON, got nil")
+	}
+}
+
+// TestNFTAddRuleCommandRefusesRatherThanGuess pins the deliberate
+// scope limit: nftables has no well-known chain convention this
+// package could safely target, so it explains why instead of building
+// a command that might silently add a rule to a chain packets never
+// traverse.
+func TestNFTAddRuleCommandRefusesRatherThanGuess(t *testing.T) {
+	_, err := NFTAddRuleCommand(NewRuleSpec{})
+	if err == nil {
+		t.Fatal("NFTAddRuleCommand should refuse rather than guess a table/chain")
+	}
+	if !strings.Contains(err.Error(), "nftables") {
+		t.Errorf("error = %q, want it to name nftables specifically", err.Error())
 	}
 }

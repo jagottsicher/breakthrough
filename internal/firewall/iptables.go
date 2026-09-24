@@ -141,3 +141,92 @@ func parseIPTablesPortSpec(s string) (from, to int, err error) {
 	}
 	return n, n, nil
 }
+
+// iptablesActionTarget/iptablesChain/iptablesInterfaceFlag render
+// spec's own fields the way a real iptables command line expects them
+// — the same vocabulary parseIPTablesRuleFields already reads back
+// (ACCEPT/DROP/REJECT, INPUT/OUTPUT, -i for incoming/-o for outgoing),
+// so a rule this package adds and one it merely reports can never
+// disagree on it.
+func iptablesActionTarget(a Action) string {
+	switch a {
+	case ActionDeny:
+		return "DROP"
+	case ActionReject:
+		return "REJECT"
+	default:
+		return "ACCEPT"
+	}
+}
+
+func iptablesChain(d Direction) string {
+	if d == DirectionOut {
+		return "OUTPUT"
+	}
+	return "INPUT"
+}
+
+func iptablesInterfaceFlag(d Direction) string {
+	if d == DirectionOut {
+		return "-o"
+	}
+	return "-i"
+}
+
+// iptablesRuleCommand builds one real `iptables` command line for
+// spec, under either flag ("-A" to append, "-D" to delete the exact
+// same rule again) — the shared core IPTablesAddRuleCommand/
+// IPTablesDeleteRuleCommand build on, so the two can never quietly
+// disagree about what a given spec actually turns into beyond that one
+// flag. Only the "filter" table's INPUT/OUTPUT chains, matching this
+// package's own read side (see ParseIPTablesSave's own doc comment for
+// why FORWARD and every other table are out of scope).
+//
+// A port always requires an explicit protocol: `--dport` is a
+// tcp/udp-specific match extension iptables refuses outright without
+// `-p tcp`/`-p udp` naming which one first — reported here as a clear,
+// actionable error rather than a real iptables invocation this package
+// would just hand to a shell to fail on with a less legible message.
+func iptablesRuleCommand(flag string, spec NewRuleSpec) (string, error) {
+	if err := spec.Validate(); err != nil {
+		return "", err
+	}
+	if !spec.HasAnyPort() && spec.Protocol == "" {
+		return "", fmt.Errorf("iptables: a port requires an explicit protocol (tcp or udp)")
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "iptables %s %s", flag, iptablesChain(spec.Direction))
+	if spec.Protocol != "" {
+		fmt.Fprintf(&b, " -p %s", spec.Protocol)
+	}
+	if spec.Source != "" {
+		fmt.Fprintf(&b, " -s %s", spec.Source)
+	}
+	if spec.Destination != "" {
+		fmt.Fprintf(&b, " -d %s", spec.Destination)
+	}
+	if spec.Interface != "" {
+		fmt.Fprintf(&b, " %s %s", iptablesInterfaceFlag(spec.Direction), spec.Interface)
+	}
+	if !spec.HasAnyPort() {
+		fmt.Fprintf(&b, " --dport %s", portRangeArg(spec.PortFrom, spec.PortTo, ":"))
+	}
+	fmt.Fprintf(&b, " -j %s", iptablesActionTarget(spec.Action))
+	return b.String(), nil
+}
+
+// IPTablesAddRuleCommand builds the real `iptables -A ...` command
+// line that would add spec as a new rule.
+func IPTablesAddRuleCommand(spec NewRuleSpec) (string, error) {
+	return iptablesRuleCommand("-A", spec)
+}
+
+// IPTablesDeleteRuleCommand builds the exact command that reverses
+// IPTablesAddRuleCommand's own (`-D` in place of `-A`, otherwise byte-
+// for-byte identical) — the rollback feature_ideas.txt's own
+// "Selbstaussperr-Schutz" calls once a rule it just applied turns out
+// to have cut off the very session that applied it.
+func IPTablesDeleteRuleCommand(spec NewRuleSpec) (string, error) {
+	return iptablesRuleCommand("-D", spec)
+}

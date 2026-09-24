@@ -2,28 +2,59 @@ package firewall
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // runUFWStatus/runNFTRuleset/runIPTablesSave are package-level swappable
 // vars — the same "mockable exec wrapper" idiom internal/ui's own dirSize
 // already uses — so DetectBackend and ReadSnapshot can be exercised by a
 // test without a real ufw/nft/iptables binary ever needing to be present or
-// runnable (root is required for several of these in practice).
+// runnable (root is required for several of these in practice). Each
+// wraps its own Output() error through wrapExitError, so a real failure
+// (most commonly a permission error — several of these do need root)
+// surfaces its own real stderr text, not just Go's own bare "exit status
+// N" — see wrapExitError's own doc comment for the real, reported gap
+// this closes.
 var (
 	runUFWStatus = func() (string, error) {
 		out, err := exec.Command("ufw", "status", "verbose").Output()
-		return string(out), err
+		return string(out), wrapExitError(err)
 	}
 	runNFTRuleset = func() ([]byte, error) {
-		return exec.Command("nft", "-j", "list", "ruleset").Output()
+		out, err := exec.Command("nft", "-j", "list", "ruleset").Output()
+		return out, wrapExitError(err)
 	}
 	runIPTablesSave = func() (string, error) {
 		out, err := exec.Command("iptables-save").Output()
-		return string(out), err
+		return string(out), wrapExitError(err)
 	}
 	lookPath = exec.LookPath
 )
+
+// wrapExitError enriches err with the failed command's own stderr, if
+// any was captured — turning Go's own bare "exit status 4" (all
+// *exec.ExitError.Error() ever says on its own) into something
+// actually actionable, e.g. "exit status 4: iptables-save: Permission
+// denied (you must be root)". A real, reported gap: every one of
+// ufw/nft/iptables-save can fail this way when breakthrough isn't
+// running as root, and the bare exit code alone gives no hint that
+// permissions are the reason. cmd.Output() already populates
+// ExitError.Stderr for exactly this (see os/exec's own doc comment on
+// Cmd.Output) — this only has to surface it. Left unchanged for any
+// other error (the binary itself missing or failing to start, where
+// there is no stderr to add) or a clean nil.
+func wrapExitError(err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+			return fmt.Errorf("%w: %s", err, stderr)
+		}
+	}
+	return err
+}
 
 // DetectBackend picks exactly one backend to read rules from, in this
 // order:

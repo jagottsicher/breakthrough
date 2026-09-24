@@ -3,10 +3,12 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 )
 
@@ -303,6 +305,22 @@ func TestConfirmApplySedConfirmedWritesChanges(t *testing.T) {
 	}
 	if r.activePage == sedPreviewPage || r.activePage == confirmPage {
 		t.Errorf("activePage = %q, want the dialog closed", r.activePage)
+	}
+}
+
+func TestConfirmApplySedLogsAnAction(t *testing.T) {
+	r, _, file := newTestRootWithSedFile(t, "hello world\n")
+	r.openSedReplace()
+	r.showSedPreviewResult([]replace.FileChange{{Path: file, Before: []byte("hello world\n"), After: []byte("goodbye world\n")}}, nil, nil)
+	readLog := attachTestActivityLog(t, r)
+
+	r.confirmApplySed()
+	r.confirmDialog.SetCurrentItem(0)
+	r.acceptConfirm()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryTextOps)) || !strings.Contains(got, "sed replace: updated 1 file(s)") {
+		t.Errorf("log = %q, want a textops entry about the sed replace", got)
 	}
 }
 

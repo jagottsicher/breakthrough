@@ -65,10 +65,12 @@ terminal.
   to `…` and Modified disappeared off the right edge entirely.
 - A live filter, tucked behind a compact "Y" button in the top row (an
   "Nx" count appears right before it once one or more are actually
-  narrowing the listing, turning bright red instead if one is currently
-  hiding everything a directory would otherwise show): click it, or
-  press `/`, to open a small dropdown with three independently
-  combinable rows, each narrowing the listing live as you type:
+  narrowing the listing — glowing the same slow green breathing pulse
+  the header's own "@" connection button uses (see below), or turning
+  solid red instead if one is currently hiding everything a directory
+  would otherwise show): click it, or press `/`, to open a small
+  dropdown with three independently combinable rows, each narrowing the
+  listing live as you type:
   - **Glob/regex** — the original filter, with a Glob/Regex toggle for
     how the pattern is interpreted and its own checkbox to switch it
     off without losing what's typed.
@@ -83,16 +85,22 @@ terminal.
     expression on its own (`last 7 days`) means "modified within
     that span".
 
+  A fourth row, **Exclude dirs**, sits below all three: not a filter of
+  its own, but a single on/off switch that applies to all three at
+  once — while on, a directory is never hidden by any of them, however
+  it would otherwise have matched (or failed to match); only plain
+  files are ever actually filtered.
+
   Typing into any field auto-activates its own row, the same way it
-  already did for glob. `Tab`/`Shift+Tab` cycle through all seven of
+  already did for glob. `Tab`/`Shift+Tab` cycle through all eight of
   the dropdown's own pieces (checkbox + field for size and
-  modified-time, checkbox + mode button + field for glob),
-  `Space`/`Enter` toggles whichever checkbox has focus, `/` — once the
-  dropdown is already open — jumps straight to the next of the three
-  fields instead (the same "press it again to advance further" trick
-  `Ctrl+T` already does for the tab switcher; safe to repurpose since a
-  bare filename can never contain `/` in the first place), and `Escape`
-  closes it from any of them.
+  modified-time, checkbox + mode button + field for glob, plus the
+  "Exclude dirs" checkbox), `Space`/`Enter` toggles whichever checkbox
+  has focus, `/` — once the dropdown is already open — jumps straight
+  to the next of the three fields instead (the same "press it again to
+  advance further" trick `Ctrl+T` already does for the tab switcher;
+  safe to repurpose since a bare filename can never contain `/` in the
+  first place), and `Escape` closes it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go
@@ -170,7 +178,8 @@ terminal.
   place when chosen (Windows Explorer's own cascading-menu idea,
   without needing room to open beside it): "More actions" (New file,
   New dir, `tail -f`, chown, chmod, Sed Replace, Batch rename, Undo
-  last rename, Compare, Rsync, Remove), "Selection" (Select all/
+  last rename, Compare, Rsync, Compress…, Extract/Extract-delete-original
+  (the latter two only for a recognized archive), Remove), "Selection" (Select all/
   Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
   the last two only once a split actually exists). `◂ Back`, `Escape`,
@@ -180,14 +189,16 @@ terminal.
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
   Cut/Move to Trash/Properties already have on their own — fire that
   entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `m`/`o` again (`mmm`/`mmo`
-  from plain browsing) do too, for Multiply and Open with… — the two
-  entries with no plain-key equivalent of their own, since neither ever
-  opens from anywhere but here. `mf`/`md` reach New file/New dir directly from plain
-  browsing, without opening the menu at all — both create their new
-  entry directly inside the active panel's own current directory
-  (remote-aware the same way Rename already is), prompting only for a
-  name.
+  entry isn't currently showing does nothing. `o`/`t`/`A` do too, for
+  Open with…, `tail -f`, and Deselect all — all three also directly
+  reachable as `mo`/`mt`/`mA` from plain browsing, without opening the
+  menu at all. `m` again (`mmm` from plain browsing) fires Multiply,
+  the one entry with no keyboard route of its own anywhere else, since
+  its own natural letter is already this chord's own prefix key.
+  `mf`/`md` reach New file/New dir directly from plain browsing too,
+  without opening the menu at all — both create their new entry
+  directly inside the active panel's own current directory (remote-aware
+  the same way Rename already is), prompting only for a name.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -451,7 +462,11 @@ terminal.
   `-e 'ssh -p PORT'` flag rather than guessed — the same applies to an
   address typed straight in by hand for a host never connected to via
   the Connect dialog at all, recognized by rsync's own real
-  disambiguation rule (a colon before the first "/" names a host).
+  disambiguation rule (a colon before the first "/" names a host). Two
+  buttons, "Pick source tab…"/"Pick destination tab…", open a list of
+  every currently open tab as an alternative to typing or trusting that
+  one-shot default — picking one fills the field exactly as if Rsync
+  had been opened fresh from that tab, connection included.
   Syncing between two remote hosts at once shows a warning line: `rsync
   -e ssh` has no server-to-server mode of its own, every byte still
   relays through this machine over two separate ssh connections, never
@@ -467,16 +482,17 @@ terminal.
   bar, queuing behind an already-running background rsync the same way
   a second Paste already queues behind one still in flight. See
   [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
-- Toolbox (`j` then `j`): a full-screen, browsable catalog of built-in
-  networking (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`,
-  `nslookup`, `dig`, netcat, `curl`, a `tail -f` Logviewer) and hardware
-  (`lsblk`, `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`,
-  `lsscsi`) tools — real external commands, never reimplemented, the
-  same approach Rsync above already takes. An entry that needs one — a
-  host, a URL, a database key — asks for it in a small field first;
-  every one of them then streams its live output into its own small,
-  draggable tool window, non-modal so the Toolbox screen and the panel
-  underneath both stay usable while it runs. See
+- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): two
+  full-screen, browsable catalogs of built-in commands — Network Tools
+  (Ping, Nmap, `ip`, `route`, `ss`, `getent`, `wget`, `nslookup`, `dig`,
+  netcat, `curl`, a `tail -f` Logviewer) and Hardware Tools (`lsblk`,
+  `lsusb`, `lscpu`, `lsmem`, `lsdev`, `hwinfo`, `inxi`, `lsscsi`) — real
+  external commands, never reimplemented, the same approach Rsync above
+  already takes. An entry that needs one — a host, a URL, a database
+  key — asks for it in a small field first; every one of them then
+  streams its live output into its own small, draggable tool window,
+  non-modal so the Toolbox screen and the panel underneath both stay
+  usable while it runs. See
   [docs/user-guide.md](docs/user-guide.md#toolbox) for the full catalog.
 - Mounts (`j` then `m`): a third full-screen catalog, kept deliberately
   separate from the Toolbox above — a read-only, live table of every
@@ -487,11 +503,29 @@ terminal.
   some point since), and flags bind mounts, so it doubles as a quick
   answer to "what will still be here after I reboot this box?" See
   [docs/user-guide.md](docs/user-guide.md#mounts) for the full picture.
-- Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): the
-  same Toolbox screen above, opened already filtered down to just its
-  Networking or just its Hardware catalog, for jumping straight to one
-  tool without scrolling past the other category first. `jj` itself
-  still shows both categories together.
+- Compress (`j` then `c`, or the context menu's "Compress…") and
+  Extract (`j` then `e`/`E`, or the context menu's "Extract"/"Extract,
+  delete original"): real archive creation and unpacking, through a
+  real external tool (zip, tar, gzip, bzip2, xz, or zstd) in both
+  directions, never a reimplementation. Compress archives the current
+  selection — a file, several files, or a whole directory — into a new
+  file right beside it, or, once a split is active, straight into the
+  other pane's own directory instead; pick a Format, type an Output
+  name, a live Preview line shows exactly what will be created. Extract
+  unpacks the archive under the cursor in one step, without first
+  entering it — into its own directory, or, once a split is active,
+  the other pane's own current directory, the same default
+  Rsync/Compare already use. Either direction's own "other pane" may be
+  a remote SFTP connection too: the real archive tool still only ever
+  runs locally, but the result is compressed/extracted into a local
+  staging copy first and then uploaded, transparently, with its own
+  "Uploading" status while that happens. `jE` additionally moves the
+  original archive to the Trash once extraction has actually succeeded
+  — asking first, and naming the fallback plainly as a real permanent
+  delete, if that ever fails outright. All of this runs in the
+  background, the same as Copy/Cut/Paste — no terminal takes over the
+  screen, and the affected directory reloads on its own once it's
+  actually done.
 - Three rows below the panel, each with its own job. First, a real
   shell command line (with its own history — shared with `$HISTFILE` if
   you've set it, `~/.bash_history` otherwise regardless of your actual
@@ -675,20 +709,34 @@ terminal.
   one. An archive found *inside* another is never opened this way
   automatically — it stays a plain file, extracted whole if you copy it
   out.
+- Activity log: off by default, turned on under Options with a single
+  `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
+  superset of the one before it — plus seven independent on/off
+  categories (file operations, permissions, archives, Sed Replace/Batch
+  Rename, Rsync, remote connections/transfers, shell) so you can dial
+  detail up or down per subsystem rather than all at once. Plain,
+  greppable text, one line per entry, written to
+  `/var/log/breakthrough/breakthrough.log` where that's writable or the
+  same per-user directory the crash log already uses otherwise —
+  `actions` records every real, state-changing action (Copy, Rename,
+  chmod, Compress, a Rsync run, an SFTP connect…), enough to answer
+  "what did I actually do with breakthrough" after the fact, and the
+  foundation a future Undo will build on.
 
 ## Status
 
 Actively developed and usable day to day. Everything described above is
 built and tested: browsing, tabs, split view, the trash, Search, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
-covering every setting breakthrough recognizes, a Toolbox screen
-(`jj`) of built-in networking and hardware tools with its own filtered
-Network Tools (`jn`) and Hardware Tools (`jh`) screens, a Mounts
+covering every setting breakthrough recognizes, a Toolbox screen of
+built-in networking and hardware tools with its own Network Tools
+(`jn`) and Hardware Tools (`jh`) screens, a Mounts
 screen (`jm`) showing what's currently mounted and whether it survives a
-reboot, and a Firewall screen (`jf`) showing this host's own actual
+reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other. Progress bars
-for long-running file operations are what's
+governs traffic), including which rules shadow each other, and real
+Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
+zstd. Progress bars for long-running file operations are what's
 planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on

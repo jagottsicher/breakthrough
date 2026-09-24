@@ -354,6 +354,62 @@ func SettingDocs() []SettingDoc {
 			Summary:     `Opening a remote zip/tar at or above this size asks first (e.g. "10MB", "500KB", "1GB").`,
 			Implemented: true,
 		},
+		{
+			Key:         "log_level",
+			Default:     d.LogLevel,
+			Kind:        KindString,
+			Summary:     `The activity log's own detail dial: "off", "errors", "actions", "detailed", or "debug" — each a superset of the one before it.`,
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_fileops",
+			Default:     strconv.FormatBool(d.LogCategoryFileOps),
+			Kind:        KindBool,
+			Summary:     "Log file operations (copy, move, rename, trash, remove, multiply, new file/dir) when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_permissions",
+			Default:     strconv.FormatBool(d.LogCategoryPermissions),
+			Kind:        KindBool,
+			Summary:     "Log permission changes (chmod, chown) when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_archive",
+			Default:     strconv.FormatBool(d.LogCategoryArchive),
+			Kind:        KindBool,
+			Summary:     "Log Compress/Extract when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_textops",
+			Default:     strconv.FormatBool(d.LogCategoryTextOps),
+			Kind:        KindBool,
+			Summary:     "Log Sed Replace and Batch Rename when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_rsync",
+			Default:     strconv.FormatBool(d.LogCategoryRsync),
+			Kind:        KindBool,
+			Summary:     "Log Rsync runs when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_remote",
+			Default:     strconv.FormatBool(d.LogCategoryRemote),
+			Kind:        KindBool,
+			Summary:     "Log remote connections and SFTP transfers when the activity log is on.",
+			Implemented: true,
+		},
+		{
+			Key:         "log_category_shell",
+			Default:     strconv.FormatBool(d.LogCategoryShell),
+			Kind:        KindBool,
+			Summary:     "Log the bash line, Open with…, and Edit when the activity log is on.",
+			Implemented: true,
+		},
 	}
 }
 

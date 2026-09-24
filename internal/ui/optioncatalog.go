@@ -3,6 +3,7 @@ package ui
 import (
 	"strconv"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
@@ -768,7 +769,97 @@ func optionCategories() []optionCategory {
 				),
 			},
 		},
+		{
+			// Off by default (see internal/activitylog's own doc
+			// comment on why this stays opt-in) — a plain-text, one-
+			// line-per-entry activity log of what breakthrough itself
+			// did, kept for two reasons the user's own explicit request
+			// named: making what happened with breakthrough traceable
+			// after the fact, and giving a future Undo feature a real,
+			// structured record to work from. Written to
+			// /var/log/breakthrough if that's writable (root or a
+			// pre-prepared shared group directory), or the same
+			// per-user directory the crash log already uses otherwise
+			// — see activitylog.ResolvePath's own doc comment.
+			name: "Activity log",
+			options: []optionSpec{
+				{
+					key:   "log_level",
+					label: "Detail level",
+					help: "How much the activity log records — each step a superset of the one " +
+						"before it. Off by default.\n\n" +
+						"\"Errors\" records only a failed action. \"Actions\" additionally records " +
+						"every successful, state-changing action (Copy, Move, Rename, Trash/Remove, " +
+						"Compress/Extract, chmod/chown, a Rsync run, ...) — the level a future Undo " +
+						"feature, and simply reviewing what you did with breakthrough, actually " +
+						"needs. \"Detailed\" additionally records an action's own sub-steps (each " +
+						"file within a batch Copy/Paste, each conflict resolution, each file Rsync " +
+						"itself reports transferring). \"Debug\" additionally records internal " +
+						"diagnostic detail (the exact command line an external tool was handed, " +
+						"connection handshake steps, timing) — for troubleshooting breakthrough " +
+						"itself, not for reviewing what you did with it.\n\n" +
+						"The categories below are independent of this level: turning one off means " +
+						"nothing in that category is ever recorded, at any level.",
+					value: func(r *Root) string { return r.settings.LogLevel },
+					apply: func(r *Root, v string) {
+						r.settings.LogLevel = v
+						r.persistSetting("log_level", v)
+						r.reopenActivityLog()
+					},
+					choices: func(*Root) []optionChoice {
+						var choices []optionChoice
+						for _, level := range activitylog.Levels() {
+							choices = append(choices, optionChoice{value: level.String(), label: level.Label()})
+						}
+						return choices
+					},
+				},
+				activityLogCategoryOption("log_category_fileops", "File operations",
+					"Copy, Cut/Paste, Rename, Trash/Remove/Restore, Multiply, and New file/New dir.",
+					func(r *Root) bool { return r.settings.LogCategoryFileOps },
+					func(r *Root, b bool) { r.settings.LogCategoryFileOps = b }),
+				activityLogCategoryOption("log_category_permissions", "Permission changes",
+					"chmod and chown.",
+					func(r *Root) bool { return r.settings.LogCategoryPermissions },
+					func(r *Root, b bool) { r.settings.LogCategoryPermissions = b }),
+				activityLogCategoryOption("log_category_archive", "Archives",
+					"Compress and Extract.",
+					func(r *Root) bool { return r.settings.LogCategoryArchive },
+					func(r *Root, b bool) { r.settings.LogCategoryArchive = b }),
+				activityLogCategoryOption("log_category_textops", "Sed Replace / Batch Rename",
+					"Sed Replace and Batch Rename.",
+					func(r *Root) bool { return r.settings.LogCategoryTextOps },
+					func(r *Root, b bool) { r.settings.LogCategoryTextOps = b }),
+				activityLogCategoryOption("log_category_rsync", "Rsync",
+					"A Rsync run, foreground or backgrounded.",
+					func(r *Root) bool { return r.settings.LogCategoryRsync },
+					func(r *Root, b bool) { r.settings.LogCategoryRsync = b }),
+				activityLogCategoryOption("log_category_remote", "Remote connections",
+					"Connecting/disconnecting an SFTP connection, and any remote file transfer.",
+					func(r *Root) bool { return r.settings.LogCategoryRemote },
+					func(r *Root, b bool) { r.settings.LogCategoryRemote = b }),
+				activityLogCategoryOption("log_category_shell", "Shell",
+					"The bash line, \"Open with…\", and Edit.",
+					func(r *Root) bool { return r.settings.LogCategoryShell },
+					func(r *Root, b bool) { r.settings.LogCategoryShell = b }),
+			},
+		},
 	}
+}
+
+// activityLogCategoryOption builds one Activity log category toggle —
+// like boolOption, but also reopens the activity log afterward (see
+// reopenActivityLog's own doc comment for why a category change needs
+// that and a level change already gets it inline above): the Logger
+// itself holds a snapshot of which categories are enabled, taken once
+// when it was last (re)built, so a toggle here has no visible effect
+// at all until that snapshot is refreshed.
+func activityLogCategoryOption(key, label, help string, get func(*Root) bool, set func(*Root, bool)) optionSpec {
+	return boolOption(key, label, help, false, get, func(r *Root, b bool) {
+		set(r, b)
+		r.persistSetting(key, strconv.FormatBool(b))
+		r.reopenActivityLog()
+	})
 }
 
 // optionSpecByKey finds one setting's own optionSpec by its config key,
@@ -884,6 +975,22 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MoveStableSymlinks), true
 	case "remote_archive_confirm_size":
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
+	case "log_level":
+		return s.LogLevel, true
+	case "log_category_fileops":
+		return strconv.FormatBool(s.LogCategoryFileOps), true
+	case "log_category_permissions":
+		return strconv.FormatBool(s.LogCategoryPermissions), true
+	case "log_category_archive":
+		return strconv.FormatBool(s.LogCategoryArchive), true
+	case "log_category_textops":
+		return strconv.FormatBool(s.LogCategoryTextOps), true
+	case "log_category_rsync":
+		return strconv.FormatBool(s.LogCategoryRsync), true
+	case "log_category_remote":
+		return strconv.FormatBool(s.LogCategoryRemote), true
+	case "log_category_shell":
+		return strconv.FormatBool(s.LogCategoryShell), true
 	}
 	return "", false
 }

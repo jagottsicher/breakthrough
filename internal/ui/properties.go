@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
@@ -807,14 +808,19 @@ func (r *Root) savePropertiesEdit() {
 	if r.stagedName != r.propertiesStat.Name {
 		newPath, err := fsops.Rename(target, r.stagedName)
 		if err != nil {
+			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", target, r.stagedName, err))
 			firstErr = err
 		} else {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", target, r.stagedName))
 			target = newPath
 		}
 	}
 	if firstErr == nil && r.stagedMode != r.propertiesStat.Mode.Perm() {
 		if err := fsops.Chmod(target, r.stagedMode); err != nil {
+			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chmod %q: %v", target, err))
 			firstErr = err
+		} else {
+			r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed permissions on %q to %04o", target, r.stagedMode&os.ModePerm))
 		}
 	}
 	// Compared at whole-second precision, not with Equal directly: the
@@ -828,7 +834,10 @@ func (r *Root) savePropertiesEdit() {
 	// here actually differs.
 	if firstErr == nil && !r.stagedMtime.Truncate(time.Second).Equal(r.propertiesStat.ModTime.Truncate(time.Second)) {
 		if err := fsops.SetModTime(target, r.stagedMtime); err != nil {
+			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q: %v", target, err))
 			firstErr = err
+		} else {
+			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("set modified time on %q", target))
 		}
 	}
 	// Owner and Group are applied as two separate Chown/ChownRecursive
@@ -847,6 +856,7 @@ func (r *Root) savePropertiesEdit() {
 	// isDirish), so no extra guard is needed here beyond reading them.
 	if firstErr == nil && r.stagedOwner != r.propertiesStat.Owner {
 		if uid, err := fsops.ResolveUID(r.stagedOwner); err != nil {
+			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
 			firstErr = err
 		} else {
 			chown := fsops.Chown
@@ -854,12 +864,16 @@ func (r *Root) savePropertiesEdit() {
 				chown = fsops.ChownRecursive
 			}
 			if err := chown(target, uid, -1); err != nil {
+				r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q owner to %q: %v", target, r.stagedOwner, err))
 				firstErr = err
+			} else {
+				r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner of %q to %q", target, r.stagedOwner))
 			}
 		}
 	}
 	if firstErr == nil && r.stagedGroup != r.propertiesStat.Group {
 		if gid, err := fsops.ResolveGID(r.stagedGroup); err != nil {
+			r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
 			firstErr = err
 		} else {
 			chown := fsops.Chown
@@ -867,7 +881,10 @@ func (r *Root) savePropertiesEdit() {
 				chown = fsops.ChownRecursive
 			}
 			if err := chown(target, -1, gid); err != nil {
+				r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q group to %q: %v", target, r.stagedGroup, err))
 				firstErr = err
+			} else {
+				r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed group of %q to %q", target, r.stagedGroup))
 			}
 		}
 	}

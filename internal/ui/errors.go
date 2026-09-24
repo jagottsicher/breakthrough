@@ -26,11 +26,26 @@ func (r *Root) newErrorView() *tview.TextView {
 	return v
 }
 
-// showError displays err in a centered overlay. It is the single place
-// errors surface in the UI: Panel reports its own failures through the
-// callback Root installs (see Panel.onError), and Root's own actions call
-// this directly. A nil error is ignored, so callers can pass a result
-// straight through without checking first.
+// showError displays err in a centered overlay, sized against the whole
+// screen — clampToScreen, not clampToPanel: an error is "genuinely meant
+// to sit in the middle of the whole terminal" (see clampToScreen's own
+// doc comment), the same as Help/Options/BatchRename, not an overlay
+// anchored to the active panel. Using the panel's own rect here was a
+// real, reported bug with two visible symptoms: in split view, a wide
+// error was squeezed into (and shoved to one edge of) whichever pane
+// happened to be active instead of reading as centered on the whole
+// screen; and a startup notice shown before Root's first real Draw
+// pass — the panel's own rect still tview.Box's uninitialized 15x10
+// default at that point, since nothing has laid it out yet — landed
+// wrapped to a handful of columns in the terminal's top-left corner.
+// Root's own rect (see clampToScreen) is already correct that early,
+// because it's set explicitly once by NewRoot from the real terminal
+// size, not left for a parent Flex layout's own Draw to fill in.
+//
+// It is the single place errors surface in the UI: Panel reports its
+// own failures through the callback Root installs (see Panel.onError),
+// and Root's own actions call this directly. A nil error is ignored, so
+// callers can pass a result straight through without checking first.
 func (r *Root) showError(err error) {
 	if err == nil {
 		return
@@ -41,20 +56,24 @@ func (r *Root) showError(err error) {
 
 	width, height := textSize(text)
 	_, _, screenWidth, screenHeight := r.GetRect() // Root fills the whole screen
-	x, y, width, height := r.clampToPanel((screenWidth-width)/2, (screenHeight-height)/2, width, height)
+	x, y, width, height := r.clampToScreen((screenWidth-width)/2, (screenHeight-height)/2, width, height)
 
 	r.errorView.SetRect(x, y, width, height)
 	r.showOverlay(errorPage, r.errorView)
 }
 
 // errorWidth returns the column width error text is wrapped to: the
-// configured maximum, or less if the panel itself is narrower.
+// configured maximum, or less if the whole screen itself is narrower —
+// the whole screen, not just the active panel (see showError's own doc
+// comment for why: a split view's own narrower single pane must never
+// needlessly squeeze a message that's centered on the whole terminal
+// anyway).
 func (r *Root) errorWidth() int {
 	width := errorViewMaxWidth
 
 	// Leave room for the overlay's own 1-column padding on each side.
-	if _, _, panelWidth, _ := r.panel.GetInnerRect(); panelWidth > 2 && width > panelWidth-2 {
-		width = panelWidth - 2
+	if _, _, screenWidth, _ := r.GetRect(); screenWidth > 2 && width > screenWidth-2 {
+		width = screenWidth - 2
 	}
 	if width < 1 {
 		width = 1

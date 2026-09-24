@@ -55,6 +55,7 @@ import (
 
 	"github.com/creack/pty"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
@@ -381,13 +382,17 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 	r.rsyncJob = nil
 	job.cancel()
 
-	if err != nil && !wasCancelled {
+	switch {
+	case err != nil && !wasCancelled:
 		// !wasCancelled: a real failure, not this job being cancelled
 		// out from under itself (cancelRsyncJob's own context.Cancel is
 		// what makes cmd.Wait return an error too — that one is
 		// expected, already handled by cancelRsyncJob itself, and must
 		// not also show as a spurious error overlay).
+		r.activityLog.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
 		r.showError(err)
+	case !wasCancelled:
+		r.activityLog.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
 	}
 	r.forEachTab(func(p *Panel) {
 		if p.path == job.destPath {

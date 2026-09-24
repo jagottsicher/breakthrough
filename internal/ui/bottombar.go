@@ -14,6 +14,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -324,6 +325,16 @@ func (r *Root) buildStatusBar() string {
 	// yield to the other the way paste and the clipboard indicator do.
 	if r.rsyncJob != nil {
 		write(rsyncProgressText(r.rsyncJob, len(r.rsyncQueue)))
+		sep()
+	}
+
+	// A backgrounded Compress/Extract's own progress — the same
+	// independent-segment treatment as rsync just above, and for the
+	// same reason: a separate process tree, free to run alongside
+	// either of the other two (see compressjob.go's own package doc
+	// comment).
+	if r.compressJob != nil {
+		write(compressProgressText(r.compressJob, len(r.compressQueue)))
 		sep()
 	}
 
@@ -666,6 +677,23 @@ func rsyncProgressText(job *rsyncJob, queued int) string {
 		fmt.Fprintf(&b, " (+%d queued)", queued)
 	}
 	return b.String()
+}
+
+// compressProgressText renders buildStatusBar's own backgrounded
+// Compress/Extract segment (see compressjob.go's own package doc
+// comment) — a spinner (reusing hashAnimationFrames, the same visual
+// language pasteProgressText's own uses), since none of zip/tar/gzip/
+// bzip2/xz/zstd offer a percentage to show the way rsync's own
+// --info=progress2 does, the elapsed time, and the archive's own base
+// name.
+func compressProgressText(job *compressJob, queued int) string {
+	spinner := hashAnimationFrames[job.animFrame%len(hashAnimationFrames)]
+	elapsed := time.Since(job.startedAt).Round(time.Second)
+	text := fmt.Sprintf("%s %s %s (%s)", spinner, job.verb, job.label, elapsed)
+	if queued > 0 {
+		text += fmt.Sprintf(" (+%d queued)", queued)
+	}
+	return text
 }
 
 // mouseStatusText renders buildStatusBar's own "Mouse on"/"Mouse off"
@@ -1309,9 +1337,11 @@ func (r *Root) runEditor(path string, line int) {
 // directory afterward, unchanged.
 func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
 	if err := r.runCommandOnFile(command, path, line); err != nil {
+		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, path, err))
 		r.showError(fmt.Errorf("run %s on %s: %w", command, path, err))
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, path))
 	if r.panel.searchMode {
 		return
 	}
@@ -1400,9 +1430,11 @@ func (r *Root) openRemoteEntryWithCommand(remote remotefs.Client, remotePath, co
 	}
 
 	if err := r.runCommandOnFile(command, localPath, 0); err != nil {
+		r.activityLog.Error(activitylog.CategoryShell, fmt.Sprintf("run %s on %s: %v", command, remotePath, err))
 		r.showError(fmt.Errorf("open %s: %w", remotePath, err))
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryShell, fmt.Sprintf("ran %s on %s", command, remotePath))
 
 	r.showError(r.finishRemoteEdit(remote, remotePath, localPath, before))
 }
@@ -1425,8 +1457,10 @@ func (r *Root) finishRemoteEdit(remote remotefs.Client, remotePath, localPath st
 	}
 
 	if err := copyTransferFile(transferSide{}, transferSide{client: remote}, localPath, remotePath); err != nil {
+		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("upload changes to %s: %v", remotePath, err))
 		return fmt.Errorf("uploading changes back to %s: %w", remotePath, err)
 	}
+	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("uploaded changes to %s", remotePath))
 	return r.panel.load(r.panel.path)
 }
 
@@ -1480,18 +1514,32 @@ func (r *Root) StartClock() (stop func()) {
 // to force a redraw a plain, unconnected header never needs.
 func (r *Root) refreshActivePanelHeaderGlow() {
 	p := r.panel
-	if p == nil || p.remote == nil {
+	if p == nil {
 		return
 	}
-	if p.searchMode {
-		// setSearchStatus rebuilds the breadcrumb half of the combined
-		// text via buildHeaderSpans itself, the same as the plain
-		// branch below — reusing it here rather than duplicating that
-		// call keeps the two paths from ever drifting apart.
-		p.setSearchStatus(p.searchStatusText)
-		return
+	if p.remote != nil {
+		if p.searchMode {
+			// setSearchStatus rebuilds the breadcrumb half of the
+			// combined text via buildHeaderSpans itself, the same as
+			// the plain branch below — reusing it here rather than
+			// duplicating that call keeps the two paths from ever
+			// drifting apart.
+			p.setSearchStatus(p.searchStatusText)
+		} else {
+			text, spans := buildHeaderSpans(p.path, p.theme, true)
+			p.header.SetText(text)
+			p.headerSpans = spans
+		}
 	}
-	text, spans := buildHeaderSpans(p.path, p.theme, true)
-	p.header.SetText(text)
-	p.headerSpans = spans
+	// The filter-menu button's own "Nx" glow (see renderFilterMenuBtn)
+	// needs the exact same once-a-second nudge to keep advancing while
+	// sitting idle with a filter active, for the same reason the "@"
+	// button above does — independent of it, since a panel can have
+	// both a remote connection and an active filter at once. Skipped
+	// while filterMatchesNothing: that state deliberately stays a flat,
+	// unmoving red (see renderFilterMenuBtn's own doc comment), so
+	// there's no glow phase to advance there either.
+	if p.activeFilterCount() > 0 && !p.filterMatchesNothing {
+		p.renderFilterMenuBtn()
+	}
 }

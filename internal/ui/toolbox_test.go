@@ -265,16 +265,21 @@ func TestToolboxArgEntryEscapeCancelsWithoutRunning(t *testing.T) {
 	}
 }
 
-// TestOpenToolboxRendersTheWholeCatalog pins openToolbox's own basic
-// contract: it shows the Toolbox page and fills the table with exactly
-// one row per toolboxDisplayRows entry, cursor landing on a real one.
-func TestOpenToolboxRendersTheWholeCatalog(t *testing.T) {
+// TestOpenToolboxScreenRendersTheWholeCatalog pins openToolboxScreen's
+// own basic contract when given every category at once: it shows the
+// Toolbox page and fills the table with exactly one row per
+// toolboxDisplayRows entry, cursor landing on a real one. There is no
+// keyboard shortcut reaching the combined catalog directly any more
+// ("jn"/"jh" each show one category — see their own tests below), but
+// the shared rendering mechanism handling every category at once
+// remains real, exercised behavior worth its own test.
+func TestOpenToolboxScreenRendersTheWholeCatalog(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
-	r.openToolbox()
+	r.openToolboxScreen("Toolbox", toolboxCategories())
 
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
@@ -291,7 +296,7 @@ func TestOpenToolboxRendersTheWholeCatalog(t *testing.T) {
 // TestToolboxCategoriesNamedFiltersAndPreservesOrder pins
 // toolboxCategoriesNamed's own two cases: filtering down to exactly the
 // requested categories, in the catalog's own order, and — no names at
-// all — falling back to the full, unfiltered catalog (the "jj" case).
+// all — falling back to the full, unfiltered catalog.
 func TestToolboxCategoriesNamedFiltersAndPreservesOrder(t *testing.T) {
 	all := toolboxCategories()
 	if got := toolboxCategoriesNamed(); len(got) != len(all) {
@@ -311,9 +316,7 @@ func TestToolboxCategoriesNamedFiltersAndPreservesOrder(t *testing.T) {
 
 // TestOpenNetworkToolsShowsOnlyTheNetworkingCategory pins "jn"'s own
 // contract: a dedicated screen with just the Networking entries, no
-// Hardware header or entries mixed in — per the user's own explicit
-// request to reach them without the combined "jj" catalog's other
-// category in the way.
+// Hardware header or entries mixed in.
 func TestOpenNetworkToolsShowsOnlyTheNetworkingCategory(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
@@ -367,23 +370,25 @@ func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
 	}
 }
 
-// TestOpenToolboxRestoresTheWholeCatalogAfterAFilteredScreen pins that
-// re-opening the combined "jj" screen after a filtered "jn"/"jh" one
-// shows the whole catalog again — r.toolboxRows must not stay stuck on
-// the previous, narrower filter.
-func TestOpenToolboxRestoresTheWholeCatalogAfterAFilteredScreen(t *testing.T) {
+// TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware pins that
+// switching from one filtered screen to the other actually replaces
+// its rows rather than adding to or getting stuck on the previous
+// one's — r.toolboxRows must not stay stuck on "jn"'s own Networking
+// rows once "jh" opens.
+func TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
 
 	r.openNetworkTools()
-	r.openToolbox()
+	r.openHardwareTools()
 
-	if got, want := r.toolboxTable.GetRowCount(), len(toolboxDisplayRows()); got != want {
-		t.Errorf("row count after re-opening jj = %d, want %d (the whole catalog)", got, want)
+	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
+	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
+		t.Errorf("row count after opening jh = %d, want %d (Hardware only)", got, want)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Toolbox "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 }
@@ -397,7 +402,7 @@ func TestCaptureToolboxKeyEscapeClosesTheScreen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openToolbox()
+	r.openNetworkTools()
 
 	if got := r.captureToolboxKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
 		t.Error("captureToolboxKey should consume Escape")
@@ -417,7 +422,7 @@ func TestActivateToolboxRowOnAHeaderRowDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openToolbox()
+	r.openNetworkTools()
 
 	r.activateToolboxRow(0) // the leading "Networking" header
 

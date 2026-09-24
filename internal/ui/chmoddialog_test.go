@@ -8,6 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 )
 
 // selectRow moves the panel's own table cursor to row — the same
@@ -555,6 +557,54 @@ func TestApplyChmodDialogPlainFile(t *testing.T) {
 	}
 	if r.activePage != "" {
 		t.Errorf("activePage = %q after Apply, want closed", r.activePage)
+	}
+}
+
+func TestApplyChmodDialogLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	selectRow(r, 2) // apple.txt
+	r.openChmod()
+	r.stagedChmodMode = 0o600
+	r.applyChmodDialog()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) || !strings.Contains(got, "changed permissions on 1 item(s) to 0600") {
+		t.Errorf("log = %q, want a permissions entry about the chmod", got)
+	}
+}
+
+func TestApplyChmodDialogLogsAnErrorForAMissingTarget(t *testing.T) {
+	dir := fixtureDir(t)
+	apple := filepath.Join(dir, "apple.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.panel.toggleCheckbox(3) // apricot.txt
+	r.openChmod()
+	r.stagedChmodMode = 0o600
+	if err := os.Remove(apple); err != nil {
+		t.Fatal(err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.applyChmodDialog()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) {
+		t.Errorf("log = %q, want a permissions error entry for the missing target", got)
+	}
+	if !strings.Contains(got, "changed permissions on 1 item(s)") {
+		t.Errorf("log = %q, want an Action summary for apricot.txt, which still succeeded", got)
 	}
 }
 

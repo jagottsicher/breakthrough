@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -655,13 +657,25 @@ func (r *Root) runDuplicate() {
 
 	r.safeGo("duplicate", nil, func() {
 		created, err := performDuplicate(targets, opts, copyOpts, count)
-		r.app.QueueUpdateDraw(func() {
-			r.reloadPanel(nil)
-			if err != nil {
-				r.showError(fmt.Errorf("duplicate: created %d, then: %w", created, err))
-			}
-		})
+		r.app.QueueUpdateDraw(func() { r.finishDuplicate(created, err, len(targets)) })
 	})
+}
+
+// finishDuplicate is runDuplicate's own QueueUpdateDraw hand-off, split
+// out so it's directly, synchronously testable — the same reasoning
+// finishCompressJob/finishRsyncJob are their own named methods rather
+// than anonymous closures inline in reallyStartCompressJob/
+// reallyStartRsyncBackground.
+func (r *Root) finishDuplicate(created int, err error, targetCount int) {
+	r.reloadPanel(nil)
+	if err != nil {
+		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("duplicate: created %d, then: %v", created, err))
+		r.showError(fmt.Errorf("duplicate: created %d, then: %w", created, err))
+		return
+	}
+	if created > 0 {
+		r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("duplicated %d item(s) from %d target(s)", created, targetCount))
+	}
 }
 
 // performDuplicate runs Duplicate's own sequential copy loop for real,

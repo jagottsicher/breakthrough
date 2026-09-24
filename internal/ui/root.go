@@ -13,6 +13,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -182,6 +183,25 @@ type Root struct {
 	settings     config.Settings
 	colorSchemes []config.NamedTheme
 
+	// activityLog is the optional activity log's own live sink (see
+	// internal/activitylog's own doc comment) — built once at startup
+	// from settings, and rebuilt (see reopenActivityLog) whenever
+	// Options changes LogLevel or a log_category_* toggle, since the
+	// Logger itself holds an immutable snapshot of both rather than
+	// reading r.settings live on every call. Never nil itself (see
+	// newActivityLogger), even with logging off — its own methods are
+	// all nil-receiver-safe regardless, the same convention every call
+	// site relies on to log unconditionally without asking "is logging
+	// even on" first.
+	activityLog *activitylog.Logger
+	// activityLogFallbackWarned tracks whether this run has already
+	// told the user once that /var/log/breakthrough isn't writable and
+	// logging fell back to a per-user directory instead (see
+	// newActivityLogger) — shown once per run, not repeated every time
+	// Options reopens the log (a category toggle, say) with the same
+	// unchanged fallback still in effect.
+	activityLogFallbackWarned bool
+
 	// settingOrigins says, per config key, which tier the value
 	// currently in force actually came from (see config.Origin) — shown
 	// in the Options screen's own origin column, and what gives its
@@ -234,11 +254,11 @@ type Root struct {
 	toolboxTable    *tview.Table
 	toolboxInput    *tview.InputField
 
-	// toolboxRows is the currently open screen's own row list — the
-	// whole catalog for "jj" (openToolbox), one single category for "jn"
-	// (openNetworkTools) or "jh" (openHardwareTools). One table/rendering
-	// implementation (renderToolbox et al.) driven by whichever rows this
-	// holds, rather than a separate near-identical screen per category.
+	// toolboxRows is the currently open screen's own row list — one
+	// single category, for "jn" (openNetworkTools) or "jh"
+	// (openHardwareTools). One table/rendering implementation
+	// (renderToolbox et al.) driven by whichever rows this holds, rather
+	// than a separate near-identical screen per category.
 	toolboxRows []toolboxDisplayRow
 
 	// The Mounts screen (see mounts.go) — a third full-screen catalog,
@@ -572,6 +592,30 @@ type Root struct {
 	duplicateLayout                      *tview.Flex
 	duplicateTargets                     []string
 
+	// compressForm/compressButtons/compressLayout together make up the
+	// "Compress" dialog (compress.go) — the same Target/live-preview/
+	// Cancel-Action shape newDuplicateLayout's own doc comment already
+	// establishes, just with a fixed Format dropdown and an Output name
+	// field instead of Multiply's own strategy-dependent ones.
+	// compressTargets is the file(s) this open is for; compressFormatIndex
+	// indexes archiveFormats(); compressOutputName mirrors the Output
+	// name field's own current text (needed across renderCompressForm's
+	// own rebuilds the same reason every duplicateXxxValue mirror is).
+	compressForm            *tview.Form
+	compressFormatField     *tview.DropDown
+	compressOutputNameField *tview.InputField
+	compressPreviewView     *tview.TextView
+	compressSpacer          *tview.Box
+	compressCancelBtn       *tview.Button
+	compressApplyBtn        *tview.Button
+	compressButtons         *tview.Flex
+	compressTitleBar        *tview.TextView
+	compressContentLayout   *tview.Flex
+	compressLayout          *tview.Flex
+	compressTargets         []string
+	compressFormatIndex     int
+	compressOutputName      string
+
 	// The "Rsync" dialog (see rsync.go) — source/destination and the
 	// free-text Excludes/Extra flags fields live in rsyncForm; the five
 	// boolean toggles (Copy contents/Archive/Compress/Delete/Dry run)
@@ -601,6 +645,19 @@ type Root struct {
 	rsyncTitleBar         *tview.TextView
 	rsyncContentLayout    *tview.Flex
 	rsyncLayout           *tview.Flex
+
+	// rsyncPickSourceBtn/rsyncPickDestinationBtn open the tab picker
+	// (see openRsyncTabPicker) for Source/Destination respectively —
+	// their own row, rsyncPickButtons, sits right above the Cancel/Run/
+	// Run in background row. A button, not a new keybinding: this
+	// project's own keymap rules leave no room for a further Ctrl
+	// combination or function key, and a button reaches every existing
+	// "quick, discoverable, keyboard *and* mouse" bar this app's
+	// dialogs already clear via Tab-focus + Enter/Space, the same as
+	// Cancel/Run themselves.
+	rsyncPickSourceBtn      *tview.Button
+	rsyncPickDestinationBtn *tview.Button
+	rsyncPickButtons        *tview.Flex
 
 	// rsyncSourceDefault/rsyncDestinationDefault record exactly what
 	// defaultRsyncSource/defaultRsyncDestination prefilled
@@ -1237,6 +1294,17 @@ type Root struct {
 	// rsyncQueue mirrors pasteQueue for a background rsync asked for
 	// while one is already running — see advanceRsyncQueue.
 	rsyncQueue []queuedRsync
+
+	// compressJob is the currently-running backgrounded Compress or
+	// Extract, if any (see startCompressJob's own doc comment in
+	// compressjob.go) — entirely independent of pasteJob/rsyncJob above
+	// for the same reason those two are independent of each other: a
+	// separate process tree with nothing to serialize against either.
+	// nil whenever no background Compress/Extract is currently running.
+	compressJob *compressJob
+	// compressQueue mirrors rsyncQueue for a further Compress/Extract
+	// asked for while one is already running — see advanceCompressQueue.
+	compressQueue []compressRequest
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
@@ -1552,6 +1620,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.duplicateButtons = r.newDuplicateButtons()
 	r.duplicateLayout = r.newDuplicateLayout()
 
+	// The Compress dialog (see compress.go/openCompress) — same
+	// build-once/repopulate-on-open shape as Duplicate just above.
+	r.compressForm = r.newCompressForm()
+	r.compressPreviewView = r.newCompressPreviewView()
+	r.compressSpacer = tview.NewBox()
+	r.compressButtons = r.newCompressButtons()
+	r.compressLayout = r.newCompressLayout()
+
 	// The "Rsync" dialog (see rsync.go) — same "built once here,
 	// contents rebuilt fresh per open" shape as Multiply just above.
 	r.rsyncForm = r.newRsyncForm()
@@ -1559,6 +1635,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.rsyncPreviewView = r.newRsyncPreviewView()
 	r.rsyncHintView = r.newRsyncHintView()
 	r.rsyncSpacer = tview.NewBox()
+	r.rsyncPickButtons = r.newRsyncPickButtons()
 	r.rsyncButtons = r.newRsyncButtons()
 	r.rsyncLayout = r.newRsyncLayout()
 
@@ -1592,9 +1669,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// cutting but the actually simpler, more capable choice.
 	r.newCompareScreens()
 
-	// The owner/group picker (see openOwnerGroupPicker) — one shared List,
-	// repopulated and repositioned per open, the same pattern rename/
-	// prompt/propertiesEditField already use.
+	// The generic picker (see openOwnerGroupPicker and, unrelated,
+	// openRsyncTabPicker) — one shared List, repopulated and
+	// repositioned per open, the same pattern rename/prompt/
+	// propertiesEditField already use. The two callers are never open
+	// at the same time, so neither has to know about the other's own
+	// state.
 	r.picker = tview.NewList().ShowSecondaryText(false)
 	r.picker.SetHighlightFullLine(true)
 	r.picker.SetBorderPadding(0, 0, 1, 1)
@@ -1603,8 +1683,9 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// repopulated List" pattern as r.picker above.
 	r.newOptionsScreen()
 
-	// The Toolbox screen (see toolbox.go/openToolbox) — same full-screen
-	// shape as Options, built once here and repopulated on every open.
+	// The Toolbox screen (see toolbox.go/openToolboxScreen) — same
+	// full-screen shape as Options, built once here and repopulated on
+	// every open.
 	r.newToolboxScreen()
 
 	// The Mounts screen (see mounts.go/openMounts) — a third full-screen
@@ -1715,6 +1796,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
+	r.AddPage(compressPage, r.compressLayout, false, false)
 	r.AddPage(rsyncPage, r.rsyncLayout, false, false)
 	// resize=true: the Batch Rename screen deliberately fills the whole
 	// terminal too, the same reasoning the Options screen's own comment
@@ -1781,8 +1863,35 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	if notice := r.pruneTrashAtStartup(); notice != "" {
 		startupNotices = append(startupNotices, notice)
 	}
+	logger, activityLogNotice := r.newActivityLogger()
+	r.activityLog = logger
+	if activityLogNotice != "" {
+		startupNotices = append(startupNotices, activityLogNotice)
+	}
 	if len(startupNotices) > 0 {
-		r.showError(fmt.Errorf("%s", strings.Join(startupNotices, "\n\n")))
+		notice := strings.Join(startupNotices, "\n\n")
+		// Deferred via QueueUpdateDraw, not called directly: NewRoot runs
+		// entirely before cmd/breakthrough ever calls
+		// Application.SetRoot/Run, so Root's own rect (and the panel's)
+		// is still tview.Box's uninitialized 15x10 default here, not the
+		// real terminal size — a direct showError call centers and sizes
+		// itself against that tiny placeholder instead of the screen, a
+		// real, reported bug (a notice landing wrapped to a handful of
+		// columns in the terminal's top-left corner). QueueUpdateDraw's
+		// own send blocks until Application.Run's event loop actually
+		// starts servicing it, which is only after Run's own first
+		// a.draw() call has already resized Root to the real screen size
+		// (see Application.Run's own "draw the screen for the first
+		// time" step, verified directly against tview's own
+		// application.go) — the first genuinely correct moment to size
+		// anything against the whole screen. Calling showOverlay
+		// synchronously from inside handleBeforeDraw instead (tried and
+		// rejected) deadlocks: Pages.ShowPage focuses the shown page,
+		// which calls Application.SetFocus, which needs the exact lock
+		// Application.draw is still holding while handleBeforeDraw runs.
+		r.safeGo("startup notice", nil, func() {
+			r.app.QueueUpdateDraw(func() { r.showError(fmt.Errorf("%s", notice)) })
+		})
 	}
 
 	return r, nil
@@ -2218,6 +2327,19 @@ func (r *Root) closeAllOverlays() {
 // mechanism in the first place. Scoped to
 // Properties and to Details alone — every other overlay, and every
 // other button-bar click, still gets the ordinary handling below.
+//
+// The rename field (renamePage) is a fourth exception, and the only one
+// that changes *what* an outside click does rather than whether it does
+// anything at all: it commits the name currently typed (via
+// finishRename(tcell.KeyEnter), the exact same path Enter itself
+// already takes) instead of the ordinary hideOverlay below, which would
+// discard it — per the user's own explicit request that a click
+// anywhere outside the field behave the same as pressing Enter, so
+// Enter is never the *only* way to confirm a rename. A click still
+// inside the field itself never reaches here at all (see the
+// primitiveContains check above) and keeps moving the cursor exactly as
+// before — deliberately left alone, since that in-field click was never
+// part of what was reported as awkward here.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
@@ -2247,6 +2369,10 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		}
 		if r.activePage == pasteConflictPage {
 			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
+		}
+		if r.activePage == renamePage {
+			r.finishRename(tcell.KeyEnter) // commits, same as Enter — see this function's own doc comment above
+			return tview.MouseConsumed, nil
 		}
 		r.hideOverlay()
 	}
@@ -2517,17 +2643,21 @@ func (r *Root) RequestCancel() {
 		r.hideOverlay()
 		return
 	}
-	// Stops both a running Paste and a backgrounded rsync in the same
-	// press, if both happen to be running at once — they're two
-	// entirely independent background jobs (see rsyncjob.go's own
-	// package doc comment), so "cancel whatever's running" naturally
-	// means both, not whichever one happened to be checked first.
-	if r.pasteJob != nil || r.rsyncJob != nil {
+	// Stops a running Paste, a backgrounded rsync, and a backgrounded
+	// Compress/Extract in the same press, if more than one happens to
+	// be running at once — three entirely independent background jobs
+	// (see rsyncjob.go/compressjob.go's own package doc comments), so
+	// "cancel whatever's running" naturally means all of them, not
+	// whichever one happened to be checked first.
+	if r.pasteJob != nil || r.rsyncJob != nil || r.compressJob != nil {
 		if r.pasteJob != nil {
 			r.cancelPasteJob()
 		}
 		if r.rsyncJob != nil {
 			r.cancelRsyncJob()
+		}
+		if r.compressJob != nil {
+			r.cancelCompressJob()
 		}
 		r.refreshStatusBar()
 		return
@@ -2583,6 +2713,7 @@ func (r *Root) setMouseEnabled(enabled bool) {
 // user never actually chose to leave behind.
 func (r *Root) confirmQuit() {
 	r.saveTabs()
+	_ = r.activityLog.Close()
 	r.app.Stop()
 }
 
@@ -3011,9 +3142,11 @@ func (r *Root) finishRename(key tcell.Key) {
 		newPath, err = fsops.Rename(r.target, newName)
 	}
 	if err != nil {
+		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
 		r.showError(err)
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
 	r.refreshDetailsIfShowing(r.target, newPath)
 	r.showError(r.panel.load(r.panel.path))
 }
@@ -3448,9 +3581,11 @@ func (r *Root) openChown() {
 // failure — the common tail of every path through openChown.
 func (r *Root) applyChown(target string, uid, gid int) {
 	if err := fsops.Chown(target, uid, gid); err != nil {
+		r.activityLog.Error(activitylog.CategoryPermissions, fmt.Sprintf("chown %q to %d:%d: %v", target, uid, gid, err))
 		r.showError(err)
 		return
 	}
+	r.activityLog.Action(activitylog.CategoryPermissions, fmt.Sprintf("changed owner/group of %q to %d:%d", target, uid, gid))
 	r.refreshDetailsIfShowing(target, target)
 	r.showError(r.panel.load(r.panel.path))
 }

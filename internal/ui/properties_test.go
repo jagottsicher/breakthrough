@@ -14,6 +14,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -1698,6 +1699,72 @@ func TestSavePropertiesEditAppliesAllStagedChanges(t *testing.T) {
 	}
 	if !fi.ModTime().Equal(wantMtime) {
 		t.Errorf("ModTime = %v, want %v", fi.ModTime(), wantMtime)
+	}
+}
+
+// TestSavePropertiesEditLogsRenameAndChmod pins savePropertiesEdit's own
+// activity-log instrumentation for its rename and chmod sub-steps — the
+// same staged edits TestSavePropertiesEditAppliesAllStagedChanges
+// already exercises, minus the Modified date/time edit (mtime's own log
+// line is covered separately, see its own doc comment there).
+func TestSavePropertiesEditLogsRenameAndChmod(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.togglePermBit(fieldPermOtherRead) // 0644 -> 0640
+	nameSpan, _ := findPropertySpan(r, fieldName)
+	r.activatePropertyField(nameSpan)
+	r.propertiesEditField.SetText("saved.txt")
+	r.finishPropertyEdit(tcell.KeyEnter)
+
+	readLog := attachTestActivityLog(t, r)
+	r.savePropertiesEdit()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, `renamed "`+path+`" to "saved.txt"`) {
+		t.Errorf("log = %q, want a fileops entry about the rename", got)
+	}
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) || !strings.Contains(got, "changed permissions on") {
+		t.Errorf("log = %q, want a permissions entry about the chmod", got)
+	}
+}
+
+// TestSavePropertiesEditLogsOwnerAndGroupChanges mirrors
+// TestSavePropertiesEditAppliesOwnerGroupChange's own privilege-
+// independent setup, checking that both the owner and the group change
+// are logged as their own separate permissions entries (see
+// savePropertiesEdit's own doc comment on why they're two independent
+// Chown calls).
+func TestSavePropertiesEditLogsOwnerAndGroupChanges(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.target = path
+	r.openProperties()
+	r.stagedOwner = strconv.Itoa(os.Getuid())
+	r.stagedGroup = strconv.Itoa(os.Getgid())
+	r.markPropertiesDirty()
+	readLog := attachTestActivityLog(t, r)
+
+	r.savePropertiesEdit()
+
+	if r.activePage == errorPage {
+		t.Fatalf("Save should have succeeded, got error overlay: %q", r.errorView.GetText(true))
+	}
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) || !strings.Contains(got, "changed owner of") || !strings.Contains(got, "changed group of") {
+		t.Errorf("log = %q, want separate permissions entries for the owner and group changes", got)
 	}
 }
 

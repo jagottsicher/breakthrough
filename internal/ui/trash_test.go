@@ -10,6 +10,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
@@ -56,6 +57,59 @@ func newTestRootWithFile(t *testing.T) (r *Root, dir, file string) {
 	}
 	r.panel.focusRow(1) // off ".." onto the one real entry
 	return r, dir, file
+}
+
+func TestMoveSelectionToTrashLogsAnAction(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.moveSelectionToTrash()
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "moved 1 item(s) to trash") {
+		t.Errorf("log = %q, want a fileops entry about moving 1 item to trash", got)
+	}
+}
+
+func TestReallyMoveToTrashLogsAnErrorForAFailedTarget(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.reallyMoveToTrash([]string{filepath.Join(t.TempDir(), "does-not-exist")})
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "move to trash") {
+		t.Errorf("log = %q, want a fileops error entry about the failed move", got)
+	}
+}
+
+func TestOpenRemoveConfirmConfirmedLogsAnAction(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.openRemoveConfirm()
+	r.confirmDialog.SetCurrentItem(0) // deliberately move to "Yes, delete permanently"
+	r.resolvePurgeConfirmByCurrentFocus(t)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "permanently removed 1 item(s)") {
+		t.Errorf("log = %q, want a fileops entry about permanently removing 1 item", got)
+	}
+}
+
+func TestOpenEmptyTrashConfirmLogsAnAction(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.moveSelectionToTrash()
+
+	readLog := attachTestActivityLog(t, r)
+	r.openEmptyTrashConfirm()
+	r.confirmDialog.SetCurrentItem(0) // "Yes, delete permanently"
+	r.resolvePurgeConfirmByCurrentFocus(t)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "emptied trash") {
+		t.Errorf("log = %q, want a fileops entry about emptying the trash", got)
+	}
 }
 
 func TestMoveSelectionToTrashMovesFileAndListsIt(t *testing.T) {
