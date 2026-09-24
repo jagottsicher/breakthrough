@@ -726,7 +726,10 @@ terminal.
   `actions` records every real, state-changing action (Copy, Rename,
   chmod, Compress, a Rsync run, an SFTP connect…), enough to answer
   "what did I actually do with breakthrough" after the fact, and the
-  foundation a future Undo will build on.
+  foundation a future Undo will build on. An Activity Log screen (`jl`)
+  browses the real log file itself — newest entries first, with a
+  keyword filter (full text over the message) and a time-range filter
+  reusing the panel's own Modified-time filter syntax.
 
 ## Status
 
@@ -739,7 +742,9 @@ built-in networking and hardware tools with its own Network Tools
 screen (`jm`) showing what's currently mounted and whether it survives a
 reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other, and real
+governs traffic), including which rules shadow each other, an Activity
+Log screen (`jl`) browsing the real activity log with keyword/time
+filtering, and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

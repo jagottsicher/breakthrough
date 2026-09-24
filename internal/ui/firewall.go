@@ -166,11 +166,30 @@ func (r *Root) renderFirewall() {
 
 	r.firewallTitleBar.SetText(" " + firewallTitle(r.firewallSnapshot, r.firewallErr) + " ")
 
+	// Every early return below turns row selection off entirely
+	// (SetSelectable(false, false)) rather than leaving it on with
+	// nothing selectable to land on — a real, reported freeze otherwise:
+	// tview's own Table, on its very next Draw with rowsSelectable still
+	// true and not one selectable cell anywhere, walks its own cursor
+	// row-by-row hunting for one and — finding none — leaves it sitting
+	// exactly one row past the end (verified directly against tview
+	// v0.42.0's own table.go, not guessed). That alone doesn't yet
+	// break anything, but the next Up/Down starts from that same
+	// out-of-range row, and tview's own selectable-cell search can spin
+	// forever from there. Turning off row selection altogether — nothing
+	// here is meant to be selectable in the first place — means neither
+	// tview's own Draw-time search nor its Up/Down handling ever runs at
+	// all while this placeholder is showing; Select(1, 0) still lands
+	// the cursor on the placeholder row itself, purely so the number
+	// stored is never left stale once selection is turned back on by
+	// the success path below.
 	if r.firewallErr != nil {
 		r.firewallTable.SetCell(1, firewallColOrder,
 			tview.NewTableCell(r.firewallErr.Error()).
 				SetTextColor(r.theme.EntryError).
 				SetSelectable(false))
+		r.firewallTable.SetSelectable(false, false)
+		r.firewallTable.Select(1, 0)
 		return
 	}
 	if r.firewallSnapshot.Backend == firewall.BackendNone {
@@ -178,6 +197,8 @@ func (r *Root) renderFirewall() {
 			tview.NewTableCell("No supported firewall backend (ufw, nftables, or iptables) is active on this system.").
 				SetTextColor(r.theme.PlaceholderText).
 				SetSelectable(false))
+		r.firewallTable.SetSelectable(false, false)
+		r.firewallTable.Select(1, 0)
 		return
 	}
 
@@ -209,8 +230,14 @@ func (r *Root) renderFirewall() {
 			tview.NewTableCell("No rules configured.").
 				SetTextColor(r.theme.PlaceholderText).
 				SetSelectable(false))
+		r.firewallTable.SetSelectable(false, false) // see the doc comment above the first of this function's own early returns
+		r.firewallTable.Select(1, 0)
 		return
 	}
+
+	// Real, selectable rows exist again — restore row selection (see
+	// this function's own early returns above for why it was off).
+	r.firewallTable.SetSelectable(true, false)
 
 	// Keep the cursor in range (and off the header/section-label rows)
 	// after a refresh changed how many rows there are — the same

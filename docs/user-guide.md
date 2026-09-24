@@ -98,7 +98,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -1927,7 +1927,24 @@ format and locations](#config-file-format-and-locations)), with a
 one-time notice the first time that fallback happens. Append-only —
 breakthrough never rotates or truncates it; that is `logrotate`'s job.
 
-There is no in-app viewer yet — read it directly for now.
+### Activity Log screen ("jl")
+
+A read-only, live view of the real log file above — no second, parallel
+recording, just `activitylog.ParseLine` reading the same file back.
+
+| Key | Action |
+|---|---|
+| `jl` | Open the Activity Log screen |
+| Keyword field | Filter by a case-insensitive substring of the message |
+| Time field | Filter by when it happened — the exact same `before`/`after`/`between ... and ...`/relative ("last 7 days") expressions the panel's own Modified-time filter already accepts |
+| `Tab` / `Shift+Tab` | Move between Keyword, Time, and the list |
+| `r` | Re-read the real log file (while the list has focus) |
+| `Escape` | Close the screen, from any of the three |
+
+Both fields narrow the list live as you type, the same feel the panel's
+own filter dropdown already has. Entries show newest first — the file
+itself is written oldest-first, but a log is usually read the other way
+around, the same "tail, not head" reasoning as a live log.
 
 ## Settings reference
 
