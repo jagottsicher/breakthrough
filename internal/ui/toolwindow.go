@@ -36,8 +36,29 @@ type toolWindow struct {
 	titleBar *tview.TextView
 	content  *tview.TextView
 
-	cancel context.CancelFunc // stops the running process (see Root.openToolCommand) — called by close
+	cancel context.CancelFunc // stops the running process (see Root.openToolCommand) — called by close/reload
 	closed bool               // guards a late QueueUpdateDraw callback against writing into a torn-down window
+
+	// name/args are exactly what Root.openToolCommand originally started
+	// this window with — remembered so reload can run the identical
+	// command again, rather than needing openToolCommand's own caller
+	// (toolbox.go) to somehow be reached a second time.
+	name string
+	args []string
+
+	// generation is bumped by Root.startToolCommand every time this
+	// window's own command (re)starts — reload's own real point. Each
+	// run's own output-scanning/process-wait goroutines close over the
+	// generation they were started with, and every QueueUpdateDraw
+	// callback they queue checks it against tw.generation before
+	// touching content at all: reload cancels whatever's still running
+	// first, but that old process's own remaining buffered output (and
+	// its own final status line once cmd.Wait finally unblocks) can
+	// keep arriving asynchronously, on its own schedule, for a little
+	// while after — this is what keeps a stale run's own trailing
+	// output/status from a moment ago corrupting the fresh run's
+	// content, which starts from a freshly cleared window (see reload).
+	generation int
 
 	dragging                 bool // the title bar was pressed and the button is still down
 	dragOffsetX, dragOffsetY int  // click position minus the window's own x/y at drag-start — kept constant for the rest of the drag
@@ -158,6 +179,15 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 const (
 	toolWindowCloseGlyph  = '✕'
 	toolWindowResizeGlyph = '◢'
+
+	// toolWindowReloadGlyph reuses the exact same glyph the header's own
+	// path-bar Reload button already draws (see panel.go's own
+	// headerButtons) — already confirmed single-width in this app's own
+	// terminal environment (unlike an earlier close-glyph candidate, see
+	// toolWindowCloseGlyph's own doc comment on that), and reusing it
+	// keeps "reload" reading as the same action everywhere it appears in
+	// this app rather than introducing a second icon for the same idea.
+	toolWindowReloadGlyph = '⭯'
 )
 
 // toolWindowCloseButtonCol returns the close glyph's own column within
@@ -168,6 +198,16 @@ const (
 // leaves on how narrow the window can ever get.
 func toolWindowCloseButtonCol(x, width int) int {
 	return x + width - 2
+}
+
+// toolWindowReloadButtonCol returns the reload glyph's own column,
+// immediately to the close glyph's own left with one blank column of
+// breathing room between them — the same one-column gap the close
+// glyph itself already keeps from the window's own right edge (see
+// toolWindowCloseButtonCol), per the user's own explicit request for a
+// reload button "links vom x".
+func toolWindowReloadButtonCol(x, width int) int {
+	return toolWindowCloseButtonCol(x, width) - 2
 }
 
 // Draw draws the title bar as row 0 of this window's own rect (see
@@ -185,9 +225,12 @@ func (tw *toolWindow) Draw(screen tcell.Screen) {
 
 	tw.titleBar.SetRect(x, y, width, 1)
 	tw.titleBar.Draw(screen)
+	buttonStyle := tcell.StyleDefault.Background(tw.titleBar.GetBackgroundColor()).Foreground(tw.root.theme.Text)
 	if closeCol := toolWindowCloseButtonCol(x, width); closeCol >= x {
-		closeStyle := tcell.StyleDefault.Background(tw.titleBar.GetBackgroundColor()).Foreground(tw.root.theme.Text)
-		screen.SetContent(closeCol, y, toolWindowCloseGlyph, nil, closeStyle)
+		screen.SetContent(closeCol, y, toolWindowCloseGlyph, nil, buttonStyle)
+	}
+	if reloadCol := toolWindowReloadButtonCol(x, width); reloadCol >= x {
+		screen.SetContent(reloadCol, y, toolWindowReloadGlyph, nil, buttonStyle)
 	}
 
 	tw.content.SetRect(x, y+1, width, tw.contentHeight())
@@ -302,6 +345,9 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 			case y == wy && x == toolWindowCloseButtonCol(wx, width): // the close glyph, one column in from the title bar's own top-right corner
 				tw.close()
 				return true, nil
+			case y == wy && x == toolWindowReloadButtonCol(wx, width): // the reload glyph, immediately left of the close glyph
+				tw.reload()
+				return true, nil
 			case y == wy: // the rest of the title bar
 				tw.dragging = true
 				tw.dragOffsetX, tw.dragOffsetY = x-wx, y-wy
@@ -338,13 +384,14 @@ func (tw *toolWindow) moveTo(x, y, width, height int) {
 const toolWindowMinHeight = 3
 
 // minWidth is the narrowest this window can ever be resized to (see
-// resizeTo) — its own title, one space, the close button, and one more
-// space to its right (see toolWindowCloseButtonCol's own doc comment),
-// per the user's own explicit request: any narrower and the close
-// glyph would either overlap the title text or sit flush against the
-// window's own right edge.
+// resizeTo) — its own title, one space, the reload button, one blank
+// column, the close button, and one more space to its right (see
+// toolWindowCloseButtonCol/toolWindowReloadButtonCol's own doc
+// comments), per the user's own explicit request: any narrower and the
+// two buttons would either overlap the title text, overlap each other,
+// or sit flush against the window's own right edge.
 func (tw *toolWindow) minWidth() int {
-	return tview.TaggedStringWidth(tw.titleBar.GetText(false)) + 3 // +1 space, +1 for the close glyph's own cell, +1 space
+	return tview.TaggedStringWidth(tw.titleBar.GetText(false)) + 5 // +1 space, +1 reload glyph, +1 gap, +1 close glyph, +1 space
 }
 
 // resizeTo is the resize handle's own counterpart to moveTo: unlike a
@@ -550,6 +597,29 @@ func (tw *toolWindow) close() {
 	}
 }
 
+// reload is the title bar's own reload button (see
+// toolWindowReloadButtonCol/MouseHandler) — per the user's own explicit
+// request, refreshes/repeats whatever this window's own command was:
+// stops it first if it's still running (harmless if it already
+// finished — cancelling an already-done context is a no-op), clears
+// this window's own content back to empty exactly the way it started
+// out before this run's first line ever arrived, and starts tw.name/
+// tw.args again from scratch. Position, size, and manuallyResized are
+// all left completely alone — this only ever replaces the running
+// command and what it's shown so far, never where or how big the
+// window itself is.
+func (tw *toolWindow) reload() {
+	if tw.closed {
+		return
+	}
+	tw.cancel()
+	tw.content.Clear()
+	tw.lineWidths = nil
+	tw.hasContent = false
+	tw.root.startToolCommand(tw)
+	tw.recalculateWidth() // back to fitting just the title, the same as when this window was first opened
+}
+
 // toolWindowDefaultHeight is a fixed height for every tool window, for
 // its whole lifetime — unlike width (see recalculateWidth), height
 // isn't part of the user's own auto-fit request, so it's still exactly
@@ -580,7 +650,13 @@ const toolWindowContentPadding = 1
 // if it's still running. This is the same context.WithCancel +
 // QueueUpdateDraw pairing computeHashes already uses in properties.go,
 // just for a genuinely long-running, line-streaming process instead of
-// one bounded computation reporting progress.
+// one bounded computation reporting progress. The window's own title
+// bar also grew a reload button (see toolWindowReloadButtonCol/
+// toolWindow.reload) for running the identical command again — whether
+// to get a fresh snapshot from a one-shot tool or to restart one that's
+// still running — per the user's own explicit request; the real
+// process/goroutine setup below lives in startToolCommand so both this
+// function and reload share exactly one copy of it.
 //
 // Output is captured through a manual io.Pipe rather than
 // cmd.StdoutPipe() so stdout and stderr both land in the same
@@ -591,19 +667,11 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 	r.toolWindowSeq++
 	id := fmt.Sprintf("toolwindow-%d", r.toolWindowSeq)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	tw := newToolWindow(r, id, title)
-	tw.cancel = cancel
+	tw.name = name
+	tw.args = args
 
-	pr, pw := io.Pipe()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = pw
-	cmd.Stderr = pw
-
-	if err := cmd.Start(); err != nil {
-		_ = pw.Close() // io.PipeWriter.Close never fails
-		cancel()
-		r.showError(fmt.Errorf("%s: %w", name, err))
+	if !r.startToolCommand(tw) {
 		return nil
 	}
 
@@ -620,6 +688,47 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 
 	r.toolWindows = append(r.toolWindows, tw)
 
+	r.AddPage(id, tw, false, true)
+	r.SendToFront(id)
+	r.app.SetFocus(tw)
+
+	return tw
+}
+
+// startToolCommand actually starts (or, via reload, restarts) tw's own
+// tw.name(tw.args...) — split out from openToolCommand so reload can
+// run through the exact same process/goroutine setup rather than a
+// second, drifting copy of it. Returns false (having already shown the
+// error) if the command failed to even start; openToolCommand's own
+// caller relies on this to bail out before this window is ever shown at
+// all.
+//
+// tw.generation is bumped here and captured by both goroutines below —
+// see its own doc comment on the struct for why a reload needs this at
+// all: cancelling the previous run's context (see reload) only asks the
+// kernel to stop that process, it doesn't retroactively un-queue
+// whatever that run's own goroutines already had in flight, so without
+// this a stale line or status from a run that's being replaced could
+// still land in the freshly cleared window a moment later.
+func (r *Root) startToolCommand(tw *toolWindow) bool {
+	tw.generation++
+	gen := tw.generation
+
+	ctx, cancel := context.WithCancel(context.Background())
+	tw.cancel = cancel
+
+	pr, pw := io.Pipe()
+	cmd := exec.CommandContext(ctx, tw.name, tw.args...)
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		_ = pw.Close() // io.PipeWriter.Close never fails
+		cancel()
+		r.showError(fmt.Errorf("%s: %w", tw.name, err))
+		return false
+	}
+
 	// Both wrapped in safeGo (see its own doc comment): a panic in
 	// either one used to take the whole process down without even
 	// restoring the terminal, since neither runs inside
@@ -632,7 +741,12 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 		scanner := bufio.NewScanner(pr)
 		for scanner.Scan() {
 			line := scanner.Text()
-			r.app.QueueUpdateDraw(func() { tw.appendLine(line) })
+			r.app.QueueUpdateDraw(func() {
+				if tw.closed || tw.generation != gen {
+					return
+				}
+				tw.appendLine(line)
+			})
 		}
 	})
 
@@ -640,7 +754,7 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 		waitErr := cmd.Wait()
 		_ = pw.Close() // unblocks the scanning goroutine's Read with EOF; io.PipeWriter.Close never fails
 		r.app.QueueUpdateDraw(func() {
-			if tw.closed {
+			if tw.closed || tw.generation != gen {
 				return
 			}
 			switch {
@@ -648,17 +762,16 @@ func (r *Root) openToolCommand(title, name string, args []string) *toolWindow {
 				tw.appendStatus(dimTag + "— stopped —" + "[-:-:-]")
 			case waitErr != nil:
 				tw.appendStatus(fmt.Sprintf("%s— exited: %s —%s", dimTag, waitErr, "[-:-:-]"))
-			default:
-				tw.appendStatus(dimTag + "— finished —" + "[-:-:-]")
 			}
+			// A clean exit (neither of the above) gets no status line at
+			// all, per the user's own explicit report that "— finished —"
+			// was superfluous there: the output itself already makes that
+			// obvious for a one-shot tool (lsblk, ip addr, ...), and there
+			// is nothing further coming either way.
 		})
 	})
 
-	r.AddPage(id, tw, false, true)
-	r.SendToFront(id)
-	r.app.SetFocus(tw)
-
-	return tw
+	return true
 }
 
 // nextToolWindowPosition returns a cascading spawn point for a new tool
