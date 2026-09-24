@@ -1003,8 +1003,8 @@
     },
     {
       "path": "internal/ui/activitylogscreen.go",
-      "size": 14672,
-      "sha256": "1e9c254df52575c0ed22f7d391f09981e6553ea4cadb536a2e0028e7dfdd6bbb"
+      "size": 13952,
+      "sha256": "4f764efad1a4139b1af276353b62abb76ee9501452234b1db771730018bea42a"
     },
     {
       "path": "internal/ui/activitylogscreen_test.go",
@@ -1233,8 +1233,8 @@
     },
     {
       "path": "internal/ui/firewall.go",
-      "size": 12489,
-      "sha256": "95b889d3abf79da251509a6fab91b9cad56b3b913516db754421c5ecdd16d2f0"
+      "size": 11031,
+      "sha256": "ffe4e2e8abd2b83d802382700f21c9cba41db4c9c1c85211e5bce7c951999100"
     },
     {
       "path": "internal/ui/firewall_test.go",
@@ -1293,13 +1293,13 @@
     },
     {
       "path": "internal/ui/mounts.go",
-      "size": 14010,
-      "sha256": "a29c27d72a24eaeb042265ff4b72aeb6658c142b45b35e58a06b8adb7e0558a2"
+      "size": 13530,
+      "sha256": "bdb46f45338e3c7ae3a9526df0899ae5c157b5221569f96bffd059eba3677269"
     },
     {
       "path": "internal/ui/mounts_test.go",
-      "size": 12266,
-      "sha256": "031f6ff98885f7fe8c5056c655e0866b5ae2f95fa20397228a4c85fb80129190"
+      "size": 13042,
+      "sha256": "8508ae2d3e9a723172d3bd8e8b986d1c167c31e68dbbdd05bb3051233a8cec5a"
     },
     {
       "path": "internal/ui/mousefocus_test.go",
@@ -1535,6 +1535,16 @@
       "path": "internal/ui/table_click_test.go",
       "size": 38038,
       "sha256": "d3c1bd7fbc866c8d1fa45be66c0dc77bc8b498d80cef88cf15738a54df876444"
+    },
+    {
+      "path": "internal/ui/tableplaceholder.go",
+      "size": 2345,
+      "sha256": "dc32041a9d3d8cd871ef3f22e50dd5e4cbe95a3834e6725d2f0628b22a3fa839"
+    },
+    {
+      "path": "internal/ui/tableplaceholder_test.go",
+      "size": 2721,
+      "sha256": "4db1a4542623aee555b5d465341e700dc21896bae3d93a047c2c78195e469e02"
     },
     {
       "path": "internal/ui/tabs.go",
@@ -2347,6 +2357,8 @@
         "internal/ui/systeminfo_test.go",
         "internal/ui/systeminforemote_test.go",
         "internal/ui/table_click_test.go",
+        "internal/ui/tableplaceholder.go",
+        "internal/ui/tableplaceholder_test.go",
         "internal/ui/tabs.go",
         "internal/ui/tabs_test.go",
         "internal/ui/tabstrip.go",
@@ -12020,7 +12032,7 @@
       "name": "activityLogFieldDone",
       "kind": "method",
       "receiver": "*Root",
-      "line": 330
+      "line": 314
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -12028,7 +12040,7 @@
       "name": "captureActivityLogTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 349
+      "line": 333
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19628,7 +19640,7 @@
       "file": "internal/ui/firewall.go",
       "name": "firewallTitle",
       "kind": "function",
-      "line": 252
+      "line": 223
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19636,7 +19648,7 @@
       "name": "renderFirewallSection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 265
+      "line": 236
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19644,7 +19656,7 @@
       "name": "renderFirewallRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 286
+      "line": 257
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19652,7 +19664,7 @@
       "name": "actionColor",
       "kind": "method",
       "receiver": "*Root",
-      "line": 319
+      "line": 290
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19660,7 +19672,7 @@
       "name": "captureFirewallKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 329
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19905,14 +19917,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -20764,7 +20776,7 @@
       "name": "captureMountsKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 356
+      "line": 345
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -20846,30 +20858,37 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
-      "name": "TestMountsReloadIntoAnErrorNeverHangsOnDown",
+      "name": "TestRenderMountsShowsAPlaceholderWhenGenuinelyEmpty",
       "kind": "function",
       "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
+      "name": "TestMountsReloadIntoAnErrorNeverHangsOnDown",
+      "kind": "function",
+      "line": 271
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/mounts_test.go",
       "name": "TestMountsErrorScreenNeverHangsOnDownAfterARealDraw",
       "kind": "function",
-      "line": 273
+      "line": 294
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestRenderMountsColorsNonPersistentEntriesWithWarning",
       "kind": "function",
-      "line": 300
+      "line": 321
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestRenderMountsSelectsTheFirstDataRowOnFirstRender",
       "kind": "function",
-      "line": 327
+      "line": 348
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -31376,6 +31395,41 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tableplaceholder.go",
+      "name": "showTablePlaceholder",
+      "kind": "function",
+      "line": 38
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tableplaceholder.go",
+      "name": "enableTableSelection",
+      "kind": "function",
+      "line": 46
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tableplaceholder_test.go",
+      "name": "TestShowTablePlaceholderWritesTheMessageAndDisablesSelection",
+      "kind": "function",
+      "line": 15
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tableplaceholder_test.go",
+      "name": "TestShowTablePlaceholderNeverHangsOnDownAfterARealDraw",
+      "kind": "function",
+      "line": 36
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tableplaceholder_test.go",
+      "name": "TestEnableTableSelectionTurnsSelectionBackOn",
+      "kind": "function",
+      "line": 63
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/tabs.go",
       "name": "maxTabs",
       "kind": "const",
@@ -34432,5 +34486,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "18eea505671c6ddf0f7aaf3945278d3ead3b7ee2ccd9f62b94fe9fda008768fc"
+  "merkle_root": "142fa75ff85048a21707d13736da40c0518d99716ca036cdd8af55b8464f2ca5"
 }
