@@ -357,7 +357,10 @@ func (r *Root) buildStatusBar() string {
 				write(diskUsageText(u, r.theme))
 				sep()
 			}
-			if r.settings.StatusBarShowInodes {
+			// u.HasInodes is false on a filesystem df -i genuinely can't
+			// report a count for (see DiskUsage's own doc comment) —
+			// left off entirely rather than showing a misleading 0/0.
+			if r.settings.StatusBarShowInodes && u.HasInodes {
 				write(inodeUsageText(u, r.theme))
 				sep()
 			}
@@ -944,7 +947,18 @@ func diskUsageFor(panel *Panel) (fsops.DiskUsage, bool) {
 func diskUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
 	total := u.UsedBytes + u.AvailBytes
 	percent := coloredPercentIn(u.UsePercent, percentStatusColor(u.UsePercent, theme), statusDiskColor)
-	return fmt.Sprintf("[%s]Disk free %s/%s (%s)[-]", colorTag(statusDiskColor), humanSize(u.AvailBytes), humanSize(total), percent)
+	label := "Disk"
+	if u.Fstype != "" {
+		// Uppercased, not a hand-maintained lookup table keyed by fstype
+		// name: whatever findmnt reports (cifs, nfs4, ecryptfs, btrfs,
+		// ...) already reads fine in caps, the same way the Mounts
+		// screen's own Type column already shows it verbatim — and per
+		// the user's own explicit example, this is exactly what makes an
+		// EncryptFS mounted over an ordinary-looking path visible here
+		// too, without this app needing to know ecryptfs exists at all.
+		label = strings.ToUpper(u.Fstype)
+	}
+	return fmt.Sprintf("[%s]%s free %s/%s (%s)[-]", colorTag(statusDiskColor), label, humanSize(u.AvailBytes), humanSize(total), percent)
 }
 
 func inodeUsageText(u fsops.DiskUsage, theme config.ResolvedTheme) string {
@@ -1534,12 +1548,12 @@ func (r *Root) refreshActivePanelHeaderGlow() {
 	// The filter-menu button's own "Nx" glow (see renderFilterMenuBtn)
 	// needs the exact same once-a-second nudge to keep advancing while
 	// sitting idle with a filter active, for the same reason the "@"
-	// button above does — independent of it, since a panel can have
-	// both a remote connection and an active filter at once. Skipped
-	// while filterMatchesNothing: that state deliberately stays a flat,
-	// unmoving red (see renderFilterMenuBtn's own doc comment), so
-	// there's no glow phase to advance there either.
-	if p.activeFilterCount() > 0 && !p.filterMatchesNothing {
+	// button above does — independent of it, since a panel can have both
+	// a remote connection and an active filter at once. This also covers
+	// filterMatchesNothing now: that state pulses too (see
+	// renderFilterMenuBtn's own doc comment), not just the "genuinely
+	// narrowing the listing" case.
+	if p.activeFilterCount() > 0 {
 		p.renderFilterMenuBtn()
 	}
 }

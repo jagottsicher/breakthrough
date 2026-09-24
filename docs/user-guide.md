@@ -98,7 +98,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -336,7 +336,10 @@ instead, and `restore_tabs = false` turns the whole thing off.
 
 ## Split view
 
-Two of your open tabs on screen at once, side by side or stacked.
+Two of your open tabs on screen at once, side by side or stacked. Side
+by side, a plain, background-colored column separates the two panes;
+stacked panes need no such gap, since the row break already separates
+them.
 
 | Key | Action |
 |---|---|
@@ -442,11 +445,13 @@ Properties
 group's own entries, led by a `◂ Back` row — the same "drill in, one
 level at a time" shape a settings app on a phone already uses, chosen
 over a flyout beside the menu since it needs no horizontal room a
-narrow terminal might not have. `Escape` backs out one level at a time
-(a second press closes the menu once you're back at the top); Left
-arrow does the same, alongside clicking or selecting `◂ Back` itself.
-The menu's own title bar names where you are — "Menu" at the top,
-"Menu › Selection" one level in.
+narrow terminal might not have. Right arrow drills into whichever
+submenu the cursor is on, no Enter needed; `Escape` backs out one level
+at a time (a second press closes the menu once you're back at the top),
+and Left arrow does the same, alongside clicking or selecting `◂ Back`
+itself. The menu's own title bar names where you are — "Menu" at the
+top, "Menu › Selection" one level in — and the menu is always at least
+as wide as that title, even when every row inside is shorter.
 
 - **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
   (files only, `mt`), `chown`, `chmod`, `sed`, Batch rename, Undo last
@@ -1810,8 +1815,8 @@ configuration](#options-and-configuration) below), and finally a clock.
 |---|---|---|
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
-| Disk space | `Disk free <free>/<total> (<percent>%)` for the current directory's own filesystem | Blue, percentage green/orange/red |
-| Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem | Violet, percentage green/orange/red |
+| Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |
+| Inode usage | `Inodes used <used>/<total> (<percent>%)` for the same filesystem — omitted entirely on a filesystem that can't report a count at all (some CIFS/SMB mounts) rather than showing a misleading 0/0 | Violet, percentage green/orange/red |
 | Git status | `git:(branch) ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts` for the current directory, only while it's part of a git repository | Green (clean) / orange (dirty) / red (conflicts) |
 | Kernel version | `uname -r`'s own output | Gold |
 | Uptime | `up <days> <HH:MM>` (Linux's own `/proc/uptime`) | Teal |
@@ -1922,7 +1927,24 @@ format and locations](#config-file-format-and-locations)), with a
 one-time notice the first time that fallback happens. Append-only —
 breakthrough never rotates or truncates it; that is `logrotate`'s job.
 
-There is no in-app viewer yet — read it directly for now.
+### Activity Log screen ("jl")
+
+A read-only, live view of the real log file above — no second, parallel
+recording, just `activitylog.ParseLine` reading the same file back.
+
+| Key | Action |
+|---|---|
+| `jl` | Open the Activity Log screen |
+| Keyword field | Filter by a case-insensitive substring of the message |
+| Time field | Filter by when it happened — the exact same `before`/`after`/`between ... and ...`/relative ("last 7 days") expressions the panel's own Modified-time filter already accepts |
+| `Tab` / `Shift+Tab` | Move between Keyword, Time, and the list |
+| `r` | Re-read the real log file (while the list has focus) |
+| `Escape` | Close the screen, from any of the three |
+
+Both fields narrow the list live as you type, the same feel the panel's
+own filter dropdown already has. Entries show newest first — the file
+itself is written oldest-first, but a log is usually read the other way
+around, the same "tail, not head" reasoning as a live log.
 
 ## Settings reference
 

@@ -126,8 +126,9 @@ terminal.
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
 - Split view (`s`): two of those tabs on screen at once, side by side
-  or stacked (`z` then `o` flips it, or set `split_stacked` once and
-  forget it). With a single tab open, `s` opens a second one on the same
+  (with a plain background-colored gap column between them) or stacked
+  (`z` then `o` flips it, or set `split_stacked` once and forget it).
+  With a single tab open, `s` opens a second one on the same
   directory — the usual starting point for copying between two places in
   one tree; otherwise it pairs you with the tab you last split with. To
   choose the other pane yourself, the tab list (`t`) gives every row a `◫` button,
@@ -182,8 +183,9 @@ terminal.
   (the latter two only for a recognized archive), Remove), "Selection" (Select all/
   Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
-  the last two only once a split actually exists). `◂ Back`, `Escape`,
-  or Left arrow step back out one level at a time. Browsing the Trash
+  the last two only once a split actually exists). Right arrow drills
+  into a submenu with no Enter needed; `◂ Back`, `Escape`, or Left arrow
+  step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there. Once open,
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
@@ -578,9 +580,12 @@ terminal.
   restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
   current user (green, red while running as root), disk space
-  (`free/total`) and inode usage (`used/total`) for the directory on
-  screen — each with its own fixed color and a green/orange/red
-  percentage (under 80% / 80%+ / 90%+) — git status (`git:(branch)
+  (`free/total`, labeled with the real filesystem type — `EXT4`, `CIFS`,
+  `NFS4`, `ECRYPTFS`, ... — the same one the Mounts screen shows) and
+  inode usage (`used/total`, omitted on a filesystem that can't report a
+  count at all) for the directory on screen — each with its own fixed
+  color and a green/orange/red percentage (under 80% / 80%+ / 90%+) —
+  git status (`git:(branch)
   ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts`, the same
   phrasing several zsh prompt themes already use, green/orange/red for
   clean/dirty/conflicted, shown only inside a git repository), the
@@ -721,7 +726,10 @@ terminal.
   `actions` records every real, state-changing action (Copy, Rename,
   chmod, Compress, a Rsync run, an SFTP connect…), enough to answer
   "what did I actually do with breakthrough" after the fact, and the
-  foundation a future Undo will build on.
+  foundation a future Undo will build on. An Activity Log screen (`jl`)
+  browses the real log file itself — newest entries first, with a
+  keyword filter (full text over the message) and a time-range filter
+  reusing the panel's own Modified-time filter syntax.
 
 ## Status
 
@@ -734,7 +742,9 @@ built-in networking and hardware tools with its own Network Tools
 screen (`jm`) showing what's currently mounted and whether it survives a
 reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other, and real
+governs traffic), including which rules shadow each other, an Activity
+Log screen (`jl`) browsing the real activity log with keyword/time
+filtering, and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see
