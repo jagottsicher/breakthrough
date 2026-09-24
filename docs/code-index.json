@@ -1003,13 +1003,13 @@
     },
     {
       "path": "internal/ui/activitylogscreen.go",
-      "size": 14655,
-      "sha256": "84fca992360d55725d85745981d7b1ae08d28543e816f554464ba5f5d3cf3cc6"
+      "size": 14672,
+      "sha256": "1e9c254df52575c0ed22f7d391f09981e6553ea4cadb536a2e0028e7dfdd6bbb"
     },
     {
       "path": "internal/ui/activitylogscreen_test.go",
-      "size": 13323,
-      "sha256": "619a83c4a36089dac4703a19d3aed7a67e3e7554c0ffab9b0767b1f40ce18fcd"
+      "size": 13385,
+      "sha256": "1ce0d3c4530e78442de4d2acfc3925f14952fbc1eec9e29a988f4103f869450e"
     },
     {
       "path": "internal/ui/archivepanel.go",
@@ -1238,8 +1238,8 @@
     },
     {
       "path": "internal/ui/firewall_test.go",
-      "size": 10697,
-      "sha256": "550818b6e7c738d6fa49c40c33137863f6b306aa1e7d1383da26041b31e2842b"
+      "size": 10759,
+      "sha256": "297670689679827070510fabd37eb28fb5910784c6cdd44437e9dbc0ff5c0633"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -1298,8 +1298,8 @@
     },
     {
       "path": "internal/ui/mounts_test.go",
-      "size": 12204,
-      "sha256": "18a9c388e7e2e79179c09a4b28fd24d2e14a4a82e3fb259b90130e1698be40e4"
+      "size": 12266,
+      "sha256": "031f6ff98885f7fe8c5056c655e0866b5ae2f95fa20397228a4c85fb80129190"
     },
     {
       "path": "internal/ui/mousefocus_test.go",
@@ -12140,14 +12140,14 @@
       "file": "internal/ui/activitylogscreen_test.go",
       "name": "TestCaptureActivityLogTableKeyTabFocusesKeywordField",
       "kind": "function",
-      "line": 306
+      "line": 308
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/activitylogscreen_test.go",
       "name": "TestActivityLogFieldDoneEscapeClosesFromEitherField",
       "kind": "function",
-      "line": 325
+      "line": 327
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -19730,21 +19730,21 @@
       "file": "internal/ui/firewall_test.go",
       "name": "TestRenderFirewallColorsAllowAndDenyRowsApart",
       "kind": "function",
-      "line": 197
+      "line": 199
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/firewall_test.go",
       "name": "TestRenderFirewallMutesAShadowedRuleAndNotesWhy",
       "kind": "function",
-      "line": 228
+      "line": 230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/firewall_test.go",
       "name": "TestRenderFirewallSelectsTheFirstRuleRowOnFirstRender",
       "kind": "function",
-      "line": 260
+      "line": 262
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -20862,14 +20862,14 @@
       "file": "internal/ui/mounts_test.go",
       "name": "TestRenderMountsColorsNonPersistentEntriesWithWarning",
       "kind": "function",
-      "line": 298
+      "line": 300
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestRenderMountsSelectsTheFirstDataRowOnFirstRender",
       "kind": "function",
-      "line": 325
+      "line": 327
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34432,5 +34432,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "f112a1775f0f51e255e9ccd5492b0e29abc6d7779476aa5c74d261a811fdb775"
+  "merkle_root": "18eea505671c6ddf0f7aaf3945278d3ead3b7ee2ccd9f62b94fe9fda008768fc"
 }
