@@ -242,6 +242,27 @@ func TestRenderMountsShowsTheErrorInPlaceOfRows(t *testing.T) {
 	}
 }
 
+// TestRenderMountsShowsAPlaceholderWhenGenuinelyEmpty pins the other
+// no-real-content case (a successful read finding no real storage
+// mounted at all — vanishingly unlikely in practice, but not
+// impossible): reported explicitly, the same as a failed read, rather
+// than just leaving the table looking like an empty header.
+func TestRenderMountsShowsAPlaceholderWhenGenuinelyEmpty(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.mountsErr = nil
+	r.mountsEntries = nil
+
+	r.renderMounts()
+
+	got := strings.TrimSpace(r.mountsTable.GetCell(1, mountsColTarget).Text)
+	if !strings.Contains(got, "No real storage mounted") {
+		t.Errorf("row 1 = %q, want the empty-read placeholder", got)
+	}
+}
+
 // TestMountsReloadIntoAnErrorNeverHangsOnDown pins the same real,
 // reported freeze TestFirewallReloadIntoAnErrorNeverHangsOnDown pins for
 // the Firewall screen — see that test's own doc comment and
