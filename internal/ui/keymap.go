@@ -427,6 +427,7 @@ func chordFamilies() []chordFamily {
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
+			{'l', "Activity Log", func(r *Root) { r.openActivityLog() }},
 		}},
 	}
 }

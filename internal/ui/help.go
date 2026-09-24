@@ -436,6 +436,30 @@ var helpText = strings.TrimLeft(`
   from IP Y" without needing to know any firewall-specific syntax, are
   not part of this first, read-only cut.
 
+[::b]Activity Log screen ("jl")[::-]
+
+  A read-only, live view of the real activity log file (see the
+  "Activity log" Options category) — Copy/Cut/Paste, Rename, Trash,
+  chmod/chown, Compress/Extract, Sed Replace/Batch Rename, Rsync runs,
+  remote connections/transfers, and shell commands, whatever the
+  configured level and categories actually record.
+
+  Keyword          Filter by a case-insensitive substring of the
+                    message — full text, not just a category or level
+  Time             Filter by when it happened — the exact same
+                    "before"/"after"/"between ... and ..."/relative
+                    ("last 7 days") expressions the panel's own
+                    Modified-time filter already accepts
+  Tab / Shift+Tab   Move between Keyword, Time, and the list
+  r                 Re-read the real log file (while the list has focus)
+  Escape            Close the Activity Log screen, from any of the three
+
+  Both fields narrow the list live as you type, the same feel the
+  panel's own filter dropdown already has. Newest entries show first —
+  the log itself is written oldest-first, but read the other way around
+  here, the same "tail, not head" reasoning a live log is usually
+  browsed with.
+
 [::b]Split view ("s")[::-]
 
   Two of your open tabs on screen at once, instead of one at a time.
