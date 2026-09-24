@@ -183,8 +183,9 @@ terminal.
   (the latter two only for a recognized archive), Remove), "Selection" (Select all/
   Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
   close tab, Switch tab..., Split on/off, orientation and Swap panes —
-  the last two only once a split actually exists). `◂ Back`, `Escape`,
-  or Left arrow step back out one level at a time. Browsing the Trash
+  the last two only once a split actually exists). Right arrow drills
+  into a submenu with no Enter needed; `◂ Back`, `Escape`, or Left arrow
+  step back out one level at a time. Browsing the Trash
   itself replaces the whole menu with just Restore/Empty Trash/
   Properties, since almost nothing else still applies there. Once open,
   `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/

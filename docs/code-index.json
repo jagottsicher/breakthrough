@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 58542,
-      "sha256": "6c6d58e2205429ec51d5f466ee0465bd6709401485962728e293d1a7300a29fe"
+      "size": 58600,
+      "sha256": "53a12424e69dbfaf9fcc1ac24c3e5bea45aa7aaf0a26cef3feaba199bdfdad26"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 114330,
-      "sha256": "2bef1cec29ff09f59930392afa361a887e8681c2e403318bad1c32c028b1aaf7"
+      "size": 114508,
+      "sha256": "d834644b10113706f3c7cfa6f64ea5aa4466395dc945c1926d7c1307da2d720a"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1143,13 +1143,13 @@
     },
     {
       "path": "internal/ui/contextmenu.go",
-      "size": 21619,
-      "sha256": "386a2de98d302f20300e48a7f8d57a176b8e61c918307dd1cb0a014fc0527671"
+      "size": 23736,
+      "sha256": "b8dbcccc683d62722b13023bb10fab517210432d5fc5358f9d54f9f756f435a0"
     },
     {
       "path": "internal/ui/contextmenu_test.go",
-      "size": 19946,
-      "sha256": "c738c4abe255602e8bdbd75c000b6bfeaf901af8230e2296b70f15bc15cd56e2"
+      "size": 22922,
+      "sha256": "db0648bf0bf02c94e956b590cd07b51818bc588dc48e2ea1bc4b55a26c41c034"
     },
     {
       "path": "internal/ui/crash.go",
@@ -17034,7 +17034,7 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu.go",
-      "name": "renderContextMenu",
+      "name": "visibleMenuEntries",
       "kind": "method",
       "receiver": "*Root",
       "line": 284
@@ -17042,10 +17042,18 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu.go",
+      "name": "renderContextMenu",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 301
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/contextmenu.go",
       "name": "contextMenuHintBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 312
+      "line": 326
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17053,7 +17061,7 @@
       "name": "refreshContextMenuHint",
       "kind": "method",
       "receiver": "*Root",
-      "line": 353
+      "line": 367
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17061,7 +17069,7 @@
       "name": "renderContextMenuTitle",
       "kind": "method",
       "receiver": "*Root",
-      "line": 364
+      "line": 378
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17069,7 +17077,7 @@
       "name": "enterMenuSubmenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 375
+      "line": 389
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17077,7 +17085,7 @@
       "name": "closeMenuOrGoBack",
       "kind": "method",
       "receiver": "*Root",
-      "line": 389
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17085,7 +17093,15 @@
       "name": "captureContextMenuKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 412
+      "line": 432
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/contextmenu.go",
+      "name": "currentMenuEntryAtCursor",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 458
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17093,7 +17109,7 @@
       "name": "menuMnemonicEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 436
+      "line": 480
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17101,7 +17117,7 @@
       "name": "resizeContextMenu",
       "kind": "method",
       "receiver": "*Root",
-      "line": 458
+      "line": 506
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -17204,58 +17220,79 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
-      "name": "TestContextMenuReopeningStartsAtTopLevel",
+      "name": "TestContextMenuRightArrowEntersSubmenu",
       "kind": "function",
       "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
+      "name": "TestContextMenuRightArrowOnALeafFallsThrough",
+      "kind": "function",
+      "line": 360
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/contextmenu_test.go",
+      "name": "TestContextMenuReopeningStartsAtTopLevel",
+      "kind": "function",
+      "line": 381
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuResizesForItsCurrentContent",
       "kind": "function",
-      "line": 363
+      "line": 406
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/contextmenu_test.go",
+      "name": "TestContextMenuWidthFitsALongTitleBar",
+      "kind": "function",
+      "line": 434
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuCopyPasteRoundTrip",
       "kind": "function",
-      "line": 391
+      "line": 457
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuMnemonicFiresMatchingEntry",
       "kind": "function",
-      "line": 428
+      "line": 494
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuMnemonicMoveToTrashActuallyMoves",
       "kind": "function",
-      "line": 448
+      "line": 514
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuMnemonicOpensPropertiesInBothMenus",
       "kind": "function",
-      "line": 471
+      "line": 537
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuMnemonicIgnoresHiddenEntry",
       "kind": "function",
-      "line": 491
+      "line": 557
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/contextmenu_test.go",
       "name": "TestContextMenuMnemonicIgnoresCtrlAndAltModified",
       "kind": "function",
-      "line": 511
+      "line": 577
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -18094,14 +18131,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -34060,5 +34097,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "d841b1f9ff37089a13a1546579009c622f54b9d5870f1844a3bd643683d9c16d"
+  "merkle_root": "c3a2169ed43a76f7819bc16ef9475859ac5fb227f831ae474fb38ad5fa64bd2a"
 }
