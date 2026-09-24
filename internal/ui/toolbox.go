@@ -5,6 +5,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // The Toolbox screen: a full-screen, browsable catalog of real external
@@ -302,6 +304,33 @@ func (r *Root) closeToolbox() {
 // every later call (a live color-scheme switch while this screen is
 // open), the same "don't reset a in-range, already-correct choice"
 // restraint renderOptions' own tail shows.
+// applyToolboxTheme repaints the Toolbox screen for a live theme switch
+// — split out of Root.applyTheme (see that method's own doc comment).
+// Guarded because applyTheme also runs from NewRoot, before
+// newToolboxScreen has built any of these.
+func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
+	if r.toolboxTable == nil {
+		return
+	}
+	r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	// FocusedBackground, fixed — the Toolbox screen has exactly one
+	// focusable widget (its own table), never itself the base a further
+	// overlay stacks on top of in a way that should dim it, the same
+	// reasoning optionsTitleBar's own fixed FocusedBackground already
+	// follows.
+	r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.toolboxTitleBar.SetTextColor(theme.TextColor)
+	r.toolboxHint.SetBackgroundColor(theme.InputBackground)
+	r.toolboxHint.SetTextColor(theme.MutedTextColor)
+
+	styleInput(r.toolboxInput, theme, true)
+	r.toolboxInput.SetLabelColor(theme.TextColor)
+
+	r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
+}
+
 func (r *Root) renderToolbox() {
 	r.toolboxTable.Clear()
 

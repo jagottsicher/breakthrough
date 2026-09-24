@@ -247,6 +247,30 @@ func activityLogLevelColor(theme config.ResolvedTheme, level activitylog.Level) 
 // shows in place of any rows rather than leaving the screen looking
 // like an empty, successful read, the same "report it, don't swallow
 // it" principle renderMounts/renderFirewall already follow.
+// applyActivityLogTheme repaints the Activity Log screen for a live
+// theme switch — split out of Root.applyTheme (see that method's own
+// doc comment). Guarded because applyTheme also runs from NewRoot,
+// before newActivityLogScreen has built any of these.
+func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
+	if r.activityLogTable == nil {
+		return
+	}
+	r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activityLogTitleBar.SetTextColor(theme.TextColor)
+	r.activityLogHint.SetBackgroundColor(theme.InputBackground)
+	r.activityLogHint.SetTextColor(theme.MutedTextColor)
+
+	r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
+	r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
+	r.activityLogKeywordField.SetLabelColor(theme.TextColor)
+	r.activityLogTimeField.SetLabelColor(theme.TextColor)
+
+	r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
+}
+
 func (r *Root) renderActivityLog() {
 	r.activityLogTable.Clear()
 

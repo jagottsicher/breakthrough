@@ -241,47 +241,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
-	// The Options screen (see optionsscreen.go). Guarded because
-	// applyTheme also runs from NewRoot, before newOptionsScreen has
-	// built any of these.
-	if r.optionsCategories != nil {
-		styleList(r.optionsCategories, theme)
-
-		r.optionsLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.optionsButtons.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.optionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.optionsTitleBar.SetTextColor(theme.TextColor)
-		r.optionsHint.SetBackgroundColor(theme.InputBackground)
-		r.optionsHint.SetTextColor(theme.MutedTextColor)
-
-		r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.optionsInfo.SetBackgroundColor(theme.InputBackground)
-		r.optionsInfo.SetTextColor(theme.TextColor)
-
-		styleInput(r.optionsInput, theme, true)
-		r.optionsInput.SetLabelColor(theme.TextColor)
-
-		for _, b := range r.optionsButtonList() {
-			styleButton(b, theme)
-		}
-
-		// Last, and deliberately after styleList above: that sets one
-		// fixed FocusedBackground selection color, which is right for
-		// every other list in this app but would erase the two panes'
-		// own focus-dependent highlight (see setOptionsPaneFocused) —
-		// a real bug, caught by reading the drawn colors back off a
-		// screen. Re-derived from each pane's actual focus, which is
-		// trustworthy here: applyTheme is never called from inside a
-		// blur callback, the one place HasFocus lies.
-		r.setOptionsPaneFocused(r.optionsCategories, r.optionsCategories.HasFocus())
-		r.setOptionsPaneFocused(r.optionsTable, r.optionsTable.HasFocus())
-
-		// Re-render: the table's own cell colors are baked in per cell
-		// (see renderOptions), not looked up live at draw time.
-		r.renderOptions()
-	}
+	// The Options screen (see optionsscreen.go/applyOptionsTheme).
+	r.applyOptionsTheme(theme)
 
 	// The Batch Rename screen (see batchrename.go) — guarded the same
 	// way the Options block above is (applyTheme also runs from
@@ -327,76 +288,14 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderBatchRenamePreview()
 	}
 
-	if r.toolboxTable != nil {
-		r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		// FocusedBackground, fixed — the Toolbox screen has exactly one
-		// focusable widget (its own table), never itself the base a
-		// further overlay stacks on top of in a way that should dim it,
-		// the same reasoning optionsTitleBar's own fixed
-		// FocusedBackground already follows.
-		r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.toolboxTitleBar.SetTextColor(theme.TextColor)
-		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
-		r.toolboxHint.SetTextColor(theme.MutedTextColor)
-
-		styleInput(r.toolboxInput, theme, true)
-		r.toolboxInput.SetLabelColor(theme.TextColor)
-
-		r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	if r.mountsTable != nil {
-		r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
-		// fixed FocusedBackground just above follows.
-		r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.mountsTitleBar.SetTextColor(theme.TextColor)
-		r.mountsHint.SetBackgroundColor(theme.InputBackground)
-		r.mountsHint.SetTextColor(theme.MutedTextColor)
-
-		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	if r.firewallTable != nil {
-		// A real, previously-unnoticed gap: unlike every other full-screen
-		// catalog here, this block never existed at all, so the Firewall
-		// screen's own layout/table sat at tview's plain, unthemed default
-		// (black) background instead of SurfaceBackground — caught per the
-		// user's own explicit report that the "tool pages" didn't match
-		// the rest of the theme.
-		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
-		// fixed FocusedBackground above follows.
-		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.firewallTitleBar.SetTextColor(theme.TextColor)
-		r.firewallHint.SetBackgroundColor(theme.InputBackground)
-		r.firewallHint.SetTextColor(theme.MutedTextColor)
-
-		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	if r.activityLogTable != nil {
-		r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.activityLogTitleBar.SetTextColor(theme.TextColor)
-		r.activityLogHint.SetBackgroundColor(theme.InputBackground)
-		r.activityLogHint.SetTextColor(theme.MutedTextColor)
-
-		r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
-		r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
-		r.activityLogKeywordField.SetLabelColor(theme.TextColor)
-		r.activityLogTimeField.SetLabelColor(theme.TextColor)
-
-		r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
-	}
+	// The five full-screen catalogs (Toolbox, Mounts, Firewall, Activity
+	// Log) — see each one's own applyXTheme method (toolbox.go/mounts.go/
+	// firewall.go/activitylogscreen.go) for why the split, and why each
+	// one still guards against running before its own screen exists.
+	r.applyToolboxTheme(theme)
+	r.applyMountsTheme(theme)
+	r.applyFirewallTheme(theme)
+	r.applyActivityLogTheme(theme)
 
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
