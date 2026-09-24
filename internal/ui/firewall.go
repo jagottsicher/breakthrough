@@ -6,6 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 )
 
@@ -144,6 +145,27 @@ func (r *Root) reloadFirewall() {
 // leaving the screen looking like an empty, successful "no rules" read —
 // the same "report it, don't swallow it" principle renderMounts already
 // follows.
+// applyFirewallTheme repaints the Firewall screen for a live theme
+// switch — split out of Root.applyTheme (see that method's own doc
+// comment). Guarded because applyTheme also runs from NewRoot, before
+// newFirewallScreen has built any of these.
+func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
+	if r.firewallTable == nil {
+		return
+	}
+	r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+	// fixed FocusedBackground already follows.
+	r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallTitleBar.SetTextColor(theme.TextColor)
+	r.firewallHint.SetBackgroundColor(theme.InputBackground)
+	r.firewallHint.SetTextColor(theme.MutedTextColor)
+
+	r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
+}
+
 func (r *Root) renderFirewall() {
 	r.firewallTable.Clear()
 
