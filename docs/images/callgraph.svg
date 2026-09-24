@@ -749,7 +749,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock -->
 <g id="node21" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock</title>
-<g id="a_node21"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock | defined in bottombar.go:1479">
+<g id="a_node21"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).StartClock | defined in bottombar.go:1493">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M449.4292,-292.4C449.4292,-292.4 342.5708,-292.4 342.5708,-292.4 336.5708,-292.4 330.5708,-286.4 330.5708,-280.4 330.5708,-280.4 330.5708,-268.4 330.5708,-268.4 330.5708,-262.4 336.5708,-256.4 342.5708,-256.4 342.5708,-256.4 449.4292,-256.4 449.4292,-256.4 455.4292,-256.4 461.4292,-262.4 461.4292,-268.4 461.4292,-268.4 461.4292,-280.4 461.4292,-280.4 461.4292,-286.4 455.4292,-292.4 449.4292,-292.4"/>
 <text text-anchor="middle" x="396" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).StartClock</text>
 </a>
