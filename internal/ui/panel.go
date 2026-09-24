@@ -1792,22 +1792,23 @@ func (p *Panel) renderFilterMenuBtn() {
 	prefix := ""
 	if count > 0 {
 		prefix = fmt.Sprintf("%dx", count)
-		switch {
-		case p.filterMatchesNothing:
-			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(p.theme.EntryError), prefix)
-		default:
-			// The same breathing glow the header's own "@" connection
-			// button uses (see connectionGlowColor) once a filter is
-			// genuinely narrowing the listing — per the user's own
-			// explicit request that "Nx" read as just as alive/current a
-			// signal as a live remote connection already does, rather
-			// than sitting there in a flat, easy-to-miss neutral color.
-			// refreshActivePanelHeaderGlow's own once-a-second tick is
-			// what actually advances this over time; a call from here
-			// alone would only ever show whatever phase the glow happens
-			// to be in at the moment something else caused a redraw.
-			prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(connectionGlowColor(p.theme, true, connectionGlowNow())), prefix)
+		// The same breathing glow the header's own "@" connection button
+		// uses (see connectionGlowColor/glowColor) whenever any filter is
+		// active — per the user's own explicit request that "Nx" always
+		// read as alive, even while filterMatchesNothing (an earlier
+		// design left that case a flat, unmoving red instead). The base
+		// color still tells the two states apart: theme.EntryError while
+		// matching nothing, theme.EntryExecutable while genuinely
+		// narrowing the listing. refreshActivePanelHeaderGlow's own
+		// once-a-second tick is what actually advances this over time; a
+		// call from here alone would only ever show whatever phase the
+		// glow happens to be in at the moment something else caused a
+		// redraw.
+		base := p.theme.EntryExecutable
+		if p.filterMatchesNothing {
+			base = p.theme.EntryError
 		}
+		prefix = fmt.Sprintf("[%s::]%s[-:-:-]", colorTag(glowColor(base, connectionGlowNow())), prefix)
 	}
 
 	keyBG := colorTag(p.theme.ButtonBackground)
@@ -3767,10 +3768,20 @@ func connectionGlowColor(theme config.ResolvedTheme, connected bool, now time.Ti
 	if !connected {
 		return theme.MutedTextColor
 	}
+	return glowColor(theme.EntryExecutable, now)
+}
+
+// glowColor is connectionGlowColor's own pulse math, generalized to any
+// base color — reused by the filter-menu "Nx" indicator so a filter that
+// matches nothing still pulses (toward white, off theme.EntryError)
+// rather than sitting as a flat, unmoving red, per the user's own
+// explicit request that the indicator always read as "alive" while any
+// filter is active, independent of whether it currently matches anything.
+func glowColor(base tcell.Color, now time.Time) tcell.Color {
 	period := connectionGlowPeriod.Seconds()
 	phase := math.Mod(float64(now.UnixMilli())/1000, period) / period
 	brightness := (1 - math.Cos(2*math.Pi*phase)) / 2 // 0 (rest) .. 1 (peak) .. 0 (rest)
-	return blendToward(theme.EntryExecutable, colorWhite, brightness*connectionGlowPeakBlend)
+	return blendToward(base, colorWhite, brightness*connectionGlowPeakBlend)
 }
 
 // colorWhite/colorBlack are blendToward's own two endpoints — named

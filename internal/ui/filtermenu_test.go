@@ -465,14 +465,23 @@ func TestRenderFilterMenuBtnOmitsIndicatorWhenNoFiltersActive(t *testing.T) {
 // show, leaving a listing indistinguishable from a genuinely empty
 // folder unless you already know to check the "Nx" indicator. Once a
 // filter hides everything, that indicator's own count must render in
-// EntryError's own red instead of the plain default color, impossible
-// to miss even at a glance.
+// a shade of EntryError's own red instead of the plain default color,
+// impossible to miss even at a glance — and, per a later user report,
+// it must still pulse the same way the "genuinely narrowing" case does
+// (see TestRenderFilterMenuBtnGlowsWhenAFilterIsActive) rather than
+// sitting as a flat, unmoving red, so "Nx" always reads as alive
+// whenever any filter is active.
 func TestFilterMatchesNothingColorsIndicatorRed(t *testing.T) {
 	dir := fixtureDir(t) // rows: "..", app-data, apple.txt, apricot.txt, banana.txt
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	fixed := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	orig := connectionGlowNow
+	connectionGlowNow = func() time.Time { return fixed }
+	t.Cleanup(func() { connectionGlowNow = orig })
+
 	r.panel.filterField.SetText("*.zzz") // matches nothing in fixtureDir
 
 	if !r.panel.filterMatchesNothing {
@@ -482,12 +491,47 @@ func TestFilterMatchesNothingColorsIndicatorRed(t *testing.T) {
 		t.Errorf("row count with a filter matching nothing = %d, want 1 (\"..\" only)", got)
 	}
 
-	wantTag := "[" + colorTag(r.panel.theme.EntryError) + "::]"
+	wantColor := glowColor(r.panel.theme.EntryError, fixed)
+	wantTag := "[" + colorTag(wantColor) + "::]"
 	if got := r.panel.filterMenuBtn.GetText(false); !containsSubstring(got, wantTag) {
-		t.Errorf("filterMenuBtn raw text = %q, want it to contain the EntryError color tag %q", got, wantTag)
+		t.Errorf("filterMenuBtn raw text = %q, want it to contain the pulsing-red color tag %q", got, wantTag)
 	}
 	if got := r.panel.filterMenuBtn.GetText(true); !containsSubstring(got, "1x") {
 		t.Errorf("filterMenuBtn text = %q, want it to still contain \"1x\"", got)
+	}
+}
+
+// TestFilterMatchesNothingIndicatorKeepsPulsingOverTime pins the part
+// TestFilterMatchesNothingColorsIndicatorRed alone can't: that the red
+// indicator's glow phase actually advances on refreshActivePanelHeaderGlow's
+// own once-a-second tick while idle, the same as the "genuinely narrowing"
+// case already does (see
+// TestRefreshActivePanelHeaderGlowAdvancesTheFilterButtonWhileActive) —
+// an earlier design deliberately skipped this tick while
+// filterMatchesNothing, leaving it a flat red instead.
+func TestFilterMatchesNothingIndicatorKeepsPulsingOverTime(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	orig := connectionGlowNow
+	t.Cleanup(func() { connectionGlowNow = orig })
+
+	r.panel.filterField.SetText("*.zzz") // matches nothing in fixtureDir
+
+	connectionGlowNow = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	r.refreshActivePanelHeaderGlow()
+	first := r.panel.filterMenuBtn.GetText(false)
+
+	// Half of connectionGlowPeriod (3s) later — the glow's own peak,
+	// against the first sample's own rest point.
+	connectionGlowNow = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 1, 500_000_000, time.UTC) }
+	r.refreshActivePanelHeaderGlow()
+	second := r.panel.filterMenuBtn.GetText(false)
+
+	if first == second {
+		t.Error("refreshActivePanelHeaderGlow did not re-render the filter button while filterMatchesNothing — its own glow phase never advances")
 	}
 }
 
