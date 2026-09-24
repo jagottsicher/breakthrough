@@ -361,6 +361,43 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 	}
 
+	if r.firewallTable != nil {
+		// A real, previously-unnoticed gap: unlike every other full-screen
+		// catalog here, this block never existed at all, so the Firewall
+		// screen's own layout/table sat at tview's plain, unthemed default
+		// (black) background instead of SurfaceBackground — caught per the
+		// user's own explicit report that the "tool pages" didn't match
+		// the rest of the theme.
+		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// fixed FocusedBackground above follows.
+		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.firewallTitleBar.SetTextColor(theme.TextColor)
+		r.firewallHint.SetBackgroundColor(theme.InputBackground)
+		r.firewallHint.SetTextColor(theme.MutedTextColor)
+
+		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
+	if r.activityLogTable != nil {
+		r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.activityLogTitleBar.SetTextColor(theme.TextColor)
+		r.activityLogHint.SetBackgroundColor(theme.InputBackground)
+		r.activityLogHint.SetTextColor(theme.MutedTextColor)
+
+		r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
+		r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
+		r.activityLogKeywordField.SetLabelColor(theme.TextColor)
+		r.activityLogTimeField.SetLabelColor(theme.TextColor)
+
+		r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
 		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
