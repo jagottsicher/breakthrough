@@ -8,6 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // The Mounts screen: a full-screen, read-only view of every currently
@@ -256,6 +258,27 @@ func (r *Root) reloadMounts() {
 // any rows rather than silently leaving the screen empty — the same
 // "report it, don't swallow it" principle every other action in this
 // app already follows.
+// applyMountsTheme repaints the Mounts screen for a live theme switch —
+// split out of Root.applyTheme (see that method's own doc comment).
+// Guarded because applyTheme also runs from NewRoot, before
+// newMountsScreen has built any of these.
+func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
+	if r.mountsTable == nil {
+		return
+	}
+	r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
+	// fixed FocusedBackground already follows.
+	r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.mountsTitleBar.SetTextColor(theme.TextColor)
+	r.mountsHint.SetBackgroundColor(theme.InputBackground)
+	r.mountsHint.SetTextColor(theme.MutedTextColor)
+
+	r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
+}
+
 func (r *Root) renderMounts() {
 	r.mountsTable.Clear()
 
