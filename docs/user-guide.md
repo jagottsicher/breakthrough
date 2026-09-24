@@ -336,7 +336,10 @@ instead, and `restore_tabs = false` turns the whole thing off.
 
 ## Split view
 
-Two of your open tabs on screen at once, side by side or stacked.
+Two of your open tabs on screen at once, side by side or stacked. Side
+by side, a plain, background-colored column separates the two panes;
+stacked panes need no such gap, since the row break already separates
+them.
 
 | Key | Action |
 |---|---|
