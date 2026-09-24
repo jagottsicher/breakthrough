@@ -983,6 +983,7 @@ this one floats on top of them.
 | `Escape` | Close it, stopping the process first if it's still running |
 | Drag the title bar | Move the window; `Alt`+arrow keys do the same |
 | Click the title bar's `✕` | Close it, same as `Escape` |
+| Click the title bar's `⭯` | Reload: run the same command again with the same arguments, clearing the window first — stops the current run first if it's still going |
 | Drag the bottom-right `◢` | Resize it by hand |
 | Arrow keys / `PageUp`/`PageDown` / mouse wheel | Scroll the output once it's longer than the window currently shows |
 
@@ -990,9 +991,11 @@ Left alone, a tool window auto-fits its own width to whatever it's
 currently showing — growing the moment a long line arrives, shrinking
 back once that line scrolls out of view — until the resize handle is
 ever dragged by hand, which turns that auto-fit off for that window for
-good. A window that finishes on its own (the command exits) says so
-right in its own content area instead of closing itself, so its last
-output stays readable until you close it yourself.
+good. A window that finishes on its own (the command exits) never
+closes itself, so its last output stays readable until you close it
+yourself — a genuine failure or a stop still says so, right in the
+window's own content area, but a clean exit says nothing further: the
+output already speaks for itself.
 
 ## Mounts
 
