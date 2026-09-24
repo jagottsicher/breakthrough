@@ -86,16 +86,17 @@ var helpText = strings.TrimLeft(`
                 gr / (root) · gb Trashbin · gc Connect…
     p  perms    pm chmod · po chown
     m  menu     mm Context menu (what a bare "m" always opened before
-                this family existed) · mf New file · md New dir
+                this family existed) · mf New file · md New dir ·
+                mo Open with… · mt tail -f · mA Deselect all
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
     o  options  oo Options screen · om Mouse reporting on/off
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    j  tools    jj Toolbox screen (networking/hardware tools) ·
+    j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
-                jn Network Tools screen · jh Hardware Tools screen ·
-                jf Firewall screen (this host's own actual rules)
+                jn Network Tools screen · jf Firewall screen (this
+                host's own actual rules) · jh Hardware Tools screen
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
@@ -156,15 +157,19 @@ var helpText = strings.TrimLeft(`
                   chown/chmod/sed/Batch rename/Undo last rename/Remove/
                   Paste following symlinks, Selection, Tabs & Split).
                   "mm" opens the same menu from the keyboard (see the
-                  "m" chord above). Once it's open,
-                  "l"/"e"/"r"/"c"/"x"/"d"/"i" — the same letters those
-                  seven already have on their own — fire that entry
-                  directly, without arrowing down to it first. "m"
-                  again (so "mmm" from plain browsing) does too, for
-                  Multiply, and "o" for Open with… — both have no
-                  plain-key equivalent of their own to mirror, since
-                  neither ever opens anywhere but here, so each just
-                  uses its own first letter instead.
+                  "m" chord above). Once it's open, a plain letter fires
+                  whichever entry already carries it as its own
+                  mnemonic, without arrowing down to it first:
+                  "l"/"e"/"r"/"c"/"x"/"d"/"i" (the same letters those
+                  seven already have on their own outside the menu),
+                  "o" for Open with… and "t" for tail -f (also directly
+                  reachable as "mo"/"mt" without opening the menu at
+                  all — see the "m" chord above), and "A" for Deselect
+                  all (likewise "mA"). "m" again (so "mmm" from plain
+                  browsing) fires Multiply — the one entry with no
+                  keyboard route of its own anywhere else, since its
+                  natural letter, "m", is already this family's own
+                  prefix key.
 
 [::b]Details sidebar ("I")[::-]
 
@@ -268,10 +273,12 @@ var helpText = strings.TrimLeft(`
   path itself to type a new one (Tab completes it, Enter goes); click
   a column heading to sort by it; click the "Y" button near the right
   edge of the path bar (an "Nx" count appears before it once one or
-  more are actually narrowing the listing, turning red if a filter is
-  hiding everything a directory would otherwise show) — or press "/" —
-  to open the filter dropdown, three independently combinable (AND)
-  rows, each narrowing the listing live as you type:
+  more are actually narrowing the listing — glowing the same slow
+  green breathing pulse the header's own "@" connection button uses,
+  or turning solid red instead if a filter is hiding everything a
+  directory would otherwise show) — or press "/" — to open the filter
+  dropdown, three independently combinable (AND) rows, each narrowing
+  the listing live as you type:
 
     Glob/regex      type to narrow the list live; its own button
                     switches glob/regex, its own checkbox disables it
@@ -286,12 +293,18 @@ var helpText = strings.TrimLeft(`
                     minutes") — sec/min/hour/day/week/month/year,
                     singular or plural
 
+  A fourth row, "Exclude dirs", sits below all three: not a filter of
+  its own, but a single on/off switch that applies to all three at
+  once — while on, a directory is never hidden by any of them, however
+  it would otherwise have matched (or failed to match); only plain
+  files are ever actually filtered.
+
   Typing into a field auto-activates its own row. Tab/Shift+Tab cycle
-  all seven of the dropdown's own pieces; "/" — once the dropdown is
+  all eight of the dropdown's own pieces; "/" — once the dropdown is
   already open — jumps straight to the next of the three fields
   instead, the same "press it again to advance further" trick Ctrl+T
   uses for the tab switcher. Escape closes it. By default
-  (filter_persistent) all three carry over across a directory change,
+  (filter_persistent) all four carry over across a directory change,
   so browsing a whole tree with the same filter on is the normal way
   to use it; set filter_persistent = false to have every new directory
   start unfiltered instead.
@@ -361,14 +374,14 @@ var helpText = strings.TrimLeft(`
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
 
-[::b]Toolbox screen ("jj")[::-]
+[::b]Toolbox screen ("jn"/"jh")[::-]
 
-  A browsable catalog of real networking and hardware tools — Networking
-  (Ping, Nmap, ip, route, ss, getent, wget, nslookup, dig, netcat, curl,
-  a log-following Tail -f) and Hardware (lsblk, lsusb, lscpu, lsmem,
-  lsdev, hwinfo, inxi, lsscsi) — each one a genuine external command,
-  never reimplemented, the same "shell out to the real tool" approach
-  Rsync and Sed Replace already take.
+  A browsable catalog of real networking and hardware tools — "jn"
+  (Network Tools: Ping, Nmap, ip, route, ss, getent, wget, nslookup,
+  dig, netcat, curl, a log-following Tail -f) and "jh" (Hardware Tools:
+  lsblk, lsusb, lscpu, lsmem, lsdev, hwinfo, inxi, lsscsi) — each one a
+  genuine external command, never reimplemented, the same "shell out to
+  the real tool" approach Rsync and Sed Replace already take.
 
   Up / Down         Move between entries
   Enter             Run the selected tool — asks for one further
@@ -379,12 +392,6 @@ var helpText = strings.TrimLeft(`
   below), floating on top of this screen rather than replacing it — pick
   another tool, or press Escape to get back to browsing, without losing
   anything already running.
-
-  "jn" (Network Tools) and "jh" (Hardware Tools) open this very same
-  screen already filtered down to just the Networking or just the
-  Hardware category, for jumping straight to one tool without scrolling
-  past the other category's entries first. Everything above about
-  Up/Down, Enter, Escape and tool windows applies the same way there.
 
 [::b]Mounts screen ("jm")[::-]
 
@@ -587,6 +594,13 @@ var helpText = strings.TrimLeft(`
   this machine over two separate ssh connections, never directly
   between the two remote hosts.
 
+  "Pick source tab…"/"Pick destination tab…" open a list of every
+  currently open tab (local or already connected via the Connect
+  dialog) as an alternative to typing or trusting the one-shot default
+  above — picking one fills the field exactly the way opening Rsync
+  fresh from that tab would have, connection and all, so a remote
+  tab's own Host/User/port still travel through to the real invocation.
+
   The toggle "Copy the folder's contents in (not the folder itself)"
   turns rsync's own classic, easy-to-get-wrong trailing-slash-on-
   source ambiguity into one explicit, named choice instead of a typo
@@ -778,6 +792,53 @@ var helpText = strings.TrimLeft(`
   result back over the connection only if it actually changed —
   nothing extra to do differently for a file on another machine.
 
+[::b]Compress ("jc", or context menu's "Compress…")[::-]
+
+  Archives the current selection — one file, several files, or a whole
+  directory — into a new file right beside it, or, once a split is
+  active, straight into the other pane's own directory instead (the
+  same default Rsync/Compare already use), via a real external tool
+  (zip, tar, gzip, bzip2, xz, or zstd — never a reimplementation). Pick
+  a Format, type an Output name (the extension is added automatically);
+  the live Preview line shows exactly what will be created. Refuses a
+  name that already exists at the destination rather than overwriting
+  it.
+
+  Whichever tool the chosen format needs (zip/unzip, tar, gzip, bzip2,
+  xz, zstd) has to actually be installed — a missing one reports
+  exactly which, rather than a bare "command not found".
+
+  The panel doing the selecting has to be local. The destination may be
+  a remote SFTP connection, though: compressing still only ever happens
+  locally, into a throwaway staging copy, which is then uploaded to the
+  connected pane — its own "Uploading" stage, shown right after
+  "Compressing" in the status bar.
+
+  Runs in the background, the same way Copy/Cut/Paste already do — no
+  terminal takes over the screen, and the destination reloads on its
+  own once it's actually done (see the status bar for a spinner and
+  elapsed time while it runs; Ctrl+C cancels it).
+
+[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
+
+  Unpacks the archive currently under the cursor in one step, without
+  first entering it — into the archive's own directory, or, if a split
+  is currently active, straight into the other pane's own current
+  directory instead (the same default Rsync/Compare already use once a
+  split exists) — local or, extracting locally into a throwaway temp
+  directory first and uploading it, a remote SFTP connection. "jE"
+  additionally moves the original archive to the Trash once extraction
+  has actually succeeded (landed on the real destination, upload
+  included) — if that fails (Trash unavailable, or the move itself
+  errors), asks first, naming plainly that the fallback is a real,
+  permanent delete, rather than either silently leaving the archive
+  behind or deleting it without asking.
+
+  Runs in the background exactly like Compress above — no terminal, a
+  status bar spinner instead ("Uploading" too, once the destination is
+  remote), and whichever tab shows the destination reloads once it's
+  done.
+
 [::b]Search dialog ("f")[::-]
 
   Tab / Shift+Tab   Move between fields
@@ -871,7 +932,7 @@ var helpText = strings.TrimLeft(`
   Enter / Space     Activate the focused one
   Escape            Cancel and close
 
-[::b]Tool windows (every entry in the Toolbox screen, "jj")[::-]
+[::b]Tool windows (every entry in the Toolbox screen, "jn"/"jh")[::-]
 
   A small floating window running one command's live output — unlike
   every dialog above, not modal: the panel underneath (and any other
@@ -881,9 +942,14 @@ var helpText = strings.TrimLeft(`
                            running
   Drag the title bar       Move the window; Alt+arrow keys do the same
   Click the title bar's ✕  Close it, same as Escape
-  Drag the bottom-right ◢  Resize it — the title, its own close button,
-                           and one content row plus the handle's own
-                           row are the smallest it'll ever get
+  Click the title bar's ⭯  Reload: run the same command again with the
+                           same arguments, clearing the window first —
+                           if it's still running, that run is stopped
+                           first
+  Drag the bottom-right ◢  Resize it — the title, its own reload and
+                           close buttons, and one content row plus the
+                           handle's own row are the smallest it'll ever
+                           get
   Arrow keys/PageUp/       Scroll the output once it's longer than the
   PageDown/mouse wheel     window currently shows
 

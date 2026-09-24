@@ -11,6 +11,7 @@ import (
 
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
@@ -238,6 +239,51 @@ func TestFinishRsyncJobReportsARealError(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q for a genuine failure", r.activePage, errorPage)
+	}
+}
+
+func TestFinishRsyncJobLogsAnAction(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	r.finishRsyncJob(job, nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRsync)) || !strings.Contains(got, "rsync src -> dst") {
+		t.Errorf("log = %q, want an rsync entry naming src -> dst", got)
+	}
+}
+
+func TestFinishRsyncJobLogsAnError(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	r.finishRsyncJob(job, errors.New("rsync: boom"))
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRsync)) || !strings.Contains(got, "boom") {
+		t.Errorf("log = %q, want an rsync error entry mentioning the failure", got)
+	}
+}
+
+func TestFinishRsyncJobDoesNotLogWhenCancelled(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readLog := attachTestActivityLog(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	cancel()
+	r.finishRsyncJob(job, errors.New("signal: killed"))
+
+	if got := readLog(); got != "" {
+		t.Errorf("log = %q, want nothing logged for a cancelled job", got)
 	}
 }
 

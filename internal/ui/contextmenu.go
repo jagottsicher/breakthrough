@@ -147,7 +147,10 @@ func contextMenuTree() []menuEntry {
 			// target row at all.
 			{label: "New file", mnemonic: 'f', action: func(r *Root) { r.openNewFile() }},
 			{label: "New dir", mnemonic: 'd', action: func(r *Root) { r.openNewDir() }},
-			{label: "tail -f", visible: menuTargetIsFile, action: func(r *Root) { r.tailCurrentEntry() }},
+			// mnemonic 't', added alongside the "m" chord's own new "mt"
+			// member (see keymap.go) — matches this action's own new
+			// keyboard-only route rather than an unrelated letter.
+			{label: "tail -f", visible: menuTargetIsFile, mnemonic: 't', action: func(r *Root) { r.tailCurrentEntry() }},
 			{label: "chown", action: func(r *Root) { r.openChown() }},
 			{label: "chmod", action: func(r *Root) { r.openChmod() }},
 			{label: "sed", action: func(r *Root) { r.openSedReplace() }},
@@ -155,6 +158,21 @@ func contextMenuTree() []menuEntry {
 			{label: "Undo last rename", action: func(r *Root) { r.undoLastBatchRename() }},
 			{label: "Compare", action: func(r *Root) { r.openCompare() }},
 			{label: "Rsync", action: func(r *Root) { r.openRsync() }},
+			// Compress works on any selection (a file, several files, or a
+			// whole directory tree) — no visibility gate of its own, the
+			// same as Rsync/sed/chmod/chown just above.
+			{label: "Compress…", action: func(r *Root) { r.openCompress() }},
+			// Extract only makes sense once the target is actually a
+			// recognized archive (see menuTargetIsArchive) — the same
+			// "hide what doesn't apply" reasoning menuTargetIsFile already
+			// follows for Edit/Open with… above.
+			{label: "Extract", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(false) }},
+			// The dangerous sibling of "Extract" just above — kept right
+			// next to it rather than a further step away, since the real
+			// safety net here is deleteExtractedArchive's own Trash-first
+			// behavior (see its own doc comment), not physical distance in
+			// the menu.
+			{label: "Extract, delete original", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(true) }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the
@@ -169,7 +187,12 @@ func contextMenuTree() []menuEntry {
 		}},
 		{label: "Selection", submenu: []menuEntry{
 			{label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
-			{label: "Deselect all", action: func(r *Root) { r.panel.deselectAll() }},
+			// mnemonic 'A', added alongside the "m" chord's own new "mA"
+			// member (see keymap.go) — capital, matching that member's
+			// own reasoning: plain "a" already means "Select all"
+			// itself, both outside this menu and as this very entry's
+			// own sibling just above.
+			{label: "Deselect all", mnemonic: 'A', action: func(r *Root) { r.panel.deselectAll() }},
 			{label: "Select +", action: func(r *Root) { r.openSelectPlus() }},
 			{label: "Select -", action: func(r *Root) { r.openSelectMinus() }},
 		}},
@@ -211,6 +234,19 @@ func trashMenuTree() []menuEntry {
 func menuTargetIsFile(r *Root) bool {
 	ref, ok := r.panel.rowRef(r.targetRow)
 	return ok && !ref.isDir
+}
+
+// menuTargetIsArchive reports whether the row this menu was opened for
+// is a file this app can extract (see archiveFormatFor) — false for a
+// directory, or for a file whose extension none of the compress/extract
+// formats recognize.
+func menuTargetIsArchive(r *Root) bool {
+	ref, ok := r.panel.rowRef(r.targetRow)
+	if !ok || ref.isDir {
+		return false
+	}
+	_, ok = archiveFormatFor(ref.path)
+	return ok
 }
 
 // menuClipboardHasContent reports whether Paste currently has anything

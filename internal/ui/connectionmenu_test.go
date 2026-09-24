@@ -7,6 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -330,6 +331,29 @@ func TestPressingEOnTheActiveConnectionRowDisconnects(t *testing.T) {
 	}
 	if r.panel.remote != nil {
 		t.Error("panel is still connected after pressing \"e\" on its own active row")
+	}
+}
+
+func TestDisconnectConnectionRowLogsAnAction(t *testing.T) {
+	r := newTestRootForConnectionMenu(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	if err := remotefs.RecordAttempt(conn, false); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+	if err := r.panel.connectRemote(fakeConnectedClient(), conn); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openConnectionMenu()
+	r.connectionMenuTable.Select(r.connectionMenuActiveRow, connectionMenuColLabel)
+	readLog := attachTestActivityLog(t, r)
+
+	if !r.disconnectConnectionRow(r.connectionMenuActiveRow) {
+		t.Fatal("disconnectConnectionRow did not fire for the active row")
+	}
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRemote)) || !strings.Contains(got, "disconnected from tester@example.com") {
+		t.Errorf("log = %q, want a remote entry about the disconnection", got)
 	}
 }
 

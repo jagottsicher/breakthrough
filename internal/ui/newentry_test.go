@@ -3,11 +3,13 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -49,6 +51,48 @@ func TestOpenNewFileRefusesAnExistingName(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q after refusing an existing name", r.activePage, errorPage)
+	}
+}
+
+func TestOpenNewFileLogsAnAction(t *testing.T) {
+	r, _ := newTestRootForNewEntry(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.openNewFile()
+	r.prompt.SetText("fresh.txt")
+	r.finishPrompt(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, `created file "fresh.txt"`) {
+		t.Errorf("log = %q, want a fileops entry about the new file", got)
+	}
+}
+
+func TestOpenNewFileLogsAnErrorForAnExistingName(t *testing.T) {
+	r, _ := newTestRootForNewEntry(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.openNewFile()
+	r.prompt.SetText("apple.txt") // already exists, see fixtureDir
+	r.finishPrompt(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) {
+		t.Errorf("log = %q, want a fileops error entry", got)
+	}
+}
+
+func TestOpenNewDirLogsAnAction(t *testing.T) {
+	r, _ := newTestRootForNewEntry(t)
+	readLog := attachTestActivityLog(t, r)
+
+	r.openNewDir()
+	r.prompt.SetText("fresh-dir")
+	r.finishPrompt(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, `created directory "fresh-dir"`) {
+		t.Errorf("log = %q, want a fileops entry about the new directory", got)
 	}
 }
 

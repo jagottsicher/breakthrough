@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
@@ -928,9 +929,11 @@ func (r *Root) confirmApplyBatchRename() {
 			applied, err := batchrename.Apply(result.Changes)
 			r.batchRenameUndo = applied
 			if err != nil {
+				r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("batch rename: %d of %d files renamed, then: %v", len(applied), len(result.Changes), err))
 				r.showError(fmt.Errorf("batch rename: %d of %d files renamed, then: %w", len(applied), len(result.Changes), err))
 				return
 			}
+			r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("batch renamed %d file(s)", len(applied)))
 			r.reloadPanel(nil)
 		},
 	)
@@ -950,6 +953,11 @@ func (r *Root) undoLastBatchRename() {
 	}
 	changes := r.batchRenameUndo
 	r.batchRenameUndo = nil
-	_, err := batchrename.Undo(changes)
+	undone, err := batchrename.Undo(changes)
+	if err != nil {
+		r.activityLog.Error(activitylog.CategoryTextOps, fmt.Sprintf("undo batch rename: %d of %d files reverted, then: %v", len(undone), len(changes), err))
+	} else {
+		r.activityLog.Action(activitylog.CategoryTextOps, fmt.Sprintf("undid batch rename of %d file(s)", len(undone)))
+	}
 	r.reloadPanel(err)
 }

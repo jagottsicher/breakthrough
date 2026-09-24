@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/archive"
 )
 
@@ -96,15 +97,24 @@ func hasDescendant(listed []archive.Entry, dir string) bool {
 func (r *Root) extractClipboardArchive(archivePath string, members []archive.Entry, destDir string) {
 	r.safeGo("archive extract", nil, func() {
 		err := archive.Extract(archivePath, members, destDir)
-		r.app.QueueUpdateDraw(func() {
-			r.forEachTab(func(p *Panel) {
-				if p.path == destDir {
-					p.reportError(p.load(p.path))
-				}
-			})
-			if err != nil {
-				r.showError(fmt.Errorf("extract from %s: %w", archivePath, err))
-			}
-		})
+		r.app.QueueUpdateDraw(func() { r.finishExtractClipboardArchive(archivePath, len(members), destDir, err) })
 	})
+}
+
+// finishExtractClipboardArchive is extractClipboardArchive's own
+// QueueUpdateDraw hand-off, split out so it's directly, synchronously
+// testable — the same reasoning finishDuplicate's own doc comment
+// gives for finishCompressJob/finishRsyncJob's identical shape.
+func (r *Root) finishExtractClipboardArchive(archivePath string, memberCount int, destDir string, err error) {
+	r.forEachTab(func(p *Panel) {
+		if p.path == destDir {
+			p.reportError(p.load(p.path))
+		}
+	})
+	if err != nil {
+		r.activityLog.Error(activitylog.CategoryArchive, fmt.Sprintf("extract from %s: %v", archivePath, err))
+		r.showError(fmt.Errorf("extract from %s: %w", archivePath, err))
+		return
+	}
+	r.activityLog.Action(activitylog.CategoryArchive, fmt.Sprintf("extracted %d item(s) from %s", memberCount, archivePath))
 }

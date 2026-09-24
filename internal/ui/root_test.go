@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
@@ -587,6 +588,108 @@ func TestFinishRenameRefreshesDetailsShowingSameFile(t *testing.T) {
 	}
 }
 
+// TestCaptureOutsideClickCommitsAPendingRename pins the user's own
+// explicit request: a click outside the rename field commits whatever
+// name is currently typed, the same as pressing Enter, rather than
+// discarding it the way an outside click cancels every other overlay.
+func TestCaptureOutsideClickCommitsAPendingRename(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("renamed-by-outside-click.txt")
+
+	rx, ry, rw, rh := r.rename.GetRect()
+	x, y := rx+rw+10, ry+rh+10 // guaranteed outside the rename field's own rect
+	r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
+
+	want := filepath.Join(dir, "renamed-by-outside-click.txt")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("renamed-by-outside-click.txt not found: %v — outside click should have committed the rename", err)
+	}
+	if r.activePage == renamePage {
+		t.Error("activePage is still renamePage after the outside click")
+	}
+}
+
+// TestCaptureOutsideClickInsideTheRenameFieldLeavesItOpen guards the
+// other half of the same request: a click *inside* the rename field
+// must keep behaving exactly as before (moving the cursor, handled
+// elsewhere — see primitiveContains' own early return above), not also
+// commit the rename the way an outside click now does.
+func TestCaptureOutsideClickInsideTheRenameFieldLeavesItOpen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("should-not-commit-yet.txt")
+	// nameCellRect (see renameRow/openRename) can't compute a real,
+	// non-zero column width without an actual Draw() having already
+	// rendered the table — never true in this headless test — so the
+	// rect is pinned explicitly here rather than trusting whatever
+	// renameRow itself came up with, the one thing this test actually
+	// needs to be real.
+	r.rename.SetRect(10, 5, 20, 1)
+
+	got, gotEvent := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(12, 5, tcell.Button1, 0))
+
+	if got != tview.MouseLeftClick || gotEvent == nil {
+		t.Error("an in-field click should pass through unchanged, not be consumed here")
+	}
+	if r.activePage != renamePage {
+		t.Errorf("activePage = %q, want renamePage still open after an in-field click", r.activePage)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "should-not-commit-yet.txt")); err == nil {
+		t.Error("an in-field click must not commit the rename")
+	}
+}
+
+func TestFinishRenameLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	readLog := attachTestActivityLog(t, r)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("renamed.txt")
+	r.finishRename(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, `renamed "`+filepath.Join(dir, "apple.txt")+`" to "renamed.txt"`) {
+		t.Errorf("log = %q, want a fileops entry about the rename", got)
+	}
+}
+
+func TestFinishRenameLogsAnErrorWhenTheNewNameAlreadyExists(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	readLog := attachTestActivityLog(t, r)
+
+	r.renameRow(2) // apple.txt
+	r.rename.SetText("banana.txt")
+	r.finishRename(tcell.KeyEnter)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryFileOps)) || !strings.Contains(got, "already exists") {
+		t.Errorf("log = %q, want a fileops error entry about the name collision", got)
+	}
+}
+
 // TestChownViaPromptNoopToOwnUser is Chown's counterpart, kept privilege-
 // independent the same way TestChownNoopToOwnUser in fsops is: changing
 // ownership to anyone else needs root, but chowning to the process's own
@@ -649,6 +752,41 @@ func TestApplyChownRefreshesDetailsShowingSameFile(t *testing.T) {
 	}
 	if r.detailsMetadataState != "" {
 		t.Error("detailsMetadataState should have been reset by loadDetailsTarget — Details wasn't actually reloaded")
+	}
+}
+
+func TestApplyChownLogsAnAction(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "apple.txt")
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.applyChown(path, os.Getuid(), os.Getgid())
+
+	got := readLog()
+	want := fmt.Sprintf("changed owner/group of %q to %d:%d", path, os.Getuid(), os.Getgid())
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) || !strings.Contains(got, want) {
+		t.Errorf("log = %q, want a permissions entry: %q", got, want)
+	}
+}
+
+func TestApplyChownLogsAnErrorForAMissingTarget(t *testing.T) {
+	dir := fixtureDir(t)
+	missing := filepath.Join(dir, "does-not-exist")
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readLog := attachTestActivityLog(t, r)
+
+	r.applyChown(missing, os.Getuid(), os.Getgid())
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryPermissions)) {
+		t.Errorf("log = %q, want a permissions error entry for the missing target", got)
 	}
 }
 

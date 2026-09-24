@@ -7,6 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -172,6 +173,35 @@ func TestFinishConnectOnSuccessAttachesClientAndClosesTheDialog(t *testing.T) {
 	}
 	if len(history) != 1 || history[0].LastFailed {
 		t.Errorf("history = %+v, want one successful entry", history)
+	}
+}
+
+func TestFinishConnectOnSuccessLogsAnAction(t *testing.T) {
+	withTestConfigHome(t)
+	r := newTestRootForConnect(t)
+	client := fakeConnectedClient()
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishConnect(r.panel, conn, client, nil)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRemote)) || !strings.Contains(got, "connected to tester@example.com") {
+		t.Errorf("log = %q, want a remote entry about the connection", got)
+	}
+}
+
+func TestFinishConnectOnFailureLogsAnError(t *testing.T) {
+	withTestConfigHome(t)
+	r := newTestRootForConnect(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	readLog := attachTestActivityLog(t, r)
+
+	r.finishConnect(r.panel, conn, nil, errAuthFailedForTest)
+
+	got := readLog()
+	if !strings.Contains(got, string(activitylog.CategoryRemote)) || !strings.Contains(got, errAuthFailedForTest.Error()) {
+		t.Errorf("log = %q, want a remote error entry mentioning the Dial failure", got)
 	}
 }
 

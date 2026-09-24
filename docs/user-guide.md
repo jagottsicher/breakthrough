@@ -16,6 +16,8 @@ material, always matching the version you are actually running.
 - [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
 - [Open with…](#open-with)
+- [Compress](#compress)
+- [Extract](#extract)
 - [Batch rename](#batch-rename)
 - [Compare](#compare)
 - [Rsync](#rsync)
@@ -34,6 +36,7 @@ material, always matching the version you are actually running.
 - [The command line](#the-command-line)
 - [Status bar](#status-bar)
 - [Options and configuration](#options-and-configuration)
+- [Activity log](#activity-log)
 - [Settings reference](#settings-reference)
 - [Keyboard reference](#keyboard-reference)
 
@@ -91,11 +94,11 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jj` [Toolbox](#toolbox) screen (networking/hardware tools) · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` Network Tools screen · `jh` Hardware Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -201,14 +204,18 @@ connection dropdown — see [Remote connections
 ### Filtering
 
 Click the "Y" button near the right edge of the path bar, or press
-`/`, to open a small dropdown with three rows, all combinable. An "Nx"
+`/`, to open a small dropdown with three rows, all combinable, plus a
+fourth "Exclude dirs" option that applies to all three at once. An "Nx"
 count appears right before the button once one or more filters are
-actually narrowing the listing (omitted while none are) — and turns
-bright red if a filter is currently hiding *everything* a directory
-would otherwise show, which otherwise looks exactly like a genuinely
-empty folder (a filter carried over from browsing somewhere else
-entirely, say, after `filter_persistent` — see below — brought it along
-into a directory it was never meant to apply to).
+actually narrowing the listing (omitted while none are) — glowing the
+same slow green breathing pulse the header's own "@" connection button
+uses (see [Remote connections (SFTP)](#remote-connections-sftp) above)
+— and turns solid red instead if a filter is currently hiding
+*everything* a directory would otherwise show, which otherwise looks
+exactly like a genuinely empty folder (a filter carried over from
+browsing somewhere else entirely, say, after `filter_persistent` — see
+below — brought it along into a directory it was never meant to apply
+to).
 
 - **Glob/regex filter** — the same live, type-to-narrow filter this app
   has always had, now living in the dropdown instead of always taking
@@ -235,6 +242,13 @@ into a directory it was never meant to apply to).
   off the `before`/`after`/`between` keyword entirely and just typing a
   relative moment on its own — `last 7 days`, or plain `7 days` — is
   shorthand for "modified within that span", the most common case.
+- **Exclude dirs** — a single on/off switch below the three filters
+  above, applying to all of them at once rather than being a filter of
+  its own: while it's on, a directory is never hidden by any of the
+  three, however it would otherwise have matched (or failed to match)
+  — only plain files are ever actually filtered. Not counted toward the
+  "Nx" indicator itself, since it has nothing of its own to match
+  against.
 
 Typing into the size or modified-time field auto-activates its own
 checkbox, exactly the way typing into the glob field already does —
@@ -247,13 +261,14 @@ listing into a confusing state.
 
 The dropdown stays open while you tick or fill in more than one of
 these — narrowing by name, size, and modified time all at once is the
-point. `Tab`/`Shift+Tab` cycle keyboard focus through all seven of its
+point. `Tab`/`Shift+Tab` cycle keyboard focus through all eight of its
 own pieces — the glob checkbox, its Glob/Regex button, the pattern
 field, the size checkbox, the size expression field, the modified-time
-checkbox, and the modified-time expression field, wrapping back to the
-first — `Space` or `Enter` toggles whichever checkbox currently has
-focus, and `Escape` closes the whole dropdown from any of them, the
-same as clicking elsewhere or `Ctrl`+`C` already did.
+checkbox, the modified-time expression field, and the "Exclude dirs"
+checkbox, wrapping back to the first — `Space` or `Enter` toggles
+whichever checkbox currently has focus, and `Escape` closes the whole
+dropdown from any of them, the same as clicking elsewhere or `Ctrl`+`C`
+already did.
 
 `/` itself, pressed again once the dropdown is already open, is a
 faster way to reach the size or modified-time field specifically: it
@@ -265,15 +280,15 @@ safe to repurpose from typing a literal `/`: a bare filename can never
 contain one (it's the OS's own path separator), so none of these three
 expressions — a glob pattern, a size comparison, or a modified-time
 one — could ever legitimately need to type it. By default (the
-`filter_persistent` setting, see the reference below), all three carry
+`filter_persistent` setting, see the reference below), all four carry
 straight over when you navigate to a different directory — browsing a
 whole tree with the same filter switched on is the point, and the "Nx"
 count in the path bar is what keeps a still-active filter from going
 unnoticed while you do. Set `filter_persistent = false` to go back to
 the original behavior instead: navigating to a different directory
-resets all three back to their own defaults (the glob/regex filter
-cleared and re-enabled, size/modified-time switched off and cleared),
-so every new directory starts unfiltered.
+resets all four back to their own defaults (the glob/regex filter
+cleared and re-enabled, size/modified-time switched off and cleared,
+"Exclude dirs" switched off), so every new directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, dark green for executable, red for a
@@ -405,11 +420,13 @@ Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
 **Properties** already have as their own single-key shortcuts — fire
 that entry directly, without arrowing down to it first. A letter whose
 own entry isn't currently showing (`e` for a directory, say) does
-nothing. `m`/`o` again (`mmm`/`mmo` from plain browsing) fire
-**Multiply**/**Open with…** the same way — the two entries here with no
-plain-key shortcut of their own to mirror, since neither ever opens
-from anywhere but this menu — see [Multiply](#multiply) and [Open
-with…](#open-with).
+nothing. `o`/`t`/`A` do too, for **Open with…**, `tail -f`, and
+**Deselect all** — see [Open with…](#open-with) — all three also
+directly reachable as `mo`/`mt`/`mA` from plain browsing, without
+opening the menu at all. `m` again (`mmm` from plain browsing) fires
+**Multiply** — the one entry with no keyboard route of its own anywhere
+else, since its own natural letter is already this chord's own prefix
+key — see [Multiply](#multiply).
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -432,10 +449,12 @@ The menu's own title bar names where you are — "Menu" at the top,
 "Menu › Selection" one level in.
 
 - **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
-  (files only), `chown`, `chmod`, `sed`, Batch rename, Undo last
-  rename, Compare, Rsync, Remove (the permanent, asks-first sibling of
-  Move to Trash above), Paste following symlinks.
-- **▸ Selection** — Select all, Deselect all, Select +, Select -
+  (files only, `mt`), `chown`, `chmod`, `sed`, Batch rename, Undo last
+  rename, Compare, Rsync, [Compress…](#compress) (`jc`),
+  [Extract](#extract)/"Extract, delete original" (`je`/`jE`, shown only
+  for a recognized archive), Remove (the permanent, asks-first sibling
+  of Move to Trash above), Paste following symlinks.
+- **▸ Selection** — Select all, Deselect all (`mA`), Select +, Select -
   (checkbox-based, the same these already reach on their own keys).
 - **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
   Split orientation, Swap panes.
@@ -543,6 +562,91 @@ copy, runs the typed command against it, and uploads the result back
 over the connection only if it actually changed — nothing about a file
 living on another machine needs a different command or a separate
 step.
+
+## Compress
+
+`j` then `c`, or the context menu's **Compress…**. Archives the current
+selection — one file, several files, or a whole directory — into a new
+file right beside it, through a real external tool (never a
+reimplementation of any compression algorithm): `zip`, `tar`, and
+`gzip`/`bzip2`/`xz`/`zstd` for the compressed tar variants.
+
+| Field | Meaning |
+|---|---|
+| Target | Read-only — what this Compress run is for |
+| Format | zip, tar, tar.gz, tar.bz2, tar.xz, or tar.zst |
+| Output name | The archive's own name, without extension — the selected Format's own extension is added automatically |
+
+A live Preview line always shows the exact file name that will be
+created. Compress refuses a name that already exists at the destination
+rather than silently overwriting it — pick a different one instead.
+
+The destination depends on whether a split is currently active — the
+same rule [Extract](#extract) below already follows:
+
+| Split view | Destination |
+|---|---|
+| Off | The current directory, right beside the selection |
+| On | The other pane's own current directory — the same default [Rsync](#rsync)/[Compare](#compare) already use once a split exists |
+
+The panel doing the selecting has to be local — there is no remote
+source path yet. The *destination* may be a remote SFTP connection,
+though: the real archive tool still only ever runs locally, into a
+throwaway local staging copy, which is then uploaded to the connected
+pane — its own separate "Uploading" stage, shown in the status bar
+alongside "Compressing" once the local half is done.
+
+Every compressed tar variant is built as a plain `tar -cf -` piped
+through the real compressor binary (`gzip`/`bzip2`/`xz`/`zstd`), rather
+than relying on tar's own bundled compression support — that varies by
+which `tar` is actually installed (GNU tar vs. macOS/BSD's own
+`bsdtar`), while a plain pipe through the real compressor works
+identically everywhere it's installed. Whichever tool a format needs
+has to actually be on `$PATH` — a missing one is reported by name
+("`zstd` not found on \$PATH — install it first…") rather than a bare,
+buried "command not found".
+
+Runs in the background, the same as [Copy, Cut and Paste](#copy-cut-and-paste) —
+no terminal takes over the screen; a spinner and elapsed time show in
+the status bar while it runs (Ctrl+C cancels it), and the current
+directory reloads on its own once the archive is actually done.
+
+## Extract
+
+`j` then `e` (keep the original) or `E` (also delete it), or the
+context menu's **Extract**/**Extract, delete original** (both shown
+only once the cursor is actually on a recognized archive). Unpacks the
+whole archive in one step, without first browsing into it — real
+`unzip`/`tar` (piped through the matching decompressor), never a
+reimplementation, the same as [Compress](#compress) above.
+
+The destination depends on whether a split is currently active:
+
+| Split view | Destination |
+|---|---|
+| Off | The archive's own directory ("extract here") |
+| On | The other pane's own current directory — the same default [Rsync](#rsync)/[Compare](#compare) already use once a split exists |
+
+`jE`/"Extract, delete original" additionally moves the original archive
+to the Trash, but only once extraction has actually succeeded. If that
+move fails outright (Trash unavailable, or the move itself errors),
+this never silently leaves the archive behind and never silently
+hard-deletes it either — it asks first, naming plainly that the
+fallback is a real, permanent delete, the same "irreversible actions
+must be clearly flagged and confirmed" principle [Trash, Remove and
+Restore](#trash-remove-and-restore) already follows.
+
+The archive itself has to sit on a local panel, the same scope limit
+[Compress](#compress) above has. The *destination* pane may be a remote
+SFTP connection, though: extraction still only ever happens locally,
+into a throwaway temp directory, which is then uploaded to the
+connected pane — its own separate "Uploading" stage, shown in the
+status bar once the local extraction is done. `jE`'s own Trash step
+only runs once that upload has actually succeeded.
+
+Runs in the background exactly like [Compress](#compress) above — no
+terminal, a status bar spinner instead, and whichever tab shows the
+destination reloads once it's done.
 
 ## Batch rename
 
@@ -745,6 +849,15 @@ hand — never reimplements any of rsync's own transfer logic, the same
   transfer mode of its own, so every byte still relays through this
   machine over two separate ssh connections, never directly between the
   two remote hosts, which can matter a lot over a slow local link.
+- **Pick source tab…**/**Pick destination tab…** open a list of every
+  currently open tab as an alternative to typing a path (or trusting
+  the one-shot default above) by hand — the same "choose from what's
+  already open" idea the tab switcher (`t`) already offers, applied
+  here to Source/Destination specifically. Picking one fills the field
+  exactly as if the dialog had been opened fresh from that tab: a
+  remote tab's own connection (Host/User/port) travels through to the
+  real invocation the same way the field's own one-shot default already
+  does, not just its visible `user@host:path` text.
 - **Copy the folder's contents in (not the folder itself)** is the one
   choice this dialog makes explicit rather than implicit: real `rsync`
   decides this from whether the *source* path ends in a trailing
@@ -817,9 +930,11 @@ breakthrough's own keyboard.
 
 ## Toolbox
 
-`j` then `j`. A full-screen, browsable catalog of external networking
-and hardware tools — never reimplemented, the same "shell out to the
-real tool" approach Rsync and Sed Replace already take. Two categories:
+`j` then `n` (Network Tools) or `j` then `h` (Hardware Tools). A
+full-screen, browsable catalog of external networking and hardware
+tools — never reimplemented, the same "shell out to the real tool"
+approach Rsync and Sed Replace already take. Two categories, each with
+its own dedicated entry point:
 
 - **Networking**: Ping, Nmap scan, IP addresses (`ip addr`), Routing
   table (`route -n`), Sockets (`ss -tulpn`), `getent`, `wget`,
@@ -850,11 +965,9 @@ Not every one of these commands ships by default on every distribution
 installed reports a real "command not found" in its own tool window,
 the same as typing it at a shell would.
 
-`j` then `n` (Network Tools) and `j` then `h` (Hardware Tools) open
-this exact same screen already filtered down to just the Networking or
-just the Hardware category above, for jumping straight to one tool
-without scrolling past the other category's entries first. `jj` itself
-is unchanged and still shows both categories together.
+`jn` and `jh` share the exact same underlying screen — each simply
+opens it pre-filtered to its own category, so reaching one specific
+tool never means scrolling past the other category's entries first.
 
 ## Tool windows
 
@@ -870,6 +983,7 @@ this one floats on top of them.
 | `Escape` | Close it, stopping the process first if it's still running |
 | Drag the title bar | Move the window; `Alt`+arrow keys do the same |
 | Click the title bar's `✕` | Close it, same as `Escape` |
+| Click the title bar's `⭯` | Reload: run the same command again with the same arguments, clearing the window first — stops the current run first if it's still going |
 | Drag the bottom-right `◢` | Resize it by hand |
 | Arrow keys / `PageUp`/`PageDown` / mouse wheel | Scroll the output once it's longer than the window currently shows |
 
@@ -877,9 +991,11 @@ Left alone, a tool window auto-fits its own width to whatever it's
 currently showing — growing the moment a long line arrives, shrinking
 back once that line scrolls out of view — until the resize handle is
 ever dragged by hand, which turns that auto-fit off for that window for
-good. A window that finishes on its own (the command exits) says so
-right in its own content area instead of closing itself, so its last
-output stays readable until you close it yourself.
+good. A window that finishes on its own (the command exits) never
+closes itself, so its last output stays readable until you close it
+yourself — a genuine failure or a stop still says so, right in the
+window's own content area, but a clean exit says nothing further: the
+output already speaks for itself.
 
 ## Mounts
 
@@ -1780,6 +1896,34 @@ list settings you don't want to change. Booleans accept
 A malformed line costs that one setting and is reported at startup — it
 never stops breakthrough from starting.
 
+## Activity log
+
+Off by default. Turn it on under Options → Activity log with `log_level`:
+`off`, `errors`, `actions`, `detailed`, or `debug` — each level records
+everything the one before it does, plus more. `actions` is the level
+most people want: one line per real, state-changing action (a Copy, a
+Rename, a chmod, a Compress, a Rsync run, an SFTP connect…), enough to
+answer "what did I actually do with breakthrough" after the fact, and a
+future Undo's own foundation. `errors` alone still records a failed
+action even with everything else dialed down; `detailed` adds each
+file within a batch; `debug` adds internal diagnostic detail.
+
+Independently of the level, seven categories — File operations,
+Permission changes, Archives, Sed Replace/Batch Rename, Rsync, Remote
+connections/transfers, and Shell — can each be switched off on their
+own, so you can log everything about, say, permission changes while
+staying silent about the shell.
+
+The log itself is a plain, one-line-per-entry text file, greppable with
+ordinary tools (`tail -f`, `grep`, `less`): `/var/log/breakthrough/
+breakthrough.log` if that directory is writable, otherwise the same
+per-user state directory the crash log already uses (see [Config file
+format and locations](#config-file-format-and-locations)), with a
+one-time notice the first time that fallback happens. Append-only —
+breakthrough never rotates or truncates it; that is `logrotate`'s job.
+
+There is no in-app viewer yet — read it directly for now.
+
 ## Settings reference
 
 Every key breakthrough recognizes, with its default:
@@ -1827,6 +1971,14 @@ Every key breakthrough recognizes, with its default:
 | `duplicate_count_max` | `100` | Upper bound `duplicate_count` can be set to |
 | `language` | `en` | Reserved for future translations — parsed, no effect yet |
 | `remote_archive_confirm_size` | `10MB` | Opening a remote zip/tar at or above this size asks first — a size with a unit, e.g. `500KB` or `1GB` |
+| `log_level` | `off` | Activity log detail: `off`, `errors`, `actions`, `detailed`, or `debug` |
+| `log_category_fileops` | `true` | Log File operations (copy, move, rename, trash, remove, multiply, new file/dir) |
+| `log_category_permissions` | `true` | Log permission changes (chmod, chown) |
+| `log_category_archive` | `true` | Log Compress/Extract |
+| `log_category_textops` | `true` | Log Sed Replace and Batch Rename |
+| `log_category_rsync` | `true` | Log Rsync runs |
+| `log_category_remote` | `true` | Log remote connections and SFTP transfers |
+| `log_category_shell` | `true` | Log the bash line, "Open with…", and Edit |
 
 ## Keyboard reference
 

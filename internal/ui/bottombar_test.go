@@ -1662,3 +1662,58 @@ func TestNewRootLoadsExistingHistory(t *testing.T) {
 		t.Errorf("Ctrl+P right after startup = %q, want the pre-existing history entry %q", got, "old session command")
 	}
 }
+
+// TestRefreshActivePanelHeaderGlowAdvancesTheFilterButtonWhileActive
+// pins refreshActivePanelHeaderGlow's own filter-button half (see
+// renderFilterMenuBtn's own doc comment on why "Nx" glows the same way
+// the header's own "@" connection button already does): called again
+// with connectionGlowNow at a different point in the glow's own period,
+// it must actually re-render the button so the animation visibly
+// advances while sitting idle with a filter active — the same
+// "otherwise stuck at whatever phase happened to be current at the last
+// real redraw" gap this closes for the "@" button too.
+func TestRefreshActivePanelHeaderGlowAdvancesTheFilterButtonWhileActive(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterField.SetText("ap*") // matches something — not filterMatchesNothing
+
+	orig := connectionGlowNow
+	t.Cleanup(func() { connectionGlowNow = orig })
+
+	connectionGlowNow = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	r.refreshActivePanelHeaderGlow()
+	first := r.panel.filterMenuBtn.GetText(false)
+
+	// Half of connectionGlowPeriod (3s) later — the glow's own peak,
+	// against the first sample's own rest point, so the two colors are
+	// guaranteed to actually differ rather than risking an unlucky
+	// same-phase coincidence.
+	connectionGlowNow = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 1, 500_000_000, time.UTC) }
+	r.refreshActivePanelHeaderGlow()
+	second := r.panel.filterMenuBtn.GetText(false)
+
+	if first == second {
+		t.Error("refreshActivePanelHeaderGlow did not re-render the filter button — its own glow phase never advances")
+	}
+}
+
+// TestRefreshActivePanelHeaderGlowLeavesFilterButtonAloneWhenNoFilterIsActive
+// is the no-op counterpart: nothing to animate, so no reason to force a
+// redraw a plain, unfiltered header never needs.
+func TestRefreshActivePanelHeaderGlowLeavesFilterButtonAloneWhenNoFilterIsActive(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	before := r.panel.filterMenuBtn.GetText(false)
+
+	r.refreshActivePanelHeaderGlow()
+
+	if got := r.panel.filterMenuBtn.GetText(false); got != before {
+		t.Errorf("filterMenuBtn text changed from %q to %q with no filter active", before, got)
+	}
+}

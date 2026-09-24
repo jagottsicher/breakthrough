@@ -527,6 +527,26 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.duplicateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.duplicateTitleBar.SetTextColor(theme.TextColor)
 
+	if r.compressForm != nil {
+		r.compressForm.SetBackgroundColor(theme.SurfaceBackground)
+		r.compressForm.SetLabelColor(theme.TextColor)
+		r.compressForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+		r.compressForm.SetFieldTextColor(theme.TextColor)
+		if r.compressFormatField != nil {
+			r.themeDuplicateDropDown(r.compressFormatField)
+		}
+		r.compressPreviewView.SetBackgroundColor(theme.SurfaceBackground)
+		r.compressPreviewView.SetTextColor(theme.TextColor)
+		r.compressSpacer.SetBackgroundColor(theme.SurfaceBackground)
+		r.compressButtons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compressCancelBtn, theme)
+		styleButton(r.compressApplyBtn, theme)
+		// FocusedBackground, fixed — the same reasoning
+		// duplicateTitleBar's own identical choice just above follows.
+		r.compressTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compressTitleBar.SetTextColor(theme.TextColor)
+	}
+
 	r.rsyncForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.rsyncForm.SetLabelColor(theme.TextColor)
 	r.rsyncForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
@@ -537,6 +557,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.rsyncHintView.SetBackgroundColor(theme.SurfaceBackground)
 	r.rsyncHintView.SetTextColor(theme.TextColor)
 	r.rsyncSpacer.SetBackgroundColor(theme.SurfaceBackground)
+	r.rsyncPickButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.rsyncPickSourceBtn, theme)
+	styleButton(r.rsyncPickDestinationBtn, theme)
 	r.rsyncButtons.SetBackgroundColor(theme.SurfaceBackground)
 	styleButton(r.rsyncCancelBtn, theme)
 	styleButton(r.rsyncRunBtn, theme)
