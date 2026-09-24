@@ -331,6 +331,49 @@ func TestContextMenuLeftArrowAtTopLevelFallsThrough(t *testing.T) {
 	}
 }
 
+// TestContextMenuRightArrowEntersSubmenu pins the arrow-only counterpart
+// to selecting a "▸ Group" row and pressing Enter — per the user's own
+// explicit report that drilling into a submenu shouldn't need a separate
+// Enter once the cursor already sits on it.
+func TestContextMenuRightArrowEntersSubmenu(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt (row 2 — app-data/ sorts first, see fixtureDir)
+	r.menu.SetCurrentItem(menuItemIndex(r, menuGroupGlyph+"Selection"))
+
+	if got := r.captureContextMenuKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); got != nil {
+		t.Error("Right arrow on a submenu row should be consumed")
+	}
+	if got, want := r.menuTitleBar.GetText(true), " Menu › Selection "; got != want {
+		t.Errorf("title bar = %q, want the breadcrumb %q", got, want)
+	}
+}
+
+// TestContextMenuRightArrowOnALeafFallsThrough pins the other half:
+// Right on a plain, non-submenu row does nothing of its own (it isn't a
+// general "activate" gesture the way Enter is) and reaches tview.List's
+// own default handling untouched, the same as Left already does at the
+// top level.
+func TestContextMenuRightArrowOnALeafFallsThrough(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt (row 2 — app-data/ sorts first, see fixtureDir)
+	r.menu.SetCurrentItem(menuItemIndex(r, "Copy"))
+
+	if got := r.captureContextMenuKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); got == nil {
+		t.Error("Right arrow on a leaf row should not be consumed")
+	}
+	if got, want := r.menuTitleBar.GetText(true), " Menu "; got != want {
+		t.Errorf("title bar = %q, want it to stay at the top level %q", got, want)
+	}
+}
+
 // TestContextMenuReopeningStartsAtTopLevel pins that closing the menu
 // from inside a submenu and opening it again starts fresh at the top —
 // a real risk with content rebuilt in place rather than recreated (see
@@ -379,6 +422,29 @@ func TestContextMenuResizesForItsCurrentContent(t *testing.T) {
 	// so the two heights must actually differ, not just both exist.
 	if topHeight == submenuHeight {
 		t.Errorf("menuLayout height stayed %d after drilling into a shorter submenu, want it to shrink", topHeight)
+	}
+}
+
+// TestContextMenuWidthFitsALongTitleBar pins a real, user-reported gap:
+// the menu used to size itself only to its widest row, so a submenu
+// whose breadcrumb title ("Menu › Tabs & Split") is longer than every
+// one of its own short entries ("New tab", "Close tab", ...) rendered
+// with a title that overflowed the box. Width must now cover whichever
+// is wider, the title bar or the widest row, plus a small margin.
+func TestContextMenuWidthFitsALongTitleBar(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24) // realistic — see clampToPanel's own default-rect gotcha noted elsewhere
+	openMenuOnRow(t, r, 2)        // apple.txt (row 2 — app-data/ sorts first, see fixtureDir)
+	selectMenuItem(t, r, menuGroupGlyph+"Tabs & Split")
+
+	_, _, width, _ := r.menuLayout.GetRect()
+	titleWidth := tview.TaggedStringWidth(r.menuTitleBar.GetText(false))
+	if width < titleWidth {
+		t.Errorf("menuLayout width = %d, want at least the title bar's own width %d", width, titleWidth)
 	}
 }
 

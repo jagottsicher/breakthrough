@@ -276,6 +276,23 @@ func (r *Root) currentMenuTree() []menuEntry {
 	return contextMenuTree()
 }
 
+// visibleMenuEntries returns currentMenuTree's entries actually visible
+// right now, in render order — the single source both renderContextMenu's
+// own AddItem loop and currentMenuEntryAtCursor's own row-index lookup
+// draw from, so a row index can never mean two different entries to the
+// two of them.
+func (r *Root) visibleMenuEntries() []menuEntry {
+	tree := r.currentMenuTree()
+	entries := make([]menuEntry, 0, len(tree))
+	for _, entry := range tree {
+		if entry.visible != nil && !entry.visible(r) {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 // renderContextMenu rebuilds r.menu's rows from currentMenuTree — called
 // on every open and every drill in/out, never mutated in place
 // afterward. A "◂ Back" row leads the list whenever a submenu is showing
@@ -288,10 +305,7 @@ func (r *Root) renderContextMenu() {
 		r.menu.AddItem(menuBackGlyph, "", 0, r.closeMenuOrGoBack)
 	}
 
-	for _, entry := range r.currentMenuTree() {
-		if entry.visible != nil && !entry.visible(r) {
-			continue
-		}
+	for _, entry := range r.visibleMenuEntries() {
 		if entry.submenu != nil {
 			r.menu.AddItem(menuGroupGlyph+entry.resolvedLabel(r), "", 0, func() { r.enterMenuSubmenu(entry) })
 			continue
@@ -399,31 +413,61 @@ func (r *Root) closeMenuOrGoBack() {
 }
 
 // captureContextMenuKey adds Left/Backspace as a second way back out of
-// a submenu, alongside Escape and clicking/selecting "◂ Back", and — at
-// any level — a plain letter matching one of the currently visible
-// entries' own mnemonic (see menuEntry.mnemonic) fires that entry
-// directly, the same as arrowing to it and pressing Enter would.
+// a submenu, Right as a second way to drill into one, alongside Escape/
+// Enter and clicking/selecting "◂ Back"/a "▸ Group" row, and — at any
+// level — a plain letter matching one of the currently visible entries'
+// own mnemonic (see menuEntry.mnemonic) fires that entry directly, the
+// same as arrowing to it and pressing Enter would. Per the user's own
+// explicit report: moving in or out of a submenu shouldn't need an
+// Enter to confirm the arrow key that already got you there.
 //
 // Left/Backspace: tview's own List binds Left to shifting its
 // horizontal scroll offset, harmless and unused for labels this short,
 // so intercepting it here only changes behavior while a submenu is
 // actually showing; at the top level (where there's nothing to go back
-// to) it reaches List's own default handling exactly as before.
+// to) it reaches List's own default handling exactly as before. Right
+// is similarly unbound by List itself, so leaving it unhandled — the
+// cursor isn't on a submenu row, or there's no visible entry at all
+// (the "◂ Back" row) — is just as harmless.
 func (r *Root) captureContextMenuKey(event *tcell.EventKey) *tcell.EventKey {
 	if entry, ok := r.menuMnemonicEntry(event); ok {
 		entry.action(r)
 		return nil
 	}
 
-	if r.menuInSubmenu == nil {
-		return event
-	}
 	switch event.Key() {
 	case tcell.KeyLeft, tcell.KeyBackspace, tcell.KeyBackspace2:
-		r.closeMenuOrGoBack()
-		return nil
+		if r.menuInSubmenu != nil {
+			r.closeMenuOrGoBack()
+			return nil
+		}
+	case tcell.KeyRight:
+		if entry, ok := r.currentMenuEntryAtCursor(); ok && entry.submenu != nil {
+			r.enterMenuSubmenu(entry)
+			return nil
+		}
 	}
 	return event
+}
+
+// currentMenuEntryAtCursor maps r.menu's own currently highlighted row
+// back to the menuEntry it renders — used by captureContextMenuKey's own
+// Right-arrow handling to tell whether the cursor actually sits on a
+// submenu group. The "◂ Back" row (when present) has no entry of its
+// own to report.
+func (r *Root) currentMenuEntryAtCursor() (menuEntry, bool) {
+	idx := r.menu.GetCurrentItem()
+	if r.menuInSubmenu != nil {
+		if idx == 0 {
+			return menuEntry{}, false
+		}
+		idx--
+	}
+	entries := r.visibleMenuEntries()
+	if idx < 0 || idx >= len(entries) {
+		return menuEntry{}, false
+	}
+	return entries[idx], true
 }
 
 // menuMnemonicEntry finds the currently visible entry, in whichever
@@ -454,9 +498,16 @@ func (r *Root) menuMnemonicEntry(event *tcell.EventKey) (menuEntry, bool) {
 // currently holds (see listSize) — called on the initial open and again
 // every time drilling in or backing out changes the row count, always
 // anchored at (x, y), the menu's own existing top-left corner once
-// already open.
+// already open. Width is whichever is wider: the widest visible row, or
+// the title bar's own text (" Menu › Tabs & Split ", say) plus a small
+// margin — per the user's own explicit report that a long submenu title
+// used to overflow a box sized only to fit the (possibly much shorter)
+// items inside it.
 func (r *Root) resizeContextMenu(x, y int) {
 	width, height := listSize(r.menu)
+	if titleWidth := tview.TaggedStringWidth(r.menuTitleBar.GetText(false)) + 2; titleWidth > width {
+		width = titleWidth
+	}
 	height++ // reserved title bar row (see menuLayout)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.menuLayout.SetRect(x, y, width, height)
