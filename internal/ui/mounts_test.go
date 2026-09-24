@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -239,6 +240,55 @@ func TestRenderMountsShowsTheErrorInPlaceOfRows(t *testing.T) {
 	if !strings.Contains(got, "not found") {
 		t.Errorf("row 1 = %q, want it to show the read error", got)
 	}
+}
+
+// TestMountsReloadIntoAnErrorNeverHangsOnDown pins the same real,
+// reported freeze TestFirewallReloadIntoAnErrorNeverHangsOnDown pins for
+// the Firewall screen — see that test's own doc comment and
+// renderMounts' own doc comment on its error branch's Select call for
+// the mechanism and the fix.
+func TestMountsReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.mountsErr = errors.New("findmnt: command not found")
+	r.mountsEntries = nil
+	r.renderMounts()
+	r.mountsTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+
+	r.renderMounts() // still errors — re-renders down to just 2 rows
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.mountsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
+}
+
+// TestMountsErrorScreenNeverHangsOnDownAfterARealDraw pins the actual
+// mechanism behind TestMountsReloadIntoAnErrorNeverHangsOnDown — see
+// TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw's own doc
+// comment for the full explanation. No prior big list or stale Select()
+// needed at all here either: just one ordinary redraw between opening
+// the screen and the very first arrow key.
+func TestMountsErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.mountsErr = errors.New("findmnt: command not found")
+	r.mountsEntries = nil
+	r.renderMounts()
+
+	screen := tcell.NewSimulationScreen("")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	r.mountsTable.SetRect(0, 0, 100, 40)
+	r.mountsTable.Draw(screen) // the real app's own ordinary redraw
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.mountsTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
 }
 
 // TestRenderMountsColorsNonPersistentEntriesWithWarning pins the one

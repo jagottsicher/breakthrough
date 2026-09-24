@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -24,6 +25,24 @@ func isolateFirewallRead(t *testing.T, snapshot firewall.Snapshot, err error) {
 	})
 	readFirewallSnapshot = func() (firewall.Snapshot, error) { return snapshot, err }
 	loadFirewallServices = func() firewall.ServiceLookup { return firewall.ServiceLookup{} }
+}
+
+// callWithTimeout runs fn in its own goroutine and fails t if it doesn't
+// return within timeout, rather than letting a real regression (see
+// TestFirewallReloadIntoAnErrorNeverHangsOnDown) hang the whole test
+// binary instead of failing cleanly.
+func callWithTimeout(t *testing.T, timeout time.Duration, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		fn()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatal("timed out — likely an infinite loop, not just a slow call")
+	}
 }
 
 // TestOpenFirewallShowsThePage pins openFirewall's own basic contract.
@@ -114,6 +133,62 @@ func TestRenderFirewallShowsNoBackendMessage(t *testing.T) {
 	if !strings.Contains(got, "No supported firewall backend") {
 		t.Errorf("row 1 = %q, want the no-backend message", got)
 	}
+}
+
+// TestFirewallReloadIntoAnErrorNeverHangsOnDown pins a real, reported
+// freeze: with the cursor left on a row number that no longer exists
+// once a reload shrinks the table down to a single unselectable error
+// row, pressing Down used to send tview's own Table.InputHandler into
+// an infinite loop hunting for a selectable cell that was never going
+// to appear (verified directly against tview v0.42.0's own table.go) —
+// see renderFirewall's own doc comment on its early returns for the fix
+// (Select-ing the error row's own, in-range row number, even though
+// it's not itself selectable).
+func TestFirewallReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateFirewallRead(t, firewall.Snapshot{}, errors.New("permission denied"))
+	r.openFirewall()
+	r.firewallTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+
+	r.reloadFirewall() // still errors — re-renders down to just 2 rows
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.firewallTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
+}
+
+// TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw pins the actual
+// mechanism behind TestFirewallReloadIntoAnErrorNeverHangsOnDown's own
+// bug, on a table that was never large in the first place: tview's own
+// Table, drawn at least once while rowsSelectable is true and nothing on
+// screen is selectable, silently leaves its own cursor row one past the
+// last real row — no prior big list or stale Select() required at
+// all, just one ordinary redraw between opening the screen and the very
+// first arrow key (exactly what a real terminal session always does).
+// The fix is SetSelectable(false, false) while a placeholder is showing
+// (see renderFirewall's own doc comment) — Select(1, 0) alone, without
+// that, still leaves this exact path open.
+func TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateFirewallRead(t, firewall.Snapshot{}, errors.New("permission denied"))
+	r.openFirewall()
+
+	screen := tcell.NewSimulationScreen("")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	r.firewallTable.SetRect(0, 0, 100, 40)
+	r.firewallTable.Draw(screen) // the real app's own ordinary redraw
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.firewallTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
 }
 
 // TestRenderFirewallColorsAllowAndDenyRowsApart pins the one piece of

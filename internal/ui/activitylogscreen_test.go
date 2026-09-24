@@ -253,6 +253,53 @@ func TestCaptureActivityLogTableKeyRReloads(t *testing.T) {
 	}
 }
 
+// TestActivityLogReloadIntoAnErrorNeverHangsOnDown pins the same real,
+// reported freeze TestFirewallReloadIntoAnErrorNeverHangsOnDown pins for
+// the Firewall screen — see that test's own doc comment and
+// renderActivityLog's own doc comment on its early returns' Select
+// calls for the mechanism and the fix.
+func TestActivityLogReloadIntoAnErrorNeverHangsOnDown(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openActivityLog()              // no file yet — the "No activity logged yet." placeholder
+	r.activityLogTable.Select(15, 0) // simulate a stale cursor from a much longer previous list
+
+	r.reloadActivityLog() // still nothing to show — re-renders down to just 2 rows
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.activityLogTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
+}
+
+// TestActivityLogErrorScreenNeverHangsOnDownAfterARealDraw pins the
+// actual mechanism behind TestActivityLogReloadIntoAnErrorNeverHangsOnDown
+// — see TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw's own doc
+// comment for the full explanation. No prior big list or stale Select()
+// needed at all here either: just one ordinary redraw between opening
+// the screen and the very first arrow key.
+func TestActivityLogErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openActivityLog() // no file yet — the "No activity logged yet." placeholder
+
+	screen := tcell.NewSimulationScreen("")
+	screen.Init()
+	defer screen.Fini()
+	screen.SetSize(100, 40)
+	r.activityLogTable.SetRect(0, 0, 100, 40)
+	r.activityLogTable.Draw(screen) // the real app's own ordinary redraw
+
+	callWithTimeout(t, 2*time.Second, func() {
+		r.activityLogTable.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	})
+}
+
 // TestCaptureActivityLogTableKeyTabFocusesKeywordField pins the focus
 // cycle's table-to-field leg — the fields' own activityLogFieldDone
 // covers the other two legs.

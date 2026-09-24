@@ -278,8 +278,24 @@ func (r *Root) renderMounts() {
 			tview.NewTableCell(r.mountsErr.Error()).
 				SetTextColor(r.theme.EntryError).
 				SetSelectable(false))
+		// Turn row selection off entirely while showing this placeholder
+		// — see renderFirewall's own identical fix and its doc comment
+		// for the real freeze this prevents: tview's own Table, on its
+		// very next Draw with nothing selectable and selection still on,
+		// leaves its cursor row one past the end, and the next Up/Down
+		// can spin forever hunting for a selectable cell from there.
+		// Select(1, 0) still lands the number on the placeholder row
+		// itself, purely so it isn't left stale once selection comes
+		// back on below.
+		r.mountsTable.SetSelectable(false, false)
+		r.mountsTable.Select(1, 0)
 		return
 	}
+
+	// Real, selectable rows may exist below — restore row selection (see
+	// the error branch above for why it might currently be off). Reset
+	// again just below if this directory turns out to have none.
+	r.mountsTable.SetSelectable(true, false)
 
 	for i, m := range r.mountsEntries {
 		row := i + 1
@@ -319,8 +335,18 @@ func (r *Root) renderMounts() {
 	// Keep the cursor in range (and off the header row) after a refresh
 	// changed how many rows there are — landing on the first real row
 	// the very first time this ever renders, left alone otherwise, the
-	// same restraint renderToolbox's own tail already shows.
-	if row, _ := r.mountsTable.GetSelection(); len(r.mountsEntries) > 0 && (row < 1 || row > len(r.mountsEntries)) {
+	// same restraint renderToolbox's own tail already shows. The
+	// zero-entries case (no real storage mounted at all — vanishingly
+	// unlikely in practice, but not impossible) still needs its own
+	// Select the same as the error branch above: an empty table is just
+	// as vulnerable to a stale out-of-range cursor as an unselectable
+	// error row is.
+	if len(r.mountsEntries) == 0 {
+		r.mountsTable.SetSelectable(false, false) // see the error branch above for why
+		r.mountsTable.Select(0, 0)
+		return
+	}
+	if row, _ := r.mountsTable.GetSelection(); row < 1 || row > len(r.mountsEntries) {
 		r.mountsTable.Select(1, 0)
 	}
 }
