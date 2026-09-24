@@ -262,22 +262,11 @@ func (r *Root) renderActivityLog() {
 	header(activityLogColCategory, "Category")
 	header(activityLogColMessage, "Message")
 
-	// Both early returns below turn row selection off entirely rather
-	// than leaving it on with nothing selectable to land on — see
-	// renderFirewall's identical fix and its own doc comment for the
-	// real freeze this prevents: tview's own Table, on its very next
-	// Draw with nothing selectable and selection still on, leaves its
-	// cursor row one past the end, and the next Up/Down can spin forever
-	// hunting for a selectable cell from there. Select(1, 0) still lands
-	// the number on the placeholder row itself, purely so it isn't left
-	// stale once selection comes back on below.
+	// See showTablePlaceholder's own doc comment for why both early
+	// returns below go through it rather than a bare SetCell — it's the
+	// fix for a real, reported freeze, not just a message.
 	if r.activityLogReadErr != nil {
-		r.activityLogTable.SetCell(1, activityLogColTime,
-			tview.NewTableCell(r.activityLogReadErr.Error()).
-				SetTextColor(r.theme.EntryError).
-				SetSelectable(false))
-		r.activityLogTable.SetSelectable(false, false)
-		r.activityLogTable.Select(1, 0)
+		showTablePlaceholder(r.activityLogTable, r.activityLogReadErr.Error(), r.theme.EntryError)
 		return
 	}
 
@@ -287,18 +276,13 @@ func (r *Root) renderActivityLog() {
 		if len(r.activityLogAllEntries) > 0 {
 			placeholder = "No entries match the current filter."
 		}
-		r.activityLogTable.SetCell(1, activityLogColTime,
-			tview.NewTableCell(placeholder).
-				SetTextColor(r.theme.PlaceholderText).
-				SetSelectable(false))
-		r.activityLogTable.SetSelectable(false, false)
-		r.activityLogTable.Select(1, 0)
+		showTablePlaceholder(r.activityLogTable, placeholder, r.theme.PlaceholderText)
 		return
 	}
 
-	// Real, selectable rows exist again — restore row selection (see
-	// this function's own early returns above for why it was off).
-	r.activityLogTable.SetSelectable(true, false)
+	// Real, selectable rows exist again — see showTablePlaceholder's own
+	// doc comment for why this isn't optional cosmetic tidiness.
+	enableTableSelection(r.activityLogTable)
 
 	for i, e := range entries {
 		row := i + 1
