@@ -126,8 +126,9 @@ terminal.
   reopened next time, unless a directory was named on the command line
   or `restore_tabs = false` turns it off.
 - Split view (`s`): two of those tabs on screen at once, side by side
-  or stacked (`z` then `o` flips it, or set `split_stacked` once and
-  forget it). With a single tab open, `s` opens a second one on the same
+  (with a plain background-colored gap column between them) or stacked
+  (`z` then `o` flips it, or set `split_stacked` once and forget it).
+  With a single tab open, `s` opens a second one on the same
   directory — the usual starting point for copying between two places in
   one tree; otherwise it pairs you with the tab you last split with. To
   choose the other pane yourself, the tab list (`t`) gives every row a `◫` button,

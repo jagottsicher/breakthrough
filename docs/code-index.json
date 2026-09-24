@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 58482,
-      "sha256": "31595ea33db7726b94f0497ef48a9d044e916c77196de40ef150ce054571aa36"
+      "size": 58542,
+      "sha256": "6c6d58e2205429ec51d5f466ee0465bd6709401485962728e293d1a7300a29fe"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 114180,
-      "sha256": "2015b021f59c462d3fd077297ce8e625d381d23bf26dc6d735f9e35f758989d0"
+      "size": 114330,
+      "sha256": "2bef1cec29ff09f59930392afa361a887e8681c2e403318bad1c32c028b1aaf7"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1488,13 +1488,13 @@
     },
     {
       "path": "internal/ui/split.go",
-      "size": 14927,
-      "sha256": "ba420a059bd2621d3a99f707d5effd2959deeeec74c761bb69dd79313fff8257"
+      "size": 15811,
+      "sha256": "5286de2ce557e289a44c66f1f9ccc34bc78f336f6e4d6b3d93a890b6aa56f537"
     },
     {
       "path": "internal/ui/split_test.go",
-      "size": 17826,
-      "sha256": "a3f21747577e551686d1e15324258e7acda7add27ea5627e6c49be6489b298bb"
+      "size": 19022,
+      "sha256": "5992d11e9a1fd1c0e77f3f76c8a1bfa3d555f74ec52c9bab46661a5192fb3114"
     },
     {
       "path": "internal/ui/syntax.go",
@@ -29927,10 +29927,17 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split.go",
+      "name": "splitGapWidth",
+      "kind": "const",
+      "line": 97
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/split.go",
       "name": "splitPanesValid",
       "kind": "method",
       "receiver": "*Root",
-      "line": 88
+      "line": 104
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29938,7 +29945,7 @@
       "name": "splitPartner",
       "kind": "method",
       "receiver": "*Root",
-      "line": 102
+      "line": 118
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29946,7 +29953,7 @@
       "name": "splitSlotOf",
       "kind": "method",
       "receiver": "*Root",
-      "line": 116
+      "line": 132
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29954,7 +29961,7 @@
       "name": "enterSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 131
+      "line": 147
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29962,7 +29969,7 @@
       "name": "exitSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 150
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29970,7 +29977,7 @@
       "name": "splitPartnerForToggle",
       "kind": "method",
       "receiver": "*Root",
-      "line": 173
+      "line": 189
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29978,7 +29985,7 @@
       "name": "newTabForSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 194
+      "line": 210
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -29986,28 +29993,28 @@
       "name": "adjustSplitForClosedTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 216
+      "line": 232
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split.go",
       "name": "splitToggleLabel",
       "kind": "function",
-      "line": 236
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split.go",
       "name": "splitButtonLabel",
       "kind": "function",
-      "line": 248
+      "line": 264
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split.go",
       "name": "splitOrientationLabel",
       "kind": "function",
-      "line": 258
+      "line": 274
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30015,7 +30022,7 @@
       "name": "ToggleSplitShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 277
+      "line": 293
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30023,7 +30030,7 @@
       "name": "toggleSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 287
+      "line": 303
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30031,7 +30038,7 @@
       "name": "SplitOrientationShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 310
+      "line": 326
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30039,7 +30046,7 @@
       "name": "toggleSplitStacked",
       "kind": "method",
       "receiver": "*Root",
-      "line": 319
+      "line": 335
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30047,7 +30054,7 @@
       "name": "setSplitStacked",
       "kind": "method",
       "receiver": "*Root",
-      "line": 329
+      "line": 345
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30055,7 +30062,7 @@
       "name": "splitWithTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 344
+      "line": 360
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30063,7 +30070,7 @@
       "name": "splitWithNewTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 366
+      "line": 382
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30071,7 +30078,7 @@
       "name": "swapPanes",
       "kind": "method",
       "receiver": "*Root",
-      "line": 387
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30079,7 +30086,7 @@
       "name": "swapPanesOrExplain",
       "kind": "method",
       "receiver": "*Root",
-      "line": 407
+      "line": 423
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30140,149 +30147,163 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
+      "name": "TestSplitSideBySideHasABackgroundGapBetweenThePanes",
+      "kind": "function",
+      "line": 150
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/split_test.go",
+      "name": "TestSplitStackedHasNoGap",
+      "kind": "function",
+      "line": 166
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/split_test.go",
       "name": "TestSplitOrientationDrivesTheFlexDirection",
       "kind": "function",
-      "line": 145
+      "line": 176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitOrientationSurvivesIntoTheConfigFile",
       "kind": "function",
-      "line": 161
+      "line": 192
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSwitchingToTheOtherPaneOnlyMovesFocus",
       "kind": "function",
-      "line": 180
+      "line": 211
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSwitchingToAThirdTabReplacesOnlyTheFocusedPane",
       "kind": "function",
-      "line": 198
+      "line": 229
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestClosingAPaneTabEndsSplitView",
       "kind": "function",
-      "line": 215
+      "line": 246
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestClosingAnUnrelatedTabKeepsSplitViewAndFixesTheIndices",
       "kind": "function",
-      "line": 229
+      "line": 260
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestTabKeyMovesBetweenThePanes",
       "kind": "function",
-      "line": 254
+      "line": 285
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestClickingTheOtherPaneMakesItActive",
       "kind": "function",
-      "line": 270
+      "line": 301
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestMerelyPointingAtTheOtherPaneDoesNotActivateIt",
       "kind": "function",
-      "line": 290
+      "line": 321
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestEachPaneHighlightsItsOwnTabNumber",
       "kind": "function",
-      "line": 308
+      "line": 339
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitMenuLabelsDescribeTheNextAction",
       "kind": "function",
-      "line": 320
+      "line": 351
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitMenuLabelsFollowTheState",
       "kind": "function",
-      "line": 339
+      "line": 370
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitWithTabOnTheCurrentTabOpensAFreshPaneInstead",
       "kind": "function",
-      "line": 357
+      "line": 388
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitWithNewTabAddsAPaneAndKeepsYouPut",
       "kind": "function",
-      "line": 372
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitSurvivesSaveAndRestore",
       "kind": "function",
-      "line": 395
+      "line": 426
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSplitIsDroppedWhenAPaneDirectoryVanished",
       "kind": "function",
-      "line": 436
+      "line": 467
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestEventOutsideAPaneDoesNotSwitchToIt",
       "kind": "function",
-      "line": 477
+      "line": 508
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestRightDragInTheInactivePaneStillSelects",
       "kind": "function",
-      "line": 497
+      "line": 528
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSwapPanesExchangesTheirPositions",
       "kind": "function",
-      "line": 536
+      "line": 567
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSwapPanesTwiceIsWhereYouStarted",
       "kind": "function",
-      "line": 559
+      "line": 590
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/split_test.go",
       "name": "TestSwapPanesRefusesWithoutASplit",
       "kind": "function",
-      "line": 572
+      "line": 603
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34039,5 +34060,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "bbcdb797d822a6fa0b7c40e015c08d2baa9fa7bae06c5f6a609183f735179a63"
+  "merkle_root": "d841b1f9ff37089a13a1546579009c622f54b9d5870f1844a3bd643683d9c16d"
 }
