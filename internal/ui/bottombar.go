@@ -1534,12 +1534,12 @@ func (r *Root) refreshActivePanelHeaderGlow() {
 	// The filter-menu button's own "Nx" glow (see renderFilterMenuBtn)
 	// needs the exact same once-a-second nudge to keep advancing while
 	// sitting idle with a filter active, for the same reason the "@"
-	// button above does — independent of it, since a panel can have
-	// both a remote connection and an active filter at once. Skipped
-	// while filterMatchesNothing: that state deliberately stays a flat,
-	// unmoving red (see renderFilterMenuBtn's own doc comment), so
-	// there's no glow phase to advance there either.
-	if p.activeFilterCount() > 0 && !p.filterMatchesNothing {
+	// button above does — independent of it, since a panel can have both
+	// a remote connection and an active filter at once. This also covers
+	// filterMatchesNothing now: that state pulses too (see
+	// renderFilterMenuBtn's own doc comment), not just the "genuinely
+	// narrowing the listing" case.
+	if p.activeFilterCount() > 0 {
 		p.renderFilterMenuBtn()
 	}
 }
