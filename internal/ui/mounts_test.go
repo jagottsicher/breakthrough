@@ -280,7 +280,9 @@ func TestMountsErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	r.renderMounts()
 
 	screen := tcell.NewSimulationScreen("")
-	screen.Init()
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
 	r.mountsTable.SetRect(0, 0, 100, 40)

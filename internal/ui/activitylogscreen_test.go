@@ -289,7 +289,9 @@ func TestActivityLogErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	r.openActivityLog() // no file yet — the "No activity logged yet." placeholder
 
 	screen := tcell.NewSimulationScreen("")
-	screen.Init()
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
 	r.activityLogTable.SetRect(0, 0, 100, 40)

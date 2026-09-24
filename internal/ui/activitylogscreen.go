@@ -158,7 +158,7 @@ func readActivityLogEntries() ([]activitylog.Entry, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var entries []activitylog.Entry
 	scanner := bufio.NewScanner(f)

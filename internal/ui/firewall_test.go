@@ -180,7 +180,9 @@ func TestFirewallErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	r.openFirewall()
 
 	screen := tcell.NewSimulationScreen("")
-	screen.Init()
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
 	defer screen.Fini()
 	screen.SetSize(100, 40)
 	r.firewallTable.SetRect(0, 0, 100, 40)
