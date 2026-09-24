@@ -336,7 +336,10 @@ instead, and `restore_tabs = false` turns the whole thing off.
 
 ## Split view
 
-Two of your open tabs on screen at once, side by side or stacked.
+Two of your open tabs on screen at once, side by side or stacked. Side
+by side, a plain, background-colored column separates the two panes;
+stacked panes need no such gap, since the row break already separates
+them.
 
 | Key | Action |
 |---|---|
@@ -442,11 +445,13 @@ Properties
 group's own entries, led by a `◂ Back` row — the same "drill in, one
 level at a time" shape a settings app on a phone already uses, chosen
 over a flyout beside the menu since it needs no horizontal room a
-narrow terminal might not have. `Escape` backs out one level at a time
-(a second press closes the menu once you're back at the top); Left
-arrow does the same, alongside clicking or selecting `◂ Back` itself.
-The menu's own title bar names where you are — "Menu" at the top,
-"Menu › Selection" one level in.
+narrow terminal might not have. Right arrow drills into whichever
+submenu the cursor is on, no Enter needed; `Escape` backs out one level
+at a time (a second press closes the menu once you're back at the top),
+and Left arrow does the same, alongside clicking or selecting `◂ Back`
+itself. The menu's own title bar names where you are — "Menu" at the
+top, "Menu › Selection" one level in — and the menu is always at least
+as wide as that title, even when every row inside is shorter.
 
 - **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
   (files only, `mt`), `chown`, `chmod`, `sed`, Batch rename, Undo last
