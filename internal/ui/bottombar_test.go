@@ -310,6 +310,49 @@ func TestDiskUsageTextIsFreeOverTotalInodeUsageTextIsUsedOverTotal(t *testing.T)
 	}
 }
 
+// TestDiskUsageTextUsesFstypeAsLabel pins the user's own explicit
+// request: the status bar's disk segment names the actual filesystem
+// ("CIFS free", "EXT4 free", "ECRYPTFS free", ...) instead of a plain,
+// protocol-less "Disk free" once DiskUsage.Fstype is known — the exact
+// same field the Mounts screen already shows per mount, here for
+// whichever one the current panel's own path lives on.
+func TestDiskUsageTextUsesFstypeAsLabel(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+
+	withFstype := diskUsageText(fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, Fstype: "cifs"}, theme)
+	if !strings.HasPrefix(withFstype, fmt.Sprintf("[%s]CIFS free ", colorTag(statusDiskColor))) {
+		t.Errorf(`diskUsageText with Fstype "cifs" = %q, want it to start "CIFS free "`, withFstype)
+	}
+
+	withoutFstype := diskUsageText(fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100}, theme)
+	if !strings.HasPrefix(withoutFstype, fmt.Sprintf("[%s]Disk free ", colorTag(statusDiskColor))) {
+		t.Errorf(`diskUsageText with no Fstype = %q, want the plain "Disk free " fallback`, withoutFstype)
+	}
+}
+
+// TestBuildStatusBarOmitsInodesWhenNotAvailable pins the user's own
+// explicit request: a filesystem df -i genuinely can't report a count
+// for (real, observed on some CIFS/SMB mounts) leaves the Inodes segment
+// off the status bar entirely rather than showing a misleading 0/0 —
+// using a remote panel's fake client (see diskUsageFor) to control
+// HasInodes directly, the same way
+// TestDiskUsageForOnARemotePanelUsesTheClientNotLocalDf does.
+func TestBuildStatusBarOmitsInodesWhenNotAvailable(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	r.settings.StatusBarShowInodes = true
+	client := r.panel.remote.(*fakeRemoteClient)
+
+	client.diskUsage = fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: false}
+	if got := r.buildStatusBar(); strings.Contains(got, "Inodes used") {
+		t.Errorf("status bar = %q, want no Inodes segment when HasInodes is false", got)
+	}
+
+	client.diskUsage = fsops.DiskUsage{AvailBytes: 900, UsedBytes: 100, HasInodes: true, UsedInodes: 1, AvailInodes: 9}
+	if got := r.buildStatusBar(); !strings.Contains(got, "Inodes used") {
+		t.Errorf("status bar = %q, want the Inodes segment once HasInodes is true", got)
+	}
+}
+
 func TestKernelVersionTextMatchesUnameR(t *testing.T) {
 	requireCommand(t, "uname")
 	want, err := exec.Command("uname", "-r").Output()
@@ -592,7 +635,13 @@ func TestBuildStatusBarEachSegmentToggleHidesOnlyThatSegment(t *testing.T) {
 	}{
 		{"username", &r.settings.StatusBarShowUsername, r.currentUser},
 		{"mouse", &r.settings.StatusBarShowMouse, "Mouse on"},
-		{"disk", &r.settings.StatusBarShowDisk, "Disk free"},
+		// "free " rather than "Disk free": the segment's own label now
+		// depends on the real directory's own filesystem type (see
+		// diskUsageText/fetchFstype), "EXT4"/"CIFS"/... in place of a
+		// plain "Disk" wherever findmnt can actually resolve one, so a
+		// literal "Disk free" would only match on a filesystem findmnt
+		// doesn't recognize.
+		{"disk", &r.settings.StatusBarShowDisk, "free "},
 		{"inodes", &r.settings.StatusBarShowInodes, "Inodes used"},
 		{"kernel", &r.settings.StatusBarShowKernel, kernelVersionText()},
 		{"uptime", &r.settings.StatusBarShowUptime, "up "},

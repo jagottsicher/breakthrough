@@ -580,9 +580,12 @@ terminal.
   restarts.
 - A bottom row that's purely informational, no buttons on it at all: the
   current user (green, red while running as root), disk space
-  (`free/total`) and inode usage (`used/total`) for the directory on
-  screen — each with its own fixed color and a green/orange/red
-  percentage (under 80% / 80%+ / 90%+) — git status (`git:(branch)
+  (`free/total`, labeled with the real filesystem type — `EXT4`, `CIFS`,
+  `NFS4`, `ECRYPTFS`, ... — the same one the Mounts screen shows) and
+  inode usage (`used/total`, omitted on a filesystem that can't report a
+  count at all) for the directory on screen — each with its own fixed
+  color and a green/orange/red percentage (under 80% / 80%+ / 90%+) —
+  git status (`git:(branch)
   ⇡ahead ⇣behind +staged !unstaged ?untracked =conflicts`, the same
   phrasing several zsh prompt themes already use, green/orange/red for
   clean/dirty/conflicted, shown only inside a git repository), the

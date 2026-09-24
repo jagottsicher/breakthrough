@@ -31,6 +31,38 @@ func TestFetchDiskUsageRealFilesystem(t *testing.T) {
 	}
 }
 
+// TestFetchDiskUsageSetsHasInodesOnARealFilesystem pins that an ordinary
+// local filesystem (whatever t.TempDir() sits on) reports HasInodes true
+// with real, non-negative counts — the common case, distinct from the
+// CIFS/SMB gap FetchDiskUsage's own doc comment describes, where df -i
+// can't report a count at all.
+func TestFetchDiskUsageSetsHasInodesOnARealFilesystem(t *testing.T) {
+	requireCommand(t, "df")
+	u, ok := FetchDiskUsage(t.TempDir())
+	if !ok {
+		t.Fatal("FetchDiskUsage should succeed against a real, existing directory")
+	}
+	if !u.HasInodes {
+		t.Error("HasInodes should be true on an ordinary local filesystem")
+	}
+}
+
+// TestFetchDiskUsageSetsFstypeWhenFindmntIsAvailable pins the other new
+// field: Fstype comes back non-empty on a real system with findmnt
+// installed (Linux — see fetchFstype's own doc comment on why it's
+// empty by design elsewhere, macOS/BSD included).
+func TestFetchDiskUsageSetsFstypeWhenFindmntIsAvailable(t *testing.T) {
+	requireCommand(t, "df")
+	requireCommand(t, "findmnt")
+	u, ok := FetchDiskUsage(t.TempDir())
+	if !ok {
+		t.Fatal("FetchDiskUsage should succeed against a real, existing directory")
+	}
+	if u.Fstype == "" {
+		t.Error("Fstype should be non-empty once findmnt is available")
+	}
+}
+
 // TestParseDfDataLine pins the field layout against real df output
 // captured on this machine (GNU df, df -k and df -i) plus a simulated
 // BSD-style wrapped line (Filesystem name on its own line, so the data
