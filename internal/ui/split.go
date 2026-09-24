@@ -68,9 +68,19 @@ func (r *Root) remountPanels() {
 	}
 
 	r.panelHost.SetDirection(r.splitDirection())
-	for _, tab := range r.splitPanes {
+	for i, tab := range r.splitPanes {
 		if tab < 0 || tab >= len(r.tabs) {
 			continue // defensive: splitPanesValid should already have ruled this out
+		}
+		// A plain, fixed-width gap between the two panes — side by side
+		// only, per the user's own explicit request; stacked panes
+		// already read as separate thanks to the row break itself. Just
+		// PanelBackground, no divider glyph or drag handling (see this
+		// file's own package doc on why a draggable divider is future
+		// work) — a new Box each remount rather than a field on Root,
+		// since nothing about it needs to persist between rebuilds.
+		if i > 0 && !r.settings.SplitStacked {
+			r.panelHost.AddItem(tview.NewBox().SetBackgroundColor(r.theme.PanelBackground), splitGapWidth, 0, false)
 		}
 		// Equal proportions, no fixed size: an even split is the only
 		// division that needs no explanation, and a draggable divider
@@ -79,6 +89,12 @@ func (r *Root) remountPanels() {
 		r.panelHost.AddItem(r.tabs[tab], 0, 1, tab == r.activeTab)
 	}
 }
+
+// splitGapWidth is the empty column's own fixed width between the two
+// side-by-side panes (see remountPanels) — named rather than a bare 1 at
+// its one call site, the same "no magic number" reasoning splitPaneCount
+// above already follows.
+const splitGapWidth = 1
 
 // splitPanesValid reports whether splitPanes currently names two
 // distinct, in-range tabs — the precondition for split view meaning

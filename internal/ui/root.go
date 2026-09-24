@@ -289,6 +289,22 @@ type Root struct {
 	firewallErr      error
 	firewallServices firewall.ServiceLookup
 
+	// The Activity Log screen (see activitylogscreen.go) — a fifth
+	// full-screen catalog, browsing the real activity log file (see
+	// internal/activitylog) rather than a second, parallel recording of
+	// it. activityLogAllEntries holds the last real read (newest first),
+	// refreshed by reloadActivityLog (on open, and on "r"); the keyword/
+	// time fields filter it live, the same "narrows as you type" feel
+	// the panel's own filter dropdown already has.
+	activityLogLayout       *tview.Flex
+	activityLogTitleBar     *tview.TextView
+	activityLogKeywordField *tview.InputField
+	activityLogTimeField    *tview.InputField
+	activityLogTable        *tview.Table
+	activityLogHint         *tview.TextView
+	activityLogAllEntries   []activitylog.Entry
+	activityLogReadErr      error
+
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
 	// package keeps meaning the right one without knowing tabs exist.
@@ -1696,6 +1712,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newFirewallScreen()
 
+	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
+	// — a fifth full-screen catalog, same build-once/repopulate-on-open
+	// shape.
+	r.newActivityLogScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -1825,6 +1846,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
+	// resize=true: the Activity Log screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall screens' own comments above give.
+	r.AddPage(activityLogPage, r.activityLogLayout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)

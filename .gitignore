@@ -18,6 +18,10 @@ github-token.txt
 *.test
 *.out
 
+# Core dumps from a crashed `go run`/test binary (see crash.log for the
+# real, human-readable panic instead) — never a real project artifact.
+core.[0-9]*
+
 # GoReleaser build output, and the release pipeline's own before.hooks
 # output (see .goreleaser.yaml — the generated /etc/breakthrough/config
 # the .deb/.rpm packages ship, regenerated fresh on every release)

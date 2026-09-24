@@ -15,6 +15,25 @@ type DiskUsage struct {
 	UsedBytes, AvailBytes    int64
 	UsedInodes, AvailInodes  int64
 	UsePercent, InodePercent int
+
+	// HasInodes is false when `df -i` either failed outright or came
+	// back with fields df itself can't report a number for (a "-" in
+	// place of a count — real, observed behavior on some CIFS/SMB
+	// mounts, not a hypothetical) — inode usage genuinely doesn't exist
+	// for this filesystem rather than something FetchDiskUsage failed
+	// to fetch, so block usage is still reported normally; only the
+	// inode segment itself is left off (see internal/ui's own
+	// buildStatusBar), per the user's own explicit request.
+	HasInodes bool
+
+	// Fstype is dir's own filesystem type ("ext4", "cifs", "nfs4",
+	// "ecryptfs", ...) — the same field the Mounts screen already shows
+	// per mount (see internal/ui/mounts.go), fetched here for just the
+	// one path a panel's status bar cares about. Empty when it can't be
+	// determined (findmnt missing — expected on macOS/BSD, see
+	// fetchFstype — or the lookup otherwise failing), in which case the
+	// status bar falls back to a plain, protocol-less label.
+	Fstype string
 }
 
 // FetchDiskUsage runs `df -k` (block usage) and `df -i` (inode usage)
@@ -40,28 +59,49 @@ func FetchDiskUsage(dir string) (DiskUsage, bool) {
 	if !ok {
 		return DiskUsage{}, false
 	}
-	inodeLine, ok := dfLastLine("df", "-i", dir)
-	if !ok {
-		return DiskUsage{}, false
-	}
-
 	usedBlocks, availBlocks, usePercent, ok := parseDfDataLine(blockLine)
 	if !ok {
 		return DiskUsage{}, false
 	}
-	usedInodes, availInodes, inodePercent, ok := parseDfDataLine(inodeLine)
-	if !ok {
-		return DiskUsage{}, false
+
+	u := DiskUsage{
+		UsedBytes:  usedBlocks * 1024,
+		AvailBytes: availBlocks * 1024,
+		UsePercent: usePercent,
+		Fstype:     fetchFstype(dir),
 	}
 
-	return DiskUsage{
-		UsedBytes:    usedBlocks * 1024,
-		AvailBytes:   availBlocks * 1024,
-		UsedInodes:   usedInodes,
-		AvailInodes:  availInodes,
-		UsePercent:   usePercent,
-		InodePercent: inodePercent,
-	}, true
+	// Inode usage is fetched separately, and its own failure doesn't
+	// fail the whole call — a real, observed gap on some CIFS/SMB
+	// mounts, whose `df -i` either exits non-zero or reports "-" where a
+	// count belongs (parseDfDataLine already turns that into ok=false
+	// rather than a bogus 0). Block usage (the part that actually works
+	// there) shouldn't disappear along with it.
+	if inodeLine, ok := dfLastLine("df", "-i", dir); ok {
+		if usedInodes, availInodes, inodePercent, ok := parseDfDataLine(inodeLine); ok {
+			u.HasInodes = true
+			u.UsedInodes = usedInodes
+			u.AvailInodes = availInodes
+			u.InodePercent = inodePercent
+		}
+	}
+
+	return u, true
+}
+
+// fetchFstype resolves dir to whichever real filesystem contains it — a
+// mount point itself or one of its own subdirectories, findmnt's own -T
+// flag doing exactly the resolution a bare mount-point lookup wouldn't —
+// and returns its type. Best-effort: findmnt is Linux/util-linux-
+// specific (see internal/ui/mounts.go's own package doc) and simply
+// isn't there on macOS/BSD, so a failure here just means DiskUsage.Fstype
+// stays empty, not that FetchDiskUsage itself fails.
+func fetchFstype(dir string) string {
+	out, err := exec.Command("findmnt", "-no", "FSTYPE", "-T", dir).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // dfLastLine runs name(args...) (df, with whatever flags the caller

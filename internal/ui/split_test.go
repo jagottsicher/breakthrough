@@ -142,6 +142,37 @@ func TestToggleSplitWithOneTabOpensASecondOnTheSameDirectory(t *testing.T) {
 	}
 }
 
+// TestSplitSideBySideHasABackgroundGapBetweenThePanes pins the plain,
+// fixed-width gap remountPanels now inserts between the two panes while
+// they sit side by side — per the user's own explicit request, absent
+// while stacked (see TestSplitStackedHasNoGap), since a row break
+// already separates stacked panes visually.
+func TestSplitSideBySideHasABackgroundGapBetweenThePanes(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1) // side by side by default
+
+	if got, want := r.panelHost.GetItemCount(), 3; got != want {
+		t.Fatalf("panelHost has %d items, want %d (pane, gap, pane)", got, want)
+	}
+	gap := r.panelHost.GetItem(1)
+	if _, isPanel := gap.(*Panel); isPanel {
+		t.Fatal("the middle item should be the gap, not a pane")
+	}
+}
+
+// TestSplitStackedHasNoGap pins the other half of
+// TestSplitSideBySideHasABackgroundGapBetweenThePanes: no gap item once
+// stacked, only the two panes themselves.
+func TestSplitStackedHasNoGap(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1)
+	r.toggleSplitStacked()
+
+	if got, want := r.panelHost.GetItemCount(), 2; got != want {
+		t.Fatalf("panelHost has %d items while stacked, want %d (just the two panes)", got, want)
+	}
+}
+
 func TestSplitOrientationDrivesTheFlexDirection(t *testing.T) {
 	r, _, _ := newSplitRoot(t)
 	r.enterSplit(1)
