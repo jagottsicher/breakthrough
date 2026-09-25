@@ -193,6 +193,35 @@ func TestWatchAndWaitRsyncReportsAFailureWithStderr(t *testing.T) {
 	}
 }
 
+// TestWatchAndWaitRsyncReportsANonInteractiveAuthenticationFailure pins
+// feature_ideas.txt's own still-open "nicht-interaktive Authentifizierungs-
+// fehler" test gap: a background run has no attached terminal for ssh's
+// own password prompt (reallyStartRsyncBackground's own Setsid/null-stdin
+// setup — see its own doc comment), so a connection that can't
+// authenticate non-interactively fails fast instead of hanging — real
+// ssh's own exit code (255) and stderr wording for exactly that case
+// (an unreachable/refused non-interactive publickey prompt), not just
+// TestWatchAndWaitRsyncReportsAFailureWithStderr's own generic
+// connection-closed message.
+func TestWatchAndWaitRsyncReportsANonInteractiveAuthenticationFailure(t *testing.T) {
+	r := &Root{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	job := &rsyncJob{ctx: ctx, cancel: cancel}
+	job.percent.Store(-1)
+
+	cmd, stdout, stderr := newFakeRsyncCmd(t, `echo 'Permission denied (publickey,password).' >&2; echo 'rsync: connection unexpectedly closed (0 bytes received so far) [sender]' >&2; echo 'rsync error: unexplained error (code 255) at io.c(226) [sender=3.2.7]' >&2; exit 255`)
+
+	err := r.watchAndWaitRsync(job, cmd, stdout, stderr)
+
+	if err == nil {
+		t.Fatal("expected an error for a non-interactive authentication failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "Permission denied") {
+		t.Errorf("error = %q, want it to include ssh's own \"Permission denied\" message", err.Error())
+	}
+}
+
 func newTestRootForRsyncJob(t *testing.T) *Root {
 	t.Helper()
 	dir := fixtureDir(t)
