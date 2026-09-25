@@ -25,6 +25,7 @@ material, always matching the version you are actually running.
 - [Tool windows](#tool-windows)
 - [Mounts](#mounts)
 - [Firewall](#firewall)
+- [Sessions](#sessions)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -1062,10 +1063,63 @@ Proto, Port, Source, Destination, Interface, and Note.
   "shadowed by #N (...)" note explaining which earlier rule makes it
   unreachable and what that rule itself does.
 
-`Up`/`Down` move between rules, `r` re-reads the live rules, `Escape`
-closes it. Read-only for now — building a new rule, and testing "what
-happens to a request on port X from IP Y" without needing to know any
-firewall-specific syntax, are planned next.
+`Up`/`Down` move between rules, `r` re-reads the live rules, `a` opens
+the Add-rule form, `Escape` closes it.
+
+**Add a rule** (`a`, UFW and iptables only — nftables is refused
+outright, since its table/chain layout is host-specific and can't be
+safely guessed): a form for Direction, Action, Protocol, Port, Source,
+Destination, and Interface, never raw firewall syntax typed by hand.
+Submitting it shows the exact `ufw`/`iptables` command it would run for
+confirmation, then applies it via `sudo` through a real, attached
+terminal — the same reasoning breakthrough runs everywhere else that
+might need to answer sudo's own interactive password prompt. A rule
+that could plausibly affect an already-established SSH session (naming
+port 22, or leaving the port unrestricted) arms an automatic 30-second
+rollback: unless you explicitly choose "Keep this rule" in time, the
+rule is reverted on its own, so a mistake can't lock you out for good.
+
+Testing "what happens to a request on port X from IP Y" against the
+read rules, without needing to know any firewall-specific syntax, isn't
+part of this yet.
+
+## Sessions
+
+`j` then `s`. A full-screen table listing this host's own local GNU
+screen and tmux sessions together — never just one of the two — styled
+like the Tab switcher/Connection dropdown (a real table with its own
+per-row action cells), not the Toolbox's own scrolling command output:
+attaching to a session needs a real, interactive terminal, which a
+plain scrolling-text window can't provide.
+
+Columns: Name, Backend (`screen`/`tmux`), and Status (Attached/
+Detached). Three actions per row, each its own clickable cell (or reach
+it with `Tab`/arrow keys and press `Enter`/`Space`):
+
+- **⭢ Attach** — hands the real terminal to the session (`screen -D -r`
+  / `tmux attach -d`), taking over a session already attached somewhere
+  else the same way a real shell would. breakthrough suspends itself
+  for the duration and resumes automatically the moment you detach or
+  the session itself ends — no extra key to press, no special handling
+  either way. Clicking a row's own Name/Backend/Status cell does the
+  same thing; it's the row's own obvious action, so it needs no
+  separate cell of its own.
+- **⇶ Attach in new window** — not implemented yet. Needs a real,
+  embedded PTY/ANSI terminal inside breakthrough itself, which doesn't
+  exist yet either; pressing it shows a notice that clears itself after
+  a few seconds.
+- **✕ Close** — ends the session outright (`screen -X quit` / `tmux
+  kill-session`), asking first, the same as Remove. `x` or `Delete`
+  does the same for the currently selected row's own session from
+  anywhere in that row.
+
+`r` re-reads the live session list, `Escape` closes the screen. If
+neither `screen` nor `tmux` is installed at all, that shows as a plain,
+understandable error rather than an empty list.
+
+Local sessions only, for now — attaching to a session on a remote host
+reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
+in principle, but needs its own connection-reuse design first.
 
 ## Sed Replace
 

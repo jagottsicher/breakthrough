@@ -20,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
@@ -337,6 +338,20 @@ type Root struct {
 	firewallRollbackDeadline time.Time
 	firewallRollbackBackend  firewall.Backend
 	firewallRollbackSpec     firewall.NewRuleSpec
+
+	// The Sessions screen ("js", see sessions.go) — local GNU screen/
+	// tmux terminal-multiplexer sessions (internal/multiplex), styled
+	// after the Tab switcher/Connection menu's own per-row action-cell
+	// table rather than Mounts/Firewall's own plain read-only rows: each
+	// session carries three independent actions (Attach, Attach in new
+	// window, Close). sessionsList/sessionsErr hold the last read
+	// result, refreshed by reloadSessions (on open, and on "r").
+	sessionsLayout   *tview.Flex
+	sessionsTitleBar *tview.TextView
+	sessionsHint     *tview.TextView
+	sessionsTable    *tview.Table
+	sessionsList     []multiplex.Session
+	sessionsErr      error
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -1776,6 +1791,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
 	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
 
+	// The Sessions screen (see sessions.go/openSessions) — a sixth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newSessionsScreen()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -1912,6 +1931,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
 	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
 	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
+	// resize=true: the Sessions screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall screens' own comments above give.
+	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
