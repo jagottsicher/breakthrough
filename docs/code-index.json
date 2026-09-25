@@ -1058,8 +1058,8 @@
     },
     {
       "path": "internal/ui/bottombar.go",
-      "size": 65905,
-      "sha256": "3cc3be02d4dd270a3b3ca68d02a36bf29c5db30db0b3eaf65810031ce2edc142"
+      "size": 65909,
+      "sha256": "57c70789a33e31505d3e49ec7ca3fc79434150df85114f9eccbd6a50232ffca8"
     },
     {
       "path": "internal/ui/bottombar_test.go",
@@ -1264,7 +1264,7 @@
     {
       "path": "internal/ui/help.go",
       "size": 64656,
-      "sha256": "9b671a781e4c0c3b2911cdade20daddf1d8fdb4e0e99f6449bfd996b40fdcfc0"
+      "sha256": "cc507b0ee7453d9333c8997f01d941134501686ad8dc2ce994dfad4217701d13"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1294,7 +1294,7 @@
     {
       "path": "internal/ui/keymap.go",
       "size": 38100,
-      "sha256": "d02b4a99e97638866c4a607edacec20a3ffc47bb2468487cc8d3d20e556c9d46"
+      "sha256": "52be625697c7a333581d2291edfbc0d3472bd5d4071a389065a1084c980623cc"
     },
     {
       "path": "internal/ui/keymap_test.go",
@@ -34973,5 +34973,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "9b60508ad698c63c6696434a32018fbcc235a82c1917323bf2c8a7ed03809a24"
+  "merkle_root": "abe35815ca0fe3fae7eafedd98f7acc83b17742995a72e4b838a3cac6856d8ba"
 }
