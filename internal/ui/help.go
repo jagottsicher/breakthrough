@@ -678,9 +678,14 @@ var helpText = strings.TrimLeft(`
   queues behind it the same way a second Paste already does. Ctrl+C/
   Ctrl+Delete cancels a running background rsync, the same key that
   already cancels a running Paste. The one thing it can't do that "Run"
-  can: answer an interactive prompt — an untrusted ssh host key or a
-  password prompt fails fast with a real error instead of hanging,
-  since its own stdin deliberately reads from nothing.
+  can: answer an interactive prompt, since its own stdin deliberately
+  reads from nothing. "Run in background" refuses outright, before
+  starting anything, if Source or Destination is still a connection
+  that last authenticated with a typed password — pointing to "Run"
+  instead, which can answer that prompt on its own attached terminal;
+  a remote address typed by hand with no known connection at all has
+  nothing to refuse, and an untrusted ssh host key still fails fast
+  with a real error instead of hanging.
 
 [::b]Tabs[::-]
 
