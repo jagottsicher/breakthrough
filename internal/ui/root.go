@@ -2498,6 +2498,26 @@ func (r *Root) closeAllOverlays() {
 // before — deliberately left alone, since that in-field click was never
 // part of what was reported as awkward here.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	// A Properties drag in progress (see dragPropertiesMouseCapture) must
+	// keep receiving every subsequent move/release itself, regardless of
+	// whether the cursor's own current position still happens to fall
+	// inside properties' own rect — which, dragging from the title bar
+	// (the window's own top row), it very often doesn't the moment the
+	// drag moves up or left at all, since that immediately puts the
+	// cursor above/left of the not-yet-updated rect. Without this check
+	// running first, the primitiveContains gate just below would treat
+	// that move as "outside the overlay" and let it fall through toward
+	// Root's own ordinary position-based dispatch instead — which would
+	// route it to whatever's actually drawn under the cursor by then
+	// (the panel, most of the time), never back to
+	// dragPropertiesMouseCapture at all, silently dropping the rest of
+	// the drag. A real, user-reported bug: Properties could only ever be
+	// dragged down/right, never up/left, for exactly this reason.
+	if r.propertiesDragging {
+		out, outEvent, _ := r.dragPropertiesMouseCapture(action, event)
+		return out, outEvent
+	}
+
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}

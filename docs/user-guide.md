@@ -1500,6 +1500,11 @@ group, and the modified date and time.
 `Tab` moves between fields, `Enter` or `Space` activates the focused
 one, `Escape` cancels.
 
+The title bar is draggable with the mouse, the same as a Toolbox tool
+window — it still opens anchored to the row it's about, only moving
+once you actually drag it. Its own close glyph (`✕`), in the top-right
+corner, closes it exactly like Cancel does.
+
 ## Copy, Cut and Paste
 
 `c`/`x` copy or cut the current selection — the whole selection, not

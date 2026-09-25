@@ -416,7 +416,10 @@ func (r *Root) newPropertiesView() *tview.Pages {
 	// room for it.
 	r.propertiesTitleBar = tview.NewTextView()
 	r.propertiesTitleBar.SetWrap(false)
-	r.propertiesTitleBar.SetText(" Properties ")
+	// Text is set by renderPropertiesTitleBar instead, not here: it needs
+	// the window's own current width, not yet known at construction time
+	// (see resizeProperties/moveProperties, both of which call it once
+	// they've set a real rect).
 
 	pages := tview.NewPages()
 	pages.SetBorderPadding(1, 0, 0, 0)
@@ -763,6 +766,27 @@ func (r *Root) resizeProperties(x, y int) {
 	r.properties.SetRect(x, y, width, height)
 	r.propertiesTitleBar.SetRect(x, y, width, 1)
 	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+	r.renderPropertiesTitleBar(width)
+}
+
+// renderPropertiesTitleBar sets propertiesTitleBar's own text to
+// " Properties ", padded out to width columns, with a close glyph
+// (toolWindowCloseGlyph, the same one toolWindow's/Help's own title bars
+// already use — see their own doc comments) in its own top-right corner
+// — per the user's own explicit request for a mouse-clickable close
+// button on Properties that behaves exactly like Cancel (see
+// dragPropertiesMouseCapture's own close-glyph check), not a plain
+// letter shortcut, since every other action Properties' own keyboard
+// already reaches (Cancel/Save, the field navigation) is a real button
+// or field of its own, never a bare key.
+func (r *Root) renderPropertiesTitleBar(width int) {
+	const label = " Properties "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.propertiesTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
 }
 
 // moveProperties repositions Properties to (x, y) without touching its
@@ -786,6 +810,7 @@ func (r *Root) moveProperties(x, y int) {
 	r.properties.SetRect(x, y, width, height)
 	r.propertiesTitleBar.SetRect(x, y, width, 1)
 	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+	r.renderPropertiesTitleBar(width)
 }
 
 // rerenderProperties re-runs renderProperties/resizeProperties in place
@@ -1620,26 +1645,33 @@ func (r *Root) cancelHashComputation() {
 // makes Properties' own title bar draggable, per the user's own
 // explicit request that the dialog become movable the way a Toolbox
 // tool window already is, while still opening at the exact same
-// anchor as before (openProperties/resizeProperties, both untouched).
-// Split out on its own since it's about repositioning the whole
-// window, not about anything inside propertiesText the rest of
-// hashesMouseCapture deals with.
+// anchor as before (openProperties/resizeProperties, both untouched) —
+// plus a close glyph in the title bar's own top-right corner (see
+// renderPropertiesTitleBar) that behaves exactly like Cancel, also per
+// the user's own explicit request. Split out on its own since it's
+// about the window's own chrome, not about anything inside
+// propertiesText the rest of hashesMouseCapture deals with.
 //
 // Mirrors toolWindow's own dragging/dragOffsetX/Y (see toolwindow.go's
 // MouseHandler): the offset between the click and the window's own
 // top-left corner is fixed once, at drag-start, and reapplied on every
-// subsequent move so the same point under the cursor stays there —
-// which is also what keeps every later move event landing back on this
-// same capture at all: tview's own Pages.MouseHandler dispatches purely
-// by current screen position (see pages.go), not by holding onto a
-// captured primitive, so a dragged window has to actually stay under
-// the cursor for its own capture to keep receiving events, the same
-// reasoning toolWindow's own moveTo relies on.
+// subsequent move so the same point under the cursor stays there.
+// Unlike toolWindow, a dragged Properties window does NOT have to stay
+// under the cursor for this capture to keep receiving events: it's
+// reached via captureOutsideClick's own propertiesDragging check
+// (root.go), invoked directly — bypassing tview's own Pages.MouseHandler
+// position-based dispatch (see pages.go) entirely — rather than relying
+// on that dispatch to keep routing here on its own. A real, user-
+// reported bug before that check existed: starting a drag from the
+// title bar (the window's own top row) and moving up or left put the
+// cursor above/left of the not-yet-updated rect on the very next event,
+// which the position-based dispatch then routed elsewhere instead of
+// back here, so the window could only ever be dragged down/right.
 //
-// handled reports whether this call was about dragging at all — false
-// (action/event returned unchanged) lets hashesMouseCapture fall
-// through to its own, unrelated hash-section handling exactly as
-// before.
+// handled reports whether this call was about dragging (or the close
+// glyph) at all — false (action/event returned unchanged) lets
+// hashesMouseCapture fall through to its own, unrelated hash-section
+// handling exactly as before.
 func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (out tview.MouseAction, outEvent *tcell.EventMouse, handled bool) {
 	x, y := event.Position()
 
@@ -1665,8 +1697,18 @@ func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell
 	}
 
 	if action == tview.MouseLeftDown && r.propertiesTitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.properties.GetRect()
+		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
+			// The close glyph itself (see renderPropertiesTitleBar) — per
+			// the user's own explicit request, behaves exactly like
+			// Cancel, not a drag start: cancelPropertiesEdit, not
+			// hideOverlay directly, so a dirty, in-progress edit gets the
+			// exact same "discard it" handling clicking Cancel already
+			// gives, not some separate, second way to close this dialog.
+			r.cancelPropertiesEdit()
+			return tview.MouseConsumed, nil, true
+		}
 		r.propertiesDragging = true
-		wx, wy, _, _ := r.properties.GetRect()
 		r.propertiesDragOffsetX, r.propertiesDragOffsetY = x-wx, y-wy
 		return tview.MouseConsumed, nil, true
 	}
