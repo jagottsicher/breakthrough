@@ -2,12 +2,17 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 const errorPage = "error"
+
+// errorAutoHideDelay is how long a "transient" notice (see
+// showTransientError) stays up before disappearing on its own.
+const errorAutoHideDelay = 3 * time.Second
 
 // errorViewMaxWidth caps how wide an error overlay grows before its text
 // starts wrapping instead. Filesystem errors embed full paths, which are
@@ -60,6 +65,45 @@ func (r *Root) showError(err error) {
 
 	r.errorView.SetRect(x, y, width, height)
 	r.showOverlay(errorPage, r.errorView)
+	r.errorGeneration++
+}
+
+// showTransientError is showError, plus an automatic dismiss after
+// errorAutoHideDelay — for a notice that's genuinely minor and would
+// otherwise sit blocking the workflow until explicitly dismissed for
+// no real reason (see resolveChord's own "not a command" case, this
+// function's first caller: a mistyped chord is common, forgettable,
+// and reading it takes a moment, not a deliberate stop). Every
+// existing way to dismiss an error early — Escape, a click outside,
+// Ctrl+C (RequestCancel) — keeps working exactly as it does for an
+// ordinary showError; this only adds a ceiling on how long it can sit
+// there unattended.
+//
+// errorGeneration guards against a real, if unlikely, race: dismissing
+// this notice early and then triggering a second, unrelated showError
+// before this one's own timer fires must never have the timer close
+// that second, still-relevant notice just because it also happens to
+// be showing on errorPage — comparing the generation showError itself
+// bumped on open is what tells the two apart.
+func (r *Root) showTransientError(err error) {
+	if err == nil {
+		return
+	}
+	r.showError(err)
+	generation := r.errorGeneration
+	time.AfterFunc(errorAutoHideDelay, func() {
+		r.app.QueueUpdateDraw(func() { r.autoHideError(generation) })
+	})
+}
+
+// autoHideError is showTransientError's own timer callback, split out
+// so a test can call it directly instead of waiting on a real
+// errorAutoHideDelay — see showTransientError's own doc comment for
+// why generation is checked before hiding anything.
+func (r *Root) autoHideError(generation int) {
+	if r.activePage == errorPage && r.errorGeneration == generation {
+		r.hideOverlay()
+	}
 }
 
 // errorWidth returns the column width error text is wrapped to: the

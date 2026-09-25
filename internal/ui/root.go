@@ -413,6 +413,12 @@ type Root struct {
 	picker       *tview.List // owner/group picker — see openOwnerGroupPicker; the one dialog in this app deliberately left without a title bar, per the user's own explicit exception
 	errorView    *tview.TextView
 
+	// errorGeneration counts every real showError call — showTransientError's
+	// own way to tell "the notice its timer was armed for" apart from
+	// whatever unrelated error might coincidentally be showing on errorPage
+	// once that timer actually fires (see its own doc comment in errors.go).
+	errorGeneration int
+
 	// quitConfirm is the real focus target (see RequestQuit); its own
 	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
 	// are what's actually registered on Pages/positioned instead — the
