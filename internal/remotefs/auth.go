@@ -49,7 +49,19 @@ type AuthOptions struct {
 // files present is the common case for a brand new setup, not a
 // problem — Dial only fails once the server has rejected every method
 // actually offered.
-func authMethods(opts AuthOptions) []ssh.AuthMethod {
+//
+// passwordUsed, if non-nil, is set to true the moment the password
+// method is actually tried against the server — the ssh package tries
+// every method in this exact order and stops at the first the server
+// accepts, so the password method (always last) is only ever reached
+// once agent auth and every key file have already failed. That, plus
+// Dial itself going on to succeed, is what lets Dial derive
+// Connection.AuthMethod afterward without golang.org/x/crypto/ssh ever
+// exposing "which method actually won" directly: there is nothing left
+// after the password method for the server to accept instead, so a
+// successful Dial with passwordUsed set true can only mean the
+// password itself was what got accepted.
+func authMethods(opts AuthOptions, passwordUsed *bool) []ssh.AuthMethod {
 	var methods []ssh.AuthMethod
 
 	if am, ok := agentAuthMethod(opts.AgentSocket); ok {
@@ -68,6 +80,9 @@ func authMethods(opts AuthOptions) []ssh.AuthMethod {
 		// caller never asked for — the connection dialog itself is
 		// what offers "try again" (a fresh Dial call), not this.
 		methods = append(methods, ssh.RetryableAuthMethod(ssh.PasswordCallback(func() (string, error) {
+			if passwordUsed != nil {
+				*passwordUsed = true
+			}
 			return opts.Password()
 		}), 1))
 	}

@@ -181,6 +181,34 @@ func TestListDirSortsDirectoriesFirstThenCaseInsensitiveName(t *testing.T) {
 	}
 }
 
+// TestDialWithPasswordAuthReportsAuthMethodPassword pins AuthMethod's
+// own derivation (see Dial's own passwordUsed local): a session that
+// only ever authenticated via a typed password must report
+// AuthMethodPassword, never the zero value or AuthMethodKeyOrAgent —
+// this is exactly what internal/ui's own Rsync dialog relies on to
+// refuse silently reusing it for a backgrounded transfer.
+func TestDialWithPasswordAuthReportsAuthMethodPassword(t *testing.T) {
+	addr := startTestSFTPServer(t, passwordServerConfig("tester", "s3cret"))
+
+	client, err := Dial(context.Background(), DialOptions{
+		Connection: Connection{Host: mustSplitHost(t, addr), Port: mustSplitPort(t, addr), User: "tester"},
+		Auth: AuthOptions{
+			IdentityFiles: []string{},
+			Password:      func() (string, error) { return "s3cret", nil },
+		},
+		HostKeyPrompt:  noPromptHostKeyCallback,
+		KnownHostsFile: testKnownHostsFile(t),
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if got := client.AuthMethod(); got != AuthMethodPassword {
+		t.Errorf("AuthMethod() = %q, want %q", got, AuthMethodPassword)
+	}
+}
+
 func TestDialWithWrongPasswordFailsWithoutBeingAConnectionRefusedError(t *testing.T) {
 	addr := startTestSFTPServer(t, passwordServerConfig("tester", "s3cret"))
 
@@ -232,7 +260,11 @@ func TestDialWithPublicKeyIdentityFileSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	_ = client.Close()
+	defer func() { _ = client.Close() }()
+
+	if got := client.AuthMethod(); got != AuthMethodKeyOrAgent {
+		t.Errorf("AuthMethod() = %q, want %q", got, AuthMethodKeyOrAgent)
+	}
 }
 
 func TestDialWithAgentAuthSucceeds(t *testing.T) {
@@ -266,7 +298,11 @@ func TestDialWithAgentAuthSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
-	_ = client.Close()
+	defer func() { _ = client.Close() }()
+
+	if got := client.AuthMethod(); got != AuthMethodKeyOrAgent {
+		t.Errorf("AuthMethod() = %q, want %q", got, AuthMethodKeyOrAgent)
+	}
 }
 
 func TestClientCreateMkdirRenameAndRemoveRoundTrip(t *testing.T) {

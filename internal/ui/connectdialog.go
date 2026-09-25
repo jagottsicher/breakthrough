@@ -318,6 +318,14 @@ func (r *Root) finishConnect(panel *Panel, conn remotefs.Connection, client remo
 		r.setConnectStatus(err.Error(), r.theme.CriticalText)
 		return
 	}
+	// Recorded on conn itself, before RecordAttempt persists it to
+	// history and connectRemote attaches it to panel — see
+	// remotefs.AuthMethod's own doc comment for why this is the one
+	// "how" worth keeping despite Connection otherwise only ever
+	// describing "where": rsync.go's own refuseBackgroundPasswordAuth
+	// reads exactly this back off the active panel's own remoteConn.
+	conn.AuthMethod = client.AuthMethod()
+
 	_ = remotefs.RecordAttempt(conn, false)
 	r.activityLog.Action(activitylog.CategoryRemote, fmt.Sprintf("connected to %s", conn.Label()))
 

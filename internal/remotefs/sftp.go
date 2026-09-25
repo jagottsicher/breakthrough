@@ -47,12 +47,22 @@ type DialOptions struct {
 // one TCP connection, one SSH handshake, one SFTP subsystem channel
 // on top of it. See Dial.
 type SFTPClient struct {
-	ssh  *ssh.Client
-	sftp *sftp.Client
-	root string
+	ssh        *ssh.Client
+	sftp       *sftp.Client
+	root       string
+	authMethod AuthMethod
 }
 
 var _ Client = (*SFTPClient)(nil)
+
+// AuthMethod reports which of the two broad kinds of method (see
+// AuthMethod's own doc comment) actually authenticated this session —
+// determined once, at Dial time, from whether authMethods' own
+// password callback was ever reached (see Dial's own passwordUsed
+// local for the full reasoning).
+func (c *SFTPClient) AuthMethod() AuthMethod {
+	return c.authMethod
+}
 
 // Dial authenticates to opts's endpoint and starts an SFTP session
 // against it. ctx bounds the whole attempt, including a handshake
@@ -78,7 +88,8 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 		return nil, err
 	}
 
-	methods := authMethods(opts.Auth)
+	var passwordUsed bool
+	methods := authMethods(opts.Auth, &passwordUsed)
 	if len(methods) == 0 {
 		return nil, errors.New("no authentication method available: no running agent, no default private key, no password supplied")
 	}
@@ -120,7 +131,11 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 		root = "/" // best-effort fallback — every SFTP server has a "/"
 	}
 
-	return &SFTPClient{ssh: sshClient, sftp: sftpClient, root: root}, nil
+	authMethod := AuthMethodKeyOrAgent
+	if passwordUsed {
+		authMethod = AuthMethodPassword
+	}
+	return &SFTPClient{ssh: sshClient, sftp: sftpClient, root: root, authMethod: authMethod}, nil
 }
 
 // dialSSHContext races the TCP connect + SSH handshake against ctx —

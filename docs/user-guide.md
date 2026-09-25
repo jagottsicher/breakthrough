@@ -926,12 +926,19 @@ same way a second Paste already queues behind one still copying.
 `Ctrl+C`/`Ctrl+Delete` cancels a running background rsync the same key
 that already cancels a running Paste — both, if both happen to be
 running at once. The one thing this path can't do that Run's own
-directly-attached terminal can: answer an interactive prompt — an
-`ssh` connection whose host key isn't already trusted, or one that
-still needs a typed password, fails fast with a real, reported error
-instead of hanging with no visible prompt at all, since a backgrounded
-rsync's own stdin deliberately reads from nothing rather than from
-breakthrough's own keyboard.
+directly-attached terminal can: answer an interactive prompt, since a
+backgrounded rsync's own stdin deliberately reads from nothing rather
+than from breakthrough's own keyboard. "Run in background" itself
+refuses outright, before ever starting anything, when Source or
+Destination is still a connection that last authenticated with a typed
+password (see [Remote connections (SFTP)](#remote-connections-sftp)) —
+pointing to "Run" instead, which *can* answer that same prompt on its
+own directly-attached terminal. This only ever applies to a connection
+actually made via the Connect dialog; a remote address typed straight
+into the field by hand has no known connection to check at all, so
+there's nothing to refuse — an `ssh` host key that isn't already
+trusted still fails fast with a real, reported error instead of hanging
+with no visible prompt.
 
 ## Toolbox
 

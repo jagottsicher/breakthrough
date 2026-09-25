@@ -293,6 +293,141 @@ func TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort(t *test
 	}
 }
 
+// TestRunRsyncBackgroundRefusesAPasswordOnlySourceConnection pins
+// refuseBackgroundPasswordAuth's own core contract: a Source still
+// tracking a Connection that last authenticated with a typed password
+// must never silently start a background run (see its own doc comment
+// for why — no attached terminal for ssh's own password prompt).
+func TestRunRsyncBackgroundRefusesAPasswordOnlySourceConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync() // Source defaults from r.panel, untouched from here on
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.rsyncJob != nil {
+		t.Error("startRsyncBackground ran despite a password-only Source connection")
+	}
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+	}
+	if got := r.errorView.GetText(true); !strings.Contains(got, "Source") || !strings.Contains(got, "password") {
+		t.Errorf("error text = %q, want it to mention Source and password", got)
+	}
+}
+
+// TestRunRsyncBackgroundRefusesAPasswordOnlyDestinationConnection
+// mirrors the Source-side test above, against the Destination default
+// instead.
+func TestRunRsyncBackgroundRefusesAPasswordOnlyDestinationConnection(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0)
+	r.splitWithTab(1)
+	r.openRsync() // Destination defaults from the split partner, untouched from here on
+
+	r.runRsyncBackground()
+
+	if r.rsyncJob != nil {
+		t.Error("startRsyncBackground ran despite a password-only Destination connection")
+	}
+	if got := r.errorView.GetText(true); !strings.Contains(got, "Destination") || !strings.Contains(got, "password") {
+		t.Errorf("error text = %q, want it to mention Destination and password", got)
+	}
+}
+
+// TestRunRsyncBackgroundAllowsAKeyOrAgentConnection is the safeguard's
+// own negative case: a connection that authenticated via a key or
+// agent needs no human present to answer anything, so it must start
+// normally in the background.
+func TestRunRsyncBackgroundAllowsAKeyOrAgentConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync()
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a key/agent connection: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a key/agent connection")
+	}
+}
+
+// TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection
+// is the safeguard's own documented limit (see
+// refuseBackgroundPasswordAuth's own doc comment): a remote endpoint
+// typed by hand, never reached through the Connect dialog, has no
+// known Connection to read AuthMethod off at all, so there's nothing
+// to refuse — feature_ideas.txt's own open dependency on
+// internal/remotefs actually knowing the auth method in the first
+// place.
+func TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("someone@unknown-host.example:/data")
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a hand-typed remote endpoint with no known Connection: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a hand-typed remote endpoint")
+	}
+}
+
+// TestRunRsyncAllowsPasswordAuthInTheForeground is the safeguard's own
+// asymmetry: "Run" suspends the whole TUI and hands over the real
+// terminal (see runShellCommandFullScreen), exactly what ssh's own
+// password prompt needs — refuseBackgroundPasswordAuth is only ever
+// consulted from runRsyncBackground, never from runRsync.
+func TestRunRsyncAllowsPasswordAuthInTheForeground(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync()
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsync()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsync refused a password-only connection, want the foreground path to always allow it: %q", r.errorView.GetText(true))
+	}
+}
+
 func TestRsyncRelayHintOnlyAppearsWhenBothEndpointsAreRemote(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	remote := rsync.Endpoint{Host: "example.com", Path: "/x"}

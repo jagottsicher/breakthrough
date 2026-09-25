@@ -772,21 +772,74 @@ func (r *Root) runRsync() {
 }
 
 // runRsyncBackground is the "Run in background" button's own action —
-// the same Source/Destination validation runRsync already does, then
-// startRsyncBackground instead of suspending the terminal (see
-// rsyncjob.go's own package doc comment for the full trade-off: no
-// directly-attached terminal for whatever isn't already covered by
-// --info=progress2's own percentage, but Copy/Cut/Paste — and browsing
-// itself — keep working the whole time, and its own live progress shows
-// in the status bar exactly the way a Paste's already does).
+// the same Source/Destination validation runRsync already does, plus
+// refuseBackgroundPasswordAuth's own additional check (see its own doc
+// comment), then startRsyncBackground instead of suspending the
+// terminal (see rsyncjob.go's own package doc comment for the full
+// trade-off: no directly-attached terminal for whatever isn't already
+// covered by --info=progress2's own percentage, but Copy/Cut/Paste —
+// and browsing itself — keep working the whole time, and its own live
+// progress shows in the status bar exactly the way a Paste's already
+// does).
 func (r *Root) runRsyncBackground() {
 	job := r.currentRsyncJob()
 	if job.Source.Path == "" || job.Destination.Path == "" {
 		r.showError(fmt.Errorf("rsync: both Source and Destination are required"))
 		return
 	}
+	if err := r.refuseBackgroundPasswordAuth(job); err != nil {
+		r.showError(err)
+		return
+	}
 	r.hideOverlay()
 	r.startRsyncBackground(job, rsyncEndpointBase(job.Source)+" → "+rsyncEndpointBase(job.Destination))
+}
+
+// refuseBackgroundPasswordAuth is runRsyncBackground's own safety check
+// (feature_ideas.txt's own "Passwort-basierte SFTP-Verbindungen nicht
+// still für Hintergrund-Rsync wiederverwenden"): a background run has
+// no attached terminal for ssh's own interactive password prompt to
+// ask on (see rsyncjob.go's own reallyStartRsyncBackground — Setsid
+// deliberately detaches it from breakthrough's own controlling
+// terminal), so silently reusing a password-only SFTP connection there
+// would either hang forever or fail with a bare, confusing
+// "Permission denied" and no indication why. "Run" (runRsync) is
+// unaffected: it suspends the whole TUI and hands over the real
+// terminal, exactly what ssh's own password prompt needs.
+//
+// Only ever fires for an endpoint that still traces back to a real,
+// known Connection (see rsyncFieldDefault's own doc comment on
+// "tracking") — a bare, hand-typed "user@host:path" never connected
+// to via the Connect dialog has no known Connection to read
+// AuthMethod off in the first place (see remotefs.Connection's own
+// AuthMethod doc comment), so there's nothing here to warn about
+// either way.
+func (r *Root) refuseBackgroundPasswordAuth(job rsync.Job) error {
+	if endpointTracksPasswordAuth(job.Source, r.rsyncSourceDefault) {
+		return rsyncPasswordAuthRefusal("Source")
+	}
+	if endpointTracksPasswordAuth(job.Destination, r.rsyncDestinationDefault) {
+		return rsyncPasswordAuthRefusal("Destination")
+	}
+	return nil
+}
+
+// endpointTracksPasswordAuth reports whether e is still exactly what
+// def defaulted to (see rsyncFieldDefault.endpoint's own doc comment —
+// only that case ever populates e.Host at all) and that connection's
+// own AuthMethod recorded a typed password rather than an agent/key
+// (see remotefs.Connection.AuthMethod, set once at Dial time by
+// finishConnect in connectdialog.go).
+func endpointTracksPasswordAuth(e rsync.Endpoint, def rsyncFieldDefault) bool {
+	return e.IsRemote() && def.conn != nil && def.conn.AuthMethod == remotefs.AuthMethodPassword
+}
+
+// rsyncPasswordAuthRefusal is refuseBackgroundPasswordAuth's own
+// user-facing wording — side is "Source" or "Destination".
+func rsyncPasswordAuthRefusal(side string) error {
+	return fmt.Errorf(
+		"rsync: %s is a password-only SFTP connection — a background run can't answer ssh's own interactive password prompt; use \"Run\" instead, or reconnect using a key or agent first",
+		side)
 }
 
 // rsyncEndpointBase is startRsyncBackground's own compact label for one
