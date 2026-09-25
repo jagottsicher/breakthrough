@@ -281,19 +281,27 @@ func sessionsTitle(sessions []multiplex.Session, err error) string {
 // cells — the same per-cell shape renderConnectionMenu's own eject/
 // edit/remove cells already establish.
 func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
-	// Clicked, not just selectable: the same "clicking this cell attaches,
-	// exactly like Enter/Space would" behavior connectionmenu.go's own
-	// label cell already gives its row's own primary action.
-	cell := func(col int, text string, color tcell.Color) {
+	// Clicked either way — mouse clicks reach TableCell.Clicked
+	// regardless of Selectable (verified directly against tview's own
+	// table.go: MouseLeftClick dispatch looks the clicked cell up by
+	// position and calls Clicked() on it with no Selectable check at
+	// all) — but only Name itself is keyboard-selectable: per the
+	// user's own explicit request, Name/Backend/Status read as one
+	// single field for arrow-key navigation, not three independent
+	// stops, so Backend/Status are excluded from cell selection
+	// (tview's own Left/Right skip a NotSelectable cell and land on the
+	// next one that isn't — see its own Table.go forward/backwards —
+	// which is exactly "treat the three as one" from the keyboard).
+	cell := func(col int, text string, color tcell.Color, selectable bool) {
 		r.sessionsTable.SetCell(row, col,
 			tview.NewTableCell(padRight(text, sessionsColumnWidth(col))).
 				SetTextColor(color).
-				SetSelectable(true).
+				SetSelectable(selectable).
 				SetClickedFunc(r.clickSessionsCell(row, col)))
 	}
-	cell(sessionsColName, s.Name, r.theme.Text)
-	cell(sessionsColBackend, string(s.Backend), sessionsBackendColor(s.Backend))
-	cell(sessionsColStatus, sessionsStatusGlyph(s.Status), sessionsStatusColor(s.Status, r.theme))
+	cell(sessionsColName, s.Name, r.theme.Text, true)
+	cell(sessionsColBackend, string(s.Backend), sessionsBackendColor(s.Backend), false)
+	cell(sessionsColStatus, sessionsStatusGlyph(s.Status), sessionsStatusColor(s.Status, r.theme), false)
 
 	action := func(col int, glyph string) {
 		r.sessionsTable.SetCell(row, col,

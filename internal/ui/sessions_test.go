@@ -210,6 +210,32 @@ func TestRenderSessionsKeepsColumnsSelectableWithRealRows(t *testing.T) {
 	}
 }
 
+// TestRenderSessionsRowTreatsNameBackendStatusAsOneKeyboardStop pins the
+// user's own explicit follow-up request: Name/Backend/Status should
+// read as a single field for keyboard navigation, not three
+// independent stops — only Name stays selectable (Backend/Status get
+// SetSelectable(false)), so tview's own Left/Right skip straight over
+// them to the next real stop (an action cell). Mouse clicks on
+// Backend/Status still work exactly as before — see renderSessionsRow's
+// own doc comment on why TableCell.Clicked never checks Selectable at
+// all — so this only ever changes what the arrow keys land on, not
+// what clicking does.
+func TestRenderSessionsRowTreatsNameBackendStatusAsOneKeyboardStop(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{{Name: "foo", Backend: multiplex.BackendTmux}}, nil)
+
+	r.openSessions()
+
+	for _, col := range []int{sessionsColBackend, sessionsColStatus} {
+		if !r.sessionsTable.GetCell(1, col).NotSelectable {
+			t.Errorf("column %d is keyboard-selectable, want it excluded (grouped under Name)", col)
+		}
+	}
+	if r.sessionsTable.GetCell(1, sessionsColName).NotSelectable {
+		t.Error("Name is not keyboard-selectable, want it to be the group's own one stop")
+	}
+}
+
 func TestActivateSessionsCellCloseColumnOpensConfirm(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, []multiplex.Session{{Name: "12345.mysession", Backend: multiplex.BackendScreen}}, nil)

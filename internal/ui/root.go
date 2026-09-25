@@ -1314,6 +1314,20 @@ type Root struct {
 	propertiesCancelBtn  *tview.Button
 	propertiesSaveBtn    *tview.Button
 
+	// propertiesDragging/propertiesDragOffsetX/Y make Properties'
+	// own title bar draggable — the same "click position minus the
+	// window's own x/y at drag-start, kept constant for the rest of the
+	// drag" shape toolWindow's own dragging/dragOffsetX/Y already
+	// establish in toolwindow.go, adapted to hashesMouseCapture's own
+	// SetMouseCapture shape (Properties is a composed tview.Pages, not
+	// its own Box subclass the way a toolWindow is, so there's no
+	// per-window MouseHandler override to add this to instead). Per the
+	// user's own explicit request: still opens at the exact same anchor
+	// as before (see openProperties/resizeProperties, both untouched),
+	// only draggable afterward.
+	propertiesDragging                           bool
+	propertiesDragOffsetX, propertiesDragOffsetY int
+
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
 	// -1 (nothing focused, Properties' state right after opening) or an

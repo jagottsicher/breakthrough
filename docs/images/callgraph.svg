@@ -731,7 +731,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo -->
 <g id="node20" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo</title>
-<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:2217">
+<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).SetVersionInfo | defined in root.go:2231">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M933.075,-292.4C933.075,-292.4 800.925,-292.4 800.925,-292.4 794.925,-292.4 788.925,-286.4 788.925,-280.4 788.925,-280.4 788.925,-268.4 788.925,-268.4 788.925,-262.4 794.925,-256.4 800.925,-256.4 800.925,-256.4 933.075,-256.4 933.075,-256.4 939.075,-256.4 945.075,-262.4 945.075,-268.4 945.075,-268.4 945.075,-280.4 945.075,-280.4 945.075,-286.4 939.075,-292.4 933.075,-292.4"/>
 <text text-anchor="middle" x="867" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).SetVersionInfo</text>
 </a>
@@ -767,7 +767,7 @@
 <!-- github.com/jagottsicher/breakthrough/internal/ui.NewRoot -->
 <g id="node23" class="node">
 <title>github.com/jagottsicher/breakthrough/internal/ui.NewRoot</title>
-<g id="a_node23"><a xlink:title="github.com/jagottsicher/breakthrough/internal/ui.NewRoot | defined in root.go:1552">
+<g id="a_node23"><a xlink:title="github.com/jagottsicher/breakthrough/internal/ui.NewRoot | defined in root.go:1566">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M551.6558,-292.4C551.6558,-292.4 498.3442,-292.4 498.3442,-292.4 492.3442,-292.4 486.3442,-286.4 486.3442,-280.4 486.3442,-280.4 486.3442,-268.4 486.3442,-268.4 486.3442,-262.4 492.3442,-256.4 498.3442,-256.4 498.3442,-256.4 551.6558,-256.4 551.6558,-256.4 557.6558,-256.4 563.6558,-262.4 563.6558,-268.4 563.6558,-268.4 563.6558,-280.4 563.6558,-280.4 563.6558,-286.4 557.6558,-292.4 551.6558,-292.4"/>
 <text text-anchor="middle" x="525" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">NewRoot</text>
 </a>
