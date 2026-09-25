@@ -410,6 +410,13 @@ func SettingDocs() []SettingDoc {
 			Summary:     "Log the bash line, Open with…, and Edit when the activity log is on.",
 			Implemented: true,
 		},
+		{
+			Key:         "log_category_firewall",
+			Default:     strconv.FormatBool(d.LogCategoryFirewall),
+			Kind:        KindBool,
+			Summary:     "Log adding a firewall rule and its own self-lockout rollback when the activity log is on.",
+			Implemented: true,
+		},
 	}
 }
 

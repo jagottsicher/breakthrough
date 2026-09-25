@@ -39,6 +39,7 @@ func (r *Root) newActivityLogger() (logger *activitylog.Logger, notice string) {
 		activitylog.CategoryRsync:       r.settings.LogCategoryRsync,
 		activitylog.CategoryRemote:      r.settings.LogCategoryRemote,
 		activitylog.CategoryShell:       r.settings.LogCategoryShell,
+		activitylog.CategoryFirewall:    r.settings.LogCategoryFirewall,
 	}
 	if level == activitylog.LevelOff {
 		return activitylog.New(level, categories, nil), ""
