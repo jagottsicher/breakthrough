@@ -1468,8 +1468,8 @@
     },
     {
       "path": "internal/ui/rsync.go",
-      "size": 38027,
-      "sha256": "e2b61f7d9e0cc441b96a3904e0b59d9548a94ee7e46b7b5c6be9afda8f91dc32"
+      "size": 38026,
+      "sha256": "dbceab53526347c33f39503330eee0c8540fcd39338bd11f5ff16c667f20e8c8"
     },
     {
       "path": "internal/ui/rsync_test.go",
@@ -34973,5 +34973,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "01cc157040c6e6ae16e45f0c726f77527acb8fbd32c62ecdae456d6122e2fdff"
+  "merkle_root": "9b60508ad698c63c6696434a32018fbcc235a82c1917323bf2c8a7ed03809a24"
 }
