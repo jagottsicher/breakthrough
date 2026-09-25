@@ -296,7 +296,9 @@ func (r *Root) actionColor(action firewall.Action) tcell.Color {
 
 // captureFirewallKey is the Firewall screen's own key handling: Escape
 // closes it, "r" re-reads this host's actual rules — the same two keys
-// captureMountsKey already handles, for the same reasons.
+// captureMountsKey already handles, for the same reasons — and "a"
+// opens the "Add rule" form (see openFirewallAddRule and
+// feature_ideas.txt's own Firewall-Regel-Baukasten Stufe 2b).
 func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeFirewall()
@@ -304,6 +306,10 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
 		r.reloadFirewall()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'a' {
+		r.openFirewallAddRule()
 		return nil
 	}
 	return event

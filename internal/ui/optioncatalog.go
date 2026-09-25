@@ -842,6 +842,10 @@ func optionCategories() []optionCategory {
 					"The bash line, \"Open with…\", and Edit.",
 					func(r *Root) bool { return r.settings.LogCategoryShell },
 					func(r *Root, b bool) { r.settings.LogCategoryShell = b }),
+				activityLogCategoryOption("log_category_firewall", "Firewall rules",
+					"Adding a firewall rule via the Firewall screen's own Add-rule form, and its own self-lockout rollback.",
+					func(r *Root) bool { return r.settings.LogCategoryFirewall },
+					func(r *Root, b bool) { r.settings.LogCategoryFirewall = b }),
 			},
 		},
 	}
@@ -991,6 +995,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.LogCategoryRemote), true
 	case "log_category_shell":
 		return strconv.FormatBool(s.LogCategoryShell), true
+	case "log_category_firewall":
+		return strconv.FormatBool(s.LogCategoryFirewall), true
 	}
 	return "", false
 }

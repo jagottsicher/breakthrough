@@ -716,9 +716,10 @@ terminal.
   out.
 - Activity log: off by default, turned on under Options with a single
   `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
-  superset of the one before it — plus seven independent on/off
+  superset of the one before it — plus eight independent on/off
   categories (file operations, permissions, archives, Sed Replace/Batch
-  Rename, Rsync, remote connections/transfers, shell) so you can dial
+  Rename, Rsync, remote connections/transfers, shell, firewall rules) so
+  you can dial
   detail up or down per subsystem rather than all at once. Plain,
   greppable text, one line per entry, written to
   `/var/log/breakthrough/breakthrough.log` where that's writable or the
@@ -742,7 +743,11 @@ built-in networking and hardware tools with its own Network Tools
 screen (`jm`) showing what's currently mounted and whether it survives a
 reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other, an Activity
+governs traffic), including which rules shadow each other, plus an
+Add-rule form (`a`, UFW/iptables only) that builds the exact command
+for a new rule, confirms it before running it via sudo, and
+automatically reverts an SSH-relevant rule if it isn't explicitly kept
+within 30 seconds, an Activity
 Log screen (`jl`) browsing the real activity log with keyword/time
 filtering, and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
