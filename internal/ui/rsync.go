@@ -838,7 +838,7 @@ func endpointTracksPasswordAuth(e rsync.Endpoint, def rsyncFieldDefault) bool {
 // user-facing wording — side is "Source" or "Destination".
 func rsyncPasswordAuthRefusal(side string) error {
 	return fmt.Errorf(
-		"rsync: %s is a password-only SFTP connection — a background run can't answer ssh's own interactive password prompt. Use \"Run\" instead, or reconnect using a key or agent first.",
+		"rsync: %s is a password-only SFTP connection — a background run can't answer ssh's own interactive password prompt; use \"Run\" instead, or reconnect using a key or agent first",
 		side)
 }
 
