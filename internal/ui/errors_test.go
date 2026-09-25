@@ -1,9 +1,79 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/rivo/tview"
 )
+
+func TestShowTransientErrorOpensTheErrorOverlay(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.showTransientError(fmt.Errorf("gx is not a command — see \"?\" for help"))
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+	}
+}
+
+func TestShowTransientErrorWithANilErrorIsANoOp(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.showTransientError(nil)
+
+	if r.activePage == errorPage {
+		t.Error("showTransientError(nil) opened the error overlay, want a no-op")
+	}
+}
+
+// TestAutoHideErrorClosesTheNoticeItWasArmedFor pins the timer callback
+// showTransientError arms (see autoHideError's own doc comment) —
+// called directly rather than waiting on a real errorAutoHideDelay, the
+// same "call the timer's own body, don't wait on it" shape
+// rollbackFirewallRule's own tests already use.
+func TestAutoHideErrorClosesTheNoticeItWasArmedFor(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showTransientError(fmt.Errorf("gx is not a command — see \"?\" for help"))
+	generation := r.errorGeneration
+
+	r.autoHideError(generation)
+
+	if r.activePage == errorPage {
+		t.Error("autoHideError left the notice open, want it closed")
+	}
+}
+
+// TestAutoHideErrorLeavesANewerUnrelatedNoticeAlone guards the race
+// showTransientError's own doc comment describes: a stale timer must
+// never close a second, unrelated notice that happens to already be
+// showing on errorPage by the time it fires.
+func TestAutoHideErrorLeavesANewerUnrelatedNoticeAlone(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.showTransientError(fmt.Errorf("gx is not a command — see \"?\" for help"))
+	staleGeneration := r.errorGeneration
+	r.hideOverlay() // dismissed early, e.g. via Escape/Ctrl+C/a click outside
+	r.showError(fmt.Errorf("a real, unrelated failure"))
+
+	r.autoHideError(staleGeneration)
+
+	if r.activePage != errorPage {
+		t.Error("autoHideError closed a newer, unrelated notice using a stale generation")
+	}
+}
 
 func TestWrapText(t *testing.T) {
 	tests := []struct {

@@ -614,7 +614,7 @@ func (r *Root) resolveChord(event *tcell.EventKey) bool {
 			return true
 		}
 	}
-	r.showError(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
+	r.showTransientError(fmt.Errorf("%c%c is not a command — see \"?\" for help", family.prefix, event.Rune()))
 	return true
 }
 

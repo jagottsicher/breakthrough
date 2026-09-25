@@ -99,9 +99,12 @@ var helpText = strings.TrimLeft(`
     o  options  oo Options screen · om Mouse reporting on/off
 
   Escape cancels a pending chord; any other key that isn't one of its
-  own members cancels it too and says so. Letting it simply time out
-  (the status bar's own countdown reaching empty) cancels silently —
-  that's "changed my mind", not a mistake worth a message.
+  own members cancels it too and says so, in a notice that clears
+  itself after a few seconds — Escape, Ctrl+C, or a click elsewhere
+  dismiss it early, but nothing needs to. Letting the chord itself
+  simply time out (the status bar's own countdown reaching empty)
+  cancels silently — that's "changed my mind", not a mistake worth a
+  message.
 
   Only two Ctrl-letter shortcuts remain, documented section by section
   below, for the one thing this layer genuinely can't do on its own
