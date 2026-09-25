@@ -2603,14 +2603,22 @@ func TestPropertiesDragCanMoveUpAndLeft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	drawRoot(t, r, 120, 30)
+	// A generous, fixed-margin canvas: Properties' own width depends on
+	// its content (owner/group names included — see resizeProperties),
+	// which vary by real system user, so a real, CI-only failure on
+	// macOS came from a screen/offset combination that left too little
+	// room on the left for that platform's own (longer) username to
+	// still fit before hitting clampToScreen's own left edge — 300 wide
+	// against a window moved to just past its own midpoint leaves well
+	// over 100 columns of margin either way, regardless of platform.
+	drawRoot(t, r, 300, 40)
 	r.target = filepath.Join(dir, "apple.txt")
 	r.openProperties()
 
 	// Reposition comfortably away from every screen edge first — clampToScreen
 	// would otherwise clip the up/left move below and make it
 	// indistinguishable from the very bug this test exists to catch.
-	r.moveProperties(50, 20)
+	r.moveProperties(150, 20)
 	startX, startY, width, height := r.properties.GetRect()
 
 	// Press on the title bar — the window's own top row — to start the

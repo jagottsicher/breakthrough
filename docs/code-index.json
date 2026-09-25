@@ -1478,8 +1478,8 @@
     },
     {
       "path": "internal/ui/properties_test.go",
-      "size": 104477,
-      "sha256": "d687b8c9161f850b6b00649eee752f6bebd589ff714c4333265fdee65a0495c7"
+      "size": 105028,
+      "sha256": "8ac571c38e2912238dce1bfaac8adca7c7dfb31b1c072c6fb6277dfb9148684c"
     },
     {
       "path": "internal/ui/remotearchive.go",
@@ -27597,35 +27597,35 @@
       "file": "internal/ui/properties_test.go",
       "name": "TestPropertiesDragStopsOnStrayButtonRelease",
       "kind": "function",
-      "line": 2653
+      "line": 2661
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/properties_test.go",
       "name": "TestPropertiesCloseGlyphActsLikeCancel",
       "kind": "function",
-      "line": 2681
+      "line": 2689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/properties_test.go",
       "name": "drawRoot",
       "kind": "function",
-      "line": 2712
+      "line": 2720
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/properties_test.go",
       "name": "TestPropertiesOpensOnTheRowItIsAbout",
       "kind": "function",
-      "line": 2738
+      "line": 2746
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/properties_test.go",
       "name": "TestPropertiesAnchorIgnoresTheContextMenu",
       "kind": "function",
-      "line": 2783
+      "line": 2791
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36345,5 +36345,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "d815ad77c0d75b697216fa51dff3e9d3c34e2096f74f7ceefceddbc60b83cce3"
+  "merkle_root": "145afc2204d944dca2c2a215552eba22620272879b219b909939aca422193ba6"
 }
