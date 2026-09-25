@@ -30,8 +30,22 @@ func archiveExtractionFor(clipboard []string) (archivePath string, members []arc
 	if len(clipboard) == 0 {
 		return "", nil, false
 	}
-	archivePath, _, ok = splitArchivePath(clipboard[0])
+	var firstInternal string
+	archivePath, firstInternal, ok = splitArchivePath(clipboard[0])
 	if !ok {
+		return "", nil, false
+	}
+	if firstInternal == "" {
+		// clipboard[0] IS the archive file itself (splitArchivePath's own
+		// "cur is already a real archive file" case — see its own doc
+		// comment), not a member inside one: a real, user-reported bug
+		// otherwise, since this is exactly what marking a plain .zip/.tar.gz
+		// file for an ordinary Copy/Cut produces. Refusing here falls
+		// through to pasteInto's own ordinary startPaste instead, which
+		// copies/moves the archive file itself like any other file —
+		// there is nothing here for archive.Extract to meaningfully do
+		// with zero actual members, which silently produced an empty,
+		// no-op "copy" before this check existed.
 		return "", nil, false
 	}
 	listed, err := archive.List(archivePath)
