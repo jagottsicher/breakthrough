@@ -213,7 +213,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	// to start with. " │ " (U+2502, the same box-drawing vertical bar
 	// buildStatusBar's own sep already uses one row below this) replaces
 	// that plain space for one specific transition: right before the
-	// chord-family cascades (g/p/z/o — always last, appended as their own
+	// chord-family cascades (g/m/j/p/z/o — always last, appended as their own
 	// block just above) start, setting that whole block apart from the
 	// plain commands before it — unlike an ordinary button, one of these
 	// doesn't run its own action directly, it starts a whole second

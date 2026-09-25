@@ -314,10 +314,6 @@ func chordFamilies() []chordFamily {
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
 		}},
-		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
-			{'m', "chmod", func(r *Root) { r.openChmod() }},
-			{'o', "chown", func(r *Root) { r.openChown() }},
-		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did
 		// before this family existed. Per the user's own explicit
@@ -363,28 +359,6 @@ func chordFamilies() []chordFamily {
 			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
 			{'A', "Deselect all", func(r *Root) { r.panel.deselectAll() }},
 		}},
-		{prefix: 'z', name: "display", quick: true, members: []chordMember{
-			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
-			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
-			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
-			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
-			{'r', "Reload", func(r *Root) { r.reloadCurrentTab() }},
-		}},
-		{prefix: 'y', name: "yank (reserved — no system clipboard yet)", members: []chordMember{
-			{'p', "Copy full path", reservedYankMember("Copy full path")},
-			{'n', "Copy name", reservedYankMember("Copy name")},
-			{'a', "Copy all selected paths", reservedYankMember("Copy all selected paths")},
-		}},
-		// "oo" doubles the prefix for "the family's own main destination",
-		// the same shape "gg" (go to » top) already established — opening
-		// the Options screen itself. "om" is the one Options-adjacent
-		// setting worth a direct toggle without opening the screen at all
-		// (see toggleMouseReporting's own doc comment on why "z" —
-		// display — wasn't the right fit for it either).
-		{prefix: 'o', name: "options", quick: true, members: []chordMember{
-			{'o', "Options screen", func(r *Root) { r.openOptions() }},
-			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
-		}},
 		// "j" itself carries no mnemonic of its own — by the time this
 		// family was added, every other letter already meant something
 		// else as either a plain command or a chord prefix, and "j"
@@ -428,6 +402,32 @@ func chordFamilies() []chordFamily {
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			{'l', "Activity Log", func(r *Root) { r.openActivityLog() }},
+		}},
+		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
+			{'m', "chmod", func(r *Root) { r.openChmod() }},
+			{'o', "chown", func(r *Root) { r.openChown() }},
+		}},
+		{prefix: 'z', name: "display", quick: true, members: []chordMember{
+			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
+			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
+			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
+			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
+			{'r', "Reload", func(r *Root) { r.reloadCurrentTab() }},
+		}},
+		{prefix: 'y', name: "yank (reserved — no system clipboard yet)", members: []chordMember{
+			{'p', "Copy full path", reservedYankMember("Copy full path")},
+			{'n', "Copy name", reservedYankMember("Copy name")},
+			{'a', "Copy all selected paths", reservedYankMember("Copy all selected paths")},
+		}},
+		// "oo" doubles the prefix for "the family's own main destination",
+		// the same shape "gg" (go to » top) already established — opening
+		// the Options screen itself. "om" is the one Options-adjacent
+		// setting worth a direct toggle without opening the screen at all
+		// (see toggleMouseReporting's own doc comment on why "z" —
+		// display — wasn't the right fit for it either).
+		{prefix: 'o', name: "options", quick: true, members: []chordMember{
+			{'o', "Options screen", func(r *Root) { r.openOptions() }},
+			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
 	}
 }
