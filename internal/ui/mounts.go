@@ -214,6 +214,7 @@ func (r *Root) newMountsScreen() {
 	r.mountsTable.SetInputCapture(r.captureMountsKey)
 
 	r.mountsTitleBar = newPlainTitleBar("Mounts")
+	r.mountsTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.mountsTitleBar, r.reloadMounts))
 
 	r.mountsHint = tview.NewTextView()
 	r.mountsHint.SetWrap(false)
@@ -258,6 +259,8 @@ func (r *Root) reloadMounts() {
 // app already follows.
 func (r *Root) renderMounts() {
 	r.mountsTable.Clear()
+
+	renderReloadTitleBar(r.mountsTitleBar, " Mounts ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
 		r.mountsTable.SetCell(0, col,

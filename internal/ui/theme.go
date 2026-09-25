@@ -381,6 +381,18 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
 	}
 
+	if r.sessionsTable != nil {
+		r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.sessionsTitleBar.SetTextColor(theme.TextColor)
+		r.sessionsHint.SetBackgroundColor(theme.InputBackground)
+		r.sessionsHint.SetTextColor(theme.MutedTextColor)
+
+		r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
 	if r.activityLogTable != nil {
 		r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
 		r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)

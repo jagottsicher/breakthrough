@@ -387,6 +387,11 @@ func chordFamilies() []chordFamily {
 		// whichever one actually governs traffic), not a list of
 		// commands to run, so it gets its own destination rather than a
 		// Toolbox catalog entry.
+		//
+		// "js" opens the Sessions screen (sessions.go) — local GNU
+		// screen/tmux terminal-multiplexer sessions (internal/multiplex),
+		// the same "own destination under this prefix" shape jm/jf/jl
+		// already establish.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
 			// "jE" is this family's own first capitalized member — the
 			// same "bigger, more consequential sibling" convention the
@@ -402,6 +407,7 @@ func chordFamilies() []chordFamily {
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			{'l', "Activity Log", func(r *Root) { r.openActivityLog() }},
+			{'s', "Sessions", func(r *Root) { r.openSessions() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},

@@ -755,7 +755,11 @@ for a new rule, confirms it before running it via sudo, and
 automatically reverts an SSH-relevant rule if it isn't explicitly kept
 within 30 seconds, an Activity
 Log screen (`jl`) browsing the real activity log with keyword/time
-filtering, and real
+filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
+Zellij sessions side by side with per-row Attach/Close actions (Attach
+hands the real terminal to the session — screen `-D -r`, tmux `attach
+-d`, or `zellij attach` — and returns to breakthrough automatically once
+you detach or it ends), and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see
