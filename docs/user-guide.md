@@ -1066,7 +1066,8 @@ Proto, Port, Source, Destination, Interface, and Note.
   unreachable and what that rule itself does.
 
 `Up`/`Down` move between rules, `r` re-reads the live rules, `a` opens
-the Add-rule form, `Escape` closes it.
+the Add-rule form, `t` opens the Simulate form (see below), `Escape`
+closes it.
 
 **Add a rule** (`a`, UFW and iptables only — nftables is refused
 outright, since its table/chain layout is host-specific and can't be
@@ -1081,9 +1082,16 @@ port 22, or leaving the port unrestricted) arms an automatic 30-second
 rollback: unless you explicitly choose "Keep this rule" in time, the
 rule is reverted on its own, so a mistake can't lock you out for good.
 
-Testing "what happens to a request on port X from IP Y" against the
-read rules, without needing to know any firewall-specific syntax, isn't
-part of this yet.
+**Simulate a request** (`t`): a form for Direction, Protocol, Port,
+Source, Destination, and Interface describing a hypothetical request —
+reports which rule, if any, actually decides it, in the same evaluation
+order the table above already shows. Purely an evaluation over the
+rules already read for this screen; no packet is ever sent, and no
+command is ever built or run, so it works for every backend, including
+nftables (unlike Add a rule, which nftables refuses outright). Shows
+the matching rule's own number, action, protocol, port, and source, or
+says plainly that nothing matches — falling through to the backend's
+own default policy, which this app doesn't read.
 
 ## Sessions
 

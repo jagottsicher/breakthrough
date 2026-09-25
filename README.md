@@ -753,7 +753,9 @@ governs traffic), including which rules shadow each other, plus an
 Add-rule form (`a`, UFW/iptables only) that builds the exact command
 for a new rule, confirms it before running it via sudo, and
 automatically reverts an SSH-relevant rule if it isn't explicitly kept
-within 30 seconds, an Activity
+within 30 seconds, a Simulate form (`t`, every backend including
+nftables) that reports which rule, if any, decides a hypothetical
+request, an Activity
 Log screen (`jl`) browsing the real activity log with keyword/time
 filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
