@@ -482,7 +482,13 @@ terminal.
   keeps breakthrough itself fully usable — Copy/Cut/Paste included, at
   the same time — while its own live percentage shows in the status
   bar, queuing behind an already-running background rsync the same way
-  a second Paste already queues behind one still in flight. See
+  a second Paste already queues behind one still in flight. "Run in
+  background" refuses outright — pointing to "Run" instead — when
+  Source or Destination is still a connection that last authenticated
+  with a typed password: a background run has no attached terminal for
+  ssh's own interactive password prompt to ask on, so silently reusing
+  one there would otherwise hang or fail with a bare, confusing
+  "Permission denied". See
   [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
 - Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): two
   full-screen, browsable catalogs of built-in commands — Network Tools
