@@ -3214,6 +3214,67 @@ func newPlainTitleBar(text string) *tview.TextView {
 	return bar
 }
 
+// reloadTitleBarButtonCol returns the reload glyph's own column within a
+// title bar width columns wide: one column in from the right edge, the
+// same spacing toolWindowCloseButtonCol already uses for its own corner
+// button — reused here since Sessions/Mounts have no close button of
+// their own competing for that corner (Escape already closes both).
+func reloadTitleBarButtonCol(width int) int {
+	return width - 2
+}
+
+// renderReloadTitleBar sets bar's own text to label, padded out to width
+// columns, with toolWindowReloadGlyph in its own top-right corner — the
+// exact same "reload" glyph the header's own path-bar button and every
+// toolWindow already use (see toolWindowReloadGlyph's own doc comment),
+// reused here for Sessions'/Mounts' own reload button rather than a
+// fresh icon, per the user's own explicit request for one on each,
+// since both screens show live host state that can change while open.
+// Callers pass Root's own lastScreenWidth, not bar.GetRect()'s own
+// width: both screens render their title bar for the first time from
+// openX, before Pages has ever resized the not-yet-visible page to the
+// real terminal size, which left the glyph stuck right after the label
+// instead of pinned to the right edge — confirmed live, not guessed.
+// Falls back to no padding at all if width is still zero (true only
+// before the very first Draw the whole app ever does) rather than a
+// negative repeat count — the same defensive floor renderHelpTitleBar
+// already applies.
+func renderReloadTitleBar(bar *tview.TextView, label string, width int) {
+	col := reloadTitleBarButtonCol(width)
+	// tview.TaggedStringWidth, not len(): label's own em dash (see
+	// sessionsTitle) is one display column but three UTF-8 bytes, and
+	// len() counting that as three left the glyph two columns short of
+	// the edge — a real, live-confirmed bug, not a hypothetical one.
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowReloadGlyph) + " ")
+}
+
+// captureReloadTitleBarMouse invokes reload when a click lands exactly
+// on the reload glyph (see renderReloadTitleBar) — every other click on
+// the bar is otherwise inert, the same as Help's own title bar (see
+// captureHelpTitleBarMouse). Deliberately does not reposition the glyph
+// on a live terminal resize while the screen stays open — the same
+// scope Help's own (non-dragging) title bar already accepts, per its
+// own doc comment; the button catches up the next time either screen
+// re-renders on its own (opening it again, "r", or any row action).
+func captureReloadTitleBarMouse(bar *tview.TextView, reload func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY || x != rectX+reloadTitleBarButtonCol(width) {
+			return action, event
+		}
+		reload()
+		return tview.MouseConsumed, nil
+	}
+}
+
 // closeMenu hides the context menu without taking any action (Escape at
 // the top level — see closeMenuOrGoBack for one level into a submenu).
 // Resets menuInSubmenu defensively, the same as showMenu's own explicit

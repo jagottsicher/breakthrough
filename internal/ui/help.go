@@ -407,6 +407,10 @@ var helpText = strings.TrimLeft(`
   r                 Re-read the live mount table
   Escape            Close the Mounts screen
 
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — the mounted filesystems can change
+  while this screen is open.
+
   "Bind" marks a bind mount (the same underlying filesystem attached a
   second time at another path). "Persistent" marks a mount also
   configured in /etc/fstab — it will still be there after a reboot; one
@@ -520,6 +524,10 @@ var helpText = strings.TrimLeft(`
   Local sessions only, for now — attaching to a session on a remote
   host, and the "New window" action actually working, are both later
   work.
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a session can be started, attached,
+  or closed by something else entirely while this screen is open.
 
 [::b]Split view ("s")[::-]
 

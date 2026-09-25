@@ -176,6 +176,7 @@ func (r *Root) newSessionsScreen() {
 	r.sessionsTable.SetSelectedFunc(func(row, column int) { r.activateSessionsCell(row, column) })
 
 	r.sessionsTitleBar = newPlainTitleBar("Sessions")
+	r.sessionsTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.sessionsTitleBar, r.reloadSessions))
 
 	r.sessionsHint = tview.NewTextView()
 	r.sessionsHint.SetWrap(false)
@@ -238,7 +239,7 @@ func (r *Root) renderSessions() {
 	header(sessionsColNewWindow, "")
 	header(sessionsColClose, "")
 
-	r.sessionsTitleBar.SetText(" " + sessionsTitle(r.sessionsList, r.sessionsErr) + " ")
+	renderReloadTitleBar(r.sessionsTitleBar, " "+sessionsTitle(r.sessionsList, r.sessionsErr)+" ", r.lastScreenWidth)
 
 	if r.sessionsErr != nil {
 		showTablePlaceholder(r.sessionsTable, r.sessionsErr.Error(), r.theme.EntryError)

@@ -379,3 +379,58 @@ func TestRunCloseSessionReportsAFailure(t *testing.T) {
 		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
 	}
 }
+
+// TestSessionsTitleBarReloadButtonClickReloads pins the user's own
+// explicit request for a mouse-reachable reload button on the Sessions
+// screen's own title bar, top right: clicking the exact glyph cell must
+// re-read the session list, the same as pressing "r".
+func TestSessionsTitleBarReloadButtonClickReloads(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{{Name: "before", Backend: multiplex.BackendTmux}}, nil)
+	r.openSessions()
+
+	screen := simulationScreen(t, 100, 30)
+	r.handleBeforeDraw(screen) // establishes lastScreenWidth, which renderReloadTitleBar's own column math needs
+	r.renderSessions()
+	r.sessionsTitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
+
+	listMultiplexSessions = func() ([]multiplex.Session, error) {
+		return []multiplex.Session{{Name: "after", Backend: multiplex.BackendTmux}}, nil
+	}
+
+	_, y, width, _ := r.sessionsTitleBar.GetRect()
+	col := reloadTitleBarButtonCol(width)
+	captured, _ := captureReloadTitleBarMouse(r.sessionsTitleBar, r.reloadSessions)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the reload glyph should consume the click")
+	}
+	if len(r.sessionsList) != 1 || r.sessionsList[0].Name != "after" {
+		t.Errorf("sessionsList = %v, want the click to have re-read the session list", r.sessionsList)
+	}
+}
+
+// TestSessionsTitleBarClickElsewhereDoesNothing pins that only the exact
+// reload-glyph cell does anything — the same "no drag, no other action"
+// scope Help's own title bar already has (see
+// TestHelpTitleBarClickElsewhereDoesNothing).
+func TestSessionsTitleBarClickElsewhereDoesNothing(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{{Name: "before", Backend: multiplex.BackendTmux}}, nil)
+	r.openSessions()
+
+	screen := simulationScreen(t, 100, 30)
+	r.handleBeforeDraw(screen)
+	r.renderSessions()
+	r.sessionsTitleBar.SetRect(0, 0, 100, 1)
+
+	reloaded := false
+	captured, _ := captureReloadTitleBarMouse(r.sessionsTitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+
+	if captured == tview.MouseConsumed {
+		t.Error("a click away from the reload glyph should not be consumed")
+	}
+	if reloaded {
+		t.Error("a click away from the reload glyph should not have reloaded")
+	}
+}

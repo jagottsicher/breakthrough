@@ -1080,3 +1080,45 @@ func TestHandleBeforeDrawNoopWhenScreenSizeUnchanged(t *testing.T) {
 		t.Errorf("rect = (%d,%d,%d,%d), want left untouched (0,0,5,5) — the screen size never actually changed", x, y, width, height)
 	}
 }
+
+// TestRenderReloadTitleBarPlacesGlyphAtRightEdge pins the exact column
+// the reload glyph must land on: one in from width's own right edge,
+// the same spacing toolWindowCloseButtonCol uses for its own corner
+// button.
+func TestRenderReloadTitleBarPlacesGlyphAtRightEdge(t *testing.T) {
+	bar := tview.NewTextView()
+	renderReloadTitleBar(bar, " Mounts ", 40)
+
+	text := bar.GetText(false)
+	got := tview.TaggedStringWidth(text[:strings.IndexRune(text, toolWindowReloadGlyph)])
+	if want := reloadTitleBarButtonCol(40); got != want {
+		t.Errorf("glyph column = %d, want %d (text = %q)", got, want, text)
+	}
+}
+
+// TestRenderReloadTitleBarUsesDisplayWidthNotByteLength pins a real,
+// live-confirmed bug: a label containing a multi-byte-but-single-column
+// rune (an em dash, exactly what sessionsTitle's own "—" produces) once
+// landed the glyph two columns short of the edge, because len(label)
+// counted bytes rather than display columns. tview.TaggedStringWidth
+// fixed it — this pins the fix against a regression back to len().
+func TestRenderReloadTitleBarUsesDisplayWidthNotByteLength(t *testing.T) {
+	bar := tview.NewTextView()
+	label := " Sessions — 13 found "
+	renderReloadTitleBar(bar, label, 40)
+
+	text := bar.GetText(false)
+	got := tview.TaggedStringWidth(text[:strings.IndexRune(text, toolWindowReloadGlyph)])
+	if want := reloadTitleBarButtonCol(40); got != want {
+		t.Errorf("glyph column = %d, want %d (text = %q) — an em dash in the label must not shift it", got, want, text)
+	}
+}
+
+// TestRenderReloadTitleBarNeverPanicsOnZeroWidth pins the fallback for
+// the one real moment width actually is zero: before the very first
+// Draw the whole app ever does (see renderReloadTitleBar's own doc
+// comment) — must not produce a negative strings.Repeat count.
+func TestRenderReloadTitleBarNeverPanicsOnZeroWidth(t *testing.T) {
+	bar := tview.NewTextView()
+	renderReloadTitleBar(bar, " Mounts ", 0)
+}

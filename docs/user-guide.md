@@ -1035,7 +1035,9 @@ Source, Type, Bind, Persistent, and Options.
 `Up`/`Down` move between mounts, `r` re-reads the live mount table (a
 USB stick plugged in, or a network share that dropped, while this
 screen is open won't otherwise be noticed on its own), `Escape` closes
-it. Read-only for now — no mount/unmount actions yet.
+it. The reload glyph (⭯) in the title bar's own top-right corner is a
+mouse-clickable equivalent to `r`. Read-only for now — no mount/unmount
+actions yet.
 
 ## Firewall
 
@@ -1122,7 +1124,10 @@ the arrow keys and press `Enter`/`Space`):
   Remove. `x` or `Delete` does the same for the currently selected
   row's own session from anywhere in that row.
 
-`r` re-reads the live session list, `Escape` closes the screen. If none
+`r` re-reads the live session list, `Escape` closes the screen. The
+reload glyph (⭯) in the title bar's own top-right corner is a
+mouse-clickable equivalent to `r` — a session can be started, attached,
+or closed by something else entirely while this screen is open. If none
 of `screen`, `tmux`, or `zellij` is installed at all, that shows as a
 plain, understandable error rather than an empty list.
 
