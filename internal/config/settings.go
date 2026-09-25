@@ -336,6 +336,7 @@ type Settings struct {
 	LogCategoryRsync       bool
 	LogCategoryRemote      bool
 	LogCategoryShell       bool
+	LogCategoryFirewall    bool
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -399,6 +400,7 @@ func DefaultSettings() Settings {
 		LogCategoryRsync:       true,
 		LogCategoryRemote:      true,
 		LogCategoryShell:       true,
+		LogCategoryFirewall:    true,
 	}
 }
 
@@ -527,6 +529,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.LogCategoryRemote)
 	case "log_category_shell":
 		return parseBool(&s.LogCategoryShell)
+	case "log_category_firewall":
+		return parseBool(&s.LogCategoryFirewall)
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

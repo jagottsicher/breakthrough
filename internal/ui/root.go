@@ -289,6 +289,55 @@ type Root struct {
 	firewallErr      error
 	firewallServices firewall.ServiceLookup
 
+	// firewallAddRule* make up the Firewall screen's own "Add rule" form
+	// ("a", see firewalladdrule.go and feature_ideas.txt's own Firewall-
+	// Regel-Baukasten Stufe 2b) — Direction/Action/Protocol are
+	// dropdowns, so the form is rebuilt fresh on every open via
+	// renderFirewallAddRuleForm, the same "Clear(true) then
+	// AddFormItem" shape newCompressForm's own doc comment establishes,
+	// rather than kept in sync in place the way connectForm's own fixed
+	// set of plain input fields is. The plain firewallAddRuleXxx fields
+	// below mirror the form's own current values, the same "value
+	// mirror" shape duplicateStrategy and friends already establish.
+	firewallAddRuleLayout     *tview.Flex
+	firewallAddRuleTitleBar   *tview.TextView
+	firewallAddRuleForm       *tview.Form
+	firewallAddRuleStatus     *tview.TextView
+	firewallAddRuleButtons    *tview.Flex
+	firewallAddRuleCancelBtn  *tview.Button
+	firewallAddRuleAddBtn     *tview.Button
+	firewallAddRuleDirection  firewall.Direction
+	firewallAddRuleAction     firewall.Action
+	firewallAddRuleProtocol   string
+	firewallAddRulePortText   string
+	firewallAddRuleSourceText string
+	firewallAddRuleDestText   string
+	firewallAddRuleIfaceText  string
+
+	// firewallRollback* is the self-lockout rollback prompt armed by
+	// applyFirewallAddRule whenever the rule it just applied is SSH-
+	// relevant (see firewall.NewRuleSpec.IsSSHRelevant) and this
+	// breakthrough process is itself running over an active SSH session
+	// (see firewall.RunningOverSSH) — feature_ideas.txt's own
+	// "Selbstaussperr-Schutz". firewallRollbackTimer fires
+	// rollbackFirewallRule automatically once firewallRollbackDeadline
+	// passes unless "Keep this rule" (keepFirewallRule) stops it first;
+	// nil whenever no rollback is currently armed. The timer itself runs
+	// regardless of whether firewallRollbackLayout is actually on screen
+	// — closing that overlay early (Escape) only hides the countdown,
+	// it never cancels the rollback itself, so a rule that turns out to
+	// have cut off the very session that applied it is reverted either
+	// way.
+	firewallRollbackLayout   *tview.Flex
+	firewallRollbackTitleBar *tview.TextView
+	firewallRollbackText     *tview.TextView
+	firewallRollbackKeepBtn  *tview.Button
+	firewallRollbackTimer    *time.Timer
+	firewallRollbackCancel   context.CancelFunc
+	firewallRollbackDeadline time.Time
+	firewallRollbackBackend  firewall.Backend
+	firewallRollbackSpec     firewall.NewRuleSpec
+
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
@@ -1712,6 +1761,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newFirewallScreen()
 
+	// The Firewall screen's own "Add rule" form and self-lockout
+	// rollback prompt (see firewalladdrule.go).
+	r.firewallAddRuleForm = r.newFirewallAddRuleForm()
+	r.firewallAddRuleButtons = r.newFirewallAddRuleButtons()
+	r.firewallAddRuleLayout = r.newFirewallAddRuleLayout()
+	r.firewallRollbackKeepBtn = tview.NewButton("Keep this rule").SetSelectedFunc(r.keepFirewallRule)
+	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
+	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -1846,6 +1904,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
+	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
+	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.

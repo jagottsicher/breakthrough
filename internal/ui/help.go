@@ -412,15 +412,16 @@ var helpText = strings.TrimLeft(`
 
 [::b]Firewall screen ("jf")[::-]
 
-  A read-only, live view of this host's own actual firewall rules —
-  whichever single backend really governs traffic right now (UFW,
-  nftables, or iptables, in that preference order; only one is ever read,
-  since on a modern system they're different front ends onto the same
-  underlying rules, and reading more than one would double-count), via
-  the real ufw/nft/iptables-save commands, never reimplemented.
+  A live view of this host's own actual firewall rules — whichever
+  single backend really governs traffic right now (UFW, nftables, or
+  iptables, in that preference order; only one is ever read, since on a
+  modern system they're different front ends onto the same underlying
+  rules, and reading more than one would double-count), via the real
+  ufw/nft/iptables-save commands, never reimplemented.
 
   Up / Down         Move between rules
   r                 Re-read the live firewall rules
+  a                 Add a rule (UFW/iptables only, see below)
   Escape            Close the Firewall screen
 
   Rules are shown grouped into "Incoming" and "Outgoing", in the exact
@@ -432,9 +433,22 @@ var helpText = strings.TrimLeft(`
   as active as one that does. Allow rules and deny/reject rules are
   colored apart for a quick scan of what's actually open.
 
-  Building a new rule, and testing "what happens to a request on port X
-  from IP Y" without needing to know any firewall-specific syntax, are
-  not part of this first, read-only cut.
+  "a" opens a form (Direction, Action, Protocol, Port, Source,
+  Destination, Interface) and builds the exact ufw/iptables command that
+  would apply it — never raw firewall syntax to type yourself. Not
+  offered for nftables: its table/chain layout is host-specific and
+  can't be safely guessed. The exact command is always shown for
+  confirmation before it runs, via sudo through a real, attached
+  terminal (sudo's own password prompt needs one). A rule that could
+  plausibly affect an already-established SSH session (naming port 22,
+  or leaving the port unrestricted) arms an automatic rollback if this
+  breakthrough process is itself running over SSH: unless confirmed with
+  "Keep this rule" within 30 seconds, the rule is reverted automatically
+  so a mistaken rule can never lock you out for good.
+
+  Testing "what happens to a request on port X from IP Y" against the
+  read rules — without needing to know any firewall-specific syntax —
+  isn't part of this yet.
 
 [::b]Activity Log screen ("jl")[::-]
 
