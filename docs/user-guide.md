@@ -25,6 +25,7 @@ material, always matching the version you are actually running.
 - [Tool windows](#tool-windows)
 - [Mounts](#mounts)
 - [Firewall](#firewall)
+- [Sessions](#sessions)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -1034,7 +1035,9 @@ Source, Type, Bind, Persistent, and Options.
 `Up`/`Down` move between mounts, `r` re-reads the live mount table (a
 USB stick plugged in, or a network share that dropped, while this
 screen is open won't otherwise be noticed on its own), `Escape` closes
-it. Read-only for now — no mount/unmount actions yet.
+it. The reload glyph (⭯) in the title bar's own top-right corner is a
+mouse-clickable equivalent to `r`. Read-only for now — no mount/unmount
+actions yet.
 
 ## Firewall
 
@@ -1062,10 +1065,82 @@ Proto, Port, Source, Destination, Interface, and Note.
   "shadowed by #N (...)" note explaining which earlier rule makes it
   unreachable and what that rule itself does.
 
-`Up`/`Down` move between rules, `r` re-reads the live rules, `Escape`
-closes it. Read-only for now — building a new rule, and testing "what
-happens to a request on port X from IP Y" without needing to know any
-firewall-specific syntax, are planned next.
+`Up`/`Down` move between rules, `r` re-reads the live rules, `a` opens
+the Add-rule form, `Escape` closes it.
+
+**Add a rule** (`a`, UFW and iptables only — nftables is refused
+outright, since its table/chain layout is host-specific and can't be
+safely guessed): a form for Direction, Action, Protocol, Port, Source,
+Destination, and Interface, never raw firewall syntax typed by hand.
+Submitting it shows the exact `ufw`/`iptables` command it would run for
+confirmation, then applies it via `sudo` through a real, attached
+terminal — the same reasoning breakthrough runs everywhere else that
+might need to answer sudo's own interactive password prompt. A rule
+that could plausibly affect an already-established SSH session (naming
+port 22, or leaving the port unrestricted) arms an automatic 30-second
+rollback: unless you explicitly choose "Keep this rule" in time, the
+rule is reverted on its own, so a mistake can't lock you out for good.
+
+Testing "what happens to a request on port X from IP Y" against the
+read rules, without needing to know any firewall-specific syntax, isn't
+part of this yet.
+
+## Sessions
+
+`j` then `s`. A full-screen table listing this host's own local GNU
+screen, tmux, and Zellij sessions together — never just one of them — styled
+like the Tab switcher/Connection dropdown (a real table with its own
+per-row action cells), not the Toolbox's own scrolling command output:
+attaching to a session needs a real, interactive terminal, which a
+plain scrolling-text window can't provide.
+
+Columns: Name, Backend (`screen`/`tmux`/`zellij`, each in the same
+color its own status-bar segment already uses — `screen` the disk-usage
+blue, `tmux` the inode-usage violet, `zellij` the kernel-version gold —
+so "which subsystem is this" reads consistently wherever this app
+already colors something that way), and Status — a green `✔` for
+attached, a red `✘` for detached, or a muted `–` when the backend
+itself can't say (Zellij's own `list-sessions` never reports attach
+status at all, unlike screen/tmux, so this app never guesses one).
+Three actions per row, each its own clickable cell (or reach it with
+the arrow keys and press `Enter`/`Space`):
+
+- **⭢ Attach** — hands the real terminal to the session (`screen -D -r`
+  / `tmux attach -d` / `zellij attach`), taking over a session already
+  attached somewhere else the same way a real shell would (Zellij needs
+  no such takeover at all — it natively supports more than one
+  simultaneously attached client). breakthrough suspends itself for the
+  duration and resumes automatically the moment you detach or the
+  session itself ends — no extra key to press, no special handling
+  either way. Clicking a row's own Name/Backend/Status cell does the
+  same thing; it's the row's own obvious action, so it needs no
+  separate cell of its own.
+- **⇶ Attach in new window** — not implemented yet. Needs a real,
+  embedded PTY/ANSI terminal inside breakthrough itself, which doesn't
+  exist yet either; pressing it shows a notice that clears itself after
+  a few seconds.
+- **✕ Close** — ends the session outright (`screen -X quit` / `tmux
+  kill-session` / `zellij kill-session`), asking first, the same as
+  Remove. `x` or `Delete` does the same for the currently selected
+  row's own session from anywhere in that row.
+
+`r` re-reads the live session list, `Escape` closes the screen. The
+reload glyph (⭯) in the title bar's own top-right corner is a
+mouse-clickable equivalent to `r` — a session can be started, attached,
+or closed by something else entirely while this screen is open. If none
+of `screen`, `tmux`, or `zellij` is installed at all, that shows as a
+plain, understandable error rather than an empty list.
+
+mosh is deliberately not included here: unlike the three above, a
+`mosh-server` instance has no listing command and no way to be
+reattached to at all once the client that started it is gone —
+reconnecting needs the one-time secret key `mosh-server` prints to its
+own stdout at startup, which is never recoverable afterward. There is
+nothing this screen could list or attach to that would actually work.
+
+Local sessions only, for now — attaching to a session on a remote host
+reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
+in principle, but needs its own connection-reuse design first.
 
 ## Sed Replace
 

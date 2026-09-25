@@ -765,6 +765,29 @@ func (r *Root) resizeProperties(x, y int) {
 	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
 }
 
+// moveProperties repositions Properties to (x, y) without touching its
+// own current width/height — resizeProperties' own drag-time
+// counterpart: that one recomputes size fresh from propertiesText's own
+// content on every call (right for "just opened" and "content just
+// changed"), which a drag must never do, or the window would keep
+// snapping back to its content-fit size on every mouse-move event
+// instead of actually following the cursor.
+//
+// clampToScreen, not resizeProperties' own clampToPanel: per the user's
+// own explicit request that Properties become freely draggable, the
+// same "draggable anywhere, not confined to one panel" reasoning
+// toolWindow's own moveTo already applies (see toolwindow.go) — only
+// where it first opens stays anchored to the clicked row's own panel,
+// exactly as before.
+func (r *Root) moveProperties(x, y int) {
+	_, _, width, height := r.properties.GetRect()
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+
+	r.properties.SetRect(x, y, width, height)
+	r.propertiesTitleBar.SetRect(x, y, width, 1)
+	r.propertiesButtons.SetRect(x, y+height-1, width, 1)
+}
+
 // rerenderProperties re-runs renderProperties/resizeProperties in place
 // — the common tail of every edit action (permission toggle, finishing a
 // text field, computing hashes).
@@ -1593,7 +1616,69 @@ func (r *Root) cancelHashComputation() {
 // doc comment on why Ctrl+K replaced it outright instead of needing the
 // same "shared ancestor" treatment, and on 'h' since reclaiming that
 // same ground back from Ctrl+K in its own turn (see ComputeHashesShortcut).
+// dragPropertiesMouseCapture is hashesMouseCapture's own first check —
+// makes Properties' own title bar draggable, per the user's own
+// explicit request that the dialog become movable the way a Toolbox
+// tool window already is, while still opening at the exact same
+// anchor as before (openProperties/resizeProperties, both untouched).
+// Split out on its own since it's about repositioning the whole
+// window, not about anything inside propertiesText the rest of
+// hashesMouseCapture deals with.
+//
+// Mirrors toolWindow's own dragging/dragOffsetX/Y (see toolwindow.go's
+// MouseHandler): the offset between the click and the window's own
+// top-left corner is fixed once, at drag-start, and reapplied on every
+// subsequent move so the same point under the cursor stays there —
+// which is also what keeps every later move event landing back on this
+// same capture at all: tview's own Pages.MouseHandler dispatches purely
+// by current screen position (see pages.go), not by holding onto a
+// captured primitive, so a dragged window has to actually stay under
+// the cursor for its own capture to keep receiving events, the same
+// reasoning toolWindow's own moveTo relies on.
+//
+// handled reports whether this call was about dragging at all — false
+// (action/event returned unchanged) lets hashesMouseCapture fall
+// through to its own, unrelated hash-section handling exactly as
+// before.
+func (r *Root) dragPropertiesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (out tview.MouseAction, outEvent *tcell.EventMouse, handled bool) {
+	x, y := event.Position()
+
+	if r.propertiesDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				// The button came up somewhere this capture's own
+				// MouseLeftUp case below never saw (e.g. released outside
+				// the terminal) — stop rather than follow the cursor
+				// forever, the same guard toolWindow's own MouseMove case
+				// already has.
+				r.propertiesDragging = false
+				return tview.MouseConsumed, nil, true
+			}
+			r.moveProperties(x-r.propertiesDragOffsetX, y-r.propertiesDragOffsetY)
+			return tview.MouseConsumed, nil, true
+		case tview.MouseLeftUp:
+			r.propertiesDragging = false
+			return tview.MouseConsumed, nil, true
+		}
+		return tview.MouseConsumed, nil, true // swallow everything else for the duration of the drag
+	}
+
+	if action == tview.MouseLeftDown && r.propertiesTitleBar.InRect(x, y) {
+		r.propertiesDragging = true
+		wx, wy, _, _ := r.properties.GetRect()
+		r.propertiesDragOffsetX, r.propertiesDragOffsetY = x-wx, y-wy
+		return tview.MouseConsumed, nil, true
+	}
+
+	return action, event, false
+}
+
 func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if captured, consumedEvent, handled := r.dragPropertiesMouseCapture(action, event); handled {
+		return captured, consumedEvent
+	}
+
 	if action != tview.MouseLeftClick || isDirish(r.propertiesStat) {
 		return action, event
 	}

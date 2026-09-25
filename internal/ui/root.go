@@ -20,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
@@ -337,6 +338,20 @@ type Root struct {
 	firewallRollbackDeadline time.Time
 	firewallRollbackBackend  firewall.Backend
 	firewallRollbackSpec     firewall.NewRuleSpec
+
+	// The Sessions screen ("js", see sessions.go) — local GNU screen/
+	// tmux terminal-multiplexer sessions (internal/multiplex), styled
+	// after the Tab switcher/Connection menu's own per-row action-cell
+	// table rather than Mounts/Firewall's own plain read-only rows: each
+	// session carries three independent actions (Attach, Attach in new
+	// window, Close). sessionsList/sessionsErr hold the last read
+	// result, refreshed by reloadSessions (on open, and on "r").
+	sessionsLayout   *tview.Flex
+	sessionsTitleBar *tview.TextView
+	sessionsHint     *tview.TextView
+	sessionsTable    *tview.Table
+	sessionsList     []multiplex.Session
+	sessionsErr      error
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -1299,6 +1314,20 @@ type Root struct {
 	propertiesCancelBtn  *tview.Button
 	propertiesSaveBtn    *tview.Button
 
+	// propertiesDragging/propertiesDragOffsetX/Y make Properties'
+	// own title bar draggable — the same "click position minus the
+	// window's own x/y at drag-start, kept constant for the rest of the
+	// drag" shape toolWindow's own dragging/dragOffsetX/Y already
+	// establish in toolwindow.go, adapted to hashesMouseCapture's own
+	// SetMouseCapture shape (Properties is a composed tview.Pages, not
+	// its own Box subclass the way a toolWindow is, so there's no
+	// per-window MouseHandler override to add this to instead). Per the
+	// user's own explicit request: still opens at the exact same anchor
+	// as before (see openProperties/resizeProperties, both untouched),
+	// only draggable afterward.
+	propertiesDragging                           bool
+	propertiesDragOffsetX, propertiesDragOffsetY int
+
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
 	// -1 (nothing focused, Properties' state right after opening) or an
@@ -1776,6 +1805,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
 	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
 
+	// The Sessions screen (see sessions.go/openSessions) — a sixth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newSessionsScreen()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -1912,6 +1945,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
 	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
 	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
+	// resize=true: the Sessions screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall screens' own comments above give.
+	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
@@ -3175,6 +3212,67 @@ func newPlainTitleBar(text string) *tview.TextView {
 	bar.SetWrap(false)
 	bar.SetText(" " + text + " ")
 	return bar
+}
+
+// reloadTitleBarButtonCol returns the reload glyph's own column within a
+// title bar width columns wide: one column in from the right edge, the
+// same spacing toolWindowCloseButtonCol already uses for its own corner
+// button — reused here since Sessions/Mounts have no close button of
+// their own competing for that corner (Escape already closes both).
+func reloadTitleBarButtonCol(width int) int {
+	return width - 2
+}
+
+// renderReloadTitleBar sets bar's own text to label, padded out to width
+// columns, with toolWindowReloadGlyph in its own top-right corner — the
+// exact same "reload" glyph the header's own path-bar button and every
+// toolWindow already use (see toolWindowReloadGlyph's own doc comment),
+// reused here for Sessions'/Mounts' own reload button rather than a
+// fresh icon, per the user's own explicit request for one on each,
+// since both screens show live host state that can change while open.
+// Callers pass Root's own lastScreenWidth, not bar.GetRect()'s own
+// width: both screens render their title bar for the first time from
+// openX, before Pages has ever resized the not-yet-visible page to the
+// real terminal size, which left the glyph stuck right after the label
+// instead of pinned to the right edge — confirmed live, not guessed.
+// Falls back to no padding at all if width is still zero (true only
+// before the very first Draw the whole app ever does) rather than a
+// negative repeat count — the same defensive floor renderHelpTitleBar
+// already applies.
+func renderReloadTitleBar(bar *tview.TextView, label string, width int) {
+	col := reloadTitleBarButtonCol(width)
+	// tview.TaggedStringWidth, not len(): label's own em dash (see
+	// sessionsTitle) is one display column but three UTF-8 bytes, and
+	// len() counting that as three left the glyph two columns short of
+	// the edge — a real, live-confirmed bug, not a hypothetical one.
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowReloadGlyph) + " ")
+}
+
+// captureReloadTitleBarMouse invokes reload when a click lands exactly
+// on the reload glyph (see renderReloadTitleBar) — every other click on
+// the bar is otherwise inert, the same as Help's own title bar (see
+// captureHelpTitleBarMouse). Deliberately does not reposition the glyph
+// on a live terminal resize while the screen stays open — the same
+// scope Help's own (non-dragging) title bar already accepts, per its
+// own doc comment; the button catches up the next time either screen
+// re-renders on its own (opening it again, "r", or any row action).
+func captureReloadTitleBarMouse(bar *tview.TextView, reload func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY || x != rectX+reloadTitleBarButtonCol(width) {
+			return action, event
+		}
+		reload()
+		return tview.MouseConsumed, nil
+	}
 }
 
 // closeMenu hides the context menu without taking any action (Escape at

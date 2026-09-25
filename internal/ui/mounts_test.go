@@ -359,3 +359,68 @@ func TestRenderMountsSelectsTheFirstDataRowOnFirstRender(t *testing.T) {
 		t.Errorf("selected row = %d, want 1 (the first real data row, not the row-0 header)", row)
 	}
 }
+
+// TestMountsTitleBarReloadButtonClickReloads pins the user's own
+// explicit request for a mouse-reachable reload button on the Mounts
+// screen's own title bar, top right: clicking the exact glyph cell must
+// re-read the live mount table, the same as pressing "r". Runs against
+// the real findmnt (see TestReadMountsRealSystem's own identical
+// guard/reasoning), since readMounts has no swappable var of its own —
+// a placeholder entry findmnt could never itself report is used to
+// detect that a real re-read actually happened, not just a re-render of
+// whatever was already there.
+func TestMountsTitleBarReloadButtonClickReloads(t *testing.T) {
+	requireCommand(t, "findmnt")
+
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openMounts()
+
+	screen := simulationScreen(t, 100, 30)
+	r.handleBeforeDraw(screen) // establishes lastScreenWidth, which renderReloadTitleBar's own column math needs
+	r.mountsEntries = []mountEntry{{target: "/definitely-not-a-real-mount-xyz"}}
+	r.renderMounts()
+	r.mountsTitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
+
+	_, y, width, _ := r.mountsTitleBar.GetRect()
+	col := reloadTitleBarButtonCol(width)
+	captured, _ := captureReloadTitleBarMouse(r.mountsTitleBar, r.reloadMounts)(tview.MouseLeftClick, tcell.NewEventMouse(col, y, tcell.ButtonNone, 0))
+
+	if captured != tview.MouseConsumed {
+		t.Error("clicking the reload glyph should consume the click")
+	}
+	for _, e := range r.mountsEntries {
+		if e.target == "/definitely-not-a-real-mount-xyz" {
+			t.Error("the placeholder entry survived the click, want it replaced by a real re-read")
+		}
+	}
+}
+
+// TestMountsTitleBarClickElsewhereDoesNothing pins that only the exact
+// reload-glyph cell does anything — the same "no drag, no other action"
+// scope Help's own title bar already has (see
+// TestHelpTitleBarClickElsewhereDoesNothing).
+func TestMountsTitleBarClickElsewhereDoesNothing(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.mountsEntries = []mountEntry{{target: "/", source: "/dev/md0", fstype: "ext4"}}
+
+	screen := simulationScreen(t, 100, 30)
+	r.handleBeforeDraw(screen)
+	r.renderMounts()
+	r.mountsTitleBar.SetRect(0, 0, 100, 1)
+
+	reloaded := false
+	captured, _ := captureReloadTitleBarMouse(r.mountsTitleBar, func() { reloaded = true })(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+
+	if captured == tview.MouseConsumed {
+		t.Error("a click away from the reload glyph should not be consumed")
+	}
+	if reloaded {
+		t.Error("a click away from the reload glyph should not have reloaded")
+	}
+}

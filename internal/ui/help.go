@@ -90,7 +90,8 @@ var helpText = strings.TrimLeft(`
     j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
-                host's own actual rules) · jh Hardware Tools screen
+                host's own actual rules) · jh Hardware Tools screen ·
+                js Sessions screen (local screen/tmux/zellij sessions)
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
@@ -406,6 +407,10 @@ var helpText = strings.TrimLeft(`
   r                 Re-read the live mount table
   Escape            Close the Mounts screen
 
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — the mounted filesystems can change
+  while this screen is open.
+
   "Bind" marks a bind mount (the same underlying filesystem attached a
   second time at another path). "Persistent" marks a mount also
   configured in /etc/fstab — it will still be there after a reboot; one
@@ -476,6 +481,53 @@ var helpText = strings.TrimLeft(`
   the log itself is written oldest-first, but read the other way around
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
+
+[::b]Sessions screen ("js")[::-]
+
+  This host's own local GNU screen, tmux, and Zellij sessions, listed
+  together in one table (all three side by side, never just one) —
+  Backend colored the same as its own status-bar segment (screen=disk
+  blue, tmux=inode violet, zellij=kernel gold), Status shown as ✔
+  (green, attached), ✘ (red, detached), or – (muted, unknown — Zellij's
+  own list-sessions never reports this at all). Each row carries three
+  of its own actions, reachable by clicking, or with the keyboard via
+  the arrow keys to reach the cell and Enter or Space to run it:
+
+  ⭢  Attach       Suspends breakthrough and hands the real terminal to
+                   the session — screen -D -r / tmux attach -d / zellij
+                   attach, taking over a session already attached
+                   somewhere else the same way a real shell would
+                   (Zellij needs no takeover at all — it natively
+                   allows more than one attached client at once).
+                   Returns to breakthrough automatically the moment you
+                   detach or the session itself ends, with no extra key
+                   to press.
+  ⇶  New window   Not available yet — needs a real, embedded terminal
+                   inside breakthrough itself; shows a notice that
+                   clears on its own after a few seconds.
+  ✕  Close        Ends the session outright (screen -X quit / tmux
+                   kill-session / zellij kill-session) — asks first,
+                   the same as Remove.
+
+  mosh isn't listed here at all: unlike the three above, a mosh-server
+  instance has no listing command and no way to be reattached to once
+  the client that started it is gone — reconnecting needs the one-time
+  secret key it printed at startup, never recoverable afterward.
+
+  Clicking a row's own Name/Backend/Status cell attaches too, the same
+  as pressing ⭢ — the row's own obvious action needs no separate cell
+  of its own. "x" or Delete closes the currently selected row's session
+  from anywhere in that row, the same shortcut Remove uses in the
+  Connect dropdown. "r" re-reads the live session list; Escape closes
+  the screen.
+
+  Local sessions only, for now — attaching to a session on a remote
+  host, and the "New window" action actually working, are both later
+  work.
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a session can be started, attached,
+  or closed by something else entirely while this screen is open.
 
 [::b]Split view ("s")[::-]
 
