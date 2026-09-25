@@ -84,19 +84,19 @@ var helpText = strings.TrimLeft(`
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trashbin · gc Connect…
-    p  perms    pm chmod · po chown
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mo Open with… · mt tail -f · mA Deselect all
-    z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes · zr reload
-    o  options  oo Options screen · om Mouse reporting on/off
-    y  yank     yp/yn/ya full path/name/all selected — reserved, not
-                built yet (needs its own system-clipboard design first)
     j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen
+    p  perms    pm chmod · po chown
+    z  display  zs size format · zt time format · zo split orientation ·
+                zw swap panes · zr reload
+    y  yank     yp/yn/ya full path/name/all selected — reserved, not
+                built yet (needs its own system-clipboard design first)
+    o  options  oo Options screen · om Mouse reporting on/off
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so. Letting it simply time out
