@@ -86,6 +86,130 @@ func TestReloadSessionsSortsByBackendThenName(t *testing.T) {
 	}
 }
 
+// TestRenderSessionsRowShowsStatusAsAColoredGlyph pins the Status
+// column's own glyph choice — a green ✔ for attached, a red ✘ for
+// detached, per the user's own explicit choice, rather than the words
+// "Attached"/"Detached" themselves.
+func TestRenderSessionsRowShowsStatusAsAColoredGlyph(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{
+		{Name: "attached-one", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
+		{Name: "detached-one", Backend: multiplex.BackendTmux, Status: multiplex.StatusDetached},
+	}, nil)
+
+	r.openSessions()
+
+	attachedCell := r.sessionsTable.GetCell(1, sessionsColStatus)
+	if !strings.Contains(attachedCell.Text, sessionsAttachedGlyph) {
+		t.Errorf("attached row's Status cell = %q, want it to contain %q", attachedCell.Text, sessionsAttachedGlyph)
+	}
+	if got := tableCellForeground(attachedCell); got != r.theme.EntryExecutable {
+		t.Errorf("attached row's Status color = %v, want theme.EntryExecutable (%v)", got, r.theme.EntryExecutable)
+	}
+
+	detachedCell := r.sessionsTable.GetCell(2, sessionsColStatus)
+	if !strings.Contains(detachedCell.Text, sessionsDetachedGlyph) {
+		t.Errorf("detached row's Status cell = %q, want it to contain %q", detachedCell.Text, sessionsDetachedGlyph)
+	}
+	if got := tableCellForeground(detachedCell); got != r.theme.CriticalText {
+		t.Errorf("detached row's Status color = %v, want theme.CriticalText (%v)", got, r.theme.CriticalText)
+	}
+}
+
+// TestRenderSessionsRowShowsUnknownStatusAsAMutedDash covers Zellij's
+// own real gap: `zellij list-sessions` never reports attach status at
+// all (verified directly against a real zellij binary, not assumed —
+// see multiplex.Status's own doc comment), so a Zellij session must
+// never render as a false ✔ or ✘ — a muted dash instead, in the
+// theme's own muted color, same as multiplex.StatusUnknown's zero value
+// already defaults to.
+func TestRenderSessionsRowShowsUnknownStatusAsAMutedDash(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{
+		{Name: "some-session", Backend: multiplex.BackendZellij, Status: multiplex.StatusUnknown},
+	}, nil)
+
+	r.openSessions()
+
+	cell := r.sessionsTable.GetCell(1, sessionsColStatus)
+	if !strings.Contains(cell.Text, sessionsUnknownGlyph) {
+		t.Errorf("unknown-status row's Status cell = %q, want it to contain %q", cell.Text, sessionsUnknownGlyph)
+	}
+	if got := tableCellForeground(cell); got != r.theme.MutedTextColor {
+		t.Errorf("unknown-status row's Status color = %v, want theme.MutedTextColor (%v)", got, r.theme.MutedTextColor)
+	}
+}
+
+// TestRenderSessionsRowColorsBackendByStatusBarSegment pins the user's
+// own explicit choice: each backend's own name in the Backend column
+// uses the exact same fixed color its counterpart status-bar segment
+// already does (see statusDiskColor/statusInodeColor/statusKernelColor
+// in bottombar.go), so "which subsystem is this" reads consistently
+// wherever this app already colors something by that same idea.
+func TestRenderSessionsRowColorsBackendByStatusBarSegment(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{
+		{Name: "a", Backend: multiplex.BackendScreen},
+		{Name: "b", Backend: multiplex.BackendTmux},
+		{Name: "c", Backend: multiplex.BackendZellij},
+	}, nil)
+
+	r.openSessions()
+
+	cases := []struct {
+		row   int
+		want  tcell.Color
+		label string
+	}{
+		{1, statusDiskColor, "screen/statusDiskColor"},
+		{2, statusInodeColor, "tmux/statusInodeColor"},
+		{3, statusKernelColor, "zellij/statusKernelColor"},
+	}
+	for _, c := range cases {
+		cell := r.sessionsTable.GetCell(c.row, sessionsColBackend)
+		if got := tableCellForeground(cell); got != c.want {
+			t.Errorf("%s: Backend color = %v, want %v", c.label, got, c.want)
+		}
+	}
+}
+
+// tableCellForeground reads back whatever SetTextColor actually stored
+// — tview.NewTableCell seeds every cell with its own non-default Style
+// (Foreground/Background already set to its own Styles.* defaults), so
+// SetTextColor's own "only set .Color if Style is still exactly
+// tcell.StyleDefault" branch (verified directly against tview's own
+// table.go, not guessed) never applies here: the color always lands in
+// .Style instead, and a test reading the deprecated .Color field
+// straight would always see tcell.ColorDefault regardless of what was
+// actually set.
+func tableCellForeground(cell *tview.TableCell) tcell.Color {
+	fg, _, _ := cell.Style.Decompose()
+	return fg
+}
+
+// TestRenderSessionsKeepsColumnsSelectableWithRealRows is a regression
+// test for a real, reported bug: renderSessions used to finish by
+// calling the shared enableTableSelection (SetSelectable(true, false),
+// rows only — right for Mounts/Firewall/Activity Log, which never need
+// per-cell navigation), silently turning columnsSelectable back off
+// even though newSessionsScreen had already turned it on. With columns
+// not selectable, tview's own Table.InputHandler routes Left/Right to
+// its horizontal-scroll-offset handling instead of moving the cell
+// selection — invisible on a table narrow enough to need no scrolling,
+// which read as "Left/Right do nothing at all" and made the Attach in
+// new window/Close cells unreachable by keyboard.
+func TestRenderSessionsKeepsColumnsSelectableWithRealRows(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, []multiplex.Session{{Name: "foo", Backend: multiplex.BackendTmux}}, nil)
+
+	r.openSessions()
+
+	rowsSelectable, columnsSelectable := r.sessionsTable.GetSelectable()
+	if !rowsSelectable || !columnsSelectable {
+		t.Errorf("GetSelectable() = (%v, %v), want (true, true) — Left/Right must move between a row's own action cells", rowsSelectable, columnsSelectable)
+	}
+}
+
 func TestActivateSessionsCellCloseColumnOpensConfirm(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, []multiplex.Session{{Name: "12345.mysession", Backend: multiplex.BackendScreen}}, nil)

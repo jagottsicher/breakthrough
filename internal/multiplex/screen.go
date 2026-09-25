@@ -64,10 +64,14 @@ func parseScreenList(text string) []Session {
 			continue
 		}
 		status := groups[len(groups)-1][1]
+		sessionStatus := StatusDetached
+		if strings.EqualFold(status, "Attached") {
+			sessionStatus = StatusAttached
+		}
 		sessions = append(sessions, Session{
-			Name:     m[1],
-			Backend:  BackendScreen,
-			Attached: strings.EqualFold(status, "Attached"),
+			Name:    m[1],
+			Backend: BackendScreen,
+			Status:  sessionStatus,
 		})
 	}
 	return sessions

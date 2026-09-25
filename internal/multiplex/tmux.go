@@ -48,10 +48,14 @@ func parseTmuxList(text string) []Session {
 		if name == "" {
 			continue
 		}
+		sessionStatus := StatusDetached
+		if fields[1] == "1" {
+			sessionStatus = StatusAttached
+		}
 		sessions = append(sessions, Session{
-			Name:     name,
-			Backend:  BackendTmux,
-			Attached: fields[1] == "1",
+			Name:    name,
+			Backend: BackendTmux,
+			Status:  sessionStatus,
 		})
 	}
 	return sessions

@@ -91,7 +91,7 @@ var helpText = strings.TrimLeft(`
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
-                js Sessions screen (local screen/tmux sessions)
+                js Sessions screen (local screen/tmux/zellij sessions)
     p  perms    pm chmod · po chown
     z  display  zs size format · zt time format · zo split orientation ·
                 zw swap panes · zr reload
@@ -480,23 +480,35 @@ var helpText = strings.TrimLeft(`
 
 [::b]Sessions screen ("js")[::-]
 
-  This host's own local GNU screen and tmux sessions, listed together
-  in one table (screen and tmux are shown side by side, never just one
-  of the two). Each row carries three of its own actions, reachable by
-  clicking, or with the keyboard via Tab/arrow keys to reach the cell
-  and Enter or Space to run it:
+  This host's own local GNU screen, tmux, and Zellij sessions, listed
+  together in one table (all three side by side, never just one) —
+  Backend colored the same as its own status-bar segment (screen=disk
+  blue, tmux=inode violet, zellij=kernel gold), Status shown as ✔
+  (green, attached), ✘ (red, detached), or – (muted, unknown — Zellij's
+  own list-sessions never reports this at all). Each row carries three
+  of its own actions, reachable by clicking, or with the keyboard via
+  the arrow keys to reach the cell and Enter or Space to run it:
 
   ⭢  Attach       Suspends breakthrough and hands the real terminal to
-                   the session — screen -D -r / tmux attach -d, taking
-                   over a session already attached somewhere else the
-                   same way a real shell would. Returns to breakthrough
-                   automatically the moment you detach or the session
-                   itself ends, with no extra key to press.
+                   the session — screen -D -r / tmux attach -d / zellij
+                   attach, taking over a session already attached
+                   somewhere else the same way a real shell would
+                   (Zellij needs no takeover at all — it natively
+                   allows more than one attached client at once).
+                   Returns to breakthrough automatically the moment you
+                   detach or the session itself ends, with no extra key
+                   to press.
   ⇶  New window   Not available yet — needs a real, embedded terminal
                    inside breakthrough itself; shows a notice that
                    clears on its own after a few seconds.
   ✕  Close        Ends the session outright (screen -X quit / tmux
-                   kill-session) — asks first, the same as Remove.
+                   kill-session / zellij kill-session) — asks first,
+                   the same as Remove.
+
+  mosh isn't listed here at all: unlike the three above, a mosh-server
+  instance has no listing command and no way to be reattached to once
+  the client that started it is gone — reconnecting needs the one-time
+  secret key it printed at startup, never recoverable afterward.
 
   Clicking a row's own Name/Backend/Status cell attaches too, the same
   as pressing ⭢ — the row's own obvious action needs no separate cell

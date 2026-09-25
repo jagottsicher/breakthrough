@@ -8,10 +8,11 @@ import "os/exec"
 // machine that lacks either binary.
 var lookPath = exec.LookPath
 
-// ScreenInstalled/TmuxInstalled report whether the real binary is on
-// $PATH at all — checked once up front by ListSessions rather than
-// inferred from a failed list attempt, so "not installed" and "installed
-// but genuinely errored" are never confused with each other.
+// ScreenInstalled/TmuxInstalled/ZellijInstalled report whether the real
+// binary is on $PATH at all — checked once up front by ListSessions
+// rather than inferred from a failed list attempt, so "not installed"
+// and "installed but genuinely errored" are never confused with each
+// other.
 func ScreenInstalled() bool {
 	_, err := lookPath("screen")
 	return err == nil
@@ -19,5 +20,10 @@ func ScreenInstalled() bool {
 
 func TmuxInstalled() bool {
 	_, err := lookPath("tmux")
+	return err == nil
+}
+
+func ZellijInstalled() bool {
+	_, err := lookPath("zellij")
 	return err == nil
 }

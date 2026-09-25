@@ -13,8 +13,8 @@ const realTmuxListTranscript = "bt-test-a\t0\nbt-test-b\t1\n"
 func TestParseTmuxListParsesARealTranscript(t *testing.T) {
 	got := parseTmuxList(realTmuxListTranscript)
 	want := []Session{
-		{Name: "bt-test-a", Backend: BackendTmux, Attached: false},
-		{Name: "bt-test-b", Backend: BackendTmux, Attached: true},
+		{Name: "bt-test-a", Backend: BackendTmux, Status: StatusDetached},
+		{Name: "bt-test-b", Backend: BackendTmux, Status: StatusAttached},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseTmuxList() = %+v, want %+v", got, want)

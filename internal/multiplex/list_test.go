@@ -10,7 +10,7 @@ import (
 // of one test, restoring the original via t.Cleanup — the same "swap
 // the package-level var, restore in Cleanup" idiom internal/firewall's
 // own detect_test.go already establishes.
-func isolateBinaries(t *testing.T, screenPresent, tmuxPresent bool) {
+func isolateBinaries(t *testing.T, screenPresent, tmuxPresent, zellijPresent bool) {
 	t.Helper()
 	orig := lookPath
 	t.Cleanup(func() { lookPath = orig })
@@ -24,44 +24,49 @@ func isolateBinaries(t *testing.T, screenPresent, tmuxPresent bool) {
 			if tmuxPresent {
 				return "/usr/bin/tmux", nil
 			}
+		case "zellij":
+			if zellijPresent {
+				return "/usr/bin/zellij", nil
+			}
 		}
 		return "", exec.ErrNotFound
 	}
 }
 
-func isolateListers(t *testing.T, screenOut, tmuxOut string) {
+func isolateListers(t *testing.T, screenOut, tmuxOut, zellijOut string) {
 	t.Helper()
-	origScreen, origTmux := runScreenList, runTmuxList
-	t.Cleanup(func() { runScreenList, runTmuxList = origScreen, origTmux })
+	origScreen, origTmux, origZellij := runScreenList, runTmuxList, runZellijList
+	t.Cleanup(func() { runScreenList, runTmuxList, runZellijList = origScreen, origTmux, origZellij })
 	runScreenList = func() (string, error) { return screenOut, nil }
 	runTmuxList = func() (string, error) { return tmuxOut, nil }
+	runZellijList = func() (string, error) { return zellijOut, nil }
 }
 
-func TestListSessionsRefusesWhenNeitherBinaryIsInstalled(t *testing.T) {
-	isolateBinaries(t, false, false)
+func TestListSessionsRefusesWhenNoBackendIsInstalled(t *testing.T) {
+	isolateBinaries(t, false, false, false)
 
 	_, err := ListSessions()
 	if err == nil {
-		t.Fatal("ListSessions() = nil error, want a refusal when neither screen nor tmux is installed")
+		t.Fatal("ListSessions() = nil error, want a refusal when none of screen/tmux/zellij is installed")
 	}
 }
 
-func TestListSessionsCombinesBothBackendsWhenBothAreInstalled(t *testing.T) {
-	isolateBinaries(t, true, true)
-	isolateListers(t, realScreenListTranscript, realTmuxListTranscript)
+func TestListSessionsCombinesAllThreeBackendsWhenAllAreInstalled(t *testing.T) {
+	isolateBinaries(t, true, true, true)
+	isolateListers(t, realScreenListTranscript, realTmuxListTranscript, realZellijListTranscript)
 
 	got, err := ListSessions()
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(got) != 5 { // 3 screen + 2 tmux
-		t.Errorf("len(got) = %d, want 5", len(got))
+	if len(got) != 6 { // 3 screen + 2 tmux + 1 zellij
+		t.Errorf("len(got) = %d, want 6", len(got))
 	}
 }
 
 func TestListSessionsUsesOnlyTheInstalledBackend(t *testing.T) {
-	isolateBinaries(t, true, false)
-	isolateListers(t, realScreenListTranscript, realTmuxListTranscript)
+	isolateBinaries(t, true, false, false)
+	isolateListers(t, realScreenListTranscript, realTmuxListTranscript, realZellijListTranscript)
 
 	got, err := ListSessions()
 	if err != nil {
@@ -77,8 +82,21 @@ func TestListSessionsUsesOnlyTheInstalledBackend(t *testing.T) {
 	}
 }
 
+func TestListSessionsUsesOnlyZellijWhenOnlyZellijIsInstalled(t *testing.T) {
+	isolateBinaries(t, false, false, true)
+	isolateListers(t, realScreenListTranscript, realTmuxListTranscript, realZellijListTranscript)
+
+	got, err := ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(got) != 1 || got[0].Backend != BackendZellij {
+		t.Errorf("got %+v, want exactly one BackendZellij session", got)
+	}
+}
+
 func TestListSessionsPropagatesARealScreenFailure(t *testing.T) {
-	isolateBinaries(t, true, false)
+	isolateBinaries(t, true, false, false)
 	origScreen := runScreenList
 	t.Cleanup(func() { runScreenList = origScreen })
 	runScreenList = func() (string, error) { return "", errors.New("exec: \"screen\": permission denied") }
@@ -95,6 +113,9 @@ func TestAttachCommandDispatchesByBackend(t *testing.T) {
 	if got := AttachCommand(Session{Name: "foo", Backend: BackendTmux}); got[0] != "tmux" {
 		t.Errorf("AttachCommand(tmux) = %v, want it to start with \"tmux\"", got)
 	}
+	if got := AttachCommand(Session{Name: "foo", Backend: BackendZellij}); got[0] != "zellij" {
+		t.Errorf("AttachCommand(zellij) = %v, want it to start with \"zellij\"", got)
+	}
 }
 
 func TestCloseCommandDispatchesByBackend(t *testing.T) {
@@ -103,5 +124,8 @@ func TestCloseCommandDispatchesByBackend(t *testing.T) {
 	}
 	if got := CloseCommand(Session{Name: "foo", Backend: BackendTmux}); got[0] != "tmux" {
 		t.Errorf("CloseCommand(tmux) = %v, want it to start with \"tmux\"", got)
+	}
+	if got := CloseCommand(Session{Name: "foo", Backend: BackendZellij}); got[0] != "zellij" {
+		t.Errorf("CloseCommand(zellij) = %v, want it to start with \"zellij\"", got)
 	}
 }

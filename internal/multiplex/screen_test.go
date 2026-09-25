@@ -19,9 +19,9 @@ const realScreenListTranscript = `There are screens on:
 func TestParseScreenListParsesARealTranscriptWithTimestamps(t *testing.T) {
 	got := parseScreenList(realScreenListTranscript)
 	want := []Session{
-		{Name: "3343442.bt-test-2", Backend: BackendScreen, Attached: false},
-		{Name: "3343440.bt-test-1", Backend: BackendScreen, Attached: false},
-		{Name: "10065.breakthrough", Backend: BackendScreen, Attached: true},
+		{Name: "3343442.bt-test-2", Backend: BackendScreen, Status: StatusDetached},
+		{Name: "3343440.bt-test-1", Backend: BackendScreen, Status: StatusDetached},
+		{Name: "10065.breakthrough", Backend: BackendScreen, Status: StatusAttached},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseScreenList() = %+v, want %+v", got, want)
@@ -34,7 +34,7 @@ func TestParseScreenListParsesARealTranscriptWithTimestamps(t *testing.T) {
 func TestParseScreenListParsesATranscriptWithoutTimestamps(t *testing.T) {
 	const transcript = "There is a screen on:\n\t12345.mysession\t(Detached)\n1 Socket in /run/screen/S-user.\n"
 	got := parseScreenList(transcript)
-	want := []Session{{Name: "12345.mysession", Backend: BackendScreen, Attached: false}}
+	want := []Session{{Name: "12345.mysession", Backend: BackendScreen, Status: StatusDetached}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseScreenList() = %+v, want %+v", got, want)
 	}

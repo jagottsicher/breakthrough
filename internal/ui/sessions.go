@@ -29,6 +29,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 )
 
@@ -75,12 +76,76 @@ const (
 	sessionsAttachGlyph    = "⭢"
 	sessionsNewWindowGlyph = "⇶"
 	sessionsCloseGlyph     = "✕"
+
+	// sessionsAttachedGlyph/sessionsDetachedGlyph/sessionsUnknownGlyph are
+	// the Status column's own glyphs, per the user's own explicit choice
+	// for the first two — a heavy checkmark/ballot X (U+2714/U+2718)
+	// colored green/red (see sessionsStatusColor), rather than the words
+	// "Attached"/"Detached" themselves. sessionsUnknownGlyph (a plain em
+	// dash, in the theme's own muted color) is this screen's own
+	// addition for multiplex.StatusUnknown — Zellij's own list-sessions
+	// never reports attach status at all (see multiplex.Status's own doc
+	// comment), so showing ✔ or ✘ for it either way would just be a
+	// guess dressed up as a fact.
+	sessionsAttachedGlyph = "✔"
+	sessionsDetachedGlyph = "✘"
+	sessionsUnknownGlyph  = "–"
 )
+
+// sessionsStatusGlyph/sessionsStatusColor render one Session's own
+// Status — split from renderSessionsRow so sessionsColStatus's cell
+// construction reads as "glyph, then its own color" without a local
+// if/else repeating the same three-way switch twice.
+func sessionsStatusGlyph(status multiplex.Status) string {
+	switch status {
+	case multiplex.StatusAttached:
+		return sessionsAttachedGlyph
+	case multiplex.StatusDetached:
+		return sessionsDetachedGlyph
+	default:
+		return sessionsUnknownGlyph
+	}
+}
+
+func sessionsStatusColor(status multiplex.Status, theme config.ResolvedTheme) tcell.Color {
+	switch status {
+	case multiplex.StatusAttached:
+		return theme.EntryExecutable
+	case multiplex.StatusDetached:
+		return theme.CriticalText
+	default:
+		return theme.MutedTextColor
+	}
+}
+
+// sessionsBackendColor gives each backend's own name its own fixed
+// color in the Backend column — per the user's own explicit choice, the
+// same colors their own status-bar segments already use (see
+// statusDiskColor/statusInodeColor/statusKernelColor in bottombar.go),
+// so a backend reads consistently wherever this app already colors
+// something by "which subsystem is this", not a fresh palette invented
+// just for this column. mosh has no color here: see multiplex's own
+// package doc comment for why it was never made a backend at all.
+func sessionsBackendColor(backend multiplex.Backend) tcell.Color {
+	switch backend {
+	case multiplex.BackendScreen:
+		return statusDiskColor
+	case multiplex.BackendTmux:
+		return statusInodeColor
+	case multiplex.BackendZellij:
+		return statusKernelColor
+	default:
+		return tcell.ColorDefault
+	}
+}
 
 // sessionsColumnWidth is Name/Backend/Status's own padding floor — the
 // same "floor, never a ceiling" reasoning firewallColumnWidth's own doc
 // comment gives. The three action columns have no floor: each is a
-// single glyph, never wider than its own fixed " ⭢ " padding.
+// single glyph, never wider than its own fixed " ⭢ " padding. Status is
+// a single glyph too now (✔/✘, see sessionsAttachedGlyph/
+// sessionsDetachedGlyph), so its own floor only needs to fit "Status"
+// itself, the wider of the two.
 func sessionsColumnWidth(col int) int {
 	switch col {
 	case sessionsColName:
@@ -88,7 +153,7 @@ func sessionsColumnWidth(col int) int {
 	case sessionsColBackend:
 		return 8
 	case sessionsColStatus:
-		return 10
+		return 8
 	default:
 		return 0
 	}
@@ -187,7 +252,16 @@ func (r *Root) renderSessions() {
 	for i, s := range r.sessionsList {
 		r.renderSessionsRow(i+1, s)
 	}
-	enableTableSelection(r.sessionsTable)
+	// Not enableTableSelection (SetSelectable(true, false), rows only) —
+	// unlike Mounts/Firewall/Activity Log, this screen's own rows each
+	// carry three independent action cells, so both rows *and* columns
+	// need to stay selectable, the same as connectionmenu.go's/
+	// tabswitcher.go's own tables. A real, reported bug: with columns
+	// not selectable, Left/Right silently fall back to tview's own
+	// horizontal-scroll-offset handling instead of moving the cell
+	// selection at all — invisible on a table narrow enough to need no
+	// scrolling, which reads as "Left/Right do nothing whatsoever".
+	r.sessionsTable.SetSelectable(true, true)
 
 	if cur, _ := r.sessionsTable.GetSelection(); cur < 1 || cur > len(r.sessionsList) {
 		r.sessionsTable.Select(1, sessionsColName)
@@ -207,11 +281,6 @@ func sessionsTitle(sessions []multiplex.Session, err error) string {
 // cells — the same per-cell shape renderConnectionMenu's own eject/
 // edit/remove cells already establish.
 func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
-	statusText, statusColor := "Detached", r.theme.MutedTextColor
-	if s.Attached {
-		statusText, statusColor = "Attached", r.theme.EntryExecutable
-	}
-
 	// Clicked, not just selectable: the same "clicking this cell attaches,
 	// exactly like Enter/Space would" behavior connectionmenu.go's own
 	// label cell already gives its row's own primary action.
@@ -223,8 +292,8 @@ func (r *Root) renderSessionsRow(row int, s multiplex.Session) {
 				SetClickedFunc(r.clickSessionsCell(row, col)))
 	}
 	cell(sessionsColName, s.Name, r.theme.Text)
-	cell(sessionsColBackend, string(s.Backend), r.theme.Text)
-	cell(sessionsColStatus, statusText, statusColor)
+	cell(sessionsColBackend, string(s.Backend), sessionsBackendColor(s.Backend))
+	cell(sessionsColStatus, sessionsStatusGlyph(s.Status), sessionsStatusColor(s.Status, r.theme))
 
 	action := func(col int, glyph string) {
 		r.sessionsTable.SetCell(row, col,
