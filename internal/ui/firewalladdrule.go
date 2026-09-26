@@ -84,13 +84,72 @@ var firewallProtocolChoices = []struct{ value, label string }{
 	{"udp", "udp"},
 }
 
+// firewallDirectionConfigValue/firewallActionConfigValue map a
+// firewall.Direction/firewall.Action to its own config.Settings.
+// FirewallDefaultDirection/FirewallDefaultAction literal ("in"/"out",
+// "allow"/"deny"/"reject") — lowercase, unlike Direction.String()'s own
+// "IN"/"OUT" table wording, matching every other enum setting's own
+// lowercase convention (e.g. duplicate_strategy's "numbered"). Used only
+// by optioncatalog.go's own "Default direction"/"Default action"
+// choices; openFirewallAddRule itself reads the stored string back
+// directly (see firewallDirectionFromConfigValue/
+// firewallActionFromConfigValue) rather than through these.
+func firewallDirectionConfigValue(d firewall.Direction) string {
+	if d == firewall.DirectionOut {
+		return "out"
+	}
+	return "in"
+}
+
+func firewallActionConfigValue(a firewall.Action) string {
+	switch a {
+	case firewall.ActionDeny:
+		return "deny"
+	case firewall.ActionReject:
+		return "reject"
+	default:
+		return "allow"
+	}
+}
+
+// firewallDirectionFromConfigValue/firewallActionFromConfigValue are
+// firewallDirectionConfigValue/firewallActionConfigValue's own inverse —
+// openFirewallAddRule's own way of seeding firewallAddRuleDirection/
+// firewallAddRuleAction from settings.FirewallDefaultDirection/
+// FirewallDefaultAction. Forgiving of an unrecognized or empty value
+// (a stale config predating this setting, a hand-edited typo) the same
+// way archiveFormatIndexByID already is — falls back to
+// DirectionIn/ActionAllow, this app's own built-in default either way.
+func firewallDirectionFromConfigValue(v string) firewall.Direction {
+	if v == "out" {
+		return firewall.DirectionOut
+	}
+	return firewall.DirectionIn
+}
+
+func firewallActionFromConfigValue(v string) firewall.Action {
+	switch v {
+	case "deny":
+		return firewall.ActionDeny
+	case "reject":
+		return firewall.ActionReject
+	default:
+		return firewall.ActionAllow
+	}
+}
+
 // openFirewallAddRule is the Firewall screen's own "a": opens the "Add
-// rule" form, seeded to a harmless default (Incoming/Allow/any
-// protocol/any port/any source/any destination/any interface) fresh on
-// every open, never sticky from a previous fill-in — an accidentally
-// reused Deny-any-port from a previous, unrelated rule would be exactly
-// the kind of quiet, surprising default this app's own "keine stillen
-// Fehler" principle rules out.
+// rule" form, seeded to a harmless default — Direction/Action/Protocol
+// from settings.FirewallDefaultDirection/FirewallDefaultAction/
+// FirewallDefaultProtocol (Incoming/Allow/any protocol, out of the box),
+// Port/Source/Destination/Interface always blank — fresh on every open,
+// never sticky from a previous fill-in — an accidentally reused
+// Deny-any-port from a previous, unrelated rule would be exactly the
+// kind of quiet, surprising default this app's own "keine stillen
+// Fehler" principle rules out. Unlike every other dialog-facing setting
+// in this app, these three are never written back from here: they can
+// only ever be changed in Options (see FirewallDefaultDirection's own
+// doc comment for why).
 //
 // Refuses outright for nftables (see firewall.NFTAddRuleCommand's own
 // doc comment for why its table/chain layout can never be safely
@@ -106,9 +165,9 @@ func (r *Root) openFirewallAddRule() {
 		return
 	}
 
-	r.firewallAddRuleDirection = firewall.DirectionIn
-	r.firewallAddRuleAction = firewall.ActionAllow
-	r.firewallAddRuleProtocol = ""
+	r.firewallAddRuleDirection = firewallDirectionFromConfigValue(r.settings.FirewallDefaultDirection)
+	r.firewallAddRuleAction = firewallActionFromConfigValue(r.settings.FirewallDefaultAction)
+	r.firewallAddRuleProtocol = r.settings.FirewallDefaultProtocol
 	r.firewallAddRulePortText = ""
 	r.firewallAddRuleSourceText = ""
 	r.firewallAddRuleDestText = ""
