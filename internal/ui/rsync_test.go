@@ -408,6 +408,109 @@ func TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection(t
 // terminal (see runShellCommandFullScreen), exactly what ssh's own
 // password prompt needs — refuseBackgroundPasswordAuth is only ever
 // consulted from runRsyncBackground, never from runRsync.
+// TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob pins the
+// feature_ideas.txt's own still-open "Remote→Remote" test gap: unlike
+// every existing password-auth safeguard test above, which only ever
+// has one side remote, this connects Source (the active panel) *and*
+// Destination (the split partner) to two different real connections at
+// once — the same "both remote" shape rsyncRelayHint's own doc comment
+// already models with hand-built Endpoints, exercised here end to end
+// through currentRsyncJob/runRsyncBackground instead. Both sides
+// authenticate via key/agent, so neither should be refused.
+func TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	destClient := &fakeRemoteClient{root: "/remote-dest", entries: map[string][]fsops.Entry{
+		"/remote-dest": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(destClient, remotefs.Connection{
+		Host: "example.org", User: "destuser", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote (destination): %v", err)
+	}
+	r.switchToTab(0)
+	sourceClient := &fakeRemoteClient{root: "/remote-src", entries: map[string][]fsops.Entry{
+		"/remote-src": {{Name: "a.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(sourceClient, remotefs.Connection{
+		Host: "example.com", User: "srcuser", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote (source): %v", err)
+	}
+	r.splitWithTab(1)
+	r.openRsync()
+
+	job := r.currentRsyncJob()
+	if !job.Source.IsRemote() || job.Source.Host != "example.com" {
+		t.Fatalf("Source = %+v, want a remote endpoint on example.com", job.Source)
+	}
+	if !job.Destination.IsRemote() || job.Destination.Host != "example.org" {
+		t.Fatalf("Destination = %+v, want a remote endpoint on example.org", job.Destination)
+	}
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a real remote-to-remote job with key/agent auth on both sides: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a remote-to-remote job")
+	}
+}
+
+// TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob extends
+// the single-sided password-auth safeguard tests above to the
+// remote-to-remote case: the other side being remote too (rather than
+// local) must never mask a password-only connection on the side actually
+// being checked.
+func TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob(t *testing.T) {
+	cases := []struct {
+		name                 string
+		sourceAuth, destAuth remotefs.AuthMethod
+		wantRefusalToMention string
+	}{
+		{"password-only source", remotefs.AuthMethodPassword, remotefs.AuthMethodKeyOrAgent, "Source"},
+		{"password-only destination", remotefs.AuthMethodKeyOrAgent, remotefs.AuthMethodPassword, "Destination"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, _ := newTestRootForRsync(t)
+			r.newTabHere()
+			destClient := &fakeRemoteClient{root: "/remote-dest", entries: map[string][]fsops.Entry{
+				"/remote-dest": {{Name: "b.txt", Type: fsops.TypeFile}},
+			}}
+			if err := r.panel.connectRemote(destClient, remotefs.Connection{
+				Host: "example.org", User: "destuser", AuthMethod: c.destAuth,
+			}); err != nil {
+				t.Fatalf("connectRemote (destination): %v", err)
+			}
+			r.switchToTab(0)
+			sourceClient := &fakeRemoteClient{root: "/remote-src", entries: map[string][]fsops.Entry{
+				"/remote-src": {{Name: "a.txt", Type: fsops.TypeFile}},
+			}}
+			if err := r.panel.connectRemote(sourceClient, remotefs.Connection{
+				Host: "example.com", User: "srcuser", AuthMethod: c.sourceAuth,
+			}); err != nil {
+				t.Fatalf("connectRemote (source): %v", err)
+			}
+			r.splitWithTab(1)
+			r.openRsync()
+
+			r.runRsyncBackground()
+
+			if r.rsyncJob != nil {
+				t.Error("startRsyncBackground ran despite a password-only connection on one side")
+			}
+			if r.activePage != errorPage {
+				t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+			}
+			if got := r.errorView.GetText(true); !strings.Contains(got, c.wantRefusalToMention) || !strings.Contains(got, "password") {
+				t.Errorf("error text = %q, want it to mention %q and password", got, c.wantRefusalToMention)
+			}
+		})
+	}
+}
+
 func TestRunRsyncAllowsPasswordAuthInTheForeground(t *testing.T) {
 	r, dir := newTestRootForRsync(t)
 	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{

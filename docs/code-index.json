@@ -1548,8 +1548,8 @@
     },
     {
       "path": "internal/ui/rsync_test.go",
-      "size": 37236,
-      "sha256": "b3b97d8a60f6f0d69636dd7adc94818e2330b63cfeb49baea23a3b3795bf8222"
+      "size": 41539,
+      "sha256": "b9e26cb4dfdb8450c8804b4bf22500b9fe802441d5c0fb47335c8dc4b744958d"
     },
     {
       "path": "internal/ui/rsyncjob.go",
@@ -1558,8 +1558,8 @@
     },
     {
       "path": "internal/ui/rsyncjob_test.go",
-      "size": 13786,
-      "sha256": "a427d3f3c0df250eba95e90aaaa00fa9565c18703562a0b37803725ac7f4b2cb"
+      "size": 15296,
+      "sha256": "a07a500b47c0b7145f24da095b073c3e4503a940f67ff2c2a34197606e7b6add"
     },
     {
       "path": "internal/ui/search.go",
@@ -30164,184 +30164,198 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
+      "name": "TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob",
+      "kind": "function",
+      "line": 420
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
+      "name": "TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob",
+      "kind": "function",
+      "line": 466
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsync_test.go",
       "name": "TestRunRsyncAllowsPasswordAuthInTheForeground",
       "kind": "function",
-      "line": 411
+      "line": 514
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRsyncRelayHintOnlyAppearsWhenBothEndpointsAreRemote",
       "kind": "function",
-      "line": 431
+      "line": 534
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRsyncRelayHintAlsoCatchesHandTypedRemoteSyntax",
       "kind": "function",
-      "line": 462
+      "line": 565
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewShowsTheRelayHintForRemoteToRemote",
       "kind": "function",
-      "line": 475
+      "line": 578
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewHintIsBlankForLocalToRemote",
       "kind": "function",
-      "line": 489
+      "line": 592
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestSplitRsyncExcludesTrimsAndDropsEmptyEntries",
       "kind": "function",
-      "line": 502
+      "line": 605
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestSplitRsyncExcludesOnBlankTextReturnsNothing",
       "kind": "function",
-      "line": 510
+      "line": 613
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestCurrentRsyncJobReflectsEveryFieldAndFlag",
       "kind": "function",
-      "line": 520
+      "line": 623
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewShowsTheRealCommand",
       "kind": "function",
-      "line": 556
+      "line": 659
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRenderRsyncPreviewHighlightsDeleteWithAWarningTag",
       "kind": "function",
-      "line": 574
+      "line": 677
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRunRsyncRefusesAnEmptySourceOrDestination",
       "kind": "function",
-      "line": 593
+      "line": 696
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRunRsyncLogsAnAction",
       "kind": "function",
-      "line": 617
+      "line": 720
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagFlipsStateAndRelabelsTheRow",
       "kind": "function",
-      "line": 632
+      "line": 735
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsAppendsTrailingSlashToSourceField",
       "kind": "function",
-      "line": 661
+      "line": 764
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsRemovesTrailingSlashWhenTurnedOff",
       "kind": "function",
-      "line": 676
+      "line": 779
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsNeverDoublesAnExistingTrailingSlash",
       "kind": "function",
-      "line": 693
+      "line": 796
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsIsANoOpOnAnEmptyField",
       "kind": "function",
-      "line": 710
+      "line": 813
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsKeepsThePortForARemoteSource",
       "kind": "function",
-      "line": 727
+      "line": 830
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsSubstitutesTheParentDirectoryForAFileSource",
       "kind": "function",
-      "line": 755
+      "line": 858
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsRestoresTheOriginalFileWhenTurnedOffAgain",
       "kind": "function",
-      "line": 777
+      "line": 880
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsFileSubstitutionSkipsAnEditedField",
       "kind": "function",
-      "line": 797
+      "line": 900
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestToggleRsyncFlagCopyContentsFileSubstitutionKeepsThePortForARemoteFileSource",
       "kind": "function",
-      "line": 816
+      "line": 919
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestRsyncTabPickerLabelNumbersAndShowsTheEndpointText",
       "kind": "function",
-      "line": 849
+      "line": 952
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestOpenRsyncTabPickerListsEveryOpenTab",
       "kind": "function",
-      "line": 861
+      "line": 964
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestOpenRsyncTabPickerPickingATabFillsTheFieldAndItsOwnDefault",
       "kind": "function",
-      "line": 882
+      "line": 985
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsync_test.go",
       "name": "TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection",
       "kind": "function",
-      "line": 915
+      "line": 1018
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30524,86 +30538,93 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
-      "name": "newTestRootForRsyncJob",
-      "kind": "function",
-      "line": 196
-    },
-    {
-      "package": "github.com/jagottsicher/breakthrough/internal/ui",
-      "file": "internal/ui/rsyncjob_test.go",
-      "name": "TestFinishRsyncJobReloadsTheDestinationPanel",
+      "name": "TestWatchAndWaitRsyncReportsANonInteractiveAuthenticationFailure",
       "kind": "function",
       "line": 206
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
+      "name": "newTestRootForRsyncJob",
+      "kind": "function",
+      "line": 225
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsyncjob_test.go",
+      "name": "TestFinishRsyncJobReloadsTheDestinationPanel",
+      "kind": "function",
+      "line": 235
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobReportsARealError",
       "kind": "function",
-      "line": 232
+      "line": 261
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobLogsAnAction",
       "kind": "function",
-      "line": 245
+      "line": 274
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobLogsAnError",
       "kind": "function",
-      "line": 260
+      "line": 289
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobDoesNotLogWhenCancelled",
       "kind": "function",
-      "line": 275
+      "line": 304
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobSuppressesErrorWhenCancelled",
       "kind": "function",
-      "line": 295
+      "line": 324
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestFinishRsyncJobStartsTheNextQueuedRun",
       "kind": "function",
-      "line": 309
+      "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestCancelRsyncJobStopsTheProcessAndClearsTheQueue",
       "kind": "function",
-      "line": 330
+      "line": 359
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestRunRsyncBackgroundRefusesAnEmptyDestination",
       "kind": "function",
-      "line": 347
+      "line": 376
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestReallyStartRsyncBackgroundNeverChdirsIntoARemotePanelsOwnPath",
       "kind": "function",
-      "line": 378
+      "line": 407
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/rsyncjob_test.go",
       "name": "TestRsyncEndpointBase",
       "kind": "function",
-      "line": 406
+      "line": 435
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -30615,14 +30636,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 25
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 25
     },
@@ -35456,14 +35477,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinWidth",
+      "name": "viewerMinHeight",
       "kind": "const",
       "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinHeight",
+      "name": "viewerMinWidth",
       "kind": "const",
       "line": 24
     },
@@ -36359,5 +36380,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "7aad4d65c597acd9c78d17fac869a94a768f07c87537a0a59651634110f1ee70"
+  "merkle_root": "043eaa6ac4dbba07d37e48a1e18009c12ac775e15902dad8fa00c00e3294275c"
 }
