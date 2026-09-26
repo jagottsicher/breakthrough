@@ -303,17 +303,18 @@ func DefaultTheme() Theme {
 		ErrorBackground:         "darkred",
 		DirectoryBackground:     "darkgoldenrod",
 
-		// Light blue/light red, per the user's own explicit RGB values —
-		// rgb(198, 198, 255)/rgb(255, 204, 204) active, rgb(158, 158,
-		// 255)/rgb(255, 163, 163) inactive — replacing the previous
-		// muted-gray pair (and its own auto-derived Inactive shades, see
-		// darkenForInactiveFocus) with brighter, explicitly-set colors
-		// for all four, still keeping Copy on blue and Cut on red per
-		// this field's own doc comment.
-		ClipboardCopyBackground:         "#c6c6ff",
-		ClipboardCutBackground:          "#ffcccc",
-		ClipboardCopyBackgroundInactive: "#9e9eff",
-		ClipboardCutBackgroundInactive:  "#ffa3a3",
+		// Muted blue/muted red, per the user's own explicit RGB values —
+		// rgb(110, 110, 160)/rgb(160, 110, 110) active, rgb(90, 90, 180)/
+		// rgb(180, 90, 90) inactive (a second revision of these same four
+		// fields — see this file's own git history for the brighter
+		// rgb(198, 198, 255)-based pair that preceded it) — all four
+		// explicitly set rather than the Inactive pair auto-derived (see
+		// darkenForInactiveFocus), still keeping Copy on blue and Cut on
+		// red per this field's own doc comment.
+		ClipboardCopyBackground:         "#6e6ea0",
+		ClipboardCutBackground:          "#a06e6e",
+		ClipboardCopyBackgroundInactive: "#5a5ab4",
+		ClipboardCutBackgroundInactive:  "#b45a5a",
 
 		Text:               "white",
 		TextColor:          "white",

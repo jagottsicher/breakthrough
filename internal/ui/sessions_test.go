@@ -66,6 +66,30 @@ func TestReloadSessionsWithNoSessionsIsNotAnError(t *testing.T) {
 	}
 }
 
+// TestSessionsHintRButtonClickReloadsTheList pins the user's own
+// explicit further request that these colored keys be real, clickable
+// buttons: clicking "r" has to actually re-read the session list, not
+// just look like a button — the same real-click contract
+// TestActivityLogHintRButtonClickReloadsTheLog already pins for that
+// screen.
+func TestSessionsHintRButtonClickReloadsTheList(t *testing.T) {
+	r := newTestRootForSessions(t)
+	isolateSessionsList(t, nil, nil)
+	r.openSessions()
+	if got := r.sessionsTable.GetRowCount(); got != 2 {
+		t.Fatalf("setup: table has %d rows, want 2 (header + placeholder, no sessions yet)", got)
+	}
+
+	isolateSessionsList(t, []multiplex.Session{{Name: "work", Backend: multiplex.BackendTmux}}, nil)
+	// sessionsHintEntries: {↑,↓,←,→} group, then {Enter,Space} group, then r, Esc.
+	rSpan := r.sessionsHintSpans[6]
+	clickListHint(t, r, r.sessionsHint, &r.sessionsHintSpans, rSpan.startCol)
+
+	if got, want := r.sessionsTable.GetRowCount(), 2; got != want {
+		t.Errorf("table has %d rows after clicking r, want %d (header + 1 session) — the click should have reloaded", got, want)
+	}
+}
+
 func TestReloadSessionsSortsByBackendThenName(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, []multiplex.Session{

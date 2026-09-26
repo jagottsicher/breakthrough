@@ -57,6 +57,20 @@ func activityLogColumnWidth(col int) int {
 	}
 }
 
+// activityLogHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme. A
+// function, not a package-level var: a var whose own initializer
+// closes over Root methods creates a real initialization cycle the
+// moment any of those methods' own call graphs reaches back into this
+// package (see optionCategories' own identical reasoning).
+func activityLogHintEntries() []listHintEntry {
+	return []listHintEntry{
+		hintKey("Tab", "next field", simulateKeyOnFocused(tcell.KeyTab)),
+		hintKey("r", "refresh (while the list has focus)", func(r *Root) { r.reloadActivityLog() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeActivityLog() }),
+	}
+}
+
 // newActivityLogScreen builds the whole screen once, at startup — the
 // same build-once/repopulate-on-open shape newMountsScreen/
 // newFirewallScreen already establish.
@@ -90,7 +104,11 @@ func (r *Root) newActivityLogScreen() {
 
 	r.activityLogHint = tview.NewTextView()
 	r.activityLogHint.SetWrap(false)
-	r.activityLogHint.SetText(" Tab: next field · r: refresh (while the list has focus) · Esc: close ")
+	r.activityLogHint.SetDynamicColors(true)
+	activityLogHintText, activityLogHintSpans := buildListHint(r.theme, activityLogHintEntries())
+	r.activityLogHint.SetText(activityLogHintText)
+	r.activityLogHintSpans = activityLogHintSpans
+	r.activityLogHint.SetMouseCapture(r.captureListHintMouse(r.activityLogHint, &r.activityLogHintSpans))
 
 	r.activityLogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogTitleBar, 1, 0, false).

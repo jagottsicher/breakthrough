@@ -199,6 +199,20 @@ func runFindmnt(extraArg string) ([]findmntNode, error) {
 	return parseFindmntJSON(out)
 }
 
+// mountsHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func mountsHintEntries() []listHintEntry {
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+		}, label: "move"},
+		hintKey("r", "refresh", func(r *Root) { r.reloadMounts() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeMounts() }),
+	}
+}
+
 // newMountsScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newToolboxScreen already
 // establishes.
@@ -218,7 +232,11 @@ func (r *Root) newMountsScreen() {
 
 	r.mountsHint = tview.NewTextView()
 	r.mountsHint.SetWrap(false)
-	r.mountsHint.SetText(" ↑/↓: move · r: refresh · Esc: close ")
+	r.mountsHint.SetDynamicColors(true)
+	mountsHintText, mountsHintSpans := buildListHint(r.theme, mountsHintEntries())
+	r.mountsHint.SetText(mountsHintText)
+	r.mountsHintSpans = mountsHintSpans
+	r.mountsHint.SetMouseCapture(r.captureListHintMouse(r.mountsHint, &r.mountsHintSpans))
 
 	r.mountsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.mountsTitleBar, 1, 0, false).
