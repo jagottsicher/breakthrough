@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,5 +338,50 @@ func TestActivityLogFieldDoneEscapeClosesFromEitherField(t *testing.T) {
 
 	if r.activePage == activityLogPage {
 		t.Error("Escape from the keyword field should have closed the Activity Log screen")
+	}
+}
+
+// TestActivityLogHintUsesButtonColoredKeys pins the user's own explicit
+// request that this screen's own bottom hint bar read the same way the
+// button bar/a chord's own second-level legend already do (see
+// buildListHint), not as plain, uncolored text.
+func TestActivityLogHintUsesButtonColoredKeys(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	got := r.activityLogHint.GetText(false)
+	keyBG := colorTag(r.theme.ButtonBackground)
+	for _, want := range []string{
+		fmt.Sprintf("[:%s:]Tab[-:-:-]next field", keyBG),
+		fmt.Sprintf("[:%s:] r [-:-:-]refresh", keyBG),
+		fmt.Sprintf("[:%s:]Esc[-:-:-]close", keyBG),
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("activityLogHint text = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestApplyThemeRecolorsActivityLogHint pins that a live scheme switch
+// (see Root.applyTheme) rebuilds this hint's own colored keys too, not
+// just its background/foreground — the same correctness buildButtonBar/
+// chordHintBar already have via refreshButtonBar, generalized here.
+func TestApplyThemeRecolorsActivityLogHint(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	newTheme := r.theme
+	newTheme.ButtonBackground = 0x123456
+	r.applyTheme(newTheme)
+
+	got := r.activityLogHint.GetText(false)
+	if !strings.Contains(got, colorTag(0x123456)) {
+		t.Errorf("activityLogHint text = %q, want it recolored with the new theme's own ButtonBackground", got)
 	}
 }

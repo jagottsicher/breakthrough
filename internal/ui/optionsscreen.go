@@ -100,6 +100,17 @@ func padRight(s string, width int) string {
 	return s
 }
 
+// optionsHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var optionsHintEntries = []listHintEntry{
+	{"←/→", "pane"},
+	{"↑/↓", "move"},
+	{"Enter/Space", "change"},
+	{"?", "explain"},
+	{"Tab", "buttons"},
+	{"Esc", "close"},
+}
+
 // newOptionsScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape every other overlay in this
 // package uses (see newPropertiesView, r.picker). Only the contents are
@@ -134,7 +145,8 @@ func (r *Root) newOptionsScreen() {
 
 	r.optionsHint = tview.NewTextView()
 	r.optionsHint.SetWrap(false)
-	r.optionsHint.SetText(" ←/→: pane · ↑/↓: move · Enter/Space: change · ?: explain · Tab: buttons · Esc: close ")
+	r.optionsHint.SetDynamicColors(true)
+	r.optionsHint.SetText(buildListHint(r.theme, optionsHintEntries))
 
 	r.optionsButtons = r.newOptionsButtons()
 

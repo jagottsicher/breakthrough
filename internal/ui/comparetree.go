@@ -17,6 +17,16 @@ import (
 
 const compareTreePage = "compare-tree"
 
+// compareTreeHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var compareTreeHintEntries = []listHintEntry{
+	{"Enter", "diff"},
+	{"c", "copy one-sided item across"},
+	{"m", "toggle mode"},
+	{"i", "show/hide identical"},
+	{"Esc", "close"},
+}
+
 // newCompareTreeScreen builds the directory-vs-directory full screen: a
 // table of every compared/one-sided path (see renderCompareTree), a
 // status line tallying Walk's own Stats, and a button row — the same
@@ -40,7 +50,8 @@ func (r *Root) newCompareTreeScreen() {
 	r.compareTreeTitleBar = newPlainTitleBar("Compare directories")
 	r.compareTreeHint = tview.NewTextView()
 	r.compareTreeHint.SetWrap(false)
-	r.compareTreeHint.SetText(" Enter: diff · c: copy one-sided item across · m: toggle mode · i: show/hide identical · Esc: close ")
+	r.compareTreeHint.SetDynamicColors(true)
+	r.compareTreeHint.SetText(buildListHint(r.theme, compareTreeHintEntries))
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.compareTreeTable, 0, 1, true).

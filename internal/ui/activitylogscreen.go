@@ -57,6 +57,14 @@ func activityLogColumnWidth(col int) int {
 	}
 }
 
+// activityLogHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var activityLogHintEntries = []listHintEntry{
+	{"Tab", "next field"},
+	{"r", "refresh (while the list has focus)"},
+	{"Esc", "close"},
+}
+
 // newActivityLogScreen builds the whole screen once, at startup — the
 // same build-once/repopulate-on-open shape newMountsScreen/
 // newFirewallScreen already establish.
@@ -90,7 +98,8 @@ func (r *Root) newActivityLogScreen() {
 
 	r.activityLogHint = tview.NewTextView()
 	r.activityLogHint.SetWrap(false)
-	r.activityLogHint.SetText(" Tab: next field · r: refresh (while the list has focus) · Esc: close ")
+	r.activityLogHint.SetDynamicColors(true)
+	r.activityLogHint.SetText(buildListHint(r.theme, activityLogHintEntries))
 
 	r.activityLogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogTitleBar, 1, 0, false).

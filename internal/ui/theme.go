@@ -254,6 +254,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.optionsTitleBar.SetTextColor(theme.TextColor)
 		r.optionsHint.SetBackgroundColor(theme.InputBackground)
 		r.optionsHint.SetTextColor(theme.MutedTextColor)
+		r.optionsHint.SetText(buildListHint(theme, optionsHintEntries))
 
 		r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
 
@@ -340,6 +341,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.toolboxTitleBar.SetTextColor(theme.TextColor)
 		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
 		r.toolboxHint.SetTextColor(theme.MutedTextColor)
+		r.toolboxHint.SetText(buildListHint(theme, toolboxHintEntries))
 
 		styleInput(r.toolboxInput, theme, true)
 		r.toolboxInput.SetLabelColor(theme.TextColor)
@@ -357,6 +359,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.mountsTitleBar.SetTextColor(theme.TextColor)
 		r.mountsHint.SetBackgroundColor(theme.InputBackground)
 		r.mountsHint.SetTextColor(theme.MutedTextColor)
+		r.mountsHint.SetText(buildListHint(theme, mountsHintEntries))
 
 		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -377,6 +380,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.firewallTitleBar.SetTextColor(theme.TextColor)
 		r.firewallHint.SetBackgroundColor(theme.InputBackground)
 		r.firewallHint.SetTextColor(theme.MutedTextColor)
+		r.firewallHint.SetText(buildListHint(theme, firewallHintEntries))
 
 		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -427,6 +431,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.sessionsTitleBar.SetTextColor(theme.TextColor)
 		r.sessionsHint.SetBackgroundColor(theme.InputBackground)
 		r.sessionsHint.SetTextColor(theme.MutedTextColor)
+		r.sessionsHint.SetText(buildListHint(theme, sessionsHintEntries))
 
 		r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -439,6 +444,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.activityLogTitleBar.SetTextColor(theme.TextColor)
 		r.activityLogHint.SetBackgroundColor(theme.InputBackground)
 		r.activityLogHint.SetTextColor(theme.MutedTextColor)
+		r.activityLogHint.SetText(buildListHint(theme, activityLogHintEntries))
 
 		r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
 		r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
@@ -446,6 +452,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.activityLogTimeField.SetLabelColor(theme.TextColor)
 
 		r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
+	if r.compareTreeTable != nil {
+		r.compareTreeHint.SetText(buildListHint(theme, compareTreeHintEntries))
 	}
 
 	if r.searchTop != nil {

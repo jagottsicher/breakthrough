@@ -159,6 +159,15 @@ func sessionsColumnWidth(col int) int {
 	}
 }
 
+// sessionsHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var sessionsHintEntries = []listHintEntry{
+	{"↑/↓/←/→", "move"},
+	{"Enter/Space/click", "activate"},
+	{"r", "refresh"},
+	{"Esc", "close"},
+}
+
 // newSessionsScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newFirewallScreen already
 // establishes. SetSelectable(true, true): cell-level selection, not
@@ -180,7 +189,8 @@ func (r *Root) newSessionsScreen() {
 
 	r.sessionsHint = tview.NewTextView()
 	r.sessionsHint.SetWrap(false)
-	r.sessionsHint.SetText(" ↑/↓/←/→: move · Enter/Space/click: activate · r: refresh · Esc: close ")
+	r.sessionsHint.SetDynamicColors(true)
+	r.sessionsHint.SetText(buildListHint(r.theme, sessionsHintEntries))
 
 	r.sessionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.sessionsTitleBar, 1, 0, false).

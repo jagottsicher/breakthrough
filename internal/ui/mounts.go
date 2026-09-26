@@ -199,6 +199,14 @@ func runFindmnt(extraArg string) ([]findmntNode, error) {
 	return parseFindmntJSON(out)
 }
 
+// mountsHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var mountsHintEntries = []listHintEntry{
+	{"↑/↓", "move"},
+	{"r", "refresh"},
+	{"Esc", "close"},
+}
+
 // newMountsScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newToolboxScreen already
 // establishes.
@@ -218,7 +226,8 @@ func (r *Root) newMountsScreen() {
 
 	r.mountsHint = tview.NewTextView()
 	r.mountsHint.SetWrap(false)
-	r.mountsHint.SetText(" ↑/↓: move · r: refresh · Esc: close ")
+	r.mountsHint.SetDynamicColors(true)
+	r.mountsHint.SetText(buildListHint(r.theme, mountsHintEntries))
 
 	r.mountsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.mountsTitleBar, 1, 0, false).

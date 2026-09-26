@@ -226,6 +226,14 @@ func firstSelectableToolboxRow() int {
 	return firstSelectableToolboxRowIn(toolboxDisplayRows())
 }
 
+// toolboxHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var toolboxHintEntries = []listHintEntry{
+	{"↑/↓", "move"},
+	{"Enter", "run"},
+	{"Esc", "close"},
+}
+
 // newToolboxScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newOptionsScreen already
 // establishes. Only the table's own contents are rebuilt per open (see
@@ -246,7 +254,8 @@ func (r *Root) newToolboxScreen() {
 
 	r.toolboxHint = tview.NewTextView()
 	r.toolboxHint.SetWrap(false)
-	r.toolboxHint.SetText(" ↑/↓: move · Enter: run · Esc: close ")
+	r.toolboxHint.SetDynamicColors(true)
+	r.toolboxHint.SetText(buildListHint(r.theme, toolboxHintEntries))
 
 	r.toolboxLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.toolboxTitleBar, 1, 0, false).

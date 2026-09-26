@@ -89,6 +89,16 @@ var loadFirewallServices = func() firewall.ServiceLookup {
 // exercised without ever touching a real system's actual firewall state.
 var readFirewallSnapshot = firewall.ReadSnapshot
 
+// firewallHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — used both at construction and by applyTheme.
+var firewallHintEntries = []listHintEntry{
+	{"↑/↓", "move"},
+	{"r", "refresh"},
+	{"a", "add rule"},
+	{"t", "simulate"},
+	{"Esc", "close"},
+}
+
 // newFirewallScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newMountsScreen already establishes.
 func (r *Root) newFirewallScreen() {
@@ -103,7 +113,8 @@ func (r *Root) newFirewallScreen() {
 
 	r.firewallHint = tview.NewTextView()
 	r.firewallHint.SetWrap(false)
-	r.firewallHint.SetText(" ↑/↓: move · r: refresh · a: add rule · t: simulate · Esc: close ")
+	r.firewallHint.SetDynamicColors(true)
+	r.firewallHint.SetText(buildListHint(r.theme, firewallHintEntries))
 
 	r.firewallLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.firewallTitleBar, 1, 0, false).
