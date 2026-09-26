@@ -339,6 +339,29 @@ type Root struct {
 	firewallRollbackBackend  firewall.Backend
 	firewallRollbackSpec     firewall.NewRuleSpec
 
+	// firewallSimulate* make up the Firewall screen's own "Simulate" form
+	// ("t", see firewallsimulate.go and feature_ideas.txt's own
+	// Firewall-Regel-Baukasten Stufe 3) — the same "dropdowns rebuilt
+	// fresh on every open, plain fields kept as value mirrors" shape
+	// firewallAddRule* above already establishes, minus Action (a
+	// hypothetical request has no action of its own, only the rule that
+	// ends up deciding it does — see firewall.Simulate's own doc
+	// comment). firewallSimulateResult holds the last run's own outcome
+	// text, blank until "Run" has been pressed at least once.
+	firewallSimulateLayout     *tview.Flex
+	firewallSimulateTitleBar   *tview.TextView
+	firewallSimulateForm       *tview.Form
+	firewallSimulateResult     *tview.TextView
+	firewallSimulateButtons    *tview.Flex
+	firewallSimulateCloseBtn   *tview.Button
+	firewallSimulateRunBtn     *tview.Button
+	firewallSimulateDirection  firewall.Direction
+	firewallSimulateProtocol   string
+	firewallSimulatePortText   string
+	firewallSimulateSourceText string
+	firewallSimulateDestText   string
+	firewallSimulateIfaceText  string
+
 	// The Sessions screen ("js", see sessions.go) — local GNU screen/
 	// tmux terminal-multiplexer sessions (internal/multiplex), styled
 	// after the Tab switcher/Connection menu's own per-row action-cell
@@ -1805,6 +1828,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
 	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
 
+	// The Firewall screen's own "Simulate" form (see firewallsimulate.go).
+	r.firewallSimulateForm = r.newFirewallSimulateForm()
+	r.firewallSimulateButtons = r.newFirewallSimulateButtons()
+	r.firewallSimulateLayout = r.newFirewallSimulateLayout()
+
 	// The Sessions screen (see sessions.go/openSessions) — a sixth
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newSessionsScreen()
@@ -1945,6 +1973,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
 	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
 	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
+	r.AddPage(firewallSimulatePage, r.firewallSimulateLayout, false, false)
 	// resize=true: the Sessions screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
