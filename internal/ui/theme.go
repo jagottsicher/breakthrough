@@ -254,7 +254,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.optionsTitleBar.SetTextColor(theme.TextColor)
 		r.optionsHint.SetBackgroundColor(theme.InputBackground)
 		r.optionsHint.SetTextColor(theme.MutedTextColor)
-		r.optionsHint.SetText(buildListHint(theme, optionsHintEntries))
+		optionsHintText, optionsHintSpans := buildListHint(theme, optionsHintEntries())
+		r.optionsHint.SetText(optionsHintText)
+		r.optionsHintSpans = optionsHintSpans
 
 		r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
 
@@ -341,7 +343,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.toolboxTitleBar.SetTextColor(theme.TextColor)
 		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
 		r.toolboxHint.SetTextColor(theme.MutedTextColor)
-		r.toolboxHint.SetText(buildListHint(theme, toolboxHintEntries))
+		toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
+		r.toolboxHint.SetText(toolboxHintText)
+		r.toolboxHintSpans = toolboxHintSpans
 
 		styleInput(r.toolboxInput, theme, true)
 		r.toolboxInput.SetLabelColor(theme.TextColor)
@@ -359,7 +363,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.mountsTitleBar.SetTextColor(theme.TextColor)
 		r.mountsHint.SetBackgroundColor(theme.InputBackground)
 		r.mountsHint.SetTextColor(theme.MutedTextColor)
-		r.mountsHint.SetText(buildListHint(theme, mountsHintEntries))
+		mountsHintText, mountsHintSpans := buildListHint(theme, mountsHintEntries())
+		r.mountsHint.SetText(mountsHintText)
+		r.mountsHintSpans = mountsHintSpans
 
 		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -380,7 +386,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.firewallTitleBar.SetTextColor(theme.TextColor)
 		r.firewallHint.SetBackgroundColor(theme.InputBackground)
 		r.firewallHint.SetTextColor(theme.MutedTextColor)
-		r.firewallHint.SetText(buildListHint(theme, firewallHintEntries))
+		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())
+		r.firewallHint.SetText(firewallHintText)
+		r.firewallHintSpans = firewallHintSpans
 
 		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -431,7 +439,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.sessionsTitleBar.SetTextColor(theme.TextColor)
 		r.sessionsHint.SetBackgroundColor(theme.InputBackground)
 		r.sessionsHint.SetTextColor(theme.MutedTextColor)
-		r.sessionsHint.SetText(buildListHint(theme, sessionsHintEntries))
+		sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())
+		r.sessionsHint.SetText(sessionsHintText)
+		r.sessionsHintSpans = sessionsHintSpans
 
 		r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
 	}
@@ -444,7 +454,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.activityLogTitleBar.SetTextColor(theme.TextColor)
 		r.activityLogHint.SetBackgroundColor(theme.InputBackground)
 		r.activityLogHint.SetTextColor(theme.MutedTextColor)
-		r.activityLogHint.SetText(buildListHint(theme, activityLogHintEntries))
+		activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
+		r.activityLogHint.SetText(activityLogHintText)
+		r.activityLogHintSpans = activityLogHintSpans
 
 		r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
 		r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
@@ -455,7 +467,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	}
 
 	if r.compareTreeTable != nil {
-		r.compareTreeHint.SetText(buildListHint(theme, compareTreeHintEntries))
+		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
+		r.compareTreeHint.SetText(compareTreeHintText)
+		r.compareTreeHintSpans = compareTreeHintSpans
 	}
 
 	if r.searchTop != nil {

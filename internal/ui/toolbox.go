@@ -227,11 +227,20 @@ func firstSelectableToolboxRow() int {
 }
 
 // toolboxHintEntries is this screen's own bottom hint bar (see
-// buildListHint) — used both at construction and by applyTheme.
-var toolboxHintEntries = []listHintEntry{
-	{"↑/↓", "move"},
-	{"Enter", "run"},
-	{"Esc", "close"},
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func toolboxHintEntries() []listHintEntry {
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+		}, label: "move"},
+		hintKey("Enter", "run", func(r *Root) {
+			row, _ := r.toolboxTable.GetSelection()
+			r.activateToolboxRow(row)
+		}),
+		hintKey("Esc", "close", func(r *Root) { r.closeToolbox() }),
+	}
 }
 
 // newToolboxScreen builds the whole screen once, at startup — the same
@@ -255,7 +264,10 @@ func (r *Root) newToolboxScreen() {
 	r.toolboxHint = tview.NewTextView()
 	r.toolboxHint.SetWrap(false)
 	r.toolboxHint.SetDynamicColors(true)
-	r.toolboxHint.SetText(buildListHint(r.theme, toolboxHintEntries))
+	toolboxHintText, toolboxHintSpans := buildListHint(r.theme, toolboxHintEntries())
+	r.toolboxHint.SetText(toolboxHintText)
+	r.toolboxHintSpans = toolboxHintSpans
+	r.toolboxHint.SetMouseCapture(r.captureListHintMouse(r.toolboxHint, &r.toolboxHintSpans))
 
 	r.toolboxLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.toolboxTitleBar, 1, 0, false).

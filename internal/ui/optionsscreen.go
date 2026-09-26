@@ -101,14 +101,35 @@ func padRight(s string, width int) string {
 }
 
 // optionsHintEntries is this screen's own bottom hint bar (see
-// buildListHint) — used both at construction and by applyTheme.
-var optionsHintEntries = []listHintEntry{
-	{"←/→", "pane"},
-	{"↑/↓", "move"},
-	{"Enter/Space", "change"},
-	{"?", "explain"},
-	{"Tab", "buttons"},
-	{"Esc", "close"},
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func optionsHintEntries() []listHintEntry {
+	change := func(r *Root) {
+		row, _ := r.optionsTable.GetSelection()
+		r.activateOptionRow(row)
+	}
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"←", simulateKeyOnFocused(tcell.KeyLeft)},
+			{"→", simulateKeyOnFocused(tcell.KeyRight)},
+		}, label: "pane"},
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+		}, label: "move"},
+		{keys: []listHintKey{
+			{"Enter", change},
+			{"Space", change},
+		}, label: "change"},
+		hintKey("?", "explain", func(r *Root) {
+			row, _ := r.optionsTable.GetSelection()
+			if opt, ok := r.optionAtRow(row); ok {
+				r.showOptionInfo(opt)
+			}
+		}),
+		hintKey("Tab", "buttons", simulateKeyOnFocused(tcell.KeyTab)),
+		hintKey("Esc", "close", func(r *Root) { r.closeOptions() }),
+	}
 }
 
 // newOptionsScreen builds the whole screen once, at startup — the same
@@ -146,7 +167,10 @@ func (r *Root) newOptionsScreen() {
 	r.optionsHint = tview.NewTextView()
 	r.optionsHint.SetWrap(false)
 	r.optionsHint.SetDynamicColors(true)
-	r.optionsHint.SetText(buildListHint(r.theme, optionsHintEntries))
+	optionsHintText, optionsHintSpans := buildListHint(r.theme, optionsHintEntries())
+	r.optionsHint.SetText(optionsHintText)
+	r.optionsHintSpans = optionsHintSpans
+	r.optionsHint.SetMouseCapture(r.captureListHintMouse(r.optionsHint, &r.optionsHintSpans))
 
 	r.optionsButtons = r.newOptionsButtons()
 

@@ -18,13 +18,22 @@ import (
 const compareTreePage = "compare-tree"
 
 // compareTreeHintEntries is this screen's own bottom hint bar (see
-// buildListHint) — used both at construction and by applyTheme.
-var compareTreeHintEntries = []listHintEntry{
-	{"Enter", "diff"},
-	{"c", "copy one-sided item across"},
-	{"m", "toggle mode"},
-	{"i", "show/hide identical"},
-	{"Esc", "close"},
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func compareTreeHintEntries() []listHintEntry {
+	return []listHintEntry{
+		hintKey("Enter", "diff", func(r *Root) {
+			row, _ := r.compareTreeTable.GetSelection()
+			r.activateCompareTreeRow(row)
+		}),
+		hintKey("c", "copy one-sided item across", func(r *Root) {
+			row, _ := r.compareTreeTable.GetSelection()
+			r.copyCompareTreeRow(row)
+		}),
+		hintKey("m", "toggle mode", func(r *Root) { r.toggleCompareTreeMode() }),
+		hintKey("i", "show/hide identical", func(r *Root) { r.toggleCompareTreeShowIdentical() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeCompareTree() }),
+	}
 }
 
 // newCompareTreeScreen builds the directory-vs-directory full screen: a
@@ -51,7 +60,10 @@ func (r *Root) newCompareTreeScreen() {
 	r.compareTreeHint = tview.NewTextView()
 	r.compareTreeHint.SetWrap(false)
 	r.compareTreeHint.SetDynamicColors(true)
-	r.compareTreeHint.SetText(buildListHint(r.theme, compareTreeHintEntries))
+	compareTreeHintText, compareTreeHintSpans := buildListHint(r.theme, compareTreeHintEntries())
+	r.compareTreeHint.SetText(compareTreeHintText)
+	r.compareTreeHintSpans = compareTreeHintSpans
+	r.compareTreeHint.SetMouseCapture(r.captureListHintMouse(r.compareTreeHint, &r.compareTreeHintSpans))
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.compareTreeTable, 0, 1, true).

@@ -78,6 +78,43 @@ func TestCaptureFirewallKeyEscapeClosesTheScreen(t *testing.T) {
 	}
 }
 
+// TestFirewallHintArrowButtonClickMovesTheSelection pins the user's own
+// explicit further request that even a grouped arrow key ("↑"/"↓" both
+// under "move") be its own real, independently clickable button — a
+// click on "↓" must actually move the table's own selection down, the
+// same as pressing the real key already does, not just look colored.
+func TestFirewallHintArrowButtonClickMovesTheSelection(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateFirewallRead(t, firewall.Snapshot{
+		Backend: firewall.BackendUFW,
+		Rules: []firewall.Rule{
+			{Order: 1, Direction: firewall.DirectionIn, Action: firewall.ActionAllow},
+			{Order: 2, Direction: firewall.DirectionIn, Action: firewall.ActionDeny},
+		},
+	}, nil)
+	r.openFirewall()
+	r.firewallTable.Select(2, 0) // the first rule row — row 1 is the "Incoming" section label
+
+	// firewallHintEntries: {"↑","↓"} group, then r, a, t, Esc — spans[0]
+	// is "↑", spans[1] is "↓".
+	downSpan := r.firewallHintSpans[1]
+	clickListHint(t, r, r.firewallHint, &r.firewallHintSpans, downSpan.startCol)
+
+	if row, _ := r.firewallTable.GetSelection(); row != 3 {
+		t.Errorf("selected row = %d after clicking ↓, want 3 (one row down)", row)
+	}
+
+	upSpan := r.firewallHintSpans[0]
+	clickListHint(t, r, r.firewallHint, &r.firewallHintSpans, upSpan.startCol)
+
+	if row, _ := r.firewallTable.GetSelection(); row != 2 {
+		t.Errorf("selected row = %d after clicking ↑, want 2 (back up one row)", row)
+	}
+}
+
 // TestCaptureFirewallKeyRRefreshesWithoutClosing pins that "r" is
 // consumed and re-reads the firewall snapshot (via reloadFirewall)
 // without closing the screen.
