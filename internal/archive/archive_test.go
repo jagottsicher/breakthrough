@@ -43,6 +43,32 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// FuzzClassify pins the one property TestClassify's own fixed cases
+// can't: suffix matching can never depend on what comes *before* the
+// suffix, for any real path at all — prepending arbitrary bytes ahead
+// of p must never change whether it classifies as an archive, or which
+// Kind it classifies as. Also a plain crash-safety net for the
+// case-insensitive strings.ToLower call ahead of the real suffix
+// check — arbitrary Unicode input is exactly what a hand-picked test
+// corpus is least likely to include on its own.
+func FuzzClassify(f *testing.F) {
+	for _, seed := range []string{
+		"archive.zip", "ARCHIVE.ZIP", "backup.tar.gz", "backup.tar.bz2",
+		"backup.tar.xz", "notes.txt", "archive.7z", "", "no-extension-at-all",
+		"a.tar.gz.part", "İstanbul.zip", "a.zip/inner.tar",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, p string) {
+		kind, ok := Classify(p)
+		prefixed := "random-prefix-" + p
+		kindPrefixed, okPrefixed := Classify(prefixed)
+		if ok != okPrefixed || (ok && kind != kindPrefixed) {
+			t.Errorf("Classify(%q) = (%v, %v), but Classify(%q) = (%v, %v) — suffix matching must be prefix-independent", p, kind, ok, prefixed, kindPrefixed, okPrefixed)
+		}
+	})
+}
+
 // writeZip builds a small zip fixture at dir/name.zip containing files
 // (path -> content) and returns its full path. A path ending in "/"
 // with an empty content adds an explicit, otherwise-empty directory
