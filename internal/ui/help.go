@@ -809,6 +809,11 @@ var helpText = strings.TrimLeft(`
   "h" (see the Details sidebar's own entry above) computes hashes here
   too — clicking the hash hint works as well.
 
+  The title bar is draggable with the mouse, like a Toolbox tool
+  window — grab it anywhere and move it, though it still opens anchored
+  to the row it's about, same as always. Its own close glyph (✕), in
+  the top-right corner, behaves exactly like Cancel.
+
 [::b]Look ("l", or Enter/double-click a file)[::-]
 
   Escape            Close
