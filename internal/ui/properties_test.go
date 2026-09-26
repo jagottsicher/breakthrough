@@ -335,7 +335,7 @@ func TestComputeHashesUpdatesPropertiesText(t *testing.T) {
 	r.openProperties()
 
 	before := r.propertiesText.GetText(true)
-	if !strings.Contains(before, "Press h or click here") {
+	if !strings.Contains(before, "h to compute SHA-256") {
 		t.Errorf("Properties text before computing hashes should show the hint, got:\n%s", before)
 	}
 
@@ -782,6 +782,39 @@ func TestPropertiesHashLineClickTriggersHash(t *testing.T) {
 	// nothing here drains (see isolateHashFile's own doc comment).
 	if !r.hashInProgress {
 		t.Error("clicking the hash line should have started computing the hash")
+	}
+}
+
+// TestPropertiesHashLineClickPastTheButtonDoesNotTriggerHash pins the
+// user's own explicit request: the "h" hint is a real button now, not
+// "click anywhere on this line" the way it used to work — a click on
+// the same row, but past the button's own few columns, must do
+// nothing.
+func TestPropertiesHashLineClickPastTheButtonDoesNotTriggerHash(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "banana.txt")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.SetRect(0, 0, 80, 24)
+	r.target = path
+	r.openProperties()
+	screen := drawProperties(t, r)
+	defer screen.Fini()
+
+	x, y, _, _ := r.propertiesText.GetInnerRect()
+	clickY := y + r.hashSectionRow
+
+	// consumed itself isn't checked here: tview's own default TextView
+	// MouseHandler already reports a plain click within its own rect as
+	// consumed regardless of whether this app's own hashesMouseCapture
+	// matched anything — hashInProgress is what actually pins whether
+	// the click reached the hash section's own action at all.
+	r.properties.MouseHandler()(tview.MouseLeftClick, tcell.NewEventMouse(x+r.hashButtonWidth+5, clickY, tcell.Button1, 0), func(tview.Primitive) {})
+	if r.hashInProgress {
+		t.Error("clicking past the button should not have started computing hashes")
 	}
 }
 

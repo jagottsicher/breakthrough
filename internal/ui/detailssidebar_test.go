@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
@@ -391,8 +392,9 @@ func TestInfoFieldDateTimeNeverWrapsAtMinWidth(t *testing.T) {
 // Modified.
 func TestDetailsFullscreenHintNeverWrapsAtMinWidth(t *testing.T) {
 	usableWidth := detailsSidebarMinWidth - 2
-	if w := len([]rune(detailsFullscreenHint)); w > usableWidth {
-		t.Errorf("detailsFullscreenHint is %d columns wide, want at most %d (the sidebar's own minimum usable width): %q", w, usableWidth, detailsFullscreenHint)
+	hint := detailsFullscreenHint(config.DefaultTheme().Resolve())
+	if w := tview.TaggedStringWidth(hint); w > usableWidth {
+		t.Errorf("detailsFullscreenHint is %d columns wide, want at most %d (the sidebar's own minimum usable width): %q", w, usableWidth, hint)
 	}
 }
 
@@ -404,8 +406,8 @@ func TestDetailsFullscreenHintNeverWrapsAtMinWidth(t *testing.T) {
 // so wrapping here silently threw off every click zone below it.
 func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
 	usableWidth := detailsSidebarMinWidth - 2
-	for _, s := range []string{detailsMetadataHint, detailsMetadataStubMessage} {
-		if w := len([]rune(s)); w > usableWidth {
+	for _, s := range []string{detailsMetadataHint(config.DefaultTheme().Resolve()), detailsMetadataStubMessage} {
+		if w := tview.TaggedStringWidth(s); w > usableWidth {
 			t.Errorf("%q is %d columns wide, want at most %d (the sidebar's own minimum usable width)", s, w, usableWidth)
 		}
 	}
@@ -705,8 +707,8 @@ func TestDetailsSidebarShowsDirSizeHintForDirectory(t *testing.T) {
 	r.detailsSidebarVisible = true
 
 	text := r.detailsSidebar.GetText(true)
-	if !strings.Contains(text, "Press k or click here") || !strings.Contains(text, "du -hs") {
-		t.Errorf(`a directory's Details sidebar should hint at "Press k...du -hs", got:%s`, "\n"+text)
+	if !strings.Contains(text, "k to compute") || !strings.Contains(text, "du -hs") {
+		t.Errorf(`a directory's Details sidebar should hint at "k to compute...du -hs", got:%s`, "\n"+text)
 	}
 	if r.detailsDirSizeRowStart < 0 {
 		t.Errorf("detailsDirSizeRowStart = %d, want >= 0 for a directory", r.detailsDirSizeRowStart)
@@ -799,7 +801,7 @@ func TestFetchDetailsMetadataShowsStubMessage(t *testing.T) {
 	loadDetailsWithPreview(t, r, path)
 
 	before := r.detailsSidebar.GetText(true)
-	if !strings.Contains(before, "M: load metadata") {
+	if !strings.Contains(before, "load metadata") {
 		t.Errorf("before fetching, the sidebar should show the metadata hint, got:\n%s", before)
 	}
 
@@ -1148,6 +1150,39 @@ func TestClickingDetailsHashZoneDefersToOpenProperties(t *testing.T) {
 	}
 }
 
+// TestDetailsHashClickPastTheButtonDoesNotTriggerHash pins the user's
+// own explicit request: the "h" hint is a real button now, not "click
+// anywhere on this line or below it" the way it used to work — a click
+// on the same row, but past the button's own few columns, must do
+// nothing.
+func TestDetailsHashClickPastTheButtonDoesNotTriggerHash(t *testing.T) {
+	dir := fixtureDir(t)
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	r.panel.focusRow(1)
+	r.showDetailsSidebar()
+	r.target = path
+	r.loadDetailsTarget(path)
+
+	if r.detailsHashRowStart < 0 {
+		t.Fatal("setup: detailsHashRowStart should be set for a non-directory target")
+	}
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x+r.detailsHashButtonWidth+5, rectY+r.detailsHashRowStart, tcell.Button1, 0))
+
+	if r.detailsHashInProgress {
+		t.Error("clicking past the button should not have started computing hashes")
+	}
+}
+
 // TestHideDetailsSidebarCancelsInProgressHashComputation pins the
 // original design intent (see feature_ideas.txt): an expensive
 // computation running purely for the sidebar's own benefit stops the
@@ -1251,7 +1286,7 @@ func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
 	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
 
 	before := r.detailsSidebar.GetText(true)
-	if !strings.Contains(before, "Press k or click here") {
+	if !strings.Contains(before, "k to compute") {
 		t.Errorf("before computing a size, the sidebar should show the hint, got:\n%s", before)
 	}
 
@@ -1268,7 +1303,7 @@ func TestComputeDetailsDirSizeStoresResult(t *testing.T) {
 	if !strings.Contains(after, "Size (du -hs): 5.0M") {
 		t.Errorf("detailsSidebar after computing a size should show \"Size (du -hs): 5.0M\", got:\n%s", after)
 	}
-	if strings.Contains(after, "Press k or click here") {
+	if strings.Contains(after, "k to compute") {
 		t.Errorf("detailsSidebar after computing a size should no longer show the hint, got:\n%s", after)
 	}
 }
@@ -1359,6 +1394,32 @@ func TestDetailsDirSizeClickZoneTriggersComputation(t *testing.T) {
 
 	if !r.detailsDirSizeInProgress {
 		t.Error("clicking the directory-size hint should start a computation")
+	}
+}
+
+// TestDetailsDirSizeClickPastTheButtonDoesNotTriggerComputation mirrors
+// TestDetailsHashClickPastTheButtonDoesNotTriggerHash for the "k"
+// button.
+func TestDetailsDirSizeClickPastTheButtonDoesNotTriggerComputation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.showDetailsSidebar()
+	r.loadDetailsTarget(filepath.Join(dir, "app-data"))
+	if r.detailsDirSizeRowStart < 0 {
+		t.Fatal("setup: expected a directory-size row")
+	}
+
+	_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+	x, _, _, _ := r.detailsSidebar.GetRect()
+	r.captureDetailsSidebarMouse(tview.MouseLeftClick, tcell.NewEventMouse(x+r.detailsDirSizeButtonWidth+5, rectY+r.detailsDirSizeRowStart, tcell.Button1, 0))
+
+	if r.detailsDirSizeInProgress {
+		t.Error("clicking past the button should not have started computing the directory size")
 	}
 }
 
@@ -1513,7 +1574,7 @@ func TestDetailsSidebarShowsPDFPreviewWhenPdftoppmAvailable(t *testing.T) {
 	if !strings.Contains(text, "▀") {
 		t.Errorf("details sidebar text should contain a half-block preview, got:\n%s", text)
 	}
-	if !strings.Contains(text, detailsFullscreenHint) {
+	if !strings.Contains(text, "fullscreen") {
 		t.Errorf("details sidebar text should show the fullscreen hint, got:\n%s", text)
 	}
 	if r.detailsPreviewRowStart < 0 || r.detailsPreviewRowEnd < r.detailsPreviewRowStart {
