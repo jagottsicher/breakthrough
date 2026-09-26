@@ -76,19 +76,45 @@ func simulateKeyOnFocused(key tcell.Key) func(r *Root) {
 	}
 }
 
+// renderHintKey renders key with the shared "background-colored key"
+// style this file's own package doc comment describes — highlightKey's
+// own padded style (one space either side, inside the colored
+// background) for a single rune (e.g. "r", "?"), or chordHintBar's own
+// direct "Esc" treatment (no padding at all) for anything longer ("Esc",
+// "Tab", one member of a compound like "↑"): there is no single-
+// character "key" to pad in that case, the whole text names what's
+// actually pressed. width is the rendered result's own display width —
+// the click target's own size, in columns, starting wherever the
+// caller places this text.
+func renderHintKey(theme config.ResolvedTheme, key string) (rendered string, width int) {
+	keyBG := colorTag(theme.ButtonBackground)
+	if len([]rune(key)) == 1 {
+		return fmt.Sprintf("[:%s:] %s [-:-:-]", keyBG, key), 3
+	}
+	return fmt.Sprintf("[:%s:]%s[-:-:-]", keyBG, key), len([]rune(key))
+}
+
+// singleKeyHint renders one "key" immediately followed by label, with
+// no surrounding padding of its own — for a one-off "key to do this"
+// hint that sits at column 0 of its own line inside a larger block of
+// otherwise plain text (Properties'/Details' own hash and directory-
+// size compute hints — "'h' to compute...", "'k' to compute this
+// directory's total size..."), rather than one of buildListHint's own
+// standalone hint bars. keyWidth is the key's own click target width,
+// always starting at column 0 — the caller's own mouse capture checks
+// a click's column against it directly (see e.g. hashesMouseCapture),
+// deliberately never falling back to "click anywhere on this line/
+// section" the way this app used to, per the user's own explicit
+// request that a real button, not a whole line or area, be the actual
+// click target everywhere a key is highlighted this way.
+func singleKeyHint(theme config.ResolvedTheme, key, label string) (text string, keyWidth int) {
+	rendered, width := renderHintKey(theme, key)
+	return rendered + label, width
+}
+
 // buildListHint renders entries in the shared style this file's own
 // doc comment describes, and returns every key's own clickable region
 // alongside it (see listHintActionAt/captureListHintMouse).
-//
-// A single-rune key (e.g. "r", "?") gets highlightKey's own padded
-// style — one space either side of it inside the colored background,
-// the label following with no space of its own (the highlight's own
-// trailing space already separates the two). Anything longer — "Esc",
-// "Tab", or one member of a compound like "↑" — gets the background
-// wrapped directly around it instead, with no padding and no space
-// before whatever follows, the exact same treatment chordHintBar
-// already gives "Esc" itself: there is no single-character "key" to pad
-// here, the whole text names what's actually pressed.
 //
 // Every entry is separated from the one before it by a single plain
 // space, except one whose own first key is exactly "Esc": that one gets
@@ -97,7 +123,6 @@ func simulateKeyOnFocused(key tcell.Key) func(r *Root) {
 // already use to set an exit action apart from the ones before it,
 // since every one of these hint bars' own last entry is exactly that.
 func buildListHint(theme config.ResolvedTheme, entries []listHintEntry) (text string, spans []listHintSpan) {
-	keyBG := colorTag(theme.ButtonBackground)
 	var b strings.Builder
 	col := 0
 	write := func(s string) {
@@ -119,11 +144,8 @@ func buildListHint(theme config.ResolvedTheme, entries []listHintEntry) (text st
 				write("/")
 			}
 			start := col
-			if len([]rune(k.key)) == 1 {
-				write(fmt.Sprintf("[:%s:] %s [-:-:-]", keyBG, k.key))
-			} else {
-				write(fmt.Sprintf("[:%s:]%s[-:-:-]", keyBG, k.key))
-			}
+			rendered, _ := renderHintKey(theme, k.key)
+			write(rendered)
 			if k.run != nil {
 				spans = append(spans, listHintSpan{startCol: start, endCol: col, run: k.run})
 			}

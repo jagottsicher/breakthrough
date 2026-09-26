@@ -703,11 +703,16 @@ func (r *Root) renderProperties() {
 	text := pb.b.String()
 	if !isDirish(r.propertiesStat) {
 		r.hashSectionRow = pb.row + 2 // +1 past the fields' own last line, +1 for the blank separator
+		r.hashButtonWidth = 0
 		switch {
 		case r.hashInProgress:
 			text += "\n\n" + hashAnimationFrames[r.hashAnimFrame%len(hashAnimationFrames)] + " Computing hashes" + hashProgressSuffix(r.hashBytesRead.Load(), r.propertiesStat.Size)
+		case r.propertiesHashes == nil:
+			hint, width := singleKeyHint(r.theme, "h", "to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512")
+			text += "\n\n" + hint
+			r.hashButtonWidth = width
 		default:
-			text += "\n\n" + hashLines(r.propertiesHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", propertiesHashFieldWidth)
+			text += "\n\n" + hashLines(r.propertiesHashes, "", propertiesHashFieldWidth)
 		}
 	}
 
@@ -1743,8 +1748,15 @@ func (r *Root) hashesMouseCapture(action tview.MouseAction, event *tcell.EventMo
 		return action, event
 	}
 
-	_, rectY, _, _ := r.propertiesText.GetInnerRect()
-	if y-rectY < r.hashSectionRow {
+	rectX, rectY, _, _ := r.propertiesText.GetInnerRect()
+	// A real button (see renderProperties/singleKeyHint), not "click
+	// anywhere on this line or below it" the way this used to work —
+	// per the user's own explicit request. hashButtonWidth is 0 whenever
+	// there's no button actually shown right now (already computed, or
+	// a computation is currently in progress) — x-rectX >= 0 is always
+	// true then, so this same check already rejects every click in that
+	// case too, with no separate guard needed.
+	if y-rectY != r.hashSectionRow || x-rectX >= r.hashButtonWidth {
 		return action, event
 	}
 	r.computeHashes()
