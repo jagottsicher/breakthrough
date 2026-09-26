@@ -1108,7 +1108,7 @@ func (r *Root) aboutText() string {
 
   Version    %s (commit %s, built %s by %s)
   License    Apache License, Version 2.0
-  Copyright  2026 jagottsicher
+  Copyright  hand knitted with ❤ by Jens Schendel in 2026
   Homepage   github.com/jagottsicher/breakthrough
 
   Provided "AS IS", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
