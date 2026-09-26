@@ -17,6 +17,25 @@ import (
 
 const compareTreePage = "compare-tree"
 
+// compareTreeHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func compareTreeHintEntries() []listHintEntry {
+	return []listHintEntry{
+		hintKey("Enter", "diff", func(r *Root) {
+			row, _ := r.compareTreeTable.GetSelection()
+			r.activateCompareTreeRow(row)
+		}),
+		hintKey("c", "copy one-sided item across", func(r *Root) {
+			row, _ := r.compareTreeTable.GetSelection()
+			r.copyCompareTreeRow(row)
+		}),
+		hintKey("m", "toggle mode", func(r *Root) { r.toggleCompareTreeMode() }),
+		hintKey("i", "show/hide identical", func(r *Root) { r.toggleCompareTreeShowIdentical() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeCompareTree() }),
+	}
+}
+
 // newCompareTreeScreen builds the directory-vs-directory full screen: a
 // table of every compared/one-sided path (see renderCompareTree), a
 // status line tallying Walk's own Stats, and a button row — the same
@@ -40,7 +59,11 @@ func (r *Root) newCompareTreeScreen() {
 	r.compareTreeTitleBar = newPlainTitleBar("Compare directories")
 	r.compareTreeHint = tview.NewTextView()
 	r.compareTreeHint.SetWrap(false)
-	r.compareTreeHint.SetText(" Enter: diff · c: copy one-sided item across · m: toggle mode · i: show/hide identical · Esc: close ")
+	r.compareTreeHint.SetDynamicColors(true)
+	compareTreeHintText, compareTreeHintSpans := buildListHint(r.theme, compareTreeHintEntries())
+	r.compareTreeHint.SetText(compareTreeHintText)
+	r.compareTreeHintSpans = compareTreeHintSpans
+	r.compareTreeHint.SetMouseCapture(r.captureListHintMouse(r.compareTreeHint, &r.compareTreeHintSpans))
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.compareTreeTable, 0, 1, true).
