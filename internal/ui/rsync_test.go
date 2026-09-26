@@ -1039,3 +1039,83 @@ func TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection(t *testing.T) {
 		t.Errorf("Destination = %+v, want Host=example.com User=tester tracked from the picked tab's own connection", job.Destination)
 	}
 }
+
+// TestResetRsyncFormSeedsFlagsFromSettings pins the self-adapting half
+// of Rsync's own five flags: opening the dialog starts from whatever
+// settings last recorded, not always Archive-only.
+func TestResetRsyncFormSeedsFlagsFromSettings(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.settings.RsyncCopyContents = true
+	r.settings.RsyncArchive = false
+	r.settings.RsyncCompress = true
+	r.settings.RsyncDelete = true
+	r.settings.RsyncDryRun = true
+
+	r.openRsync()
+
+	switch {
+	case !r.rsyncFlags[rsyncLabelCopyContents]:
+		t.Error("rsyncFlags[CopyContents] = false, want it seeded true from settings")
+	case r.rsyncFlags[rsyncLabelArchive]:
+		t.Error("rsyncFlags[Archive] = true, want it seeded false from settings")
+	case !r.rsyncFlags[rsyncLabelCompress]:
+		t.Error("rsyncFlags[Compress] = false, want it seeded true from settings")
+	case !r.rsyncFlags[rsyncLabelDelete]:
+		t.Error("rsyncFlags[Delete] = false, want it seeded true from settings")
+	case !r.rsyncFlags[rsyncLabelDryRun]:
+		t.Error("rsyncFlags[DryRun] = false, want it seeded true from settings")
+	}
+}
+
+// TestRunRsyncWritesBackTheChosenFlagsAsTheNewDefault pins the user's
+// own explicit "self-adapting defaults" request applied to Rsync:
+// confirming a run with a given flag combination becomes the new
+// sticky default, persisted to disk through the exact same
+// optionSpec.apply the Options screen itself uses (see
+// persistRsyncFlags).
+func TestRunRsyncWritesBackTheChosenFlagsAsTheNewDefault(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(filepath.Join(dir, "a.txt"))
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "b.txt"))
+	r.toggleRsyncFlag(rsyncLabelCompress)
+	r.toggleRsyncFlag(rsyncLabelDelete)
+
+	r.runRsync()
+
+	if !r.settings.RsyncCompress || !r.settings.RsyncDelete {
+		t.Errorf("settings.RsyncCompress/RsyncDelete = %v/%v, want both true", r.settings.RsyncCompress, r.settings.RsyncDelete)
+	}
+	if !r.settings.RsyncArchive {
+		t.Errorf("settings.RsyncArchive = %v, want the untouched default true", r.settings.RsyncArchive)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading persisted config: %v", err)
+	}
+	for _, want := range []string{"rsync_compress = true", "rsync_delete = true", "rsync_archive = true"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("persisted config missing %q; got:\n%s", want, data)
+		}
+	}
+}
+
+// TestRunRsyncNeverPersistsOnAMissingDestination pins that an aborted
+// attempt (see TestRunRsyncRefusesAnEmptySourceOrDestination) never
+// writes back new flag defaults — only an actual, valid run should.
+func TestRunRsyncNeverPersistsOnAMissingDestination(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("/src")
+	r.rsyncDestinationField.SetText("")
+	r.toggleRsyncFlag(rsyncLabelDelete)
+
+	r.runRsync()
+
+	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "rsync_delete") {
+		t.Errorf("persisted config should not mention rsync_delete at all; got:\n%s", data)
+	}
+}

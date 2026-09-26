@@ -378,3 +378,92 @@ func TestSedReplaceShortcutNoOpWhileOverlayIsOpen(t *testing.T) {
 		t.Error("file should be untouched")
 	}
 }
+
+// TestResetSedFormSeedsFlagsFromSettings pins the self-adapting half of
+// Sed Replace's own five flags: opening the dialog starts from whatever
+// settings last recorded, not always the fixed Global-only literal.
+func TestResetSedFormSeedsFlagsFromSettings(t *testing.T) {
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+	r.settings.SedRegex = true
+	r.settings.SedExtendedRegex = true
+	r.settings.SedCaseInsensitive = true
+	r.settings.SedGlobal = false
+	r.settings.SedBackup = true
+
+	r.openSedReplace()
+
+	switch {
+	case !r.sedFlags[sedLabelRegex]:
+		t.Error("sedFlags[Regex] = false, want it seeded true from settings")
+	case !r.sedFlags[sedLabelExtendedRegex]:
+		t.Error("sedFlags[ExtendedRegex] = false, want it seeded true from settings")
+	case !r.sedFlags[sedLabelCaseInsensitive]:
+		t.Error("sedFlags[CaseInsensitive] = false, want it seeded true from settings")
+	case r.sedFlags[sedLabelGlobal]:
+		t.Error("sedFlags[Global] = true, want it seeded false from settings")
+	case !r.sedFlags[sedLabelBackup]:
+		t.Error("sedFlags[Backup] = false, want it seeded true from settings")
+	}
+}
+
+// TestRunSedPreviewWritesBackTheChosenFlagsAsTheNewDefault pins the
+// user's own explicit "self-adapting defaults" request applied to Sed
+// Replace: running Preview with a given flag combination becomes the
+// new sticky default, persisted to disk through the exact same
+// optionSpec.apply the Options screen itself uses (see
+// persistSedFlags).
+func TestRunSedPreviewWritesBackTheChosenFlagsAsTheNewDefault(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+	r.openSedReplace()
+	r.sedFindField.SetText("hello")
+	r.sedReplaceField.SetText("goodbye")
+	sedSetFlag(t, r, sedLabelCaseInsensitive, true)
+	sedSetFlag(t, r, sedLabelBackup, true)
+
+	isolateSedPreviewFunc(t, blockingSedPreviewFunc)
+	r.runSedPreview()
+
+	if !r.settings.SedCaseInsensitive || !r.settings.SedBackup {
+		t.Errorf("settings.SedCaseInsensitive/SedBackup = %v/%v, want both true", r.settings.SedCaseInsensitive, r.settings.SedBackup)
+	}
+	if !r.settings.SedGlobal {
+		t.Errorf("settings.SedGlobal = %v, want the untouched default true", r.settings.SedGlobal)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading persisted config: %v", err)
+	}
+	for _, want := range []string{"sed_case_insensitive = true", "sed_backup = true", "sed_global = true"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("persisted config missing %q; got:\n%s", want, data)
+		}
+	}
+}
+
+// TestRunSedPreviewNeverPersistsOnABuildScriptError pins that an
+// aborted attempt — here, Find/Replace text that exhausts every
+// delimiter candidate (see replace.pickDelimiter) — never writes back
+// new flag defaults; only a script that actually built successfully
+// should.
+func TestRunSedPreviewNeverPersistsOnABuildScriptError(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _, _ := newTestRootWithSedFile(t, "hello world\n")
+	r.openSedReplace()
+	r.sedFindField.SetText("/#|~^@%") // every delimiter candidate at once
+	r.sedReplaceField.SetText("x")
+	sedSetFlag(t, r, sedLabelBackup, true)
+
+	r.runSedPreview()
+
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay (an impossible-to-delimit script)", r.activePage)
+	}
+	if r.settings.SedBackup {
+		t.Error("settings.SedBackup = true, want it untouched — buildSedScript failed before persisting")
+	}
+	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "sed_backup") {
+		t.Errorf("persisted config should not mention sed_backup at all; got:\n%s", data)
+	}
+}

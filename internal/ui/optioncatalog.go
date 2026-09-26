@@ -657,6 +657,202 @@ func optionCategories() []optionCategory {
 						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
 					},
 				)),
+				// "Compress & Extract" subsection — self-adapting, per
+				// the user's own explicit request that this follow the
+				// same "whatever gets chosen becomes the new sticky
+				// default" shape Duplicate's own settings above already
+				// have: confirming Compress with a given Format writes
+				// it back here (see openCompress/runCompress in
+				// compress.go), so the dialog opens on whichever one was
+				// actually used last instead of always "zip".
+				withSection("Compress & Extract", optionSpec{
+					key:   "compress_format",
+					label: "Default archive format",
+					help: "Which format Compress's own \"Format\" dropdown starts on.\n\n" +
+						"Self-adapting: whichever format you actually pick and confirm Compress " +
+						"with becomes the new value here — this only ever sets the starting " +
+						"point the dialog opens with, never overrides a format you then pick " +
+						"differently for one particular archive.\n\n" +
+						"\"zip\" by default.",
+					value: func(r *Root) string { return r.settings.CompressFormat },
+					apply: func(r *Root, v string) {
+						r.settings.CompressFormat = v
+						r.persistSetting("compress_format", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := make([]optionChoice, 0, len(archiveFormats()))
+						for _, f := range archiveFormats() {
+							out = append(out, optionChoice{value: archiveFormatID(f), label: f.label})
+						}
+						return out
+					},
+				}),
+				// "Rsync" subsection — self-adapting, the same shape as
+				// "Compress & Extract" above: running Rsync (Run or Run
+				// in background) writes its own five flags back here
+				// (see runRsync/runRsyncBackground in rsync.go), so the
+				// dialog opens on whichever combination was actually
+				// used last.
+				withSection("Rsync", boolOption("rsync_copy_contents", "Copy the folder's contents in",
+					"Rsync's own last-used \"Copy the folder's contents in (not the folder "+
+						"itself)\" flag — see internal/rsync's own CopyContents doc comment for "+
+						"what it actually changes. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.RsyncCopyContents },
+					func(r *Root, b bool) {
+						r.settings.RsyncCopyContents = b
+						r.persistSetting("rsync_copy_contents", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Rsync", boolOption("rsync_archive", "Archive mode (-a)",
+					"Rsync's own last-used \"Archive mode\" flag — preserves permissions, "+
+						"times, and symlinks. On by default, rsync's own conventional "+
+						"\"just copy it properly\" starting point.",
+					false,
+					func(r *Root) bool { return r.settings.RsyncArchive },
+					func(r *Root, b bool) {
+						r.settings.RsyncArchive = b
+						r.persistSetting("rsync_archive", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Rsync", boolOption("rsync_compress", "Compress data in transit (-z)",
+					"Rsync's own last-used compression flag — mainly useful over a slow "+
+						"link. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.RsyncCompress },
+					func(r *Root, b bool) {
+						r.settings.RsyncCompress = b
+						r.persistSetting("rsync_compress", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Rsync", boolOption("rsync_delete", "Delete extraneous files (--delete)",
+					"Rsync's own last-used \"also remove from Destination whatever no "+
+						"longer exists in Source\" flag. Off by default — this can permanently "+
+						"remove files at the destination, so it's never silently pre-enabled "+
+						"just because a previous run happened to use it.",
+					false,
+					func(r *Root) bool { return r.settings.RsyncDelete },
+					func(r *Root, b bool) {
+						r.settings.RsyncDelete = b
+						r.persistSetting("rsync_delete", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Rsync", boolOption("rsync_dry_run", "Dry run (-n)",
+					"Rsync's own last-used \"report what would happen, change nothing\" "+
+						"flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.RsyncDryRun },
+					func(r *Root, b bool) {
+						r.settings.RsyncDryRun = b
+						r.persistSetting("rsync_dry_run", strconv.FormatBool(b))
+					},
+				)),
+				// "Sed Replace" subsection — self-adapting, the same
+				// shape as above: running Preview writes its own five
+				// flags back here (see runSedPreview in sedreplace.go).
+				withSection("Sed Replace", boolOption("sed_regex", "Regex",
+					"Sed Replace's own last-used \"Find is a pattern, not literal text\" "+
+						"flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SedRegex },
+					func(r *Root, b bool) {
+						r.settings.SedRegex = b
+						r.persistSetting("sed_regex", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Sed Replace", boolOption("sed_extended_regex", "Extended regex (-E)",
+					"Sed Replace's own last-used extended-regex flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SedExtendedRegex },
+					func(r *Root, b bool) {
+						r.settings.SedExtendedRegex = b
+						r.persistSetting("sed_extended_regex", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Sed Replace", boolOption("sed_case_insensitive", "Case-insensitive",
+					"Sed Replace's own last-used case-insensitive flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SedCaseInsensitive },
+					func(r *Root, b bool) {
+						r.settings.SedCaseInsensitive = b
+						r.persistSetting("sed_case_insensitive", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Sed Replace", boolOption("sed_global", "Replace all matches per line",
+					"Sed Replace's own last-used \"replace every match, not just the "+
+						"first\" flag. On by default, today's existing behavior.",
+					false,
+					func(r *Root) bool { return r.settings.SedGlobal },
+					func(r *Root, b bool) {
+						r.settings.SedGlobal = b
+						r.persistSetting("sed_global", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Sed Replace", boolOption("sed_backup", "Keep a .bak backup",
+					"Sed Replace's own last-used \"keep a .bak backup before overwriting\" "+
+						"flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SedBackup },
+					func(r *Root, b bool) {
+						r.settings.SedBackup = b
+						r.persistSetting("sed_backup", strconv.FormatBool(b))
+					},
+				)),
+				// "Search" subsection — self-adapting, the same shape as
+				// above: running a real search writes these four back
+				// here (see runSearch in search.go) — the same four that
+				// already stayed put for the rest of a session, never
+				// resetting between searches (see openSearch's own doc
+				// comment), now surviving a restart too.
+				withSection("Search", optionSpec{
+					key:   "search_engine",
+					label: "Default engine",
+					help: "Which Engine the Search dialog starts on: \"find\" or \"locate\" " +
+						"(only ever offered where locate's own database is actually usable — " +
+						"see search.LocateAvailable).\n\n" +
+						"Self-adapting: running a search with a given Engine selected becomes " +
+						"the new value here. \"find\" by default.",
+					value: func(r *Root) string { return r.settings.SearchEngine },
+					apply: func(r *Root, v string) {
+						r.settings.SearchEngine = v
+						r.persistSetting("search_engine", v)
+					},
+					choices: func(*Root) []optionChoice {
+						return []optionChoice{
+							{value: "find", label: "find"},
+							{value: "locate", label: "locate"},
+						}
+					},
+				}),
+				withSection("Search", boolOption("search_shell_patterns", "Using shell patterns",
+					"Search's own last-used Filename match mode: on for a shell-glob "+
+						"pattern, off for a regex. On by default, matching MC's own real "+
+						"default for this same checkbox.",
+					false,
+					func(r *Root) bool { return r.settings.SearchShellPatterns },
+					func(r *Root, b bool) {
+						r.settings.SearchShellPatterns = b
+						r.persistSetting("search_shell_patterns", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Search", boolOption("search_case_sensitive", "Case sensitive",
+					"Search's own last-used \"Case sensitive\" flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SearchCaseSensitive },
+					func(r *Root, b bool) {
+						r.settings.SearchCaseSensitive = b
+						r.persistSetting("search_case_sensitive", strconv.FormatBool(b))
+					},
+				)),
+				withSection("Search", boolOption("search_skip_hidden", "Skip hidden",
+					"Search's own last-used \"Skip hidden\" flag. Off by default.",
+					false,
+					func(r *Root) bool { return r.settings.SearchSkipHidden },
+					func(r *Root, b bool) {
+						r.settings.SearchSkipHidden = b
+						r.persistSetting("search_skip_hidden", strconv.FormatBool(b))
+					},
+				)),
 			},
 		},
 		{
@@ -682,6 +878,18 @@ func optionCategories() []optionCategory {
 						}
 					},
 				},
+				stringOption("open_with_command", "Last \"Open with…\" command",
+					"The command \"Open with…\" last ran, prefilled the next time it's opened.\n\n"+
+						"Self-adapting: whatever you actually type into \"Open with…\" and run "+
+						"becomes the new value here, the same way it already prefilled the next "+
+						"open within a session — this just makes that survive a restart too.\n\n"+
+						"Empty by default (nothing has been typed yet).",
+					func(r *Root) string { return r.settings.OpenWithCommand },
+					func(r *Root, v string) {
+						r.settings.OpenWithCommand = v
+						r.persistSetting("open_with_command", v)
+					},
+				),
 			},
 		},
 		{
@@ -848,6 +1056,81 @@ func optionCategories() []optionCategory {
 					func(r *Root, b bool) { r.settings.LogCategoryFirewall = b }),
 			},
 		},
+		{
+			// Deliberately NOT self-adapting, unlike every other
+			// category above — see FirewallDefaultDirection's own doc
+			// comment in config/settings.go for why: the "Add rule"
+			// form itself never writes back through these three, only
+			// ever reads them, so an accidentally reused Deny-any-port
+			// from one rule can never silently become the starting
+			// point for the next, unrelated one.
+			name: "Firewall",
+			options: []optionSpec{
+				{
+					key:   "firewall_default_direction",
+					label: "Default direction",
+					help: "Which Direction the Firewall screen's own \"Add rule\" form starts " +
+						"on.\n\n" +
+						"Not self-adapting: submitting a rule with a different Direction " +
+						"selected never changes this — the form always resets to this value on " +
+						"every open, exactly the same as before this setting existed. \"Incoming\" " +
+						"by default.",
+					value: func(r *Root) string { return r.settings.FirewallDefaultDirection },
+					apply: func(r *Root, v string) {
+						r.settings.FirewallDefaultDirection = v
+						r.persistSetting("firewall_default_direction", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := make([]optionChoice, 0, len(firewallDirectionChoices))
+						for _, c := range firewallDirectionChoices {
+							out = append(out, optionChoice{value: firewallDirectionConfigValue(c.value), label: c.label})
+						}
+						return out
+					},
+				},
+				{
+					key:   "firewall_default_action",
+					label: "Default action",
+					help: "Which Action the Firewall screen's own \"Add rule\" form starts on.\n\n" +
+						"Not self-adapting, the same as \"Default direction\" above. \"Allow\" by " +
+						"default — deliberately never \"Deny\" or \"Reject\", regardless of what " +
+						"this is set to changing that: raising the ceiling here is a config edit " +
+						"the same as any other, not a silent behavior change.",
+					value: func(r *Root) string { return r.settings.FirewallDefaultAction },
+					apply: func(r *Root, v string) {
+						r.settings.FirewallDefaultAction = v
+						r.persistSetting("firewall_default_action", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := make([]optionChoice, 0, len(firewallActionChoices))
+						for _, c := range firewallActionChoices {
+							out = append(out, optionChoice{value: firewallActionConfigValue(c.value), label: c.label})
+						}
+						return out
+					},
+				},
+				{
+					key:   "firewall_default_protocol",
+					label: "Default protocol",
+					help: "Which Protocol the Firewall screen's own \"Add rule\" form starts " +
+						"on.\n\n" +
+						"Not self-adapting, the same as the two settings above. \"any\" by " +
+						"default.",
+					value: func(r *Root) string { return r.settings.FirewallDefaultProtocol },
+					apply: func(r *Root, v string) {
+						r.settings.FirewallDefaultProtocol = v
+						r.persistSetting("firewall_default_protocol", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := make([]optionChoice, 0, len(firewallProtocolChoices))
+						for _, c := range firewallProtocolChoices {
+							out = append(out, optionChoice{value: c.value, label: c.label})
+						}
+						return out
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -979,6 +1262,38 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.MoveStableSymlinks), true
 	case "remote_archive_confirm_size":
 		return config.FormatByteSize(s.RemoteArchiveConfirmSize), true
+	case "compress_format":
+		return s.CompressFormat, true
+	case "open_with_command":
+		return s.OpenWithCommand, true
+	case "rsync_copy_contents":
+		return strconv.FormatBool(s.RsyncCopyContents), true
+	case "rsync_archive":
+		return strconv.FormatBool(s.RsyncArchive), true
+	case "rsync_compress":
+		return strconv.FormatBool(s.RsyncCompress), true
+	case "rsync_delete":
+		return strconv.FormatBool(s.RsyncDelete), true
+	case "rsync_dry_run":
+		return strconv.FormatBool(s.RsyncDryRun), true
+	case "sed_regex":
+		return strconv.FormatBool(s.SedRegex), true
+	case "sed_extended_regex":
+		return strconv.FormatBool(s.SedExtendedRegex), true
+	case "sed_case_insensitive":
+		return strconv.FormatBool(s.SedCaseInsensitive), true
+	case "sed_global":
+		return strconv.FormatBool(s.SedGlobal), true
+	case "sed_backup":
+		return strconv.FormatBool(s.SedBackup), true
+	case "search_engine":
+		return s.SearchEngine, true
+	case "search_shell_patterns":
+		return strconv.FormatBool(s.SearchShellPatterns), true
+	case "search_case_sensitive":
+		return strconv.FormatBool(s.SearchCaseSensitive), true
+	case "search_skip_hidden":
+		return strconv.FormatBool(s.SearchSkipHidden), true
 	case "log_level":
 		return s.LogLevel, true
 	case "log_category_fileops":
@@ -997,6 +1312,12 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.LogCategoryShell), true
 	case "log_category_firewall":
 		return strconv.FormatBool(s.LogCategoryFirewall), true
+	case "firewall_default_direction":
+		return s.FirewallDefaultDirection, true
+	case "firewall_default_action":
+		return s.FirewallDefaultAction, true
+	case "firewall_default_protocol":
+		return s.FirewallDefaultProtocol, true
 	}
 	return "", false
 }

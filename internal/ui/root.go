@@ -1618,6 +1618,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		// without going through openProperties (e.g. seedProperties in
 		// the test suite).
 		propertiesFocusIndex: -1,
+
+		// Seeded from settings.OpenWithCommand rather than left at its
+		// zero value — see that setting's own doc comment: this is
+		// "Open with…"'s own self-adapting prefill, now surviving a
+		// restart instead of resetting to empty every time.
+		lastOpenWithCommand: settings.OpenWithCommand,
 	}
 
 	// No borders on the floating elements below — a background color set

@@ -130,12 +130,17 @@ func (r *Root) resetSedForm() {
 	r.sedAdvancedField = tview.NewInputField().SetLabel("Advanced sed script (overrides Find/Replace above)")
 	r.sedForm.AddFormItem(r.sedAdvancedField)
 
+	// Seeded from settings rather than these fixed literals —
+	// self-adapting, the same shape Duplicate's own settings and
+	// runRsync's own persistRsyncFlags already have (see
+	// runSedPreview): whatever combination Sed Replace last actually
+	// ran with becomes the new starting point here.
 	r.sedFlags = map[string]bool{
-		sedLabelRegex:           false,
-		sedLabelExtendedRegex:   false,
-		sedLabelCaseInsensitive: false,
-		sedLabelGlobal:          true,
-		sedLabelBackup:          false,
+		sedLabelRegex:           r.settings.SedRegex,
+		sedLabelExtendedRegex:   r.settings.SedExtendedRegex,
+		sedLabelCaseInsensitive: r.settings.SedCaseInsensitive,
+		sedLabelGlobal:          r.settings.SedGlobal,
+		sedLabelBackup:          r.settings.SedBackup,
 	}
 	r.sedFlagsList.Clear()
 	for _, label := range sedFlagOrder {
@@ -151,6 +156,24 @@ func (r *Root) resetSedForm() {
 // which widget happens to implement it.
 func sedFlagItemText(label string, checked bool) string {
 	return fmt.Sprintf("%s  %s", checkboxText(checked), label)
+}
+
+// persistSedFlags writes sedFlags back to settings, self-adapting the
+// same way persistRsyncFlags already does for Rsync: runSedPreview
+// calls this once buildSedScript has actually validated, so a rejected
+// script (a bad advanced script, an empty Find) never overwrites a
+// previous, real default.
+func (r *Root) persistSedFlags() {
+	apply := func(key, label string) {
+		if opt, ok := optionSpecByKey(key); ok {
+			opt.apply(r, strconv.FormatBool(r.sedFlags[label]))
+		}
+	}
+	apply("sed_regex", sedLabelRegex)
+	apply("sed_extended_regex", sedLabelExtendedRegex)
+	apply("sed_case_insensitive", sedLabelCaseInsensitive)
+	apply("sed_global", sedLabelGlobal)
+	apply("sed_backup", sedLabelBackup)
 }
 
 // toggleSedFlag flips one flag's state and re-renders just that row —
@@ -287,6 +310,7 @@ func (r *Root) runSedPreview() {
 		r.showError(err)
 		return
 	}
+	r.persistSedFlags()
 
 	r.cancelSedPreview() // stop an earlier run still in flight, if any
 	ctx, cancel := context.WithCancel(context.Background())

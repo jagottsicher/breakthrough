@@ -157,6 +157,31 @@ func archiveFormats() []archiveFormat {
 	}
 }
 
+// archiveFormatID is one archiveFormat's own stable identifier for
+// config.Settings.CompressFormat — ext with its leading "." stripped
+// ("zip", "tar.gz", ...), rather than label (which also carries every
+// recognized extension in parentheses, not a stable machine-readable
+// value) or the slice index itself (not stable across a reorder of
+// archiveFormats).
+func archiveFormatID(f archiveFormat) string {
+	return strings.TrimPrefix(f.ext, ".")
+}
+
+// archiveFormatIndexByID returns formats' own index whose
+// archiveFormatID matches id, or 0 (zip, archiveFormats' own first
+// entry) if id is empty, stale (a format this build no longer offers),
+// or otherwise unrecognized — the same forgiving, unvalidated-at-load-
+// time handling every other enum setting already gets (see e.g.
+// FindColorScheme's own fallback).
+func archiveFormatIndexByID(formats []archiveFormat, id string) int {
+	for i, f := range formats {
+		if archiveFormatID(f) == id {
+			return i
+		}
+	}
+	return 0
+}
+
 // archiveFormatFor reports which archiveFormats entry path's own
 // extension matches (case-insensitively), if any — Extract's own way
 // of recognizing a file as an archive at all, independent of
@@ -233,7 +258,7 @@ func (r *Root) openCompress() {
 	}
 
 	r.compressTargets = targets
-	r.compressFormatIndex = 0
+	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), r.settings.CompressFormat)
 	r.compressOutputName = defaultCompressOutputName(targets, r.panel.path)
 	r.renderCompressForm()
 	r.renderCompressPreview()
@@ -440,6 +465,16 @@ func (r *Root) runCompress() {
 	if name == "" {
 		r.showError(fmt.Errorf("compress: an output name is required"))
 		return
+	}
+
+	// Self-adapting, per the user's own explicit request that this
+	// follow the same shape Duplicate's own settings already have (see
+	// applyDuplicateSelection's own doc comment): whichever format is
+	// actually used becomes the new sticky default, through the exact
+	// same optionSpec.apply the Options screen itself uses.
+	id := archiveFormatID(format)
+	if opt, ok := optionSpecByKey("compress_format"); ok {
+		opt.apply(r, id)
 	}
 
 	sourceDir := r.panel.path
