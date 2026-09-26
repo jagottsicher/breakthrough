@@ -979,6 +979,9 @@ type Root struct {
 	detailsPreviewCancel context.CancelFunc
 	detailsHashBytesRead atomic.Int64
 	detailsHashRowStart  int
+	// detailsHashButtonWidth mirrors Properties' own hashButtonWidth —
+	// see its own doc comment — for Details' identical "h" button.
+	detailsHashButtonWidth int
 
 	// detailsGitStatus is the current target's own git status (see
 	// gitstatus.go) — nil until a background fetch actually confirms
@@ -1022,6 +1025,9 @@ type Root struct {
 	detailsDirSizeAnimFrame  int
 	detailsDirSizeCancel     context.CancelFunc
 	detailsDirSizeRowStart   int
+	// detailsDirSizeButtonWidth mirrors detailsHashButtonWidth above for
+	// this section's own "k" button.
+	detailsDirSizeButtonWidth int
 
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
@@ -1484,12 +1490,19 @@ type Root struct {
 	// taking it as a parameter, since it's re-run after every kind of
 	// edit, not just this one. hashSectionRow is the 0-based row, within
 	// that text, where the hash hint/result line starts — set by
-	// renderProperties, read by capturePropertiesMouse to tell whether a
-	// click landed on it.
+	// renderProperties, read by hashesMouseCapture to tell whether a
+	// click landed on it. hashButtonWidth is that same row's own "h"
+	// button's click width (see singleKeyHint), 0 whenever no button is
+	// actually shown there right now (already computed, or a computation
+	// is currently in progress) — hashesMouseCapture requires both the
+	// right row and a column inside this width, per the user's own
+	// explicit request that this be a real button, not "click anywhere
+	// on this line or below it" the way it used to be.
 	propertiesTarget string
 	propertiesStat   fsops.Info
 	propertiesHashes *fsops.Hashes
 	hashSectionRow   int
+	hashButtonWidth  int
 
 	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
 	// "in progress" animation (see hashAnimationFrames): hashInProgress

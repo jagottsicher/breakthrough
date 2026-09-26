@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
@@ -596,34 +597,45 @@ func (r *Root) detailsImageBoxSize() (width, height int) {
 // and it already works from here unmodified (it reads the panel's own
 // current selection itself, the same as this sidebar's own target — see
 // openLook), so nothing new was needed beyond a click zone routing to
-// it and a line saying so.
+// it and a line saying so. Styled the same button-colored-key way
+// singleKeyHint's own callers are, per the user's own explicit further
+// request that this read the same way the hash/directory-size hints
+// now do — renderHintKey's own single-rune padding keeps the rendered
+// width identical to the old plain "l: fullscreen", so this still fits
+// the same real, observed minimum-width wrapping constraint that hint's
+// own doc comment used to describe here.
 //
-// Deliberately short rather than spelling out "or click here" the way
-// the hash/metadata hints do: a real, observed bug once found a longer
-// wording wrapped at this sidebar's own minimum width (see
-// detailsSidebarMinWidth), silently mis-numbering every row after it —
-// the exact same class of bug already fixed once for hashes and once
-// for Modified. This one's own click-zone is also the whole preview
-// image itself (see renderDetailsSidebar/captureDetailsSidebarMouse), a
-// much bigger and more discoverable target than the text alone, so
-// losing the explicit "click here" wording costs less here than it
-// would in the other two hints.
-const detailsFullscreenHint = "l: fullscreen"
+// Unlike the hash/directory-size hints, this one's own click zone stays
+// the whole preview image itself (see renderDetailsSidebar/
+// captureDetailsSidebarMouse), not just this button — a much bigger and
+// more discoverable target than the text alone, and a deliberate,
+// separate "click the image to view it" gesture this hint's own text
+// never claimed sole ownership of restricting the click zone to just
+// this line would only take that away, not fix anything.
+func detailsFullscreenHint(theme config.ResolvedTheme) string {
+	text, _ := singleKeyHint(theme, "l", "fullscreen")
+	return text
+}
 
 // detailsMetadataHint is the metadata section's own placeholder, shown
 // until fetchDetailsMetadata actually runs for the current target — the
 // same "hint until triggered" shape hashLines already uses for hashes,
-// just naming "M" instead of "h".
+// just naming "M" instead of "h", styled the same way per
+// detailsFullscreenHint's own doc comment.
 //
-// Deliberately short, for the same reason detailsFullscreenHint is (see
-// its own doc comment): unlike the hash hint, which sits last with
+// Deliberately kept just as short as the old plain "M: load metadata"
+// (see detailsFullscreenHint's own doc comment on why the rendered
+// width has to match): unlike the hash hint, which sits last with
 // nothing after it to mis-number, this one is always followed by the
 // stat block (and often the hash section too) — a real, observed bug
-// once found the original, longer wording of this exact string wrapped
-// at the sidebar's own minimum width, silently pushing both of those
-// down by a row this function's own click-zone bookkeeping never knew
-// to account for.
-const detailsMetadataHint = "M: load metadata"
+// once found a longer wording of this exact string wrapped at the
+// sidebar's own minimum width, silently pushing both of those down by a
+// row this function's own click-zone bookkeeping never knew to account
+// for.
+func detailsMetadataHint(theme config.ResolvedTheme) string {
+	text, _ := singleKeyHint(theme, "M", "load metadata")
+	return text
+}
 
 // detailsMetadataStubMessage is what fetchDetailsMetadata currently
 // shows once triggered — see its own doc comment on why that's a stub
@@ -757,7 +769,9 @@ func (r *Root) renderDetailsSidebar() {
 	r.detailsPreviewRowStart, r.detailsPreviewRowEnd = -1, -1
 	r.detailsMetaRowStart, r.detailsMetaRowEnd = -1, -1
 	r.detailsHashRowStart = -1
+	r.detailsHashButtonWidth = 0
 	r.detailsDirSizeRowStart = -1
+	r.detailsDirSizeButtonWidth = 0
 
 	if r.showingSystemInfo() {
 		// No click zones of its own (every RowStart above is left at
@@ -842,7 +856,7 @@ func (r *Root) renderDetailsSidebar() {
 				infoField("Dimensions", fmt.Sprintf("%d × %d px", bounds.Dx(), bounds.Dy())),
 			}
 		}
-		infoLines = append(infoLines, detailsFullscreenHint)
+		infoLines = append(infoLines, detailsFullscreenHint(r.theme))
 		_, previewEnd := writeSection(strings.Join(infoLines, "\n"))
 		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
 
@@ -853,7 +867,7 @@ func (r *Root) renderDetailsSidebar() {
 			// built here yet, so no hint for it is shown on one.
 			meta := r.detailsMetadataState
 			if meta == "" {
-				meta = detailsMetadataHint
+				meta = detailsMetadataHint(r.theme)
 			}
 			r.detailsMetaRowStart, r.detailsMetaRowEnd = writeSection(meta)
 		}
@@ -899,7 +913,13 @@ func (r *Root) renderDetailsSidebar() {
 			// 64-character halves here too, and each one wrapped again
 			// inside this sidebar's own much narrower box.
 			_, _, innerWidth, _ := r.detailsSidebar.GetInnerRect()
-			hashText = hashLines(r.detailsHashes, "Press h or click here to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512", innerWidth)
+			if r.detailsHashes == nil {
+				var width int
+				hashText, width = singleKeyHint(r.theme, "h", "to compute SHA-256 / SHA-1 / MD5 / SHA-512 / BLAKE2b-512")
+				r.detailsHashButtonWidth = width
+			} else {
+				hashText = hashLines(r.detailsHashes, "", innerWidth)
+			}
 		}
 		r.detailsHashRowStart, _ = writeSection(hashText)
 
@@ -933,7 +953,9 @@ func (r *Root) renderDetailsSidebar() {
 			// (a real, observed bug once the label got this long).
 			sizeText = fmt.Sprintf("Size (du -hs): %s", humanSize(*r.detailsDirSize))
 		default:
-			sizeText = "Press k or click here to compute this directory's total size (du -hs)"
+			var width int
+			sizeText, width = singleKeyHint(r.theme, "k", "to compute this directory's total size (du -hs)")
+			r.detailsDirSizeButtonWidth = width
 		}
 		r.detailsDirSizeRowStart, _ = writeSection(sizeText)
 	}
@@ -1413,8 +1435,8 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 		return action, event
 
 	case tview.MouseLeftClick:
-		_, rectY, _, _ := r.detailsSidebar.GetInnerRect()
-		row := y - rectY
+		rectX, rectY, _, _ := r.detailsSidebar.GetInnerRect()
+		row, col := y-rectY, x-rectX
 		switch {
 		case r.detailsPreviewRowStart >= 0 && row >= r.detailsPreviewRowStart && row <= r.detailsPreviewRowEnd:
 			r.lookCurrentEntry()
@@ -1422,7 +1444,14 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 		case r.detailsMetaRowStart >= 0 && row >= r.detailsMetaRowStart && row <= r.detailsMetaRowEnd:
 			r.fetchDetailsMetadata()
 			return tview.MouseConsumed, nil
-		case r.detailsHashRowStart >= 0 && row >= r.detailsHashRowStart:
+		// row == (not >=) detailsHashRowStart, and col within the "h"
+		// button's own width — a real button, not "click anywhere on
+		// this line or below it" the way this used to work, per the
+		// user's own explicit request. Only ever non-zero while that
+		// button is actually shown (see renderDetailsSidebar), so this
+		// already rejects a click once hashes are computed or a
+		// computation is in progress, with no separate guard needed.
+		case r.detailsHashRowStart >= 0 && row == r.detailsHashRowStart && col < r.detailsHashButtonWidth:
 			// Through the same dispatcher "h" uses, not
 			// computeDetailsHashes directly — so a click here defers to
 			// Properties too when that's the one currently open (see
@@ -1431,7 +1460,7 @@ func (r *Root) captureDetailsSidebarMouse(action tview.MouseAction, event *tcell
 			// to bypass that rule.
 			r.ComputeHashesShortcut()
 			return tview.MouseConsumed, nil
-		case r.detailsDirSizeRowStart >= 0 && row >= r.detailsDirSizeRowStart:
+		case r.detailsDirSizeRowStart >= 0 && row == r.detailsDirSizeRowStart && col < r.detailsDirSizeButtonWidth:
 			r.computeDetailsDirSize()
 			return tview.MouseConsumed, nil
 		}
