@@ -704,6 +704,85 @@ func TestExtractCurrentArchiveToRemoteExtractsLocallyFirst(t *testing.T) {
 	}
 }
 
+// TestOpenCompressSeedsFormatIndexFromSettings pins the self-adapting
+// half of compress_format: opening Compress starts on whichever format
+// settings.CompressFormat names, not always index 0 (zip).
+func TestOpenCompressSeedsFormatIndexFromSettings(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.settings.CompressFormat = "tar.gz"
+
+	r.openCompress()
+
+	want := archiveFormatIndexByID(archiveFormats(), "tar.gz")
+	if r.compressFormatIndex != want {
+		t.Errorf("compressFormatIndex = %d, want %d (tar.gz)", r.compressFormatIndex, want)
+	}
+}
+
+// TestOpenCompressFallsBackToZipForAnUnrecognizedStoredFormat pins
+// archiveFormatIndexByID's own forgiving fallback: a stale or
+// hand-edited compress_format this build doesn't recognize opens on
+// zip (index 0) rather than panicking or silently picking something
+// else.
+func TestOpenCompressFallsBackToZipForAnUnrecognizedStoredFormat(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.settings.CompressFormat = "rar" // never a real archiveFormats entry
+
+	r.openCompress()
+
+	if r.compressFormatIndex != 0 {
+		t.Errorf("compressFormatIndex = %d, want 0 (zip) for an unrecognized stored format", r.compressFormatIndex)
+	}
+}
+
+// TestRunCompressWritesBackTheChosenFormatAsTheNewDefault pins the
+// user's own explicit "self-adapting defaults" request applied to
+// Compress: confirming it with a given Format becomes the new sticky
+// default, persisted to disk through the exact same optionSpec.apply
+// the Options screen itself uses (see runCompress).
+func TestRunCompressWritesBackTheChosenFormatAsTheNewDefault(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _, _ := newTestRootWithFile(t)
+	r.openCompress()
+	r.compressOutputName = "whole-dir"
+	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
+
+	r.runCompress()
+	defer r.cancelCompressJob()
+
+	if r.settings.CompressFormat != "tar.gz" {
+		t.Errorf("settings.CompressFormat = %q, want %q", r.settings.CompressFormat, "tar.gz")
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading persisted config: %v", err)
+	}
+	if !strings.Contains(string(data), "compress_format = tar.gz") {
+		t.Errorf("persisted config missing %q; got:\n%s", "compress_format = tar.gz", data)
+	}
+}
+
+// TestRunCompressNeverPersistsOnAnEmptyOutputName pins that an aborted
+// attempt (see TestRunCompressRefusesAnEmptyOutputName) never writes
+// back a new default — only an actual, valid Compress run should.
+func TestRunCompressNeverPersistsOnAnEmptyOutputName(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _, _ := newTestRootWithFile(t)
+	r.openCompress()
+	r.compressOutputName = "   "
+	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), "tar.gz")
+
+	r.runCompress()
+
+	if r.settings.CompressFormat != "zip" {
+		t.Errorf("settings.CompressFormat = %q, want the untouched default %q", r.settings.CompressFormat, "zip")
+	}
+	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "compress_format") {
+		t.Errorf("persisted config should not mention compress_format at all; got:\n%s", data)
+	}
+}
+
 // focusRowNamed moves p's own table cursor onto the row named name —
 // t.Fatal if there isn't one, since every caller here treats that as a
 // broken test setup rather than something to keep going past.

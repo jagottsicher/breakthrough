@@ -30,6 +30,11 @@ const (
 	// CategoryShell covers the embedded bash line, "Open with…", and
 	// Edit — anything that hands a path to an external program.
 	CategoryShell Category = "shell"
+	// CategoryFirewall covers adding a firewall rule via the Firewall
+	// screen's own Add-rule form, and its own automatic self-lockout
+	// rollback — internal/firewall's own write side (see AddRuleCommand/
+	// DeleteRuleCommand).
+	CategoryFirewall Category = "firewall"
 )
 
 // Categories is every category this package defines, in the fixed
@@ -45,6 +50,7 @@ func Categories() []Category {
 		CategoryRsync,
 		CategoryRemote,
 		CategoryShell,
+		CategoryFirewall,
 	}
 }
 
@@ -66,6 +72,8 @@ func (c Category) Label() string {
 		return "Remote connections and transfers (SFTP)"
 	case CategoryShell:
 		return "Shell (bash line, Open with…, Edit)"
+	case CategoryFirewall:
+		return "Firewall rules (Add-rule form, self-lockout rollback)"
 	default:
 		return string(c)
 	}

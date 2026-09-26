@@ -20,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
@@ -289,6 +290,92 @@ type Root struct {
 	firewallErr      error
 	firewallServices firewall.ServiceLookup
 
+	// firewallAddRule* make up the Firewall screen's own "Add rule" form
+	// ("a", see firewalladdrule.go and feature_ideas.txt's own Firewall-
+	// Regel-Baukasten Stufe 2b) — Direction/Action/Protocol are
+	// dropdowns, so the form is rebuilt fresh on every open via
+	// renderFirewallAddRuleForm, the same "Clear(true) then
+	// AddFormItem" shape newCompressForm's own doc comment establishes,
+	// rather than kept in sync in place the way connectForm's own fixed
+	// set of plain input fields is. The plain firewallAddRuleXxx fields
+	// below mirror the form's own current values, the same "value
+	// mirror" shape duplicateStrategy and friends already establish.
+	firewallAddRuleLayout     *tview.Flex
+	firewallAddRuleTitleBar   *tview.TextView
+	firewallAddRuleForm       *tview.Form
+	firewallAddRuleStatus     *tview.TextView
+	firewallAddRuleButtons    *tview.Flex
+	firewallAddRuleCancelBtn  *tview.Button
+	firewallAddRuleAddBtn     *tview.Button
+	firewallAddRuleDirection  firewall.Direction
+	firewallAddRuleAction     firewall.Action
+	firewallAddRuleProtocol   string
+	firewallAddRulePortText   string
+	firewallAddRuleSourceText string
+	firewallAddRuleDestText   string
+	firewallAddRuleIfaceText  string
+
+	// firewallRollback* is the self-lockout rollback prompt armed by
+	// applyFirewallAddRule whenever the rule it just applied is SSH-
+	// relevant (see firewall.NewRuleSpec.IsSSHRelevant) and this
+	// breakthrough process is itself running over an active SSH session
+	// (see firewall.RunningOverSSH) — feature_ideas.txt's own
+	// "Selbstaussperr-Schutz". firewallRollbackTimer fires
+	// rollbackFirewallRule automatically once firewallRollbackDeadline
+	// passes unless "Keep this rule" (keepFirewallRule) stops it first;
+	// nil whenever no rollback is currently armed. The timer itself runs
+	// regardless of whether firewallRollbackLayout is actually on screen
+	// — closing that overlay early (Escape) only hides the countdown,
+	// it never cancels the rollback itself, so a rule that turns out to
+	// have cut off the very session that applied it is reverted either
+	// way.
+	firewallRollbackLayout   *tview.Flex
+	firewallRollbackTitleBar *tview.TextView
+	firewallRollbackText     *tview.TextView
+	firewallRollbackKeepBtn  *tview.Button
+	firewallRollbackTimer    *time.Timer
+	firewallRollbackCancel   context.CancelFunc
+	firewallRollbackDeadline time.Time
+	firewallRollbackBackend  firewall.Backend
+	firewallRollbackSpec     firewall.NewRuleSpec
+
+	// firewallSimulate* make up the Firewall screen's own "Simulate" form
+	// ("t", see firewallsimulate.go and feature_ideas.txt's own
+	// Firewall-Regel-Baukasten Stufe 3) — the same "dropdowns rebuilt
+	// fresh on every open, plain fields kept as value mirrors" shape
+	// firewallAddRule* above already establishes, minus Action (a
+	// hypothetical request has no action of its own, only the rule that
+	// ends up deciding it does — see firewall.Simulate's own doc
+	// comment). firewallSimulateResult holds the last run's own outcome
+	// text, blank until "Run" has been pressed at least once.
+	firewallSimulateLayout     *tview.Flex
+	firewallSimulateTitleBar   *tview.TextView
+	firewallSimulateForm       *tview.Form
+	firewallSimulateResult     *tview.TextView
+	firewallSimulateButtons    *tview.Flex
+	firewallSimulateCloseBtn   *tview.Button
+	firewallSimulateRunBtn     *tview.Button
+	firewallSimulateDirection  firewall.Direction
+	firewallSimulateProtocol   string
+	firewallSimulatePortText   string
+	firewallSimulateSourceText string
+	firewallSimulateDestText   string
+	firewallSimulateIfaceText  string
+
+	// The Sessions screen ("js", see sessions.go) — local GNU screen/
+	// tmux terminal-multiplexer sessions (internal/multiplex), styled
+	// after the Tab switcher/Connection menu's own per-row action-cell
+	// table rather than Mounts/Firewall's own plain read-only rows: each
+	// session carries three independent actions (Attach, Attach in new
+	// window, Close). sessionsList/sessionsErr hold the last read
+	// result, refreshed by reloadSessions (on open, and on "r").
+	sessionsLayout   *tview.Flex
+	sessionsTitleBar *tview.TextView
+	sessionsHint     *tview.TextView
+	sessionsTable    *tview.Table
+	sessionsList     []multiplex.Session
+	sessionsErr      error
+
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
@@ -363,6 +450,12 @@ type Root struct {
 	prompt       *tview.InputField
 	picker       *tview.List // owner/group picker — see openOwnerGroupPicker; the one dialog in this app deliberately left without a title bar, per the user's own explicit exception
 	errorView    *tview.TextView
+
+	// errorGeneration counts every real showError call — showTransientError's
+	// own way to tell "the notice its timer was armed for" apart from
+	// whatever unrelated error might coincidentally be showing on errorPage
+	// once that timer actually fires (see its own doc comment in errors.go).
+	errorGeneration int
 
 	// quitConfirm is the real focus target (see RequestQuit); its own
 	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
@@ -1244,6 +1337,20 @@ type Root struct {
 	propertiesCancelBtn  *tview.Button
 	propertiesSaveBtn    *tview.Button
 
+	// propertiesDragging/propertiesDragOffsetX/Y make Properties'
+	// own title bar draggable — the same "click position minus the
+	// window's own x/y at drag-start, kept constant for the rest of the
+	// drag" shape toolWindow's own dragging/dragOffsetX/Y already
+	// establish in toolwindow.go, adapted to hashesMouseCapture's own
+	// SetMouseCapture shape (Properties is a composed tview.Pages, not
+	// its own Box subclass the way a toolWindow is, so there's no
+	// per-window MouseHandler override to add this to instead). Per the
+	// user's own explicit request: still opens at the exact same anchor
+	// as before (see openProperties/resizeProperties, both untouched),
+	// only draggable afterward.
+	propertiesDragging                           bool
+	propertiesDragOffsetX, propertiesDragOffsetY int
+
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
 	// -1 (nothing focused, Properties' state right after opening) or an
@@ -1511,6 +1618,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		// without going through openProperties (e.g. seedProperties in
 		// the test suite).
 		propertiesFocusIndex: -1,
+
+		// Seeded from settings.OpenWithCommand rather than left at its
+		// zero value — see that setting's own doc comment: this is
+		// "Open with…"'s own self-adapting prefill, now surviving a
+		// restart instead of resetting to empty every time.
+		lastOpenWithCommand: settings.OpenWithCommand,
 	}
 
 	// No borders on the floating elements below — a background color set
@@ -1712,6 +1825,24 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newFirewallScreen()
 
+	// The Firewall screen's own "Add rule" form and self-lockout
+	// rollback prompt (see firewalladdrule.go).
+	r.firewallAddRuleForm = r.newFirewallAddRuleForm()
+	r.firewallAddRuleButtons = r.newFirewallAddRuleButtons()
+	r.firewallAddRuleLayout = r.newFirewallAddRuleLayout()
+	r.firewallRollbackKeepBtn = tview.NewButton("Keep this rule").SetSelectedFunc(r.keepFirewallRule)
+	r.firewallRollbackKeepBtn.SetInputCapture(spaceAlsoActivates(r.keepFirewallRule))
+	r.firewallRollbackLayout = r.newFirewallRollbackLayout()
+
+	// The Firewall screen's own "Simulate" form (see firewallsimulate.go).
+	r.firewallSimulateForm = r.newFirewallSimulateForm()
+	r.firewallSimulateButtons = r.newFirewallSimulateButtons()
+	r.firewallSimulateLayout = r.newFirewallSimulateLayout()
+
+	// The Sessions screen (see sessions.go/openSessions) — a sixth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newSessionsScreen()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -1846,6 +1977,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts
 	// screens' own comments above give.
 	r.AddPage(firewallPage, r.firewallLayout, true, false)
+	r.AddPage(firewallAddRulePage, r.firewallAddRuleLayout, false, false)
+	r.AddPage(firewallRollbackPage, r.firewallRollbackLayout, false, false)
+	r.AddPage(firewallSimulatePage, r.firewallSimulateLayout, false, false)
+	// resize=true: the Sessions screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall screens' own comments above give.
+	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
@@ -2366,6 +2504,26 @@ func (r *Root) closeAllOverlays() {
 // before — deliberately left alone, since that in-field click was never
 // part of what was reported as awkward here.
 func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	// A Properties drag in progress (see dragPropertiesMouseCapture) must
+	// keep receiving every subsequent move/release itself, regardless of
+	// whether the cursor's own current position still happens to fall
+	// inside properties' own rect — which, dragging from the title bar
+	// (the window's own top row), it very often doesn't the moment the
+	// drag moves up or left at all, since that immediately puts the
+	// cursor above/left of the not-yet-updated rect. Without this check
+	// running first, the primitiveContains gate just below would treat
+	// that move as "outside the overlay" and let it fall through toward
+	// Root's own ordinary position-based dispatch instead — which would
+	// route it to whatever's actually drawn under the cursor by then
+	// (the panel, most of the time), never back to
+	// dragPropertiesMouseCapture at all, silently dropping the rest of
+	// the drag. A real, user-reported bug: Properties could only ever be
+	// dragged down/right, never up/left, for exactly this reason.
+	if r.propertiesDragging {
+		out, outEvent, _ := r.dragPropertiesMouseCapture(action, event)
+		return out, outEvent
+	}
+
 	if r.activePage == "" {
 		return action, event // nothing open, nothing to do
 	}
@@ -3109,6 +3267,67 @@ func newPlainTitleBar(text string) *tview.TextView {
 	bar.SetWrap(false)
 	bar.SetText(" " + text + " ")
 	return bar
+}
+
+// reloadTitleBarButtonCol returns the reload glyph's own column within a
+// title bar width columns wide: one column in from the right edge, the
+// same spacing toolWindowCloseButtonCol already uses for its own corner
+// button — reused here since Sessions/Mounts have no close button of
+// their own competing for that corner (Escape already closes both).
+func reloadTitleBarButtonCol(width int) int {
+	return width - 2
+}
+
+// renderReloadTitleBar sets bar's own text to label, padded out to width
+// columns, with toolWindowReloadGlyph in its own top-right corner — the
+// exact same "reload" glyph the header's own path-bar button and every
+// toolWindow already use (see toolWindowReloadGlyph's own doc comment),
+// reused here for Sessions'/Mounts' own reload button rather than a
+// fresh icon, per the user's own explicit request for one on each,
+// since both screens show live host state that can change while open.
+// Callers pass Root's own lastScreenWidth, not bar.GetRect()'s own
+// width: both screens render their title bar for the first time from
+// openX, before Pages has ever resized the not-yet-visible page to the
+// real terminal size, which left the glyph stuck right after the label
+// instead of pinned to the right edge — confirmed live, not guessed.
+// Falls back to no padding at all if width is still zero (true only
+// before the very first Draw the whole app ever does) rather than a
+// negative repeat count — the same defensive floor renderHelpTitleBar
+// already applies.
+func renderReloadTitleBar(bar *tview.TextView, label string, width int) {
+	col := reloadTitleBarButtonCol(width)
+	// tview.TaggedStringWidth, not len(): label's own em dash (see
+	// sessionsTitle) is one display column but three UTF-8 bytes, and
+	// len() counting that as three left the glyph two columns short of
+	// the edge — a real, live-confirmed bug, not a hypothetical one.
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowReloadGlyph) + " ")
+}
+
+// captureReloadTitleBarMouse invokes reload when a click lands exactly
+// on the reload glyph (see renderReloadTitleBar) — every other click on
+// the bar is otherwise inert, the same as Help's own title bar (see
+// captureHelpTitleBarMouse). Deliberately does not reposition the glyph
+// on a live terminal resize while the screen stays open — the same
+// scope Help's own (non-dragging) title bar already accepts, per its
+// own doc comment; the button catches up the next time either screen
+// re-renders on its own (opening it again, "r", or any row action).
+func captureReloadTitleBarMouse(bar *tview.TextView, reload func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY || x != rectX+reloadTitleBarButtonCol(width) {
+			return action, event
+		}
+		reload()
+		return tview.MouseConsumed, nil
+	}
 }
 
 // closeMenu hides the context menu without taking any action (Escape at

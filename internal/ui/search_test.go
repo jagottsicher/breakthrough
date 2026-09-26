@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
 
@@ -1847,3 +1848,124 @@ func rowIsDimmed(t *testing.T, r *Root, tagName string) bool {
 // TestRunSearchUsesContentValueWhenContentFilled already covering the
 // behavior that matters (a filled Content field selects content
 // search).
+
+// TestSearchEngineIndexForFindsAMatchOrFallsBackToFind pins
+// searchEngineIndexFor's own two cases against a synthetic options
+// slice — independent of whether the real machine running this test
+// actually has locate installed (see buildSearchEngineOptions), unlike
+// asserting through NewRoot/newSearchDialog directly would be.
+func TestSearchEngineIndexForFindsAMatchOrFallsBackToFind(t *testing.T) {
+	options := []searchEngineOption{{"find", search.EngineFind}, {"locate", search.EngineLocate}}
+
+	if got := searchEngineIndexFor(options, "locate"); got != 1 {
+		t.Errorf("searchEngineIndexFor(..., %q) = %d, want 1", "locate", got)
+	}
+	if got := searchEngineIndexFor(options, "find"); got != 0 {
+		t.Errorf("searchEngineIndexFor(..., %q) = %d, want 0", "find", got)
+	}
+	if got := searchEngineIndexFor(options, "nonsense"); got != 0 {
+		t.Errorf("searchEngineIndexFor(..., %q) = %d, want the fallback 0", "nonsense", got)
+	}
+	if got := searchEngineIndexFor([]searchEngineOption{{"find", search.EngineFind}}, "locate"); got != 0 {
+		t.Errorf("searchEngineIndexFor with no locate entry = %d, want the fallback 0 (locate unavailable on this machine)", got)
+	}
+}
+
+// TestNewSearchDialogSeedsFieldsFromSettings pins the self-adapting
+// half of Search's own boolean settings: a freshly constructed Root
+// starts on whatever settings last recorded, not always regex/off/off.
+func TestNewSearchDialogSeedsFieldsFromSettings(t *testing.T) {
+	settings := config.DefaultSettings()
+	settings.SearchShellPatterns = false
+	settings.SearchCaseSensitive = true
+	settings.SearchSkipHidden = true
+	isolateInitialSettings(t, settings, nil)
+
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	if r.searchShellPatterns {
+		t.Error("searchShellPatterns = true, want it seeded false from settings")
+	}
+	if !r.searchCaseSensitive {
+		t.Error("searchCaseSensitive = false, want it seeded true from settings")
+	}
+	if !r.searchSkipHidden {
+		t.Error("searchSkipHidden = false, want it seeded true from settings")
+	}
+}
+
+// TestRunSearchWritesBackTheChosenDefaultsAsTheNewDefault pins the
+// user's own explicit "self-adapting defaults" request applied to
+// Search: running a real search with a given Engine/mode/toggle
+// combination becomes the new sticky default, persisted to disk
+// through the exact same optionSpec.apply the Options screen itself
+// uses (see persistSearchDefaults).
+func TestRunSearchWritesBackTheChosenDefaultsAsTheNewDefault(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	var captured search.Request
+	isolateSearchRun(t, fakeSearchRun(&captured))
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchShellPatterns = false
+	r.searchCaseSensitive = true
+	r.searchSkipHidden = true
+
+	r.runSearch()
+
+	switch {
+	case r.settings.SearchShellPatterns:
+		t.Error("settings.SearchShellPatterns = true, want it written back false")
+	case !r.settings.SearchCaseSensitive:
+		t.Error("settings.SearchCaseSensitive = false, want it written back true")
+	case !r.settings.SearchSkipHidden:
+		t.Error("settings.SearchSkipHidden = false, want it written back true")
+	case r.settings.SearchEngine != "find":
+		t.Errorf("settings.SearchEngine = %q, want %q", r.settings.SearchEngine, "find")
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading persisted config: %v", err)
+	}
+	for _, want := range []string{"search_engine = find", "search_shell_patterns = false", "search_case_sensitive = true", "search_skip_hidden = true"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("persisted config missing %q; got:\n%s", want, data)
+		}
+	}
+}
+
+// TestRunSearchNeverPersistsOnAnAbortedAttempt pins that a rejected
+// Start-at (see TestRunSearchRejectsNonexistentStartAt) never writes
+// back new defaults — only an actual, valid search should.
+func TestRunSearchNeverPersistsOnAnAbortedAttempt(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	isolateSearchRun(t, func(_ context.Context, req search.Request) (<-chan search.Result, <-chan error) {
+		return make(chan search.Result), make(chan error)
+	})
+
+	r.openSearch()
+	r.searchFilenameValue = "*.go"
+	r.searchScopeValue = dir + "/does-not-exist"
+	r.searchCaseSensitive = true
+
+	r.runSearch()
+
+	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "search_") {
+		t.Errorf("persisted config should not mention any search_* key at all; got:\n%s", data)
+	}
+}

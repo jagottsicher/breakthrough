@@ -214,6 +214,7 @@ func (r *Root) newMountsScreen() {
 	r.mountsTable.SetInputCapture(r.captureMountsKey)
 
 	r.mountsTitleBar = newPlainTitleBar("Mounts")
+	r.mountsTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.mountsTitleBar, r.reloadMounts))
 
 	r.mountsHint = tview.NewTextView()
 	r.mountsHint.SetWrap(false)
@@ -259,6 +260,8 @@ func (r *Root) reloadMounts() {
 func (r *Root) renderMounts() {
 	r.mountsTable.Clear()
 
+	renderReloadTitleBar(r.mountsTitleBar, " Mounts ", r.lastScreenWidth)
+
 	header := func(col int, text string) {
 		r.mountsTable.SetCell(0, col,
 			tview.NewTableCell(padRight(text, mountsColumnWidth(col))).
@@ -273,29 +276,18 @@ func (r *Root) renderMounts() {
 	header(mountsColSource, "Source")
 	header(mountsColOptions, "Options")
 
+	// See showTablePlaceholder's own doc comment for why this — and the
+	// zero-entries case below — go through it rather than a bare
+	// SetCell: it's the fix for a real, reported freeze, not just a
+	// message.
 	if r.mountsErr != nil {
-		r.mountsTable.SetCell(1, mountsColTarget,
-			tview.NewTableCell(r.mountsErr.Error()).
-				SetTextColor(r.theme.EntryError).
-				SetSelectable(false))
-		// Turn row selection off entirely while showing this placeholder
-		// — see renderFirewall's own identical fix and its doc comment
-		// for the real freeze this prevents: tview's own Table, on its
-		// very next Draw with nothing selectable and selection still on,
-		// leaves its cursor row one past the end, and the next Up/Down
-		// can spin forever hunting for a selectable cell from there.
-		// Select(1, 0) still lands the number on the placeholder row
-		// itself, purely so it isn't left stale once selection comes
-		// back on below.
-		r.mountsTable.SetSelectable(false, false)
-		r.mountsTable.Select(1, 0)
+		showTablePlaceholder(r.mountsTable, r.mountsErr.Error(), r.theme.EntryError)
 		return
 	}
 
-	// Real, selectable rows may exist below — restore row selection (see
-	// the error branch above for why it might currently be off). Reset
-	// again just below if this directory turns out to have none.
-	r.mountsTable.SetSelectable(true, false)
+	// Real, selectable rows may exist below — reset again just below if
+	// this directory turns out to have none.
+	enableTableSelection(r.mountsTable)
 
 	for i, m := range r.mountsEntries {
 		row := i + 1
@@ -337,13 +329,13 @@ func (r *Root) renderMounts() {
 	// the very first time this ever renders, left alone otherwise, the
 	// same restraint renderToolbox's own tail already shows. The
 	// zero-entries case (no real storage mounted at all — vanishingly
-	// unlikely in practice, but not impossible) still needs its own
-	// Select the same as the error branch above: an empty table is just
-	// as vulnerable to a stale out-of-range cursor as an unselectable
-	// error row is.
+	// unlikely in practice, but not impossible) is just as vulnerable to
+	// the freeze showTablePlaceholder's own doc comment describes as the
+	// error branch above, so it goes through the same helper — and,
+	// same as renderFirewall's "No rules configured.", reports the
+	// empty read explicitly instead of just looking like one.
 	if len(r.mountsEntries) == 0 {
-		r.mountsTable.SetSelectable(false, false) // see the error branch above for why
-		r.mountsTable.Select(0, 0)
+		showTablePlaceholder(r.mountsTable, "No real storage mounted.", r.theme.PlaceholderText)
 		return
 	}
 	if row, _ := r.mountsTable.GetSelection(); row < 1 || row > len(r.mountsEntries) {

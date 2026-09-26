@@ -58,6 +58,13 @@ type fakeRemoteClient struct {
 	// with — the only way a test can observe that call at all, since
 	// nothing here ever hands the created writer itself back out.
 	truncated map[string]int64
+
+	// authMethod is whatever a test sets it to directly (the zero value,
+	// remotefs.AuthMethodUnknown, otherwise) — this fake never dials
+	// anything for real, so there's no real authMethods handshake here
+	// to derive it from the way remotefs.SFTPClient's own AuthMethod
+	// does.
+	authMethod remotefs.AuthMethod
 }
 
 var _ remotefs.Client = (*fakeRemoteClient)(nil)
@@ -237,6 +244,10 @@ func (f *fakeRemoteClient) DiskUsage(p string) (fsops.DiskUsage, error) {
 func (f *fakeRemoteClient) Close() error {
 	f.closed = true
 	return nil
+}
+
+func (f *fakeRemoteClient) AuthMethod() remotefs.AuthMethod {
+	return f.authMethod
 }
 
 func TestConnectRemoteSwitchesToTheRemoteRootAndResetsHistory(t *testing.T) {

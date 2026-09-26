@@ -213,7 +213,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 	// to start with. " │ " (U+2502, the same box-drawing vertical bar
 	// buildStatusBar's own sep already uses one row below this) replaces
 	// that plain space for one specific transition: right before the
-	// chord-family cascades (g/p/z/o — always last, appended as their own
+	// chord-family cascades (g/m/j/p/z/o — always last, appended as their own
 	// block just above) start, setting that whole block apart from the
 	// plain commands before it — unlike an ordinary button, one of these
 	// doesn't run its own action directly, it starts a whole second
@@ -1115,6 +1115,13 @@ func (r *Root) openCurrentEntryWith() {
 			return
 		}
 		r.lastOpenWithCommand = command
+		// Self-adapting, the same "whatever gets used becomes the new
+		// sticky default" shape Duplicate's own settings already have —
+		// see settings.go's own doc comment on open_with_command: this is
+		// what makes the prefill above survive a restart, not just the
+		// rest of one session.
+		r.settings.OpenWithCommand = command
+		r.persistSetting("open_with_command", command)
 
 		if remote := r.panel.remote; remote != nil {
 			r.openRemoteEntryWithCommand(remote, path, command)

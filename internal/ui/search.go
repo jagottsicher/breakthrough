@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,35 @@ func buildSearchEngineOptions() []searchEngineOption {
 		opts = append(opts, searchEngineOption{"locate", search.EngineLocate})
 	}
 	return opts
+}
+
+// searchEngineConfigValue maps engine to its own config.Settings.
+// SearchEngine literal ("find"/"locate") — used only to seed/persist
+// search_engine (see newSearchDialog/runSearch), independent of
+// buildSearchEngineOptions' own display label, which is always
+// identical to this in practice but conceptually a UI wording choice
+// rather than the stable, on-disk value.
+func searchEngineConfigValue(engine search.Engine) string {
+	if engine == search.EngineLocate {
+		return "locate"
+	}
+	return "find"
+}
+
+// searchEngineIndexFor returns options' own index whose
+// searchEngineConfigValue matches value, or 0 (the same forgiving
+// fallback archiveFormatIndexByID already uses for compress_format) if
+// none does — value naming an engine this build/environment doesn't
+// currently offer (e.g. settings.SearchEngine == "locate" from an
+// earlier run on a machine that had it, on one that doesn't) falls back
+// to whichever engine options' own first entry is, always find.
+func searchEngineIndexFor(options []searchEngineOption, value string) int {
+	for i, opt := range options {
+		if searchEngineConfigValue(opt.engine) == value {
+			return i
+		}
+	}
+	return 0
 }
 
 // searchSpan is one clickable/keyboard-focusable region within one of
@@ -249,12 +279,32 @@ func (sb *searchBuilder) choice(selected bool, label string, action func()) {
 // problem exists here.
 func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchEngineOptions = buildSearchEngineOptions()
-	// MC's own real defaults (see its screenshot): "Find recursively"
-	// and "Using shell patterns" both start checked — every other
-	// checkbox here defaults to Go's own bool zero value, false, which
-	// already matches MC's own defaults for those.
+	// searchShellPatterns/searchCaseSensitive/searchSkipHidden, and
+	// searchEngineIdx just below, are seeded from settings rather than
+	// MC's own fixed defaults directly — self-adapting, the same shape
+	// Rsync/Sed Replace's own settings already have (see runSearch):
+	// whatever combination a real search last actually ran with becomes
+	// the new starting point here, surviving a restart, not just the
+	// rest of one session the way it already did before this. settings
+	// itself starts out at MC's own real defaults (see
+	// config.DefaultSettings) — "Using shell patterns" checked, engine
+	// "find" — so a first run looks exactly like it always did.
+	//
+	// searchRecursive stays a fixed true, deliberately not one of
+	// these: MC's own default there is also checked, but nothing about
+	// it is a self-adapting "sticky preference" the way the other four
+	// are documented to be (see config.Settings' own doc comment on
+	// search_engine/search_shell_patterns/search_case_sensitive/
+	// search_skip_hidden) — it's just this dialog's own ordinary
+	// built-in starting point, same as searchFollowSymlinks/
+	// searchWholeWords/searchFirstHit/searchIncludeArchives/
+	// searchIncludeCompressed below it, all of which stay at Go's own
+	// bool zero value.
 	r.searchRecursive = true
-	r.searchShellPatterns = true
+	r.searchShellPatterns = r.settings.SearchShellPatterns
+	r.searchCaseSensitive = r.settings.SearchCaseSensitive
+	r.searchSkipHidden = r.settings.SearchSkipHidden
+	r.searchEngineIdx = searchEngineIndexFor(r.searchEngineOptions, r.settings.SearchEngine)
 
 	// SetWrap(false) on all three: searchSpan's own row is the count of
 	// literal '\n's written (see searchBuilder.newline), which only
@@ -1035,6 +1085,24 @@ func parseIgnoreDirs(text string) []string {
 // entry for Skip hidden (if checked) — see search.Request.IgnoreDirs'
 // own doc comment on why the latter needs no separate mechanism of its
 // own.
+// persistSearchDefaults writes Engine/"Using shell patterns"/"Case
+// sensitive"/"Skip hidden" back to settings, self-adapting the same way
+// persistRsyncFlags/persistSedFlags already do — called once a real
+// search has actually validated (see runSearch), so a rejected attempt
+// (a typo'd Start-at, both Filename and Content left blank) never
+// overwrites a previous, real default.
+func (r *Root) persistSearchDefaults(engine search.Engine) {
+	apply := func(key, value string) {
+		if opt, ok := optionSpecByKey(key); ok {
+			opt.apply(r, value)
+		}
+	}
+	apply("search_engine", searchEngineConfigValue(engine))
+	apply("search_shell_patterns", strconv.FormatBool(r.searchShellPatterns))
+	apply("search_case_sensitive", strconv.FormatBool(r.searchCaseSensitive))
+	apply("search_skip_hidden", strconv.FormatBool(r.searchSkipHidden))
+}
+
 func (r *Root) runSearch() {
 	contentMode := search.ContentNone
 	if r.searchContentValue != "" {
@@ -1103,6 +1171,7 @@ func (r *Root) runSearch() {
 			return
 		}
 	}
+	r.persistSearchDefaults(engine)
 
 	var ignoreDirs []string
 	if r.searchIgnoreEnabled {

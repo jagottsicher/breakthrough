@@ -263,6 +263,46 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     unlike every other numeric setting, which is a plain count/
 //     percentage/millisecond figure with no unit ambiguity to begin
 //     with.
+//   - compress_format: Compress's own last-used archive format (see
+//     internal/ui's archiveFormat/archiveFormats) — "zip" (the default),
+//     "tar", "tar.gz", "tar.bz2", "tar.xz", or "tar.zst". Self-adapting,
+//     the same "whatever gets chosen becomes the new sticky default" as
+//     Duplicate's own settings above: confirming Compress with a
+//     different format writes it back here, so the dialog opens on
+//     whichever one was actually used last, not always "zip".
+//   - open_with_command: "Open with…"'s own last-typed command,
+//     prefilled the next time it's opened. Empty by default (nothing
+//     has been typed yet). Self-adapting: every real "Open with…" run
+//     writes its command back here, the same way it already prefilled
+//     the next open within a session (see internal/ui's
+//     lastOpenWithCommand) — now surviving a restart too.
+//   - rsync_copy_contents, rsync_archive, rsync_compress, rsync_delete,
+//     rsync_dry_run: Rsync's own last-used flag combination (see
+//     internal/ui's rsyncFlagOrder). rsync_archive defaults to true
+//     (rsync's own conventional "just copy it properly" default); the
+//     other four default to false — rsync_delete in particular, since a
+//     flag that can permanently remove files at the destination must
+//     never be silently pre-enabled just because a previous run happened
+//     to use it. Self-adapting: running Rsync (in the foreground or in
+//     the background) writes every one of these five back here.
+//   - sed_regex, sed_extended_regex, sed_case_insensitive, sed_global,
+//     sed_backup: Sed Replace's own last-used flag combination (see
+//     internal/ui's sedFlagOrder). sed_global defaults to true (replace
+//     every match per line, today's existing behavior); the other four
+//     default to false. Self-adapting: running Preview writes every one
+//     of these five back here.
+//   - search_engine, search_shell_patterns, search_case_sensitive,
+//     search_skip_hidden: four of the Search dialog's own settings that
+//     already stayed put for the rest of a session, never resetting
+//     between searches (see internal/ui's newSearchDialog/openSearch) —
+//     search_engine is "find" (the default) or "locate" (only ever
+//     offered where search.LocateAvailable()); search_shell_patterns
+//     defaults to true, matching MC's own real "Using shell patterns"
+//     default; search_case_sensitive/search_skip_hidden default to
+//     false. Self-adapting, the same as everything above: running a
+//     real search writes all four back here too, so what used to
+//     survive only until breakthrough's own exit now survives a
+//     restart as well.
 type Settings struct {
 	ColorScheme       string
 	Language          string
@@ -310,6 +350,27 @@ type Settings struct {
 
 	RemoteArchiveConfirmSize int64
 
+	CompressFormat string
+
+	OpenWithCommand string
+
+	RsyncCopyContents bool
+	RsyncArchive      bool
+	RsyncCompress     bool
+	RsyncDelete       bool
+	RsyncDryRun       bool
+
+	SedRegex           bool
+	SedExtendedRegex   bool
+	SedCaseInsensitive bool
+	SedGlobal          bool
+	SedBackup          bool
+
+	SearchEngine        string
+	SearchShellPatterns bool
+	SearchCaseSensitive bool
+	SearchSkipHidden    bool
+
 	// LogLevel is the activity log's own single detail dial — "off"
 	// (the default; see internal/activitylog's own doc comment for why
 	// this stays opt-in), "errors", "actions", "detailed", or "debug",
@@ -336,6 +397,27 @@ type Settings struct {
 	LogCategoryRsync       bool
 	LogCategoryRemote      bool
 	LogCategoryShell       bool
+	LogCategoryFirewall    bool
+
+	// FirewallDefaultDirection/FirewallDefaultAction/
+	// FirewallDefaultProtocol are the Firewall screen's own "Add rule"
+	// form's starting Direction/Action/Protocol — "in" (the default),
+	// "allow" (the default), and "" (the default, meaning "any
+	// protocol"). Deliberately NOT self-adapting, unlike every other
+	// dialog-facing setting in this file: internal/ui's own
+	// openFirewallAddRule already documents, in its own doc comment,
+	// why this form resets to a harmless default on every open rather
+	// than staying sticky from a previous fill-in — an accidentally
+	// reused Deny-any-port from a previous, unrelated rule would be
+	// exactly the kind of quiet, surprising default this app's own
+	// "keine stillen Fehler" principle rules out. These three exist so
+	// an admin whose own workflow genuinely starts from something other
+	// than "Incoming/Allow/any protocol" every time (say, mostly adding
+	// Outgoing Deny rules) can say so once, here — never written back
+	// from the dialog itself, only ever read by it.
+	FirewallDefaultDirection string
+	FirewallDefaultAction    string
+	FirewallDefaultProtocol  string
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -391,6 +473,27 @@ func DefaultSettings() Settings {
 
 		RemoteArchiveConfirmSize: 10 << 20, // 10MB
 
+		CompressFormat: "zip",
+
+		OpenWithCommand: "",
+
+		RsyncCopyContents: false,
+		RsyncArchive:      true,
+		RsyncCompress:     false,
+		RsyncDelete:       false,
+		RsyncDryRun:       false,
+
+		SedRegex:           false,
+		SedExtendedRegex:   false,
+		SedCaseInsensitive: false,
+		SedGlobal:          true,
+		SedBackup:          false,
+
+		SearchEngine:        "find",
+		SearchShellPatterns: true,
+		SearchCaseSensitive: false,
+		SearchSkipHidden:    false,
+
 		LogLevel:               "off",
 		LogCategoryFileOps:     true,
 		LogCategoryPermissions: true,
@@ -399,6 +502,11 @@ func DefaultSettings() Settings {
 		LogCategoryRsync:       true,
 		LogCategoryRemote:      true,
 		LogCategoryShell:       true,
+		LogCategoryFirewall:    true,
+
+		FirewallDefaultDirection: "in",
+		FirewallDefaultAction:    "allow",
+		FirewallDefaultProtocol:  "",
 	}
 }
 
@@ -511,6 +619,38 @@ func (s *Settings) apply(key, value string) error {
 			return fmt.Errorf("invalid size for %q: %w", key, err)
 		}
 		s.RemoteArchiveConfirmSize = n
+	case "compress_format":
+		s.CompressFormat = value
+	case "open_with_command":
+		s.OpenWithCommand = value
+	case "rsync_copy_contents":
+		return parseBool(&s.RsyncCopyContents)
+	case "rsync_archive":
+		return parseBool(&s.RsyncArchive)
+	case "rsync_compress":
+		return parseBool(&s.RsyncCompress)
+	case "rsync_delete":
+		return parseBool(&s.RsyncDelete)
+	case "rsync_dry_run":
+		return parseBool(&s.RsyncDryRun)
+	case "sed_regex":
+		return parseBool(&s.SedRegex)
+	case "sed_extended_regex":
+		return parseBool(&s.SedExtendedRegex)
+	case "sed_case_insensitive":
+		return parseBool(&s.SedCaseInsensitive)
+	case "sed_global":
+		return parseBool(&s.SedGlobal)
+	case "sed_backup":
+		return parseBool(&s.SedBackup)
+	case "search_engine":
+		s.SearchEngine = value
+	case "search_shell_patterns":
+		return parseBool(&s.SearchShellPatterns)
+	case "search_case_sensitive":
+		return parseBool(&s.SearchCaseSensitive)
+	case "search_skip_hidden":
+		return parseBool(&s.SearchSkipHidden)
 	case "log_level":
 		s.LogLevel = value
 	case "log_category_fileops":
@@ -527,6 +667,14 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.LogCategoryRemote)
 	case "log_category_shell":
 		return parseBool(&s.LogCategoryShell)
+	case "log_category_firewall":
+		return parseBool(&s.LogCategoryFirewall)
+	case "firewall_default_direction":
+		s.FirewallDefaultDirection = value
+	case "firewall_default_action":
+		s.FirewallDefaultAction = value
+	case "firewall_default_protocol":
+		s.FirewallDefaultProtocol = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
