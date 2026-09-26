@@ -154,7 +154,15 @@ func (r *Root) remoteArchiveExtractionFor(paths []string) (archiveLocalPath stri
 		if source != nil || p.archiveRemoteClient == nil || p.archivePath == "" {
 			return
 		}
-		if paths[0] == p.archivePath || strings.HasPrefix(paths[0], p.archivePath+"/") {
+		// strings.HasPrefix(paths[0], p.archivePath+"/") alone, not
+		// paths[0] == p.archivePath too: the latter would match the
+		// archive file's own path with no member suffix at all — the
+		// same real bug archiveExtractionFor's own identical check
+		// guards against (see its own doc comment): marking the archive
+		// file itself for an ordinary Copy/Cut, not any of its own
+		// members, so there is no member here for archive.Extract to act
+		// on either.
+		if strings.HasPrefix(paths[0], p.archivePath+"/") {
 			source = p
 		}
 	})
