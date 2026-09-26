@@ -159,6 +159,30 @@ func sessionsColumnWidth(col int) int {
 	}
 }
 
+// sessionsHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func sessionsHintEntries() []listHintEntry {
+	activate := func(r *Root) {
+		row, col := r.sessionsTable.GetSelection()
+		r.activateSessionsCell(row, col)
+	}
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+			{"←", simulateKeyOnFocused(tcell.KeyLeft)},
+			{"→", simulateKeyOnFocused(tcell.KeyRight)},
+		}, label: "move"},
+		{keys: []listHintKey{
+			{"Enter", activate},
+			{"Space", activate},
+		}, suffix: "/click", label: "activate"},
+		hintKey("r", "refresh", func(r *Root) { r.reloadSessions() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeSessions() }),
+	}
+}
+
 // newSessionsScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newFirewallScreen already
 // establishes. SetSelectable(true, true): cell-level selection, not
@@ -180,7 +204,11 @@ func (r *Root) newSessionsScreen() {
 
 	r.sessionsHint = tview.NewTextView()
 	r.sessionsHint.SetWrap(false)
-	r.sessionsHint.SetText(" ↑/↓/←/→: move · Enter/Space/click: activate · r: refresh · Esc: close ")
+	r.sessionsHint.SetDynamicColors(true)
+	sessionsHintText, sessionsHintSpans := buildListHint(r.theme, sessionsHintEntries())
+	r.sessionsHint.SetText(sessionsHintText)
+	r.sessionsHintSpans = sessionsHintSpans
+	r.sessionsHint.SetMouseCapture(r.captureListHintMouse(r.sessionsHint, &r.sessionsHintSpans))
 
 	r.sessionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.sessionsTitleBar, 1, 0, false).
