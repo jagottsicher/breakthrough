@@ -1083,13 +1083,13 @@
     },
     {
       "path": "internal/ui/archivepanel_test.go",
-      "size": 13213,
-      "sha256": "7b062f157b7a9fe140cc0087605fff191b5ab977446396d9d2347401a4645901"
+      "size": 14586,
+      "sha256": "6f7291196d3009831996acc5e6f9dc036c332f313739ab4cc9ef712d6e6e23de"
     },
     {
       "path": "internal/ui/archivepaste.go",
-      "size": 5082,
-      "sha256": "a8ab3eb665ae6ae8f1260c3f3595dc5a320cd490660bde139dacab4725cb9f39"
+      "size": 5821,
+      "sha256": "b16d2359b1a61d4455afae5db84e8e83ac21e497904994a62781afe982e08b77"
     },
     {
       "path": "internal/ui/bashconsole.go",
@@ -1483,13 +1483,13 @@
     },
     {
       "path": "internal/ui/remotearchive.go",
-      "size": 7577,
-      "sha256": "1f99dceef90841a523ad4d29726062059ebade854b50241a23bb5de95f7fdedb"
+      "size": 8015,
+      "sha256": "0edffc59199b3ccdea2f2d3b8049bdf2d3aa954bde83acdc8b523e8109868965"
     },
     {
       "path": "internal/ui/remotearchive_test.go",
-      "size": 16922,
-      "sha256": "641beae627bd9bd8d779eadbad4cfd8cdb531b4d31dba7b7e05267c8a049e14e"
+      "size": 18274,
+      "sha256": "1053f2b2ab4b724bda5dc63b8dd39009e5893bdb2c9fc63bb1736da279542677"
     },
     {
       "path": "internal/ui/remoteconnection_test.go",
@@ -13115,30 +13115,37 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/archivepanel_test.go",
+      "name": "TestArchiveExtractionForRefusesTheArchiveFileItself",
+      "kind": "function",
+      "line": 380
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/archivepanel_test.go",
       "name": "waitForCondition",
       "kind": "function",
-      "line": 371
+      "line": 398
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/archivepanel_test.go",
       "name": "rowNames",
       "kind": "function",
-      "line": 388
+      "line": 415
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/archivepanel_test.go",
       "name": "findRowByName",
       "kind": "function",
-      "line": 401
+      "line": 428
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/archivepanel_test.go",
       "name": "containsName",
       "kind": "function",
-      "line": 412
+      "line": 439
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -13152,7 +13159,7 @@
       "file": "internal/ui/archivepaste.go",
       "name": "hasDescendant",
       "kind": "function",
-      "line": 72
+      "line": 86
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -13160,7 +13167,7 @@
       "name": "extractClipboardArchive",
       "kind": "method",
       "receiver": "*Root",
-      "line": 97
+      "line": 111
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -13168,7 +13175,7 @@
       "name": "finishExtractClipboardArchive",
       "kind": "method",
       "receiver": "*Root",
-      "line": 108
+      "line": 122
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27746,16 +27753,23 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotearchive_test.go",
+      "name": "TestRemoteArchiveExtractionForRefusesTheArchiveFileItself",
+      "kind": "function",
+      "line": 391
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/remotearchive_test.go",
       "name": "TestRemoteArchiveExtractionForOnAnUnrelatedPathReturnsFalse",
       "kind": "function",
-      "line": 388
+      "line": 415
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/remotearchive_test.go",
       "name": "rowForName",
       "kind": "function",
-      "line": 400
+      "line": 427
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36345,5 +36359,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "145afc2204d944dca2c2a215552eba22620272879b219b909939aca422193ba6"
+  "merkle_root": "7aad4d65c597acd9c78d17fac869a94a768f07c87537a0a59651634110f1ee70"
 }
