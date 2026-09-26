@@ -423,8 +423,8 @@
     },
     {
       "path": "internal/config/theme_test.go",
-      "size": 11290,
-      "sha256": "ab49dfb3cac2c5af2a1b60cd0df49e3d3d5709004a03618f34cce00488abc749"
+      "size": 11280,
+      "sha256": "ae9424f2d8a338860db3c0a6f3c5881fd1a826a5f5ab29eadc2dafbd6edd8e97"
     },
     {
       "path": "internal/contextindex/index.go",
@@ -5765,7 +5765,7 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
       "file": "internal/config/theme_test.go",
-      "name": "TestDefaultThemeClipboardColorsMatchTheUserSSpecifiedRGBValues",
+      "name": "TestDefaultThemeClipboardColorsMatchTheSpecifiedRGBValues",
       "kind": "function",
       "line": 183
     },
@@ -36579,5 +36579,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "13b396253b6deaba1f5fe4484431b8fce69b55073d56191fd978001679f3143b"
+  "merkle_root": "bf22e97d63815bf38be4281686c14c281c252a87a998c275d629b58eec233161"
 }
