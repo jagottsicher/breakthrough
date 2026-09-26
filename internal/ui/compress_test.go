@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -103,6 +104,43 @@ func TestTarGzCompressAndExtractCommandsPipeThroughGzipExplicitly(t *testing.T) 
 	}
 }
 
+// TestCompressAndExtractCommandsForEveryRemainingArchiveFormat closes
+// the gap TestZipCompressCommandBuildsTheRealZipInvocation/
+// TestTarGzCompressAndExtractCommandsPipeThroughGzipExplicitly left:
+// zip and tar.gz each had their own dedicated command-string test, but
+// plain tar, tar.bz2, tar.xz, and tar.zst never did — a real,
+// reproducible bug in any one of these would silently create garbage
+// archives or corrupt filenames, exactly like the zip test's own doc
+// comment already warns, and this table is what actually pins that for
+// every format a user can pick from the Compress dropdown, not just the
+// two that happened to get a test first.
+func TestCompressAndExtractCommandsForEveryRemainingArchiveFormat(t *testing.T) {
+	cases := []struct {
+		path, wantCompress, wantExtract string
+	}{
+		{"x.tar", "tar -cf 'out.tar' 'a.txt'", "tar -xf 'x.tar' -C '/dest'"},
+		{"x.tar.bz2", "tar -cf - 'a.txt' | bzip2 > 'out.tar.bz2'", "bzip2 -dc 'x.tar.bz2' | tar -x -C '/dest'"},
+		{"x.tar.xz", "tar -cf - 'a.txt' | xz > 'out.tar.xz'", "xz -dc 'x.tar.xz' | tar -x -C '/dest'"},
+		{"x.tar.zst", "tar -cf - 'a.txt' | zstd > 'out.tar.zst'", "zstd -dc 'x.tar.zst' | tar -x -C '/dest'"},
+	}
+	for _, c := range cases {
+		t.Run(c.path, func(t *testing.T) {
+			format, ok := archiveFormatFor(c.path)
+			if !ok {
+				t.Fatalf("archiveFormatFor(%q) should match", c.path)
+			}
+			outName := "'out" + format.ext + "'"
+			if got := format.compress(outName, []string{"'a.txt'"}); got != c.wantCompress {
+				t.Errorf("compress command = %q, want %q", got, c.wantCompress)
+			}
+			archiveName := "'" + c.path + "'"
+			if got := format.extract(archiveName, "'/dest'"); got != c.wantExtract {
+				t.Errorf("extract command = %q, want %q", got, c.wantExtract)
+			}
+		})
+	}
+}
+
 // TestShellQuoteArgEscapesEmbeddedSingleQuotes pins the one character
 // single-quoting can't represent directly — a filename containing a
 // literal apostrophe is common enough (contractions, "it's") that this
@@ -113,6 +151,37 @@ func TestShellQuoteArgEscapesEmbeddedSingleQuotes(t *testing.T) {
 	if got != want {
 		t.Errorf("shellQuoteArg = %q, want %q", got, want)
 	}
+}
+
+// FuzzShellQuoteArg is internal/rsync's own identical FuzzShellQuote,
+// for this package's own sibling quoting function (Compress/Extract's
+// own command preview and real invocation, built the same way rsync's
+// Job.Command already is — see shellQuoteArg's own doc comment). Two
+// separate quoting implementations across two packages are exactly the
+// kind of thing that can quietly drift apart from each other without
+// its own, independent fuzz target here rather than assuming this one
+// behaves identically just because it looks the same.
+func FuzzShellQuoteArg(f *testing.F) {
+	for _, seed := range []string{
+		"simple.txt", "it's a test", "", " leading and trailing ",
+		"$(rm -rf /)", "`backticks`", "a\nb", "a\tb", "--flag-looking",
+		`"double quotes"`, "\\backslash", "*.log", "~/home",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if strings.ContainsRune(s, 0) {
+			t.Skip("a real path can never contain a NUL byte")
+		}
+		quoted := shellQuoteArg(s)
+		out, err := exec.Command("sh", "-c", "printf %s "+quoted).Output()
+		if err != nil {
+			t.Fatalf("shell rejected shellQuoteArg(%q) = %q: %v", s, quoted, err)
+		}
+		if string(out) != s {
+			t.Errorf("round-trip mismatch: shellQuoteArg(%q) = %q, shell decoded it back to %q", s, quoted, out)
+		}
+	})
 }
 
 // TestCheckToolsReportsEveryMissingToolByName pins that a real,

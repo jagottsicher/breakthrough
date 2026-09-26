@@ -1126,13 +1126,11 @@ func (r *Root) openCurrentEntryWith() {
 
 // renameCurrentEntry is the "r" key's actual action — the
 // keyboard/status-bar equivalent of the context menu's "Rename" (see
-// Root.openRename), targeting whichever entry the table's cursor is
-// currently on instead of a right-clicked one.
+// Root.openRename, which is also where the archive-view refusal now
+// lives — see its own doc comment — rather than duplicated here too),
+// targeting whichever entry the table's cursor is currently on instead
+// of a right-clicked one.
 func (r *Root) renameCurrentEntry() {
-	if r.panel.inArchiveView() {
-		r.showError(errNotSupportedInArchive)
-		return
-	}
 	row, path, ok := r.panel.CurrentRowPath()
 	if !ok {
 		return
