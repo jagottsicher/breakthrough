@@ -176,7 +176,7 @@ func TestClipboardBackgroundInactiveAcceptsExplicitOverride(t *testing.T) {
 }
 
 // TestDefaultThemeClipboardColorsMatchTheSpecifiedRGBValues pins
-// the light-blue/light-red clipboard pair's own exact values — active
+// the muted-blue/muted-red clipboard pair's own exact values — active
 // and inactive both explicitly set now, rather than relying on
 // darkenForInactiveFocus to derive the inactive pair from the active
 // one (see DefaultTheme's own doc comment on why).
@@ -187,10 +187,10 @@ func TestDefaultThemeClipboardColorsMatchTheSpecifiedRGBValues(t *testing.T) {
 		got     tcell.Color
 		r, g, b int32
 	}{
-		{"ClipboardCopyBackground", resolved.ClipboardCopyBackground, 198, 198, 255},
-		{"ClipboardCutBackground", resolved.ClipboardCutBackground, 255, 204, 204},
-		{"ClipboardCopyBackgroundInactive", resolved.ClipboardCopyBackgroundInactive, 158, 158, 255},
-		{"ClipboardCutBackgroundInactive", resolved.ClipboardCutBackgroundInactive, 255, 163, 163},
+		{"ClipboardCopyBackground", resolved.ClipboardCopyBackground, 110, 110, 160},
+		{"ClipboardCutBackground", resolved.ClipboardCutBackground, 160, 110, 110},
+		{"ClipboardCopyBackgroundInactive", resolved.ClipboardCopyBackgroundInactive, 90, 90, 180},
+		{"ClipboardCutBackgroundInactive", resolved.ClipboardCutBackgroundInactive, 180, 90, 90},
 	}
 	for _, c := range cases {
 		want := tcell.NewRGBColor(c.r, c.g, c.b)

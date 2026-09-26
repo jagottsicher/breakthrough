@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,5 +338,93 @@ func TestActivityLogFieldDoneEscapeClosesFromEitherField(t *testing.T) {
 
 	if r.activePage == activityLogPage {
 		t.Error("Escape from the keyword field should have closed the Activity Log screen")
+	}
+}
+
+// TestActivityLogHintUsesButtonColoredKeys pins the user's own explicit
+// request that this screen's own bottom hint bar read the same way the
+// button bar/a chord's own second-level legend already do (see
+// buildListHint), not as plain, uncolored text.
+func TestActivityLogHintUsesButtonColoredKeys(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	got := r.activityLogHint.GetText(false)
+	keyBG := colorTag(r.theme.ButtonBackground)
+	for _, want := range []string{
+		fmt.Sprintf("[:%s:]Tab[-:-:-]next field", keyBG),
+		fmt.Sprintf("[:%s:] r [-:-:-]refresh", keyBG),
+		fmt.Sprintf("[:%s:]Esc[-:-:-]close", keyBG),
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("activityLogHint text = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+// TestApplyThemeRecolorsActivityLogHint pins that a live scheme switch
+// (see Root.applyTheme) rebuilds this hint's own colored keys too, not
+// just its background/foreground — the same correctness buildButtonBar/
+// chordHintBar already have via refreshButtonBar, generalized here.
+func TestApplyThemeRecolorsActivityLogHint(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	newTheme := r.theme
+	newTheme.ButtonBackground = 0x123456
+	r.applyTheme(newTheme)
+
+	got := r.activityLogHint.GetText(false)
+	if !strings.Contains(got, colorTag(0x123456)) {
+		t.Errorf("activityLogHint text = %q, want it recolored with the new theme's own ButtonBackground", got)
+	}
+}
+
+// TestActivityLogHintEscButtonClickClosesTheScreen pins the user's own
+// explicit further request: these colored keys aren't just colored,
+// they're real, clickable buttons — clicking "Esc" has to actually
+// close the screen, the same as pressing the real key already does.
+func TestActivityLogHintEscButtonClickClosesTheScreen(t *testing.T) {
+	isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openActivityLog()
+
+	escSpan := r.activityLogHintSpans[len(r.activityLogHintSpans)-1] // Esc is always last
+	clickListHint(t, r, r.activityLogHint, &r.activityLogHintSpans, escSpan.startCol)
+
+	if r.activePage == activityLogPage {
+		t.Error("clicking the Esc button should have closed the Activity Log screen")
+	}
+}
+
+// TestActivityLogHintRButtonClickReloadsTheLog pins the same real-click
+// contract for "r": clicking it has to actually re-read the log file,
+// not just look like a button.
+func TestActivityLogHintRButtonClickReloadsTheLog(t *testing.T) {
+	systemDir := isolateActivityLogPaths(t)
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openActivityLog()
+	if got := r.activityLogTable.GetRowCount(); got != 2 {
+		t.Fatalf("setup: table has %d rows, want 2 (header + placeholder, no log file yet)", got)
+	}
+
+	writeActivityLogLines(t, systemDir, activityLogFixture()...)
+	rSpan := r.activityLogHintSpans[1] // Tab, r, Esc, in that order
+	clickListHint(t, r, r.activityLogHint, &r.activityLogHintSpans, rSpan.startCol)
+
+	if got, want := r.activityLogTable.GetRowCount(), 4; got != want {
+		t.Errorf("table has %d rows after clicking r, want %d (header + 3 entries) — the click should have reloaded", got, want)
 	}
 }

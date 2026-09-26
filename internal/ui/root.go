@@ -230,6 +230,7 @@ type Root struct {
 	optionsLayout           *tview.Flex
 	optionsTitleBar         *tview.TextView
 	optionsHint             *tview.TextView
+	optionsHintSpans        []listHintSpan
 	optionsCategories       *tview.List
 	optionsTable            *tview.Table
 	optionsButtons          *tview.Flex
@@ -249,11 +250,12 @@ type Root struct {
 	// Options. Every entry ends up in openToolCommand (toolwindow.go),
 	// the same draggable, non-modal window Ping already used before this
 	// screen gave it (and everything else here) a real home.
-	toolboxLayout   *tview.Flex
-	toolboxTitleBar *tview.TextView
-	toolboxHint     *tview.TextView
-	toolboxTable    *tview.Table
-	toolboxInput    *tview.InputField
+	toolboxLayout    *tview.Flex
+	toolboxTitleBar  *tview.TextView
+	toolboxHint      *tview.TextView
+	toolboxHintSpans []listHintSpan
+	toolboxTable     *tview.Table
+	toolboxInput     *tview.InputField
 
 	// toolboxRows is the currently open screen's own row list — one
 	// single category, for "jn" (openNetworkTools) or "jh"
@@ -269,12 +271,13 @@ type Root struct {
 	// survive a reboot" column) rather than a list of commands to run.
 	// mountsEntries/mountsErr hold the last read result, refreshed by
 	// reloadMounts (on open, and on "r").
-	mountsLayout   *tview.Flex
-	mountsTitleBar *tview.TextView
-	mountsHint     *tview.TextView
-	mountsTable    *tview.Table
-	mountsEntries  []mountEntry
-	mountsErr      error
+	mountsLayout    *tview.Flex
+	mountsTitleBar  *tview.TextView
+	mountsHint      *tview.TextView
+	mountsHintSpans []listHintSpan
+	mountsTable     *tview.Table
+	mountsEntries   []mountEntry
+	mountsErr       error
 
 	// The Firewall screen (see firewall.go) — a fourth full-screen
 	// catalog, showing this host's own actual firewall rules (whichever
@@ -282,13 +285,14 @@ type Root struct {
 	// internal/firewall). firewallSnapshot/firewallErr/firewallServices
 	// hold the last read result, refreshed by reloadFirewall (on open,
 	// and on "r").
-	firewallLayout   *tview.Flex
-	firewallTitleBar *tview.TextView
-	firewallHint     *tview.TextView
-	firewallTable    *tview.Table
-	firewallSnapshot firewall.Snapshot
-	firewallErr      error
-	firewallServices firewall.ServiceLookup
+	firewallLayout    *tview.Flex
+	firewallTitleBar  *tview.TextView
+	firewallHint      *tview.TextView
+	firewallHintSpans []listHintSpan
+	firewallTable     *tview.Table
+	firewallSnapshot  firewall.Snapshot
+	firewallErr       error
+	firewallServices  firewall.ServiceLookup
 
 	// firewallAddRule* make up the Firewall screen's own "Add rule" form
 	// ("a", see firewalladdrule.go and feature_ideas.txt's own Firewall-
@@ -369,12 +373,13 @@ type Root struct {
 	// session carries three independent actions (Attach, Attach in new
 	// window, Close). sessionsList/sessionsErr hold the last read
 	// result, refreshed by reloadSessions (on open, and on "r").
-	sessionsLayout   *tview.Flex
-	sessionsTitleBar *tview.TextView
-	sessionsHint     *tview.TextView
-	sessionsTable    *tview.Table
-	sessionsList     []multiplex.Session
-	sessionsErr      error
+	sessionsLayout    *tview.Flex
+	sessionsTitleBar  *tview.TextView
+	sessionsHint      *tview.TextView
+	sessionsHintSpans []listHintSpan
+	sessionsTable     *tview.Table
+	sessionsList      []multiplex.Session
+	sessionsErr       error
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -389,6 +394,7 @@ type Root struct {
 	activityLogTimeField    *tview.InputField
 	activityLogTable        *tview.Table
 	activityLogHint         *tview.TextView
+	activityLogHintSpans    []listHintSpan
 	activityLogAllEntries   []activitylog.Entry
 	activityLogReadErr      error
 
@@ -875,6 +881,7 @@ type Root struct {
 	compareTreeLayout        *tview.Flex
 	compareTreeTitleBar      *tview.TextView
 	compareTreeHint          *tview.TextView
+	compareTreeHintSpans     []listHintSpan
 	compareTreeTable         *tview.Table
 	compareTreeStatus        *tview.TextView
 	compareTreeButtons       *tview.Flex

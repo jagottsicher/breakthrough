@@ -89,6 +89,22 @@ var loadFirewallServices = func() firewall.ServiceLookup {
 // exercised without ever touching a real system's actual firewall state.
 var readFirewallSnapshot = firewall.ReadSnapshot
 
+// firewallHintEntries is this screen's own bottom hint bar (see
+// buildListHint) — a function, not a var, per activityLogHintEntries'
+// own doc comment.
+func firewallHintEntries() []listHintEntry {
+	return []listHintEntry{
+		{keys: []listHintKey{
+			{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+		}, label: "move"},
+		hintKey("r", "refresh", func(r *Root) { r.reloadFirewall() }),
+		hintKey("a", "add rule", func(r *Root) { r.openFirewallAddRule() }),
+		hintKey("t", "simulate", func(r *Root) { r.openFirewallSimulate() }),
+		hintKey("Esc", "close", func(r *Root) { r.closeFirewall() }),
+	}
+}
+
 // newFirewallScreen builds the whole screen once, at startup — the same
 // build-once/repopulate-on-open shape newMountsScreen already establishes.
 func (r *Root) newFirewallScreen() {
@@ -103,7 +119,11 @@ func (r *Root) newFirewallScreen() {
 
 	r.firewallHint = tview.NewTextView()
 	r.firewallHint.SetWrap(false)
-	r.firewallHint.SetText(" ↑/↓: move · r: refresh · a: add rule · t: simulate · Esc: close ")
+	r.firewallHint.SetDynamicColors(true)
+	firewallHintText, firewallHintSpans := buildListHint(r.theme, firewallHintEntries())
+	r.firewallHint.SetText(firewallHintText)
+	r.firewallHintSpans = firewallHintSpans
+	r.firewallHint.SetMouseCapture(r.captureListHintMouse(r.firewallHint, &r.firewallHintSpans))
 
 	r.firewallLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.firewallTitleBar, 1, 0, false).
