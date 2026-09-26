@@ -2585,6 +2585,134 @@ func TestPermBitKeyboardShortcuts(t *testing.T) {
 	}
 }
 
+// TestPropertiesDragCanMoveUpAndLeft is a regression test for a real,
+// user-reported bug: Properties could only ever be dragged down/right,
+// never up/left. Root cause: captureOutsideClick's own primitiveContains
+// gate treated a drag's own MouseMove as "outside the overlay" the
+// moment the cursor moved above/left of the not-yet-updated rect —
+// which, starting a drag from the title bar (the window's own top row),
+// an upward move does immediately — and let the event fall through
+// toward Root's own ordinary position-based dispatch instead of ever
+// reaching dragPropertiesMouseCapture at all. captureOutsideClick itself
+// (not dragPropertiesMouseCapture directly) is what's under test here,
+// since the bug was specifically in the gate in front of it, not in the
+// drag math itself.
+func TestPropertiesDragCanMoveUpAndLeft(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	// A generous, fixed-margin canvas: Properties' own width depends on
+	// its content (owner/group names included — see resizeProperties),
+	// which vary by real system user, so a real, CI-only failure on
+	// macOS came from a screen/offset combination that left too little
+	// room on the left for that platform's own (longer) username to
+	// still fit before hitting clampToScreen's own left edge — 300 wide
+	// against a window moved to just past its own midpoint leaves well
+	// over 100 columns of margin either way, regardless of platform.
+	drawRoot(t, r, 300, 40)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	// Reposition comfortably away from every screen edge first — clampToScreen
+	// would otherwise clip the up/left move below and make it
+	// indistinguishable from the very bug this test exists to catch.
+	r.moveProperties(150, 20)
+	startX, startY, width, height := r.properties.GetRect()
+
+	// Press on the title bar — the window's own top row — to start the
+	// drag, the same as a real click there does.
+	// hashesMouseCapture, not captureOutsideClick, for the initial press:
+	// this is the link Pages' own normal dispatch calls once it routes an
+	// in-bounds press to properties itself — captureOutsideClick's own
+	// primitiveContains gate lets an in-bounds press through unchanged
+	// (propertiesDragging is still false at this point), so it never
+	// starts the drag by itself; that always happens one level further
+	// in, exactly like the real pipeline.
+	r.hashesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+	if !r.propertiesDragging {
+		t.Fatal("setup: pressing the title bar should have started a drag")
+	}
+
+	// Move up and left, past the window's own current top-left corner —
+	// exactly the direction that used to never register at all.
+	newX, newY := startX-5, startY-3
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
+	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
+
+	gotX, gotY, gotWidth, gotHeight := r.properties.GetRect()
+	if gotX != newX || gotY != newY {
+		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the window exactly like dragging down/right does", gotX, gotY, newX, newY)
+	}
+	if gotWidth != width || gotHeight != height {
+		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
+	}
+	if r.propertiesDragging {
+		t.Error("propertiesDragging should be false after MouseLeftUp")
+	}
+}
+
+// TestPropertiesDragStopsOnStrayButtonRelease pins dragPropertiesMouseCapture's
+// own guard against a MouseMove that arrives with the button no longer
+// held (released somewhere this code's own MouseLeftUp case never saw,
+// e.g. outside the terminal) — the same stray-release case toolWindow's
+// own drag already guards against.
+func TestPropertiesDragStopsOnStrayButtonRelease(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+
+	startX, startY, _, _ := r.properties.GetRect()
+	r.hashesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(startX-5, startY-3, tcell.ButtonNone, 0))
+
+	if r.propertiesDragging {
+		t.Error("propertiesDragging should be false once a move arrives with no button held")
+	}
+}
+
+// TestPropertiesCloseGlyphActsLikeCancel pins the user's own explicit
+// request for a mouse-clickable close button on Properties' own title
+// bar that behaves exactly like Cancel: clicking it must close the
+// dialog without starting a drag, even while a real, in-progress edit
+// would otherwise keep the dialog open for anything but Cancel/Save
+// (see propertiesDirty's own doc comment) — cancelPropertiesEdit itself
+// has no such gate, and this must reach it directly, not the generic
+// "click outside" path that does.
+func TestPropertiesCloseGlyphActsLikeCancel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	r.target = filepath.Join(dir, "apple.txt")
+	r.openProperties()
+	r.propertiesDirty = true // an in-progress edit — Cancel must still work
+
+	wx, wy, width, _ := r.properties.GetRect()
+	closeX := wx + toolWindowCloseButtonCol(0, width)
+
+	captured, _, handled := r.dragPropertiesMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(closeX, wy, tcell.ButtonPrimary, 0))
+
+	if !handled || captured != tview.MouseConsumed {
+		t.Fatal("clicking the close glyph should be handled and consume the click")
+	}
+	if r.propertiesDragging {
+		t.Error("clicking the close glyph should not start a drag")
+	}
+	if r.activePage == propertiesPage {
+		t.Error("activePage is still Properties, want it closed")
+	}
+}
+
 // drawRoot gives the whole UI a real screen and draws it once, so every
 // widget below has a genuine rectangle. Several positioning questions
 // can only be asked after that: an undrawn tview primitive reports

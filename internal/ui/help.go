@@ -84,24 +84,28 @@ var helpText = strings.TrimLeft(`
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trashbin · gc Connect…
-    p  perms    pm chmod · po chown
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mo Open with… · mt tail -f · mA Deselect all
-    z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes · zr reload
-    o  options  oo Options screen · om Mouse reporting on/off
-    y  yank     yp/yn/ya full path/name/all selected — reserved, not
-                built yet (needs its own system-clipboard design first)
     j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
-                host's own actual rules) · jh Hardware Tools screen
+                host's own actual rules) · jh Hardware Tools screen ·
+                js Sessions screen (local screen/tmux/zellij sessions)
+    p  perms    pm chmod · po chown
+    z  display  zs size format · zt time format · zo split orientation ·
+                zw swap panes · zr reload
+    y  yank     yp/yn/ya full path/name/all selected — reserved, not
+                built yet (needs its own system-clipboard design first)
+    o  options  oo Options screen · om Mouse reporting on/off
 
   Escape cancels a pending chord; any other key that isn't one of its
-  own members cancels it too and says so. Letting it simply time out
-  (the status bar's own countdown reaching empty) cancels silently —
-  that's "changed my mind", not a mistake worth a message.
+  own members cancels it too and says so, in a notice that clears
+  itself after a few seconds — Escape, Ctrl+C, or a click elsewhere
+  dismiss it early, but nothing needs to. Letting the chord itself
+  simply time out (the status bar's own countdown reaching empty)
+  cancels silently — that's "changed my mind", not a mistake worth a
+  message.
 
   Only two Ctrl-letter shortcuts remain, documented section by section
   below, for the one thing this layer genuinely can't do on its own
@@ -403,6 +407,10 @@ var helpText = strings.TrimLeft(`
   r                 Re-read the live mount table
   Escape            Close the Mounts screen
 
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — the mounted filesystems can change
+  while this screen is open.
+
   "Bind" marks a bind mount (the same underlying filesystem attached a
   second time at another path). "Persistent" marks a mount also
   configured in /etc/fstab — it will still be there after a reboot; one
@@ -412,15 +420,17 @@ var helpText = strings.TrimLeft(`
 
 [::b]Firewall screen ("jf")[::-]
 
-  A read-only, live view of this host's own actual firewall rules —
-  whichever single backend really governs traffic right now (UFW,
-  nftables, or iptables, in that preference order; only one is ever read,
-  since on a modern system they're different front ends onto the same
-  underlying rules, and reading more than one would double-count), via
-  the real ufw/nft/iptables-save commands, never reimplemented.
+  A live view of this host's own actual firewall rules — whichever
+  single backend really governs traffic right now (UFW, nftables, or
+  iptables, in that preference order; only one is ever read, since on a
+  modern system they're different front ends onto the same underlying
+  rules, and reading more than one would double-count), via the real
+  ufw/nft/iptables-save commands, never reimplemented.
 
   Up / Down         Move between rules
   r                 Re-read the live firewall rules
+  a                 Add a rule (UFW/iptables only, see below)
+  t                 Simulate a request against the read rules (see below)
   Escape            Close the Firewall screen
 
   Rules are shown grouped into "Incoming" and "Outgoing", in the exact
@@ -432,9 +442,29 @@ var helpText = strings.TrimLeft(`
   as active as one that does. Allow rules and deny/reject rules are
   colored apart for a quick scan of what's actually open.
 
-  Building a new rule, and testing "what happens to a request on port X
-  from IP Y" without needing to know any firewall-specific syntax, are
-  not part of this first, read-only cut.
+  "a" opens a form (Direction, Action, Protocol, Port, Source,
+  Destination, Interface) and builds the exact ufw/iptables command that
+  would apply it — never raw firewall syntax to type yourself. Not
+  offered for nftables: its table/chain layout is host-specific and
+  can't be safely guessed. The exact command is always shown for
+  confirmation before it runs, via sudo through a real, attached
+  terminal (sudo's own password prompt needs one). A rule that could
+  plausibly affect an already-established SSH session (naming port 22,
+  or leaving the port unrestricted) arms an automatic rollback if this
+  breakthrough process is itself running over SSH: unless confirmed with
+  "Keep this rule" within 30 seconds, the rule is reverted automatically
+  so a mistaken rule can never lock you out for good.
+
+  "t" opens a form (Direction, Protocol, Port, Source, Destination,
+  Interface) describing a hypothetical request and reports which rule —
+  if any — actually decides it, in the same evaluation order the table
+  above already shows: no packet is ever sent, this is a pure evaluation
+  over the rules already read for this screen. Works for every backend,
+  including nftables, unlike "a": there is no command to build here, so
+  none of nftables' own table/chain limitations apply. Shows the
+  matching rule's own number, action, protocol, port, and source, or
+  says plainly that nothing matches (falling through to the backend's
+  own default policy, which this app doesn't read).
 
 [::b]Activity Log screen ("jl")[::-]
 
@@ -459,6 +489,53 @@ var helpText = strings.TrimLeft(`
   the log itself is written oldest-first, but read the other way around
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
+
+[::b]Sessions screen ("js")[::-]
+
+  This host's own local GNU screen, tmux, and Zellij sessions, listed
+  together in one table (all three side by side, never just one) —
+  Backend colored the same as its own status-bar segment (screen=disk
+  blue, tmux=inode violet, zellij=kernel gold), Status shown as ✔
+  (green, attached), ✘ (red, detached), or – (muted, unknown — Zellij's
+  own list-sessions never reports this at all). Each row carries three
+  of its own actions, reachable by clicking, or with the keyboard via
+  the arrow keys to reach the cell and Enter or Space to run it:
+
+  ⭢  Attach       Suspends breakthrough and hands the real terminal to
+                   the session — screen -D -r / tmux attach -d / zellij
+                   attach, taking over a session already attached
+                   somewhere else the same way a real shell would
+                   (Zellij needs no takeover at all — it natively
+                   allows more than one attached client at once).
+                   Returns to breakthrough automatically the moment you
+                   detach or the session itself ends, with no extra key
+                   to press.
+  ⇶  New window   Not available yet — needs a real, embedded terminal
+                   inside breakthrough itself; shows a notice that
+                   clears on its own after a few seconds.
+  ✕  Close        Ends the session outright (screen -X quit / tmux
+                   kill-session / zellij kill-session) — asks first,
+                   the same as Remove.
+
+  mosh isn't listed here at all: unlike the three above, a mosh-server
+  instance has no listing command and no way to be reattached to once
+  the client that started it is gone — reconnecting needs the one-time
+  secret key it printed at startup, never recoverable afterward.
+
+  Clicking a row's own Name/Backend/Status cell attaches too, the same
+  as pressing ⭢ — the row's own obvious action needs no separate cell
+  of its own. "x" or Delete closes the currently selected row's session
+  from anywhere in that row, the same shortcut Remove uses in the
+  Connect dropdown. "r" re-reads the live session list; Escape closes
+  the screen.
+
+  Local sessions only, for now — attaching to a session on a remote
+  host, and the "New window" action actually working, are both later
+  work.
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a session can be started, attached,
+  or closed by something else entirely while this screen is open.
 
 [::b]Split view ("s")[::-]
 
@@ -664,9 +741,14 @@ var helpText = strings.TrimLeft(`
   queues behind it the same way a second Paste already does. Ctrl+C/
   Ctrl+Delete cancels a running background rsync, the same key that
   already cancels a running Paste. The one thing it can't do that "Run"
-  can: answer an interactive prompt — an untrusted ssh host key or a
-  password prompt fails fast with a real error instead of hanging,
-  since its own stdin deliberately reads from nothing.
+  can: answer an interactive prompt, since its own stdin deliberately
+  reads from nothing. "Run in background" refuses outright, before
+  starting anything, if Source or Destination is still a connection
+  that last authenticated with a typed password — pointing to "Run"
+  instead, which can answer that prompt on its own attached terminal;
+  a remote address typed by hand with no known connection at all has
+  nothing to refuse, and an untrusted ssh host key still fails fast
+  with a real error instead of hanging.
 
 [::b]Tabs[::-]
 
@@ -726,6 +808,11 @@ var helpText = strings.TrimLeft(`
 
   "h" (see the Details sidebar's own entry above) computes hashes here
   too — clicking the hash hint works as well.
+
+  The title bar is draggable with the mouse, like a Toolbox tool
+  window — grab it anywhere and move it, though it still opens anchored
+  to the row it's about, same as always. Its own close glyph (✕), in
+  the top-right corner, behaves exactly like Cancel.
 
 [::b]Look ("l", or Enter/double-click a file)[::-]
 

@@ -381,6 +381,33 @@ func TestRemoteArchiveExtractionForResolvesTheAlreadyDownloadedLocalCopy(t *test
 	}
 }
 
+// TestRemoteArchiveExtractionForRefusesTheArchiveFileItself is the
+// remote counterpart of TestArchiveExtractionForRefusesTheArchiveFileItself
+// (archivepanel_test.go): marking the archive file's own path — not one
+// of its members — while some other tab happens to already be browsing
+// into that exact archive must not be mistaken for an extraction either,
+// the same real bug class, just requiring an already-open archive tab
+// to reach here at all.
+func TestRemoteArchiveExtractionForRefusesTheArchiveFileItself(t *testing.T) {
+	r := newTestRemoteRoot(t)
+	client := r.panel.remote.(*fakeRemoteClient)
+	zipBytes := buildTestZipBytes(t, map[string]string{"member.txt": "hello"})
+	client.entries["/remote"] = append(client.entries["/remote"], fsops.Entry{Name: "archive.zip", Type: fsops.TypeFile})
+	client.content = map[string][]byte{"/remote/archive.zip": zipBytes}
+	localPath, cleanup, err := downloadRemoteToTemp(client, "/remote/archive.zip")
+	if err != nil {
+		t.Fatalf("downloadRemoteToTemp: %v", err)
+	}
+	defer cleanup()
+	r.finishRemoteArchiveDownload(r.panel, client, "/remote/archive.zip", localPath, cleanup, nil)
+
+	_, members, ok := r.remoteArchiveExtractionFor([]string{"/remote/archive.zip"})
+
+	if ok {
+		t.Errorf("remoteArchiveExtractionFor should refuse the archive file's own path, got ok=true, members=%v", members)
+	}
+}
+
 // TestRemoteArchiveExtractionForOnAnUnrelatedPathReturnsFalse pins
 // the "ordinary remote paste" fallback: a clipboard path that isn't
 // under any currently-open remote archive tab must not be mistaken

@@ -482,7 +482,13 @@ terminal.
   keeps breakthrough itself fully usable — Copy/Cut/Paste included, at
   the same time — while its own live percentage shows in the status
   bar, queuing behind an already-running background rsync the same way
-  a second Paste already queues behind one still in flight. See
+  a second Paste already queues behind one still in flight. "Run in
+  background" refuses outright — pointing to "Run" instead — when
+  Source or Destination is still a connection that last authenticated
+  with a typed password: a background run has no attached terminal for
+  ssh's own interactive password prompt to ask on, so silently reusing
+  one there would otherwise hang or fail with a bare, confusing
+  "Permission denied". See
   [docs/user-guide.md](docs/user-guide.md#rsync) for the full picture.
 - Network Tools (`j` then `n`) and Hardware Tools (`j` then `h`): two
   full-screen, browsable catalogs of built-in commands — Network Tools
@@ -716,9 +722,10 @@ terminal.
   out.
 - Activity log: off by default, turned on under Options with a single
   `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
-  superset of the one before it — plus seven independent on/off
+  superset of the one before it — plus eight independent on/off
   categories (file operations, permissions, archives, Sed Replace/Batch
-  Rename, Rsync, remote connections/transfers, shell) so you can dial
+  Rename, Rsync, remote connections/transfers, shell, firewall rules) so
+  you can dial
   detail up or down per subsystem rather than all at once. Plain,
   greppable text, one line per entry, written to
   `/var/log/breakthrough/breakthrough.log` where that's writable or the
@@ -742,9 +749,19 @@ built-in networking and hardware tools with its own Network Tools
 screen (`jm`) showing what's currently mounted and whether it survives a
 reboot, a Firewall screen (`jf`) showing this host's own actual
 firewall rules (UFW, nftables, or iptables — whichever one really
-governs traffic), including which rules shadow each other, an Activity
+governs traffic), including which rules shadow each other, plus an
+Add-rule form (`a`, UFW/iptables only) that builds the exact command
+for a new rule, confirms it before running it via sudo, and
+automatically reverts an SSH-relevant rule if it isn't explicitly kept
+within 30 seconds, a Simulate form (`t`, every backend including
+nftables) that reports which rule, if any, decides a hypothetical
+request, an Activity
 Log screen (`jl`) browsing the real activity log with keyword/time
-filtering, and real
+filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
+Zellij sessions side by side with per-row Attach/Close actions (Attach
+hands the real terminal to the session — screen `-D -r`, tmux `attach
+-d`, or `zellij attach` — and returns to breakthrough automatically once
+you detach or it ends), and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

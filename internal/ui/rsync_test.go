@@ -293,6 +293,244 @@ func TestCurrentRsyncJobTreatsAnEditedRemoteDefaultAsPlainTextWithNoPort(t *test
 	}
 }
 
+// TestRunRsyncBackgroundRefusesAPasswordOnlySourceConnection pins
+// refuseBackgroundPasswordAuth's own core contract: a Source still
+// tracking a Connection that last authenticated with a typed password
+// must never silently start a background run (see its own doc comment
+// for why — no attached terminal for ssh's own password prompt).
+func TestRunRsyncBackgroundRefusesAPasswordOnlySourceConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync() // Source defaults from r.panel, untouched from here on
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.rsyncJob != nil {
+		t.Error("startRsyncBackground ran despite a password-only Source connection")
+	}
+	if r.activePage != errorPage {
+		t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+	}
+	if got := r.errorView.GetText(true); !strings.Contains(got, "Source") || !strings.Contains(got, "password") {
+		t.Errorf("error text = %q, want it to mention Source and password", got)
+	}
+}
+
+// TestRunRsyncBackgroundRefusesAPasswordOnlyDestinationConnection
+// mirrors the Source-side test above, against the Destination default
+// instead.
+func TestRunRsyncBackgroundRefusesAPasswordOnlyDestinationConnection(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.switchToTab(0)
+	r.splitWithTab(1)
+	r.openRsync() // Destination defaults from the split partner, untouched from here on
+
+	r.runRsyncBackground()
+
+	if r.rsyncJob != nil {
+		t.Error("startRsyncBackground ran despite a password-only Destination connection")
+	}
+	if got := r.errorView.GetText(true); !strings.Contains(got, "Destination") || !strings.Contains(got, "password") {
+		t.Errorf("error text = %q, want it to mention Destination and password", got)
+	}
+}
+
+// TestRunRsyncBackgroundAllowsAKeyOrAgentConnection is the safeguard's
+// own negative case: a connection that authenticated via a key or
+// agent needs no human present to answer anything, so it must start
+// normally in the background.
+func TestRunRsyncBackgroundAllowsAKeyOrAgentConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync()
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a key/agent connection: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a key/agent connection")
+	}
+}
+
+// TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection
+// is the safeguard's own documented limit (see
+// refuseBackgroundPasswordAuth's own doc comment): a remote endpoint
+// typed by hand, never reached through the Connect dialog, has no
+// known Connection to read AuthMethod off at all, so there's nothing
+// to refuse — feature_ideas.txt's own open dependency on
+// internal/remotefs actually knowing the auth method in the first
+// place.
+func TestRunRsyncBackgroundAllowsAHandTypedRemoteEndpointWithNoKnownConnection(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("someone@unknown-host.example:/data")
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a hand-typed remote endpoint with no known Connection: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a hand-typed remote endpoint")
+	}
+}
+
+// TestRunRsyncAllowsPasswordAuthInTheForeground is the safeguard's own
+// asymmetry: "Run" suspends the whole TUI and hands over the real
+// terminal (see runShellCommandFullScreen), exactly what ssh's own
+// password prompt needs — refuseBackgroundPasswordAuth is only ever
+// consulted from runRsyncBackground, never from runRsync.
+// TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob pins the
+// feature_ideas.txt's own still-open "Remote→Remote" test gap: unlike
+// every existing password-auth safeguard test above, which only ever
+// has one side remote, this connects Source (the active panel) *and*
+// Destination (the split partner) to two different real connections at
+// once — the same "both remote" shape rsyncRelayHint's own doc comment
+// already models with hand-built Endpoints, exercised here end to end
+// through currentRsyncJob/runRsyncBackground instead. Both sides
+// authenticate via key/agent, so neither should be refused.
+func TestRunRsyncBackgroundHandlesARealRemoteToRemoteJob(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.newTabHere()
+	destClient := &fakeRemoteClient{root: "/remote-dest", entries: map[string][]fsops.Entry{
+		"/remote-dest": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(destClient, remotefs.Connection{
+		Host: "example.org", User: "destuser", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote (destination): %v", err)
+	}
+	r.switchToTab(0)
+	sourceClient := &fakeRemoteClient{root: "/remote-src", entries: map[string][]fsops.Entry{
+		"/remote-src": {{Name: "a.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(sourceClient, remotefs.Connection{
+		Host: "example.com", User: "srcuser", AuthMethod: remotefs.AuthMethodKeyOrAgent,
+	}); err != nil {
+		t.Fatalf("connectRemote (source): %v", err)
+	}
+	r.splitWithTab(1)
+	r.openRsync()
+
+	job := r.currentRsyncJob()
+	if !job.Source.IsRemote() || job.Source.Host != "example.com" {
+		t.Fatalf("Source = %+v, want a remote endpoint on example.com", job.Source)
+	}
+	if !job.Destination.IsRemote() || job.Destination.Host != "example.org" {
+		t.Fatalf("Destination = %+v, want a remote endpoint on example.org", job.Destination)
+	}
+
+	r.runRsyncBackground()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsyncBackground refused a real remote-to-remote job with key/agent auth on both sides: %q", r.errorView.GetText(true))
+	}
+	if r.rsyncJob == nil {
+		t.Error("startRsyncBackground never ran for a remote-to-remote job")
+	}
+}
+
+// TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob extends
+// the single-sided password-auth safeguard tests above to the
+// remote-to-remote case: the other side being remote too (rather than
+// local) must never mask a password-only connection on the side actually
+// being checked.
+func TestRunRsyncBackgroundRefusesEitherSideOfARemoteToRemoteJob(t *testing.T) {
+	cases := []struct {
+		name                 string
+		sourceAuth, destAuth remotefs.AuthMethod
+		wantRefusalToMention string
+	}{
+		{"password-only source", remotefs.AuthMethodPassword, remotefs.AuthMethodKeyOrAgent, "Source"},
+		{"password-only destination", remotefs.AuthMethodKeyOrAgent, remotefs.AuthMethodPassword, "Destination"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, _ := newTestRootForRsync(t)
+			r.newTabHere()
+			destClient := &fakeRemoteClient{root: "/remote-dest", entries: map[string][]fsops.Entry{
+				"/remote-dest": {{Name: "b.txt", Type: fsops.TypeFile}},
+			}}
+			if err := r.panel.connectRemote(destClient, remotefs.Connection{
+				Host: "example.org", User: "destuser", AuthMethod: c.destAuth,
+			}); err != nil {
+				t.Fatalf("connectRemote (destination): %v", err)
+			}
+			r.switchToTab(0)
+			sourceClient := &fakeRemoteClient{root: "/remote-src", entries: map[string][]fsops.Entry{
+				"/remote-src": {{Name: "a.txt", Type: fsops.TypeFile}},
+			}}
+			if err := r.panel.connectRemote(sourceClient, remotefs.Connection{
+				Host: "example.com", User: "srcuser", AuthMethod: c.sourceAuth,
+			}); err != nil {
+				t.Fatalf("connectRemote (source): %v", err)
+			}
+			r.splitWithTab(1)
+			r.openRsync()
+
+			r.runRsyncBackground()
+
+			if r.rsyncJob != nil {
+				t.Error("startRsyncBackground ran despite a password-only connection on one side")
+			}
+			if r.activePage != errorPage {
+				t.Fatalf("activePage = %q, want the error overlay", r.activePage)
+			}
+			if got := r.errorView.GetText(true); !strings.Contains(got, c.wantRefusalToMention) || !strings.Contains(got, "password") {
+				t.Errorf("error text = %q, want it to mention %q and password", got, c.wantRefusalToMention)
+			}
+		})
+	}
+}
+
+func TestRunRsyncAllowsPasswordAuthInTheForeground(t *testing.T) {
+	r, dir := newTestRootForRsync(t)
+	client := &fakeRemoteClient{root: "/remote", entries: map[string][]fsops.Entry{
+		"/remote": {{Name: "b.txt", Type: fsops.TypeFile}},
+	}}
+	if err := r.panel.connectRemote(client, remotefs.Connection{
+		Host: "example.com", User: "tester", AuthMethod: remotefs.AuthMethodPassword,
+	}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openRsync()
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "dest"))
+
+	r.runRsync()
+
+	if r.activePage == errorPage {
+		t.Errorf("runRsync refused a password-only connection, want the foreground path to always allow it: %q", r.errorView.GetText(true))
+	}
+}
+
 func TestRsyncRelayHintOnlyAppearsWhenBothEndpointsAreRemote(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	remote := rsync.Endpoint{Host: "example.com", Path: "/x"}
@@ -799,5 +1037,85 @@ func TestOpenRsyncTabPickerPickingARemoteTabTracksItsConnection(t *testing.T) {
 	job := r.currentRsyncJob()
 	if job.Destination.Host != "example.com" || job.Destination.User != "tester" {
 		t.Errorf("Destination = %+v, want Host=example.com User=tester tracked from the picked tab's own connection", job.Destination)
+	}
+}
+
+// TestResetRsyncFormSeedsFlagsFromSettings pins the self-adapting half
+// of Rsync's own five flags: opening the dialog starts from whatever
+// settings last recorded, not always Archive-only.
+func TestResetRsyncFormSeedsFlagsFromSettings(t *testing.T) {
+	r, _ := newTestRootForRsync(t)
+	r.settings.RsyncCopyContents = true
+	r.settings.RsyncArchive = false
+	r.settings.RsyncCompress = true
+	r.settings.RsyncDelete = true
+	r.settings.RsyncDryRun = true
+
+	r.openRsync()
+
+	switch {
+	case !r.rsyncFlags[rsyncLabelCopyContents]:
+		t.Error("rsyncFlags[CopyContents] = false, want it seeded true from settings")
+	case r.rsyncFlags[rsyncLabelArchive]:
+		t.Error("rsyncFlags[Archive] = true, want it seeded false from settings")
+	case !r.rsyncFlags[rsyncLabelCompress]:
+		t.Error("rsyncFlags[Compress] = false, want it seeded true from settings")
+	case !r.rsyncFlags[rsyncLabelDelete]:
+		t.Error("rsyncFlags[Delete] = false, want it seeded true from settings")
+	case !r.rsyncFlags[rsyncLabelDryRun]:
+		t.Error("rsyncFlags[DryRun] = false, want it seeded true from settings")
+	}
+}
+
+// TestRunRsyncWritesBackTheChosenFlagsAsTheNewDefault pins the user's
+// own explicit "self-adapting defaults" request applied to Rsync:
+// confirming a run with a given flag combination becomes the new
+// sticky default, persisted to disk through the exact same
+// optionSpec.apply the Options screen itself uses (see
+// persistRsyncFlags).
+func TestRunRsyncWritesBackTheChosenFlagsAsTheNewDefault(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, dir := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText(filepath.Join(dir, "a.txt"))
+	r.rsyncDestinationField.SetText(filepath.Join(dir, "b.txt"))
+	r.toggleRsyncFlag(rsyncLabelCompress)
+	r.toggleRsyncFlag(rsyncLabelDelete)
+
+	r.runRsync()
+
+	if !r.settings.RsyncCompress || !r.settings.RsyncDelete {
+		t.Errorf("settings.RsyncCompress/RsyncDelete = %v/%v, want both true", r.settings.RsyncCompress, r.settings.RsyncDelete)
+	}
+	if !r.settings.RsyncArchive {
+		t.Errorf("settings.RsyncArchive = %v, want the untouched default true", r.settings.RsyncArchive)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("reading persisted config: %v", err)
+	}
+	for _, want := range []string{"rsync_compress = true", "rsync_delete = true", "rsync_archive = true"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("persisted config missing %q; got:\n%s", want, data)
+		}
+	}
+}
+
+// TestRunRsyncNeverPersistsOnAMissingDestination pins that an aborted
+// attempt (see TestRunRsyncRefusesAnEmptySourceOrDestination) never
+// writes back new flag defaults — only an actual, valid run should.
+func TestRunRsyncNeverPersistsOnAMissingDestination(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r, _ := newTestRootForRsync(t)
+	r.openRsync()
+	r.rsyncSourceField.SetText("/src")
+	r.rsyncDestinationField.SetText("")
+	r.toggleRsyncFlag(rsyncLabelDelete)
+
+	r.runRsync()
+
+	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "rsync_delete") {
+		t.Errorf("persisted config should not mention rsync_delete at all; got:\n%s", data)
 	}
 }

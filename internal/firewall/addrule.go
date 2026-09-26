@@ -1,6 +1,9 @@
 package firewall
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // NewRuleSpec is what the Firewall screen's own rule-builder form will
 // collect (see feature_ideas.txt's own "Regel-Baukasten" stage) — the
@@ -47,7 +50,7 @@ func (s NewRuleSpec) Validate() error {
 	return nil
 }
 
-// isSSHRelevant reports whether spec could plausibly affect an already
+// IsSSHRelevant reports whether spec could plausibly affect an already
 // established SSH session to this host — the trigger
 // feature_ideas.txt's own "Selbstaussperr-Schutz" exists for: a rule
 // naming port 22 specifically, or one with no port restriction at all
@@ -58,9 +61,9 @@ func (s NewRuleSpec) Validate() error {
 // still matter (see the Firewall screen's own default-deny reasoning
 // for why not every relevant change is a Deny), and callers layering
 // this on top of a live SSH-session check of their own (see
-// runningOverSSH) are what actually decides whether to arm the
+// RunningOverSSH) are what actually decides whether to arm the
 // rollback timer, not this function in isolation.
-func (s NewRuleSpec) isSSHRelevant() bool {
+func (s NewRuleSpec) IsSSHRelevant() bool {
 	if s.Protocol != "" && s.Protocol != "tcp" {
 		return false
 	}
@@ -68,6 +71,59 @@ func (s NewRuleSpec) isSSHRelevant() bool {
 		return true
 	}
 	return s.PortFrom <= 22 && s.PortTo >= 22
+}
+
+// RunningOverSSH reports whether this breakthrough process is itself
+// running inside an active SSH session — SSH_CONNECTION or SSH_TTY set,
+// the same two variables `man ssh` documents sshd itself exporting into
+// every session it starts, checked here rather than via some heavier
+// /proc/self inspection since either one already being set is exactly
+// what "this terminal came in over SSH" means. The Firewall screen's
+// own Add-rule form (see IsSSHRelevant's own doc comment) only arms its
+// self-lockout rollback when this is true: an SSH-relevant rule applied
+// from a real, local console can never lock anyone out of an SSH
+// session that was never there to begin with, so arming a rollback
+// timer for it would just be unexplained, surprising behavior a local
+// admin never asked for.
+func RunningOverSSH() bool {
+	return os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != ""
+}
+
+// AddRuleCommand dispatches to whichever backend's own AddRuleCommand
+// actually matches backend — the one place internal/ui's own Firewall
+// screen needs to reach for the exact command to show and run, without
+// having to know itself which of UFWAddRuleCommand/
+// IPTablesAddRuleCommand/NFTAddRuleCommand applies. BackendNone (no
+// active backend at all) is refused the same way NFTAddRuleCommand
+// itself refuses nftables — there's no command to build either way.
+func AddRuleCommand(backend Backend, spec NewRuleSpec) (string, error) {
+	switch backend {
+	case BackendUFW:
+		return UFWAddRuleCommand(spec)
+	case BackendIPTables:
+		return IPTablesAddRuleCommand(spec)
+	case BackendNFTables:
+		return NFTAddRuleCommand(spec)
+	default:
+		return "", fmt.Errorf("firewall: no supported backend (ufw, nftables, or iptables) is active on this system")
+	}
+}
+
+// DeleteRuleCommand is AddRuleCommand's own rollback counterpart —
+// see UFWDeleteRuleCommand/IPTablesDeleteRuleCommand's own doc comments
+// for why this is exactly the same rule specification reversed, never a
+// separately built one.
+func DeleteRuleCommand(backend Backend, spec NewRuleSpec) (string, error) {
+	switch backend {
+	case BackendUFW:
+		return UFWDeleteRuleCommand(spec)
+	case BackendIPTables:
+		return IPTablesDeleteRuleCommand(spec)
+	case BackendNFTables:
+		return NFTAddRuleCommand(spec) // always refuses — see its own doc comment
+	default:
+		return "", fmt.Errorf("firewall: no supported backend (ufw, nftables, or iptables) is active on this system")
+	}
 }
 
 // portRangeArg renders a port (or range) using sep between From and To

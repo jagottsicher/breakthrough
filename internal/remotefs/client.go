@@ -83,6 +83,13 @@ type Client interface {
 	// Close ends the underlying connection. Safe to call more than
 	// once; a Client is unusable afterward.
 	Close() error
+
+	// AuthMethod reports which of the two broad kinds of method (see
+	// AuthMethod's own doc comment on connection.go) actually
+	// authenticated this session — how a caller (see internal/ui's own
+	// rsync.go) learns whether reusing it for a background transfer is
+	// safe without a human present to type a password again.
+	AuthMethod() AuthMethod
 }
 
 // ConnectionRefusedError wraps a Dial failure that occurred before any

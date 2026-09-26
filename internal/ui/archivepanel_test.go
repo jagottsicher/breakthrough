@@ -363,6 +363,33 @@ func TestArchiveExtractionForSynthesizesImpliedDirectory(t *testing.T) {
 	}
 }
 
+// TestArchiveExtractionForRefusesTheArchiveFileItself is a regression
+// test for a real, user-reported bug: marking a plain archive file
+// itself (e.g. an ordinary "backup.zip" sitting in a directory, not
+// something being browsed into) for an ordinary Copy or Cut silently
+// copied nothing, and Cut refused with "cut isn't supported for items
+// inside an archive". Root cause: splitArchivePath(zipPath) reports
+// zipPath itself as "the archive, with an empty internal path" (correct
+// for its other caller, resolveArchiveState, which uses that to mean
+// "browse this archive's own root") — but archiveExtractionFor read the
+// same empty internal path as "extract everything from the archive's
+// own root" instead of "this clipboard entry is the archive file
+// itself, not one of its own members", ending up with a real ok=true
+// but zero actual members: an empty, silent no-op extraction. Must fall
+// through to an ordinary file copy/move instead.
+func TestArchiveExtractionForRefusesTheArchiveFileItself(t *testing.T) {
+	dir := t.TempDir()
+	zipPath := writeTestZip(t, dir, "sample.zip", map[string]string{
+		"src/main.go": "package main\n",
+	})
+	clipboard := []string{zipPath}
+
+	_, members, ok := archiveExtractionFor(clipboard)
+	if ok {
+		t.Errorf("archiveExtractionFor should refuse the archive file's own path, got ok=true, members=%v", members)
+	}
+}
+
 // waitForCondition polls cond briefly — extractClipboardArchive runs
 // off the UI thread (see its own doc comment), so the test has to wait
 // for its QueueUpdateDraw hand-off the same way a real Application.Run

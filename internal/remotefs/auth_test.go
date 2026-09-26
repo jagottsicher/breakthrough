@@ -127,8 +127,32 @@ func TestIdentityFilesHonorsAnExplicitEmptyListInsteadOfFallingBackToDefaults(t 
 }
 
 func TestAuthMethodsReturnsNothingWhenEverythingIsExplicitlyDisabled(t *testing.T) {
-	methods := authMethods(AuthOptions{IdentityFiles: []string{}})
+	methods := authMethods(AuthOptions{IdentityFiles: []string{}}, nil)
 	if len(methods) != 0 {
 		t.Errorf("len(methods) = %d, want 0", len(methods))
+	}
+}
+
+// TestAuthMethodsBuildsExactlyOnePasswordMethodWhenNothingElseApplies
+// pins authMethods' own shape when only a password is configured — the
+// passwordUsed out-parameter's own behavior once the ssh package
+// actually invokes it is exercised end-to-end instead, against a real
+// handshake, by TestDialWithPasswordAuthReportsAuthMethodPassword
+// (sftp_test.go): RetryableAuthMethod's own wrapped callback isn't
+// reachable from outside a real ssh.ClientConfig.Auth negotiation, so
+// there's nothing meaningful to unit-test about invocation in isolation
+// here.
+func TestAuthMethodsBuildsExactlyOnePasswordMethodWhenNothingElseApplies(t *testing.T) {
+	var passwordUsed bool
+	methods := authMethods(AuthOptions{
+		IdentityFiles: []string{},
+		Password:      func() (string, error) { return "s3cret", nil },
+	}, &passwordUsed)
+
+	if passwordUsed {
+		t.Error("passwordUsed = true before the password method was ever invoked")
+	}
+	if len(methods) != 1 {
+		t.Errorf("len(methods) = %d, want 1 (just the password method)", len(methods))
 	}
 }
