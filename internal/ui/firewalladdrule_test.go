@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -102,6 +103,66 @@ func TestOpenFirewallAddRuleResetsToHarmlessDefaults(t *testing.T) {
 	}
 	if r.firewallAddRulePortText != "" {
 		t.Errorf("PortText = %q, want blank (reset on every open, never sticky)", r.firewallAddRulePortText)
+	}
+}
+
+// TestOpenFirewallAddRuleUsesConfiguredDefaults pins that Direction/
+// Action/Protocol come from settings.FirewallDefaultDirection/
+// FirewallDefaultAction/FirewallDefaultProtocol, not always the
+// built-in Incoming/Allow/any — the one thing an admin can actually
+// change about this form's own starting point (see its own doc
+// comment for why the rest — Port/Source/Destination/Interface — never
+// gets a setting of its own here).
+func TestOpenFirewallAddRuleUsesConfiguredDefaults(t *testing.T) {
+	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
+	r.settings.FirewallDefaultDirection = "out"
+	r.settings.FirewallDefaultAction = "deny"
+	r.settings.FirewallDefaultProtocol = "tcp"
+
+	r.openFirewallAddRule()
+
+	switch {
+	case r.firewallAddRuleDirection != firewall.DirectionOut:
+		t.Errorf("Direction = %v, want DirectionOut (from settings)", r.firewallAddRuleDirection)
+	case r.firewallAddRuleAction != firewall.ActionDeny:
+		t.Errorf("Action = %v, want ActionDeny (from settings)", r.firewallAddRuleAction)
+	case r.firewallAddRuleProtocol != "tcp":
+		t.Errorf("Protocol = %q, want %q (from settings)", r.firewallAddRuleProtocol, "tcp")
+	}
+}
+
+// TestSubmitFirewallAddRuleNeverWritesBackToSettings pins the
+// deliberate non-self-adapting contract FirewallDefaultDirection's own
+// doc comment (config/settings.go) describes: submitting a rule with a
+// Direction/Action/Protocol different from whatever settings currently
+// say must never change those settings, or persist anything at all —
+// unlike every other dialog this feature branch touches (Compress,
+// Rsync, Sed Replace, Search), where confirming the dialog is exactly
+// what's supposed to happen.
+func TestSubmitFirewallAddRuleNeverWritesBackToSettings(t *testing.T) {
+	configPath := isolateUserConfigFile(t)
+	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
+	r.openFirewallAddRule() // seeds Direction=in/Action=allow/Protocol="" from settings' own defaults
+	r.firewallAddRuleDirection = firewall.DirectionOut
+	r.firewallAddRuleAction = firewall.ActionDeny
+	r.firewallAddRuleProtocol = "udp"
+
+	r.submitFirewallAddRule()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog", r.activePage)
+	}
+	switch {
+	case r.settings.FirewallDefaultDirection != "in":
+		t.Errorf("settings.FirewallDefaultDirection = %q, want it untouched (%q)", r.settings.FirewallDefaultDirection, "in")
+	case r.settings.FirewallDefaultAction != "allow":
+		t.Errorf("settings.FirewallDefaultAction = %q, want it untouched (%q)", r.settings.FirewallDefaultAction, "allow")
+	case r.settings.FirewallDefaultProtocol != "":
+		t.Errorf("settings.FirewallDefaultProtocol = %q, want it untouched (empty)", r.settings.FirewallDefaultProtocol)
+	}
+	if _, err := os.Stat(configPath); err == nil {
+		data, _ := os.ReadFile(configPath)
+		t.Errorf("submitFirewallAddRule should not have written the config file at all; got:\n%s", data)
 	}
 }
 

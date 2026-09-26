@@ -1115,6 +1115,13 @@ func (r *Root) openCurrentEntryWith() {
 			return
 		}
 		r.lastOpenWithCommand = command
+		// Self-adapting, the same "whatever gets used becomes the new
+		// sticky default" shape Duplicate's own settings already have —
+		// see settings.go's own doc comment on open_with_command: this is
+		// what makes the prefill above survive a restart, not just the
+		// rest of one session.
+		r.settings.OpenWithCommand = command
+		r.persistSetting("open_with_command", command)
 
 		if remote := r.panel.remote; remote != nil {
 			r.openRemoteEntryWithCommand(remote, path, command)

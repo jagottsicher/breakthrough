@@ -175,6 +175,31 @@ func TestClipboardBackgroundInactiveAcceptsExplicitOverride(t *testing.T) {
 	}
 }
 
+// TestDefaultThemeClipboardColorsMatchTheSpecifiedRGBValues pins
+// the light-blue/light-red clipboard pair's own exact values — active
+// and inactive both explicitly set now, rather than relying on
+// darkenForInactiveFocus to derive the inactive pair from the active
+// one (see DefaultTheme's own doc comment on why).
+func TestDefaultThemeClipboardColorsMatchTheSpecifiedRGBValues(t *testing.T) {
+	resolved := DefaultTheme().Resolve()
+	cases := []struct {
+		name    string
+		got     tcell.Color
+		r, g, b int32
+	}{
+		{"ClipboardCopyBackground", resolved.ClipboardCopyBackground, 198, 198, 255},
+		{"ClipboardCutBackground", resolved.ClipboardCutBackground, 255, 204, 204},
+		{"ClipboardCopyBackgroundInactive", resolved.ClipboardCopyBackgroundInactive, 158, 158, 255},
+		{"ClipboardCutBackgroundInactive", resolved.ClipboardCutBackgroundInactive, 255, 163, 163},
+	}
+	for _, c := range cases {
+		want := tcell.NewRGBColor(c.r, c.g, c.b)
+		if c.got != want {
+			t.Errorf("%s = %v, want %v (rgb(%d, %d, %d))", c.name, c.got, want, c.r, c.g, c.b)
+		}
+	}
+}
+
 func writeScheme(t *testing.T, dir, filename, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

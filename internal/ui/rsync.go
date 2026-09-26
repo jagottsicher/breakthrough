@@ -15,6 +15,7 @@ package ui
 import (
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -307,15 +308,18 @@ func (r *Root) newRsyncForm() *tview.Form {
 // resetSedForm's own doc comment gives (Form has no other way to
 // remove everything a previous open left behind).
 //
-// Archive defaults on (rsync's own conventional "just copy it
-// properly" default); Delete and Dry run default off — Delete
-// specifically, since it's the one flag here that can permanently
-// remove files at the destination, must never be silently pre-enabled.
-// Copy contents defaults off too: "put a new folder named after the
-// source inside the destination" matches how this app's own ordinary
-// Copy/Paste already behaves, so it's the less surprising default
-// between the two — see internal/rsync's own CopyContents doc comment
-// for what the choice actually changes.
+// Every flag is seeded from settings (self-adapting — see
+// runRsync/runRsyncBackground), which itself starts out at the same
+// built-in defaults this comment used to hardcode directly: Archive on
+// (rsync's own conventional "just copy it properly" default); Delete
+// and Dry run off — Delete specifically, since it's the one flag here
+// that can permanently remove files at the destination, must never be
+// silently pre-enabled just because an earlier run happened to use it.
+// Copy contents off too: "put a new folder named after the source
+// inside the destination" matches how this app's own ordinary
+// Copy/Paste already behaves, so it's the less surprising built-in
+// starting point between the two — see internal/rsync's own
+// CopyContents doc comment for what the choice actually changes.
 func (r *Root) resetRsyncForm() {
 	r.rsyncForm.Clear(true)
 
@@ -355,12 +359,18 @@ func (r *Root) resetRsyncForm() {
 		return event
 	})
 
+	// Seeded from settings rather than these fixed literals — self-
+	// adapting, per the user's own explicit request that this follow
+	// the same shape Duplicate's own settings already have (see
+	// runRsync/runRsyncBackground's own doc comment): whatever
+	// combination Rsync last actually ran with becomes the new starting
+	// point here.
 	r.rsyncFlags = map[string]bool{
-		rsyncLabelCopyContents: false,
-		rsyncLabelArchive:      true,
-		rsyncLabelCompress:     false,
-		rsyncLabelDelete:       false,
-		rsyncLabelDryRun:       false,
+		rsyncLabelCopyContents: r.settings.RsyncCopyContents,
+		rsyncLabelArchive:      r.settings.RsyncArchive,
+		rsyncLabelCompress:     r.settings.RsyncCompress,
+		rsyncLabelDelete:       r.settings.RsyncDelete,
+		rsyncLabelDryRun:       r.settings.RsyncDryRun,
 	}
 	r.rsyncFlagsList.Clear()
 	for _, label := range rsyncFlagOrder {
@@ -767,8 +777,27 @@ func (r *Root) runRsync() {
 		r.showError(fmt.Errorf("rsync: both Source and Destination are required"))
 		return
 	}
+	r.persistRsyncFlags()
 	r.hideOverlay()
 	r.runShellCommandFullScreen(job.Command(), activitylog.CategoryRsync)
+}
+
+// persistRsyncFlags writes rsyncFlags back to settings, self-adapting
+// the same way applyDuplicateSelection already does for Duplicate: both
+// runRsync and runRsyncBackground call this once Source/Destination
+// have actually validated, so an aborted attempt never overwrites a
+// previous, real default.
+func (r *Root) persistRsyncFlags() {
+	apply := func(key, label string) {
+		if opt, ok := optionSpecByKey(key); ok {
+			opt.apply(r, strconv.FormatBool(r.rsyncFlags[label]))
+		}
+	}
+	apply("rsync_copy_contents", rsyncLabelCopyContents)
+	apply("rsync_archive", rsyncLabelArchive)
+	apply("rsync_compress", rsyncLabelCompress)
+	apply("rsync_delete", rsyncLabelDelete)
+	apply("rsync_dry_run", rsyncLabelDryRun)
 }
 
 // runRsyncBackground is the "Run in background" button's own action —
@@ -791,6 +820,7 @@ func (r *Root) runRsyncBackground() {
 		r.showError(err)
 		return
 	}
+	r.persistRsyncFlags()
 	r.hideOverlay()
 	r.startRsyncBackground(job, rsyncEndpointBase(job.Source)+" → "+rsyncEndpointBase(job.Destination))
 }
