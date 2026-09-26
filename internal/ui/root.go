@@ -3335,14 +3335,29 @@ func (r *Root) closeMenu() {
 	r.refreshButtonBar()
 }
 
-// openRename is the context menu's "Rename" action. Rather than a prompt
-// floating near the menu, it positions the rename field exactly over the
-// target's own name cell — not the whole row: the checkbox column is
-// deliberately left uncovered, so the row's current checked state stays
-// visible (without becoming editable itself) while renaming. It reads as
-// just the name becoming editable in place, pre-filled with the current
-// one.
+// openRename is the context menu's "Rename" action, and renameRow's own
+// click-pause-click gesture — renameCurrentEntry (the "r" key) is the
+// third and last way to reach a rename, and used to be the only one of
+// the three that actually refused inside an archive view: r.target
+// there is a virtual "archivePath/member" string, never a real
+// filesystem path (see splitArchivePath's own doc comment), so
+// finishRename's own fsops.Rename call would just fail with a bare,
+// confusing "no such file or directory" instead of ever explaining
+// *why* — a real gap, not a hypothetical one, closed here once for all
+// three entry points rather than duplicating the same check in each of
+// them.
+//
+// Rather than a prompt floating near the menu, it positions the rename
+// field exactly over the target's own name cell — not the whole row:
+// the checkbox column is deliberately left uncovered, so the row's
+// current checked state stays visible (without becoming editable
+// itself) while renaming. It reads as just the name becoming editable
+// in place, pre-filled with the current one.
 func (r *Root) openRename() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	x, y, width, ok := r.panel.nameCellRect(r.targetRow)
 	if !ok {
 		return // targetRow came from a right-click just validated by RowAt
