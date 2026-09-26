@@ -103,7 +103,7 @@ func (r *Root) newFirewallScreen() {
 
 	r.firewallHint = tview.NewTextView()
 	r.firewallHint.SetWrap(false)
-	r.firewallHint.SetText(" ↑/↓: move · r: refresh · Esc: close ")
+	r.firewallHint.SetText(" ↑/↓: move · r: refresh · a: add rule · t: simulate · Esc: close ")
 
 	r.firewallLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.firewallTitleBar, 1, 0, false).
@@ -296,9 +296,10 @@ func (r *Root) actionColor(action firewall.Action) tcell.Color {
 
 // captureFirewallKey is the Firewall screen's own key handling: Escape
 // closes it, "r" re-reads this host's actual rules — the same two keys
-// captureMountsKey already handles, for the same reasons — and "a"
-// opens the "Add rule" form (see openFirewallAddRule and
-// feature_ideas.txt's own Firewall-Regel-Baukasten Stufe 2b).
+// captureMountsKey already handles, for the same reasons — "a" opens
+// the "Add rule" form (see openFirewallAddRule and feature_ideas.txt's
+// own Firewall-Regel-Baukasten Stufe 2b), and "t" opens the "Simulate"
+// form (see openFirewallSimulate and Stufe 3).
 func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeFirewall()
@@ -310,6 +311,10 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'a' {
 		r.openFirewallAddRule()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 't' {
+		r.openFirewallSimulate()
 		return nil
 	}
 	return event

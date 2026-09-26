@@ -430,6 +430,7 @@ var helpText = strings.TrimLeft(`
   Up / Down         Move between rules
   r                 Re-read the live firewall rules
   a                 Add a rule (UFW/iptables only, see below)
+  t                 Simulate a request against the read rules (see below)
   Escape            Close the Firewall screen
 
   Rules are shown grouped into "Incoming" and "Outgoing", in the exact
@@ -454,9 +455,16 @@ var helpText = strings.TrimLeft(`
   "Keep this rule" within 30 seconds, the rule is reverted automatically
   so a mistaken rule can never lock you out for good.
 
-  Testing "what happens to a request on port X from IP Y" against the
-  read rules — without needing to know any firewall-specific syntax —
-  isn't part of this yet.
+  "t" opens a form (Direction, Protocol, Port, Source, Destination,
+  Interface) describing a hypothetical request and reports which rule —
+  if any — actually decides it, in the same evaluation order the table
+  above already shows: no packet is ever sent, this is a pure evaluation
+  over the rules already read for this screen. Works for every backend,
+  including nftables, unlike "a": there is no command to build here, so
+  none of nftables' own table/chain limitations apply. Shows the
+  matching rule's own number, action, protocol, port, and source, or
+  says plainly that nothing matches (falling through to the backend's
+  own default policy, which this app doesn't read).
 
 [::b]Activity Log screen ("jl")[::-]
 

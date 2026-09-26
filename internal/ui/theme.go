@@ -381,6 +381,44 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
 	}
 
+	// The Firewall screen's own three secondary dialogs (firewalladdrule.go/
+	// firewallsimulate.go) — the exact same real, previously-unnoticed gap
+	// the block just above already documents for the Firewall screen's own
+	// main table: none of these three had ever been wired into applyTheme
+	// at all, so each sat at tview's own plain, unthemed black background
+	// instead of SurfaceBackground, caught per the user's own explicit
+	// report that the Simulate form specifically didn't match the rest of
+	// the theme — the same class of gap, so fixed for all three together
+	// rather than leaving Add rule/the rollback prompt with the identical
+	// defect right next to the one actually reported.
+	r.firewallAddRuleForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallAddRuleForm.SetLabelColor(theme.TextColor)
+	r.firewallAddRuleForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewallAddRuleForm.SetFieldTextColor(theme.TextColor)
+	r.firewallAddRuleStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallAddRuleButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewallAddRuleCancelBtn, theme)
+	styleButton(r.firewallAddRuleAddBtn, theme)
+	r.firewallAddRuleTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallAddRuleTitleBar.SetTextColor(theme.TextColor)
+
+	r.firewallRollbackText.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallRollbackText.SetTextColor(theme.TextColor)
+	styleButton(r.firewallRollbackKeepBtn, theme)
+	r.firewallRollbackTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallRollbackTitleBar.SetTextColor(theme.TextColor)
+
+	r.firewallSimulateForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallSimulateForm.SetLabelColor(theme.TextColor)
+	r.firewallSimulateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewallSimulateForm.SetFieldTextColor(theme.TextColor)
+	r.firewallSimulateResult.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallSimulateButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewallSimulateCloseBtn, theme)
+	styleButton(r.firewallSimulateRunBtn, theme)
+	r.firewallSimulateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallSimulateTitleBar.SetTextColor(theme.TextColor)
+
 	if r.sessionsTable != nil {
 		r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
 		r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
