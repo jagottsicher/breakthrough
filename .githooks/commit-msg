@@ -1,0 +1,28 @@
+#!/bin/sh
+# commit-msg hook: rejects any commit whose message names an AI coding
+# assistant, an "AI-generated" note, or a Co-Authored-By trailer —
+# enforced by git itself at commit time, regardless of which tool,
+# agent, or session is committing, rather than relying on a context
+# instruction being remembered correctly every single time. See this
+# project's own local workflow notes for the underlying policy this
+# hook exists to guarantee.
+#
+# Activate once per clone with:
+#   git config core.hooksPath .githooks
+# (core.hooksPath is a local git-config setting, not something a
+# tracked file can turn on by itself — every fresh clone needs this
+# run once.)
+
+msg_file="$1"
+pattern='claude|anthropic|ai-generated|ai generated|co-authored-by'
+
+if grep -qiE "$pattern" "$msg_file"; then
+	echo "commit-msg hook: refusing this commit — its message names an" >&2
+	echo "AI assistant, an AI-generated note, or a Co-Authored-By" >&2
+	echo "trailer, none of which may appear in this repository's history." >&2
+	echo >&2
+	echo "Remove that line and commit again." >&2
+	exit 1
+fi
+
+exit 0
