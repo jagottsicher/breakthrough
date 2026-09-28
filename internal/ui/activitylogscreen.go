@@ -366,3 +366,29 @@ func (r *Root) captureActivityLogTableKey(event *tcell.EventKey) *tcell.EventKey
 	}
 	return event
 }
+
+// applyActivityLogTheme themes the Activity Log screen — split out of
+// applyTheme (see its own doc comment). Guarded the same way
+// applyOptionsTheme is.
+func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
+	if r.activityLogTable == nil {
+		return
+	}
+	r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activityLogTitleBar.SetTextColor(theme.TextColor)
+	r.activityLogHint.SetBackgroundColor(theme.InputBackground)
+	r.activityLogHint.SetTextColor(theme.MutedTextColor)
+	activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
+	r.activityLogHint.SetText(activityLogHintText)
+	r.activityLogHintSpans = activityLogHintSpans
+
+	r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
+	r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
+	r.activityLogKeywordField.SetLabelColor(theme.TextColor)
+	r.activityLogTimeField.SetLabelColor(theme.TextColor)
+
+	r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
+}

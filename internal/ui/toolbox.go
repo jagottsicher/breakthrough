@@ -5,6 +5,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // The Toolbox screen: a full-screen, browsable catalog of real external
@@ -439,4 +441,32 @@ func (r *Root) toolboxPromptForArg(label, prefill string, onSubmit func(text str
 	x, y, width, height = r.clampToScreen(x, y, width, height)
 	r.toolboxInput.SetRect(x, y, width, height)
 	r.pushOverlay(toolboxInputPage, r.toolboxInput, nil)
+}
+
+// applyToolboxTheme themes the Toolbox screen — split out of applyTheme
+// (see its own doc comment). Guarded the same way applyOptionsTheme is.
+func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
+	if r.toolboxTable == nil {
+		return
+	}
+	r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	// FocusedBackground, fixed — the Toolbox screen has exactly one
+	// focusable widget (its own table), never itself the base a
+	// further overlay stacks on top of in a way that should dim it,
+	// the same reasoning optionsTitleBar's own fixed
+	// FocusedBackground already follows.
+	r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.toolboxTitleBar.SetTextColor(theme.TextColor)
+	r.toolboxHint.SetBackgroundColor(theme.InputBackground)
+	r.toolboxHint.SetTextColor(theme.MutedTextColor)
+	toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
+	r.toolboxHint.SetText(toolboxHintText)
+	r.toolboxHintSpans = toolboxHintSpans
+
+	styleInput(r.toolboxInput, theme, true)
+	r.toolboxInput.SetLabelColor(theme.TextColor)
+
+	r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
 }

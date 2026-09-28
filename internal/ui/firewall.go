@@ -6,6 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 )
 
@@ -338,4 +339,74 @@ func (r *Root) captureFirewallKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return event
+}
+
+// applyFirewallTheme themes the Firewall screen and its own three
+// secondary dialogs (Add rule, the self-lockout rollback prompt,
+// Simulate) — split out of applyTheme (see its own doc comment).
+// Keeps its own inline guard (rather than applyOptionsTheme's early-
+// return shape) since the three secondary dialogs below it always
+// theme unconditionally, regardless of whether the main screen's own
+// table exists yet.
+func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
+	if r.firewallTable != nil {
+		// A real, previously-unnoticed gap: unlike every other full-screen
+		// catalog here, this block never existed at all, so the Firewall
+		// screen's own layout/table sat at tview's plain, unthemed default
+		// (black) background instead of SurfaceBackground — caught per the
+		// user's own explicit report that the "tool pages" didn't match
+		// the rest of the theme.
+		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
+
+		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// fixed FocusedBackground above follows.
+		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.firewallTitleBar.SetTextColor(theme.TextColor)
+		r.firewallHint.SetBackgroundColor(theme.InputBackground)
+		r.firewallHint.SetTextColor(theme.MutedTextColor)
+		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())
+		r.firewallHint.SetText(firewallHintText)
+		r.firewallHintSpans = firewallHintSpans
+
+		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
+	}
+
+	// The Firewall screen's own three secondary dialogs (firewalladdrule.go/
+	// firewallsimulate.go) — the exact same real, previously-unnoticed gap
+	// the block just above already documents for the Firewall screen's own
+	// main table: none of these three had ever been wired into applyTheme
+	// at all, so each sat at tview's own plain, unthemed black background
+	// instead of SurfaceBackground, caught per the user's own explicit
+	// report that the Simulate form specifically didn't match the rest of
+	// the theme — the same class of gap, so fixed for all three together
+	// rather than leaving Add rule/the rollback prompt with the identical
+	// defect right next to the one actually reported.
+	r.firewallAddRuleForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallAddRuleForm.SetLabelColor(theme.TextColor)
+	r.firewallAddRuleForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewallAddRuleForm.SetFieldTextColor(theme.TextColor)
+	r.firewallAddRuleStatus.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallAddRuleButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewallAddRuleCancelBtn, theme)
+	styleButton(r.firewallAddRuleAddBtn, theme)
+	r.firewallAddRuleTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallAddRuleTitleBar.SetTextColor(theme.TextColor)
+
+	r.firewallRollbackText.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallRollbackText.SetTextColor(theme.TextColor)
+	styleButton(r.firewallRollbackKeepBtn, theme)
+	r.firewallRollbackTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallRollbackTitleBar.SetTextColor(theme.TextColor)
+
+	r.firewallSimulateForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallSimulateForm.SetLabelColor(theme.TextColor)
+	r.firewallSimulateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.firewallSimulateForm.SetFieldTextColor(theme.TextColor)
+	r.firewallSimulateResult.SetBackgroundColor(theme.SurfaceBackground)
+	r.firewallSimulateButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.firewallSimulateCloseBtn, theme)
+	styleButton(r.firewallSimulateRunBtn, theme)
+	r.firewallSimulateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.firewallSimulateTitleBar.SetTextColor(theme.TextColor)
 }
