@@ -270,6 +270,58 @@ func TestChordGoBackAndGoForwardStepThroughHistory(t *testing.T) {
 	}
 }
 
+// TestChordZNZSZTSortByNameSizeTimeToggleAscDesc pins "zN"/"zS"/"zT" —
+// the user's own explicit request for a keyboard equivalent to clicking
+// a column header (see Panel.setSortKey): the same member sorts by that
+// column, ascending, the first time, and flips ascending/descending on
+// every repeat, exactly the same behavior a click already has.
+func TestChordZNZSZTSortByNameSizeTimeToggleAscDesc(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	// sortByName/ascending is the panel's own zero-value default (a
+	// fresh listing is already sorted by name), so "zN" first flips
+	// straight to descending rather than "switching to" name-ascending —
+	// exactly the same as clicking the Name column header twice would.
+	root.HandlePlainKey(runeEvent('z'))
+	root.HandlePlainKey(runeEvent('N'))
+	if root.panel.sortKey != sortByName || !root.panel.sortDescending {
+		t.Errorf("after \"zN\": sortKey=%v sortDescending=%v, want sortByName/true", root.panel.sortKey, root.panel.sortDescending)
+	}
+	root.HandlePlainKey(runeEvent('z'))
+	root.HandlePlainKey(runeEvent('N'))
+	if root.panel.sortDescending {
+		t.Error("a second \"zN\" should have flipped back to ascending")
+	}
+
+	// Switching to a different key always starts ascending, regardless
+	// of whichever direction the previous key was left in.
+	root.HandlePlainKey(runeEvent('z'))
+	root.HandlePlainKey(runeEvent('S'))
+	if root.panel.sortKey != sortBySize || root.panel.sortDescending {
+		t.Errorf("after \"zS\": sortKey=%v sortDescending=%v, want sortBySize/false", root.panel.sortKey, root.panel.sortDescending)
+	}
+
+	root.HandlePlainKey(runeEvent('z'))
+	root.HandlePlainKey(runeEvent('T'))
+	if root.panel.sortKey != sortByModified || root.panel.sortDescending {
+		t.Errorf("after \"zT\": sortKey=%v sortDescending=%v, want sortByModified/false", root.panel.sortKey, root.panel.sortDescending)
+	}
+}
+
+// TestChordZFOpensFilterMenu pins "zf" — a second way to reach the
+// filter menu, alongside the existing plain "/", per the user's own
+// explicit request.
+func TestChordZFOpensFilterMenu(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('z'))
+	root.HandlePlainKey(runeEvent('f'))
+
+	if root.activePage != filterMenuPage {
+		t.Errorf("activePage after \"zf\" = %q, want the filter menu", root.activePage)
+	}
+}
+
 func TestChordEscapeCancelsWithoutRunningAnything(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.panel.focusRow(3)
