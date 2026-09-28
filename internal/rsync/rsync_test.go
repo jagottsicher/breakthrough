@@ -1,6 +1,7 @@
 package rsync
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -184,4 +185,39 @@ func TestShellQuoteOnAnEmptyStringStillProducesQuotes(t *testing.T) {
 	if got, want := shellQuote(""), "''"; got != want {
 		t.Errorf("shellQuote(\"\") = %q, want %q", got, want)
 	}
+}
+
+// FuzzShellQuote is this package's own defense against exactly the kind
+// of bug a hand-picked test corpus is worst at catching: an unusual
+// filename (embedded backticks, a leading "-", a "$(...)" substitution,
+// a literal newline — all real, legal POSIX filenames) that shellQuote
+// escapes wrong, turning a Job's own preview/Command() into something a
+// real shell doesn't interpret as the same literal string it started
+// from. The property under test is round-trip fidelity against a real
+// shell, not just "doesn't panic": for any s a real path could ever be,
+// decoding shellQuote(s) back through /bin/sh must reproduce s exactly.
+// A real path can never contain a NUL byte (no POSIX filesystem allows
+// one), so that one input is skipped rather than asserted on — the one
+// case shellQuote was never meant to handle.
+func FuzzShellQuote(f *testing.F) {
+	for _, seed := range []string{
+		"simple.txt", "it's a test", "", " leading and trailing ",
+		"$(rm -rf /)", "`backticks`", "a\nb", "a\tb", "--flag-looking",
+		`"double quotes"`, "\\backslash", "*.log", "~/home",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if strings.ContainsRune(s, 0) {
+			t.Skip("a real path can never contain a NUL byte")
+		}
+		quoted := shellQuote(s)
+		out, err := exec.Command("sh", "-c", "printf %s "+quoted).Output()
+		if err != nil {
+			t.Fatalf("shell rejected shellQuote(%q) = %q: %v", s, quoted, err)
+		}
+		if string(out) != s {
+			t.Errorf("round-trip mismatch: shellQuote(%q) = %q, shell decoded it back to %q", s, quoted, out)
+		}
+	})
 }
