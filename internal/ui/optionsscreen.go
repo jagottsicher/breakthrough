@@ -1123,3 +1123,53 @@ func (r *Root) reloadColorSchemes() {
 func (r *Root) applyThemeOnly(slug string) {
 	r.applyTheme(config.FindColorScheme(r.colorSchemes, slug).Resolve())
 }
+
+// applyOptionsTheme themes the Options screen — split out of applyTheme
+// (see its own doc comment) so this screen owns its own theming code
+// the same way it owns everything else about its own widgets. Guarded:
+// applyTheme also runs from NewRoot, before newOptionsScreen has built
+// any of these.
+func (r *Root) applyOptionsTheme(theme config.ResolvedTheme) {
+	if r.optionsCategories == nil {
+		return
+	}
+	styleList(r.optionsCategories, theme)
+
+	r.optionsLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.optionsButtons.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.optionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.optionsTitleBar.SetTextColor(theme.TextColor)
+	r.optionsHint.SetBackgroundColor(theme.InputBackground)
+	r.optionsHint.SetTextColor(theme.MutedTextColor)
+	optionsHintText, optionsHintSpans := buildListHint(theme, optionsHintEntries())
+	r.optionsHint.SetText(optionsHintText)
+	r.optionsHintSpans = optionsHintSpans
+
+	r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.optionsInfo.SetBackgroundColor(theme.InputBackground)
+	r.optionsInfo.SetTextColor(theme.TextColor)
+
+	styleInput(r.optionsInput, theme, true)
+	r.optionsInput.SetLabelColor(theme.TextColor)
+
+	for _, b := range r.optionsButtonList() {
+		styleButton(b, theme)
+	}
+
+	// Last, and deliberately after styleList above: that sets one
+	// fixed FocusedBackground selection color, which is right for
+	// every other list in this app but would erase the two panes'
+	// own focus-dependent highlight (see setOptionsPaneFocused) —
+	// a real bug, caught by reading the drawn colors back off a
+	// screen. Re-derived from each pane's actual focus, which is
+	// trustworthy here: applyTheme is never called from inside a
+	// blur callback, the one place HasFocus lies.
+	r.setOptionsPaneFocused(r.optionsCategories, r.optionsCategories.HasFocus())
+	r.setOptionsPaneFocused(r.optionsTable, r.optionsTable.HasFocus())
+
+	// Re-render: the table's own cell colors are baked in per cell
+	// (see renderOptions), not looked up live at draw time.
+	r.renderOptions()
+}

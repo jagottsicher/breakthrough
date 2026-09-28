@@ -979,6 +979,9 @@ type Root struct {
 	detailsPreviewCancel context.CancelFunc
 	detailsHashBytesRead atomic.Int64
 	detailsHashRowStart  int
+	// detailsHashButtonWidth mirrors Properties' own hashButtonWidth —
+	// see its own doc comment — for Details' identical "h" button.
+	detailsHashButtonWidth int
 
 	// detailsGitStatus is the current target's own git status (see
 	// gitstatus.go) — nil until a background fetch actually confirms
@@ -1022,6 +1025,9 @@ type Root struct {
 	detailsDirSizeAnimFrame  int
 	detailsDirSizeCancel     context.CancelFunc
 	detailsDirSizeRowStart   int
+	// detailsDirSizeButtonWidth mirrors detailsHashButtonWidth above for
+	// this section's own "k" button.
+	detailsDirSizeButtonWidth int
 
 	// viewerPDFPath/Page/PageCount/Mode track Look's own PDF page
 	// navigation (see viewer.go's showPDFPage/renderPDFPageContent/
@@ -1484,12 +1490,19 @@ type Root struct {
 	// taking it as a parameter, since it's re-run after every kind of
 	// edit, not just this one. hashSectionRow is the 0-based row, within
 	// that text, where the hash hint/result line starts — set by
-	// renderProperties, read by capturePropertiesMouse to tell whether a
-	// click landed on it.
+	// renderProperties, read by hashesMouseCapture to tell whether a
+	// click landed on it. hashButtonWidth is that same row's own "h"
+	// button's click width (see singleKeyHint), 0 whenever no button is
+	// actually shown there right now (already computed, or a computation
+	// is currently in progress) — hashesMouseCapture requires both the
+	// right row and a column inside this width, per the user's own
+	// explicit request that this be a real button, not "click anywhere
+	// on this line or below it" the way it used to be.
 	propertiesTarget string
 	propertiesStat   fsops.Info
 	propertiesHashes *fsops.Hashes
 	hashSectionRow   int
+	hashButtonWidth  int
 
 	// hashInProgress/hashAnimFrame/hashCancel back computeHashes' own
 	// "in progress" animation (see hashAnimationFrames): hashInProgress
@@ -3348,14 +3361,29 @@ func (r *Root) closeMenu() {
 	r.refreshButtonBar()
 }
 
-// openRename is the context menu's "Rename" action. Rather than a prompt
-// floating near the menu, it positions the rename field exactly over the
-// target's own name cell — not the whole row: the checkbox column is
-// deliberately left uncovered, so the row's current checked state stays
-// visible (without becoming editable itself) while renaming. It reads as
-// just the name becoming editable in place, pre-filled with the current
-// one.
+// openRename is the context menu's "Rename" action, and renameRow's own
+// click-pause-click gesture — renameCurrentEntry (the "r" key) is the
+// third and last way to reach a rename, and used to be the only one of
+// the three that actually refused inside an archive view: r.target
+// there is a virtual "archivePath/member" string, never a real
+// filesystem path (see splitArchivePath's own doc comment), so
+// finishRename's own fsops.Rename call would just fail with a bare,
+// confusing "no such file or directory" instead of ever explaining
+// *why* — a real gap, not a hypothetical one, closed here once for all
+// three entry points rather than duplicating the same check in each of
+// them.
+//
+// Rather than a prompt floating near the menu, it positions the rename
+// field exactly over the target's own name cell — not the whole row:
+// the checkbox column is deliberately left uncovered, so the row's
+// current checked state stays visible (without becoming editable
+// itself) while renaming. It reads as just the name becoming editable
+// in place, pre-filled with the current one.
 func (r *Root) openRename() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
 	x, y, width, ok := r.panel.nameCellRect(r.targetRow)
 	if !ok {
 		return // targetRow came from a right-click just validated by RowAt
