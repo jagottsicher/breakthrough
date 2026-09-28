@@ -314,11 +314,15 @@ func TestMountsErrorScreenNeverHangsOnDownAfterARealDraw(t *testing.T) {
 	})
 }
 
-// TestRenderMountsColorsNonPersistentEntriesWithWarning pins the one
-// piece of the user's own explicit request this whole feature exists
-// for: a mount that would NOT survive a reboot should visually stand
-// out from one that would.
-func TestRenderMountsColorsNonPersistentEntriesWithWarning(t *testing.T) {
+// TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless pins
+// the user's own explicit follow-up request: a non-persistent mount's
+// own circle used to stand out in WarningText (orange) — reported back
+// as confusing rather than informative once actually seen in daily use
+// ("das macht eigentlich keinen Sinn") — so both persistent and
+// non-persistent entries now render in the same plain, unremarkable
+// color as the Bind column right next to it, not a warning color that
+// singles either one out.
+func TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
@@ -334,11 +338,11 @@ func TestRenderMountsColorsNonPersistentEntriesWithWarning(t *testing.T) {
 	persistentColor := cellTextColor(r.mountsTable.GetCell(1, mountsColPersistent))
 	manualColor := cellTextColor(r.mountsTable.GetCell(2, mountsColPersistent))
 
-	if persistentColor != r.theme.Text {
-		t.Errorf("persistent entry's own color = %v, want the plain Text color %v", persistentColor, r.theme.Text)
+	if persistentColor != r.theme.PlaceholderText {
+		t.Errorf("persistent entry's own color = %v, want the plain PlaceholderText color %v", persistentColor, r.theme.PlaceholderText)
 	}
-	if manualColor != r.theme.WarningText {
-		t.Errorf("non-persistent entry's own color = %v, want WarningText %v", manualColor, r.theme.WarningText)
+	if manualColor != r.theme.PlaceholderText {
+		t.Errorf("non-persistent entry's own color = %v, want the same plain PlaceholderText color %v, not a warning color", manualColor, r.theme.PlaceholderText)
 	}
 }
 
