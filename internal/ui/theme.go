@@ -241,50 +241,8 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleButton(r.propertiesSaveBtn, theme)
 	r.rerenderProperties() // repaints focusTag's own style tags with the new theme
 
-	// The Options screen (see optionsscreen.go). Guarded because
-	// applyTheme also runs from NewRoot, before newOptionsScreen has
-	// built any of these.
-	if r.optionsCategories != nil {
-		styleList(r.optionsCategories, theme)
-
-		r.optionsLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.optionsButtons.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.optionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.optionsTitleBar.SetTextColor(theme.TextColor)
-		r.optionsHint.SetBackgroundColor(theme.InputBackground)
-		r.optionsHint.SetTextColor(theme.MutedTextColor)
-		optionsHintText, optionsHintSpans := buildListHint(theme, optionsHintEntries())
-		r.optionsHint.SetText(optionsHintText)
-		r.optionsHintSpans = optionsHintSpans
-
-		r.optionsTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.optionsInfo.SetBackgroundColor(theme.InputBackground)
-		r.optionsInfo.SetTextColor(theme.TextColor)
-
-		styleInput(r.optionsInput, theme, true)
-		r.optionsInput.SetLabelColor(theme.TextColor)
-
-		for _, b := range r.optionsButtonList() {
-			styleButton(b, theme)
-		}
-
-		// Last, and deliberately after styleList above: that sets one
-		// fixed FocusedBackground selection color, which is right for
-		// every other list in this app but would erase the two panes'
-		// own focus-dependent highlight (see setOptionsPaneFocused) —
-		// a real bug, caught by reading the drawn colors back off a
-		// screen. Re-derived from each pane's actual focus, which is
-		// trustworthy here: applyTheme is never called from inside a
-		// blur callback, the one place HasFocus lies.
-		r.setOptionsPaneFocused(r.optionsCategories, r.optionsCategories.HasFocus())
-		r.setOptionsPaneFocused(r.optionsTable, r.optionsTable.HasFocus())
-
-		// Re-render: the table's own cell colors are baked in per cell
-		// (see renderOptions), not looked up live at draw time.
-		r.renderOptions()
-	}
+	// The Options screen (see optionsscreen.go/applyOptionsTheme).
+	r.applyOptionsTheme(theme)
 
 	// The Batch Rename screen (see batchrename.go) — guarded the same
 	// way the Options block above is (applyTheme also runs from
@@ -330,141 +288,21 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.renderBatchRenamePreview()
 	}
 
-	if r.toolboxTable != nil {
-		r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+	// The Toolbox screen (see toolbox.go/applyToolboxTheme).
+	r.applyToolboxTheme(theme)
 
-		// FocusedBackground, fixed — the Toolbox screen has exactly one
-		// focusable widget (its own table), never itself the base a
-		// further overlay stacks on top of in a way that should dim it,
-		// the same reasoning optionsTitleBar's own fixed
-		// FocusedBackground already follows.
-		r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.toolboxTitleBar.SetTextColor(theme.TextColor)
-		r.toolboxHint.SetBackgroundColor(theme.InputBackground)
-		r.toolboxHint.SetTextColor(theme.MutedTextColor)
-		toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
-		r.toolboxHint.SetText(toolboxHintText)
-		r.toolboxHintSpans = toolboxHintSpans
+	// The Mounts screen (see mounts.go/applyMountsTheme).
+	r.applyMountsTheme(theme)
 
-		styleInput(r.toolboxInput, theme, true)
-		r.toolboxInput.SetLabelColor(theme.TextColor)
+	// The Firewall screen and its own three secondary dialogs (see
+	// firewall.go/applyFirewallTheme).
+	r.applyFirewallTheme(theme)
 
-		r.renderToolbox() // cell colors are baked in per cell, not looked up live at draw time
-	}
+	// The Sessions screen (see sessions.go/applySessionsTheme).
+	r.applySessionsTheme(theme)
 
-	if r.mountsTable != nil {
-		r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
-		// fixed FocusedBackground just above follows.
-		r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.mountsTitleBar.SetTextColor(theme.TextColor)
-		r.mountsHint.SetBackgroundColor(theme.InputBackground)
-		r.mountsHint.SetTextColor(theme.MutedTextColor)
-		mountsHintText, mountsHintSpans := buildListHint(theme, mountsHintEntries())
-		r.mountsHint.SetText(mountsHintText)
-		r.mountsHintSpans = mountsHintSpans
-
-		r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	if r.firewallTable != nil {
-		// A real, previously-unnoticed gap: unlike every other full-screen
-		// catalog here, this block never existed at all, so the Firewall
-		// screen's own layout/table sat at tview's plain, unthemed default
-		// (black) background instead of SurfaceBackground — caught per the
-		// user's own explicit report that the "tool pages" didn't match
-		// the rest of the theme.
-		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
-		// fixed FocusedBackground above follows.
-		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.firewallTitleBar.SetTextColor(theme.TextColor)
-		r.firewallHint.SetBackgroundColor(theme.InputBackground)
-		r.firewallHint.SetTextColor(theme.MutedTextColor)
-		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())
-		r.firewallHint.SetText(firewallHintText)
-		r.firewallHintSpans = firewallHintSpans
-
-		r.renderFirewall() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	// The Firewall screen's own three secondary dialogs (firewalladdrule.go/
-	// firewallsimulate.go) — the exact same real, previously-unnoticed gap
-	// the block just above already documents for the Firewall screen's own
-	// main table: none of these three had ever been wired into applyTheme
-	// at all, so each sat at tview's own plain, unthemed black background
-	// instead of SurfaceBackground, caught per the user's own explicit
-	// report that the Simulate form specifically didn't match the rest of
-	// the theme — the same class of gap, so fixed for all three together
-	// rather than leaving Add rule/the rollback prompt with the identical
-	// defect right next to the one actually reported.
-	r.firewallAddRuleForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallAddRuleForm.SetLabelColor(theme.TextColor)
-	r.firewallAddRuleForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.firewallAddRuleForm.SetFieldTextColor(theme.TextColor)
-	r.firewallAddRuleStatus.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallAddRuleButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.firewallAddRuleCancelBtn, theme)
-	styleButton(r.firewallAddRuleAddBtn, theme)
-	r.firewallAddRuleTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallAddRuleTitleBar.SetTextColor(theme.TextColor)
-
-	r.firewallRollbackText.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallRollbackText.SetTextColor(theme.TextColor)
-	styleButton(r.firewallRollbackKeepBtn, theme)
-	r.firewallRollbackTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallRollbackTitleBar.SetTextColor(theme.TextColor)
-
-	r.firewallSimulateForm.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallSimulateForm.SetLabelColor(theme.TextColor)
-	r.firewallSimulateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
-	r.firewallSimulateForm.SetFieldTextColor(theme.TextColor)
-	r.firewallSimulateResult.SetBackgroundColor(theme.SurfaceBackground)
-	r.firewallSimulateButtons.SetBackgroundColor(theme.SurfaceBackground)
-	styleButton(r.firewallSimulateCloseBtn, theme)
-	styleButton(r.firewallSimulateRunBtn, theme)
-	r.firewallSimulateTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-	r.firewallSimulateTitleBar.SetTextColor(theme.TextColor)
-
-	if r.sessionsTable != nil {
-		r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.sessionsTitleBar.SetTextColor(theme.TextColor)
-		r.sessionsHint.SetBackgroundColor(theme.InputBackground)
-		r.sessionsHint.SetTextColor(theme.MutedTextColor)
-		sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())
-		r.sessionsHint.SetText(sessionsHintText)
-		r.sessionsHintSpans = sessionsHintSpans
-
-		r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
-	}
-
-	if r.activityLogTable != nil {
-		r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
-
-		r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
-		r.activityLogTitleBar.SetTextColor(theme.TextColor)
-		r.activityLogHint.SetBackgroundColor(theme.InputBackground)
-		r.activityLogHint.SetTextColor(theme.MutedTextColor)
-		activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
-		r.activityLogHint.SetText(activityLogHintText)
-		r.activityLogHintSpans = activityLogHintSpans
-
-		r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
-		r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
-		r.activityLogKeywordField.SetLabelColor(theme.TextColor)
-		r.activityLogTimeField.SetLabelColor(theme.TextColor)
-
-		r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
-	}
+	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
+	r.applyActivityLogTheme(theme)
 
 	if r.compareTreeTable != nil {
 		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())

@@ -467,3 +467,24 @@ func (r *Root) runCloseSession(s multiplex.Session) {
 	}
 	r.reloadSessions()
 }
+
+// applySessionsTheme themes the Sessions screen — split out of
+// applyTheme (see its own doc comment). Guarded the same way
+// applyOptionsTheme is.
+func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
+	if r.sessionsTable == nil {
+		return
+	}
+	r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sessionsTitleBar.SetTextColor(theme.TextColor)
+	r.sessionsHint.SetBackgroundColor(theme.InputBackground)
+	r.sessionsHint.SetTextColor(theme.MutedTextColor)
+	sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())
+	r.sessionsHint.SetText(sessionsHintText)
+	r.sessionsHintSpans = sessionsHintSpans
+
+	r.renderSessions() // cell colors are baked in per cell, not looked up live at draw time
+}

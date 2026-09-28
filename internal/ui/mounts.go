@@ -8,6 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/config"
 )
 
 // The Mounts screen: a full-screen, read-only view of every currently
@@ -373,4 +375,26 @@ func (r *Root) captureMountsKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return event
+}
+
+// applyMountsTheme themes the Mounts screen — split out of applyTheme
+// (see its own doc comment). Guarded the same way applyOptionsTheme is.
+func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
+	if r.mountsTable == nil {
+		return
+	}
+	r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+
+	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
+	// fixed FocusedBackground just above follows.
+	r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.mountsTitleBar.SetTextColor(theme.TextColor)
+	r.mountsHint.SetBackgroundColor(theme.InputBackground)
+	r.mountsHint.SetTextColor(theme.MutedTextColor)
+	mountsHintText, mountsHintSpans := buildListHint(theme, mountsHintEntries())
+	r.mountsHint.SetText(mountsHintText)
+	r.mountsHintSpans = mountsHintSpans
+
+	r.renderMounts() // cell colors are baked in per cell, not looked up live at draw time
 }
