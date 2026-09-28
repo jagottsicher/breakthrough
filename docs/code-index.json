@@ -1388,13 +1388,13 @@
     },
     {
       "path": "internal/ui/mounts.go",
-      "size": 15412,
-      "sha256": "cc3bc185b6b6a1a5893e2f11b3d83ff7773d40173bb472e3a9dea202e0ad60d6"
+      "size": 14927,
+      "sha256": "660768f370c5eb35f5b4578158a6417355d5ad66764b268377e36e25c3d369b9"
     },
     {
       "path": "internal/ui/mounts_test.go",
-      "size": 15738,
-      "sha256": "ed3543da3387c7048b7a74ec3a6b7ea837c4b73036983e20e62dd74d51e1b401"
+      "size": 16120,
+      "sha256": "959d065500115c42600f33f5545031d022d3d39b572e34f2778e0fbf950a099d"
     },
     {
       "path": "internal/ui/mousefocus_test.go",
@@ -22460,7 +22460,7 @@
       "name": "captureMountsKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 368
+      "line": 356
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22468,7 +22468,7 @@
       "name": "applyMountsTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 382
+      "line": 370
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22571,30 +22571,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
-      "name": "TestRenderMountsColorsNonPersistentEntriesWithWarning",
+      "name": "TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless",
       "kind": "function",
-      "line": 321
+      "line": 325
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestRenderMountsSelectsTheFirstDataRowOnFirstRender",
       "kind": "function",
-      "line": 348
+      "line": 352
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestMountsTitleBarReloadButtonClickReloads",
       "kind": "function",
-      "line": 372
+      "line": 376
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mounts_test.go",
       "name": "TestMountsTitleBarClickElsewhereDoesNothing",
       "kind": "function",
-      "line": 405
+      "line": 409
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37028,5 +37028,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "3acbfc63629b82de5d730c17e5e3a16a181b0b172e856752d3a57235f5fe0e1c"
+  "merkle_root": "56959fc908a449b4652230256ad5ff13e8394d8f4d38dcd4289557cfa52126c7"
 }

@@ -312,18 +312,6 @@ func (r *Root) renderMounts() {
 	for i, m := range r.mountsEntries {
 		row := i + 1
 
-		// WarningText, not plain Text, for a mount that is NOT in
-		// fstab: that's the one state worth noticing at a glance — a
-		// mount that will silently be gone after the next reboot,
-		// unlike the plain, unremarkable default of "this comes back on
-		// its own" — the same "color the exception, not the norm"
-		// convention optionDefaultHint's own doc comment already
-		// follows.
-		persistentColor := r.theme.Text
-		if !m.persistent {
-			persistentColor = r.theme.WarningText
-		}
-
 		r.mountsTable.SetCell(row, mountsColTarget,
 			tview.NewTableCell(padRight(m.target, mountsColumnWidth(mountsColTarget))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
@@ -332,7 +320,7 @@ func (r *Root) renderMounts() {
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColPersistent,
 			tview.NewTableCell(padRight(checkboxText(m.persistent), mountsColumnWidth(mountsColPersistent))).
-				SetTextColor(persistentColor).SetSelectable(true))
+				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColFstype,
 			tview.NewTableCell(padRight(m.fstype, mountsColumnWidth(mountsColFstype))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
