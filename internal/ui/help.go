@@ -93,8 +93,9 @@ var helpText = strings.TrimLeft(`
                 host's own actual rules) · jh Hardware Tools screen ·
                 js Sessions screen (local screen/tmux/zellij sessions)
     p  perms    pm chmod · po chown
-    z  display  zs size format · zt time format · zo split orientation ·
-                zw swap panes · zr reload
+    z  display  zN sort by name · zS sort by size · zT sort by time ·
+                zs size format · zt time format · zf filter · zo split
+                orientation · zw swap panes · zr reload
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
     o  options  oo Options screen · om Mouse reporting on/off

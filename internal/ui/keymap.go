@@ -414,8 +414,28 @@ func chordFamilies() []chordFamily {
 			{'o', "chown", func(r *Root) { r.openChown() }},
 		}},
 		{prefix: 'z', name: "display", quick: true, members: []chordMember{
+			// N/S/T toggle the active panel's own sort key exactly the
+			// way clicking that column's header already does (see
+			// Panel.setSortKey): the same key sorts by it, ascending, if
+			// it wasn't already the active one, or flips ascending/
+			// descending if it was — a keyboard equivalent for sorting
+			// with the mouse nowhere near the column headers, per the
+			// user's own explicit request. Capitalized specifically so
+			// each stays free of the family's own existing lowercase
+			// members below (s/t already mean something else here —
+			// Size/Time *format*, not sort).
+			{'N', "Sort by name", func(r *Root) { r.panel.setSortKey(sortByName) }},
+			{'S', "Sort by size", func(r *Root) { r.panel.setSortKey(sortBySize) }},
+			{'T', "Sort by time", func(r *Root) { r.panel.setSortKey(sortByModified) }},
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
+			// "f" for Filter, per the user's own explicit request and
+			// reasoning: this is display-scoped exactly like every other
+			// member here, narrowing what's currently shown rather than
+			// acting on a target the way most single-letter commands do.
+			// A second way to reach openFilterMenu, alongside the
+			// existing plain "/" — not a replacement for it.
+			{'f', "Filter", func(r *Root) { r.openFilterMenu() }},
 			{'o', "Split orientation", func(r *Root) { r.toggleSplitStacked() }},
 			{'w', "Swap panes", func(r *Root) { r.swapPanesOrExplain() }},
 			{'r', "Reload", func(r *Root) { r.reloadCurrentTab() }},
