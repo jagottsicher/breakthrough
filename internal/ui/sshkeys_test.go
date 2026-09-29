@@ -314,11 +314,10 @@ func findScreenRow(t *testing.T, screen tcell.SimulationScreen, width, height in
 // would silently misalign a byte offset against the screen's own,
 // one-cell-per-column coordinates.
 func findScreenCellX(t *testing.T, screen tcell.SimulationScreen, width, y int, substr string) int {
-	want := []rune(substr)
 	for x := 0; x < width; x++ {
 		matched := true
 		cursor := x
-		for _, wantRune := range want {
+		for _, wantRune := range substr {
 			str, _, _ := screen.Get(cursor, y)
 			got := []rune(str)
 			if len(got) == 0 || got[0] != wantRune {
