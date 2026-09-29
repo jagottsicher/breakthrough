@@ -26,6 +26,7 @@ material, always matching the version you are actually running.
 - [Mounts](#mounts)
 - [Firewall](#firewall)
 - [Sessions](#sessions)
+- [Email](#email)
 - [SSH Keys](#ssh-keys)
 - [Notifications](#notifications)
 - [Sed Replace](#sed-replace)
@@ -95,7 +96,7 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all · `mc` Clear clipboard |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
@@ -1152,6 +1153,48 @@ Local sessions only, for now — attaching to a session on a remote host
 reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
 in principle, but needs its own connection-reuse design first.
 
+## Email
+
+`g` then `e` ("go email") launches whichever terminal mail client is
+installed — the same Suspend-and-exec mechanism Sessions' own Attach
+already uses: breakthrough hands over the real terminal and resumes
+automatically the moment you quit the client, no separate mail client
+or IMAP/SMTP implementation of its own. Candidates, checked in this
+order: `neomutt`, `aerc`, `himalaya`, `mail`, `mailx` (two different
+binary names for the same POSIX-standard tool, depending on the
+distribution — both are checked). Exactly one found — that one runs
+directly. More than one found — whichever one is picked under Options
+(Mail, "Mail client") runs; "Automatic" (the default) always follows
+that same priority order, and a client chosen there that's since been
+uninstalled falls back to it too, rather than failing. None found at
+all — a clear, dismissible notice, never a crash or silent no-op.
+
+**Unread badge.** The status bar shows `Email <N>` (see [Status
+bar](#status-bar)) once a mailbox resolves, in this order:
+
+1. Options → Mail → "Maildir path" — a local Maildir's own root (the
+   directory holding `new`/`cur`/`tmp`); `N` is how many messages sit
+   in its `new/` folder. Never guessed from a common location like
+   `~/Mail` on its own — Maildir has several genuinely ambiguous
+   candidate locations, so this one is opt-in only, empty by default.
+2. Options → Mail → "Mbox path (override)" — an explicit classic Unix
+   mailbox file (`From `-separated messages, one flat file — the
+   format `mail`/`mailx` themselves read and write). `N` counts every
+   message whose `Status:` header — if it has one at all — doesn't
+   contain `R`: a message with no header, and a message already marked
+   `Status: O` ("old" — seen at least once, even if never actually
+   opened) both count as unread; only `Status: R`/`RO` (read) doesn't.
+3. If neither is set: the current user's own system mailbox,
+   auto-detected — `/var/mail/<user>` or `/var/spool/mail/<user>`,
+   whichever exists. Unlike Maildir's own ambiguous candidates, this
+   is the one well-defined POSIX convention per user, so it's the one
+   case this feature detects on its own rather than requiring an
+   explicit path.
+
+A misconfigured or unreadable path just omits the badge rather than
+showing an error. Clicking the badge launches the configured mail
+client, exactly like `ge`. IMAP mailboxes aren't read yet.
+
 ## SSH Keys
 
 `j` then `k`. A full-screen inventory of this user's own local SSH key
@@ -2067,20 +2110,23 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Status bar
 
-The bottom line, almost entirely informational — two real exceptions,
-both clickable (see below). Left to right: whatever's actually staged
-or in flight (a chord countdown, a running Paste's progress, or the
-clipboard's own contents — see [Copy, Cut and
-Paste](#copy-cut-and-paste)), then the notification badge, then eight
-further segments, each independently switchable off (see [Options and
-configuration](#options-and-configuration) below), and finally a clock.
-A transient one-line notice can also briefly cover this whole row for a
-few seconds — see [Notifications](#notifications) below.
+The bottom line, almost entirely informational — three real
+exceptions, all clickable (see below). Left to right: whatever's
+actually staged or in flight (a chord countdown, a running Paste's
+progress, or the clipboard's own contents — see [Copy, Cut and
+Paste](#copy-cut-and-paste)), then the notification badge, then the
+mail badge (only once a mailbox actually resolves — see
+[Email](#email)), then eight further segments, each independently
+switchable off (see [Options and configuration](#options-and-configuration)
+below), and finally a clock. A transient one-line notice can also
+briefly cover this whole row for a few seconds — see
+[Notifications](#notifications) below.
 
 | Segment | Shows | Color |
 |---|---|---|
 | Clipboard | `Copy`/`Cut: <N> files, <M> dirs ✕` while something's on the clipboard — the verb itself carries the exact same background tint a held file's own row gets in the panel, and the trailing `✕` is clickable, clearing the clipboard outright (see [Copy, Cut and Paste](#copy-cut-and-paste)) | The verb: green (Copy) / red (Cut) background |
 | Messages badge | `Msgs <N>`, `N` right-padded to a fixed 3 columns — clickable, opens the [Messages screen](#notifications) | Muted at 0, warning-colored once there's at least one unread |
+| Mail badge | `Email <N>`, shown once a mailbox resolves — a configured Maildir or mbox path (Options → Mail), or the auto-detected system mailbox — and is readable; clickable, launches the configured mail client, same as `ge` (see [Email](#email)) | Muted at 0, warning-colored once there's at least one unread |
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |

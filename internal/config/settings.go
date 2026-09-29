@@ -354,6 +354,43 @@ type Settings struct {
 
 	OpenWithCommand string
 
+	// MailClient is which terminal mail client the "ge" chord launches
+	// (see internal/mail's own doc comment and internal/ui/mail.go) —
+	// one of internal/mail.Candidates ("neomutt"/"aerc"/"himalaya"/
+	// "mail"/"mailx"), or "" (the default) meaning "no explicit
+	// choice, use whichever of those is actually installed, in that
+	// same priority order" — never a hardcoded first choice baked in
+	// here, since that has to stay in sync with internal/mail's own
+	// Candidates list, not duplicated as a literal.
+	MailClient string
+
+	// MailMaildirPath is a local Maildir's own root (the directory
+	// holding "new"/"cur"/"tmp") the status bar's own mail badge reads
+	// an unread count from (see internal/mail.MaildirSource and
+	// internal/ui/bottombar.go's own mailBadgeText) — "" (the default)
+	// means the badge simply doesn't show, the same "just show one
+	// less segment" degradation kernel version/uptime/load already
+	// have when their own data isn't available. Never auto-guessed
+	// from a common location (~/Mail, ~/Maildir, ...): unlike
+	// detecting a real binary on $PATH, guessing at a directory that
+	// happens to exist risks reading the wrong mailbox, or one the
+	// user never intended this to touch at all — an explicit, opt-in
+	// path only.
+	MailMaildirPath string
+
+	// MailMboxPath is an explicit override for the mbox mailbox the
+	// status bar's own mail badge reads from (see
+	// internal/mail.MboxSource) — "" (the default) auto-detects the
+	// current user's own system mailbox instead (internal/mail.
+	// DefaultMboxPath: /var/mail/<user> or /var/spool/mail/<user>,
+	// whichever exists) — unlike Maildir's own several genuinely
+	// ambiguous candidate locations, this is a single, well-defined
+	// POSIX convention per user, real detection rather than a guess,
+	// so auto-detecting it by default (rather than requiring explicit
+	// opt-in the way MailMaildirPath does) is the right default here.
+	// MailMaildirPath, if also set, wins outright — a mailbox can only
+	// be one format or the other.
+	MailMboxPath      string
 	RsyncCopyContents bool
 	RsyncArchive      bool
 	RsyncCompress     bool
@@ -476,6 +513,10 @@ func DefaultSettings() Settings {
 		CompressFormat: "zip",
 
 		OpenWithCommand: "",
+
+		MailClient:      "",
+		MailMaildirPath: "",
+		MailMboxPath:    "",
 
 		RsyncCopyContents: false,
 		RsyncArchive:      true,
@@ -623,6 +664,12 @@ func (s *Settings) apply(key, value string) error {
 		s.CompressFormat = value
 	case "open_with_command":
 		s.OpenWithCommand = value
+	case "mail_client":
+		s.MailClient = value
+	case "mail_maildir_path":
+		s.MailMaildirPath = value
+	case "mail_mbox_path":
+		s.MailMboxPath = value
 	case "rsync_copy_contents":
 		return parseBool(&s.RsyncCopyContents)
 	case "rsync_archive":

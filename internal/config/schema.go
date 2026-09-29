@@ -369,6 +369,27 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "mail_client",
+			Default:     d.MailClient,
+			Kind:        KindEnum,
+			Summary:     `Which terminal mail client the "ge" chord launches ("neomutt"/"aerc"/"himalaya"/"mail"/"mailx"). Empty uses whichever is installed, in that priority order.`,
+			Implemented: true,
+		},
+		{
+			Key:         "mail_maildir_path",
+			Default:     d.MailMaildirPath,
+			Kind:        KindString,
+			Summary:     "Local Maildir root the status bar's own mail badge reads an unread count from. Empty hides the badge.",
+			Implemented: true,
+		},
+		{
+			Key:         "mail_mbox_path",
+			Default:     d.MailMboxPath,
+			Kind:        KindString,
+			Summary:     "Explicit mbox mailbox override for the mail badge. Empty auto-detects /var/mail/<user> or /var/spool/mail/<user>.",
+			Implemented: true,
+		},
+		{
 			Key:         "rsync_copy_contents",
 			Default:     strconv.FormatBool(d.RsyncCopyContents),
 			Kind:        KindBool,

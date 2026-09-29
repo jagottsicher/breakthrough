@@ -5,6 +5,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/mail"
 )
 
 // The Options screen's own catalogue: which settings it offers, how
@@ -893,6 +894,61 @@ func optionCategories() []optionCategory {
 			},
 		},
 		{
+			name: "Mail",
+			options: []optionSpec{
+				{
+					key:   "mail_client",
+					label: "Mail client",
+					help: "Which terminal mail client the \"ge\" chord (\"go email\") launches.\n\n" +
+						"\"Automatic\" uses whichever of neomutt, aerc, himalaya, mail, or mailx is " +
+						"actually installed, in that priority order — no need to pick one by hand unless " +
+						"more than one is present and you want a specific one. A client chosen " +
+						"here that's since been uninstalled falls back to \"Automatic\" too, " +
+						"rather than failing outright.",
+					value: func(r *Root) string { return r.settings.MailClient },
+					apply: func(r *Root, v string) {
+						r.settings.MailClient = v
+						r.persistSetting("mail_client", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := []optionChoice{{value: "", label: "Automatic"}}
+						for _, c := range mail.Detect() {
+							out = append(out, optionChoice{value: c, label: c})
+						}
+						return out
+					},
+				},
+				stringOption("mail_maildir_path", "Maildir path",
+					"A local Maildir's own root (the directory holding \"new\"/\"cur\"/\"tmp\") "+
+						"the status bar's own mail badge (✉) reads an unread count from.\n\n"+
+						"Empty (the default) hides the badge entirely — never auto-guessed from a "+
+						"common location: unlike detecting a real binary on $PATH, guessing at a "+
+						"directory that happens to exist risks reading the wrong mailbox, or one "+
+						"you never intended this to touch at all.",
+					func(r *Root) string { return r.settings.MailMaildirPath },
+					func(r *Root, v string) {
+						r.settings.MailMaildirPath = v
+						r.persistSetting("mail_maildir_path", v)
+					},
+				),
+				stringOption("mail_mbox_path", "Mbox path (override)",
+					"An explicit mbox mailbox for the mail badge, overriding auto-detection.\n\n"+
+						"Empty (the default) auto-detects the current user's own system mailbox — "+
+						"/var/mail/<user> or /var/spool/mail/<user>, whichever exists. Unlike "+
+						"Maildir's own several genuinely ambiguous candidate locations, this is a "+
+						"single, well-defined convention per user, so it's detected automatically "+
+						"rather than requiring an explicit path.\n\n"+
+						"If \"Maildir path\" above is also set, it wins outright — a mailbox can "+
+						"only be one format or the other.",
+					func(r *Root) string { return r.settings.MailMboxPath },
+					func(r *Root, v string) {
+						r.settings.MailMboxPath = v
+						r.persistSetting("mail_mbox_path", v)
+					},
+				),
+			},
+		},
+		{
 			name: "Trash",
 			options: []optionSpec{
 				boolOption("trash_confirm", "Confirm before moving to Trash",
@@ -1266,6 +1322,12 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.CompressFormat, true
 	case "open_with_command":
 		return s.OpenWithCommand, true
+	case "mail_client":
+		return s.MailClient, true
+	case "mail_maildir_path":
+		return s.MailMaildirPath, true
+	case "mail_mbox_path":
+		return s.MailMboxPath, true
 	case "rsync_copy_contents":
 		return strconv.FormatBool(s.RsyncCopyContents), true
 	case "rsync_archive":
