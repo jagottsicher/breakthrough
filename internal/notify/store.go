@@ -29,9 +29,17 @@ type Store struct {
 	messages []Message
 	nextID   uint64
 	onPush   func(Message)
+
+	// persistPath is where Push/SetRead/Delete each save to afterward
+	// (see persist.go's own doc comment) — "" (New's own zero value)
+	// means an ordinary in-memory-only Store, the same as before this
+	// existed; only NewWithPersistence ever sets it.
+	persistPath string
 }
 
-// New returns an empty Store, ready for immediate use.
+// New returns an empty Store, ready for immediate use — never persisted
+// to disk. See NewWithPersistence for a Store that also loads from, and
+// saves back to, a file.
 func New() *Store {
 	return &Store{}
 }
@@ -64,6 +72,7 @@ func (s *Store) Push(level Level, category Category, text string) Message {
 	onPush := s.onPush
 	s.mu.Unlock()
 
+	s.save()
 	if onPush != nil {
 		onPush(msg)
 	}
@@ -89,28 +98,40 @@ func (s *Store) Messages() []Message {
 // itself.
 func (s *Store) SetRead(id uint64, read bool) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	found := false
 	for i := range s.messages {
 		if s.messages[i].ID == id {
 			s.messages[i].Read = read
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+	s.mu.Unlock()
+
+	if found {
+		s.save()
+	}
+	return found
 }
 
 // Delete removes id from the ring buffer outright, reporting whether it
 // was still there to remove.
 func (s *Store) Delete(id uint64) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	found := false
 	for i := range s.messages {
 		if s.messages[i].ID == id {
 			s.messages = append(s.messages[:i], s.messages[i+1:]...)
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+	s.mu.Unlock()
+
+	if found {
+		s.save()
+	}
+	return found
 }
 
 // UnreadCount reports how many currently-held Messages have Read ==

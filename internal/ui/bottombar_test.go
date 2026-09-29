@@ -53,10 +53,25 @@ import (
 //     — tests that actually do (see newTestRootWithFile) isolate further
 //     with their own t.TempDir() for both variables, taking precedence
 //     for their own duration the same way isolateHistoryFile does above.
+//   - The persisted notification history: Root now also loads (and, on
+//     any real trigger, saves back to) it at construction (see
+//     internal/notify's own NewWithPersistence, wired in NewRoot via
+//     notifyPersistPath) — the same class of problem XDG_DATA_HOME's
+//     own entry above describes, but fixed via that swappable var
+//     itself rather than $XDG_STATE_HOME (session.StateDir's own
+//     variable, shared with the saved tab layout/crash log/activity
+//     log — overloading it here too would make an unrelated var's
+//     isolation this package's own problem to reason about). Defaults
+//     to "" here — no persistence at all, the same "point it somewhere
+//     that doesn't exist" shape HISTFILE/userConfigFilePath already
+//     use above — so no test here so much as touches a real file
+//     unless it specifically opts back in with its own t.TempDir().
 func TestMain(m *testing.M) {
 	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
 	os.Setenv("XDG_RUNTIME_DIR", filepath.Join(os.TempDir(), "breakthrough-test-xdg-runtime"))     //nolint:errcheck
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
+
+	notifyPersistPath = func() string { return "" }
 
 	loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
 		return config.DefaultSettings(), map[string]config.Origin{}, config.LoadColorSchemes("", ""), nil
