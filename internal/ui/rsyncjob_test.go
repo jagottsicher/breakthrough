@@ -13,6 +13,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
@@ -298,6 +299,63 @@ func TestFinishRsyncJobLogsAnError(t *testing.T) {
 	got := readLog()
 	if !strings.Contains(got, string(activitylog.CategoryRsync)) || !strings.Contains(got, "boom") {
 		t.Errorf("log = %q, want an rsync error entry mentioning the failure", got)
+	}
+}
+
+func TestFinishRsyncJobPushesANotificationOnSuccess(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readNotify := attachTestNotify(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	r.finishRsyncJob(job, nil)
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelSuccess || got[0].Category != notify.CategoryRsync {
+		t.Errorf("got %+v, want LevelSuccess/CategoryRsync", got[0])
+	}
+	if !strings.Contains(got[0].Text, "src -> dst") {
+		t.Errorf("text = %q, want it to name src -> dst", got[0].Text)
+	}
+}
+
+func TestFinishRsyncJobPushesANotificationOnError(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readNotify := attachTestNotify(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	r.finishRsyncJob(job, errors.New("rsync: boom"))
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelError || got[0].Category != notify.CategoryRsync {
+		t.Errorf("got %+v, want LevelError/CategoryRsync", got[0])
+	}
+	if !strings.Contains(got[0].Text, "boom") {
+		t.Errorf("text = %q, want it to mention the failure", got[0].Text)
+	}
+}
+
+func TestFinishRsyncJobDoesNotPushANotificationWhenCancelled(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	readNotify := attachTestNotify(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel, destPath: r.panel.path, label: "src -> dst"}
+	r.rsyncJob = job
+
+	cancel()
+	r.finishRsyncJob(job, errors.New("signal: killed"))
+
+	if got := readNotify(); len(got) != 0 {
+		t.Errorf("got %d notifications, want 0 for a cancelled job", len(got))
 	}
 }
 

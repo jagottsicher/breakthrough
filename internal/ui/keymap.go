@@ -133,6 +133,12 @@ func plainCommands() []plainCommand {
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
 		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
+		// Direct top-level key for the connection dropdown — per the
+		// user's own explicit request, alongside the existing "gc" chord
+		// and the header's own "@" button (see connectionmenu.go and
+		// buildHeaderSpans), not a replacement for either: same action,
+		// three ways to reach it.
+		{key: '@', label: "Connect…", quick: true, short: "Connect", action: func(r *Root) { r.openConnectionMenu() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
 		{key: 'w', label: "Close tab", action: func(r *Root) { r.closeCurrentTab() }},
@@ -313,6 +319,11 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
+			// "Messages", after gr/gb/gc: the status bar's own badge
+			// (bottombar.go) is this same action's mouse equivalent, the
+			// same "gehe zu einem ganzen weiteren Ort" role gb/gc already
+			// have — see feature_ideas.txt's own "3a. Benachrichtigungen".
+			{'m', "Messages", func(r *Root) { r.openMessages() }},
 		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did
@@ -358,6 +369,13 @@ func chordFamilies() []chordFamily {
 			{'o', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
 			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
 			{'A', "Deselect all", func(r *Root) { r.panel.deselectAll() }},
+			// "Clear clipboard" — per the user's own explicit request,
+			// the unconditional counterpart to Copy/Cut's own toggle
+			// (pressing "c"/"x" again on the exact same selection —
+			// see copyToClipboard/cutToClipboard), for whenever the
+			// current selection has since moved on from whatever's
+			// actually still held.
+			{'c', "Clear clipboard", func(r *Root) { r.setClipboard(nil, false) }},
 		}},
 		// "j" itself carries no mnemonic of its own — by the time this
 		// family was added, every other letter already meant something

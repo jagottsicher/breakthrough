@@ -27,6 +27,7 @@ material, always matching the version you are actually running.
 - [Firewall](#firewall)
 - [Sessions](#sessions)
 - [SSH Keys](#ssh-keys)
+- [Notifications](#notifications)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -59,7 +60,7 @@ dialog open.
 | `x` | Cut | `D` | Remove permanently | `I` | Details sidebar |
 | `v` | Paste | `u` | Undo last rename | `l` | Look |
 | `r` | Rename | `e` | Edit | `/` | Filter |
-| | | `f` | Find | `.` | Toggle hidden files |
+| `@` | Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) | `f` | Find | `.` | Toggle hidden files |
 | `n` | New tab | `w` | Close tab | `t` | Tab switcher |
 | `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
 | `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
@@ -94,9 +95,9 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all · `mc` Clear clipboard |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
@@ -1238,6 +1239,71 @@ private key still needs to be unlocked or loaded into the agent) is
 reported plainly rather than just assuming the install succeeding also
 means it works.
 
+## Notifications
+
+A short, curated list of background events — a backgrounded Rsync run
+finishing, the paste/move queue completing, the Firewall screen's own
+self-lockout rollback firing — surface even while you're looking
+elsewhere, so the outcome doesn't just disappear the moment its
+status-bar progress line does. Deliberately not every action: an
+ordinary, immediately visible one (Rename, chmod, Compress...) already
+shows its own result right in the panel and would just be noise here.
+This is a separate, active "something happened just now" mechanism,
+distinct from the passive [Activity log](#activity-log) — that's a
+self-opened, after-the-fact record, this is the opposite.
+
+**Transient toast.** A new notification briefly covers the status
+bar's own row for a few seconds — `[HH:MM] <glyph> <message>`, the
+same ✔/✘ (green/red) glyph/color language the [Sessions](#sessions)
+screen's own Status column and the Firewall screen's own Action column
+already use, plus a warning-colored `⚠` for a trigger that isn't
+itself a plain success/failure (the self-lockout rollback firing). A
+newer notification replaces an older one still showing outright rather
+than queuing; nothing is lost either way — the full history stays in
+the Messages screen (below). Purely informational: never takes
+keyboard focus, never interactive.
+
+**Status bar badge.** `Msgs <N>` (see [Status bar](#status-bar)) — a
+permanent segment between the clipboard indicator and the username,
+clickable, opening the Messages screen. `N` is the unread count,
+right-padded to a fixed 3 columns so the badge's own width barely
+shifts as it changes, capped at `999+` display.
+
+**Messages screen.** The badge, or chord `gm` ("go messages"), opens a
+full-screen table — cell navigation like Sessions, not just row
+navigation, since every row carries its own checkboxes and a close
+action:
+
+- **○ Select** — a checkbox for the bulk actions below. `Space`
+  toggles it; `Shift+↑`/`Shift+↓` spans a range, the same mechanic the
+  file panel's own checkbox column already has.
+- **○ New** — checked means unread. Two ways to clear it: sitting on
+  the row for about 1.5 seconds marks it read automatically (the dwell
+  timer); clicking the circle itself, or `Space`/`Enter` on it, toggles
+  it by hand independently of that timer.
+- **Time**.
+- **Message** — the wide, variable column, colored by the same
+  success/error/warning language the toast uses. Truncated in the
+  middle (`…`) rather than wrapped, so one row always stays one line;
+  `Enter` or a click opens the full, untruncated text in a small modal
+  regardless of any Select checkbox.
+- **✕** — deletes just that one row. `x`/`Delete` does the same for
+  whichever row is currently focused, from anywhere in it. No
+  confirmation dialog: a notification is session state, not a file or
+  system one.
+
+Three bulk actions at the bottom, each acting on the checked Select
+rows, or — nothing checked — just the current row: `a` selects/deselects
+everything, `r` toggles read/unread, `d` deletes. Newest first.
+
+**Persisted across restarts.** The message history survives quitting
+and reopening breakthrough — saved as a plain, human-readable JSON file
+under the XDG State directory (`$XDG_STATE_HOME/breakthrough/` or
+`~/.local/state/breakthrough/`), updated after every real change. The
+999-entry cap keeps that file small regardless of how long a session
+runs; a missing or unreadable file just starts empty rather than
+failing.
+
 ## Sed Replace
 
 `E`, or the context menu's "sed". Runs a real `sed(1)`
@@ -1403,10 +1469,11 @@ closes it.
 
 ## Remote connections (SFTP)
 
-The `@` button right before the path itself (see [The path
-bar](#the-path-bar)) — or the `g` chord's own `gc` — opens a dropdown
-for browsing a directory tree on another machine over SFTP, exactly the
-way SSH itself already reaches it. Muted while a panel is local; once
+The `@` key, the `@` button right before the path itself (see [The path
+bar](#the-path-bar)), or the `g` chord's own `gc` — all three open a
+dropdown for browsing a directory tree on another machine over SFTP,
+exactly the way SSH itself already reaches it. Muted while a panel is
+local; once
 connected it pulses gently toward a lighter green and back, never
 dipping darker than its resting color — a settled, alive connection,
 not a "still trying to reach it" search light.
@@ -1737,12 +1804,25 @@ Paste:
   blending. This applies across every open tab currently showing that
   row, not only the tab Copy/Cut was pressed in, since the clipboard
   itself is shared by the whole application, not scoped to one tab.
-- **The status bar** names what's held — "Copy: 3 files, 1 dir" or
-  "Cut: 2 files" (a zero count is dropped rather than shown as "0
+- **The status bar** names what's held — "Copy: 3 files, 1 dir ✕" or
+  "Cut: 2 files ✕" (a zero count is dropped rather than shown as "0
   dirs") — right after the chord countdown's own leading spot, ahead
-  of the username. Disappears the moment the clipboard is empty again,
-  the same "just show one less segment" shape as the disk-usage/
-  uptime/load segments further along the same line.
+  of the username. The verb itself (`Copy`/`Cut`) carries the exact
+  same background tint the held row gets in the panel, so this segment
+  doubles as a small legend explaining what that tint means. Disappears
+  the moment the clipboard is empty again, the same "just show one less
+  segment" shape as the disk-usage/uptime/load segments further along
+  the same line.
+
+**Clearing the clipboard.** Three ways, all equivalent: click the
+trailing `✕` in the status bar; press `c`/`x` again on the exact same
+selection already held (a toggle — pressing Copy or Cut again on
+whatever's already on the clipboard clears it instead of re-setting
+it); or the `m` chord's own `mc`, which clears regardless of whatever's
+currently selected — for when the selection has since moved on from
+what's actually held. Copy and Cut on the *same* selection don't
+toggle against each other, though — Cut right after Copy (or the other
+way around) overwrites the intent instead of clearing.
 
 ### Watching a Paste while it runs
 
@@ -1987,15 +2067,20 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Status bar
 
-The bottom line, purely informational — nothing on it is clickable.
-Left to right: whatever's actually staged or in flight (a chord
-countdown, a running Paste's progress, or the clipboard's own contents
-— see [Copy, Cut and Paste](#copy-cut-and-paste)), then eight segments,
-each independently switchable off (see [Options and
+The bottom line, almost entirely informational — two real exceptions,
+both clickable (see below). Left to right: whatever's actually staged
+or in flight (a chord countdown, a running Paste's progress, or the
+clipboard's own contents — see [Copy, Cut and
+Paste](#copy-cut-and-paste)), then the notification badge, then eight
+further segments, each independently switchable off (see [Options and
 configuration](#options-and-configuration) below), and finally a clock.
+A transient one-line notice can also briefly cover this whole row for a
+few seconds — see [Notifications](#notifications) below.
 
 | Segment | Shows | Color |
 |---|---|---|
+| Clipboard | `Copy`/`Cut: <N> files, <M> dirs ✕` while something's on the clipboard — the verb itself carries the exact same background tint a held file's own row gets in the panel, and the trailing `✕` is clickable, clearing the clipboard outright (see [Copy, Cut and Paste](#copy-cut-and-paste)) | The verb: green (Copy) / red (Cut) background |
+| Messages badge | `Msgs <N>`, `N` right-padded to a fixed 3 columns — clickable, opens the [Messages screen](#notifications) | Muted at 0, warning-colored once there's at least one unread |
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |

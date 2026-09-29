@@ -69,8 +69,11 @@ func (r *Root) newBottomBar() {
 
 	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
-	// Deliberately no SetMouseCapture: statusBar is purely informational
-	// now, nothing in it is clickable — see buttonBar above for that.
+	// SetMouseCapture routes a click on the notify badge to openMessages
+	// (see captureStatusBarMouse) — this bar's one real exception to
+	// "purely informational, nothing in it is clickable" now (see
+	// notifyBadgeSpan's own doc comment on Root).
+	r.statusBar.SetMouseCapture(r.captureStatusBarMouse)
 
 	r.currentUser = currentUsername()
 }
@@ -272,7 +275,12 @@ func hideUnhideLabel(showHidden bool) string {
 // here any more — see buildButtonBar.
 func (r *Root) buildStatusBar() string {
 	var b strings.Builder
-	write := func(s string) { b.WriteString(s) }
+	col := 0
+	// col advances by s's display width, not a plain byte/rune count —
+	// the same reasoning buildButtonBar's own write closure already
+	// follows, needed here too now that notifyBadgeSpan (below) has to
+	// locate a real click target within this bar's own text.
+	write := func(s string) { b.WriteString(s); col += tview.TaggedStringWidth(s) }
 	sep := func() { write(" │ ") }
 
 	// A pending chord's own countdown (see chordIndicatorText), leading
@@ -312,9 +320,25 @@ func (r *Root) buildStatusBar() string {
 		// text, no separator) once the clipboard itself is empty again,
 		// the same "just show one less segment" shape as disk usage/
 		// uptime/load below.
-		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
+		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles, r.theme); clip != "" {
 			write(clip)
+			write(" ")
+			// The clear button — Sessions' own Close glyph/meaning
+			// (sessionsCloseGlyph, "✕"), per the user's own explicit
+			// request: a discoverable, mouse-first way to drop the
+			// clipboard outright, alongside the keyboard equivalent
+			// pressing "c"/"x" again on the exact same selection already
+			// gives (see copyToClipboard/cutToClipboard), and "mc" for
+			// clearing regardless of whatever's currently selected (see
+			// keymap.go's own "m" family).
+			clearStart := col
+			write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+			r.clipboardClearSpan = buttonBarSpan{startCol: clearStart, endCol: col, run: func(r *Root) { r.setClipboard(nil, false) }}
 			sep()
+		} else {
+			// Nothing on the clipboard — zero-value, so a stale span from
+			// the last time it wasn't empty can never still match a click.
+			r.clipboardClearSpan = buttonBarSpan{}
 		}
 	}
 
@@ -347,6 +371,18 @@ func (r *Root) buildStatusBar() string {
 		write(usernameText(r.currentUser, r.theme))
 		sep()
 	}
+
+	// The notify badge — a permanent segment, unlike every other one in
+	// this loop, per feature_ideas.txt's own "neues, dauerhaftes
+	// Segment" wording (Stufe 3): it's the Messages screen's own status-
+	// bar entry point (its click target, tracked in r.notifyBadgeSpan —
+	// see captureStatusBarMouse), so it stays even at zero unread rather
+	// than disappearing along with the segments Options can toggle off.
+	badgeStart := col
+	write(notifyBadgeText(r.notify.UnreadCount(), r.theme))
+	r.notifyBadgeSpan = buttonBarSpan{startCol: badgeStart, endCol: col, run: func(r *Root) { r.openMessages() }}
+	sep()
+
 	if r.settings.StatusBarShowMouse {
 		write(mouseStatusText(r.mouseEnabled))
 		sep()
@@ -405,16 +441,24 @@ func (r *Root) buildStatusBar() string {
 // hasn't been pressed — and this same text keeps showing, unchanged,
 // for as long as the clipboard holds these paths, including through a
 // Copy+Paste that leaves them there for a possible second Paste
-// elsewhere. See config.Theme.ClipboardCopyBackground/
-// ClipboardCutBackground for this same information's other half — the
-// row highlighting a real file's own line gets while it's held.
-func clipboardIndicatorText(cut bool, dirs, files int) string {
+// elsewhere. The verb itself carries the exact same background tint
+// (ClipboardCopyBackground/ClipboardCutBackground) a held file's own
+// row gets in the panel — per the user's own explicit request, so this
+// segment doubles as a small legend explaining what that row tint
+// means, rather than the two only ever agreeing on color by
+// coincidence. Only the verb, not the colon or the counts after it —
+// the panel's own row tint is whole-row, but this is a compact status
+// line, not a second copy of that row; the word alone is enough to
+// read as "this is the same color as that".
+func clipboardIndicatorText(cut bool, dirs, files int, theme config.ResolvedTheme) string {
 	if dirs == 0 && files == 0 {
 		return ""
 	}
 	verb := "Copy"
+	bg := theme.ClipboardCopyBackground
 	if cut {
 		verb = "Cut"
+		bg = theme.ClipboardCutBackground
 	}
 	var parts []string
 	if files > 0 {
@@ -423,7 +467,7 @@ func clipboardIndicatorText(cut bool, dirs, files int) string {
 	if dirs > 0 {
 		parts = append(parts, pluralCount(dirs, "dir", "dirs"))
 	}
-	return fmt.Sprintf("%s: %s", verb, strings.Join(parts, ", "))
+	return fmt.Sprintf("[%s:%s]%s[-:-:-]: %s", colorTag(theme.Text), colorTag(bg), verb, strings.Join(parts, ", "))
 }
 
 // pluralCount renders n paired with singular or plural, whichever n
@@ -866,6 +910,75 @@ var (
 	statusUptimeColor = tcell.GetColor("#4fd6b5") // teal: time-since-boot
 	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
 )
+
+// notifyBadgeCount pads unread's own display text to a fixed 3 columns
+// — "123" as-is, " 23" right-aligned, " 3 " centered — per the user's
+// own explicit choice, so the badge's own width barely shifts as the
+// count changes digit count, the same steadiness a real button's fixed
+// size already gives every other clickable segment in this app.
+// "999+" (see notify.Store's own doc comment on why the real count can
+// never actually reach it) is left unpadded — already the widest
+// value this can ever show, nothing to align it against.
+func notifyBadgeCount(unread int) string {
+	if unread > 999 {
+		return "999+"
+	}
+	count := strconv.Itoa(unread)
+	switch len(count) {
+	case 1:
+		return " " + count + " "
+	case 2:
+		return " " + count
+	default:
+		return count
+	}
+}
+
+// notifyBadgeText renders the status bar's own unread-messages badge:
+// a plain "Msgs" label — deliberately no glyph of its own (an envelope
+// was tried first and reverted: that icon is reserved for
+// feature_ideas.txt's own planned "0f. E-Mail-Client-Integration"
+// instead, and the two must never be confused for one another) —
+// followed by notifyBadgeCount in its own real button chrome
+// (theme.ButtonBackground, the same background every clickable key
+// highlight in this app already uses — see highlightKey/renderHintKey),
+// so the count itself reads as the actual click target, not just
+// colored text. theme.MutedTextColor at zero, so it doesn't compete
+// for attention with the segments around it when there's nothing to
+// see, theme.WarningText once there's at least one unread Message, the
+// same "something here wants a look" role WarningText already carries
+// everywhere else in this app.
+func notifyBadgeText(unread int, theme config.ResolvedTheme) string {
+	fg := theme.MutedTextColor
+	if unread > 0 {
+		fg = theme.WarningText
+	}
+	return fmt.Sprintf("Msgs [%s:%s]%s[-:-:-]", colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(unread))
+}
+
+// captureStatusBarMouse routes a click on the notify badge (see
+// notifyBadgeSpan) to openMessages — the same InRect-gated, everything-
+// else-consumed shape captureButtonBarMouse already establishes, scoped
+// to this bar's own single clickable span instead of buttonBar's many.
+func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if !r.statusBar.InRect(event.Position()) {
+		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
+	}
+
+	x, _ := event.Position()
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	col := x - rectX
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan} {
+		if span.run != nil && col >= span.startCol && col < span.endCol {
+			span.run(r)
+			break
+		}
+	}
+	return tview.MouseConsumed, nil
+}
 
 // wrapColor renders text in color as a self-contained tview markup
 // span — starts with an explicit foreground tag, ends by resetting to

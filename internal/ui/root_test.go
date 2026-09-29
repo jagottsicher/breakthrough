@@ -453,6 +453,113 @@ func TestCopyToClipboardSyncsHighlightAcrossOpenTabs(t *testing.T) {
 	}
 }
 
+// TestCopyToClipboardTogglesClearOnTheSameSelection pins the user's
+// own explicit request: pressing Copy again on the exact same targets
+// it already holds clears the clipboard instead of re-setting it.
+func TestCopyToClipboardTogglesClearOnTheSameSelection(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+
+	r.copyToClipboard()
+	if len(r.clipboard) == 0 {
+		t.Fatal("setup: Copy should have set the clipboard")
+	}
+
+	r.copyToClipboard() // same selection, still checked
+	if len(r.clipboard) != 0 {
+		t.Errorf("clipboard = %v, want empty after Copy toggled it off", r.clipboard)
+	}
+}
+
+// TestCutToClipboardTogglesClearOnTheSameSelection is Copy's own Cut
+// counterpart.
+func TestCutToClipboardTogglesClearOnTheSameSelection(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+
+	r.cutToClipboard()
+	if len(r.clipboard) == 0 {
+		t.Fatal("setup: Cut should have set the clipboard")
+	}
+
+	r.cutToClipboard()
+	if len(r.clipboard) != 0 {
+		t.Errorf("clipboard = %v, want empty after Cut toggled it off", r.clipboard)
+	}
+}
+
+// TestCopyToClipboardWithADifferentSelectionDoesNotToggleClear pins
+// the guard: only the exact same targets toggle to clear — a changed
+// selection just re-sets the clipboard, the same as always.
+func TestCopyToClipboardWithADifferentSelectionDoesNotToggleClear(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+
+	r.panel.toggleCheckbox(2) // uncheck apple.txt
+	r.panel.toggleCheckbox(3) // check apricot.txt instead
+	r.copyToClipboard()
+
+	if len(r.clipboard) == 0 {
+		t.Error("clipboard = empty, want the new selection, not cleared")
+	}
+}
+
+// TestCopyThenCutOnTheSameSelectionDoesNotToggleClear pins that the
+// Copy/Cut intent itself is part of the match — Cut on what Copy just
+// held must overwrite it (turning Copy into Cut), never clear.
+func TestCopyThenCutOnTheSameSelectionDoesNotToggleClear(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+
+	r.cutToClipboard()
+
+	if len(r.clipboard) == 0 {
+		t.Fatal("clipboard = empty, want it still holding the target as a Cut")
+	}
+	if !r.clipboardCut {
+		t.Error("clipboardCut = false, want true after Cut on what Copy held")
+	}
+}
+
+// TestClearClipboardChordEmptiesItRegardlessOfSelection pins "mc":
+// clears the clipboard even when the current selection has since moved
+// on from whatever's actually held.
+func TestClearClipboardChordEmptiesItRegardlessOfSelection(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+	r.panel.toggleCheckbox(2)
+	r.panel.toggleCheckbox(3) // selection has moved on
+
+	r.setClipboard(nil, false)
+
+	if len(r.clipboard) != 0 {
+		t.Errorf("clipboard = %v, want empty", r.clipboard)
+	}
+}
+
 // TestReloadCurrentTabReReadsFromDisk pins the "z" chord's own "r"
 // member ("Reload"): a file that shows up after the active tab already
 // loaded its directory is visible once reloadCurrentTab runs — the

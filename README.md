@@ -625,7 +625,7 @@ terminal.
   pulse toward a lighter green and back once connected (never dipping
   toward black — that reads as "still searching for a signal", not a
   settled, already-alive connection) — opening a dropdown (also
-  reachable via the `g` chord's own `gc`), styled and shaped like the
+  reachable via the plain `@` key, or the `g` chord's own `gc`), styled and shaped like the
   tab switcher: + New connection plus recent history, each row its own
   independently clickable cells rather than markup-colored text — bright
   green for the one active in this panel, a matte dimmer green for one
@@ -772,9 +772,14 @@ argument list or shell history), a Copy to server form (`c`, the same
 end result `ssh-copy-id` produces — never a duplicate, existing
 `authorized_keys` backed up first, strict permissions set explicitly —
 followed automatically by a non-interactive check that the new key
-alone now actually works passwordless), and real
+alone now actually works passwordless), real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
-zstd. Progress bars for long-running file operations are what's
+zstd, and a notification system for background jobs finishing while
+you're looking elsewhere (a backgrounded Rsync run, the paste/move
+queue, the Firewall screen's own self-lockout rollback) — a transient
+status-bar toast, a persistent unread badge, and a full Messages screen
+(`gm`) with dwell-based auto-read, persisted across restarts as plain
+JSON. Progress bars for long-running file operations are what's
 planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
