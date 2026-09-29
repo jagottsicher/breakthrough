@@ -858,6 +858,31 @@ func TestFinishPasteJobPushesANotificationOnSuccess(t *testing.T) {
 	}
 }
 
+// TestFinishPasteJobPushesANotificationForARemoteTransfer pins that a
+// remote-involving transfer (see pasteLogCategory's own "remote wins"
+// rule) notifies exactly the same as a purely local one — finishPasteJob
+// is the single completion point for both, no separate remote engine.
+func TestFinishPasteJobPushesANotificationForARemoteTransfer(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readNotify := attachTestNotify(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	job.destClient = &fakeRemoteClient{}
+	r.applyPasteOneResult(job, "/remote/a.txt", filepath.Join(destDir, "a.txt"), nil)
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelSuccess || got[0].Category != notify.CategoryPaste {
+		t.Errorf("got %+v, want LevelSuccess/CategoryPaste", got[0])
+	}
+}
+
 // TestFinishPasteJobPushesANotificationOnError is the failure
 // counterpart: a genuine per-item error surfaces as LevelError, with
 // the same summary text showError itself receives.
