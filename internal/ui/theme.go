@@ -301,6 +301,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Sessions screen (see sessions.go/applySessionsTheme).
 	r.applySessionsTheme(theme)
 
+	// The SSH Keys screen (see sshkeys.go/applySSHKeysTheme) and its own
+	// "Generate key" form (see sshkeysgenerate.go/applySSHKeysGenerateTheme).
+	r.applySSHKeysTheme(theme)
+	r.applySSHKeysGenerateTheme(theme)
+	r.applySSHKeysCopyTheme(theme)
+
 	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
 	r.applyActivityLogTheme(theme)
 

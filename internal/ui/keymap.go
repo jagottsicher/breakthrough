@@ -392,6 +392,13 @@ func chordFamilies() []chordFamily {
 		// screen/tmux terminal-multiplexer sessions (internal/multiplex),
 		// the same "own destination under this prefix" shape jm/jf/jl
 		// already establish.
+		//
+		// "jk" opens the SSH Keys screen (sshkeys.go) — an inventory of
+		// this user's own local SSH key pairs under ~/.ssh
+		// (internal/sshkeys), the same "own destination under this
+		// prefix" shape jm/jf/jl/js already establish. "k" for "keys" —
+		// the first member of this family with a mnemonic of its own,
+		// since it was still free.
 		{prefix: 'j', name: "tools", quick: true, members: []chordMember{
 			// "jE" is this family's own first capitalized member — the
 			// same "bigger, more consequential sibling" convention the
@@ -408,6 +415,7 @@ func chordFamilies() []chordFamily {
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
 			{'l', "Activity Log", func(r *Root) { r.openActivityLog() }},
 			{'s', "Sessions", func(r *Root) { r.openSessions() }},
+			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},

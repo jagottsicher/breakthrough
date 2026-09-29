@@ -761,7 +761,18 @@ filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
-you detach or it ends), and real
+you detach or it ends), an SSH Keys screen (`jk`) inventorying local key
+pairs under `~/.ssh` — algorithm/size, passphrase protection, file
+permissions, and whether each is currently loaded in the running
+ssh-agent — plus a Generate key form (`a`) that builds the exact
+`ssh-keygen` command for a new pair and runs it through a real
+terminal, deliberately with no passphrase field of its own (`ssh-keygen`
+prompts for one interactively instead, so it never sits in a process
+argument list or shell history), a Copy to server form (`c`, the same
+end result `ssh-copy-id` produces — never a duplicate, existing
+`authorized_keys` backed up first, strict permissions set explicitly —
+followed automatically by a non-interactive check that the new key
+alone now actually works passwordless), and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

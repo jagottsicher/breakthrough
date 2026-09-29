@@ -91,7 +91,8 @@ var helpText = strings.TrimLeft(`
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
-                js Sessions screen (local screen/tmux/zellij sessions)
+                js Sessions screen (local screen/tmux/zellij sessions) ·
+                jk SSH Keys screen (local key pairs under ~/.ssh)
     p  perms    pm chmod · po chown
     z  display  zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zf filter · zo split
@@ -537,6 +538,63 @@ var helpText = strings.TrimLeft(`
   The reload glyph (⭯) in the title bar's own top-right corner is a
   mouse-clickable equivalent to "r" — a session can be started, attached,
   or closed by something else entirely while this screen is open.
+
+[::b]SSH Keys screen ("jk")[::-]
+
+  An inventory of this user's own local SSH key pairs under ~/.ssh, plus
+  a form to generate a new one. Copying a public key to a remote server
+  for passwordless access is later work, not part of this screen yet.
+
+  Up / Down         Move between key pairs
+  r                 Re-scan ~/.ssh and re-check the running ssh-agent
+  a                 Generate a new key pair (see below)
+  c                 Copy the selected key pair to a server (see below)
+  Escape            Close the SSH Keys screen
+
+  Name/Type/Fingerprint/Comment come from parsing the actual key files
+  (golang.org/x/crypto/ssh), never a second, hand-rolled key-format
+  reader. Encrypted shows whether the private half is passphrase-
+  protected; for a modern OpenSSH-format key this is known even without
+  the passphrase, since such a key still carries its own public half in
+  the clear. Perms shows the private key file's own permission bits, in
+  a warning color when group or other has any access at all — sshd
+  itself refuses to use such a key. Agent shows ✔ (loaded in the running
+  ssh-agent), ✘ (not loaded — completely normal, never an error), or –
+  when there's nothing to check against (no running agent, or no
+  fingerprint at all to look up). A key pair missing one of its two
+  halves, or a private key that failed to parse outright, says so in its
+  own Note column rather than being silently dropped from the list.
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a key can be generated, removed,
+  loaded, or unloaded by something else entirely while this screen is
+  open.
+
+  "a" opens a form (Algorithm — ed25519/rsa/ecdsa, never dsa — a
+  key-size/curve field for rsa/ecdsa only, Filename, Comment) and builds
+  the exact ssh-keygen command that would create it, always into ~/.ssh
+  under the filename you choose — never raw syntax to type yourself, and
+  never a path outside ~/.ssh. A filename already in use (either half of
+  the pair) is refused rather than silently overwritten. The exact
+  command is always shown for confirmation before it runs, via a real,
+  attached terminal. There is deliberately no passphrase field: the
+  confirmed command never carries -N, so ssh-keygen itself prompts for
+  one interactively right there in that same terminal — the only way to
+  set one that never ends up sitting in this process's own argv or a
+  shell's history.
+
+  "c" opens a form (Host, Port, User — typed by hand, or filled in from
+  an already-open remote tab via "Pick tab…") for the currently selected
+  key pair, and installs its own public half into that user's remote
+  authorized_keys, the same end result ssh-copy-id itself produces:
+  never a duplicate line, the existing file backed up first, and the
+  permissions sshd itself requires set explicitly. The exact ssh command
+  is always shown for confirmation before it runs, via a real, attached
+  terminal — whichever auth the target needs (agent, a passphrase, a
+  password) needs one. Right after a successful install, this also runs
+  a second, quick, non-interactive check that the new key alone — not
+  some other identity an agent happens to already offer — now actually
+  gets in with no prompt at all, and reports that result plainly.
 
 [::b]Split view ("s")[::-]
 

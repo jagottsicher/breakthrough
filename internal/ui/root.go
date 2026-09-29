@@ -23,6 +23,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
+	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -380,6 +381,63 @@ type Root struct {
 	sessionsTable     *tview.Table
 	sessionsList      []multiplex.Session
 	sessionsErr       error
+
+	// The SSH Keys screen ("jk", see sshkeys.go) — Stage 1 (read-only) of
+	// feature_ideas.txt's own SSH-Key-Verwaltung entry: an inventory of
+	// the user's own local SSH key pairs under ~/.ssh (internal/sshkeys),
+	// plain read-only rows like Mounts/Firewall rather than Sessions' own
+	// per-row action cells — nothing here is a destructive or even a
+	// mutating action yet. sshKeysPairs/sshKeysErr/sshKeysAgent hold the
+	// last read result, refreshed by reloadSSHKeys (on open, and on "r").
+	sshKeysLayout    *tview.Flex
+	sshKeysTitleBar  *tview.TextView
+	sshKeysHint      *tview.TextView
+	sshKeysHintSpans []listHintSpan
+	sshKeysTable     *tview.Table
+	sshKeysPairs     []sshkeys.KeyPair
+	sshKeysErr       error
+	sshKeysAgent     map[string]bool
+
+	// sshKeysGenerate* make up the SSH Keys screen's own "Generate key"
+	// form ("a", see sshkeysgenerate.go and feature_ideas.txt's own
+	// SSH-Key-Verwaltung Stufe 2) — Algorithm is a dropdown, so the form
+	// is rebuilt fresh on every open and on every Algorithm change (see
+	// renderSSHKeysGenerateForm), the same "Clear(true) then
+	// AddFormItem" shape newFirewallAddRuleForm's own doc comment
+	// establishes. The plain sshKeysGenerateXxx fields below mirror the
+	// form's own current values, the same "value mirror" shape
+	// duplicateStrategy and friends already establish.
+	sshKeysGenerateLayout       *tview.Flex
+	sshKeysGenerateTitleBar     *tview.TextView
+	sshKeysGenerateForm         *tview.Form
+	sshKeysGenerateStatus       *tview.TextView
+	sshKeysGenerateButtons      *tview.Flex
+	sshKeysGenerateCancelBtn    *tview.Button
+	sshKeysGenerateGenerateBtn  *tview.Button
+	sshKeysGenerateAlgorithm    string
+	sshKeysGenerateBits         int
+	sshKeysGenerateFilenameText string
+	sshKeysGenerateCommentText  string
+
+	// sshKeysCopy* make up the SSH Keys screen's own "Copy to server"
+	// form ("c", see sshkeyscopy.go and feature_ideas.txt's own
+	// SSH-Key-Verwaltung Stufe 3) — installs the selected key pair's own
+	// public half into a remote user's authorized_keys. sshKeysCopyPick*
+	// reuses r.picker (see openSSHKeysCopyTabPicker), the same shared,
+	// repopulated-per-open List openRsyncTabPicker's own picker already
+	// establishes.
+	sshKeysCopyLayout    *tview.Flex
+	sshKeysCopyTitleBar  *tview.TextView
+	sshKeysCopyForm      *tview.Form
+	sshKeysCopyPickBtn   *tview.Button
+	sshKeysCopyStatus    *tview.TextView
+	sshKeysCopyButtons   *tview.Flex
+	sshKeysCopyCancelBtn *tview.Button
+	sshKeysCopyGoBtn     *tview.Button
+	sshKeysCopyKeyName   string
+	sshKeysCopyHostText  string
+	sshKeysCopyPortText  string
+	sshKeysCopyUserText  string
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -1863,6 +1921,23 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newSessionsScreen()
 
+	// The SSH Keys screen (see sshkeys.go/openSSHKeys) — a seventh
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newSSHKeysScreen()
+
+	// The SSH Keys screen's own "Generate key" form (see
+	// sshkeysgenerate.go).
+	r.sshKeysGenerateForm = r.newSSHKeysGenerateForm()
+	r.sshKeysGenerateButtons = r.newSSHKeysGenerateButtons()
+	r.sshKeysGenerateLayout = r.newSSHKeysGenerateLayout()
+
+	// The SSH Keys screen's own "Copy to server" form (see
+	// sshkeyscopy.go).
+	r.sshKeysCopyForm = r.newSSHKeysCopyForm()
+	r.sshKeysCopyPickBtn = r.newSSHKeysCopyPickButton()
+	r.sshKeysCopyButtons = r.newSSHKeysCopyButtons()
+	r.sshKeysCopyLayout = r.newSSHKeysCopyLayout()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -2004,6 +2079,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
 	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
+	// resize=true: the SSH Keys screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall/Sessions screens' own comments above give.
+	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
+	r.AddPage(sshKeysGeneratePage, r.sshKeysGenerateLayout, false, false)
+	r.AddPage(sshKeysCopyPage, r.sshKeysCopyLayout, false, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
