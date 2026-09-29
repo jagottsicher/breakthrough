@@ -761,7 +761,10 @@ filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
-you detach or it ends), and real
+you detach or it ends), an SSH Keys screen (`jk`) inventorying local key
+pairs under `~/.ssh` — algorithm/size, passphrase protection, file
+permissions, and whether each is currently loaded in the running
+ssh-agent — and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

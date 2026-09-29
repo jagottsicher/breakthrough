@@ -23,6 +23,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
+	"github.com/jagottsicher/breakthrough/internal/sshkeys"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -380,6 +381,22 @@ type Root struct {
 	sessionsTable     *tview.Table
 	sessionsList      []multiplex.Session
 	sessionsErr       error
+
+	// The SSH Keys screen ("jk", see sshkeys.go) — Stage 1 (read-only) of
+	// feature_ideas.txt's own SSH-Key-Verwaltung entry: an inventory of
+	// the user's own local SSH key pairs under ~/.ssh (internal/sshkeys),
+	// plain read-only rows like Mounts/Firewall rather than Sessions' own
+	// per-row action cells — nothing here is a destructive or even a
+	// mutating action yet. sshKeysPairs/sshKeysErr/sshKeysAgent hold the
+	// last read result, refreshed by reloadSSHKeys (on open, and on "r").
+	sshKeysLayout    *tview.Flex
+	sshKeysTitleBar  *tview.TextView
+	sshKeysHint      *tview.TextView
+	sshKeysHintSpans []listHintSpan
+	sshKeysTable     *tview.Table
+	sshKeysPairs     []sshkeys.KeyPair
+	sshKeysErr       error
+	sshKeysAgent     map[string]bool
 
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
@@ -1863,6 +1880,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newSessionsScreen()
 
+	// The SSH Keys screen (see sshkeys.go/openSSHKeys) — a seventh
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newSSHKeysScreen()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -2004,6 +2025,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
 	r.AddPage(sessionsPage, r.sessionsLayout, true, false)
+	// resize=true: the SSH Keys screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall/Sessions screens' own comments above give.
+	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.

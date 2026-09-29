@@ -26,6 +26,7 @@ material, always matching the version you are actually running.
 - [Mounts](#mounts)
 - [Firewall](#firewall)
 - [Sessions](#sessions)
+- [SSH Keys](#ssh-keys)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -1149,6 +1150,52 @@ nothing this screen could list or attach to that would actually work.
 Local sessions only, for now — attaching to a session on a remote host
 reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
 in principle, but needs its own connection-reuse design first.
+
+## SSH Keys
+
+`j` then `k`. A read-only, full-screen inventory of this user's own
+local SSH key pairs under `~/.ssh` — Stage 1 of a larger, staged
+feature; generating a new key pair and copying one to a remote server's
+`authorized_keys` for passwordless access are later stages, not part of
+this screen yet.
+
+Every key is parsed with this app's own already-vendored
+`golang.org/x/crypto/ssh` (already a dependency for the SFTP client
+behind Connect), never a second, hand-rolled reader for OpenSSH's key
+formats. Columns:
+
+- **Name** — the private key's own filename, e.g. `id_ed25519`, the same
+  base name `ssh`/`scp`/`-i` would take.
+- **Type** — algorithm and size the same way `ssh-keygen -lf` itself
+  would show it (`ed25519 256`, `rsa 4096`, …), or `unknown` when
+  neither half could be read at all.
+- **Encrypted** — whether the private half is passphrase-protected. A
+  modern OpenSSH-format key still shows this correctly even while
+  encrypted: such a key carries its own public half in the clear
+  alongside the encrypted private one, the same reason `ssh-keygen -lf`
+  can show a fingerprint for an encrypted key without ever asking for
+  its passphrase.
+- **Agent** — a green `✔` if this key is currently loaded in the running
+  `ssh-agent` (checked over the agent's own wire protocol, never the
+  `ssh-add` binary, which has no safe way to list fingerprints without
+  risking an interactive passphrase prompt), a muted `✘` if it simply
+  isn't (completely normal, never an error), or a muted `–` when there's
+  nothing to check against at all — no running agent, or no fingerprint
+  to look up in the first place.
+- **Perms** — the private key file's own permission bits, shown in a
+  warning color whenever group or other has any access to it at all:
+  `sshd` itself refuses to use such a key.
+- **Fingerprint** / **Comment** — straight from the key itself.
+- **Note** — flags whatever a row's own scan couldn't cleanly resolve: a
+  key pair missing one of its two halves, or a private key that failed
+  to parse outright, rather than either case being silently dropped from
+  the list.
+
+`r` re-scans `~/.ssh` and re-checks the running agent, `Escape` closes
+the screen. The reload glyph (⭯) in the title bar's own top-right corner
+is a mouse-clickable equivalent to `r` — a key can be generated,
+removed, loaded, or unloaded by something else entirely while this
+screen is open.
 
 ## Sed Replace
 

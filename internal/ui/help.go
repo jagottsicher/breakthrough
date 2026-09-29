@@ -91,7 +91,8 @@ var helpText = strings.TrimLeft(`
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
-                js Sessions screen (local screen/tmux/zellij sessions)
+                js Sessions screen (local screen/tmux/zellij sessions) ·
+                jk SSH Keys screen (local key pairs under ~/.ssh)
     p  perms    pm chmod · po chown
     z  display  zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zf filter · zo split
@@ -537,6 +538,35 @@ var helpText = strings.TrimLeft(`
   The reload glyph (⭯) in the title bar's own top-right corner is a
   mouse-clickable equivalent to "r" — a session can be started, attached,
   or closed by something else entirely while this screen is open.
+
+[::b]SSH Keys screen ("jk")[::-]
+
+  A read-only inventory of this user's own local SSH key pairs under
+  ~/.ssh — Stage 1 of a larger, staged feature; nothing here generates,
+  edits, or copies a key yet.
+
+  Up / Down         Move between key pairs
+  r                 Re-scan ~/.ssh and re-check the running ssh-agent
+  Escape            Close the SSH Keys screen
+
+  Name/Type/Fingerprint/Comment come from parsing the actual key files
+  (golang.org/x/crypto/ssh), never a second, hand-rolled key-format
+  reader. Encrypted shows whether the private half is passphrase-
+  protected; for a modern OpenSSH-format key this is known even without
+  the passphrase, since such a key still carries its own public half in
+  the clear. Perms shows the private key file's own permission bits, in
+  a warning color when group or other has any access at all — sshd
+  itself refuses to use such a key. Agent shows ✔ (loaded in the running
+  ssh-agent), ✘ (not loaded — completely normal, never an error), or –
+  when there's nothing to check against (no running agent, or no
+  fingerprint at all to look up). A key pair missing one of its two
+  halves, or a private key that failed to parse outright, says so in its
+  own Note column rather than being silently dropped from the list.
+
+  The reload glyph (⭯) in the title bar's own top-right corner is a
+  mouse-clickable equivalent to "r" — a key can be generated, removed,
+  loaded, or unloaded by something else entirely while this screen is
+  open.
 
 [::b]Split view ("s")[::-]
 
