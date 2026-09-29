@@ -312,7 +312,7 @@ func (r *Root) buildStatusBar() string {
 		// text, no separator) once the clipboard itself is empty again,
 		// the same "just show one less segment" shape as disk usage/
 		// uptime/load below.
-		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles); clip != "" {
+		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles, r.theme); clip != "" {
 			write(clip)
 			sep()
 		}
@@ -405,16 +405,24 @@ func (r *Root) buildStatusBar() string {
 // hasn't been pressed — and this same text keeps showing, unchanged,
 // for as long as the clipboard holds these paths, including through a
 // Copy+Paste that leaves them there for a possible second Paste
-// elsewhere. See config.Theme.ClipboardCopyBackground/
-// ClipboardCutBackground for this same information's other half — the
-// row highlighting a real file's own line gets while it's held.
-func clipboardIndicatorText(cut bool, dirs, files int) string {
+// elsewhere. The verb itself carries the exact same background tint
+// (ClipboardCopyBackground/ClipboardCutBackground) a held file's own
+// row gets in the panel — per the user's own explicit request, so this
+// segment doubles as a small legend explaining what that row tint
+// means, rather than the two only ever agreeing on color by
+// coincidence. Only the verb, not the colon or the counts after it —
+// the panel's own row tint is whole-row, but this is a compact status
+// line, not a second copy of that row; the word alone is enough to
+// read as "this is the same color as that".
+func clipboardIndicatorText(cut bool, dirs, files int, theme config.ResolvedTheme) string {
 	if dirs == 0 && files == 0 {
 		return ""
 	}
 	verb := "Copy"
+	bg := theme.ClipboardCopyBackground
 	if cut {
 		verb = "Cut"
+		bg = theme.ClipboardCutBackground
 	}
 	var parts []string
 	if files > 0 {
@@ -423,7 +431,7 @@ func clipboardIndicatorText(cut bool, dirs, files int) string {
 	if dirs > 0 {
 		parts = append(parts, pluralCount(dirs, "dir", "dirs"))
 	}
-	return fmt.Sprintf("%s: %s", verb, strings.Join(parts, ", "))
+	return fmt.Sprintf("[%s:%s]%s[-:-:-]: %s", colorTag(theme.Text), colorTag(bg), verb, strings.Join(parts, ", "))
 }
 
 // pluralCount renders n paired with singular or plural, whichever n
