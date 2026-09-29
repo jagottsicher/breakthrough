@@ -324,6 +324,12 @@ func chordFamilies() []chordFamily {
 			// same "gehe zu einem ganzen weiteren Ort" role gb/gc already
 			// have — see feature_ideas.txt's own "3a. Benachrichtigungen".
 			{'m', "Messages", func(r *Root) { r.openMessages() }},
+			// "Email" ("go email") — launches whichever terminal mail
+			// client is configured/detected (internal/mail), Suspend +
+			// direct exec, the exact same mechanism Sessions' own Attach
+			// already uses. See feature_ideas.txt's own "0f.
+			// E-Mail-Client-Integration".
+			{'e', "Email", func(r *Root) { r.openMail() }},
 		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did

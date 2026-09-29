@@ -5,6 +5,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/mail"
 )
 
 // The Options screen's own catalogue: which settings it offers, how
@@ -890,6 +891,28 @@ func optionCategories() []optionCategory {
 						r.persistSetting("open_with_command", v)
 					},
 				),
+				{
+					key:   "mail_client",
+					label: "Mail client",
+					help: "Which terminal mail client the \"ge\" chord (\"go email\") launches.\n\n" +
+						"\"Automatic\" uses whichever of neomutt, aerc, himalaya, mail, or mailx is " +
+						"actually installed, in that priority order — no need to pick one by hand unless " +
+						"more than one is present and you want a specific one. A client chosen " +
+						"here that's since been uninstalled falls back to \"Automatic\" too, " +
+						"rather than failing outright.",
+					value: func(r *Root) string { return r.settings.MailClient },
+					apply: func(r *Root, v string) {
+						r.settings.MailClient = v
+						r.persistSetting("mail_client", v)
+					},
+					choices: func(*Root) []optionChoice {
+						out := []optionChoice{{value: "", label: "Automatic"}}
+						for _, c := range mail.Detect() {
+							out = append(out, optionChoice{value: c, label: c})
+						}
+						return out
+					},
+				},
 			},
 		},
 		{
@@ -1266,6 +1289,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.CompressFormat, true
 	case "open_with_command":
 		return s.OpenWithCommand, true
+	case "mail_client":
+		return s.MailClient, true
 	case "rsync_copy_contents":
 		return strconv.FormatBool(s.RsyncCopyContents), true
 	case "rsync_archive":
