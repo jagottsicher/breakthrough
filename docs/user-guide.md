@@ -26,6 +26,7 @@ material, always matching the version you are actually running.
 - [Mounts](#mounts)
 - [Firewall](#firewall)
 - [Sessions](#sessions)
+- [SSH Keys](#ssh-keys)
 - [Sed Replace](#sed-replace)
 - [Search](#search)
 - [Look and Tail -f](#look-and-tail--f)
@@ -1149,6 +1150,93 @@ nothing this screen could list or attach to that would actually work.
 Local sessions only, for now — attaching to a session on a remote host
 reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
 in principle, but needs its own connection-reuse design first.
+
+## SSH Keys
+
+`j` then `k`. A full-screen inventory of this user's own local SSH key
+pairs under `~/.ssh`, plus a form to generate a new one. Copying a
+public key to a remote server's `authorized_keys` for passwordless
+access is later work, not part of this screen yet.
+
+Every key is parsed with this app's own already-vendored
+`golang.org/x/crypto/ssh` (already a dependency for the SFTP client
+behind Connect), never a second, hand-rolled reader for OpenSSH's key
+formats. Columns:
+
+- **Name** — the private key's own filename, e.g. `id_ed25519`, the same
+  base name `ssh`/`scp`/`-i` would take.
+- **Type** — algorithm and size the same way `ssh-keygen -lf` itself
+  would show it (`ed25519 256`, `rsa 4096`, …), or `unknown` when
+  neither half could be read at all.
+- **Encrypted** — whether the private half is passphrase-protected. A
+  modern OpenSSH-format key still shows this correctly even while
+  encrypted: such a key carries its own public half in the clear
+  alongside the encrypted private one, the same reason `ssh-keygen -lf`
+  can show a fingerprint for an encrypted key without ever asking for
+  its passphrase.
+- **Agent** — a green `✔` if this key is currently loaded in the running
+  `ssh-agent` (checked over the agent's own wire protocol, never the
+  `ssh-add` binary, which has no safe way to list fingerprints without
+  risking an interactive passphrase prompt), a muted `✘` if it simply
+  isn't (completely normal, never an error), or a muted `–` when there's
+  nothing to check against at all — no running agent, or no fingerprint
+  to look up in the first place.
+- **Perms** — the private key file's own permission bits, shown in a
+  warning color whenever group or other has any access to it at all:
+  `sshd` itself refuses to use such a key.
+- **Fingerprint** / **Comment** — straight from the key itself.
+- **Note** — flags whatever a row's own scan couldn't cleanly resolve: a
+  key pair missing one of its two halves, or a private key that failed
+  to parse outright, rather than either case being silently dropped from
+  the list.
+
+`r` re-scans `~/.ssh` and re-checks the running agent, `Escape` closes
+the screen. The reload glyph (⭯) in the title bar's own top-right corner
+is a mouse-clickable equivalent to `r` — a key can be generated,
+removed, loaded, or unloaded by something else entirely while this
+screen is open.
+
+`a` opens a form — Algorithm (`ed25519`/`rsa`/`ecdsa`, never `dsa`), a
+key-size/curve field for `rsa`/`ecdsa` only, Filename, and an optional
+Comment — and builds the exact `ssh-keygen` command that would create
+it, always into `~/.ssh` under the filename you choose, never raw
+syntax typed yourself and never a path outside `~/.ssh`. Changing
+Algorithm updates Filename to match (`id_ed25519` → `id_rsa`) as long as
+you haven't already typed one of your own. A filename already taken by
+either half of an existing pair is refused outright rather than
+silently overwritten. The exact command is always shown for
+confirmation before it runs, via a real, attached terminal.
+
+There is deliberately no passphrase field: the confirmed command never
+carries `-N`, so `ssh-keygen` itself prompts for one interactively right
+there in that same terminal once confirmed — the only way to set a
+passphrase that never ends up sitting in this process's own argument
+list or a shell's history.
+
+`c` opens a form — Host, Port, User, typed by hand or filled in from an
+already-open remote tab via "Pick tab…" — for the currently selected key
+pair, and installs its own public half into that remote user's
+`authorized_keys`, the same end result `ssh-copy-id` itself produces:
+
+- Never a duplicate line — an exact match is checked for first.
+- The existing `authorized_keys` is backed up to a timestamped copy
+  right beside it before anything is appended.
+- `~/.ssh` and `authorized_keys` both get the strict permissions
+  (`700`/`600`) `sshd` itself requires — a key installed with looser
+  ones is silently refused.
+
+The public key is never reconstructed from the parsed row — it's read
+byte-for-byte from the actual `.pub` file, exactly as it sits on disk.
+The exact `ssh` command is always shown for confirmation before it runs,
+via a real, attached terminal. Right after a successful install, a
+second, quick, non-interactive check follows automatically: whether the
+new key *alone* — `-o IdentitiesOnly=yes`, never falling back to some
+other identity an already-running agent happens to offer — now actually
+gets in with no password or passphrase prompt at all (`-o
+BatchMode=yes`). The result (confirmed working, or not yet — e.g. the
+private key still needs to be unlocked or loaded into the agent) is
+reported plainly rather than just assuming the install succeeding also
+means it works.
 
 ## Sed Replace
 

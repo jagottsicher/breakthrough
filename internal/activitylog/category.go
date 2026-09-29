@@ -35,6 +35,10 @@ const (
 	// rollback — internal/firewall's own write side (see AddRuleCommand/
 	// DeleteRuleCommand).
 	CategoryFirewall Category = "firewall"
+	// CategorySSHKeys covers generating a new SSH key pair via the SSH
+	// Keys screen's own "Generate key" form — internal/sshkeys' own
+	// write side (see GenerateCommand).
+	CategorySSHKeys Category = "sshkeys"
 )
 
 // Categories is every category this package defines, in the fixed
@@ -51,6 +55,7 @@ func Categories() []Category {
 		CategoryRemote,
 		CategoryShell,
 		CategoryFirewall,
+		CategorySSHKeys,
 	}
 }
 
@@ -74,6 +79,8 @@ func (c Category) Label() string {
 		return "Shell (bash line, Open with…, Edit)"
 	case CategoryFirewall:
 		return "Firewall rules (Add-rule form, self-lockout rollback)"
+	case CategorySSHKeys:
+		return "SSH keys (Generate key form)"
 	default:
 		return string(c)
 	}
