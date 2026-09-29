@@ -971,26 +971,24 @@ func notifyBadgeText(unread int, theme config.ResolvedTheme) string {
 	return fmt.Sprintf("Msgs [%s:%s]%s[-:-:-]", colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(unread))
 }
 
-// mailBadgeGlyph is the mail badge's own icon — the envelope
-// deliberately reserved for this (see notifyBadgeText's own doc
-// comment on why the notify badge itself dropped it in favor of a
-// plain "Msgs" label): this is the one real notification-style badge
-// in the app an envelope actually describes.
-const mailBadgeGlyph = "✉"
-
-// mailBadgeText renders the status bar's own mail-unread badge —
-// mailBadgeGlyph plus notifyBadgeCount's own fixed-width, button-styled
-// count (reused directly: the padding logic is generic, not specific to
-// notify's own Message type), the same "button chrome, muted at zero,
-// warning-colored once there's something to see" shape notifyBadgeText
-// already establishes, not a fresh visual language for what's
-// conceptually the same kind of badge.
+// mailBadgeText renders the status bar's own mail-unread badge — a
+// plain "Email" label (an earlier draft used an envelope glyph, but
+// this app's own status bar has no other glyph-only badge and the
+// glyph did not render reliably on every terminal it was checked
+// against, so it was dropped in favor of a text label matching
+// notifyBadgeText's own "Msgs" shape) plus notifyBadgeCount's own
+// fixed-width, button-styled count (reused directly: the padding logic
+// is generic, not specific to notify's own Message type), the same
+// "button chrome, muted at zero, warning-colored once there's
+// something to see" shape notifyBadgeText already establishes, not a
+// fresh visual language for what's conceptually the same kind of
+// badge.
 func mailBadgeText(count int, theme config.ResolvedTheme) string {
 	fg := theme.MutedTextColor
 	if count > 0 {
 		fg = theme.WarningText
 	}
-	return fmt.Sprintf("%s [%s:%s]%s[-:-:-]", mailBadgeGlyph, colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(count))
+	return fmt.Sprintf("Email [%s:%s]%s[-:-:-]", colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(count))
 }
 
 // captureStatusBarMouse routes a click on the notify badge (see

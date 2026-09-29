@@ -1169,7 +1169,7 @@ that same priority order, and a client chosen there that's since been
 uninstalled falls back to it too, rather than failing. None found at
 all — a clear, dismissible notice, never a crash or silent no-op.
 
-**Unread badge.** The status bar shows `✉ <N>` (see [Status
+**Unread badge.** The status bar shows `Email <N>` (see [Status
 bar](#status-bar)) once a mailbox resolves, in this order:
 
 1. Options → Mail → "Maildir path" — a local Maildir's own root (the
@@ -1179,12 +1179,11 @@ bar](#status-bar)) once a mailbox resolves, in this order:
    candidate locations, so this one is opt-in only, empty by default.
 2. Options → Mail → "Mbox path (override)" — an explicit classic Unix
    mailbox file (`From `-separated messages, one flat file — the
-   format `mail`/`mailx` themselves read and write). `N` counts
-   messages with no `Status:` header at all — genuinely new, never
-   listed by any mail reader before; a message already marked
+   format `mail`/`mailx` themselves read and write). `N` counts every
+   message whose `Status:` header — if it has one at all — doesn't
+   contain `R`: a message with no header, and a message already marked
    `Status: O` ("old" — seen at least once, even if never actually
-   opened) or `Status: R`/`RO` (read) doesn't count, the same
-   distinction `mail(1)`'s own "N" flag already draws.
+   opened) both count as unread; only `Status: R`/`RO` (read) doesn't.
 3. If neither is set: the current user's own system mailbox,
    auto-detected — `/var/mail/<user>` or `/var/spool/mail/<user>`,
    whichever exists. Unlike Maildir's own ambiguous candidates, this
@@ -2127,7 +2126,7 @@ briefly cover this whole row for a few seconds — see
 |---|---|---|
 | Clipboard | `Copy`/`Cut: <N> files, <M> dirs ✕` while something's on the clipboard — the verb itself carries the exact same background tint a held file's own row gets in the panel, and the trailing `✕` is clickable, clearing the clipboard outright (see [Copy, Cut and Paste](#copy-cut-and-paste)) | The verb: green (Copy) / red (Cut) background |
 | Messages badge | `Msgs <N>`, `N` right-padded to a fixed 3 columns — clickable, opens the [Messages screen](#notifications) | Muted at 0, warning-colored once there's at least one unread |
-| Mail badge | `✉ <N>`, shown once a mailbox resolves — a configured Maildir or mbox path (Options → Mail), or the auto-detected system mailbox — and is readable; clickable, launches the configured mail client, same as `ge` (see [Email](#email)) | Muted at 0, warning-colored once there's at least one unread |
+| Mail badge | `Email <N>`, shown once a mailbox resolves — a configured Maildir or mbox path (Options → Mail), or the auto-detected system mailbox — and is readable; clickable, launches the configured mail client, same as `ge` (see [Email](#email)) | Muted at 0, warning-colored once there's at least one unread |
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |
