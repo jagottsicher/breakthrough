@@ -23,9 +23,7 @@ func isolateMailDetection(t *testing.T, installed ...string) {
 	}
 	mailDetect = func() []string {
 		var found []string
-		for _, c := range installed {
-			found = append(found, c)
-		}
+		found = append(found, installed...)
 		return found
 	}
 	mailInstalled = func(client string) bool { return set[client] }
