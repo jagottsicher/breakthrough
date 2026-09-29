@@ -369,6 +369,13 @@ func chordFamilies() []chordFamily {
 			{'o', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
 			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
 			{'A', "Deselect all", func(r *Root) { r.panel.deselectAll() }},
+			// "Clear clipboard" — per the user's own explicit request,
+			// the unconditional counterpart to Copy/Cut's own toggle
+			// (pressing "c"/"x" again on the exact same selection —
+			// see copyToClipboard/cutToClipboard), for whenever the
+			// current selection has since moved on from whatever's
+			// actually still held.
+			{'c', "Clear clipboard", func(r *Root) { r.setClipboard(nil, false) }},
 		}},
 		// "j" itself carries no mnemonic of its own — by the time this
 		// family was added, every other letter already meant something

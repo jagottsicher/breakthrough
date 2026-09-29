@@ -322,7 +322,23 @@ func (r *Root) buildStatusBar() string {
 		// uptime/load below.
 		if clip := clipboardIndicatorText(r.clipboardCut, r.clipboardDirs, r.clipboardFiles, r.theme); clip != "" {
 			write(clip)
+			write(" ")
+			// The clear button — Sessions' own Close glyph/meaning
+			// (sessionsCloseGlyph, "✕"), per the user's own explicit
+			// request: a discoverable, mouse-first way to drop the
+			// clipboard outright, alongside the keyboard equivalent
+			// pressing "c"/"x" again on the exact same selection already
+			// gives (see copyToClipboard/cutToClipboard), and "mc" for
+			// clearing regardless of whatever's currently selected (see
+			// keymap.go's own "m" family).
+			clearStart := col
+			write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+			r.clipboardClearSpan = buttonBarSpan{startCol: clearStart, endCol: col, run: func(r *Root) { r.setClipboard(nil, false) }}
 			sep()
+		} else {
+			// Nothing on the clipboard — zero-value, so a stale span from
+			// the last time it wasn't empty can never still match a click.
+			r.clipboardClearSpan = buttonBarSpan{}
 		}
 	}
 
@@ -955,8 +971,11 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	if col >= r.notifyBadgeSpan.startCol && col < r.notifyBadgeSpan.endCol && r.notifyBadgeSpan.run != nil {
-		r.notifyBadgeSpan.run(r)
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan} {
+		if span.run != nil && col >= span.startCol && col < span.endCol {
+			span.run(r)
+			break
+		}
 	}
 	return tview.MouseConsumed, nil
 }
