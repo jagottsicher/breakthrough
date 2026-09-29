@@ -21,6 +21,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
@@ -203,6 +204,19 @@ type Root struct {
 	// Options reopens the log (a category toggle, say) with the same
 	// unchanged fallback still in effect.
 	activityLogFallbackWarned bool
+
+	// notify is the in-process notification service's own live Store
+	// (see internal/notify's own doc comment) — a short, curated list
+	// of background triggers (a backgrounded Rsync run, the paste/move
+	// queue, the firewall screen's own self-lockout rollback) pushes
+	// here at their own completion, so the outcome survives past the
+	// moment their status-bar line disappears. Never nil (see NewRoot):
+	// internal/notify's own Store, unlike activityLog, has no "off"
+	// setting to honor, so every call site reaches for it
+	// unconditionally. No UI reads from it yet — that starts once a
+	// later stage of feature_ideas.txt's own "3a. Benachrichtigungen"
+	// lands.
+	notify *notify.Store
 
 	// settingOrigins says, per config key, which tier the value
 	// currently in force actually came from (see config.Origin) — shown
@@ -1683,6 +1697,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		colorSchemes:   colorSchemes,
 		settingOrigins: settingOrigins,
 		theme:          theme,
+		notify:         notify.New(),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
