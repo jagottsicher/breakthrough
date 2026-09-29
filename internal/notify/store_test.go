@@ -114,6 +114,59 @@ func TestSubscribeNilTurnsCallbackOff(t *testing.T) {
 	}
 }
 
+func TestSetReadUpdatesTheMatchingMessage(t *testing.T) {
+	s := New()
+	msg := s.Push(LevelSuccess, CategoryRsync, "done")
+
+	if !s.SetRead(msg.ID, true) {
+		t.Fatal("SetRead reported not found for a real ID")
+	}
+	got := s.Messages()
+	if !got[0].Read {
+		t.Error("Read was not updated")
+	}
+}
+
+func TestSetReadReportsFalseForAnUnknownID(t *testing.T) {
+	s := New()
+	if s.SetRead(999, true) {
+		t.Error("SetRead reported success for an ID that was never pushed")
+	}
+}
+
+func TestDeleteRemovesTheMatchingMessage(t *testing.T) {
+	s := New()
+	first := s.Push(LevelInfo, CategoryFirewall, "first")
+	s.Push(LevelInfo, CategoryFirewall, "second")
+
+	if !s.Delete(first.ID) {
+		t.Fatal("Delete reported not found for a real ID")
+	}
+	got := s.Messages()
+	if len(got) != 1 || got[0].Text != "second" {
+		t.Errorf("got %+v, want only \"second\" left", got)
+	}
+}
+
+func TestDeleteReportsFalseForAnUnknownID(t *testing.T) {
+	s := New()
+	if s.Delete(999) {
+		t.Error("Delete reported success for an ID that was never pushed")
+	}
+}
+
+func TestUnreadCountCountsOnlyUnreadMessages(t *testing.T) {
+	s := New()
+	first := s.Push(LevelSuccess, CategoryRsync, "first")
+	s.Push(LevelSuccess, CategoryRsync, "second")
+	s.Push(LevelSuccess, CategoryRsync, "third")
+	s.SetRead(first.ID, true)
+
+	if got := s.UnreadCount(); got != 2 {
+		t.Errorf("UnreadCount() = %d, want 2", got)
+	}
+}
+
 func TestPushIsSafeForConcurrentUse(t *testing.T) {
 	s := New()
 	const goroutines = 50

@@ -313,6 +313,11 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
+			// "Messages", after gr/gb/gc: the status bar's own badge
+			// (bottombar.go) is this same action's mouse equivalent, the
+			// same "gehe zu einem ganzen weiteren Ort" role gb/gc already
+			// have — see feature_ideas.txt's own "3a. Benachrichtigungen".
+			{'m', "Messages", func(r *Root) { r.openMessages() }},
 		}},
 		// "mm" doubles the prefix the same way "gg"/"oo" already do —
 		// opening the context menu, exactly what a bare "m" always did

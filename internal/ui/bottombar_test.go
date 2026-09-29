@@ -1766,3 +1766,85 @@ func TestRefreshActivePanelHeaderGlowLeavesFilterButtonAloneWhenNoFilterIsActive
 		t.Errorf("filterMenuBtn text changed from %q to %q with no filter active", before, got)
 	}
 }
+
+func TestNotifyBadgeTextAtZeroIsMuted(t *testing.T) {
+	got := notifyBadgeText(0, config.DefaultTheme().Resolve())
+	if !strings.Contains(got, "0") {
+		t.Errorf("got %q, want it to show 0", got)
+	}
+	if !strings.Contains(got, colorTag(config.DefaultTheme().Resolve().MutedTextColor)) {
+		t.Errorf("got %q, want MutedTextColor at zero unread", got)
+	}
+}
+
+func TestNotifyBadgeTextWithUnreadUsesWarningColor(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := notifyBadgeText(3, theme)
+	if !strings.Contains(got, "3") {
+		t.Errorf("got %q, want it to show the count", got)
+	}
+	if !strings.Contains(got, colorTag(theme.WarningText)) {
+		t.Errorf("got %q, want WarningText once there's at least one unread", got)
+	}
+}
+
+func TestNotifyBadgeTextCapsDisplayAt999Plus(t *testing.T) {
+	got := notifyBadgeText(1500, config.DefaultTheme().Resolve())
+	if !strings.Contains(got, "999+") {
+		t.Errorf("got %q, want the display capped at \"999+\"", got)
+	}
+}
+
+// TestBuildStatusBarLocatesTheNotifyBadge pins that buildStatusBar
+// actually records a real, non-empty span for the badge — the click
+// target captureStatusBarMouse routes to openMessages.
+func TestBuildStatusBarLocatesTheNotifyBadge(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.buildStatusBar()
+
+	if r.notifyBadgeSpan.endCol <= r.notifyBadgeSpan.startCol {
+		t.Errorf("notifyBadgeSpan = %+v, want a real, non-empty column range", r.notifyBadgeSpan)
+	}
+	if r.notifyBadgeSpan.run == nil {
+		t.Error("notifyBadgeSpan.run is nil")
+	}
+}
+
+func TestCaptureStatusBarMouseClickOnBadgeOpensMessages(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar() // populates notifyBadgeSpan against this rect's own width
+
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.notifyBadgeSpan.startCol+r.notifyBadgeSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != messagesPage {
+		t.Errorf("activePage = %q, want the Messages screen after clicking the badge", r.activePage)
+	}
+}
+
+func TestCaptureStatusBarMouseClickElsewhereDoesNothing(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	event := tcell.NewEventMouse(0, 0, tcell.Button1, tcell.ModNone) // column 0: the leading chord/clock area, not the badge
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage == messagesPage {
+		t.Error("a click away from the badge opened the Messages screen")
+	}
+}

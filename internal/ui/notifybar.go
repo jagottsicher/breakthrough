@@ -84,6 +84,7 @@ func (r *Root) pushNotifyToast(m notify.Message) {
 	r.notifyBar.SetRect(x, y, width, 1)
 	r.ShowPage(notifyToastPage)
 	r.SendToFront(notifyToastPage)
+	r.refreshStatusBar() // the badge's own unread count just changed too
 
 	r.notifyGeneration++
 	generation := r.notifyGeneration

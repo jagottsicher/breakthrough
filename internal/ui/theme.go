@@ -314,6 +314,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.applySSHKeysGenerateTheme(theme)
 	r.applySSHKeysCopyTheme(theme)
 
+	// The Messages screen and its own detail modal (see messages.go/
+	// applyMessagesTheme).
+	r.applyMessagesTheme(theme)
+
 	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
 	r.applyActivityLogTheme(theme)
 

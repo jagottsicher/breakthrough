@@ -80,3 +80,51 @@ func (s *Store) Messages() []Message {
 	copy(out, s.messages)
 	return out
 }
+
+// SetRead updates id's own Read flag, reporting whether a Message with
+// that ID still exists to update (false once it's aged out of the ring
+// buffer, or was deleted — see Delete). The Messages screen (internal/
+// ui) is the only real caller: every trigger this package's own doc
+// comment lists only ever pushes a new Message, never touches Read
+// itself.
+func (s *Store) SetRead(id uint64, read bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.messages {
+		if s.messages[i].ID == id {
+			s.messages[i].Read = read
+			return true
+		}
+	}
+	return false
+}
+
+// Delete removes id from the ring buffer outright, reporting whether it
+// was still there to remove.
+func (s *Store) Delete(id uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.messages {
+		if s.messages[i].ID == id {
+			s.messages = append(s.messages[:i], s.messages[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// UnreadCount reports how many currently-held Messages have Read ==
+// false — the status bar badge's own single source of truth (see
+// internal/ui's own notifyBadgeText): never a second, independently
+// maintained counter that could drift from the real list.
+func (s *Store) UnreadCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, m := range s.messages {
+		if !m.Read {
+			n++
+		}
+	}
+	return n
+}

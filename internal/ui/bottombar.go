@@ -69,8 +69,11 @@ func (r *Root) newBottomBar() {
 
 	r.statusBar = tview.NewTextView()
 	r.statusBar.SetDynamicColors(true)
-	// Deliberately no SetMouseCapture: statusBar is purely informational
-	// now, nothing in it is clickable — see buttonBar above for that.
+	// SetMouseCapture routes a click on the notify badge to openMessages
+	// (see captureStatusBarMouse) — this bar's one real exception to
+	// "purely informational, nothing in it is clickable" now (see
+	// notifyBadgeSpan's own doc comment on Root).
+	r.statusBar.SetMouseCapture(r.captureStatusBarMouse)
 
 	r.currentUser = currentUsername()
 }
@@ -272,7 +275,12 @@ func hideUnhideLabel(showHidden bool) string {
 // here any more — see buildButtonBar.
 func (r *Root) buildStatusBar() string {
 	var b strings.Builder
-	write := func(s string) { b.WriteString(s) }
+	col := 0
+	// col advances by s's display width, not a plain byte/rune count —
+	// the same reasoning buildButtonBar's own write closure already
+	// follows, needed here too now that notifyBadgeSpan (below) has to
+	// locate a real click target within this bar's own text.
+	write := func(s string) { b.WriteString(s); col += tview.TaggedStringWidth(s) }
 	sep := func() { write(" │ ") }
 
 	// A pending chord's own countdown (see chordIndicatorText), leading
@@ -347,6 +355,18 @@ func (r *Root) buildStatusBar() string {
 		write(usernameText(r.currentUser, r.theme))
 		sep()
 	}
+
+	// The notify badge — a permanent segment, unlike every other one in
+	// this loop, per feature_ideas.txt's own "neues, dauerhaftes
+	// Segment" wording (Stufe 3): it's the Messages screen's own status-
+	// bar entry point (its click target, tracked in r.notifyBadgeSpan —
+	// see captureStatusBarMouse), so it stays even at zero unread rather
+	// than disappearing along with the segments Options can toggle off.
+	badgeStart := col
+	write(notifyBadgeText(r.notify.UnreadCount(), r.theme))
+	r.notifyBadgeSpan = buttonBarSpan{startCol: badgeStart, endCol: col, run: func(r *Root) { r.openMessages() }}
+	sep()
+
 	if r.settings.StatusBarShowMouse {
 		write(mouseStatusText(r.mouseEnabled))
 		sep()
@@ -866,6 +886,55 @@ var (
 	statusUptimeColor = tcell.GetColor("#4fd6b5") // teal: time-since-boot
 	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
 )
+
+// notifyBadgeGlyph is the notify badge's own icon (see notifyBadgeText)
+// — an envelope, the same "at a glance, what kind of thing is this"
+// role every other status-bar segment's own fixed color already gives
+// its label, just via a glyph instead since this segment is also a
+// real button (see notifyBadgeSpan/captureStatusBarMouse), not just
+// colored text.
+const notifyBadgeGlyph = "✉"
+
+// notifyBadgeText renders the status bar's own unread-messages badge:
+// notifyBadgeGlyph plus a count, capped at "999+" display (see
+// notify.Store's own doc comment on why the real count itself can
+// never actually reach that) — theme.MutedTextColor at zero, so it
+// doesn't compete for attention with the segments around it when
+// there's nothing to see, theme.WarningText once there's at least one
+// unread Message, the same "something here wants a look" role
+// WarningText already carries everywhere else in this app.
+func notifyBadgeText(unread int, theme config.ResolvedTheme) string {
+	count := strconv.Itoa(unread)
+	if unread > 999 {
+		count = "999+"
+	}
+	color := theme.MutedTextColor
+	if unread > 0 {
+		color = theme.WarningText
+	}
+	return wrapColor(color, notifyBadgeGlyph+" "+count)
+}
+
+// captureStatusBarMouse routes a click on the notify badge (see
+// notifyBadgeSpan) to openMessages — the same InRect-gated, everything-
+// else-consumed shape captureButtonBarMouse already establishes, scoped
+// to this bar's own single clickable span instead of buttonBar's many.
+func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if !r.statusBar.InRect(event.Position()) {
+		return action, event
+	}
+	if action != tview.MouseLeftClick {
+		return tview.MouseConsumed, nil
+	}
+
+	x, _ := event.Position()
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	col := x - rectX
+	if col >= r.notifyBadgeSpan.startCol && col < r.notifyBadgeSpan.endCol && r.notifyBadgeSpan.run != nil {
+		r.notifyBadgeSpan.run(r)
+	}
+	return tview.MouseConsumed, nil
+}
 
 // wrapColor renders text in color as a self-contained tview markup
 // span — starts with an explicit foreground tag, ends by resetting to

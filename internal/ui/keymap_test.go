@@ -229,6 +229,20 @@ func TestChordStartsAndResolves(t *testing.T) {
 // request, added alongside "gp"/"gn" below: mirrors actionUp (the
 // header row's own "↑" button), one level up from wherever the panel
 // currently is.
+// TestChordGoMessagesOpensTheMessagesScreen pins "gm" — feature_ideas.
+// txt's own "3a. Benachrichtigungen" Stufe 3, the g-family's own
+// keyboard equivalent of the status bar's notify badge.
+func TestChordGoMessagesOpensTheMessagesScreen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('g'))
+	root.HandlePlainKey(runeEvent('m'))
+
+	if root.activePage != messagesPage {
+		t.Errorf("activePage = %q, want the Messages screen", root.activePage)
+	}
+}
+
 func TestChordGoUpNavigatesToParent(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	dir := root.panel.path
