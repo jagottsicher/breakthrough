@@ -1058,13 +1058,13 @@
     },
     {
       "path": "internal/sshkeys/agent.go",
-      "size": 1423,
-      "sha256": "b954be5b07aae773a761c2f262b8ebc86257d2605070752a88f56d0561500b6d"
+      "size": 1440,
+      "sha256": "5649249868e41ad6f5908472ec04f04940bc78949ab65e30637fd848f7b2cbc0"
     },
     {
       "path": "internal/sshkeys/agent_test.go",
-      "size": 2101,
-      "sha256": "b2bd3cad6dc3b3a01169586848abaf33918d51e52978fc103c1be0b6c10d5a08"
+      "size": 2558,
+      "sha256": "9594521a3809b9c4eed1b9c17d4ed8ffcf3dacf6f8db0e20e41d508467bf2332"
     },
     {
       "path": "internal/sshkeys/distribute.go",
@@ -1103,8 +1103,8 @@
     },
     {
       "path": "internal/sshkeys/scan.go",
-      "size": 4342,
-      "sha256": "48efa39cfb441bc94e2d76792a80f611da19453b63f8bf9425d19a09554aa1cf"
+      "size": 4359,
+      "sha256": "635a5bf90fd72913155b043df0741a5d773af5f9326c2e378cc03f585c014ce8"
     },
     {
       "path": "internal/sshkeys/scan_test.go",
@@ -1678,8 +1678,8 @@
     },
     {
       "path": "internal/ui/sshkeys_test.go",
-      "size": 13352,
-      "sha256": "29be12c2384d048e61cedf0fc967b8238780dcc3133535217cf5750d327efd65"
+      "size": 13330,
+      "sha256": "9c5a346fb761a38aef8af787580aac0eba6093b35a99ed28a5426f92685fed7b"
     },
     {
       "path": "internal/ui/sshkeyscopy.go",
@@ -1693,8 +1693,8 @@
     },
     {
       "path": "internal/ui/sshkeysgenerate.go",
-      "size": 14961,
-      "sha256": "5cb6ec381f462d68f37d94f45832766743f2cf452592ad494f7cd900e57a2b9c"
+      "size": 14951,
+      "sha256": "b26e88a35ab3bbe3097358ae1537ff66b0b4cf8cf59264f343a02e106de97011"
     },
     {
       "path": "internal/ui/sshkeysgenerate_test.go",
@@ -12845,28 +12845,28 @@
       "file": "internal/sshkeys/agent_test.go",
       "name": "startTestAgent",
       "kind": "function",
-      "line": 18
+      "line": 19
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/sshkeys",
       "file": "internal/sshkeys/agent_test.go",
       "name": "TestAgentFingerprintsReturnsLoadedIdentity",
       "kind": "function",
-      "line": 52
+      "line": 64
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/sshkeys",
       "file": "internal/sshkeys/agent_test.go",
       "name": "TestAgentFingerprintsNoSocketEnvReturnsNil",
       "kind": "function",
-      "line": 66
+      "line": 78
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/sshkeys",
       "file": "internal/sshkeys/agent_test.go",
       "name": "TestAgentFingerprintsUnreachableSocketReturnsNil",
       "kind": "function",
-      "line": 73
+      "line": 85
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/sshkeys",
@@ -34078,7 +34078,7 @@
       "file": "internal/ui/sshkeys_test.go",
       "name": "TestSSHKeysReloadIntoAnErrorNeverHangsOnDown",
       "kind": "function",
-      "line": 347
+      "line": 346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34347,7 +34347,7 @@
       "name": "newSSHKeysGenerateButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 216
+      "line": 217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34355,7 +34355,7 @@
       "name": "newSSHKeysGenerateLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 251
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34363,7 +34363,7 @@
       "name": "setSSHKeysGenerateStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 263
+      "line": 264
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34371,7 +34371,7 @@
       "name": "cancelSSHKeysGenerate",
       "kind": "method",
       "receiver": "*Root",
-      "line": 268
+      "line": 269
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34379,7 +34379,7 @@
       "name": "buildSSHKeysGenerateSpec",
       "kind": "method",
       "receiver": "*Root",
-      "line": 274
+      "line": 275
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34387,7 +34387,7 @@
       "name": "submitSSHKeysGenerate",
       "kind": "method",
       "receiver": "*Root",
-      "line": 291
+      "line": 292
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34395,7 +34395,7 @@
       "name": "applySSHKeysGenerate",
       "kind": "method",
       "receiver": "*Root",
-      "line": 327
+      "line": 328
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34403,7 +34403,7 @@
       "name": "runSSHKeysGenerateCommandFullScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 348
+      "line": 349
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -34411,7 +34411,7 @@
       "name": "applySSHKeysGenerateTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 366
+      "line": 367
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -38295,5 +38295,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "3e4c679023b63a1f98f667b922976b0100f45534d3d25f5672e2166fd23a8118"
+  "merkle_root": "c6c4269c0dc05cc23213901acc999b48dacabbb0cc3f5a2cb63c543c2b272871"
 }

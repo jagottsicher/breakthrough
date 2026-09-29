@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,18 @@ import (
 func startTestAgent(t *testing.T, privKey ed25519.PrivateKey) (socketPath, fingerprint string) {
 	t.Helper()
 
-	socketPath = filepath.Join(t.TempDir(), "agent.sock")
+	// A short-named directory straight under os.TempDir(), not
+	// t.TempDir()'s own deeply nested (subtest-name-included) path:
+	// macOS's sockaddr_un caps sun_path at 104 bytes, and a real CI run
+	// on macOS hit exactly that ceiling here ("bind: invalid argument"),
+	// confirmed live, not guessed.
+	dir, err := os.MkdirTemp("", "sshagent")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	socketPath = filepath.Join(dir, "a.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
