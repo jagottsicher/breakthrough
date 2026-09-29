@@ -535,6 +535,23 @@ type Root struct {
 	// once that timer actually fires (see its own doc comment in errors.go).
 	errorGeneration int
 
+	// notifyBar is the transient notification bar (see notifybar.go and
+	// feature_ideas.txt's own "3a. Benachrichtigungen", Stufe 2) — a
+	// plain TextView shown over the panel's own bottom row for a few
+	// seconds whenever r.notify pushes a new Message, then auto-hidden.
+	// Added to Pages directly, never through showOverlay/pushOverlay: it
+	// must never take keyboard focus or affect r.activePage/
+	// r.overlayStack, per the spec's own explicit "kein SetFocus, keine
+	// Fokus-Frage".
+	notifyBar *tview.TextView
+
+	// notifyGeneration counts every real pushNotifyToast call — the same
+	// "tell the notice its own timer was armed for apart from whatever
+	// unrelated one might be showing once that timer fires" guard
+	// errorGeneration already establishes for showTransientError, reused
+	// here for the identical shape.
+	notifyGeneration int
+
 	// quitConfirm is the real focus target (see RequestQuit); its own
 	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
 	// are what's actually registered on Pages/positioned instead — the
@@ -2115,6 +2132,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
+	r.newNotifyBar()
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)
