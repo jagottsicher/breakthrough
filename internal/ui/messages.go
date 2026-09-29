@@ -356,8 +356,22 @@ func (r *Root) activateMessagesCell(row, column int) {
 // clickMessagesCell is one cell's own mouse action — see
 // clickSessionsCell's own doc comment for why this has to be per-cell
 // rather than a table-wide mouse capture.
+// clickMessagesCell first moves the real table selection to (row,
+// column) itself — unlike clickSessionsCell's own identical-looking
+// counterpart, this screen actually needs that: it's what fires
+// SetSelectionChangedFunc (see newMessagesScreen), the only thing that
+// arms the dwell-to-read timer and visibly moves the cursor there — a
+// real, reported bug otherwise had a mouse click neither move the
+// highlighted cell nor ever mark anything read, since tview's own
+// Table only calls Select() on a plain click when the cell's own
+// Clicked() returns false (noSelect), which every cell here already
+// returns true for. Still returns true itself afterward, so tview
+// never *also* runs its own post-click Select — activateMessagesCell
+// can delete this exact row (the ✕ column), and Select must happen
+// before that, on the row that still really exists, not after.
 func (r *Root) clickMessagesCell(row, column int) func() bool {
 	return func() bool {
+		r.messagesTable.Select(row, column)
 		r.activateMessagesCell(row, column)
 		return true
 	}
