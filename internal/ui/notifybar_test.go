@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/notify"
@@ -36,6 +37,35 @@ func TestPushNotifyToastShowsTheBarWithoutTakingFocus(t *testing.T) {
 	// why this bypasses showOverlay/pushOverlay entirely.
 	if r.activePage != "" {
 		t.Errorf("activePage = %q, want it untouched (no overlay-stack entry for a toast)", r.activePage)
+	}
+}
+
+// TestPushNotifyToastCoversTheStatusBarRow pins the bar's own real
+// position: a layer directly over the status bar's own row — the
+// screen's own bottom-most line — not the panel's own bottom row, per
+// the user's own explicit correction (see notifybar.go's own doc
+// comment).
+func TestPushNotifyToastCoversTheStatusBarRow(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(80, 24)
+	r.SetRect(0, 0, 80, 24)
+	r.Draw(screen) // establish real rects (statusBar's included) before reading them below
+
+	r.notify.Push(notify.LevelSuccess, notify.CategoryRsync, "rsync backup finished")
+
+	wantX, wantY, wantWidth, _ := r.statusBar.GetRect()
+	gotX, gotY, gotWidth, gotHeight := r.notifyBar.GetRect()
+	if gotX != wantX || gotY != wantY || gotWidth != wantWidth || gotHeight != 1 {
+		t.Errorf("notifyBar rect = (%d,%d,%d,%d), want (%d,%d,%d,1) — the status bar's own row",
+			gotX, gotY, gotWidth, gotHeight, wantX, wantY, wantWidth)
 	}
 }
 

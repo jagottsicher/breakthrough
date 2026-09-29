@@ -1493,13 +1493,13 @@
     },
     {
       "path": "internal/ui/notifybar.go",
-      "size": 4199,
-      "sha256": "78a04282427e6a3f93222107d8316ffd693b1a4eb4a0f0a15d645578a797219e"
+      "size": 4224,
+      "sha256": "113f94ff7f2a9df2db83485e46add4270caf51cac02acd6c54d91b649d16fa84"
     },
     {
       "path": "internal/ui/notifybar_test.go",
-      "size": 2965,
-      "sha256": "d6e02aacd788f762fb08e6546fc2d8d508c3e7f9321c541fa36ca99c9b345347"
+      "size": 4168,
+      "sha256": "df999a5c1774d66a88437f63ee81b257c8d71c347dd6c40554b7b82e604b2a7c"
     },
     {
       "path": "internal/ui/octalfield.go",
@@ -1558,8 +1558,8 @@
     },
     {
       "path": "internal/ui/pasteconflict_test.go",
-      "size": 89693,
-      "sha256": "a8bbb6640bf2c2d6956948f49e90cba6273dec9f116f8ed5fd7112382a69ef04"
+      "size": 90644,
+      "sha256": "181325534c88ecee3d8016aaa6b8beb31e3ac2e16b2e75310bf49a9f362bccac"
     },
     {
       "path": "internal/ui/pdf_test.go",
@@ -1638,8 +1638,8 @@
     },
     {
       "path": "internal/ui/root.go",
-      "size": 190520,
-      "sha256": "499127030ac5952517724fcd1034417f1cfef229ef4e04f8ac42444f8dae4d9c"
+      "size": 190564,
+      "sha256": "8a9d019a9b9d51a488950c837fd5c3436bd7d3fb13dfb3aa9f2246afabda4314"
     },
     {
       "path": "internal/ui/root_test.go",
@@ -20207,14 +20207,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -23569,35 +23569,42 @@
       "file": "internal/ui/notifybar_test.go",
       "name": "notifyToastVisible",
       "kind": "function",
-      "line": 12
+      "line": 13
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/notifybar_test.go",
       "name": "TestPushNotifyToastShowsTheBarWithoutTakingFocus",
       "kind": "function",
-      "line": 21
+      "line": 22
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/notifybar_test.go",
+      "name": "TestPushNotifyToastCoversTheStatusBarRow",
+      "kind": "function",
+      "line": 48
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/notifybar_test.go",
       "name": "TestPushNotifyToastReplacesRatherThanStacks",
       "kind": "function",
-      "line": 42
+      "line": 72
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/notifybar_test.go",
       "name": "TestAutoHideNotifyToastHidesTheNoticeItWasArmedFor",
       "kind": "function",
-      "line": 65
+      "line": 95
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/notifybar_test.go",
       "name": "TestAutoHideNotifyToastLeavesANewerUnrelatedNoticeAlone",
       "kind": "function",
-      "line": 83
+      "line": 113
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27171,317 +27178,324 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
-      "name": "TestFinishPasteJobPushesANotificationOnError",
+      "name": "TestFinishPasteJobPushesANotificationForARemoteTransfer",
       "kind": "function",
-      "line": 864
+      "line": 865
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
-      "name": "TestApplyPasteOneResultLogsAMove",
+      "name": "TestFinishPasteJobPushesANotificationOnError",
       "kind": "function",
       "line": 889
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
+      "name": "TestApplyPasteOneResultLogsAMove",
+      "kind": "function",
+      "line": 914
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/pasteconflict_test.go",
       "name": "TestRecordPasteErrorLogsAnError",
       "kind": "function",
-      "line": 913
+      "line": 938
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestApplyPasteOneResultLogsARestore",
       "kind": "function",
-      "line": 933
+      "line": 958
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestApplyPasteOneResultLogsUnderRemoteWhenEitherSideIsRemote",
       "kind": "function",
-      "line": 955
+      "line": 980
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestFinishPasteJobReloadsEveryOpenTabShowingDestDir",
       "kind": "function",
-      "line": 982
+      "line": 1007
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestFinishPasteJobReloadsSourceTabsAfterACut",
       "kind": "function",
-      "line": 1029
+      "line": 1054
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestFinishPasteJobLeavesSourceTabsAloneAfterACopy",
       "kind": "function",
-      "line": 1071
+      "line": 1096
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestMaybeReloadPasteAffectedTabsReloadsWhileConflictDialogOpen",
       "kind": "function",
-      "line": 1116
+      "line": 1141
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestMaybeReloadPasteAffectedTabsSkipsWhenNothingChanged",
       "kind": "function",
-      "line": 1151
+      "line": 1176
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestApplyPasteOneResultClearsClipboardAfterCut",
       "kind": "function",
-      "line": 1186
+      "line": 1211
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestApplyPasteOneResultClearsClipboardHighlightAndCountsAfterCut",
       "kind": "function",
-      "line": 1211
+      "line": 1236
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestApplyPasteOneResultKeepsClipboardOnError",
       "kind": "function",
-      "line": 1245
+      "line": 1270
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteMoveRefreshesDetailsShowingSameFile",
       "kind": "function",
-      "line": 1273
+      "line": 1298
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteCopyDoesNotDisturbDetails",
       "kind": "function",
-      "line": 1307
+      "line": 1332
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "newPasteTestConflict",
       "kind": "function",
-      "line": 1336
+      "line": 1361
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteConflictOpensDialogInsteadOfErroring",
       "kind": "function",
-      "line": 1358
+      "line": 1383
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteConflictDialogBlocksRightDragSelection",
       "kind": "function",
-      "line": 1404
+      "line": 1429
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "setUpPasteConflict",
       "kind": "function",
-      "line": 1441
+      "line": 1466
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionOverwriteRunsRealCopy",
       "kind": "function",
-      "line": 1474
+      "line": 1499
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "setUpPasteDirConflict",
       "kind": "function",
-      "line": 1495
+      "line": 1520
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionOverwriteReplacesDirectoryEntirely",
       "kind": "function",
-      "line": 1539
+      "line": 1564
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionMergeKeepsExtraDestFiles",
       "kind": "function",
-      "line": 1557
+      "line": 1582
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionSkipLeavesDestUntouched",
       "kind": "function",
-      "line": 1575
+      "line": 1600
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionOverwriteAllAppliesToQueuedConflict",
       "kind": "function",
-      "line": 1596
+      "line": 1621
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestChooseConflictResolutionSkipAllAppliesToFutureConflicts",
       "kind": "function",
-      "line": 1636
+      "line": 1661
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestResolveOverwriteIfNewerOverwritesWhenSourceIsNewer",
       "kind": "function",
-      "line": 1674
+      "line": 1699
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestResolveOverwriteIfNewerSkipsWhenSourceIsNotNewer",
       "kind": "function",
-      "line": 1706
+      "line": 1731
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestResolveOverwriteIfSourceNotEmptySkipsEmptySource",
       "kind": "function",
-      "line": 1742
+      "line": 1767
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestResolveOverwriteIfSourceNotEmptyOverwritesNonEmptySource",
       "kind": "function",
-      "line": 1768
+      "line": 1793
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteConflictFoundQueuesBehindAnOpenDialog",
       "kind": "function",
-      "line": 1800
+      "line": 1825
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteConflictDialogResizesWhenMessageGrows",
       "kind": "function",
-      "line": 1833
+      "line": 1858
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestAdvancePasteConflictsRefreshesCountForReQueuedConflict",
       "kind": "function",
-      "line": 1872
+      "line": 1897
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestAdvancePasteConflictsShowsNextQueuedConflict",
       "kind": "function",
-      "line": 1903
+      "line": 1928
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteOneSerializesRealIOAcrossConcurrentItems",
       "kind": "function",
-      "line": 1946
+      "line": 1971
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteOneFoldsPreviousFileSizeIntoBytesBaseOnTheNextFile",
       "kind": "function",
-      "line": 1989
+      "line": 2014
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestPasteSummaryError",
       "kind": "function",
-      "line": 2039
+      "line": 2064
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestStartPasteQueuesBehindARunningJob",
       "kind": "function",
-      "line": 2063
+      "line": 2088
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestFinishPasteJobStartsNextQueuedPaste",
       "kind": "function",
-      "line": 2097
+      "line": 2122
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestCancelPasteJobDropsTheWholeQueue",
       "kind": "function",
-      "line": 2135
+      "line": 2160
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestCancelPasteJobClosesOpenDialog",
       "kind": "function",
-      "line": 2154
+      "line": 2179
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestRequestCancelStopsARunningPaste",
       "kind": "function",
-      "line": 2178
+      "line": 2203
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestRequestCancelFromConflictDialogCancelsWholeJob",
       "kind": "function",
-      "line": 2204
+      "line": 2229
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestCaptureOutsideClickBlockedForPasteConflictDialog",
       "kind": "function",
-      "line": 2235
+      "line": 2260
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/pasteconflict_test.go",
       "name": "TestRequestCancelLeavesBackgroundPasteRunningForAnUnrelatedOverlay",
       "kind": "function",
-      "line": 2267
+      "line": 2292
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -38650,5 +38664,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "f9665b15cc44990893c42368eca1710a4372887c7bd68e62b2cc5e64a31e06ff"
+  "merkle_root": "34759e8558ef0cef52d45eebfd7b46f29118bcc943038bb1e1d312ae6d1d6f73"
 }

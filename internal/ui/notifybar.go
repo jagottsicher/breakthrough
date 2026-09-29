@@ -1,12 +1,12 @@
 // notifybar.go is internal/notify's own Stufe 2 (see feature_ideas.txt's
 // "3a. Benachrichtigungen"): a passive, transient overlay across the
-// panel's own bottom row whenever r.notify pushes a new Message — purely
-// informational, never interactive. Deliberately not built on
-// showOverlay/pushOverlay (see notifyBar's own doc comment on Root):
-// those always end in Application.SetFocus and register on
-// r.overlayStack/r.activePage, both wrong here — nothing in this bar is
-// clickable, and showing or hiding it must never disturb whatever
-// already had keyboard focus.
+// screen's own bottom-most row — the status bar's own row — whenever
+// r.notify pushes a new Message — purely informational, never
+// interactive. Deliberately not built on showOverlay/pushOverlay (see
+// notifyBar's own doc comment on Root): those always end in
+// Application.SetFocus and register on r.overlayStack/r.activePage,
+// both wrong here — nothing in this bar is clickable, and showing or
+// hiding it must never disturb whatever already had keyboard focus.
 package ui
 
 import (
@@ -54,7 +54,7 @@ func notifyColor(level notify.Level, theme config.ResolvedTheme) tcell.Color {
 
 // newNotifyBar builds the bar and adds it to Pages as its own page,
 // resize=false (it positions itself explicitly on every push — see
-// pushNotifyToast), initially hidden. Must run after r.panelHost exists
+// pushNotifyToast), initially hidden. Must run after r.statusBar exists
 // (pushNotifyToast reads its rect) and after r.notify itself (NewRoot's
 // own struct literal already guarantees both).
 func (r *Root) newNotifyBar() {
@@ -80,8 +80,8 @@ func (r *Root) pushNotifyToast(m notify.Message) {
 	text := fmt.Sprintf("%s %s %s", m.Time.Format("15:04"), notifyGlyph(m.Level), m.Text)
 	r.notifyBar.SetText(wrapColor(notifyColor(m.Level, r.theme), text))
 
-	x, y, width, height := r.panelHost.GetRect()
-	r.notifyBar.SetRect(x, y+height-1, width, 1)
+	x, y, width, _ := r.statusBar.GetRect()
+	r.notifyBar.SetRect(x, y, width, 1)
 	r.ShowPage(notifyToastPage)
 	r.SendToFront(notifyToastPage)
 

@@ -537,12 +537,12 @@ type Root struct {
 
 	// notifyBar is the transient notification bar (see notifybar.go and
 	// feature_ideas.txt's own "3a. Benachrichtigungen", Stufe 2) — a
-	// plain TextView shown over the panel's own bottom row for a few
-	// seconds whenever r.notify pushes a new Message, then auto-hidden.
-	// Added to Pages directly, never through showOverlay/pushOverlay: it
-	// must never take keyboard focus or affect r.activePage/
-	// r.overlayStack, per the spec's own explicit "kein SetFocus, keine
-	// Fokus-Frage".
+	// plain TextView shown as a layer over the status bar's own row (the
+	// screen's own bottom-most line) for a few seconds whenever r.notify
+	// pushes a new Message, then auto-hidden. Added to Pages directly,
+	// never through showOverlay/pushOverlay: it must never take keyboard
+	// focus or affect r.activePage/r.overlayStack, per the spec's own
+	// explicit "kein SetFocus, keine Fokus-Frage".
 	notifyBar *tview.TextView
 
 	// notifyGeneration counts every real pushNotifyToast call — the same
