@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/notify"
@@ -49,6 +50,63 @@ func TestActivateMessagesCellOnSelectColumnTogglesCheckbox(t *testing.T) {
 	r.activateMessagesCell(1, messagesColSelect)
 	if r.messagesSelected[id] {
 		t.Error("a second activation did not uncheck the row")
+	}
+}
+
+// TestClickMessagesCellMovesSelectionAndArmsDwell pins a real, reported
+// bug: a mouse click on a cell used to neither move the visible cursor
+// there nor ever arm the dwell-to-read timer, since tview's own Table
+// only calls Select() on a plain click when Clicked() itself returns
+// false — every cell here always returns true (see clickMessagesCell's
+// own doc comment on why that still has to stay true). Exercised via
+// the cell's real Clicked func, the same path a real mouse click runs
+// through tview's own Table.MouseHandler.
+func TestClickMessagesCellMovesSelectionAndArmsDwell(t *testing.T) {
+	r := newTestRootForMessages(t, 2)
+	r.messagesTable.Select(1, messagesColMessage)
+	generationBefore := r.messagesDwellGeneration
+
+	cell := r.messagesTable.GetCell(2, messagesColMessage)
+	cell.Clicked()
+
+	row, col := r.messagesTable.GetSelection()
+	if row != 2 || col != messagesColMessage {
+		t.Errorf("selection after click = (%d,%d), want (2,%d)", row, col, messagesColMessage)
+	}
+	if r.messagesDwellGeneration == generationBefore {
+		t.Error("clicking a different row did not arm a fresh dwell timer")
+	}
+}
+
+// TestClickOnCloseColumnDeletesTheClickedRowNotAStaleOne guards the
+// exact hazard clickMessagesCell's own doc comment describes: Select
+// must run before activateMessagesCell, not after, since the ✕ column
+// deletes the very row it was clicked on.
+func TestClickOnCloseColumnDeletesTheClickedRowNotAStaleOne(t *testing.T) {
+	r := newTestRootForMessages(t, 2)
+
+	cell := r.messagesTable.GetCell(1, messagesColClose) // "msg 1" (newest first)
+	cell.Clicked()
+
+	if len(r.messagesList) != 1 || r.messagesList[0].Text != "msg 0" {
+		t.Fatalf("got %+v left, want only \"msg 0\"", r.messagesList)
+	}
+}
+
+// TestRealArrowKeysNavigateAllFiveColumns pins that keyboard cell
+// navigation itself was never broken — only mouse clicks were (see
+// TestClickMessagesCellMovesSelectionAndArmsDwell) — by driving the
+// table's own real InputHandler, the same path a real keypress runs
+// through, rather than calling activateMessagesCell directly.
+func TestRealArrowKeysNavigateAllFiveColumns(t *testing.T) {
+	r := newTestRootForMessages(t, 1)
+	r.messagesTable.Select(1, messagesColSelect)
+
+	for want := messagesColNew; want <= messagesColClose; want++ {
+		r.messagesTable.InputHandler()(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone), func(tview.Primitive) {})
+		if _, col := r.messagesTable.GetSelection(); col != want {
+			t.Fatalf("column after KeyRight = %d, want %d", col, want)
+		}
 	}
 }
 
