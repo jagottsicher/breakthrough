@@ -880,27 +880,59 @@ func TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero(t *testing.T) {
 // operation rather than a progressive "Copying"/"Cutting" (nothing is
 // actually in flight until Paste runs), a zero count dropped entirely
 // rather than shown as "0 dirs", and singular/plural picked correctly
-// either way.
+// either way. The verb itself is wrapped in a color tag (see
+// TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow below), so this
+// checks the plain, uncolored tail of the string instead of an exact
+// match on the whole thing.
 func TestClipboardIndicatorText(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
 	tests := []struct {
 		cut         bool
 		dirs, files int
-		want        string
+		wantVerb    string
+		wantTail    string
 	}{
-		{false, 0, 0, ""},
-		{false, 0, 1, "Copy: 1 file"},
-		{false, 0, 3, "Copy: 3 files"},
-		{false, 1, 0, "Copy: 1 dir"},
-		{false, 2, 0, "Copy: 2 dirs"},
-		{false, 1, 1, "Copy: 1 file, 1 dir"},
-		{false, 2, 3, "Copy: 3 files, 2 dirs"},
-		{true, 0, 1, "Cut: 1 file"},
-		{true, 2, 3, "Cut: 3 files, 2 dirs"},
+		{false, 0, 0, "", ""},
+		{false, 0, 1, "Copy", ": 1 file"},
+		{false, 0, 3, "Copy", ": 3 files"},
+		{false, 1, 0, "Copy", ": 1 dir"},
+		{false, 2, 0, "Copy", ": 2 dirs"},
+		{false, 1, 1, "Copy", ": 1 file, 1 dir"},
+		{false, 2, 3, "Copy", ": 3 files, 2 dirs"},
+		{true, 0, 1, "Cut", ": 1 file"},
+		{true, 2, 3, "Cut", ": 3 files, 2 dirs"},
 	}
 	for _, tt := range tests {
-		if got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files); got != tt.want {
-			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want %q", tt.cut, tt.dirs, tt.files, got, tt.want)
+		got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files, theme)
+		if tt.wantVerb == "" {
+			if got != "" {
+				t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want empty", tt.cut, tt.dirs, tt.files, got)
+			}
+			continue
 		}
+		if !strings.Contains(got, tt.wantVerb) || !strings.HasSuffix(got, tt.wantTail) {
+			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want it to contain %q and end with %q",
+				tt.cut, tt.dirs, tt.files, got, tt.wantVerb, tt.wantTail)
+		}
+	}
+}
+
+// TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow pins the user's
+// own explicit request: "Copy"/"Cut" carry the exact same background
+// tint (ClipboardCopyBackground/ClipboardCutBackground) a held file's
+// own row gets in the panel (see Panel.rowBackground) — so this segment
+// doubles as a small legend for that tint.
+func TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+
+	copyGot := clipboardIndicatorText(false, 0, 1, theme)
+	if !strings.Contains(copyGot, colorTag(theme.ClipboardCopyBackground)) {
+		t.Errorf("Copy text = %q, want it to carry ClipboardCopyBackground", copyGot)
+	}
+
+	cutGot := clipboardIndicatorText(true, 0, 1, theme)
+	if !strings.Contains(cutGot, colorTag(theme.ClipboardCutBackground)) {
+		t.Errorf("Cut text = %q, want it to carry ClipboardCutBackground", cutGot)
 	}
 }
 
@@ -917,19 +949,23 @@ func TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser(t *testing.T) 
 	}
 
 	before := r.buildStatusBar()
-	if strings.Contains(before, "Copy:") {
+	if strings.Contains(before, "Copy") {
 		t.Fatalf("status bar already mentions Copy before anything was copied: %q", before)
 	}
 
 	r.panel.toggleCheckbox(2) // apple.txt — see fixtureDir
 	r.copyToClipboard()
 
+	// "Copy" itself is now wrapped in its own color tag (see
+	// clipboardIndicatorText), so the segment is no longer one literal
+	// "Copy: 1 file" substring — check the verb, the count, and the
+	// username all appear in that order instead.
 	got := r.buildStatusBar()
-	wantSeg := "Copy: 1 file"
+	verbIdx := strings.Index(got, "Copy")
+	countIdx := strings.Index(got, "1 file")
 	userIdx := strings.Index(got, r.currentUser)
-	segIdx := strings.Index(got, wantSeg)
-	if segIdx == -1 || userIdx == -1 || segIdx >= userIdx {
-		t.Errorf("status bar = %q, want %q to appear before the username %q", got, wantSeg, r.currentUser)
+	if verbIdx == -1 || countIdx == -1 || userIdx == -1 || verbIdx >= countIdx || countIdx >= userIdx {
+		t.Errorf("status bar = %q, want \"Copy\" then \"1 file\" then the username %q, in that order", got, r.currentUser)
 	}
 }
 
