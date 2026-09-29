@@ -14,6 +14,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
@@ -1048,7 +1049,12 @@ func (r *Root) finishPasteJob(job *pasteJob) {
 	r.reloadPasteAffectedTabs(job)
 
 	if len(job.errors) > 0 || len(job.skippedSymlinks) > 0 {
-		r.showError(pasteSummaryError(job))
+		summary := pasteSummaryError(job)
+		r.showError(summary)
+		r.notify.Push(notify.LevelError, notify.CategoryPaste, summary.Error())
+	} else if job.succeeded > 0 {
+		r.notify.Push(notify.LevelSuccess, notify.CategoryPaste,
+			fmt.Sprintf("%s %d item(s)", pasteLogVerb(job), job.succeeded))
 	}
 
 	// Once this job's own wrap-up above is fully settled, not before —

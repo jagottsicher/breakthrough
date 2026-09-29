@@ -37,6 +37,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 )
 
 const firewallAddRulePage = "firewall-add-rule"
@@ -666,6 +667,7 @@ func (r *Root) rollbackFirewallRule() {
 	command, err := firewall.DeleteRuleCommand(backend, spec)
 	if err != nil {
 		r.activityLog.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
+		r.notify.Push(notify.LevelError, notify.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %v", err))
 		r.showError(fmt.Errorf("firewall: self-lockout rollback: %w", err))
 		return
 	}
@@ -674,9 +676,13 @@ func (r *Root) rollbackFirewallRule() {
 	r.reloadFirewall()
 	if runErr != nil {
 		r.activityLog.Error(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback %q: %v", command, runErr))
+		r.notify.Push(notify.LevelError, notify.CategoryFirewall,
+			fmt.Sprintf("self-lockout rollback failed — the rule is still in place: %v", runErr))
 		r.showError(fmt.Errorf("firewall: self-lockout rollback failed — the rule is still in place: %s: %w", command, runErr))
 		return
 	}
 	r.activityLog.Action(activitylog.CategoryFirewall, fmt.Sprintf("self-lockout rollback: %s", command))
+	r.notify.Push(notify.LevelInfo, notify.CategoryFirewall,
+		"the SSH-relevant rule wasn't confirmed in time and has been reverted")
 	r.showError(fmt.Errorf("firewall: the SSH-relevant rule wasn't confirmed in time and has been reverted"))
 }

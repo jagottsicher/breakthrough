@@ -224,6 +224,13 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.buttonBar.SetTextColor(theme.TextColor)
 	r.statusBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.statusBar.SetTextColor(theme.TextColor)
+	// notifyBar sits as a layer directly over statusBar's own row (see
+	// notifybar.go's own doc comment) — the same background, so it reads
+	// as "the status line, briefly replaced" rather than a visually
+	// unrelated dark box dropped on top of it. Its own text color still
+	// comes from notifyColor per Message (see pushNotifyToast), not
+	// theme.TextColor here — this only ever sets the background.
+	r.notifyBar.SetBackgroundColor(theme.SurfaceBackground)
 
 	// AccentBackground: the shared, constant "normal panel background"
 	// every panel floating over the main one now uses (toolWindow/
@@ -306,6 +313,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.applySSHKeysTheme(theme)
 	r.applySSHKeysGenerateTheme(theme)
 	r.applySSHKeysCopyTheme(theme)
+
+	// The Messages screen and its own detail modal (see messages.go/
+	// applyMessagesTheme).
+	r.applyMessagesTheme(theme)
 
 	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
 	r.applyActivityLogTheme(theme)

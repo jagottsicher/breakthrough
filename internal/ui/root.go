@@ -21,6 +21,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 	"github.com/jagottsicher/breakthrough/internal/replace"
 	"github.com/jagottsicher/breakthrough/internal/sshkeys"
@@ -204,6 +205,19 @@ type Root struct {
 	// unchanged fallback still in effect.
 	activityLogFallbackWarned bool
 
+	// notify is the in-process notification service's own live Store
+	// (see internal/notify's own doc comment) — a short, curated list
+	// of background triggers (a backgrounded Rsync run, the paste/move
+	// queue, the firewall screen's own self-lockout rollback) pushes
+	// here at their own completion, so the outcome survives past the
+	// moment their status-bar line disappears. Never nil (see NewRoot):
+	// internal/notify's own Store, unlike activityLog, has no "off"
+	// setting to honor, so every call site reaches for it
+	// unconditionally. No UI reads from it yet — that starts once a
+	// later stage of feature_ideas.txt's own "3a. Benachrichtigungen"
+	// lands.
+	notify *notify.Store
+
 	// settingOrigins says, per config key, which tier the value
 	// currently in force actually came from (see config.Origin) — shown
 	// in the Options screen's own origin column, and what gives its
@@ -382,6 +396,58 @@ type Root struct {
 	sessionsList      []multiplex.Session
 	sessionsErr       error
 
+	// The Messages screen ("gm", see messages.go and feature_ideas.txt's
+	// own "3a. Benachrichtigungen", Stufen 3-5) — a full-screen catalog
+	// over r.notify's own ring buffer, styled like Sessions above (cell
+	// navigation, SetSelectable(true, true)) rather than Mounts/
+	// Firewall's own row-only tables, since each row carries its own
+	// Auswahl/Neu checkboxes plus a Close action. messagesList is a
+	// snapshot taken on open/reload (reloadMessages), newest first —
+	// not a live view of r.notify, which keeps every row's own table
+	// position stable while the screen stays open even as new
+	// messages keep arriving elsewhere in the background.
+	messagesLayout    *tview.Flex
+	messagesTitleBar  *tview.TextView
+	messagesHint      *tview.TextView
+	messagesHintSpans []listHintSpan
+	messagesTable     *tview.Table
+	messagesList      []notify.Message
+	// messagesSelected is the Auswahl column's own checked set, keyed by
+	// Message.ID rather than row — row numbers shift on every
+	// reloadMessages (a delete, a read/unread toggle), IDs never do.
+	messagesSelected map[uint64]bool
+	// messagesShiftSelecting/messagesShiftAnchorRow/
+	// messagesShiftCurrentRow are Shift+Up/Down's own range-selection
+	// session state — Panel's own shiftSelecting/shiftSelectAnchorRow/
+	// shiftSelectCurrentRow (panel.go), the exact same anchor-plus-
+	// delta-toggle shape, scoped to this screen's own checkbox set
+	// instead of Panel's.
+	messagesShiftSelecting                          bool
+	messagesShiftAnchorRow, messagesShiftCurrentRow int
+	// messagesDwellGeneration guards armMessagesDwell's own timer the
+	// same way notifyGeneration guards pushNotifyToast's: a row
+	// changed away from before its own 1.5s dwell elapses must never
+	// have that stale timer mark it read once it finally fires.
+	messagesDwellGeneration int
+	// messagesDwellRow is the row SetSelectionChangedFunc last actually
+	// (re)armed the dwell timer for — 0 initially (never a real row, the
+	// header's own index), so the very first real row the cursor lands
+	// on always arms correctly. Prevents a bare column move within the
+	// same row (Left/Right — tview's own SelectionChangedFunc fires for
+	// either a row or a column change) from restarting the timer; only
+	// an actual row change does.
+	messagesDwellRow int
+
+	// The Messages screen's own detail view (Stufe 5) — Enter or a
+	// click on the Message cell shows the focused row's full,
+	// untruncated text in a small modal, per feature_ideas.txt's own
+	// "eigenes, kleines Modalfenster" option (the simplest of the three
+	// it lists, since generalizing the Details sidebar or copying it
+	// wholesale both need work this feature doesn't otherwise touch).
+	messagesDetailLayout   *tview.Flex
+	messagesDetailTitleBar *tview.TextView
+	messagesDetailView     *tview.TextView
+
 	// The SSH Keys screen ("jk", see sshkeys.go) — Stage 1 (read-only) of
 	// feature_ideas.txt's own SSH-Key-Verwaltung entry: an inventory of
 	// the user's own local SSH key pairs under ~/.ssh (internal/sshkeys),
@@ -520,6 +586,23 @@ type Root struct {
 	// whatever unrelated error might coincidentally be showing on errorPage
 	// once that timer actually fires (see its own doc comment in errors.go).
 	errorGeneration int
+
+	// notifyBar is the transient notification bar (see notifybar.go and
+	// feature_ideas.txt's own "3a. Benachrichtigungen", Stufe 2) — a
+	// plain TextView shown as a layer over the status bar's own row (the
+	// screen's own bottom-most line) for a few seconds whenever r.notify
+	// pushes a new Message, then auto-hidden. Added to Pages directly,
+	// never through showOverlay/pushOverlay: it must never take keyboard
+	// focus or affect r.activePage/r.overlayStack, per the spec's own
+	// explicit "kein SetFocus, keine Fokus-Frage".
+	notifyBar *tview.TextView
+
+	// notifyGeneration counts every real pushNotifyToast call — the same
+	// "tell the notice its own timer was armed for apart from whatever
+	// unrelated one might be showing once that timer fires" guard
+	// errorGeneration already establishes for showTransientError, reused
+	// here for the identical shape.
+	notifyGeneration int
 
 	// quitConfirm is the real focus target (see RequestQuit); its own
 	// "Quit" title bar and quitConfirmLayout (the Flex stacking the two)
@@ -1331,17 +1414,21 @@ type Root struct {
 	// disappearance) and one label's own text (Hide vs. Unhide) both
 	// depend on live state now — see buildButtonBar's own doc comment.
 	//
-	// statusBar, the last row, is purely informational, deliberately
-	// with nothing clickable in it any more (see buildStatusBar): the
-	// current user, disk/inode usage, the running kernel, uptime/load
-	// average where available, and the clock — refreshed on navigation
-	// and once a second by the clock's own ticker (see
-	// refreshStatusBar), unlike buttonBar above.
-	bashConsole    *tview.Flex
-	bashLine       *tview.TextArea
-	bashHint       *tview.TextView
-	buttonBar      *tview.TextView
-	buttonBarSpans []buttonBarSpan
+	// statusBar, the last row, is almost entirely informational (see
+	// buildStatusBar): the current user, disk/inode usage, the running
+	// kernel, uptime/load average where available, and the clock —
+	// refreshed on navigation and once a second by the clock's own
+	// ticker (see refreshStatusBar), unlike buttonBar above. One real
+	// exception: the notify badge (notifyBadgeSpan, bottombar.go's own
+	// notifyBadgeText) — a single clickable segment, opening the
+	// Messages screen, the same way buttonBarSpans locate buttonBar's
+	// own many.
+	bashConsole     *tview.Flex
+	bashLine        *tview.TextArea
+	bashHint        *tview.TextView
+	buttonBar       *tview.TextView
+	buttonBarSpans  []buttonBarSpan
+	notifyBadgeSpan buttonBarSpan
 
 	statusBar *tview.TextView
 
@@ -1683,6 +1770,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		colorSchemes:   colorSchemes,
 		settingOrigins: settingOrigins,
 		theme:          theme,
+		notify:         notify.New(),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -1925,6 +2013,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newSSHKeysScreen()
 
+	// The Messages screen (see messages.go/openMessages) — an eighth
+	// full-screen catalog, same build-once/repopulate-on-open shape.
+	r.newMessagesScreen()
+	r.newMessageDetailScreen()
+
 	// The SSH Keys screen's own "Generate key" form (see
 	// sshkeysgenerate.go).
 	r.sshKeysGenerateForm = r.newSSHKeysGenerateForm()
@@ -2085,6 +2178,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
 	r.AddPage(sshKeysGeneratePage, r.sshKeysGenerateLayout, false, false)
 	r.AddPage(sshKeysCopyPage, r.sshKeysCopyLayout, false, false)
+	// resize=true: the Messages screen deliberately fills the whole
+	// terminal too, the same reasoning the Options/Toolbox/Mounts/
+	// Firewall/Sessions/SSH Keys screens' own comments above give.
+	r.AddPage(messagesPage, r.messagesLayout, true, false)
+	r.AddPage(messagesDetailPage, r.messagesDetailLayout, false, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
@@ -2100,6 +2198,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
+	r.newNotifyBar()
 
 	r.SetMouseCapture(r.captureOutsideClick)
 	app.SetBeforeDrawFunc(r.handleBeforeDraw)

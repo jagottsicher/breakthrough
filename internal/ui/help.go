@@ -83,7 +83,7 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin · gc Connect…
+                gr / (root) · gb Trashbin · gc Connect… · gm Messages
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mo Open with… · mt tail -f · mA Deselect all
