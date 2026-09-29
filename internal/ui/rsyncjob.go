@@ -56,6 +56,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/rsync"
 )
 
@@ -390,9 +391,11 @@ func (r *Root) finishRsyncJob(job *rsyncJob, err error) {
 		// expected, already handled by cancelRsyncJob itself, and must
 		// not also show as a spurious error overlay).
 		r.activityLog.Error(activitylog.CategoryRsync, fmt.Sprintf("rsync %s: %v", job.label, err))
+		r.notify.Push(notify.LevelError, notify.CategoryRsync, fmt.Sprintf("rsync %s failed: %v", job.label, err))
 		r.showError(err)
 	case !wasCancelled:
 		r.activityLog.Action(activitylog.CategoryRsync, fmt.Sprintf("rsync %s", job.label))
+		r.notify.Push(notify.LevelSuccess, notify.CategoryRsync, fmt.Sprintf("rsync %s finished", job.label))
 	}
 	r.forEachTab(func(p *Panel) {
 		if p.path == job.destPath {

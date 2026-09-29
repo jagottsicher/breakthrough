@@ -225,10 +225,39 @@ func TestChordStartsAndResolves(t *testing.T) {
 	}
 }
 
+// TestPlainKeyAtSignOpensConnectionMenu pins "@" — a direct, top-level
+// key for the connection dropdown, per the user's own explicit
+// request, alongside the existing "gc" chord and the header's own "@"
+// button (see connectionmenu.go) rather than replacing either.
+func TestPlainKeyAtSignOpensConnectionMenu(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	if !root.HandlePlainKey(runeEvent('@')) {
+		t.Fatal("'@' should have been consumed")
+	}
+	if root.activePage != connectionMenuPage {
+		t.Errorf("activePage = %q, want the connection menu", root.activePage)
+	}
+}
+
 // TestChordGoUpNavigatesToParent pins "gu" — the user's own explicit
 // request, added alongside "gp"/"gn" below: mirrors actionUp (the
 // header row's own "↑" button), one level up from wherever the panel
 // currently is.
+// TestChordGoMessagesOpensTheMessagesScreen pins "gm" — feature_ideas.
+// txt's own "3a. Benachrichtigungen" Stufe 3, the g-family's own
+// keyboard equivalent of the status bar's notify badge.
+func TestChordGoMessagesOpensTheMessagesScreen(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('g'))
+	root.HandlePlainKey(runeEvent('m'))
+
+	if root.activePage != messagesPage {
+		t.Errorf("activePage = %q, want the Messages screen", root.activePage)
+	}
+}
+
 func TestChordGoUpNavigatesToParent(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	dir := root.panel.path

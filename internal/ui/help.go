@@ -40,7 +40,7 @@ var helpText = strings.TrimLeft(`
   r   Rename            e   Edit                   k  Directory size
   f   Find                   M  Image metadata
   n   New tab           w   Close tab             l   Look
-  s   Split view                                  t   Tab switcher
+  s   Split view         @  Connect…              t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
                                                    +/- Select/deselect
                                                        by pattern
@@ -83,10 +83,11 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  go to    gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin · gc Connect…
+                gr / (root) · gb Trashbin · gc Connect… · gm Messages
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
-                mo Open with… · mt tail -f · mA Deselect all
+                mo Open with… · mt tail -f · mA Deselect all ·
+                mc Clear clipboard
     j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
@@ -218,8 +219,9 @@ var helpText = strings.TrimLeft(`
   already uses, so holding an arrow key down through a long list of
   directories costs nothing.
 
-  The "@" button right before the path (or "gc") opens a dropdown to
-  browse another machine over SFTP — muted for a local panel, a slow
+  The "@" key (also the header's own "@" button right before the path,
+  or "gc") opens a dropdown to browse another machine over SFTP —
+  muted for a local panel, a slow
   pulse toward a lighter green and back (never darker than at rest)
   once connected. + New connection plus recent history in a table like
   the tab switcher (bright green = active here, matte dimmer green =
@@ -1083,7 +1085,10 @@ var helpText = strings.TrimLeft(`
   holds gets a full-row grey tint (a lighter shade for Cut than Copy),
   across every open tab showing that row, not just the one Copy/Cut
   was pressed in; and the status bar names it — "Copy: 3 files, 1
-  dir" — right after the chord countdown's own spot. Once Paste
+  dir ✕" — right after the chord countdown's own spot, its own "✕"
+  clickable to clear the clipboard outright. Pressing "c"/"x" again on
+  the exact same selection already on the clipboard does the same —
+  "mc" clears regardless of whatever's currently selected. Once Paste
   actually starts, that same spot shows its own live progress instead
   — a spinner, how many items are done, a two-row bar packed into one
   line of half-block characters (top half: item count, bottom half:

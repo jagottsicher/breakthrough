@@ -9,6 +9,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 )
 
 func TestParseFirewallPortFieldBlankMeansAnyPort(t *testing.T) {
@@ -365,5 +366,41 @@ func TestRollbackFirewallRuleRunsDeleteAndReportsIt(t *testing.T) {
 	}
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want the reverted-rule notice", r.activePage)
+	}
+}
+
+// TestRollbackFirewallRulePushesANotification pins the self-lockout
+// rollback's own trigger from feature_ideas.txt's "3a.
+// Benachrichtigungen": firing automatically means the user may well be
+// looking elsewhere, so it must survive past the countdown overlay
+// closing.
+func TestRollbackFirewallRulePushesANotification(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "10.0.0.1 22 10.0.0.2 22")
+	t.Setenv("SSH_TTY", "")
+
+	r := newFirewallAddRuleTestRoot(t, firewall.BackendUFW)
+	r.openFirewallAddRule()
+	attachTestActivityLog(t, r)
+	readNotify := attachTestNotify(t, r)
+
+	spec := firewall.NewRuleSpec{Direction: firewall.DirectionIn, Action: firewall.ActionDeny, PortFrom: 22, PortTo: 22}
+	command, _ := firewall.UFWAddRuleCommand(spec)
+	r.applyFirewallAddRule(firewall.BackendUFW, spec, command)
+	if r.firewallRollbackTimer == nil {
+		t.Fatal("rollback not armed, precondition for this test failed")
+	}
+	r.firewallRollbackTimer.Stop() // don't race the real timer — call the same action it would fire directly
+
+	r.rollbackFirewallRule()
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelInfo || got[0].Category != notify.CategoryFirewall {
+		t.Errorf("got %+v, want LevelInfo/CategoryFirewall", got[0])
+	}
+	if !strings.Contains(got[0].Text, "reverted") {
+		t.Errorf("text = %q, want it to mention the automatic revert", got[0].Text)
 	}
 }

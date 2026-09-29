@@ -53,10 +53,25 @@ import (
 //     — tests that actually do (see newTestRootWithFile) isolate further
 //     with their own t.TempDir() for both variables, taking precedence
 //     for their own duration the same way isolateHistoryFile does above.
+//   - The persisted notification history: Root now also loads (and, on
+//     any real trigger, saves back to) it at construction (see
+//     internal/notify's own NewWithPersistence, wired in NewRoot via
+//     notifyPersistPath) — the same class of problem XDG_DATA_HOME's
+//     own entry above describes, but fixed via that swappable var
+//     itself rather than $XDG_STATE_HOME (session.StateDir's own
+//     variable, shared with the saved tab layout/crash log/activity
+//     log — overloading it here too would make an unrelated var's
+//     isolation this package's own problem to reason about). Defaults
+//     to "" here — no persistence at all, the same "point it somewhere
+//     that doesn't exist" shape HISTFILE/userConfigFilePath already
+//     use above — so no test here so much as touches a real file
+//     unless it specifically opts back in with its own t.TempDir().
 func TestMain(m *testing.M) {
 	os.Setenv("HISTFILE", filepath.Join(os.TempDir(), "breakthrough-test-history-does-not-exist")) //nolint:errcheck
 	os.Setenv("XDG_RUNTIME_DIR", filepath.Join(os.TempDir(), "breakthrough-test-xdg-runtime"))     //nolint:errcheck
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
+
+	notifyPersistPath = func() string { return "" }
 
 	loadInitialSettings = func() (config.Settings, map[string]config.Origin, []config.NamedTheme, []string) {
 		return config.DefaultSettings(), map[string]config.Origin{}, config.LoadColorSchemes("", ""), nil
@@ -465,6 +480,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		'd': " d Trash",
 		'.': " . Hide", // ShowHidden defaults to true — see config.DefaultSettings
 		's': " s Split",
+		'@': " @ Connect",
 		't': " t Tabs",
 	}
 	found := map[rune]bool{}
@@ -880,27 +896,59 @@ func TestPasteProgressTextShowsQueuedCountOnlyWhenNonZero(t *testing.T) {
 // operation rather than a progressive "Copying"/"Cutting" (nothing is
 // actually in flight until Paste runs), a zero count dropped entirely
 // rather than shown as "0 dirs", and singular/plural picked correctly
-// either way.
+// either way. The verb itself is wrapped in a color tag (see
+// TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow below), so this
+// checks the plain, uncolored tail of the string instead of an exact
+// match on the whole thing.
 func TestClipboardIndicatorText(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
 	tests := []struct {
 		cut         bool
 		dirs, files int
-		want        string
+		wantVerb    string
+		wantTail    string
 	}{
-		{false, 0, 0, ""},
-		{false, 0, 1, "Copy: 1 file"},
-		{false, 0, 3, "Copy: 3 files"},
-		{false, 1, 0, "Copy: 1 dir"},
-		{false, 2, 0, "Copy: 2 dirs"},
-		{false, 1, 1, "Copy: 1 file, 1 dir"},
-		{false, 2, 3, "Copy: 3 files, 2 dirs"},
-		{true, 0, 1, "Cut: 1 file"},
-		{true, 2, 3, "Cut: 3 files, 2 dirs"},
+		{false, 0, 0, "", ""},
+		{false, 0, 1, "Copy", ": 1 file"},
+		{false, 0, 3, "Copy", ": 3 files"},
+		{false, 1, 0, "Copy", ": 1 dir"},
+		{false, 2, 0, "Copy", ": 2 dirs"},
+		{false, 1, 1, "Copy", ": 1 file, 1 dir"},
+		{false, 2, 3, "Copy", ": 3 files, 2 dirs"},
+		{true, 0, 1, "Cut", ": 1 file"},
+		{true, 2, 3, "Cut", ": 3 files, 2 dirs"},
 	}
 	for _, tt := range tests {
-		if got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files); got != tt.want {
-			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want %q", tt.cut, tt.dirs, tt.files, got, tt.want)
+		got := clipboardIndicatorText(tt.cut, tt.dirs, tt.files, theme)
+		if tt.wantVerb == "" {
+			if got != "" {
+				t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want empty", tt.cut, tt.dirs, tt.files, got)
+			}
+			continue
 		}
+		if !strings.Contains(got, tt.wantVerb) || !strings.HasSuffix(got, tt.wantTail) {
+			t.Errorf("clipboardIndicatorText(cut=%v, dirs=%d, files=%d) = %q, want it to contain %q and end with %q",
+				tt.cut, tt.dirs, tt.files, got, tt.wantVerb, tt.wantTail)
+		}
+	}
+}
+
+// TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow pins the user's
+// own explicit request: "Copy"/"Cut" carry the exact same background
+// tint (ClipboardCopyBackground/ClipboardCutBackground) a held file's
+// own row gets in the panel (see Panel.rowBackground) — so this segment
+// doubles as a small legend for that tint.
+func TestClipboardIndicatorTextColorsTheVerbLikeTheHeldRow(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+
+	copyGot := clipboardIndicatorText(false, 0, 1, theme)
+	if !strings.Contains(copyGot, colorTag(theme.ClipboardCopyBackground)) {
+		t.Errorf("Copy text = %q, want it to carry ClipboardCopyBackground", copyGot)
+	}
+
+	cutGot := clipboardIndicatorText(true, 0, 1, theme)
+	if !strings.Contains(cutGot, colorTag(theme.ClipboardCutBackground)) {
+		t.Errorf("Cut text = %q, want it to carry ClipboardCutBackground", cutGot)
 	}
 }
 
@@ -917,19 +965,23 @@ func TestBuildStatusBarShowsClipboardIndicatorBetweenChordAndUser(t *testing.T) 
 	}
 
 	before := r.buildStatusBar()
-	if strings.Contains(before, "Copy:") {
+	if strings.Contains(before, "Copy") {
 		t.Fatalf("status bar already mentions Copy before anything was copied: %q", before)
 	}
 
 	r.panel.toggleCheckbox(2) // apple.txt — see fixtureDir
 	r.copyToClipboard()
 
+	// "Copy" itself is now wrapped in its own color tag (see
+	// clipboardIndicatorText), so the segment is no longer one literal
+	// "Copy: 1 file" substring — check the verb, the count, and the
+	// username all appear in that order instead.
 	got := r.buildStatusBar()
-	wantSeg := "Copy: 1 file"
+	verbIdx := strings.Index(got, "Copy")
+	countIdx := strings.Index(got, "1 file")
 	userIdx := strings.Index(got, r.currentUser)
-	segIdx := strings.Index(got, wantSeg)
-	if segIdx == -1 || userIdx == -1 || segIdx >= userIdx {
-		t.Errorf("status bar = %q, want %q to appear before the username %q", got, wantSeg, r.currentUser)
+	if verbIdx == -1 || countIdx == -1 || userIdx == -1 || verbIdx >= countIdx || countIdx >= userIdx {
+		t.Errorf("status bar = %q, want \"Copy\" then \"1 file\" then the username %q, in that order", got, r.currentUser)
 	}
 }
 
@@ -1764,5 +1816,164 @@ func TestRefreshActivePanelHeaderGlowLeavesFilterButtonAloneWhenNoFilterIsActive
 
 	if got := r.panel.filterMenuBtn.GetText(false); got != before {
 		t.Errorf("filterMenuBtn text changed from %q to %q with no filter active", before, got)
+	}
+}
+
+// TestNotifyBadgeCountPadsToAFixedThreeColumns pins the user's own
+// explicit choice: a single digit centered, two right-aligned, three
+// as-is — so the badge's own width barely shifts as the count changes
+// digit count. "999+" (the overflow display) is left unpadded, already
+// wider than the fixed field.
+func TestNotifyBadgeCountPadsToAFixedThreeColumns(t *testing.T) {
+	tests := []struct {
+		unread int
+		want   string
+	}{
+		{0, " 0 "},
+		{3, " 3 "},
+		{23, " 23"},
+		{123, "123"},
+		{1500, "999+"},
+	}
+	for _, tt := range tests {
+		if got := notifyBadgeCount(tt.unread); got != tt.want {
+			t.Errorf("notifyBadgeCount(%d) = %q, want %q", tt.unread, got, tt.want)
+		}
+	}
+}
+
+func TestNotifyBadgeTextAtZeroIsMuted(t *testing.T) {
+	got := notifyBadgeText(0, config.DefaultTheme().Resolve())
+	if !strings.Contains(got, "Msgs") {
+		t.Errorf("got %q, want the plain \"Msgs\" label, no glyph", got)
+	}
+	if !strings.Contains(got, colorTag(config.DefaultTheme().Resolve().MutedTextColor)) {
+		t.Errorf("got %q, want MutedTextColor at zero unread", got)
+	}
+}
+
+func TestNotifyBadgeTextWithUnreadUsesWarningColor(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := notifyBadgeText(3, theme)
+	if !strings.Contains(got, "3") {
+		t.Errorf("got %q, want it to show the count", got)
+	}
+	if !strings.Contains(got, colorTag(theme.WarningText)) {
+		t.Errorf("got %q, want WarningText once there's at least one unread", got)
+	}
+}
+
+// TestNotifyBadgeTextUsesButtonBackgroundForTheCount pins the user's
+// own explicit request: the count itself reads as real button chrome,
+// not just colored text.
+func TestNotifyBadgeTextUsesButtonBackgroundForTheCount(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := notifyBadgeText(3, theme)
+	if !strings.Contains(got, colorTag(theme.ButtonBackground)) {
+		t.Errorf("got %q, want theme.ButtonBackground behind the count", got)
+	}
+}
+
+func TestNotifyBadgeTextCapsDisplayAt999Plus(t *testing.T) {
+	got := notifyBadgeText(1500, config.DefaultTheme().Resolve())
+	if !strings.Contains(got, "999+") {
+		t.Errorf("got %q, want the display capped at \"999+\"", got)
+	}
+}
+
+// TestBuildStatusBarLocatesTheNotifyBadge pins that buildStatusBar
+// actually records a real, non-empty span for the badge — the click
+// target captureStatusBarMouse routes to openMessages.
+func TestBuildStatusBarLocatesTheNotifyBadge(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.buildStatusBar()
+
+	if r.notifyBadgeSpan.endCol <= r.notifyBadgeSpan.startCol {
+		t.Errorf("notifyBadgeSpan = %+v, want a real, non-empty column range", r.notifyBadgeSpan)
+	}
+	if r.notifyBadgeSpan.run == nil {
+		t.Error("notifyBadgeSpan.run is nil")
+	}
+}
+
+func TestCaptureStatusBarMouseClickOnBadgeOpensMessages(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar() // populates notifyBadgeSpan against this rect's own width
+
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.notifyBadgeSpan.startCol+r.notifyBadgeSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != messagesPage {
+		t.Errorf("activePage = %q, want the Messages screen after clicking the badge", r.activePage)
+	}
+}
+
+func TestCaptureStatusBarMouseClickElsewhereDoesNothing(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	event := tcell.NewEventMouse(0, 0, tcell.Button1, tcell.ModNone) // column 0: the leading chord/clock area, not the badge
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage == messagesPage {
+		t.Error("a click away from the badge opened the Messages screen")
+	}
+}
+
+// TestClipboardClearSpanClicksClearTheClipboard pins the user's own
+// explicit request: a click on the clipboard indicator's own "✕"
+// clears it.
+func TestClipboardClearSpanClicksClearTheClipboard(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar() // populates clipboardClearSpan against this rect's own width
+
+	if r.clipboardClearSpan.endCol <= r.clipboardClearSpan.startCol {
+		t.Fatalf("clipboardClearSpan = %+v, want a real, non-empty column range", r.clipboardClearSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.clipboardClearSpan.startCol+r.clipboardClearSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if len(r.clipboard) != 0 {
+		t.Errorf("clipboard = %v, want empty after clicking the ✕", r.clipboard)
+	}
+}
+
+// TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard guards that a
+// stale span from an earlier non-empty clipboard can never still match
+// a click once the clipboard itself is empty again.
+func TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	if r.clipboardClearSpan.run != nil {
+		t.Error("clipboardClearSpan has a run func with nothing on the clipboard, want the zero value")
 	}
 }

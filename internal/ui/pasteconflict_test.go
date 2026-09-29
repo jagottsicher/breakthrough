@@ -16,6 +16,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/notify"
 )
 
 // isolatePasteIO overrides fsCopy/fsMove for the duration of t, still
@@ -824,6 +825,87 @@ func TestApplyPasteOneResultLogsACopyAndFinishPasteJobLogsTheSummary(t *testing.
 	}
 	if !strings.Contains(got, "copied 1 item(s)") {
 		t.Errorf("log = %q, want finishPasteJob's own Action summary", got)
+	}
+}
+
+// TestFinishPasteJobPushesANotificationOnSuccess pins finishPasteJob's
+// own notify.Push once every item has landed successfully — the paste/
+// move queue's own trigger from feature_ideas.txt's "3a.
+// Benachrichtigungen".
+func TestFinishPasteJobPushesANotificationOnSuccess(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readNotify := attachTestNotify(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	src := filepath.Join(srcDir, "apple.txt")
+	dst := filepath.Join(destDir, "apple.txt")
+	r.applyPasteOneResult(job, src, dst, nil)
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelSuccess || got[0].Category != notify.CategoryPaste {
+		t.Errorf("got %+v, want LevelSuccess/CategoryPaste", got[0])
+	}
+	if !strings.Contains(got[0].Text, "copied 1 item(s)") {
+		t.Errorf("text = %q, want the copied-item summary", got[0].Text)
+	}
+}
+
+// TestFinishPasteJobPushesANotificationForARemoteTransfer pins that a
+// remote-involving transfer (see pasteLogCategory's own "remote wins"
+// rule) notifies exactly the same as a purely local one — finishPasteJob
+// is the single completion point for both, no separate remote engine.
+func TestFinishPasteJobPushesANotificationForARemoteTransfer(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readNotify := attachTestNotify(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	job.destClient = &fakeRemoteClient{}
+	r.applyPasteOneResult(job, "/remote/a.txt", filepath.Join(destDir, "a.txt"), nil)
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelSuccess || got[0].Category != notify.CategoryPaste {
+		t.Errorf("got %+v, want LevelSuccess/CategoryPaste", got[0])
+	}
+}
+
+// TestFinishPasteJobPushesANotificationOnError is the failure
+// counterpart: a genuine per-item error surfaces as LevelError, with
+// the same summary text showError itself receives.
+func TestFinishPasteJobPushesANotificationOnError(t *testing.T) {
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), destDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	readNotify := attachTestNotify(t, r)
+
+	job := newPasteTestJob(r, false, destDir, 1)
+	r.recordPasteError(job, fmt.Errorf("boom"))
+
+	got := readNotify()
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if got[0].Level != notify.LevelError || got[0].Category != notify.CategoryPaste {
+		t.Errorf("got %+v, want LevelError/CategoryPaste", got[0])
+	}
+	if !strings.Contains(got[0].Text, "boom") {
+		t.Errorf("text = %q, want it to mention the failure", got[0].Text)
 	}
 }
 
