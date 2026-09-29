@@ -1418,17 +1418,20 @@ type Root struct {
 	// buildStatusBar): the current user, disk/inode usage, the running
 	// kernel, uptime/load average where available, and the clock —
 	// refreshed on navigation and once a second by the clock's own
-	// ticker (see refreshStatusBar), unlike buttonBar above. One real
-	// exception: the notify badge (notifyBadgeSpan, bottombar.go's own
-	// notifyBadgeText) — a single clickable segment, opening the
-	// Messages screen, the same way buttonBarSpans locate buttonBar's
-	// own many.
-	bashConsole     *tview.Flex
-	bashLine        *tview.TextArea
-	bashHint        *tview.TextView
-	buttonBar       *tview.TextView
-	buttonBarSpans  []buttonBarSpan
-	notifyBadgeSpan buttonBarSpan
+	// ticker (see refreshStatusBar), unlike buttonBar above. Two real
+	// exceptions: the notify badge (notifyBadgeSpan, bottombar.go's own
+	// notifyBadgeText) — opens the Messages screen — and the clipboard
+	// indicator's own "✕" (clipboardClearSpan) — clears the clipboard,
+	// zero-value (an empty, never-matching range) whenever the
+	// clipboard itself is empty and there's nothing to clear — the same
+	// way buttonBarSpans locate buttonBar's own many.
+	bashConsole        *tview.Flex
+	bashLine           *tview.TextArea
+	bashHint           *tview.TextView
+	buttonBar          *tview.TextView
+	buttonBarSpans     []buttonBarSpan
+	notifyBadgeSpan    buttonBarSpan
+	clipboardClearSpan buttonBarSpan
 
 	statusBar *tview.TextView
 
@@ -3719,16 +3722,59 @@ func (r *Root) selectedOrCurrentPaths() []string {
 // single field alongside the paths themselves is enough for pasteInto
 // to later dispatch correctly regardless of which side, if either, of
 // the eventual Paste is remote.
+// copyToClipboard toggles: pressing Copy again on the exact same
+// targets it already holds clears the clipboard instead of setting it
+// again — per the user's own explicit request, the keyboard equivalent
+// of the status bar's own clipboard "✕" (see buildStatusBar/
+// clipboardClearSpan) for the one case it can actually reach (the
+// current selection is still what's on the clipboard); "mc" (see
+// keymap.go's own "m" family) reaches the general case regardless of
+// whatever's currently selected.
 func (r *Root) copyToClipboard() {
+	targets := r.clipboardTargets()
+	if len(targets) > 0 && r.clipboardMatches(targets, r.panel.remote, false) {
+		r.setClipboard(nil, false)
+		return
+	}
 	r.clipboardSourceClient = r.panel.remote
-	r.setClipboard(r.clipboardTargets(), false)
+	r.setClipboard(targets, false)
 }
 
-// cutToClipboard is "Cut": same as Copy, except the later Paste will move
-// the targets (removing them from here) instead of copying them.
+// cutToClipboard is copyToClipboard's own Cut counterpart — same toggle,
+// same reasoning, moving the targets on a later Paste instead of
+// copying them.
 func (r *Root) cutToClipboard() {
+	targets := r.clipboardTargets()
+	if len(targets) > 0 && r.clipboardMatches(targets, r.panel.remote, true) {
+		r.setClipboard(nil, false)
+		return
+	}
 	r.clipboardSourceClient = r.panel.remote
-	r.setClipboard(r.clipboardTargets(), true)
+	r.setClipboard(targets, true)
+}
+
+// clipboardMatches reports whether targets (from srcClient, meant as a
+// Cut if cut) are already exactly what's currently on the clipboard —
+// same source, same Copy/Cut intent, same paths, order-independent
+// (SelectedPaths' own iteration order isn't guaranteed stable against
+// r.clipboard's, e.g. after a reload). Used only by copyToClipboard/
+// cutToClipboard's own toggle-to-clear check above; every other real
+// clipboard mutation goes through setClipboard directly regardless of
+// what was already held.
+func (r *Root) clipboardMatches(targets []string, srcClient remotefs.Client, cut bool) bool {
+	if r.clipboardSourceClient != srcClient || r.clipboardCut != cut || len(targets) != len(r.clipboard) {
+		return false
+	}
+	want := make(map[string]bool, len(targets))
+	for _, p := range targets {
+		want[p] = true
+	}
+	for _, p := range r.clipboard {
+		if !want[p] {
+			return false
+		}
+	}
+	return true
 }
 
 // setClipboard is copyToClipboard/cutToClipboard's own shared body,

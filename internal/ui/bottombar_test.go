@@ -1882,3 +1882,46 @@ func TestCaptureStatusBarMouseClickElsewhereDoesNothing(t *testing.T) {
 		t.Error("a click away from the badge opened the Messages screen")
 	}
 }
+
+// TestClipboardClearSpanClicksClearTheClipboard pins the user's own
+// explicit request: a click on the clipboard indicator's own "✕"
+// clears it.
+func TestClipboardClearSpanClicksClearTheClipboard(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.toggleCheckbox(2) // apple.txt
+	r.copyToClipboard()
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar() // populates clipboardClearSpan against this rect's own width
+
+	if r.clipboardClearSpan.endCol <= r.clipboardClearSpan.startCol {
+		t.Fatalf("clipboardClearSpan = %+v, want a real, non-empty column range", r.clipboardClearSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.clipboardClearSpan.startCol+r.clipboardClearSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if len(r.clipboard) != 0 {
+		t.Errorf("clipboard = %v, want empty after clicking the ✕", r.clipboard)
+	}
+}
+
+// TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard guards that a
+// stale span from an earlier non-empty clipboard can never still match
+// a click once the clipboard itself is empty again.
+func TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	if r.clipboardClearSpan.run != nil {
+		t.Error("clipboardClearSpan has a run func with nothing on the clipboard, want the zero value")
+	}
+}
