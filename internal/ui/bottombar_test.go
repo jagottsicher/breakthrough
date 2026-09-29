@@ -465,6 +465,7 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 		'd': " d Trash",
 		'.': " . Hide", // ShowHidden defaults to true — see config.DefaultSettings
 		's': " s Split",
+		'@': " @ Connect",
 		't': " t Tabs",
 	}
 	found := map[rune]bool{}
