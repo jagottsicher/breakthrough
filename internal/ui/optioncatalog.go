@@ -891,6 +891,11 @@ func optionCategories() []optionCategory {
 						r.persistSetting("open_with_command", v)
 					},
 				),
+			},
+		},
+		{
+			name: "Mail",
+			options: []optionSpec{
 				{
 					key:   "mail_client",
 					label: "Mail client",
@@ -913,6 +918,19 @@ func optionCategories() []optionCategory {
 						return out
 					},
 				},
+				stringOption("mail_maildir_path", "Maildir path",
+					"A local Maildir's own root (the directory holding \"new\"/\"cur\"/\"tmp\") "+
+						"the status bar's own mail badge (✉) reads an unread count from.\n\n"+
+						"Empty (the default) hides the badge entirely — never auto-guessed from a "+
+						"common location: unlike detecting a real binary on $PATH, guessing at a "+
+						"directory that happens to exist risks reading the wrong mailbox, or one "+
+						"you never intended this to touch at all.",
+					func(r *Root) string { return r.settings.MailMaildirPath },
+					func(r *Root, v string) {
+						r.settings.MailMaildirPath = v
+						r.persistSetting("mail_maildir_path", v)
+					},
+				),
 			},
 		},
 		{
@@ -1291,6 +1309,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.OpenWithCommand, true
 	case "mail_client":
 		return s.MailClient, true
+	case "mail_maildir_path":
+		return s.MailMaildirPath, true
 	case "rsync_copy_contents":
 		return strconv.FormatBool(s.RsyncCopyContents), true
 	case "rsync_archive":

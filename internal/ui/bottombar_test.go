@@ -1977,3 +1977,108 @@ func TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard(t *testing.T) {
 		t.Error("clipboardClearSpan has a run func with nothing on the clipboard, want the zero value")
 	}
 }
+
+func TestMailBadgeTextAtZeroIsMuted(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := mailBadgeText(0, theme)
+	if !strings.Contains(got, "0") {
+		t.Errorf("got %q, want it to show 0", got)
+	}
+	if !strings.Contains(got, colorTag(theme.MutedTextColor)) {
+		t.Errorf("got %q, want MutedTextColor at zero unread", got)
+	}
+}
+
+func TestMailBadgeTextWithUnreadUsesWarningColor(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := mailBadgeText(3, theme)
+	if !strings.Contains(got, "3") {
+		t.Errorf("got %q, want it to show the count", got)
+	}
+	if !strings.Contains(got, colorTag(theme.WarningText)) {
+		t.Errorf("got %q, want WarningText once there's at least one unread", got)
+	}
+}
+
+func TestMailBadgeTextCapsDisplayAt999Plus(t *testing.T) {
+	got := mailBadgeText(1500, config.DefaultTheme().Resolve())
+	if !strings.Contains(got, "999+") {
+		t.Errorf("got %q, want the display capped at \"999+\"", got)
+	}
+}
+
+func TestBuildStatusBarLeavesMailBadgeEmptyWithNoPathConfigured(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.MailMaildirPath = ""
+
+	r.buildStatusBar()
+
+	if r.mailBadgeSpan.run != nil {
+		t.Error("mailBadgeSpan has a run func with no Maildir path configured, want the zero value")
+	}
+}
+
+func TestBuildStatusBarLeavesMailBadgeEmptyOnAReadError(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.MailMaildirPath = "/does/not/exist"
+	orig := mailUnreadCount
+	t.Cleanup(func() { mailUnreadCount = orig })
+	mailUnreadCount = func(string) (int, error) { return 0, os.ErrNotExist }
+
+	r.buildStatusBar()
+
+	if r.mailBadgeSpan.run != nil {
+		t.Error("mailBadgeSpan has a run func despite a read error, want the zero value")
+	}
+}
+
+func TestBuildStatusBarLocatesTheMailBadgeWhenConfigured(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.MailMaildirPath = "/some/maildir"
+	orig := mailUnreadCount
+	t.Cleanup(func() { mailUnreadCount = orig })
+	mailUnreadCount = func(string) (int, error) { return 5, nil }
+
+	r.buildStatusBar()
+
+	if r.mailBadgeSpan.endCol <= r.mailBadgeSpan.startCol {
+		t.Errorf("mailBadgeSpan = %+v, want a real, non-empty column range", r.mailBadgeSpan)
+	}
+	if r.mailBadgeSpan.run == nil {
+		t.Error("mailBadgeSpan.run is nil")
+	}
+}
+
+func TestCaptureStatusBarMouseClickOnMailBadgeLaunchesMail(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.settings.MailMaildirPath = "/some/maildir"
+	origCount := mailUnreadCount
+	t.Cleanup(func() { mailUnreadCount = origCount })
+	mailUnreadCount = func(string) (int, error) { return 2, nil }
+	isolateMailDetection(t) // nothing installed — clicking must reach openMail's own "not found" path
+
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar() // populates mailBadgeSpan against this rect's own width
+
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.mailBadgeSpan.startCol+r.mailBadgeSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want the \"no mail client found\" notice after clicking the badge", r.activePage)
+	}
+}

@@ -376,6 +376,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "mail_maildir_path",
+			Default:     d.MailMaildirPath,
+			Kind:        KindString,
+			Summary:     "Local Maildir root the status bar's own mail badge reads an unread count from. Empty hides the badge.",
+			Implemented: true,
+		},
+		{
 			Key:         "rsync_copy_contents",
 			Default:     strconv.FormatBool(d.RsyncCopyContents),
 			Kind:        KindBool,

@@ -1419,13 +1419,16 @@ type Root struct {
 	// buildStatusBar): the current user, disk/inode usage, the running
 	// kernel, uptime/load average where available, and the clock —
 	// refreshed on navigation and once a second by the clock's own
-	// ticker (see refreshStatusBar), unlike buttonBar above. Two real
+	// ticker (see refreshStatusBar), unlike buttonBar above. Three real
 	// exceptions: the notify badge (notifyBadgeSpan, bottombar.go's own
-	// notifyBadgeText) — opens the Messages screen — and the clipboard
-	// indicator's own "✕" (clipboardClearSpan) — clears the clipboard,
-	// zero-value (an empty, never-matching range) whenever the
-	// clipboard itself is empty and there's nothing to clear — the same
-	// way buttonBarSpans locate buttonBar's own many.
+	// notifyBadgeText) — opens the Messages screen — the clipboard
+	// indicator's own "✕" (clipboardClearSpan) — clears the clipboard —
+	// and the mail badge (mailBadgeSpan, bottombar.go's own
+	// mailBadgeText) — launches the configured mail client, the same
+	// action "ge" already reaches. Each is zero-value (an empty,
+	// never-matching range) whenever its own segment isn't currently
+	// shown at all — the same way buttonBarSpans locate buttonBar's
+	// own many.
 	bashConsole        *tview.Flex
 	bashLine           *tview.TextArea
 	bashHint           *tview.TextView
@@ -1433,6 +1436,7 @@ type Root struct {
 	buttonBarSpans     []buttonBarSpan
 	notifyBadgeSpan    buttonBarSpan
 	clipboardClearSpan buttonBarSpan
+	mailBadgeSpan      buttonBarSpan
 
 	statusBar *tview.TextView
 

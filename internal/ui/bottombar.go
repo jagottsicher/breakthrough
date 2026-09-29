@@ -383,6 +383,22 @@ func (r *Root) buildStatusBar() string {
 	r.notifyBadgeSpan = buttonBarSpan{startCol: badgeStart, endCol: col, run: func(r *Root) { r.openMessages() }}
 	sep()
 
+	// The mail badge — shown only when a Maildir path is configured
+	// (settings.MailMaildirPath), silently omitted otherwise or on any
+	// read error (missing/unreadable path), the same "just show one
+	// less segment" degradation kernel version/uptime/load already
+	// have. Clicking it launches the configured mail client, the same
+	// action "ge" already reaches.
+	r.mailBadgeSpan = buttonBarSpan{}
+	if r.settings.MailMaildirPath != "" {
+		if count, err := mailUnreadCount(r.settings.MailMaildirPath); err == nil {
+			mailBadgeStart := col
+			write(mailBadgeText(count, r.theme))
+			r.mailBadgeSpan = buttonBarSpan{startCol: mailBadgeStart, endCol: col, run: func(r *Root) { r.openMail() }}
+			sep()
+		}
+	}
+
 	if r.settings.StatusBarShowMouse {
 		write(mouseStatusText(r.mouseEnabled))
 		sep()
@@ -956,6 +972,28 @@ func notifyBadgeText(unread int, theme config.ResolvedTheme) string {
 	return fmt.Sprintf("Msgs [%s:%s]%s[-:-:-]", colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(unread))
 }
 
+// mailBadgeGlyph is the mail badge's own icon — the envelope
+// deliberately reserved for this (see notifyBadgeText's own doc
+// comment on why the notify badge itself dropped it in favor of a
+// plain "Msgs" label): this is the one real notification-style badge
+// in the app an envelope actually describes.
+const mailBadgeGlyph = "✉"
+
+// mailBadgeText renders the status bar's own mail-unread badge —
+// mailBadgeGlyph plus notifyBadgeCount's own fixed-width, button-styled
+// count (reused directly: the padding logic is generic, not specific to
+// notify's own Message type), the same "button chrome, muted at zero,
+// warning-colored once there's something to see" shape notifyBadgeText
+// already establishes, not a fresh visual language for what's
+// conceptually the same kind of badge.
+func mailBadgeText(count int, theme config.ResolvedTheme) string {
+	fg := theme.MutedTextColor
+	if count > 0 {
+		fg = theme.WarningText
+	}
+	return fmt.Sprintf("%s [%s:%s]%s[-:-:-]", mailBadgeGlyph, colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(count))
+}
+
 // captureStatusBarMouse routes a click on the notify badge (see
 // notifyBadgeSpan) to openMessages — the same InRect-gated, everything-
 // else-consumed shape captureButtonBarMouse already establishes, scoped
@@ -971,7 +1009,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break
