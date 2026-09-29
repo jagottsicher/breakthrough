@@ -1164,11 +1164,22 @@ order: `neomutt`, `aerc`, `himalaya`, `mail`, `mailx` (two different
 binary names for the same POSIX-standard tool, depending on the
 distribution — both are checked). Exactly one found — that one runs
 directly. More than one found — whichever one is picked under Options
-(Programs, "Mail client") runs; "Automatic" (the default) always
-follows that same priority order, and a client chosen there that's
-since been uninstalled falls back to it too, rather than failing.
-None found at all — a clear, dismissible notice, never a crash or
-silent no-op.
+(Mail, "Mail client") runs; "Automatic" (the default) always follows
+that same priority order, and a client chosen there that's since been
+uninstalled falls back to it too, rather than failing. None found at
+all — a clear, dismissible notice, never a crash or silent no-op.
+
+**Unread badge.** Options → Mail → "Maildir path" points at a local
+Maildir's own root (the directory holding `new`/`cur`/`tmp`) — once
+set, the status bar shows `✉ <N>` (see [Status bar](#status-bar)),
+`N` being how many messages sit in that Maildir's own `new/` folder.
+Empty by default, which hides the badge entirely: never guessed from
+a common location like `~/Mail` on its own, since guessing at a
+directory that happens to exist risks reading the wrong mailbox, or
+one you never intended this to touch. A misconfigured or unreadable
+path just omits the badge rather than showing an error. Clicking the
+badge launches the configured mail client, exactly like `ge`. mbox
+(`/var/mail/<user>`) and IMAP mailboxes aren't read yet.
 
 ## SSH Keys
 
@@ -2085,20 +2096,23 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Status bar
 
-The bottom line, almost entirely informational — two real exceptions,
-both clickable (see below). Left to right: whatever's actually staged
-or in flight (a chord countdown, a running Paste's progress, or the
-clipboard's own contents — see [Copy, Cut and
-Paste](#copy-cut-and-paste)), then the notification badge, then eight
-further segments, each independently switchable off (see [Options and
-configuration](#options-and-configuration) below), and finally a clock.
-A transient one-line notice can also briefly cover this whole row for a
-few seconds — see [Notifications](#notifications) below.
+The bottom line, almost entirely informational — three real
+exceptions, all clickable (see below). Left to right: whatever's
+actually staged or in flight (a chord countdown, a running Paste's
+progress, or the clipboard's own contents — see [Copy, Cut and
+Paste](#copy-cut-and-paste)), then the notification badge, then the
+mail badge (only once a Maildir path is configured — see
+[Email](#email)), then eight further segments, each independently
+switchable off (see [Options and configuration](#options-and-configuration)
+below), and finally a clock. A transient one-line notice can also
+briefly cover this whole row for a few seconds — see
+[Notifications](#notifications) below.
 
 | Segment | Shows | Color |
 |---|---|---|
 | Clipboard | `Copy`/`Cut: <N> files, <M> dirs ✕` while something's on the clipboard — the verb itself carries the exact same background tint a held file's own row gets in the panel, and the trailing `✕` is clickable, clearing the clipboard outright (see [Copy, Cut and Paste](#copy-cut-and-paste)) | The verb: green (Copy) / red (Cut) background |
 | Messages badge | `Msgs <N>`, `N` right-padded to a fixed 3 columns — clickable, opens the [Messages screen](#notifications) | Muted at 0, warning-colored once there's at least one unread |
+| Mail badge | `✉ <N>`, only shown once a Maildir path is configured (Options → Mail) and readable — clickable, launches the configured mail client, same as `ge` (see [Email](#email)) | Muted at 0, warning-colored once there's at least one unread |
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |

@@ -24,6 +24,15 @@ import (
 var (
 	mailDetect    = mail.Detect
 	mailInstalled = mail.Installed
+
+	// mailUnreadCount is mail.NewMaildirSource(path).UnreadCount, the
+	// same indirection shape as mailDetect/mailInstalled above — so a
+	// test can simulate any unread count (or a read failure) for the
+	// status bar's own mail badge (bottombar.go) without needing a
+	// real Maildir tree on disk.
+	mailUnreadCount = func(path string) (int, error) {
+		return mail.NewMaildirSource(path).UnreadCount()
+	}
 )
 
 // resolveMailClient picks which client openMail actually launches:
