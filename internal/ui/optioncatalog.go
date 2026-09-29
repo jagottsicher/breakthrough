@@ -931,6 +931,21 @@ func optionCategories() []optionCategory {
 						r.persistSetting("mail_maildir_path", v)
 					},
 				),
+				stringOption("mail_mbox_path", "Mbox path (override)",
+					"An explicit mbox mailbox for the mail badge, overriding auto-detection.\n\n"+
+						"Empty (the default) auto-detects the current user's own system mailbox — "+
+						"/var/mail/<user> or /var/spool/mail/<user>, whichever exists. Unlike "+
+						"Maildir's own several genuinely ambiguous candidate locations, this is a "+
+						"single, well-defined convention per user, so it's detected automatically "+
+						"rather than requiring an explicit path.\n\n"+
+						"If \"Maildir path\" above is also set, it wins outright — a mailbox can "+
+						"only be one format or the other.",
+					func(r *Root) string { return r.settings.MailMboxPath },
+					func(r *Root, v string) {
+						r.settings.MailMboxPath = v
+						r.persistSetting("mail_mbox_path", v)
+					},
+				),
 			},
 		},
 		{
@@ -1311,6 +1326,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.MailClient, true
 	case "mail_maildir_path":
 		return s.MailMaildirPath, true
+	case "mail_mbox_path":
+		return s.MailMboxPath, true
 	case "rsync_copy_contents":
 		return strconv.FormatBool(s.RsyncCopyContents), true
 	case "rsync_archive":

@@ -383,6 +383,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "mail_mbox_path",
+			Default:     d.MailMboxPath,
+			Kind:        KindString,
+			Summary:     "Explicit mbox mailbox override for the mail badge. Empty auto-detects /var/mail/<user> or /var/spool/mail/<user>.",
+			Implemented: true,
+		},
+		{
 			Key:         "rsync_copy_contents",
 			Default:     strconv.FormatBool(d.RsyncCopyContents),
 			Kind:        KindBool,

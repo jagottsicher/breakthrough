@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -112,5 +113,71 @@ func TestOpenMailWithAnInstalledClientDoesNotError(t *testing.T) {
 
 	if r.activePage == errorPage {
 		t.Errorf("openMail reported an error: %q", r.errorView.GetText(true))
+	}
+}
+
+// isolateMailUnreadSources fakes mailUnreadCount/mailMboxUnreadCount/
+// mailDefaultMboxPath together — so a test can pin exactly what each
+// possible mailbox source would report without any real file on disk.
+func isolateMailUnreadSources(t *testing.T, maildirCount int, maildirErr error, mboxCount int, mboxErr error, defaultMboxPath string) {
+	t.Helper()
+	origMaildir, origMbox, origDefault := mailUnreadCount, mailMboxUnreadCount, mailDefaultMboxPath
+	t.Cleanup(func() {
+		mailUnreadCount, mailMboxUnreadCount, mailDefaultMboxPath = origMaildir, origMbox, origDefault
+	})
+	mailUnreadCount = func(string) (int, error) { return maildirCount, maildirErr }
+	mailMboxUnreadCount = func(string) (int, error) { return mboxCount, mboxErr }
+	mailDefaultMboxPath = func() string { return defaultMboxPath }
+}
+
+func TestMailBadgeCountPrefersMaildirOverMbox(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailMaildirPath = "/some/maildir"
+	r.settings.MailMboxPath = "/some/mbox"
+	isolateMailUnreadSources(t, 3, nil, 99, nil, "")
+
+	count, ok := r.mailBadgeCount()
+	if !ok || count != 3 {
+		t.Errorf("mailBadgeCount() = (%d, %v), want (3, true) — Maildir must win", count, ok)
+	}
+}
+
+func TestMailBadgeCountPrefersExplicitMboxOverAutoDetected(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailMboxPath = "/explicit/mbox"
+	isolateMailUnreadSources(t, 0, nil, 7, nil, "/auto/detected/mbox")
+
+	count, ok := r.mailBadgeCount()
+	if !ok || count != 7 {
+		t.Errorf("mailBadgeCount() = (%d, %v), want (7, true) — the explicit mbox path must win", count, ok)
+	}
+}
+
+func TestMailBadgeCountFallsBackToAutoDetectedMbox(t *testing.T) {
+	r := newTestRootForMail(t)
+	isolateMailUnreadSources(t, 0, nil, 1, nil, "/auto/detected/mbox")
+
+	count, ok := r.mailBadgeCount()
+	if !ok || count != 1 {
+		t.Errorf("mailBadgeCount() = (%d, %v), want (1, true)", count, ok)
+	}
+}
+
+func TestMailBadgeCountFalseWhenNothingResolves(t *testing.T) {
+	r := newTestRootForMail(t)
+	isolateMailUnreadSources(t, 0, nil, 0, nil, "")
+
+	if _, ok := r.mailBadgeCount(); ok {
+		t.Error("mailBadgeCount() ok = true, want false with no path configured or auto-detected")
+	}
+}
+
+func TestMailBadgeCountFalseOnAReadError(t *testing.T) {
+	r := newTestRootForMail(t)
+	r.settings.MailMaildirPath = "/some/maildir"
+	isolateMailUnreadSources(t, 0, os.ErrNotExist, 0, nil, "")
+
+	if _, ok := r.mailBadgeCount(); ok {
+		t.Error("mailBadgeCount() ok = true, want false on a read error")
 	}
 }

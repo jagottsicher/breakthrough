@@ -33,7 +33,45 @@ var (
 	mailUnreadCount = func(path string) (int, error) {
 		return mail.NewMaildirSource(path).UnreadCount()
 	}
+
+	// mailMboxUnreadCount is mailUnreadCount's own mbox counterpart —
+	// mail.NewMboxSource(path).UnreadCount, indirected the same way.
+	mailMboxUnreadCount = func(path string) (int, error) {
+		return mail.NewMboxSource(path).UnreadCount()
+	}
+
+	// mailDefaultMboxPath is mail.DefaultMboxPath, indirected the same
+	// way — so a test can simulate a real (or absent) system mailbox
+	// without depending on, or being broken by, whatever's actually at
+	// /var/mail on the machine running it.
+	mailDefaultMboxPath = mail.DefaultMboxPath
 )
+
+// mailBadgeCount is the status bar's own mail badge (bottombar.go)
+// resolving which mailbox to read and reporting its unread count in
+// one step: an explicit Maildir path (settings.MailMaildirPath) wins
+// outright if set, then an explicit mbox override
+// (settings.MailMboxPath), then the auto-detected system mailbox
+// (mailDefaultMboxPath — see MailMboxPath's own doc comment on why
+// this one case is auto-detected at all, unlike Maildir's own several
+// genuinely ambiguous candidates). ok is false whenever none of those
+// apply, or the one that does fails to read — the badge simply isn't
+// shown either way, never an error overlay.
+func (r *Root) mailBadgeCount() (count int, ok bool) {
+	if r.settings.MailMaildirPath != "" {
+		n, err := mailUnreadCount(r.settings.MailMaildirPath)
+		return n, err == nil
+	}
+	path := r.settings.MailMboxPath
+	if path == "" {
+		path = mailDefaultMboxPath()
+	}
+	if path == "" {
+		return 0, false
+	}
+	n, err := mailMboxUnreadCount(path)
+	return n, err == nil
+}
 
 // resolveMailClient picks which client openMail actually launches:
 // settings.MailClient if it names one that's still installed — a
