@@ -26,6 +26,7 @@ material, always matching the version you are actually running.
 - [Mounts](#mounts)
 - [Firewall](#firewall)
 - [Sessions](#sessions)
+- [Email](#email)
 - [SSH Keys](#ssh-keys)
 - [Notifications](#notifications)
 - [Sed Replace](#sed-replace)
@@ -95,7 +96,7 @@ bar becomes that chord's own legend:
 
 | Chord | Members |
 |---|---|
-| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) |
+| `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all · `mc` Clear clipboard |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
@@ -1151,6 +1152,23 @@ nothing this screen could list or attach to that would actually work.
 Local sessions only, for now — attaching to a session on a remote host
 reuses the same real-terminal mechanism (`ssh -t <host> screen -r ...`)
 in principle, but needs its own connection-reuse design first.
+
+## Email
+
+`g` then `e` ("go email") launches whichever terminal mail client is
+installed — the same Suspend-and-exec mechanism Sessions' own Attach
+already uses: breakthrough hands over the real terminal and resumes
+automatically the moment you quit the client, no separate mail client
+or IMAP/SMTP implementation of its own. Candidates, checked in this
+order: `neomutt`, `aerc`, `himalaya`, `mail`, `mailx` (two different
+binary names for the same POSIX-standard tool, depending on the
+distribution — both are checked). Exactly one found — that one runs
+directly. More than one found — whichever one is picked under Options
+(Programs, "Mail client") runs; "Automatic" (the default) always
+follows that same priority order, and a client chosen there that's
+since been uninstalled falls back to it too, rather than failing.
+None found at all — a clear, dismissible notice, never a crash or
+silent no-op.
 
 ## SSH Keys
 

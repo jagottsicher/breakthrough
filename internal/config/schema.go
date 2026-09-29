@@ -369,6 +369,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "mail_client",
+			Default:     d.MailClient,
+			Kind:        KindEnum,
+			Summary:     `Which terminal mail client the "ge" chord launches ("neomutt"/"aerc"/"himalaya"/"mail"/"mailx"). Empty uses whichever is installed, in that priority order.`,
+			Implemented: true,
+		},
+		{
 			Key:         "rsync_copy_contents",
 			Default:     strconv.FormatBool(d.RsyncCopyContents),
 			Kind:        KindBool,

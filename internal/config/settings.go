@@ -354,6 +354,16 @@ type Settings struct {
 
 	OpenWithCommand string
 
+	// MailClient is which terminal mail client the "ge" chord launches
+	// (see internal/mail's own doc comment and internal/ui/mail.go) —
+	// one of internal/mail.Candidates ("neomutt"/"aerc"/"himalaya"/
+	// "mail"/"mailx"), or "" (the default) meaning "no explicit
+	// choice, use whichever of those is actually installed, in that
+	// same priority order" — never a hardcoded first choice baked in
+	// here, since that has to stay in sync with internal/mail's own
+	// Candidates list, not duplicated as a literal.
+	MailClient string
+
 	RsyncCopyContents bool
 	RsyncArchive      bool
 	RsyncCompress     bool
@@ -476,6 +486,8 @@ func DefaultSettings() Settings {
 		CompressFormat: "zip",
 
 		OpenWithCommand: "",
+
+		MailClient: "",
 
 		RsyncCopyContents: false,
 		RsyncArchive:      true,
@@ -623,6 +635,8 @@ func (s *Settings) apply(key, value string) error {
 		s.CompressFormat = value
 	case "open_with_command":
 		s.OpenWithCommand = value
+	case "mail_client":
+		s.MailClient = value
 	case "rsync_copy_contents":
 		return parseBool(&s.RsyncCopyContents)
 	case "rsync_archive":

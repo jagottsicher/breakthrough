@@ -779,8 +779,10 @@ you're looking elsewhere (a backgrounded Rsync run, the paste/move
 queue, the Firewall screen's own self-lockout rollback) — a transient
 status-bar toast, a persistent unread badge, and a full Messages screen
 (`gm`) with dwell-based auto-read, persisted across restarts as plain
-JSON. Progress bars for long-running file operations are what's
-planned next — see
+JSON, and an Email launcher (`ge`) for whichever terminal mail client
+is installed (neomutt, aerc, himalaya, mail, or mailx — configurable
+under Options when more than one is present). Progress bars for
+long-running file operations are what's planned next — see
 [docs/whitepaper.md](docs/whitepaper.md) for the full concept and
 vision, and follow along or join in on
 [Discussions](https://github.com/jagottsicher/breakthrough/discussions).
