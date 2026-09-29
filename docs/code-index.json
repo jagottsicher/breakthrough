@@ -808,8 +808,8 @@
     },
     {
       "path": "internal/mail/mbox.go",
-      "size": 3765,
-      "sha256": "b1f4bfc2b9335f9f6b2da1b610b04eabaf2d35e00f35a4ce1014c448e17e5380"
+      "size": 3824,
+      "sha256": "7a0b3f868779e9eab4e278249071385bff0d437fc12129bd761820104302de39"
     },
     {
       "path": "internal/mail/mbox_test.go",
@@ -1528,8 +1528,8 @@
     },
     {
       "path": "internal/ui/mail_test.go",
-      "size": 6140,
-      "sha256": "38d2d5bf5137a029cab7a7435daf6fce072e40732607c9bccb8662ffd88d387e"
+      "size": 6114,
+      "sha256": "2b1afdb3f01765229baf577c4c8265c93656ba27f8ef9f98fe79b8c9e5389e95"
     },
     {
       "path": "internal/ui/messagedetail.go",
@@ -24015,91 +24015,91 @@
       "file": "internal/ui/mail_test.go",
       "name": "newTestRootForMail",
       "kind": "function",
-      "line": 34
+      "line": 32
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestResolveMailClientPrefersTheConfiguredOneWhenStillInstalled",
       "kind": "function",
-      "line": 43
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestResolveMailClientFallsBackWhenConfiguredOneIsNoLongerInstalled",
       "kind": "function",
-      "line": 53
+      "line": 51
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestResolveMailClientAutoDetectsWhenNothingConfigured",
       "kind": "function",
-      "line": 63
+      "line": 61
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestResolveMailClientEmptyWhenNoneInstalled",
       "kind": "function",
-      "line": 73
+      "line": 71
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestOpenMailShowsATransientNoticeWhenNoneInstalled",
       "kind": "function",
-      "line": 83
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestOpenMailWithAnInstalledClientDoesNotError",
       "kind": "function",
-      "line": 108
+      "line": 106
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "isolateMailUnreadSources",
       "kind": "function",
-      "line": 122
+      "line": 120
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestMailBadgeCountPrefersMaildirOverMbox",
       "kind": "function",
-      "line": 133
+      "line": 131
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestMailBadgeCountPrefersExplicitMboxOverAutoDetected",
       "kind": "function",
-      "line": 145
+      "line": 143
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestMailBadgeCountFallsBackToAutoDetectedMbox",
       "kind": "function",
-      "line": 156
+      "line": 154
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestMailBadgeCountFalseWhenNothingResolves",
       "kind": "function",
-      "line": 166
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/mail_test.go",
       "name": "TestMailBadgeCountFalseOnAReadError",
       "kind": "function",
-      "line": 175
+      "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40239,5 +40239,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "7d5a649083c98e613d58a9cb3b46f7f010a92bd571ee12b3579cd2f9973012b9"
+  "merkle_root": "c56caf5b1c3e1b744a8d7f71d39d5a88e5fb836b05095b46a9891f5cdb146def"
 }
