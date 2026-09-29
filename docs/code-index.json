@@ -1473,13 +1473,13 @@
     },
     {
       "path": "internal/ui/messages.go",
-      "size": 24967,
-      "sha256": "0d8b6a72e7a08d4624969932db44c3e59172461bf99ac2a9f6ae05c800c9340a"
+      "size": 25895,
+      "sha256": "9ec360b28cc39c2bc7f3138977b1f507621e633499214b9cdba371811e284f77"
     },
     {
       "path": "internal/ui/messages_test.go",
-      "size": 8027,
-      "sha256": "f561ecc7b5deac07f1835911765a750e4cd057709a628e0a70a81222a1641bd3"
+      "size": 10576,
+      "sha256": "41edd35b9ab395d5c4213f0656474309716faca364277adc2c3951f1510b55bb"
     },
     {
       "path": "internal/ui/mounts.go",
@@ -23531,7 +23531,7 @@
       "name": "clickMessagesCell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 359
+      "line": 372
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23539,7 +23539,7 @@
       "name": "toggleMessageCheckboxRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 369
+      "line": 383
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23547,7 +23547,7 @@
       "name": "toggleMessageReadRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 389
+      "line": 403
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23555,7 +23555,7 @@
       "name": "deleteMessageRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 402
+      "line": 416
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23563,7 +23563,7 @@
       "name": "deleteCurrentMessageRow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 416
+      "line": 430
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23571,7 +23571,7 @@
       "name": "selectedOrCurrentMessageIDs",
       "kind": "method",
       "receiver": "*Root",
-      "line": 426
+      "line": 440
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23579,7 +23579,7 @@
       "name": "toggleSelectAllMessages",
       "kind": "method",
       "receiver": "*Root",
-      "line": 445
+      "line": 459
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23587,7 +23587,7 @@
       "name": "toggleReadForMessagesSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 464
+      "line": 478
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23595,7 +23595,7 @@
       "name": "deleteMessagesSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 481
+      "line": 495
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23603,7 +23603,7 @@
       "name": "applyMessagesDragDelta",
       "kind": "method",
       "receiver": "*Root",
-      "line": 493
+      "line": 507
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23611,7 +23611,7 @@
       "name": "advanceMessagesShiftSelect",
       "kind": "method",
       "receiver": "*Root",
-      "line": 509
+      "line": 523
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23619,7 +23619,7 @@
       "name": "endMessagesShiftSelect",
       "kind": "method",
       "receiver": "*Root",
-      "line": 524
+      "line": 538
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23627,7 +23627,7 @@
       "name": "armMessagesDwell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 536
+      "line": 550
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23635,7 +23635,7 @@
       "name": "applyMessagesDwell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 553
+      "line": 567
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23643,7 +23643,7 @@
       "name": "captureMessagesKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 569
+      "line": 583
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23651,119 +23651,140 @@
       "name": "applyMessagesTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 623
+      "line": 637
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "newTestRootForMessages",
       "kind": "function",
-      "line": 16
+      "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestOpenMessagesListsNewestFirst",
       "kind": "function",
-      "line": 29
+      "line": 30
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestActivateMessagesCellOnSelectColumnTogglesCheckbox",
       "kind": "function",
-      "line": 41
+      "line": 42
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/messages_test.go",
+      "name": "TestClickMessagesCellMovesSelectionAndArmsDwell",
+      "kind": "function",
+      "line": 64
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/messages_test.go",
+      "name": "TestClickOnCloseColumnDeletesTheClickedRowNotAStaleOne",
+      "kind": "function",
+      "line": 85
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/messages_test.go",
+      "name": "TestRealArrowKeysNavigateAllFiveColumns",
+      "kind": "function",
+      "line": 101
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestActivateMessagesCellOnNewColumnTogglesRead",
       "kind": "function",
-      "line": 55
+      "line": 113
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestActivateMessagesCellOnMessageColumnOpensDetail",
       "kind": "function",
-      "line": 70
+      "line": 128
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestActivateMessagesCellOnCloseColumnDeletesTheRow",
       "kind": "function",
-      "line": 83
+      "line": 141
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestDeleteCurrentMessageRowIgnoresSelection",
       "kind": "function",
-      "line": 96
+      "line": 154
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestToggleSelectAllMessagesSelectsThenClearsEverything",
       "kind": "function",
-      "line": 115
+      "line": 173
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestDeleteMessagesSelectionFallsBackToCurrentRow",
       "kind": "function",
-      "line": 129
+      "line": 187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestDeleteMessagesSelectionDeletesEveryChecked",
       "kind": "function",
-      "line": 140
+      "line": 198
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestToggleReadForMessagesSelectionFlipsEveryChecked",
       "kind": "function",
-      "line": 155
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestAdvanceMessagesShiftSelectSpansARange",
       "kind": "function",
-      "line": 174
+      "line": 232
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestApplyMessagesDwellMarksReadOnlyForTheArmedGeneration",
       "kind": "function",
-      "line": 186
+      "line": 244
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestColumnMoveWithinSameRowDoesNotRearmDwell",
       "kind": "function",
-      "line": 214
+      "line": 272
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestCloseMessagesHidesTheOverlay",
       "kind": "function",
-      "line": 228
+      "line": 286
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/messages_test.go",
       "name": "TestOpenMessagesShowsAPlaceholderWhenEmpty",
       "kind": "function",
-      "line": 238
+      "line": 296
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -39339,5 +39360,5 @@
       "line": 80
     }
   ],
-  "merkle_root": "2211fe017c70b5ce6f63ad647ed3161b2bb9d14667f417e0f3268aa99d4e7278"
+  "merkle_root": "3edec513275ddf587051921e7218d9650ebcc9d046edb43c362e446cd77a4c00"
 }
