@@ -429,6 +429,14 @@ type Root struct {
 	// changed away from before its own 1.5s dwell elapses must never
 	// have that stale timer mark it read once it finally fires.
 	messagesDwellGeneration int
+	// messagesDwellRow is the row SetSelectionChangedFunc last actually
+	// (re)armed the dwell timer for — 0 initially (never a real row, the
+	// header's own index), so the very first real row the cursor lands
+	// on always arms correctly. Prevents a bare column move within the
+	// same row (Left/Right — tview's own SelectionChangedFunc fires for
+	// either a row or a column change) from restarting the timer; only
+	// an actual row change does.
+	messagesDwellRow int
 
 	// The Messages screen's own detail view (Stufe 5) — Enter or a
 	// click on the Message cell shows the focused row's full,

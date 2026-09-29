@@ -887,32 +887,49 @@ var (
 	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
 )
 
-// notifyBadgeGlyph is the notify badge's own icon (see notifyBadgeText)
-// — an envelope, the same "at a glance, what kind of thing is this"
-// role every other status-bar segment's own fixed color already gives
-// its label, just via a glyph instead since this segment is also a
-// real button (see notifyBadgeSpan/captureStatusBarMouse), not just
-// colored text.
-const notifyBadgeGlyph = "✉"
+// notifyBadgeCount pads unread's own display text to a fixed 3 columns
+// — "123" as-is, " 23" right-aligned, " 3 " centered — per the user's
+// own explicit choice, so the badge's own width barely shifts as the
+// count changes digit count, the same steadiness a real button's fixed
+// size already gives every other clickable segment in this app.
+// "999+" (see notify.Store's own doc comment on why the real count can
+// never actually reach it) is left unpadded — already the widest
+// value this can ever show, nothing to align it against.
+func notifyBadgeCount(unread int) string {
+	if unread > 999 {
+		return "999+"
+	}
+	count := strconv.Itoa(unread)
+	switch len(count) {
+	case 1:
+		return " " + count + " "
+	case 2:
+		return " " + count
+	default:
+		return count
+	}
+}
 
 // notifyBadgeText renders the status bar's own unread-messages badge:
-// notifyBadgeGlyph plus a count, capped at "999+" display (see
-// notify.Store's own doc comment on why the real count itself can
-// never actually reach that) — theme.MutedTextColor at zero, so it
-// doesn't compete for attention with the segments around it when
-// there's nothing to see, theme.WarningText once there's at least one
-// unread Message, the same "something here wants a look" role
-// WarningText already carries everywhere else in this app.
+// a plain "Msgs" label — deliberately no glyph of its own (an envelope
+// was tried first and reverted: that icon is reserved for
+// feature_ideas.txt's own planned "0f. E-Mail-Client-Integration"
+// instead, and the two must never be confused for one another) —
+// followed by notifyBadgeCount in its own real button chrome
+// (theme.ButtonBackground, the same background every clickable key
+// highlight in this app already uses — see highlightKey/renderHintKey),
+// so the count itself reads as the actual click target, not just
+// colored text. theme.MutedTextColor at zero, so it doesn't compete
+// for attention with the segments around it when there's nothing to
+// see, theme.WarningText once there's at least one unread Message, the
+// same "something here wants a look" role WarningText already carries
+// everywhere else in this app.
 func notifyBadgeText(unread int, theme config.ResolvedTheme) string {
-	count := strconv.Itoa(unread)
-	if unread > 999 {
-		count = "999+"
-	}
-	color := theme.MutedTextColor
+	fg := theme.MutedTextColor
 	if unread > 0 {
-		color = theme.WarningText
+		fg = theme.WarningText
 	}
-	return wrapColor(color, notifyBadgeGlyph+" "+count)
+	return fmt.Sprintf("Msgs [%s:%s]%s[-:-:-]", colorTag(fg), colorTag(theme.ButtonBackground), notifyBadgeCount(unread))
 }
 
 // captureStatusBarMouse routes a click on the notify badge (see

@@ -55,13 +55,20 @@ const (
 // removing a row looks like" visual language, not a fresh one.
 const messagesCloseGlyph = sessionsCloseGlyph
 
-// messagesColSelectWidth/messagesColNewWidth/messagesColTimeWidth/
-// messagesColCloseWidth are this screen's own four fixed-width
-// columns' own padding floor — messagesMessageColumnWidth is what
-// turns these into the Message column's own real, computed width.
+// messagesColSelectWidth/messagesColNewWidth are deliberately just the
+// glyph's own single-column width, no padding — per the user's own
+// explicit request: the selection/focus highlight tview draws spans a
+// cell's own full column width, so a padded " ○ " cell (the original
+// shape) highlighted three columns for what reads as one small circle,
+// wider than the actual click target looks. A bare "○"/"●" keeps the
+// highlight hugging the glyph itself. messagesColTimeWidth/
+// messagesColCloseWidth are this screen's own remaining two
+// fixed-width columns' own padding floor — messagesMessageColumnWidth
+// is what turns all four into the Message column's own real, computed
+// width.
 const (
-	messagesColSelectWidth = 3  // " ○ "
-	messagesColNewWidth    = 3  // " ○ "
+	messagesColSelectWidth = 1  // "○"
+	messagesColNewWidth    = 1  // "○"
 	messagesColTimeWidth   = 19 // "2006-01-02 15:04:05"
 	messagesColCloseWidth  = 3  // " ✕ "
 )
@@ -149,7 +156,21 @@ func (r *Root) newMessagesScreen() {
 	r.messagesTable.SetFixed(1, 0)
 	r.messagesTable.SetInputCapture(r.captureMessagesKey)
 	r.messagesTable.SetSelectedFunc(func(row, column int) { r.activateMessagesCell(row, column) })
-	r.messagesTable.SetSelectionChangedFunc(func(row, column int) { r.armMessagesDwell(row) })
+	// Re-arms the dwell timer only when the row itself actually changes
+	// — see armMessagesDwell's own doc comment on why a bare column move
+	// within the same row (tview's own SelectionChangedFunc fires for
+	// either) must never restart it: a real, reported bug otherwise had
+	// Left/Right within an already-unread row (e.g. reaching the Neu
+	// column to mark it unread by hand) re-arm a fresh timer that then
+	// silently marked it read again a moment later, undoing the very
+	// action the user just took.
+	r.messagesTable.SetSelectionChangedFunc(func(row, column int) {
+		if row == r.messagesDwellRow {
+			return
+		}
+		r.messagesDwellRow = row
+		r.armMessagesDwell(row)
+	})
 
 	r.messagesTitleBar = newPlainTitleBar("Messages")
 
@@ -172,6 +193,11 @@ func (r *Root) newMessagesScreen() {
 // can arrive from a background trigger at any moment, including while
 // this screen isn't open.
 func (r *Root) openMessages() {
+	// Reset so the first row the cursor lands on this session always
+	// arms fresh — otherwise a reopen landing back on the exact row
+	// index a previous session already armed the dwell timer for (see
+	// messagesDwellRow's own doc comment) would wrongly skip it.
+	r.messagesDwellRow = 0
 	r.reloadMessages()
 	r.showOverlay(messagesPage, r.messagesLayout)
 }
@@ -229,8 +255,8 @@ func (r *Root) renderMessages() {
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
 	}
-	header(messagesColSelect, padRight("", messagesColSelectWidth))
-	header(messagesColNew, padRight("", messagesColNewWidth))
+	header(messagesColSelect, "")
+	header(messagesColNew, "")
 	header(messagesColTime, padRight("Time", messagesColTimeWidth))
 	header(messagesColMessage, "Message")
 	header(messagesColClose, padRight("", messagesColCloseWidth))
@@ -261,13 +287,13 @@ func (r *Root) renderMessages() {
 // ceiling" rule (see messagesMessageColumnWidth's own doc comment for
 // why), colored by its own Level throughout (messagesLevelColor).
 func (r *Root) renderMessagesRow(row int, m notify.Message) {
-	selectCell := tview.NewTableCell(padRight(checkboxText(r.messagesSelected[m.ID]), messagesColSelectWidth)).
+	selectCell := tview.NewTableCell(checkboxText(r.messagesSelected[m.ID])).
 		SetTextColor(r.theme.Text).
 		SetSelectable(true).
 		SetClickedFunc(r.clickMessagesCell(row, messagesColSelect))
 	r.messagesTable.SetCell(row, messagesColSelect, selectCell)
 
-	newCell := tview.NewTableCell(padRight(checkboxText(!m.Read), messagesColNewWidth)).
+	newCell := tview.NewTableCell(checkboxText(!m.Read)).
 		SetTextColor(r.theme.Text).
 		SetSelectable(true).
 		SetClickedFunc(r.clickMessagesCell(row, messagesColNew))
@@ -347,7 +373,7 @@ func (r *Root) toggleMessageCheckboxRow(row int) {
 	}
 	r.messagesSelected[m.ID] = !r.messagesSelected[m.ID]
 	r.messagesTable.SetCell(row, messagesColSelect,
-		tview.NewTableCell(padRight(checkboxText(r.messagesSelected[m.ID]), messagesColSelectWidth)).
+		tview.NewTableCell(checkboxText(r.messagesSelected[m.ID])).
 			SetTextColor(r.theme.Text).
 			SetSelectable(true).
 			SetClickedFunc(r.clickMessagesCell(row, messagesColSelect)))

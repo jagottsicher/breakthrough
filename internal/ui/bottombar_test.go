@@ -1767,10 +1767,33 @@ func TestRefreshActivePanelHeaderGlowLeavesFilterButtonAloneWhenNoFilterIsActive
 	}
 }
 
+// TestNotifyBadgeCountPadsToAFixedThreeColumns pins the user's own
+// explicit choice: a single digit centered, two right-aligned, three
+// as-is — so the badge's own width barely shifts as the count changes
+// digit count. "999+" (the overflow display) is left unpadded, already
+// wider than the fixed field.
+func TestNotifyBadgeCountPadsToAFixedThreeColumns(t *testing.T) {
+	tests := []struct {
+		unread int
+		want   string
+	}{
+		{0, " 0 "},
+		{3, " 3 "},
+		{23, " 23"},
+		{123, "123"},
+		{1500, "999+"},
+	}
+	for _, tt := range tests {
+		if got := notifyBadgeCount(tt.unread); got != tt.want {
+			t.Errorf("notifyBadgeCount(%d) = %q, want %q", tt.unread, got, tt.want)
+		}
+	}
+}
+
 func TestNotifyBadgeTextAtZeroIsMuted(t *testing.T) {
 	got := notifyBadgeText(0, config.DefaultTheme().Resolve())
-	if !strings.Contains(got, "0") {
-		t.Errorf("got %q, want it to show 0", got)
+	if !strings.Contains(got, "Msgs") {
+		t.Errorf("got %q, want the plain \"Msgs\" label, no glyph", got)
 	}
 	if !strings.Contains(got, colorTag(config.DefaultTheme().Resolve().MutedTextColor)) {
 		t.Errorf("got %q, want MutedTextColor at zero unread", got)
@@ -1785,6 +1808,17 @@ func TestNotifyBadgeTextWithUnreadUsesWarningColor(t *testing.T) {
 	}
 	if !strings.Contains(got, colorTag(theme.WarningText)) {
 		t.Errorf("got %q, want WarningText once there's at least one unread", got)
+	}
+}
+
+// TestNotifyBadgeTextUsesButtonBackgroundForTheCount pins the user's
+// own explicit request: the count itself reads as real button chrome,
+// not just colored text.
+func TestNotifyBadgeTextUsesButtonBackgroundForTheCount(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+	got := notifyBadgeText(3, theme)
+	if !strings.Contains(got, colorTag(theme.ButtonBackground)) {
+		t.Errorf("got %q, want theme.ButtonBackground behind the count", got)
 	}
 }
 

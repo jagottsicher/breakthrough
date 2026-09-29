@@ -204,6 +204,27 @@ func TestApplyMessagesDwellMarksReadOnlyForTheArmedGeneration(t *testing.T) {
 	}
 }
 
+// TestColumnMoveWithinSameRowDoesNotRearmDwell pins a real, reported
+// bug: reaching the Neu column via Left/Right to mark an already-read
+// message unread by hand, then leaving the cursor sitting there, used
+// to have the dwell timer silently mark it read again a moment later —
+// because tview's own SetSelectionChangedFunc fires for a bare column
+// move within the same row too, and the wrapping in newMessagesScreen
+// used to re-arm on every call, not just a real row change.
+func TestColumnMoveWithinSameRowDoesNotRearmDwell(t *testing.T) {
+	r := newTestRootForMessages(t, 1)
+	r.notify.SetRead(r.messagesList[0].ID, true)
+	r.messagesTable.Select(1, messagesColMessage) // lands on the row, arms (then skips: already read)
+	generationAfterFirstLanding := r.messagesDwellGeneration
+
+	r.messagesTable.Select(1, messagesColNew) // column-only move, same row
+
+	if r.messagesDwellGeneration != generationAfterFirstLanding {
+		t.Errorf("a column-only move within the same row re-armed the dwell timer (generation %d -> %d)",
+			generationAfterFirstLanding, r.messagesDwellGeneration)
+	}
+}
+
 func TestCloseMessagesHidesTheOverlay(t *testing.T) {
 	r := newTestRootForMessages(t, 1)
 
