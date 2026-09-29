@@ -133,6 +133,12 @@ func plainCommands() []plainCommand {
 		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
 		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
+		// Direct top-level key for the connection dropdown — per the
+		// user's own explicit request, alongside the existing "gc" chord
+		// and the header's own "@" button (see connectionmenu.go and
+		// buildHeaderSpans), not a replacement for either: same action,
+		// three ways to reach it.
+		{key: '@', label: "Connect…", quick: true, short: "Connect", action: func(r *Root) { r.openConnectionMenu() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
 		{key: 'w', label: "Close tab", action: func(r *Root) { r.closeCurrentTab() }},

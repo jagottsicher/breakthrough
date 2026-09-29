@@ -225,6 +225,21 @@ func TestChordStartsAndResolves(t *testing.T) {
 	}
 }
 
+// TestPlainKeyAtSignOpensConnectionMenu pins "@" — a direct, top-level
+// key for the connection dropdown, per the user's own explicit
+// request, alongside the existing "gc" chord and the header's own "@"
+// button (see connectionmenu.go) rather than replacing either.
+func TestPlainKeyAtSignOpensConnectionMenu(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	if !root.HandlePlainKey(runeEvent('@')) {
+		t.Fatal("'@' should have been consumed")
+	}
+	if root.activePage != connectionMenuPage {
+		t.Errorf("activePage = %q, want the connection menu", root.activePage)
+	}
+}
+
 // TestChordGoUpNavigatesToParent pins "gu" — the user's own explicit
 // request, added alongside "gp"/"gn" below: mirrors actionUp (the
 // header row's own "↑" button), one level up from wherever the panel

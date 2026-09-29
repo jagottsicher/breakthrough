@@ -40,7 +40,7 @@ var helpText = strings.TrimLeft(`
   r   Rename            e   Edit                   k  Directory size
   f   Find                   M  Image metadata
   n   New tab           w   Close tab             l   Look
-  s   Split view                                  t   Tab switcher
+  s   Split view         @  Connect…              t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
                                                    +/- Select/deselect
                                                        by pattern
@@ -218,8 +218,9 @@ var helpText = strings.TrimLeft(`
   already uses, so holding an arrow key down through a long list of
   directories costs nothing.
 
-  The "@" button right before the path (or "gc") opens a dropdown to
-  browse another machine over SFTP — muted for a local panel, a slow
+  The "@" key (also the header's own "@" button right before the path,
+  or "gc") opens a dropdown to browse another machine over SFTP —
+  muted for a local panel, a slow
   pulse toward a lighter green and back (never darker than at rest)
   once connected. + New connection plus recent history in a table like
   the tab switcher (bright green = active here, matte dimmer green =
