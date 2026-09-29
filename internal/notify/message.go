@@ -1,6 +1,9 @@
 package notify
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Level is how a notification's own trigger resolved — mirrors the
 // ✔/✘ binary this project's own Sessions screen already uses for a
@@ -16,6 +19,38 @@ const (
 	LevelSuccess
 	LevelError
 )
+
+// String renders l as the lowercase word Save writes to the persisted
+// JSON file (see persist.go) and ParseLevel reads back — a real,
+// human-readable word there rather than Level's own raw underlying
+// int, per the user's own explicit request for an easily readable
+// persistence format.
+func (l Level) String() string {
+	switch l {
+	case LevelSuccess:
+		return "success"
+	case LevelError:
+		return "error"
+	default:
+		return "info"
+	}
+}
+
+// ParseLevel reads back String's own output, case-insensitively —
+// defaulting to LevelInfo for anything unrecognized (a hand-edited
+// file, a future value an older build doesn't know yet) rather than
+// failing outright, the same "a bad value degrades to the safe
+// default" principle this app's own config parsing already follows.
+func ParseLevel(s string) Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "success":
+		return LevelSuccess
+	case "error":
+		return LevelError
+	default:
+		return LevelInfo
+	}
+}
 
 // Category groups a Message by which trigger produced it — one
 // constant per real, wired-up call site in internal/ui, the same

@@ -22,6 +22,16 @@ import (
 
 const notifyToastPage = "notify-toast"
 
+// notifyPersistPath is notify.DefaultPath, indirected through a
+// package-level var the same way loadInitialSettings/userConfigFilePath
+// (theme.go) already are — so a test can point NewRoot's own
+// notify.NewWithPersistence call somewhere isolated (or, as
+// TestMain/bottombar_test.go's own override does by default, disable
+// persistence outright by returning "") instead of every one of this
+// package's hundreds of NewRoot calls touching whatever real file
+// session.StateDir resolves to on the machine running `go test`.
+var notifyPersistPath = notify.DefaultPath
+
 // notifyGlyph/notifyColor render one Message's own Level — the same
 // glyph/color pattern Sessions' own Status column (✔/✘, green/red —
 // see sessionsAttachedGlyph/sessionsStatusColor) and the Firewall

@@ -213,9 +213,10 @@ type Root struct {
 	// moment their status-bar line disappears. Never nil (see NewRoot):
 	// internal/notify's own Store, unlike activityLog, has no "off"
 	// setting to honor, so every call site reaches for it
-	// unconditionally. No UI reads from it yet — that starts once a
-	// later stage of feature_ideas.txt's own "3a. Benachrichtigungen"
-	// lands.
+	// unconditionally. Built via NewWithPersistence, not New — see
+	// internal/notify's own persist.go — so a Message also survives
+	// past this process exiting, restored the next time breakthrough
+	// starts, up to its own 999-entry cap.
 	notify *notify.Store
 
 	// settingOrigins says, per config key, which tier the value
@@ -1773,7 +1774,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		colorSchemes:   colorSchemes,
 		settingOrigins: settingOrigins,
 		theme:          theme,
-		notify:         notify.New(),
+		notify:         notify.NewWithPersistence(notifyPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.

@@ -20,6 +20,13 @@
 // instead). It has no dependency on internal/config, tview, or
 // internal/ui, so it's fully unit-testable without a real terminal
 // run; internal/ui is what actually calls Push at each real trigger's
-// own completion and, in a later stage, Subscribes to render what
-// arrives.
+// own completion and Subscribes to render what arrives.
+//
+// Optionally persisted across restarts too (see persist.go): a
+// NewWithPersistence Store loads from, and saves back to, a plain,
+// human-readable JSON file under the XDG State directory — the ring
+// buffer's own hard cap keeps that file small regardless of how long a
+// session runs. Best-effort throughout; a missing or malformed file,
+// or a failed write, degrades silently to an ordinary in-memory Store
+// rather than interrupting startup or a real trigger's own completion.
 package notify
