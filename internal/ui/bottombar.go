@@ -383,20 +383,19 @@ func (r *Root) buildStatusBar() string {
 	r.notifyBadgeSpan = buttonBarSpan{startCol: badgeStart, endCol: col, run: func(r *Root) { r.openMessages() }}
 	sep()
 
-	// The mail badge — shown only when a Maildir path is configured
-	// (settings.MailMaildirPath), silently omitted otherwise or on any
-	// read error (missing/unreadable path), the same "just show one
-	// less segment" degradation kernel version/uptime/load already
-	// have. Clicking it launches the configured mail client, the same
-	// action "ge" already reaches.
+	// The mail badge — shown once a mailbox actually resolves (see
+	// mailBadgeCount: an explicit Maildir or mbox path, or the
+	// auto-detected system mailbox), silently omitted otherwise or on
+	// any read error, the same "just show one less segment"
+	// degradation kernel version/uptime/load already have. Clicking it
+	// launches the configured mail client, the same action "ge"
+	// already reaches.
 	r.mailBadgeSpan = buttonBarSpan{}
-	if r.settings.MailMaildirPath != "" {
-		if count, err := mailUnreadCount(r.settings.MailMaildirPath); err == nil {
-			mailBadgeStart := col
-			write(mailBadgeText(count, r.theme))
-			r.mailBadgeSpan = buttonBarSpan{startCol: mailBadgeStart, endCol: col, run: func(r *Root) { r.openMail() }}
-			sep()
-		}
+	if count, ok := r.mailBadgeCount(); ok {
+		mailBadgeStart := col
+		write(mailBadgeText(count, r.theme))
+		r.mailBadgeSpan = buttonBarSpan{startCol: mailBadgeStart, endCol: col, run: func(r *Root) { r.openMail() }}
+		sep()
 	}
 
 	if r.settings.StatusBarShowMouse {

@@ -376,7 +376,21 @@ type Settings struct {
 	// happens to exist risks reading the wrong mailbox, or one the
 	// user never intended this to touch at all — an explicit, opt-in
 	// path only.
-	MailMaildirPath   string
+	MailMaildirPath string
+
+	// MailMboxPath is an explicit override for the mbox mailbox the
+	// status bar's own mail badge reads from (see
+	// internal/mail.MboxSource) — "" (the default) auto-detects the
+	// current user's own system mailbox instead (internal/mail.
+	// DefaultMboxPath: /var/mail/<user> or /var/spool/mail/<user>,
+	// whichever exists) — unlike Maildir's own several genuinely
+	// ambiguous candidate locations, this is a single, well-defined
+	// POSIX convention per user, real detection rather than a guess,
+	// so auto-detecting it by default (rather than requiring explicit
+	// opt-in the way MailMaildirPath does) is the right default here.
+	// MailMaildirPath, if also set, wins outright — a mailbox can only
+	// be one format or the other.
+	MailMboxPath      string
 	RsyncCopyContents bool
 	RsyncArchive      bool
 	RsyncCompress     bool
@@ -502,6 +516,7 @@ func DefaultSettings() Settings {
 
 		MailClient:      "",
 		MailMaildirPath: "",
+		MailMboxPath:    "",
 
 		RsyncCopyContents: false,
 		RsyncArchive:      true,
@@ -653,6 +668,8 @@ func (s *Settings) apply(key, value string) error {
 		s.MailClient = value
 	case "mail_maildir_path":
 		s.MailMaildirPath = value
+	case "mail_mbox_path":
+		s.MailMboxPath = value
 	case "rsync_copy_contents":
 		return parseBool(&s.RsyncCopyContents)
 	case "rsync_archive":
