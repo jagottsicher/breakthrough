@@ -305,6 +305,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// "Generate key" form (see sshkeysgenerate.go/applySSHKeysGenerateTheme).
 	r.applySSHKeysTheme(theme)
 	r.applySSHKeysGenerateTheme(theme)
+	r.applySSHKeysCopyTheme(theme)
 
 	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
 	r.applyActivityLogTheme(theme)

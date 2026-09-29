@@ -1213,6 +1213,31 @@ there in that same terminal once confirmed — the only way to set a
 passphrase that never ends up sitting in this process's own argument
 list or a shell's history.
 
+`c` opens a form — Host, Port, User, typed by hand or filled in from an
+already-open remote tab via "Pick tab…" — for the currently selected key
+pair, and installs its own public half into that remote user's
+`authorized_keys`, the same end result `ssh-copy-id` itself produces:
+
+- Never a duplicate line — an exact match is checked for first.
+- The existing `authorized_keys` is backed up to a timestamped copy
+  right beside it before anything is appended.
+- `~/.ssh` and `authorized_keys` both get the strict permissions
+  (`700`/`600`) `sshd` itself requires — a key installed with looser
+  ones is silently refused.
+
+The public key is never reconstructed from the parsed row — it's read
+byte-for-byte from the actual `.pub` file, exactly as it sits on disk.
+The exact `ssh` command is always shown for confirmation before it runs,
+via a real, attached terminal. Right after a successful install, a
+second, quick, non-interactive check follows automatically: whether the
+new key *alone* — `-o IdentitiesOnly=yes`, never falling back to some
+other identity an already-running agent happens to offer — now actually
+gets in with no password or passphrase prompt at all (`-o
+BatchMode=yes`). The result (confirmed working, or not yet — e.g. the
+private key still needs to be unlocked or loaded into the agent) is
+reported plainly rather than just assuming the install succeeding also
+means it works.
+
 ## Sed Replace
 
 `E`, or the context menu's "sed". Runs a real `sed(1)`

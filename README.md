@@ -768,7 +768,11 @@ ssh-agent — plus a Generate key form (`a`) that builds the exact
 `ssh-keygen` command for a new pair and runs it through a real
 terminal, deliberately with no passphrase field of its own (`ssh-keygen`
 prompts for one interactively instead, so it never sits in a process
-argument list or shell history), and real
+argument list or shell history), a Copy to server form (`c`, the same
+end result `ssh-copy-id` produces — never a duplicate, existing
+`authorized_keys` backed up first, strict permissions set explicitly —
+followed automatically by a non-interactive check that the new key
+alone now actually works passwordless), and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

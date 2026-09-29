@@ -548,6 +548,7 @@ var helpText = strings.TrimLeft(`
   Up / Down         Move between key pairs
   r                 Re-scan ~/.ssh and re-check the running ssh-agent
   a                 Generate a new key pair (see below)
+  c                 Copy the selected key pair to a server (see below)
   Escape            Close the SSH Keys screen
 
   Name/Type/Fingerprint/Comment come from parsing the actual key files
@@ -581,6 +582,19 @@ var helpText = strings.TrimLeft(`
   one interactively right there in that same terminal — the only way to
   set one that never ends up sitting in this process's own argv or a
   shell's history.
+
+  "c" opens a form (Host, Port, User — typed by hand, or filled in from
+  an already-open remote tab via "Pick tab…") for the currently selected
+  key pair, and installs its own public half into that user's remote
+  authorized_keys, the same end result ssh-copy-id itself produces:
+  never a duplicate line, the existing file backed up first, and the
+  permissions sshd itself requires set explicitly. The exact ssh command
+  is always shown for confirmation before it runs, via a real, attached
+  terminal — whichever auth the target needs (agent, a passphrase, a
+  password) needs one. Right after a successful install, this also runs
+  a second, quick, non-interactive check that the new key alone — not
+  some other identity an agent happens to already offer — now actually
+  gets in with no prompt at all, and reports that result plainly.
 
 [::b]Split view ("s")[::-]
 

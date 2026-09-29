@@ -81,6 +81,7 @@ func sshKeysHintEntries() []listHintEntry {
 		}, label: "move"},
 		hintKey("r", "refresh", func(r *Root) { r.reloadSSHKeys() }),
 		hintKey("a", "generate key", func(r *Root) { r.openSSHKeysGenerate() }),
+		hintKey("c", "copy to server", func(r *Root) { r.openSSHKeysCopy() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeSSHKeys() }),
 	}
 }
@@ -325,6 +326,10 @@ func (r *Root) captureSSHKeysKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'a' {
 		r.openSSHKeysGenerate()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'c' {
+		r.openSSHKeysCopy()
 		return nil
 	}
 	return event

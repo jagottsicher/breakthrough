@@ -419,6 +419,26 @@ type Root struct {
 	sshKeysGenerateFilenameText string
 	sshKeysGenerateCommentText  string
 
+	// sshKeysCopy* make up the SSH Keys screen's own "Copy to server"
+	// form ("c", see sshkeyscopy.go and feature_ideas.txt's own
+	// SSH-Key-Verwaltung Stufe 3) — installs the selected key pair's own
+	// public half into a remote user's authorized_keys. sshKeysCopyPick*
+	// reuses r.picker (see openSSHKeysCopyTabPicker), the same shared,
+	// repopulated-per-open List openRsyncTabPicker's own picker already
+	// establishes.
+	sshKeysCopyLayout    *tview.Flex
+	sshKeysCopyTitleBar  *tview.TextView
+	sshKeysCopyForm      *tview.Form
+	sshKeysCopyPickBtn   *tview.Button
+	sshKeysCopyStatus    *tview.TextView
+	sshKeysCopyButtons   *tview.Flex
+	sshKeysCopyCancelBtn *tview.Button
+	sshKeysCopyGoBtn     *tview.Button
+	sshKeysCopyKeyName   string
+	sshKeysCopyHostText  string
+	sshKeysCopyPortText  string
+	sshKeysCopyUserText  string
+
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
@@ -1911,6 +1931,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.sshKeysGenerateButtons = r.newSSHKeysGenerateButtons()
 	r.sshKeysGenerateLayout = r.newSSHKeysGenerateLayout()
 
+	// The SSH Keys screen's own "Copy to server" form (see
+	// sshkeyscopy.go).
+	r.sshKeysCopyForm = r.newSSHKeysCopyForm()
+	r.sshKeysCopyPickBtn = r.newSSHKeysCopyPickButton()
+	r.sshKeysCopyButtons = r.newSSHKeysCopyButtons()
+	r.sshKeysCopyLayout = r.newSSHKeysCopyLayout()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -2057,6 +2084,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// Firewall/Sessions screens' own comments above give.
 	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
 	r.AddPage(sshKeysGeneratePage, r.sshKeysGenerateLayout, false, false)
+	r.AddPage(sshKeysCopyPage, r.sshKeysCopyLayout, false, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
