@@ -764,7 +764,11 @@ hands the real terminal to the session — screen `-D -r`, tmux `attach
 you detach or it ends), an SSH Keys screen (`jk`) inventorying local key
 pairs under `~/.ssh` — algorithm/size, passphrase protection, file
 permissions, and whether each is currently loaded in the running
-ssh-agent — and real
+ssh-agent — plus a Generate key form (`a`) that builds the exact
+`ssh-keygen` command for a new pair and runs it through a real
+terminal, deliberately with no passphrase field of its own (`ssh-keygen`
+prompts for one interactively instead, so it never sits in a process
+argument list or shell history), and real
 Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
 zstd. Progress bars for long-running file operations are what's
 planned next — see

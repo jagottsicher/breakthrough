@@ -541,12 +541,13 @@ var helpText = strings.TrimLeft(`
 
 [::b]SSH Keys screen ("jk")[::-]
 
-  A read-only inventory of this user's own local SSH key pairs under
-  ~/.ssh — Stage 1 of a larger, staged feature; nothing here generates,
-  edits, or copies a key yet.
+  An inventory of this user's own local SSH key pairs under ~/.ssh, plus
+  a form to generate a new one. Copying a public key to a remote server
+  for passwordless access is later work, not part of this screen yet.
 
   Up / Down         Move between key pairs
   r                 Re-scan ~/.ssh and re-check the running ssh-agent
+  a                 Generate a new key pair (see below)
   Escape            Close the SSH Keys screen
 
   Name/Type/Fingerprint/Comment come from parsing the actual key files
@@ -567,6 +568,19 @@ var helpText = strings.TrimLeft(`
   mouse-clickable equivalent to "r" — a key can be generated, removed,
   loaded, or unloaded by something else entirely while this screen is
   open.
+
+  "a" opens a form (Algorithm — ed25519/rsa/ecdsa, never dsa — a
+  key-size/curve field for rsa/ecdsa only, Filename, Comment) and builds
+  the exact ssh-keygen command that would create it, always into ~/.ssh
+  under the filename you choose — never raw syntax to type yourself, and
+  never a path outside ~/.ssh. A filename already in use (either half of
+  the pair) is refused rather than silently overwritten. The exact
+  command is always shown for confirmation before it runs, via a real,
+  attached terminal. There is deliberately no passphrase field: the
+  confirmed command never carries -N, so ssh-keygen itself prompts for
+  one interactively right there in that same terminal — the only way to
+  set one that never ends up sitting in this process's own argv or a
+  shell's history.
 
 [::b]Split view ("s")[::-]
 

@@ -1153,11 +1153,10 @@ in principle, but needs its own connection-reuse design first.
 
 ## SSH Keys
 
-`j` then `k`. A read-only, full-screen inventory of this user's own
-local SSH key pairs under `~/.ssh` — Stage 1 of a larger, staged
-feature; generating a new key pair and copying one to a remote server's
-`authorized_keys` for passwordless access are later stages, not part of
-this screen yet.
+`j` then `k`. A full-screen inventory of this user's own local SSH key
+pairs under `~/.ssh`, plus a form to generate a new one. Copying a
+public key to a remote server's `authorized_keys` for passwordless
+access is later work, not part of this screen yet.
 
 Every key is parsed with this app's own already-vendored
 `golang.org/x/crypto/ssh` (already a dependency for the SFTP client
@@ -1196,6 +1195,23 @@ the screen. The reload glyph (⭯) in the title bar's own top-right corner
 is a mouse-clickable equivalent to `r` — a key can be generated,
 removed, loaded, or unloaded by something else entirely while this
 screen is open.
+
+`a` opens a form — Algorithm (`ed25519`/`rsa`/`ecdsa`, never `dsa`), a
+key-size/curve field for `rsa`/`ecdsa` only, Filename, and an optional
+Comment — and builds the exact `ssh-keygen` command that would create
+it, always into `~/.ssh` under the filename you choose, never raw
+syntax typed yourself and never a path outside `~/.ssh`. Changing
+Algorithm updates Filename to match (`id_ed25519` → `id_rsa`) as long as
+you haven't already typed one of your own. A filename already taken by
+either half of an existing pair is refused outright rather than
+silently overwritten. The exact command is always shown for
+confirmation before it runs, via a real, attached terminal.
+
+There is deliberately no passphrase field: the confirmed command never
+carries `-N`, so `ssh-keygen` itself prompts for one interactively right
+there in that same terminal once confirmed — the only way to set a
+passphrase that never ends up sitting in this process's own argument
+list or a shell's history.
 
 ## Sed Replace
 

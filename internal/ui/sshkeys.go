@@ -80,6 +80,7 @@ func sshKeysHintEntries() []listHintEntry {
 			{"↓", simulateKeyOnFocused(tcell.KeyDown)},
 		}, label: "move"},
 		hintKey("r", "refresh", func(r *Root) { r.reloadSSHKeys() }),
+		hintKey("a", "generate key", func(r *Root) { r.openSSHKeysGenerate() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeSSHKeys() }),
 	}
 }
@@ -320,6 +321,10 @@ func (r *Root) captureSSHKeysKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
 		r.reloadSSHKeys()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'a' {
+		r.openSSHKeysGenerate()
 		return nil
 	}
 	return event

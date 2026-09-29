@@ -398,6 +398,27 @@ type Root struct {
 	sshKeysErr       error
 	sshKeysAgent     map[string]bool
 
+	// sshKeysGenerate* make up the SSH Keys screen's own "Generate key"
+	// form ("a", see sshkeysgenerate.go and feature_ideas.txt's own
+	// SSH-Key-Verwaltung Stufe 2) — Algorithm is a dropdown, so the form
+	// is rebuilt fresh on every open and on every Algorithm change (see
+	// renderSSHKeysGenerateForm), the same "Clear(true) then
+	// AddFormItem" shape newFirewallAddRuleForm's own doc comment
+	// establishes. The plain sshKeysGenerateXxx fields below mirror the
+	// form's own current values, the same "value mirror" shape
+	// duplicateStrategy and friends already establish.
+	sshKeysGenerateLayout       *tview.Flex
+	sshKeysGenerateTitleBar     *tview.TextView
+	sshKeysGenerateForm         *tview.Form
+	sshKeysGenerateStatus       *tview.TextView
+	sshKeysGenerateButtons      *tview.Flex
+	sshKeysGenerateCancelBtn    *tview.Button
+	sshKeysGenerateGenerateBtn  *tview.Button
+	sshKeysGenerateAlgorithm    string
+	sshKeysGenerateBits         int
+	sshKeysGenerateFilenameText string
+	sshKeysGenerateCommentText  string
+
 	// The Activity Log screen (see activitylogscreen.go) — a fifth
 	// full-screen catalog, browsing the real activity log file (see
 	// internal/activitylog) rather than a second, parallel recording of
@@ -1884,6 +1905,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// full-screen catalog, same build-once/repopulate-on-open shape.
 	r.newSSHKeysScreen()
 
+	// The SSH Keys screen's own "Generate key" form (see
+	// sshkeysgenerate.go).
+	r.sshKeysGenerateForm = r.newSSHKeysGenerateForm()
+	r.sshKeysGenerateButtons = r.newSSHKeysGenerateButtons()
+	r.sshKeysGenerateLayout = r.newSSHKeysGenerateLayout()
+
 	// The Activity Log screen (see activitylogscreen.go/openActivityLog)
 	// — a fifth full-screen catalog, same build-once/repopulate-on-open
 	// shape.
@@ -2029,6 +2056,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall/Sessions screens' own comments above give.
 	r.AddPage(sshKeysPage, r.sshKeysLayout, true, false)
+	r.AddPage(sshKeysGeneratePage, r.sshKeysGenerateLayout, false, false)
 	// resize=true: the Activity Log screen deliberately fills the whole
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
