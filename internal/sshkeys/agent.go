@@ -30,7 +30,7 @@ func AgentFingerprints() map[string]bool {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	keys, err := agent.NewClient(conn).List()
 	if err != nil {

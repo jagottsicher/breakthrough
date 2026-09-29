@@ -23,7 +23,7 @@ func startTestAgent(t *testing.T, privKey ed25519.PrivateKey) (socketPath, finge
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	t.Cleanup(func() { listener.Close() })
+	t.Cleanup(func() { _ = listener.Close() })
 
 	keyring := agent.NewKeyring()
 	if err := keyring.Add(agent.AddedKey{PrivateKey: privKey}); err != nil {
@@ -42,7 +42,7 @@ func startTestAgent(t *testing.T, privKey ed25519.PrivateKey) (socketPath, finge
 			if err != nil {
 				return
 			}
-			go agent.ServeAgent(keyring, conn)
+			go func() { _ = agent.ServeAgent(keyring, conn) }()
 		}
 	}()
 

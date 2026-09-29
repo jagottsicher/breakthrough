@@ -152,9 +152,10 @@ func (r *Root) renderSSHKeysGenerateForm() {
 			r.sshKeysGenerateFilenameText = defaultSSHKeysGenerateFilename(algorithm)
 		}
 		r.sshKeysGenerateAlgorithm = algorithm
-		if algorithm == "rsa" {
+		switch algorithm {
+		case "rsa":
 			r.sshKeysGenerateBits = RSABitsChoices[len(RSABitsChoices)-1]
-		} else if algorithm == "ecdsa" {
+		case "ecdsa":
 			r.sshKeysGenerateBits = ECDSABitsChoices[0]
 		}
 		r.renderSSHKeysGenerateForm()
