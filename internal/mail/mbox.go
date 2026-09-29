@@ -48,18 +48,21 @@ func (m MboxSource) Name() string {
 	return m.Path
 }
 
-// UnreadCount counts messages with no "Status:" header at all — the
-// classic BSD mail semantics real mail/mailx/procmail/exim already
-// follow (verified directly against a real, live mailbox's own
-// content, not assumed): a message with no Status header has never
-// been seen by any mail reader at all ("new"); "Status: O" ("old")
-// means a mail session has already listed it at least once, even if
-// no one actually opened it — the overwhelming majority of a
-// long-lived mailbox's own messages read this way, confirmed against
-// real data — and only "Status: R" ("read") means it was actually
-// opened. Only the true "never seen at all" state counts here, the
-// same distinction the "N" flag in mail(1)'s own message listing
-// already draws, matching what a user actually means by "new mail".
+// UnreadCount counts every message whose "Status:" header — if it has
+// one at all — doesn't contain "R": real mail/mailx/procmail/exim all
+// write "Status: O" ("old") the moment any mail session has so much as
+// listed a message, whether or not anyone actually opened it, and only
+// ever add "R" ("read") once it was — verified directly against a
+// real, live mailbox's own content, not assumed: 825 of 826 real
+// messages there carried "Status: O" with no "R", and the person
+// reading that mailbox considered every one of those 825 still unread.
+// A message with no Status header at all (truly never seen by
+// anything) counts the same way, for the same reason. An earlier draft
+// of this method counted only that last, narrower case ("no header at
+// all") — technically closer to the classic BSD "N" (new) flag as
+// mail(1) itself defines it, but not what "unread mail" actually means
+// to a real reader of a real mailbox; corrected after checking against
+// the real data instead of the terminology alone.
 func (m MboxSource) UnreadCount() (int, error) {
 	f, err := os.Open(m.Path)
 	if err != nil {
@@ -73,10 +76,10 @@ func (m MboxSource) UnreadCount() (int, error) {
 	unread := 0
 	inMessage := false
 	inHeaders := false
-	hasStatusHeader := false
+	hasReadStatus := false
 
 	finishMessage := func() {
-		if inMessage && !hasStatusHeader {
+		if inMessage && !hasReadStatus {
 			unread++
 		}
 	}
@@ -85,7 +88,7 @@ func (m MboxSource) UnreadCount() (int, error) {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "From ") {
 			finishMessage()
-			inMessage, inHeaders, hasStatusHeader = true, true, false
+			inMessage, inHeaders, hasReadStatus = true, true, false
 			continue
 		}
 		if !inMessage || !inHeaders {
@@ -95,8 +98,8 @@ func (m MboxSource) UnreadCount() (int, error) {
 			inHeaders = false
 			continue
 		}
-		if len(line) >= 7 && strings.EqualFold(line[:7], "status:") {
-			hasStatusHeader = true
+		if len(line) >= 7 && strings.EqualFold(line[:7], "status:") && strings.Contains(line[7:], "R") {
+			hasReadStatus = true
 		}
 	}
 	finishMessage()

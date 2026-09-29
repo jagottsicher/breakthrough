@@ -35,16 +35,18 @@ func newMessage(status string) string {
 	return b.String()
 }
 
-// TestMboxSourceUnreadCountCountsOnlyMessagesWithNoStatusHeader pins
-// the real-world-verified rule: "Status: O" (old — already seen by a
-// mail session, whether or not actually opened) does not count as
-// unread; only a message with no Status header at all does.
-func TestMboxSourceUnreadCountCountsOnlyMessagesWithNoStatusHeader(t *testing.T) {
+// TestMboxSourceUnreadCountCountsEverythingWithoutAnRStatus pins the
+// user's own real-world correction: "Status: O" (old — already seen
+// by a mail session, but never individually opened) still counts as
+// unread, same as no Status header at all — only "R" (read) excludes
+// a message.
+func TestMboxSourceUnreadCountCountsEverythingWithoutAnRStatus(t *testing.T) {
 	path := writeMbox(t,
-		newMessage(""),   // no Status header — genuinely new
-		newMessage("O"),  // old, already seen
+		newMessage(""),   // no Status header — unread
+		newMessage("O"),  // old, never actually opened — still unread
 		newMessage("RO"), // read
-		newMessage(""),   // genuinely new again
+		newMessage("R"),  // read
+		newMessage(""),   // unread again
 	)
 	s := NewMboxSource(path)
 
@@ -52,13 +54,13 @@ func TestMboxSourceUnreadCountCountsOnlyMessagesWithNoStatusHeader(t *testing.T)
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}
-	if got != 2 {
-		t.Errorf("UnreadCount() = %d, want 2", got)
+	if got != 3 {
+		t.Errorf("UnreadCount() = %d, want 3", got)
 	}
 }
 
-func TestMboxSourceUnreadCountZeroWhenEveryMessageHasAStatus(t *testing.T) {
-	path := writeMbox(t, newMessage("O"), newMessage("RO"), newMessage("R"))
+func TestMboxSourceUnreadCountZeroWhenEveryMessageWasRead(t *testing.T) {
+	path := writeMbox(t, newMessage("RO"), newMessage("R"))
 	s := NewMboxSource(path)
 
 	got, err := s.UnreadCount()
@@ -92,7 +94,7 @@ func TestMboxSourceUnreadCountErrorsWhenPathDoesNotExist(t *testing.T) {
 }
 
 func TestMboxSourceUnreadCountIsCaseInsensitiveForTheStatusHeaderName(t *testing.T) {
-	path := writeMbox(t, strings.Replace(newMessage("O"), "Status:", "status:", 1))
+	path := writeMbox(t, strings.Replace(newMessage("R"), "Status:", "status:", 1))
 	s := NewMboxSource(path)
 
 	got, err := s.UnreadCount()
@@ -114,10 +116,11 @@ func TestMboxSourceNameReturnsPathVerbatim(t *testing.T) {
 // TestMboxSourceUnreadCountMatchesRealWorldShape pins the exact
 // proportions observed against a real, live /var/mail mailbox while
 // building this feature (826 messages, 825 with "Status: O", 1 with no
-// Status header at all) — a regression guard against ever going back
-// to the wrong "missing R" rule an earlier draft of this feature used,
-// which would have miscounted 825 old-but-already-seen messages as
-// "new".
+// Status header at all — none carrying "R") — a regression guard
+// against ever going back to the narrower "no header at all" rule an
+// earlier draft of this feature used, which counted only 1 of these
+// 826 as unread; the person actually reading that mailbox considered
+// all 826 of them still unread.
 func TestMboxSourceUnreadCountMatchesRealWorldShape(t *testing.T) {
 	var messages []string
 	for i := 0; i < 825; i++ {
@@ -131,7 +134,7 @@ func TestMboxSourceUnreadCountMatchesRealWorldShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UnreadCount: %v", err)
 	}
-	if got != 1 {
-		t.Errorf("UnreadCount() = %d, want 1", got)
+	if got != 826 {
+		t.Errorf("UnreadCount() = %d, want 826", got)
 	}
 }
