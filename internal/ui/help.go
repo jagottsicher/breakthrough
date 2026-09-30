@@ -802,10 +802,12 @@ var helpText = strings.TrimLeft(`
   status bar instead, parsed from that same --info=progress2 output;
   only one background rsync runs at a time, a second one asked for
   queues behind it the same way a second Paste already does. Ctrl+C/
-  Ctrl+Delete cancels a running background rsync, the same key that
-  already cancels a running Paste. The one thing it can't do that "Run"
-  can: answer an interactive prompt, since its own stdin deliberately
-  reads from nothing. "Run in background" refuses outright, before
+  Ctrl+Delete cancels a running background rsync outright, unaffected
+  by whatever a concurrently running Paste's own Ctrl+C pause dialog
+  (see "Paste conflicts" above) ends up answering — the two are
+  entirely independent. The one thing it can't do that "Run" can:
+  answer an interactive prompt, since its own stdin deliberately reads
+  from nothing. "Run in background" refuses outright, before
   starting anything, if Source or Destination is still a connection
   that last authenticated with a typed password — pointing to "Run"
   instead, which can answer that prompt on its own attached terminal;
@@ -1078,9 +1080,16 @@ var helpText = strings.TrimLeft(`
   answered queues behind it instead of opening a second dialog on top,
   shown as "(N more waiting)" right in this one's own message.
 
-  Ctrl+C stops the whole Paste outright, dialog open or not — whatever
-  was already mid-write finishes normally where it was headed, nothing
-  still queued starts. A different overlay merely open while a Paste
+  Ctrl+C pauses the whole Paste, dialog open or not — replacing this
+  conflict dialog (or, with none open, just the status bar's own
+  progress) with a pause dialog: Continue (the safe default, also
+  Escape), Cancel just this job and let whatever's queued behind it
+  run, or cancel everything, queue included. Whatever was already
+  mid-write when Ctrl+C landed finishes normally for a Copy; for a Cut,
+  it stops right there instead, its own source left untouched, and only
+  if one of the two Cancel answers is actually chosen — Continue picks
+  up exactly where it paused, including re-showing this conflict dialog
+  if one was open. A different overlay merely open while a Paste
   continues in the background is unaffected.
 
   Whatever's currently on the clipboard shows two ways: every row it

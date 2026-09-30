@@ -3,6 +3,7 @@
 package fsops
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -58,6 +59,18 @@ type MoveOptions struct {
 	// running total of. See CopyOptions.OnBytes for the full contract
 	// once a fallback does reach it.
 	OnBytes func(copiedBytes int64)
+	// Ctx, if non-nil, is passed straight through to CopyOptions.Ctx
+	// whenever Move actually falls back to Copy (see this function's own
+	// doc comment: EXDEV, or ENOTEMPTY/EEXIST with Mode MergeInto) — see
+	// its own doc comment for exactly what it stops and when. A complete
+	// no-op on Move's own fast os.Rename path: that's a single, already-
+	// atomic syscall with nothing meaningful to interrupt partway
+	// through, and — the one property this whole field exists for —
+	// Move never removes src until a Copy fallback it was given has
+	// already landed safely (see this function's own doc comment on
+	// that ordering), so a cancelled fallback leaves src exactly as
+	// untouched as a genuinely failed one always already did.
+	Ctx context.Context
 }
 
 // Move moves src to dst, refusing to overwrite an existing dst unless
@@ -144,7 +157,7 @@ func Move(src, dst string, opts MoveOptions) error {
 
 	copyOpts := CopyOptions{
 		Force: true, Mode: opts.Mode, OnFile: opts.OnFile, OnBytes: opts.OnBytes,
-		SkipAttributes: opts.SkipAttributes, StableSymlinks: opts.StableSymlinks,
+		SkipAttributes: opts.SkipAttributes, StableSymlinks: opts.StableSymlinks, Ctx: opts.Ctx,
 	}
 	if err := Copy(src, dst, copyOpts); err != nil {
 		return err
@@ -209,6 +222,7 @@ func MoveFollowingSymlinks(src, dst string, opts MoveOptions) error {
 		SkipAttributes: opts.SkipAttributes,
 		OnFile:         opts.OnFile,
 		OnBytes:        opts.OnBytes,
+		Ctx:            opts.Ctx,
 	}
 	if err := Copy(src, dst, copyOpts); err != nil {
 		return err

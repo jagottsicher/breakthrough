@@ -3,6 +3,7 @@
 package fsops
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -134,6 +135,24 @@ type CopyOptions struct {
 	// OnFile's own "a new file just started" signal into a job-wide
 	// running total.
 	OnBytes func(copiedBytes int64)
+	// Ctx, if non-nil, is checked before every file starts (in copyDir's
+	// own per-entry loop) and before every underlying Read once one is
+	// streaming (see countingReader) — once it's cancelled, the file
+	// currently streaming stops mid-write with ctx.Err() instead of
+	// completing, and Copy returns that error without starting whatever
+	// was still left in a directory copy. Nil (the zero value, and every
+	// existing caller's own default before this field existed) means
+	// exactly what it always has: uncancellable, runs to completion
+	// regardless. Unlike Hash's own ctx (see its own doc comment for why
+	// that one is a required, always-non-nil parameter instead): Copy has
+	// many long-standing callers with no interest in cancellation at all
+	// (a one-off internal comparetree.go copy, this package's own Move
+	// fallback, ...), and CopyOptions is already a struct of optional
+	// fields a caller opts into one at a time, not a fixed positional
+	// signature — making this one field required would mean touching
+	// every one of them for a capability only internal/ui's own pasteOne
+	// (see its own doc comment) actually needs.
+	Ctx context.Context
 }
 
 // Copy copies src (a file, a directory recursively, or a symlink — see
@@ -349,18 +368,27 @@ func resolveExistingAncestor(path string) string {
 // bytes read after every underlying Read that actually returned any —
 // the same "cumulative running total, reported synchronously, no
 // rate-limiting done here" shape as Hash's own progressReader (see its
-// doc comment), reused here for CopyOptions.OnBytes instead. Unlike
-// progressReader, there's no context to check here: Copy/Move don't
-// take one at all, so a cancelled copy simply runs to completion on
-// whatever goroutine started it (see internal/ui's own job.ctx, which
-// this counter's caller checks before ever starting a Copy at all).
+// doc comment), reused here for CopyOptions.OnBytes instead. ctx, if
+// non-nil (see CopyOptions.Ctx), is checked before every underlying
+// Read the same way progressReader's own ctx is — once cancelled, the
+// very next Read returns ctx.Err() instead of reading further, exactly
+// the currently-streaming file stopping mid-write that CopyOptions.Ctx
+// promises. ctx nil (every caller before that field existed, and every
+// one since that never sets it) keeps this exactly as uncancellable as
+// it's always been.
 type countingReader struct {
 	r      io.Reader
+	ctx    context.Context
 	read   int64
 	onRead func(readBytes int64)
 }
 
 func (c *countingReader) Read(b []byte) (int, error) {
+	if c.ctx != nil {
+		if err := c.ctx.Err(); err != nil {
+			return 0, err // checked before reading further, not just before reporting — see progressReader's own doc comment on why that distinction is the actual fix
+		}
+	}
 	n, err := c.r.Read(b)
 	if n > 0 {
 		c.read += int64(n)
@@ -462,10 +490,21 @@ func copyFile(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	defer func() { _ = out.Close() }()
 
 	var reader io.Reader = in
-	if opts.OnBytes != nil {
-		reader = &countingReader{r: in, onRead: opts.OnBytes}
+	if opts.OnBytes != nil || opts.Ctx != nil {
+		reader = &countingReader{r: in, ctx: opts.Ctx, onRead: opts.OnBytes}
 	}
 	if _, err := io.Copy(out, reader); err != nil {
+		if opts.Ctx != nil && opts.Ctx.Err() != nil {
+			// A deliberate stop, not a genuine I/O failure — dst was just
+			// created (O_EXCL above), so it can only ever hold this one
+			// incomplete write; removing it leaves no partial file for a
+			// caller to trip over on retry, unlike a real failure (disk
+			// full, permission denied, ...), where leaving whatever
+			// landed so far is the existing, unrelated behavior this
+			// deliberately doesn't touch.
+			_ = out.Close()
+			_ = os.Remove(dst)
+		}
 		return err
 	}
 	if err := out.Close(); err != nil {
@@ -519,6 +558,11 @@ func copyDir(src, dst string, mode os.FileMode, opts CopyOptions) error {
 	}
 
 	for _, entry := range entries {
+		if opts.Ctx != nil {
+			if err := opts.Ctx.Err(); err != nil {
+				return err // stop before starting a further file — see CopyOptions.Ctx
+			}
+		}
 		childSrc := filepath.Join(src, entry.Name())
 		childDst := filepath.Join(dst, entry.Name())
 

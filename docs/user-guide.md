@@ -927,9 +927,10 @@ progress in the status bar, parsed straight from rsync's own
 whichever way you run it). Only one background rsync runs at a time; a
 second one asked for while one is still going queues behind it, the
 same way a second Paste already queues behind one still copying.
-`Ctrl+C`/`Ctrl+Delete` cancels a running background rsync the same key
-that already cancels a running Paste — both, if both happen to be
-running at once. The one thing this path can't do that Run's own
+`Ctrl+C`/`Ctrl+Delete` cancels a running background rsync outright,
+independently of whatever a concurrently running Paste's own `Ctrl+C`
+pause dialog (see [Copy, Cut and Paste](#copy-cut-and-paste)) ends up
+answering — the two never affect each other. The one thing this path can't do that Run's own
 directly-attached terminal can: answer an interactive prompt, since a
 backgrounded rsync's own stdin deliberately reads from nothing rather
 than from breakthrough's own keyboard. "Run in background" itself
@@ -1778,12 +1779,19 @@ it, shown as "(+N queued)" right in the status bar's own progress line,
 and starts automatically, in the order each was asked for, the moment
 the one ahead of it finishes.
 
-`Ctrl+C` stops a running Paste outright, whether or not its own
-conflict dialog happens to be open at the time. Whatever's already
-mid-write finishes normally — on disk, exactly where it was already
-headed — rather than being interrupted mid-write; anything not yet
-started simply never starts, including a whole further Paste still
-queued behind this one. A *different* dialog (Properties, say)
+`Ctrl+C` pauses a running Paste, whether or not its own conflict dialog
+happens to be open at the time (it replaces that dialog if so), and
+opens a pause dialog with three answers: **Continue** (the safe
+default, also `Escape`) picks the walk back up exactly where it left
+off, re-showing the conflict dialog first if one was pending;
+**Cancel current job, keep queue** stops just this Paste and lets
+whatever's already queued behind it start; **Cancel everything** stops
+this Paste and drops the whole queue behind it too. Whatever item was
+already mid-transfer when `Ctrl+C` landed finishes normally for a Copy
+either way — interrupted only if you actually choose one of the two
+Cancel answers, and only then; for a Cut, choosing to cancel stops that
+item immediately instead, its own source left completely untouched,
+rather than letting it finish. A *different* dialog (Properties, say)
 happening to be open while a Paste merely continues in the background
 is unaffected — `Ctrl+C` there closes that dialog as it always has,
 since it's what you're actually looking at.
