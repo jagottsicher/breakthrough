@@ -159,6 +159,8 @@ None of them is required to start; each only affects one feature:
 | `tail` | "Tail -f" | that menu entry can't run |
 | `pdftoppm` ([poppler-utils](https://poppler.freedesktop.org/)) | rendering PDF pages as images | PDFs open as extracted text instead, still fully in Go |
 | [`mpv`](https://mpv.io/) | full-screen video playback (Look), and the video thumbnail in the Details sidebar | video files show no preview at all — install mpv for either |
+| `7z` (p7zip) | browsing into `.7z` archives | `.7z` files are opened like any other regular file instead |
+| `unrar` | browsing into `.rar` archives | `.rar` files are opened like any other regular file instead |
 | `bat`, `less`, `$PAGER` | `pager = external` | only relevant if you set that; the built-in viewer needs nothing |
 
 Image viewing, syntax highlighting, PDF text extraction and hashing are

@@ -33,7 +33,10 @@ func TestClassify(t *testing.T) {
 		{"backup.tar.xz", KindTar, true},
 		{"backup.txz", KindTar, true},
 		{"notes.txt", 0, false},
-		{"archive.7z", 0, false},
+		{"archive.7z", KindSevenZip, true},
+		{"ARCHIVE.7Z", KindSevenZip, true},
+		{"backup.rar", KindRar, true},
+		{"BACKUP.RAR", KindRar, true},
 	}
 	for _, c := range cases {
 		kind, ok := Classify(c.path)
@@ -338,6 +341,197 @@ func TestListUnsupportedFormat(t *testing.T) {
 	}
 	if _, err := List(p); err == nil {
 		t.Error("List on a non-archive file should fail")
+	}
+}
+
+// requireTool mirrors internal/viewer's own helper of the same name —
+// duplicated locally rather than exported and imported across packages
+// for a single small skip-helper, the same convention that helper's
+// own doc comment already documents.
+func requireTool(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("%s not available in this environment: %v", name, err)
+	}
+}
+
+// writeSourceTree materializes files (the same path -> content
+// convention writeZip/writeTar already use, a "/"-suffixed key with
+// empty content meaning an explicit, otherwise-empty directory) as
+// real files under a fresh temp directory, returning that directory's
+// own path — the staging area writeSevenZip/writeRar both archive
+// from, since neither the real `7z` nor `rar` binary can be driven
+// from an in-memory byte stream the way archive/zip.Writer/
+// archive/tar.Writer can.
+func writeSourceTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for p, content := range files {
+		if content == "" && len(p) > 0 && p[len(p)-1] == '/' {
+			if err := os.MkdirAll(filepath.Join(root, p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		full := filepath.Join(root, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// archiveTopLevelNames lists src's own immediate children — what
+// writeSevenZip/writeRar both pass as the real `7z`/`rar` binary's own
+// "what to add" arguments, run with Dir=src, so the archive's internal
+// paths come out matching files' own keys exactly rather than being
+// prefixed with src's own absolute temp-directory path.
+func archiveTopLevelNames(t *testing.T, src string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	return names
+}
+
+// writeSevenZip builds a real .7z fixture at dir/name via the actual
+// `7z` binary — requires it on $PATH (see requireTool); this package
+// has no pure-Go 7z writer to build one with instead (see archive.go's
+// own package doc comment on why 7z/RAR are read via real binaries at
+// all here).
+func writeSevenZip(t *testing.T, dir, name string, files map[string]string) string {
+	t.Helper()
+	requireTool(t, "7z")
+	src := writeSourceTree(t, files)
+	full := filepath.Join(dir, name)
+	args := append([]string{"a", "-y", full}, archiveTopLevelNames(t, src)...)
+	cmd := exec.Command("7z", args...)
+	cmd.Dir = src
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("7z a: %v: %s", err, out)
+	}
+	return full
+}
+
+// writeRar builds a real .rar fixture at dir/name via the actual `rar`
+// binary (the proprietary creator tool — a separate program from
+// `unrar`, which this package's own listRar/extractRar use to *read*
+// one; see requireTool). Neither this package nor its production code
+// ever needs `rar` itself — only these tests do, to have a real
+// fixture to read back.
+func writeRar(t *testing.T, dir, name string, files map[string]string) string {
+	t.Helper()
+	requireTool(t, "rar")
+	src := writeSourceTree(t, files)
+	full := filepath.Join(dir, name)
+	args := append([]string{"a", "-y", full}, archiveTopLevelNames(t, src)...)
+	cmd := exec.Command("rar", args...)
+	cmd.Dir = src
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("rar a: %v: %s", err, out)
+	}
+	return full
+}
+
+func TestListSevenZip(t *testing.T) {
+	requireTool(t, "7z")
+	dir := t.TempDir()
+	p := writeSevenZip(t, dir, "a.7z", map[string]string{
+		"README.md":       "hello\n",
+		"src/main.go":     "package main\n",
+		"src/lib/util.go": "package lib\n",
+	})
+
+	entries, err := List(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pathsOf(entries)
+	want := []string{"README.md", "src", "src/lib", "src/lib/util.go", "src/main.go"}
+	if !equalStrings(got, want) {
+		t.Errorf("List(%q) paths = %v, want %v", p, got, want)
+	}
+	for _, e := range entries {
+		switch e.Path {
+		case "src", "src/lib":
+			if !e.IsDir {
+				t.Errorf("entry %q should be reported as a directory", e.Path)
+			}
+		case "README.md":
+			if e.IsDir {
+				t.Error(`entry "README.md" should not be reported as a directory`)
+			}
+			if want := int64(len("hello\n")); e.Size != want {
+				t.Errorf("README.md size = %d, want %d", e.Size, want)
+			}
+		}
+	}
+}
+
+func TestListSevenZipWithoutSevenZipBinary(t *testing.T) {
+	requireTool(t, "7z") // build the fixture with a real 7z first
+	dir := t.TempDir()
+	p := writeSevenZip(t, dir, "a.7z", map[string]string{"file.txt": "hi\n"})
+
+	t.Setenv("PATH", t.TempDir()) // isolate: no 7z/7za/7zr left to find
+
+	if _, err := List(p); err == nil {
+		t.Error("List on a .7z file with no 7-Zip binary on $PATH should fail")
+	}
+}
+
+func TestListRar(t *testing.T) {
+	requireTool(t, "unrar")
+	dir := t.TempDir()
+	p := writeRar(t, dir, "a.rar", map[string]string{
+		"README.md":       "hello\n",
+		"src/main.go":     "package main\n",
+		"src/lib/util.go": "package lib\n",
+	})
+
+	entries, err := List(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pathsOf(entries)
+	want := []string{"README.md", "src", "src/lib", "src/lib/util.go", "src/main.go"}
+	if !equalStrings(got, want) {
+		t.Errorf("List(%q) paths = %v, want %v", p, got, want)
+	}
+	for _, e := range entries {
+		switch e.Path {
+		case "src", "src/lib":
+			if !e.IsDir {
+				t.Errorf("entry %q should be reported as a directory", e.Path)
+			}
+		case "README.md":
+			if e.IsDir {
+				t.Error(`entry "README.md" should not be reported as a directory`)
+			}
+			if want := int64(len("hello\n")); e.Size != want {
+				t.Errorf("README.md size = %d, want %d", e.Size, want)
+			}
+		}
+	}
+}
+
+func TestListRarWithoutUnrarBinary(t *testing.T) {
+	requireTool(t, "unrar") // build the fixture with a real rar/unrar pair first
+	dir := t.TempDir()
+	p := writeRar(t, dir, "a.rar", map[string]string{"file.txt": "hi\n"})
+
+	t.Setenv("PATH", t.TempDir()) // isolate: no unrar left to find
+
+	if _, err := List(p); err == nil {
+		t.Error("List on a .rar file with no unrar on $PATH should fail")
 	}
 }
 

@@ -3,13 +3,18 @@ package archive
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 )
 
 // Extract writes members (each one Children/List already reported —
@@ -58,8 +63,12 @@ func Extract(archivePath string, members []Entry, destDir string) error {
 	switch kind {
 	case KindZip:
 		extractErr = extractZip(archivePath, memberPaths, destDir)
-	default:
+	case KindTar:
 		extractErr = extractTar(archivePath, memberPaths, destDir)
+	case KindSevenZip:
+		extractErr = extractSevenZip(archivePath, members, destDir)
+	case KindRar:
+		extractErr = extractRar(archivePath, members, destDir)
 	}
 	if extractErr != nil {
 		errs = append(errs, extractErr)
@@ -290,4 +299,151 @@ func extractTarFile(tr *tar.Reader, hdr *tar.Header, destDir, rel string) error 
 		return err
 	}
 	return out.Close()
+}
+
+// extractSevenZip extracts members out of archivePath via the real 7z
+// binary (see sevenZipBinary) into a fresh temp directory — 7z's own
+// `x` command recreates each requested member's full internal path
+// under whatever `-o<dir>` names (verified directly: asking for a bare
+// directory member name, e.g. "sub", correctly recurses into
+// everything nested under it — no wildcard needed, unlike unrar; see
+// extractRar's own doc comment) — then relocates exactly the
+// requested members from there into destDir via moveExtractedTree,
+// which is what actually rewrites each one onto its own base name
+// (see Extract's own doc comment on that contract, and
+// relativeDest for the shared logic zip/tar already use for it).
+func extractSevenZip(archivePath string, members []Entry, destDir string) error {
+	bin, err := sevenZipBinary()
+	if err != nil {
+		return err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "breakthrough-7z-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }() // best-effort temp-dir cleanup
+
+	args := []string{"x", "-y", "-o" + tmpDir, archivePath}
+	for _, m := range members {
+		args = append(args, m.Path)
+	}
+	if out, err := exec.Command(bin, args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s: %w: %s", bin, err, bytes.TrimSpace(out))
+	}
+
+	return moveExtractedTree(tmpDir, destDir, memberPathsOf(members))
+}
+
+// extractRar extracts members out of archivePath via the real unrar
+// binary into a fresh temp directory, then relocates them into destDir
+// the same way extractSevenZip does (see moveExtractedTree).
+//
+// Unlike 7z, unrar does *not* recurse into a directory member's own
+// contents when given its bare name (verified directly: asking unrar
+// to extract just "sub" instead silently extracted the *entire*
+// archive, sibling files included — a real, observed difference from
+// 7z's own behavior, not an assumption) — it needs an explicit
+// "sub/*" glob instead, which this appends only for a member Extract's
+// own caller already marked IsDir.
+func extractRar(archivePath string, members []Entry, destDir string) error {
+	if _, err := exec.LookPath("unrar"); err != nil {
+		return err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "breakthrough-rar-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }() // best-effort temp-dir cleanup
+
+	args := []string{"x", "-y", archivePath}
+	for _, m := range members {
+		if m.IsDir {
+			args = append(args, m.Path+"/*")
+		} else {
+			args = append(args, m.Path)
+		}
+	}
+	args = append(args, tmpDir+string(filepath.Separator))
+	if out, err := exec.Command("unrar", args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("unrar: %w: %s", err, bytes.TrimSpace(out))
+	}
+
+	return moveExtractedTree(tmpDir, destDir, memberPathsOf(members))
+}
+
+// memberPathsOf is extractSevenZip/extractRar's own small shared step:
+// their real work (building the tool's own CLI args) needs the full
+// Entry (specifically IsDir, for extractRar's own wildcard — see its
+// doc comment), but moveExtractedTree afterward, like extractZip/
+// extractTar's own relativeDest calls, only ever needs the plain paths.
+func memberPathsOf(members []Entry) []string {
+	paths := make([]string, len(members))
+	for i, m := range members {
+		paths[i] = m.Path
+	}
+	return paths
+}
+
+// moveExtractedTree relocates whatever extractSevenZip/extractRar
+// actually produced under tmpDir (the *tool's* own layout: each
+// requested member's full internal archive path, recreated as real
+// files/directories) into destDir, renamed onto each member's own base
+// name — precisely the same destination contract extractZip/extractTar
+// already give a Copy/Paste-sourced request (see Extract's own doc
+// comment), just reached by moving already-extracted real files
+// instead of streaming straight out of the archive itself the way
+// those two do, since neither 7z nor unrar offers this package a
+// stream to read from directly.
+//
+// fsops.Move (not a plain os.Rename) is what actually relocates each
+// file: tmpDir is wherever the system's own default temp directory
+// lives, which is not guaranteed to share a filesystem with an
+// arbitrary user-chosen destDir — see fsops.Move's own doc comment on
+// the EXDEV fallback this project's own file operations already
+// require everywhere else (see CLAUDE.md's own "Bei Dateibewegungen
+// EXDEV behandeln").
+func moveExtractedTree(tmpDir, destDir string, members []string) error {
+	var errs []error
+	err := filepath.WalkDir(tmpDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == tmpDir {
+			return nil
+		}
+		rel, err := filepath.Rel(tmpDir, p)
+		if err != nil {
+			return err
+		}
+		entryPath := filepath.ToSlash(rel)
+		destRel, ok := relativeDest(entryPath, members)
+		if !ok {
+			// Shouldn't happen — both extractSevenZip and extractRar only
+			// ever ask the tool for exactly the requested members — but
+			// tolerated defensively rather than failing the whole
+			// extraction over one unexpected extra entry.
+			return nil
+		}
+		if d.IsDir() {
+			if err := ensureDir(destDir, destRel); err != nil {
+				errs = append(errs, err)
+			}
+			return nil
+		}
+		dest, err := destFile(destDir, destRel)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", entryPath, err))
+			return nil
+		}
+		if err := fsops.Move(p, dest, fsops.MoveOptions{Force: true}); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", entryPath, err))
+		}
+		return nil
+	})
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
