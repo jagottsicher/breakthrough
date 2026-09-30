@@ -1421,6 +1421,14 @@ Read-only, full-screen.
 - **Formats with no decoder** (HEIC, AVIF, RAW…) still open the
   overlay, with a suggested external tool and the install command for
   your actual package manager.
+- **Video** (MP4, MKV, WebM, AVI, MOV, and the other common container
+  formats) hands the real terminal to [mpv](https://mpv.io/) instead of
+  opening the overlay, for full-screen playback — `--vo=gpu,tct`, so it
+  uses a real window locally but falls back to mpv's own true-color
+  terminal renderer where there's no display at all (SSH, tmux,
+  screen). `q` or `Ctrl+C` quits back into breakthrough, same as
+  Tail -f below. Needs mpv installed; without it, Look reports that
+  directly rather than opening an empty overlay.
 
 Set `pager = external` to hand text files to `bat`/`batcat`, `$PAGER`,
 or `less`/`more` in your real terminal instead.
@@ -1514,12 +1522,16 @@ is quietly left out of its own line, same as the status bar's own
 kernel/uptime/load segments. Refreshes once a second, the same ticker
 the status bar's own clock uses.
 
-Images and PDFs get an inline preview with its own click zone for
-fullscreen. Previews load in the background and only once the cursor has
-rested briefly, so holding an arrow key through a directory costs
-nothing: each row passed over cancels the one before it, and for a PDF
-that cancellation kills the `pdftoppm` subprocess rather than leaving it
-running. Only the stat block is read synchronously — one syscall, and
+Images, PDFs, and videos get an inline preview with its own click zone
+for fullscreen — a video's own preview is a still frame, grabbed via
+mpv 10% into its own duration (the same convention most desktop file
+managers' own video thumbnailers use, to skip past a typically
+black/blank opening). Previews load in the background and only once
+the cursor has rested briefly, so holding an arrow key through a
+directory costs nothing: each row passed over cancels the one before
+it, and for a PDF or video that cancellation kills the `pdftoppm`/`mpv`
+subprocess rather than leaving it running. Only the stat block is read
+synchronously — one syscall, and
 it is what the sidebar shows first anyway. `Tab` moves keyboard focus into the sidebar so its own
 scrolling works; `Tab` again comes back. The `>` button in its corner
 closes it.

@@ -131,6 +131,10 @@ func (r *Root) openLook() {
 		r.openRemoteLook(remote, path)
 		return
 	}
+	if viewer.LooksLikeVideoPath(path) {
+		r.playVideoFullscreen(path)
+		return
+	}
 	if r.settings.Pager == "external" {
 		r.runExternalPager(path)
 		return
@@ -163,6 +167,11 @@ func (r *Root) openRemoteLook(remote remotefs.Client, remotePath string) {
 		return
 	}
 
+	if viewer.LooksLikeVideoPath(remotePath) {
+		defer cleanup()
+		r.playVideoFullscreen(localPath)
+		return
+	}
 	if r.settings.Pager == "external" {
 		defer cleanup()
 		r.runExternalPager(localPath)
@@ -532,6 +541,43 @@ func (r *Root) runExternalPager(path string) {
 	if runErr != nil {
 		r.showError(fmt.Errorf("look %s: %w", path, runErr))
 	}
+}
+
+// playVideoFullscreen is openLook's own video branch (see
+// viewer.LooksLikeVideoPath) — suspends the TUI and hands the real
+// terminal to mpv, the same Suspend-based "give an external program
+// the real terminal" mechanism runExternalPager/runTailFollow/runEditor
+// already use, rather than anything this app's own built-in Look pager
+// tries to render itself.
+//
+// --vo=gpu,tct is mpv's own video-output priority list — a documented
+// mpv feature: a comma-separated --vo value is tried left to right
+// until one actually works — not a fixed single choice: gpu first for
+// a real local X11/Wayland session (full quality, its own window),
+// falling back automatically to tct — mpv's own true-color *terminal*
+// renderer, no window system needed at all — over SSH/tmux/screen,
+// exactly this app's own primary audience (see CLAUDE.md). --fullscreen
+// only affects the windowed (gpu) case; tct already fills the whole
+// terminal on its own and simply ignores it.
+func (r *Root) playVideoFullscreen(path string) {
+	if _, err := exec.LookPath("mpv"); err != nil {
+		r.showError(fmt.Errorf("look %s: no built-in video preview — install mpv to play video files (%s)", filepath.Base(path), packageManagerInstallHint("mpv")))
+		return
+	}
+	var runErr error
+	r.app.Suspend(func() {
+		cmd := exec.Command("mpv", "--vo=gpu,tct", "--fullscreen", path)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		runErr = cmd.Run()
+	})
+	if runErr == nil {
+		return
+	}
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) && exitErr.ExitCode() == -1 {
+		return // stopped by a signal (Ctrl+C) — the expected way out, not a failure
+	}
+	r.showError(fmt.Errorf("look %s: %w", path, runErr))
 }
 
 // tailCurrentEntry is the context menu's "Tail -f" item — see

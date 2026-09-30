@@ -42,8 +42,8 @@ func loadDetailsWithPreview(t *testing.T, r *Root, path string) {
 // through showDetailsSidebar or a cursor move.
 func applyDetailsPreview(t *testing.T, r *Root) {
 	t.Helper()
-	image, pageCount := detailsPreviewFor(context.Background(), r.detailsTarget)
-	r.detailsImage, r.detailsPDFPageCount = image, pageCount
+	image, pageCount, isVideo := detailsPreviewFor(context.Background(), r.detailsTarget)
+	r.detailsImage, r.detailsPDFPageCount, r.detailsIsVideo = image, pageCount, isVideo
 	r.renderDetailsSidebar()
 }
 
