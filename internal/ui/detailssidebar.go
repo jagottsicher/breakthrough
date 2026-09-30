@@ -511,6 +511,7 @@ func (r *Root) loadDetailsTarget(path string) {
 	r.detailsStatErr = nil
 	r.detailsImage = nil
 	r.detailsPDFPageCount = 0
+	r.detailsIsVideo = false
 
 	// The title bar ("Details" vs. "System Info") depends on
 	// showingSystemInfo(), which can only ever change between one
@@ -653,7 +654,7 @@ const detailsMetadataStubMessage = "(not implemented yet)"
 // click zone, and this keyboard shortcut all visibly do something when
 // triggered, just not the real data yet.
 func (r *Root) fetchDetailsMetadata() {
-	if r.detailsImage == nil {
+	if r.detailsImage == nil || r.detailsIsVideo {
 		return
 	}
 	r.detailsMetadataState = detailsMetadataStubMessage
@@ -813,6 +814,7 @@ func (r *Root) renderDetailsSidebar() {
 	}
 
 	isPDF := r.detailsPDFPageCount > 0
+	isVideo := r.detailsIsVideo
 
 	switch {
 	case r.detailsImage != nil:
@@ -844,12 +846,19 @@ func (r *Root) renderDetailsSidebar() {
 		previewStart, _ := writeSection(preview)
 
 		var infoLines []string
-		if isPDF {
+		switch {
+		case isPDF:
 			infoLines = []string{
 				infoField("Type", "PDF"),
 				infoField("Pages", strconv.Itoa(r.detailsPDFPageCount)),
 			}
-		} else {
+		case isVideo:
+			bounds := r.detailsImage.Image.Bounds()
+			infoLines = []string{
+				infoField("Type", "Video (preview frame)"),
+				infoField("Dimensions", fmt.Sprintf("%d × %d px", bounds.Dx(), bounds.Dy())),
+			}
+		default:
 			bounds := r.detailsImage.Image.Bounds()
 			infoLines = []string{
 				infoField("Format", strings.ToUpper(r.detailsImage.ImageFormat)),
@@ -860,7 +869,7 @@ func (r *Root) renderDetailsSidebar() {
 		_, previewEnd := writeSection(strings.Join(infoLines, "\n"))
 		r.detailsPreviewRowStart, r.detailsPreviewRowEnd = previewStart, previewEnd
 
-		if !isPDF {
+		if !isPDF && !isVideo {
 			// EXIF-style metadata is an image-specific concept (see
 			// fetchDetailsMetadata's own doc comment) — a PDF has its own,
 			// different kind of metadata (Title/Author/Creator, ...), not
@@ -1146,21 +1155,35 @@ const detailsPreviewDebounce = 120 * time.Millisecond
 // Returns a nil image for anything with no preview, which is the
 // ordinary case and not an error worth reporting: the sidebar simply
 // shows the stat block on its own.
-func detailsPreviewFor(ctx context.Context, path string) (image *viewer.Result, pageCount int) {
+func detailsPreviewFor(ctx context.Context, path string) (image *viewer.Result, pageCount int, isVideo bool) {
+	if viewer.LooksLikeVideoPath(path) {
+		// A video's own extension already settles this — see
+		// viewer.LooksLikeVideoPath's own doc comment on why there's
+		// nothing for Sniff/Load to recognize a container format by. The
+		// same context cancellation rasterizePDFPage/LoadPDFPageContext
+		// rely on kills mpv itself, not just its result, if the cursor
+		// moves on before it finishes.
+		img, format, err := viewer.LoadVideoThumbnailContext(ctx, path)
+		if err != nil || ctx.Err() != nil {
+			return nil, 0, false
+		}
+		return &viewer.Result{Kind: viewer.KindImage, Image: img, ImageFormat: format}, 0, true
+	}
+
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil || ctx.Err() != nil {
-		return nil, 0
+		return nil, 0, false
 	}
 
 	switch result.Kind {
 	case viewer.KindImage:
-		return &result, 0
+		return &result, 0, false
 	case viewer.KindPDF:
 		if count, err := viewer.PDFPageCount(path); err == nil {
 			pageCount = count
 		}
 		if ctx.Err() != nil {
-			return nil, pageCount // rasterizing below is the expensive part; don't start it if we're already stale
+			return nil, pageCount, false // rasterizing below is the expensive part; don't start it if we're already stale
 		}
 		// The context variant: cancelling has to kill pdftoppm, not
 		// merely discard what it produces, or scrolling past a run of
@@ -1168,10 +1191,10 @@ func detailsPreviewFor(ctx context.Context, path string) (image *viewer.Result, 
 		// stall would be gone from the UI and still be there on the
 		// machine.
 		if page, err := viewer.LoadPDFPageContext(ctx, path, 1, viewer.PDFViewGraphic); err == nil && page.Kind == viewer.KindImage {
-			return &page, pageCount
+			return &page, pageCount, false
 		}
 	}
-	return nil, pageCount
+	return nil, pageCount, false
 }
 
 // cancelDetailsPreview stops the preview load for whatever target the
@@ -1227,7 +1250,7 @@ func (r *Root) startDetailsPreview(path string) {
 		case <-time.After(detailsPreviewDebounce):
 		}
 
-		image, pageCount := detailsPreviewFor(ctx, path)
+		image, pageCount, isVideo := detailsPreviewFor(ctx, path)
 		if ctx.Err() != nil {
 			return
 		}
@@ -1242,6 +1265,7 @@ func (r *Root) startDetailsPreview(path string) {
 			}
 			r.detailsImage = image
 			r.detailsPDFPageCount = pageCount
+			r.detailsIsVideo = isVideo
 			r.renderDetailsSidebar()
 		})
 	})
