@@ -278,6 +278,80 @@ func TestPasteWalkUnblocksWhenCancelledWhilePaused(t *testing.T) {
 	}
 }
 
+// TestPasteOneGatesAlreadyDispatchedItemsOnPause pins a real,
+// user-reported gap the pasteWalk-level pause check alone missed
+// entirely: pasteWalk itself dispatches every item's own goroutine
+// near-instantly (see its own doc comment — no real I/O happens in
+// that loop, just an os.Lstat per item), so for anything short of a
+// very large job, every item is typically already spawned and queued
+// on job.ioMu well before a user could react and press Ctrl+C at all —
+// a pause requested at that point found nothing left in pasteWalk's own
+// loop to gate, and copying simply continued to completion regardless
+// (see pasteOne's own doc comment on why the real gate now lives at
+// job.ioMu instead). Pins the fix by pausing only *after* both items'
+// goroutines are already dispatched and racing for ioMu, then
+// confirming the second one still doesn't start until resumed.
+func TestPasteOneGatesAlreadyDispatchedItemsOnPause(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	items := []string{filepath.Join(srcDir, "apple.txt"), filepath.Join(srcDir, "banana.txt")}
+	job := newPasteTestJob(r, false, destDir, len(items))
+
+	origCopy := fsCopy
+	calls := make(chan string, 2)
+	release := make(chan struct{})
+	fsCopy = func(src, dst string, opts fsops.CopyOptions) error {
+		calls <- src
+		<-release
+		return origCopy(src, dst, opts)
+	}
+	t.Cleanup(func() { fsCopy = origCopy })
+
+	// Dispatches both items' own goroutines — returns almost instantly,
+	// well before either one has actually reached fsCopy.
+	r.pasteWalk(job, items)
+
+	var first string
+	select {
+	case first = <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no item ever reached fsCopy")
+	}
+
+	select {
+	case <-calls:
+		t.Fatal("a second item reached fsCopy before the first was even released — ioMu isn't serializing them")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Pause now — with the first item's own fsCopy call still in
+	// flight, and the second already queued behind ioMu, exactly the
+	// real-world timing a user's Ctrl+C press actually has.
+	job.pause()
+	close(release) // let the first, already-in-flight item finish normally
+
+	select {
+	case <-calls:
+		t.Fatal("the second item started even though the job was paused before it ever got its own turn")
+	case <-time.After(300 * time.Millisecond):
+		// Expected: still gated at job.ioMu, inside pasteOne.
+	}
+
+	job.resume()
+	select {
+	case second := <-calls:
+		if second == first {
+			t.Fatalf("the same item (%q) reached fsCopy twice", second)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the second item never started after resume")
+	}
+}
+
 // TestPasteOneAppliesSkipAttributesFromJob pins that job.skipAttributes
 // actually reaches the real fsCopy call pasteOne makes — the UI-layer
 // half of a guarantee already pinned at the fsops level directly (see
