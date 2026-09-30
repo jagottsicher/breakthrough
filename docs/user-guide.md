@@ -98,7 +98,7 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all · `mc` Clear clipboard |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
@@ -617,8 +617,14 @@ buried "command not found".
 
 Runs in the background, the same as [Copy, Cut and Paste](#copy-cut-and-paste) —
 no terminal takes over the screen; a spinner and elapsed time show in
-the status bar while it runs (Ctrl+C cancels it), and the current
-directory reloads on its own once the archive is actually done.
+the status bar while it runs, and the current directory reloads on its
+own once the archive is actually done. `Ctrl+C` asks to cancel it — and
+a running background rsync too, if one happens to be active — both in
+one confirmation, always all-or-nothing (see [Rsync](#rsync) for the
+full reasoning). The status bar's own segment has a clickable "✕" for
+stopping just the current run, no queue involved; `mC` opens its own
+dialog for "current job only" vs. "current plus its own queue",
+leaving a running rsync completely untouched either way.
 
 ## Extract
 
@@ -927,9 +933,17 @@ progress in the status bar, parsed straight from rsync's own
 whichever way you run it). Only one background rsync runs at a time; a
 second one asked for while one is still going queues behind it, the
 same way a second Paste already queues behind one still copying.
-`Ctrl+C`/`Ctrl+Delete` cancels a running background rsync the same key
-that already cancels a running Paste — both, if both happen to be
-running at once. The one thing this path can't do that Run's own
+`Ctrl+C`/`Ctrl+Delete` asks to cancel a running background rsync — and
+a running Compress/Extract, if one happens to be active too, both in
+the same confirmation — independently of whatever a concurrently
+running Paste's own `Ctrl+C` pause dialog (see [Copy, Cut and
+Paste](#copy-cut-and-paste)) ends up answering, and always
+all-or-nothing (both jobs, both their own queues). The status bar's
+own rsync segment has a clickable "✕" too, for stopping just the
+current run without a queue asked about at all; `mR` opens its own
+dialog instead, asking "current job only" or "current plus its own
+queue" specifically for rsync, leaving any running Compress/Extract
+completely untouched either way. The one thing this path can't do that Run's own
 directly-attached terminal can: answer an interactive prompt, since a
 backgrounded rsync's own stdin deliberately reads from nothing rather
 than from breakthrough's own keyboard. "Run in background" itself
@@ -1778,15 +1792,40 @@ it, shown as "(+N queued)" right in the status bar's own progress line,
 and starts automatically, in the order each was asked for, the moment
 the one ahead of it finishes.
 
-`Ctrl+C` stops a running Paste outright, whether or not its own
-conflict dialog happens to be open at the time. Whatever's already
-mid-write finishes normally — on disk, exactly where it was already
-headed — rather than being interrupted mid-write; anything not yet
-started simply never starts, including a whole further Paste still
-queued behind this one. A *different* dialog (Properties, say)
+`Ctrl+C` pauses a running Paste, whether or not its own conflict dialog
+happens to be open at the time (it replaces that dialog if so), and
+opens a pause dialog with three answers: **Continue** (the safe
+default, also `Escape`) picks the walk back up exactly where it left
+off, re-showing the conflict dialog first if one was pending;
+**Cancel current job, keep queue** stops just this Paste and lets
+whatever's already queued behind it start; **Cancel everything** stops
+this Paste and drops the whole queue behind it too. Whatever item was
+already mid-transfer when `Ctrl+C` landed finishes normally for a Copy
+either way — interrupted only if you actually choose one of the two
+Cancel answers, and only then; for a Cut, choosing to cancel stops that
+item immediately instead, its own source left completely untouched,
+rather than letting it finish. A *different* dialog (Properties, say)
 happening to be open while a Paste merely continues in the background
 is unaffected — `Ctrl+C` there closes that dialog as it always has,
 since it's what you're actually looking at.
+
+The `mV` chord reaches the exact same pause dialog, but only while a
+Paste is actually running — it does nothing at all otherwise, unlike
+`Ctrl+C`'s own broader fallback (see the [Keyboard
+Reference](#keyboard-reference)'s "m" family). The status bar's own
+Paste progress segment also has a clickable "✕" for a quicker, narrower
+answer instead: a plain yes/no "stop the current job?", always just the
+current one, no pause step and the queue left running either way.
+
+A backgrounded Rsync or Compress/Extract (see [Rsync](#rsync)/
+[Compress](#compress)) is cancelled separately from Paste: `Ctrl+C`
+with no Paste running, and at least one of the two active, asks to
+cancel both together, dropping both their own queues too — always
+all-or-nothing. `mR`/`mC` reach past that, each asking specifically
+about Rsync or Compress/Extract on its own, with the same "current job
+only" vs. "current job plus its own queue" choice; the status bar's
+own "✕" on either progress segment skips straight to "current job
+only", asked first.
 
 Any real failure along the way — a permission error, a full disk, and
 so on, never a conflict, which always has a decision — is collected
@@ -2110,11 +2149,15 @@ fall through to it. `Escape` or a click on the panel gets you back out.
 
 ## Status bar
 
-The bottom line, almost entirely informational — three real
+The bottom line, almost entirely informational — several real
 exceptions, all clickable (see below). Left to right: whatever's
 actually staged or in flight (a chord countdown, a running Paste's
-progress, or the clipboard's own contents — see [Copy, Cut and
-Paste](#copy-cut-and-paste)), then the notification badge, then the
+progress — with its own "✕" to stop just the current job, no queue
+involved (see [Copy, Cut and Paste](#copy-cut-and-paste)) — or the
+clipboard's own contents), then a running background rsync's own
+progress and a running background Compress/Extract's own progress if
+either is active, each with the identical "✕" (see
+[Rsync](#rsync)/[Compress](#compress)), then the notification badge, then the
 mail badge (only once a mailbox actually resolves — see
 [Email](#email)), then eight further segments, each independently
 switchable off (see [Options and configuration](#options-and-configuration)
@@ -2127,6 +2170,7 @@ briefly cover this whole row for a few seconds — see
 | Clipboard | `Copy`/`Cut: <N> files, <M> dirs ✕` while something's on the clipboard — the verb itself carries the exact same background tint a held file's own row gets in the panel, and the trailing `✕` is clickable, clearing the clipboard outright (see [Copy, Cut and Paste](#copy-cut-and-paste)) | The verb: green (Copy) / red (Cut) background |
 | Messages badge | `Msgs <N>`, `N` right-padded to a fixed 3 columns — clickable, opens the [Messages screen](#notifications) | Muted at 0, warning-colored once there's at least one unread |
 | Mail badge | `Email <N>`, shown once a mailbox resolves — a configured Maildir or mbox path (Options → Mail), or the auto-detected system mailbox — and is readable; clickable, launches the configured mail client, same as `ge` (see [Email](#email)) | Muted at 0, warning-colored once there's at least one unread |
+| Paste/Rsync/Compress cancel | Each of the Paste, Rsync, and Compress/Extract progress segments ends with a clickable "✕" once it's showing at all — a plain yes/no "stop the current job?" confirmation, always just the current job, the queue behind it left running (see [Copy, Cut and Paste](#copy-cut-and-paste)) | Muted |
 | Username | The current user | Green — red while running as root |
 | Mouse | "Mouse on"/"Mouse off" (see the `om` chord) | unchanged |
 | Disk space | `<TYPE> free <free>/<total> (<percent>%)` for the current directory's own filesystem — `<TYPE>` is the real filesystem type (`EXT4`, `CIFS`, `NFS4`, `ECRYPTFS`, ...), the same one the [Mounts](#mounts) screen shows, or a plain `Disk` if it can't be determined | Blue, percentage green/orange/red |

@@ -231,11 +231,17 @@ terminal.
   queues it rather than running it alongside the first or replacing
   it outright — shown as "(+N queued)" right in the status bar's own
   progress line — and it starts automatically the moment the one ahead
-  of it finishes, in the order each was asked for. Ctrl+C stops a
-  running Paste outright — whatever's already mid-write finishes
-  normally, on disk, right where it was headed; nothing still queued,
-  whether a pending conflict or a whole further Paste behind this one,
-  starts at all. Any real failure (permission, a full disk, ...) is
+  of it finishes, in the order each was asked for. Ctrl+C pauses a
+  running Paste and asks what to do next — continue, cancel just this
+  job and let whatever's queued run, or cancel everything; whatever
+  item was already mid-transfer finishes normally for a Copy, or, for a
+  Cut, stops immediately with its own source left untouched, but only
+  if you actually choose to cancel. A backgrounded Rsync or
+  Compress/Extract is cancelled separately: Ctrl+C with no Paste
+  running asks to cancel both together (dropping both their own
+  queues), while the "mR"/"mC" chords and a clickable "✕" on each
+  progress segment reach each one individually, "current job only" or
+  "current plus its own queue" apart from the other. Any real failure (permission, a full disk, ...) is
   collected rather than stopping at the first one, and reported once
   the whole Paste is done. Every open tab showing the destination
   reloads automatically as items actually land, not just once the

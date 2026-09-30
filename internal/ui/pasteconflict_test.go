@@ -199,6 +199,159 @@ func TestPasteWalkAutoMergeDoesNotApplyToFileConflicts(t *testing.T) {
 	}
 }
 
+// TestPasteWalkBlocksBetweenItemsWhilePaused pins the actual mechanism
+// requestPastePause relies on: pausing a job (see pasteJob.pause) stops
+// pasteWalk's own loop from starting any further item, and resuming it
+// (pasteJob.resume) releases it to continue right where it left off —
+// run on its own goroutine here, the same way startPaste always starts
+// it for real, specifically so this test can observe it genuinely
+// blocked rather than having already raced ahead.
+func TestPasteWalkBlocksBetweenItemsWhilePaused(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	items := []string{filepath.Join(srcDir, "apple.txt"), filepath.Join(srcDir, "banana.txt")}
+	job := newPasteTestJob(r, false, destDir, len(items))
+	job.pause()
+
+	done := isolatePasteIO(t)
+	walkDone := make(chan struct{})
+	go func() {
+		r.pasteWalk(job, items)
+		close(walkDone)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("fsCopy was called while the job was paused")
+	case <-time.After(200 * time.Millisecond):
+		// Expected: nothing starts while paused.
+	}
+
+	job.resume()
+	waitPasteIO(t, done, len(items))
+
+	select {
+	case <-walkDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pasteWalk never returned after being resumed")
+	}
+}
+
+// TestPasteWalkUnblocksWhenCancelledWhilePaused pins waitWhilePaused's
+// own other exit: a job paused and then cancelled outright (job.cancel,
+// not resume — e.g. "Cancel everything" from the pause dialog, or
+// confirmQuitWhilePasting) must not leave pasteWalk's own goroutine
+// blocked forever with nothing left to ever release it.
+func TestPasteWalkUnblocksWhenCancelledWhilePaused(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	items := []string{filepath.Join(srcDir, "apple.txt"), filepath.Join(srcDir, "banana.txt")}
+	job := newPasteTestJob(r, false, destDir, len(items))
+	job.pause()
+
+	done := isolatePasteIO(t)
+	walkDone := make(chan struct{})
+	go func() {
+		r.pasteWalk(job, items)
+		close(walkDone)
+	}()
+
+	job.cancel()
+
+	select {
+	case <-walkDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pasteWalk never returned after the job was cancelled while paused")
+	}
+	select {
+	case <-done:
+		t.Fatal("fsCopy was called — a cancelled job must not still start an item it never got to")
+	default:
+	}
+}
+
+// TestPasteOneGatesAlreadyDispatchedItemsOnPause pins a real,
+// user-reported gap the pasteWalk-level pause check alone missed
+// entirely: pasteWalk itself dispatches every item's own goroutine
+// near-instantly (see its own doc comment — no real I/O happens in
+// that loop, just an os.Lstat per item), so for anything short of a
+// very large job, every item is typically already spawned and queued
+// on job.ioMu well before a user could react and press Ctrl+C at all —
+// a pause requested at that point found nothing left in pasteWalk's own
+// loop to gate, and copying simply continued to completion regardless
+// (see pasteOne's own doc comment on why the real gate now lives at
+// job.ioMu instead). Pins the fix by pausing only *after* both items'
+// goroutines are already dispatched and racing for ioMu, then
+// confirming the second one still doesn't start until resumed.
+func TestPasteOneGatesAlreadyDispatchedItemsOnPause(t *testing.T) {
+	srcDir := fixtureDir(t)
+	destDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	items := []string{filepath.Join(srcDir, "apple.txt"), filepath.Join(srcDir, "banana.txt")}
+	job := newPasteTestJob(r, false, destDir, len(items))
+
+	origCopy := fsCopy
+	calls := make(chan string, 2)
+	release := make(chan struct{})
+	fsCopy = func(src, dst string, opts fsops.CopyOptions) error {
+		calls <- src
+		<-release
+		return origCopy(src, dst, opts)
+	}
+	t.Cleanup(func() { fsCopy = origCopy })
+
+	// Dispatches both items' own goroutines — returns almost instantly,
+	// well before either one has actually reached fsCopy.
+	r.pasteWalk(job, items)
+
+	var first string
+	select {
+	case first = <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no item ever reached fsCopy")
+	}
+
+	select {
+	case <-calls:
+		t.Fatal("a second item reached fsCopy before the first was even released — ioMu isn't serializing them")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Pause now — with the first item's own fsCopy call still in
+	// flight, and the second already queued behind ioMu, exactly the
+	// real-world timing a user's Ctrl+C press actually has.
+	job.pause()
+	close(release) // let the first, already-in-flight item finish normally
+
+	select {
+	case <-calls:
+		t.Fatal("the second item started even though the job was paused before it ever got its own turn")
+	case <-time.After(300 * time.Millisecond):
+		// Expected: still gated at job.ioMu, inside pasteOne.
+	}
+
+	job.resume()
+	select {
+	case second := <-calls:
+		if second == first {
+			t.Fatalf("the same item (%q) reached fsCopy twice", second)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the second item never started after resume")
+	}
+}
+
 // TestPasteOneAppliesSkipAttributesFromJob pins that job.skipAttributes
 // actually reaches the real fsCopy call pasteOne makes — the UI-layer
 // half of a guarantee already pinned at the fsops level directly (see
@@ -278,6 +431,78 @@ func TestPasteOneAppliesStableSymlinksFromJob(t *testing.T) {
 	wantTarget := filepath.Join(dst, "real.txt")
 	if got != wantTarget {
 		t.Errorf("copied link target = %q, want %q — job.stableSymlinks should have reached the real Copy call", got, wantTarget)
+	}
+}
+
+// TestPasteOneCutRespectsJobCancellationLeavingSourceUntouched pins the
+// UI-layer half of the user's own explicit requirement (the fsops-level
+// half is TestMoveMergeFallbackLeavesSourceUntouchedWhenCtxCancelled in
+// internal/fsops): job.ctx actually reaches a Cut's own real Move call
+// (see pasteOne's own doc comment on why job.cut gets Ctx and the plain
+// Copy default case deliberately doesn't), so cancelling the job while
+// its own Move is genuinely in progress leaves the source completely
+// untouched, rather than the file landing at dst with its source then
+// removed the way an uncancelled Move always finishes. Forced through
+// Move's own Copy-based fallback (MergeInto onto an existing, non-empty
+// dst — the same trigger the fsops-level test uses) rather than the
+// fast os.Rename path, which is atomic and would need a genuine EXDEV
+// condition to reach the fallback path Ctx actually applies to at all.
+// Hooks fsMove's own OnFile the same way the fsops-level test hooks
+// Move directly, cancelling job.ctx from inside the real call itself —
+// the only way to land the cancellation genuinely mid-flight rather
+// than racing it in from outside.
+func TestPasteOneCutRespectsJobCancellationLeavingSourceUntouched(t *testing.T) {
+	base := t.TempDir()
+	src := filepath.Join(base, "src")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	dstParent := t.TempDir()
+	dst := filepath.Join(dstParent, "dst")
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "extra.txt"), []byte("keep"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), base)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, true, dstParent, 1)
+
+	origMove := fsMove
+	done := make(chan struct{}, 1)
+	fsMove = func(src, dst string, opts fsops.MoveOptions) error {
+		origOnFile := opts.OnFile
+		opts.OnFile = func(path string) {
+			if origOnFile != nil {
+				origOnFile(path)
+			}
+			job.cancel() // cancel from genuinely inside the real Move call, not racing it from outside
+		}
+		err := origMove(src, dst, opts)
+		done <- struct{}{}
+		return err
+	}
+	t.Cleanup(func() { fsMove = origMove })
+
+	go r.pasteOne(job, src, dst, true, fsops.MergeInto)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the real Move call to return")
+	}
+
+	if _, err := os.Stat(filepath.Join(src, "a.txt")); err != nil {
+		t.Errorf("src/a.txt should still be there — a cancelled Move must never remove its source, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "a.txt")); !os.IsNotExist(err) {
+		t.Errorf("dst/a.txt should never have been created, stat err = %v", err)
 	}
 }
 
@@ -2195,12 +2420,14 @@ func TestCancelPasteJobClosesOpenDialog(t *testing.T) {
 	}
 }
 
-// TestRequestCancelStopsARunningPaste pins the user's own explicit
-// report: a Paste, once started, previously had no way to be
-// interrupted at all — Ctrl+C (RequestCancel) now stops it the same way
-// starting a second Paste already could (see cancelPasteJob), the
-// moment there's no overlay open to route to instead.
-func TestRequestCancelStopsARunningPaste(t *testing.T) {
+// TestRequestCancelPausesARunningPasteAndOpensTheDialog pins the
+// current behavior (see pastepause.go's own package doc comment):
+// Ctrl+C (RequestCancel) no longer kills a running Paste outright — it
+// pauses it and opens the pause dialog to ask what to do next, leaving
+// the job itself very much still alive (r.pasteJob unchanged, its own
+// context not yet cancelled) until one of that dialog's three answers
+// actually says otherwise.
+func TestRequestCancelPausesARunningPasteAndOpensTheDialog(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -2210,23 +2437,30 @@ func TestRequestCancelStopsARunningPaste(t *testing.T) {
 
 	r.RequestCancel()
 
-	if r.pasteJob != nil {
-		t.Error("r.pasteJob should be cleared after RequestCancel")
+	if r.pasteJob != job {
+		t.Error("r.pasteJob should be unchanged — pausing doesn't stop the job")
 	}
-	if job.ctx.Err() == nil {
-		t.Error("the cancelled job's own context should now report an error")
+	if job.ctx.Err() != nil {
+		t.Error("the job's own context should not be cancelled by a mere pause")
+	}
+	if job.resumeCh == nil {
+		t.Error("the job should be marked paused")
+	}
+	if r.activePage != pastePausePage {
+		t.Errorf("activePage = %q, want the pause dialog open", r.activePage)
 	}
 }
 
-// TestRequestCancelFromConflictDialogCancelsWholeJob pins the sharper
-// edge of the same report: Ctrl+C while the paste-conflict dialog
-// itself is open must cancel the *whole* job, not just close that one
-// dialog the way an unrelated overlay's own hideOverlay would — closing
-// only the dialog would leave job.current pointing at a conflict
-// nothing could ever resolve again (its own three buttons are the only
-// path to chooseConflictResolution), silently stranding the job
-// forever instead of either finishing or actually being cancelled.
-func TestRequestCancelFromConflictDialogCancelsWholeJob(t *testing.T) {
+// TestRequestCancelFromConflictDialogOpensThePauseDialog pins the
+// sharper edge of the same behavior: Ctrl+C while the paste-conflict
+// dialog itself is open must not just close that one dialog the way an
+// unrelated overlay's own hideOverlay would (see
+// TestCaptureOutsideClickBlockedForPasteConflictDialog's own doc
+// comment on the identical stranding hazard that guards against) — it
+// replaces it with the pause dialog instead, job.current left
+// untouched underneath until resumePastePause brings it back (see
+// TestResumePastePauseReshowsAPendingConflict).
+func TestRequestCancelFromConflictDialogOpensThePauseDialog(t *testing.T) {
 	r, job, _, _ := setUpPasteConflict(t, "")
 	if r.activePage != pasteConflictPage {
 		t.Fatal("setup: the conflict dialog should be open")
@@ -2234,14 +2468,127 @@ func TestRequestCancelFromConflictDialogCancelsWholeJob(t *testing.T) {
 
 	r.RequestCancel()
 
-	if r.activePage == pasteConflictPage {
-		t.Error("the dialog should have closed")
+	if r.activePage != pastePausePage {
+		t.Errorf("activePage = %q, want the pause dialog open", r.activePage)
+	}
+	if r.pasteJob != job {
+		t.Error("the job should be unchanged, only paused")
+	}
+	if job.ctx.Err() != nil {
+		t.Error("the job's own context should not be cancelled by a mere pause")
+	}
+	if job.current == nil {
+		t.Error("the pending conflict should still be tracked, not abandoned")
+	}
+}
+
+// TestRequestCancelASecondTimeWhilePausedResumes pins the pause
+// dialog's own stranding guard on the keyboard side (see
+// captureOutsideClick's identical guard on the mouse side): a second
+// Ctrl+C while it's already open must not fall through to the generic
+// "any overlay open — just close it" branch, which would leave the job
+// paused with nothing left to ever resume it. It resolves to "Continue"
+// instead, the same safe default Escape already gives it.
+func TestRequestCancelASecondTimeWhilePausedResumes(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 3)
+	r.RequestCancel() // pause
+
+	r.RequestCancel() // a second press
+
+	if job.resumeCh != nil {
+		t.Error("the job should be resumed, not still paused")
+	}
+	if r.activePage == pastePausePage {
+		t.Error("the pause dialog should have closed")
+	}
+}
+
+// TestCancelPastePauseKeepQueueContinuesWithTheNextQueuedPaste pins
+// "Cancel current job, keep queue"'s own distinguishing behavior versus
+// "Cancel everything" (see cancelPasteJob's own doc comment on that
+// one): only the current job is stopped, whatever else was already
+// queued behind it still runs.
+func TestCancelPastePauseKeepQueueContinuesWithTheNextQueuedPaste(t *testing.T) {
+	srcDir := fixtureDir(t)
+	firstDestDir := t.TempDir()
+	r, err := NewRoot(tview.NewApplication(), srcDir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, firstDestDir, 3)
+
+	secondDestDir := t.TempDir()
+	secondItems := []string{filepath.Join(srcDir, "banana.txt")}
+	r.pasteQueue = append(r.pasteQueue, queuedPaste{items: secondItems, cut: true, destDir: secondDestDir})
+	done := isolatePasteIO(t)
+
+	r.cancelPastePauseKeepQueue()
+	waitPasteIO(t, done, 1) // the queued job's own one item, actually copied now
+
+	if job.ctx.Err() == nil {
+		t.Error("the current job should be cancelled")
+	}
+	if r.pasteJob == job {
+		t.Error("r.pasteJob should no longer be the cancelled job")
+	}
+	if len(r.pasteQueue) != 0 {
+		t.Error("advancePasteQueue should have consumed the queued entry, not left it sitting")
+	}
+	if r.pasteJob == nil || !r.pasteJob.cut || r.pasteJob.destDir != secondDestDir {
+		t.Errorf("r.pasteJob = %+v, want the queued job started (cut=true, destDir=%q)", r.pasteJob, secondDestDir)
+	}
+}
+
+// TestCancelPastePauseEverythingDropsTheQueueToo pins "Cancel
+// everything"'s own contract — identical to cancelPasteJob's
+// pre-existing "stop this job and drop the whole queue behind it" one,
+// just reached through the pause dialog now instead of a direct Ctrl+C.
+func TestCancelPastePauseEverythingDropsTheQueueToo(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 3)
+	r.pasteQueue = []queuedPaste{{items: []string{"whatever"}, destDir: dir}}
+
+	r.cancelPastePauseEverything()
+
+	if job.ctx.Err() == nil {
+		t.Error("the current job should be cancelled")
 	}
 	if r.pasteJob != nil {
-		t.Error("r.pasteJob should be cleared, not just the dialog closed")
+		t.Error("r.pasteJob should be cleared")
 	}
-	if job.ctx.Err() == nil {
-		t.Error("the whole job should be cancelled, not just its dialog dismissed")
+	if len(r.pasteQueue) != 0 {
+		t.Error("the whole queue should have been dropped too")
+	}
+}
+
+// TestResumePastePauseReshowsAPendingConflict is
+// TestRequestCancelFromConflictDialogOpensThePauseDialog's own other
+// half: answering "Continue" once a conflict was pending underneath the
+// pause dialog must bring that conflict back on screen, not silently
+// abandon it the way an unconditional hideOverlay would.
+func TestResumePastePauseReshowsAPendingConflict(t *testing.T) {
+	r, job, _, _ := setUpPasteConflict(t, "")
+	r.RequestCancel() // pause, replacing the conflict dialog
+
+	r.resumePastePause()
+
+	if r.activePage != pasteConflictPage {
+		t.Errorf("activePage = %q, want the conflict dialog reshown", r.activePage)
+	}
+	if job.current == nil {
+		t.Error("the pending conflict should still be there")
+	}
+	if job.resumeCh != nil {
+		t.Error("the job should no longer be paused")
 	}
 }
 
@@ -2280,6 +2627,38 @@ func TestCaptureOutsideClickBlockedForPasteConflictDialog(t *testing.T) {
 	}
 	if r.pasteJob == nil {
 		t.Error("the job itself should still be running, not cancelled by a stray outside click")
+	}
+}
+
+// TestCaptureOutsideClickBlockedForPastePauseDialog is
+// TestCaptureOutsideClickBlockedForPasteConflictDialog's own sibling
+// for the pause dialog: a stray outside click must not silently close
+// it either — that would leave the job paused with nothing left to
+// ever resume it (see pasteJob.resumeCh's own doc comment), the exact
+// same stranding hazard the conflict dialog's own exception exists for.
+func TestCaptureOutsideClickBlockedForPastePauseDialog(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	job := newPasteTestJob(r, false, dir, 3)
+	r.RequestCancel() // pause, opening the dialog
+	if r.activePage != pastePausePage {
+		t.Fatal("setup: the pause dialog should be open")
+	}
+
+	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(0, 0, tcell.Button1, 0))
+
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("outside click should be consumed and swallowed, got action=%v event=%v", action, event)
+	}
+	if r.activePage != pastePausePage {
+		t.Errorf("activePage = %q, want the dialog to stay open", r.activePage)
+	}
+	if job.resumeCh == nil {
+		t.Error("the job should still be paused, not silently resumed or abandoned by a stray click")
 	}
 }
 

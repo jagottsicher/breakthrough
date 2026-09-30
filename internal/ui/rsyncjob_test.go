@@ -431,6 +431,49 @@ func TestCancelRsyncJobStopsTheProcessAndClearsTheQueue(t *testing.T) {
 	}
 }
 
+// TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext pins
+// cancelRsyncKeepQueue's own distinguishing behavior versus
+// cancelRsyncJob (see its own doc comment): only the current run is
+// stopped, whatever's already queued behind it starts right away
+// instead of being dropped too.
+func TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &rsyncJob{ctx: ctx, cancel: cancel}
+	r.rsyncJob = job
+	r.rsyncQueue = []queuedRsync{{
+		job:   rsync.Job{Source: rsync.Endpoint{Path: filepath.Join(r.panel.path, "a.txt")}, Destination: rsync.Endpoint{Path: t.TempDir()}},
+		label: "queued",
+	}}
+
+	r.cancelRsyncKeepQueue()
+
+	if job.ctx.Err() == nil {
+		t.Error("the cancelled job's own context should report an error")
+	}
+	if len(r.rsyncQueue) != 0 {
+		t.Error("the queued entry should have started, not stayed queued")
+	}
+	if r.rsyncJob == nil || r.rsyncJob.label != "queued" {
+		t.Errorf("r.rsyncJob = %+v, want the queued run started", r.rsyncJob)
+	}
+	r.cancelRsyncJob() // don't leave a real rsync process running past this test
+}
+
+// TestCancelRsyncKeepQueueIsANoOpWhenNothingRunning pins the "nothing
+// to do, do nothing" contract cancelRsyncJob's own nil check already
+// has — real here specifically because a confirmation dialog now sits
+// between whatever triggered this and the call itself (mR's "Cancel
+// current" answer, or the status bar's own "✕"), and the job it was
+// about to stop may have already finished on its own by then.
+func TestCancelRsyncKeepQueueIsANoOpWhenNothingRunning(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	r.cancelRsyncKeepQueue() // must not panic
+	if r.rsyncJob != nil {
+		t.Error("r.rsyncJob should still be nil")
+	}
+}
+
 func TestRunRsyncBackgroundRefusesAnEmptyDestination(t *testing.T) {
 	r := newTestRootForRsyncJob(t)
 	r.openRsync()

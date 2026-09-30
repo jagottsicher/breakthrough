@@ -105,6 +105,21 @@ type pasteJob struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	// pauseMu guards resumeCh below — pause/resume (see their own doc
+	// comments) are always called from the UI thread (Root.
+	// requestPastePause/resumePasteJob), resumeCh itself is read from
+	// pasteWalk's own background goroutine (see waitWhilePaused): the
+	// one piece of job state genuinely shared between the two that
+	// isn't already an atomic or a context, so the only one that needs
+	// a lock of its own at all.
+	pauseMu sync.Mutex
+	// resumeCh is non-nil exactly while this job is paused — closed by
+	// resume to release every waitWhilePaused call currently blocked on
+	// it, then set back to nil so a further pause starts a fresh one
+	// rather than trying to close an already-closed channel a second
+	// time.
+	resumeCh chan struct{}
+
 	cut     bool
 	destDir string
 
@@ -552,21 +567,28 @@ func (r *Root) scanPasteBytes(job *pasteJob, items []string) {
 	})
 }
 
-// cancelPasteJob stops whatever paste is currently running, if any — a
-// real Cancel (see Root.RequestCancel), or the confirmed "cancel it and
-// quit" answer (see confirmQuitWhilePasting). pasteWalk itself checks
-// job.ctx.Err() between every item and stops there; anything already
-// handed off to its own pasteOne goroutine finishes that one last file
-// rather than being interrupted mid-write, but its result is discarded
-// (see pasteOne's own job-identity check).
+// cancelPasteJob stops whatever paste is currently running, if any — the
+// pause dialog's own "Cancel everything" answer (see
+// cancelPastePauseEverything in pastepause.go), or the confirmed
+// "cancel it and quit" answer (see confirmQuitWhilePasting). pasteWalk
+// itself checks job.ctx.Err() between every item and stops there;
+// whichever single item was already handed off to its own pasteOne
+// goroutine either finishes that one last file (a Copy — see
+// pasteOne's own doc comment on why job.ctx is deliberately kept out of
+// CopyOptions) or is interrupted mid-write, its source left untouched
+// (a Cut — job.ctx is passed to MoveOptions.Ctx precisely so cancelling
+// here reaches it too). Either way its own result is discarded once it
+// does report back (see pasteOne's own job-identity check).
 //
 // Also drops the whole queue behind it (see r.pasteQueue), not just
-// this one job: both callers are a deliberate, explicit "stop this" —
-// Ctrl+C reaching for a way out, or a confirmed quit — and continuing
-// on to whatever was queued right after either one would be a new
-// surprise of exactly the kind this whole queue exists to prevent (see
-// startPaste's own doc comment). Unlike finishPasteJob, this
-// deliberately does not call advancePasteQueue.
+// this one job: both callers are a deliberate, explicit "stop
+// everything" — see cancelPastePauseKeepQueue in pastepause.go for the
+// narrower answer that cancels only the current job and lets the rest
+// of the queue proceed — and continuing on to whatever was queued right
+// after either one would be a new surprise of exactly the kind this
+// whole queue exists to prevent (see startPaste's own doc comment).
+// Unlike finishPasteJob, this deliberately does not call
+// advancePasteQueue.
 func (r *Root) cancelPasteJob() {
 	if r.pasteJob == nil {
 		return
@@ -606,10 +628,69 @@ func (r *Root) cancelPasteJob() {
 // bounding how many exist at all. Fine for the sizes this app's own
 // target use actually pastes at once; a real bounded worker pool would
 // be the next step if that ever stopped being true.
+// pause marks job as paused — see resumeCh's own doc comment.
+// waitWhilePaused (called from pasteWalk's own background goroutine) is
+// what actually blocks on it; pause itself only ever runs on the UI
+// thread (Root.requestPastePause) and returns immediately either way.
+// Idempotent: pausing an already-paused job (Ctrl+C pressed twice
+// before a decision is made, say) reuses the existing resumeCh rather
+// than leaking a second one nothing would ever close.
+func (job *pasteJob) pause() {
+	job.pauseMu.Lock()
+	defer job.pauseMu.Unlock()
+	if job.resumeCh == nil {
+		job.resumeCh = make(chan struct{})
+	}
+}
+
+// resume releases every waitWhilePaused call currently blocked on this
+// job's own resumeCh, and clears it so a further pause starts a fresh
+// one. A no-op if the job isn't actually paused (resumeCh already nil)
+// — safe to call unconditionally from whichever of the pause dialog's
+// own answers ends up continuing the walk (see resumePasteJob).
+func (job *pasteJob) resume() {
+	job.pauseMu.Lock()
+	defer job.pauseMu.Unlock()
+	if job.resumeCh != nil {
+		close(job.resumeCh)
+		job.resumeCh = nil
+	}
+}
+
+// waitWhilePaused blocks pasteWalk's own loop, between items, for as
+// long as job is paused — released either by resume (a fresh iteration
+// then finds resumeCh nil and returns immediately) or by the job being
+// cancelled out from under it while waiting (job.ctx.Done()), so a
+// paste paused and then cancelled outright, rather than resumed, still
+// unblocks and winds down instead of hanging forever. Called before
+// every item, the same place job.ctx.Err() is already checked — a paste
+// currently paused when the very last already-in-flight item finishes
+// simply stops there, reporting nothing further, until resumed or
+// cancelled.
+func (job *pasteJob) waitWhilePaused() {
+	for {
+		job.pauseMu.Lock()
+		ch := job.resumeCh
+		job.pauseMu.Unlock()
+		if ch == nil {
+			return
+		}
+		select {
+		case <-ch:
+		case <-job.ctx.Done():
+			return
+		}
+	}
+}
+
 func (r *Root) pasteWalk(job *pasteJob, items []string) {
 	for i, src := range items {
 		if job.ctx.Err() != nil {
 			return // superseded by a newer paste, or cancelled outright — see cancelPasteJob
+		}
+		job.waitWhilePaused()
+		if job.ctx.Err() != nil {
+			return // cancelled while paused — see waitWhilePaused
 		}
 		src := src
 		// restoreDests[i], when set, is this item's own real destination
@@ -819,6 +900,29 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 	}
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 	job.ioMu.Lock()
+	// waitWhilePaused here, not (only) in pasteWalk's own per-item loop,
+	// is what actually makes a pause take effect: pasteWalk itself
+	// dispatches every item's own goroutine near-instantly (see its own
+	// doc comment — no real I/O happens there at all, just an os.Lstat
+	// per item), so for anything short of a very large job, every item
+	// is typically already spawned and queued on job.ioMu well before a
+	// user could react and press Ctrl+C at all — a pause check only in
+	// that dispatch loop would then find nothing left to gate. ioMu
+	// itself is the one genuine serialization point (see its own doc
+	// comment: only one item's real I/O ever runs at a time, regardless
+	// of how many goroutines are already alive), so checking here,
+	// already holding it, is what actually guarantees "the current file
+	// finishes, then nothing further starts, regardless of dispatch
+	// order": whichever goroutine holds ioMu when a pause lands simply
+	// finishes its own real Copy/Move normally; every other one already
+	// queued behind Lock above only reaches this point, and blocks here,
+	// once it's actually its own turn — never racing ahead of the pause
+	// the way a check only before Lock could.
+	job.waitWhilePaused()
+	if job.ctx.Err() != nil {
+		job.ioMu.Unlock()
+		return
+	}
 	var err error
 	switch {
 	case job.cut && job.followSymlinks:
@@ -829,10 +933,27 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 		// FollowSymlinks always true here, nothing ever survives as a
 		// link for it to rewrite (see MoveFollowingSymlinks' own doc
 		// comment on why it doesn't even forward this field internally).
-		err = fsMoveFollowingSymlinks(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
+		err = fsMoveFollowingSymlinks(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks, Ctx: job.ctx})
 	case job.cut:
-		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
+		// Ctx: job.ctx — unlike the plain Copy default case just below,
+		// a Cut is given the job's own cancellation context, so
+		// cancelling this job interrupts whichever file is currently
+		// streaming immediately rather than letting it finish, and,
+		// critically, leaves its source untouched (see fsops.Move's own
+		// doc comment: src is never removed until a successful copy has
+		// already landed) — the user's own explicit requirement for a
+		// cancelled Move, in contrast to a cancelled Copy, which keeps
+		// job.ctx out of CopyOptions entirely for exactly the opposite
+		// reason (see the default case below).
+		err = fsMove(src, dst, fsops.MoveOptions{Force: force, Mode: mode, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks, Ctx: job.ctx})
 	default:
+		// Deliberately no Ctx here: a Copy in flight when this job is
+		// cancelled always finishes writing the file it already started
+		// rather than being interrupted mid-stream — the same "current
+		// file always completes" contract this app has always had for
+		// Copy, unaffected by adding cancellation support at all (see
+		// job.cut's own Ctx above for the one case that now does
+		// respect it, and why).
 		err = fsCopy(src, dst, fsops.CopyOptions{Force: force, Mode: mode, FollowSymlinks: job.followSymlinks, OnFile: onFile, OnBytes: onBytes, SkipAttributes: job.skipAttributes, StableSymlinks: job.stableSymlinks})
 	}
 	job.ioMu.Unlock()
@@ -890,6 +1011,14 @@ func (r *Root) pasteOneRemote(job *pasteJob, src, dst string, force bool, mode f
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 
 	job.ioMu.Lock()
+	// See pasteOne's own doc comment on why this has to be checked here,
+	// already holding ioMu, rather than only in pasteWalk's own dispatch
+	// loop.
+	job.waitWhilePaused()
+	if job.ctx.Err() != nil {
+		job.ioMu.Unlock()
+		return
+	}
 	skipped, err := runPasteTransferItem(srcSide, destSide, src, dst, force, mode, onFile, onBytes, &job.skippedSymlinks)
 	if err == nil && job.cut && !skipped {
 		// !skipped: src itself was a symlink, left untouched — nothing

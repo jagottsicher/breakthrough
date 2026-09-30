@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1993,6 +1994,154 @@ func TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard(t *testing.T) {
 
 	if r.clipboardClearSpan.run != nil {
 		t.Error("clipboardClearSpan has a run func with nothing on the clipboard, want the zero value")
+	}
+}
+
+// TestPasteCancelSpanClickOpensAConfirmation pins the status bar's own
+// "✕" on the Paste progress segment (see bgjobcancel.go's own
+// confirmCancelCurrentPaste) — per the user's own explicit request, it
+// always asks first rather than cancelling immediately.
+func TestPasteCancelSpanClickOpensAConfirmation(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	newPasteTestJob(r, false, dir, 3)
+	r.statusBar.SetRect(0, 0, 120, 1)
+	r.refreshStatusBar()
+
+	if r.pasteCancelSpan.endCol <= r.pasteCancelSpan.startCol {
+		t.Fatalf("pasteCancelSpan = %+v, want a real, non-empty column range", r.pasteCancelSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.pasteCancelSpan.startCol+r.pasteCancelSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != confirmPage {
+		t.Errorf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+}
+
+// TestPasteCancelSpanPositionIsUnaffectedByCurrentFileNameLength pins
+// the user's own explicit, real-world report: a click target placed
+// after the current file's own name — which changes completely, for
+// every single file, throughout the whole job — was effectively
+// unclickable, since its column position jumped around with every new
+// file. The "✕" now sits between pasteProgressPrefix and
+// pasteProgressSuffix (see pasteProgressText's own doc comment), so its
+// own column range must stay identical regardless of how long the
+// current file's own name is.
+func TestPasteCancelSpanPositionIsUnaffectedByCurrentFileNameLength(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 3)
+	r.statusBar.SetRect(0, 0, 160, 1)
+
+	short := "a.txt"
+	job.currentFile.Store(&short)
+	r.refreshStatusBar()
+	shortSpan := r.pasteCancelSpan
+
+	long := "a-much-much-longer-file-name-than-the-one-before-it.tar.gz"
+	job.currentFile.Store(&long)
+	r.refreshStatusBar()
+	longSpan := r.pasteCancelSpan
+
+	if shortSpan.startCol != longSpan.startCol || shortSpan.endCol != longSpan.endCol {
+		t.Errorf("pasteCancelSpan moved with the current file name: %+v (short name) vs %+v (long name), want identical", shortSpan, longSpan)
+	}
+}
+
+// TestPasteCancelSpanIsEmptyWithNoPasteRunning mirrors
+// TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard.
+func TestPasteCancelSpanIsEmptyWithNoPasteRunning(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	if r.pasteCancelSpan.run != nil {
+		t.Error("pasteCancelSpan has a run func with no Paste running, want the zero value")
+	}
+}
+
+// TestRsyncCancelSpanClickOpensAConfirmation mirrors
+// TestPasteCancelSpanClickOpensAConfirmation for the rsync segment.
+func TestRsyncCancelSpanClickOpensAConfirmation(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.rsyncJob = &rsyncJob{ctx: ctx, cancel: cancel}
+	r.statusBar.SetRect(0, 0, 120, 1)
+	r.refreshStatusBar()
+
+	if r.rsyncCancelSpan.endCol <= r.rsyncCancelSpan.startCol {
+		t.Fatalf("rsyncCancelSpan = %+v, want a real, non-empty column range", r.rsyncCancelSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.rsyncCancelSpan.startCol+r.rsyncCancelSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != confirmPage {
+		t.Errorf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+	r.cancelRsyncJob() // don't leave a real rsync process running past this test
+}
+
+// TestRsyncCancelSpanIsEmptyWithNoRsyncRunning mirrors
+// TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard.
+func TestRsyncCancelSpanIsEmptyWithNoRsyncRunning(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	if r.rsyncCancelSpan.run != nil {
+		t.Error("rsyncCancelSpan has a run func with no rsync running, want the zero value")
+	}
+}
+
+// TestCompressCancelSpanClickOpensAConfirmation mirrors
+// TestPasteCancelSpanClickOpensAConfirmation for the compress segment.
+func TestCompressCancelSpanClickOpensAConfirmation(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	r.compressJob = &compressJob{ctx: ctx, cancel: cancel, verb: "Compressing", label: "test.zip"}
+	r.statusBar.SetRect(0, 0, 120, 1)
+	r.refreshStatusBar()
+
+	if r.compressCancelSpan.endCol <= r.compressCancelSpan.startCol {
+		t.Fatalf("compressCancelSpan = %+v, want a real, non-empty column range", r.compressCancelSpan)
+	}
+	rectX, _, _, _ := r.statusBar.GetInnerRect()
+	x := rectX + (r.compressCancelSpan.startCol+r.compressCancelSpan.endCol)/2
+	event := tcell.NewEventMouse(x, 0, tcell.Button1, tcell.ModNone)
+
+	r.captureStatusBarMouse(tview.MouseLeftClick, event)
+
+	if r.activePage != confirmPage {
+		t.Errorf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+	r.cancelCompressJob() // don't leave a real process running past this test
+}
+
+// TestCompressCancelSpanIsEmptyWithNoCompressRunning mirrors
+// TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard.
+func TestCompressCancelSpanIsEmptyWithNoCompressRunning(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	r.statusBar.SetRect(0, 0, 80, 1)
+	r.refreshStatusBar()
+
+	if r.compressCancelSpan.run != nil {
+		t.Error("compressCancelSpan has a run func with no Compress/Extract running, want the zero value")
 	}
 }
 
