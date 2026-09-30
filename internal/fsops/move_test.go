@@ -1,6 +1,8 @@
 package fsops
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -591,5 +593,65 @@ func TestMoveFollowingSymlinksLeavesSourceUntouchedWhenCopyFails(t *testing.T) {
 	}
 	if got, err := os.ReadFile(target); err != nil || string(got) != "original" {
 		t.Errorf("the symlink's own target must be untouched, got %q, %v", got, err)
+	}
+}
+
+// TestMoveMergeFallbackLeavesSourceUntouchedWhenCtxCancelled pins
+// MoveOptions.Ctx's own core promise, exercised through Move's
+// Copy-based fallback (the same merge-mode trigger
+// TestMoveMergeIntoNonEmptyDirectoryFallsBackToCopy already uses, since
+// EXDEV itself needs a genuine second filesystem to simulate): once
+// cancelled mid-fallback, the Copy step returns an error, so Move's own
+// "never remove src until dst is confirmed safely in place" ordering
+// (see this file's own doc comment on Move) means src survives
+// completely intact — not just the one file that was mid-copy when
+// cancellation landed, but the whole source tree, exactly as if the
+// fallback had failed for any other reason.
+func TestMoveMergeFallbackLeavesSourceUntouchedWhenCtxCancelled(t *testing.T) {
+	dir := t.TempDir() // single filesystem — this is not an EXDEV case
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// os.ReadDir returns entries in name order, so a.txt is always
+	// reached, and reported via OnFile, before b.txt.
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "b.txt"), []byte("b"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "dst")
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "extra.txt"), []byte("keep me"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	seen := 0
+	err := Move(src, dst, MoveOptions{
+		Force: true, Mode: MergeInto, Ctx: ctx,
+		OnFile: func(path string) {
+			seen++
+			if seen == 1 {
+				cancel()
+			}
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Move err = %v, want context.Canceled", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(src, "a.txt")); err != nil {
+		t.Errorf("src/a.txt should still be there — Move never removes src until dst is fully in place, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(src, "b.txt")); err != nil {
+		t.Errorf("src/b.txt should still be there too, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "b.txt")); !os.IsNotExist(err) {
+		t.Errorf("dst/b.txt should never have started, stat err = %v", err)
 	}
 }

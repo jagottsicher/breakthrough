@@ -50,6 +50,9 @@ const (
 	// like every other page name, so cmd/breakthrough and tests never
 	// have to guess which file actually owns one.
 	pasteConflictPage = "paste-conflict"
+	// pastePausePage's own dialog is built in pastepause.go
+	// (newPastePauseDialog) — see its own package doc comment.
+	pastePausePage = "paste-pause"
 )
 
 // overlayFrame is one entry in Root.overlayStack (see showOverlay/
@@ -1609,6 +1612,15 @@ type Root struct {
 	pasteConflictDialogTitleBar *tview.TextView
 	pasteConflictDialogLayout   *tview.Flex
 
+	// pastePauseDialog is Ctrl+C's own answer while a Paste is running
+	// (see pastepause.go's own package doc comment) — same three-widget
+	// shape as pasteConflictDialog just above (a shared List, a title
+	// bar carrying the one line of state that actually changes between
+	// shows, and a Flex stacking the two), built once here the same way.
+	pastePauseDialog         *tview.List
+	pastePauseDialogTitleBar *tview.TextView
+	pastePauseDialogLayout   *tview.Flex
+
 	// menuInSubmenu is nil while the context menu shows its own top-level
 	// entries (see contextMenuTree in contextmenu.go), or points at
 	// whichever entry's own submenu is currently drilled into — the menu
@@ -1904,6 +1916,19 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.pasteConflictDialogTitleBar, 1, 0, false).
 		AddItem(r.pasteConflictDialog, 0, 1, true)
 
+	// The paste pause dialog (see pastepause.go) — Ctrl+C's own answer
+	// while a Paste is running, built the same way just above.
+	r.pastePauseDialog = r.newPastePauseDialog()
+	// Built empty — its real text (which file is running, plus whether
+	// Rsync/Compress are also active right now) is set fresh by
+	// renderPastePauseDialog before every show, the same "the question
+	// is the header" treatment pasteConflictDialogTitleBar/confirmDialog's
+	// own already get.
+	r.pastePauseDialogTitleBar = newPlainTitleBar("")
+	r.pastePauseDialogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.pastePauseDialogTitleBar, 1, 0, false).
+		AddItem(r.pastePauseDialog, 0, 1, true)
+
 	// The "Sed Replace" dialog and its own Preview screen (see
 	// sedreplace.go) — sedForm/sedFlagsList/sedActions are rebuilt fresh
 	// on every open (see resetSedForm), but sedLayout (which stacks all
@@ -2141,6 +2166,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
+	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(sedReplacePage, r.sedLayout, false, false)
 	r.AddPage(sedPreviewPage, r.sedPreviewLayout, false, false)
 	r.AddPage(duplicatePage, r.duplicateLayout, false, false)
@@ -2761,6 +2787,16 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		if r.activePage == pasteConflictPage {
 			return tview.MouseConsumed, nil // its own buttons (or Escape) only, see this function's own doc comment above
 		}
+		if r.activePage == pastePausePage {
+			// The exact same stranding hazard pasteConflictPage's own
+			// exception above exists for: closing this dialog via a
+			// stray outside click, rather than one of its own three
+			// answers, would leave the job paused (see pasteJob.resumeCh)
+			// with nothing left to ever resume it — pasteWalk's own
+			// waitWhilePaused would then block forever. See
+			// pastepause.go's own package doc comment.
+			return tview.MouseConsumed, nil
+		}
 		if r.activePage == renamePage {
 			r.finishRename(tcell.KeyEnter) // commits, same as Enter — see this function's own doc comment above
 			return tview.MouseConsumed, nil
@@ -3026,24 +3062,42 @@ func (r *Root) confirmQuitWhilePasting() {
 // It never quits: stopping breakthrough is Ctrl+Q plus a confirmation.
 func (r *Root) RequestCancel() {
 	if r.activePage == pasteConflictPage {
-		r.cancelPasteJob()
-		r.refreshStatusBar() // the progress segment should vanish immediately, not wait for the next tick
+		// See pastepause.go's own package doc comment: rather than
+		// killing the job outright the way this used to, unconditionally,
+		// Ctrl+C now always pauses a running Paste and asks what to do
+		// next — showOverlay closes this conflict dialog the same way it
+		// closes any other already-open overlay, and requestPastePause's
+		// own doc comment covers how it finds its way back if the answer
+		// ends up being "Continue".
+		r.requestPastePause()
+		return
+	}
+	if r.activePage == pastePausePage {
+		r.resumePastePause() // a second Ctrl+C while already paused - the same safe default Escape already gives it
 		return
 	}
 	if r.activePage != "" {
 		r.hideOverlay()
 		return
 	}
-	// Stops a running Paste, a backgrounded rsync, and a backgrounded
-	// Compress/Extract in the same press, if more than one happens to
-	// be running at once — three entirely independent background jobs
-	// (see rsyncjob.go/compressjob.go's own package doc comments), so
-	// "cancel whatever's running" naturally means all of them, not
-	// whichever one happened to be checked first.
-	if r.pasteJob != nil || r.rsyncJob != nil || r.compressJob != nil {
-		if r.pasteJob != nil {
-			r.cancelPasteJob()
-		}
+	// A running Paste gets its own pause-and-ask treatment (see
+	// pastepause.go) rather than being killed outright the instant
+	// Ctrl+C lands — deliberately does not also touch a concurrently
+	// running Rsync/Compress here: see renderPastePauseDialog's own
+	// notice when either is active, and pastepause.go's own package doc
+	// comment on why neither needed the same treatment Paste did.
+	if r.pasteJob != nil {
+		r.requestPastePause()
+		return
+	}
+	// Stops a backgrounded rsync and a backgrounded Compress/Extract in
+	// the same press, if both happen to be running at once — two
+	// entirely independent background jobs (see rsyncjob.go/
+	// compressjob.go's own package doc comments), so "cancel whatever's
+	// running" naturally means both, not whichever happened to be
+	// checked first. Unaffected by, and unaware of, Paste's own pause
+	// dialog above — see pastepause.go's own package doc comment.
+	if r.rsyncJob != nil || r.compressJob != nil {
 		if r.rsyncJob != nil {
 			r.cancelRsyncJob()
 		}

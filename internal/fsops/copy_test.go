@@ -1,6 +1,8 @@
 package fsops
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -950,5 +952,79 @@ func TestCopyMergeIntoExistingDirectoryLeavesItsOwnMetadataUntouched(t *testing.
 	// src's 2019", not nanosecond precision.
 	if fi.ModTime().Before(dstOwnTime.Add(-time.Second)) {
 		t.Errorf("dst ModTime = %v, want it still near its own pre-existing %v, not src's %v", fi.ModTime(), dstOwnTime, srcOldTime)
+	}
+}
+
+// TestCopyStopsMidFileWhenCtxCancelled pins CopyOptions.Ctx's own core
+// promise: the file currently streaming stops mid-write rather than
+// completing, once ctx is cancelled — verified here by cancelling from
+// inside OnBytes itself, the earliest a caller could possibly react to
+// "enough, stop now" mid-stream. The partial dst it was writing must
+// also be gone afterward, not left behind as a truncated file a caller
+// (or a later retry) could trip over.
+func TestCopyStopsMidFileWhenCtxCancelled(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	content := strings.Repeat("x", 50_000) // several read buffers' worth
+	if err := os.WriteFile(src, []byte(content), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := Copy(src, dst, CopyOptions{
+		Ctx:     ctx,
+		OnBytes: func(n int64) { cancel() }, // stop as soon as anything at all has streamed
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Copy err = %v, want context.Canceled", err)
+	}
+	if _, statErr := os.Stat(dst); !os.IsNotExist(statErr) {
+		t.Errorf("dst should have been removed after a cancelled copy, stat err = %v", statErr)
+	}
+}
+
+// TestCopyDirStopsBetweenFilesWhenCtxCancelled pins the directory-walk
+// half of CopyOptions.Ctx: copyDir's own per-entry loop checks it
+// before ever starting a further file, not only inside an
+// already-streaming one — the gap this closes is real Ctrl+C timing
+// that happens to land between two files rather than mid-write, which
+// without this check would still start the next file's OnFile/create
+// before the first Read ever got a chance to notice. Ctx is already
+// cancelled before Copy is even called here, the simplest way to pin
+// that per-entry check deterministically rather than racing a callback
+// against it.
+func TestCopyDirStopsBetweenFilesWhenCtxCancelled(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "b.txt"), []byte("b"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var onFileCalls []string
+	err := Copy(src, dst, CopyOptions{
+		Ctx:    ctx,
+		OnFile: func(path string) { onFileCalls = append(onFileCalls, path) },
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Copy err = %v, want context.Canceled", err)
+	}
+	if len(onFileCalls) != 0 {
+		t.Errorf("OnFile was called for %v, want no file ever started against an already-cancelled Ctx", onFileCalls)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "a.txt")); !os.IsNotExist(err) {
+		t.Errorf("a.txt should never have started, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "b.txt")); !os.IsNotExist(err) {
+		t.Errorf("b.txt should never have started, stat err = %v", err)
 	}
 }
