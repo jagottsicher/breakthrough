@@ -2025,6 +2025,39 @@ func TestPasteCancelSpanClickOpensAConfirmation(t *testing.T) {
 	}
 }
 
+// TestPasteCancelSpanPositionIsUnaffectedByCurrentFileNameLength pins
+// the user's own explicit, real-world report: a click target placed
+// after the current file's own name — which changes completely, for
+// every single file, throughout the whole job — was effectively
+// unclickable, since its column position jumped around with every new
+// file. The "✕" now sits between pasteProgressPrefix and
+// pasteProgressSuffix (see pasteProgressText's own doc comment), so its
+// own column range must stay identical regardless of how long the
+// current file's own name is.
+func TestPasteCancelSpanPositionIsUnaffectedByCurrentFileNameLength(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	job := newPasteTestJob(r, false, dir, 3)
+	r.statusBar.SetRect(0, 0, 160, 1)
+
+	short := "a.txt"
+	job.currentFile.Store(&short)
+	r.refreshStatusBar()
+	shortSpan := r.pasteCancelSpan
+
+	long := "a-much-much-longer-file-name-than-the-one-before-it.tar.gz"
+	job.currentFile.Store(&long)
+	r.refreshStatusBar()
+	longSpan := r.pasteCancelSpan
+
+	if shortSpan.startCol != longSpan.startCol || shortSpan.endCol != longSpan.endCol {
+		t.Errorf("pasteCancelSpan moved with the current file name: %+v (short name) vs %+v (long name), want identical", shortSpan, longSpan)
+	}
+}
+
 // TestPasteCancelSpanIsEmptyWithNoPasteRunning mirrors
 // TestClipboardClearSpanIsEmptyWithNothingOnTheClipboard.
 func TestPasteCancelSpanIsEmptyWithNoPasteRunning(t *testing.T) {
