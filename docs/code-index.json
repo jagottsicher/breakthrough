@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 62081,
-      "sha256": "ef60a72969df49d1891d9bd3d8773d83a4e462b1eaf70e33023144e3598b8f4a"
+      "size": 62583,
+      "sha256": "ca6a392e0e6617537dbe2fa80f6b79129cf5bc3b0adb85b64dcc7d69d232f273"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -138,8 +138,8 @@
     },
     {
       "path": "docs/installation.md",
-      "size": 11498,
-      "sha256": "d88f60f0c01bd4e589610692ba80d9a541817b73c9fe69aec4410be1f5f18651"
+      "size": 11675,
+      "sha256": "06d52ee98bf29fcebcdbae9baf08ade0675b2c94fca43907afe82cd6a5f365ce"
     },
     {
       "path": "docs/notes.md",
@@ -148,8 +148,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 137592,
-      "sha256": "af6f6faa7b87cfb03d2f24b806b85ef66f279e1652b633a88f031390b255c5e2"
+      "size": 138355,
+      "sha256": "2a17952583ada1155fe3b4322f2cad9e329ca9ff8aeb16260343a0fb2b880036"
     },
     {
       "path": "docs/whitepaper.md",
@@ -40879,5 +40879,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "3c3463bcf50ebecdaab63d709bccebe527fd9670106b2280b1b8512f282f62e8"
+  "merkle_root": "1d3a148e881721ca1a1474d696af2977ce11769cc809a36044b73f28410248c9"
 }
