@@ -98,7 +98,7 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
