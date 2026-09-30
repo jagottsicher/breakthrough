@@ -88,7 +88,7 @@ var helpText = strings.TrimLeft(`
                 whichever is installed — configurable under Options)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
-                mo Open with… · mt tail -f · mA Deselect all ·
+                mo Open with… · mt tail -f · ma Select all · mA Deselect all ·
                 mc Clear clipboard · mV Cancel Paste (same as Ctrl+C
                 while one is running; does nothing otherwise) · mR
                 Cancel Rsync (asks: current job only, or current plus

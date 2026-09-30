@@ -259,6 +259,21 @@ func TestChordGoMessagesOpensTheMessagesScreen(t *testing.T) {
 	}
 }
 
+// TestChordMenuSelectAllSelectsEveryEntry pins "ma" — per the user's
+// own explicit request, the literal counterpart to the already-existing
+// "mA" Deselect all, mirroring plain "a"/"A"'s own lower/uppercase
+// pairing (see plainCommands).
+func TestChordMenuSelectAllSelectsEveryEntry(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('a'))
+
+	if !root.panel.allSelected() {
+		t.Error("\"ma\" should have selected every entry")
+	}
+}
+
 // TestChordMenuCancelPasteOpensThePauseDialogOnlyWhilePasteIsRunning
 // pins "mV"'s own distinguishing behavior versus Ctrl+C (RequestCancel):
 // it reaches the exact same pause dialog while a Paste is running, but

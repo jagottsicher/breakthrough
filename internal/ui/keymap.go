@@ -374,6 +374,15 @@ func chordFamilies() []chordFamily {
 			{'d', "New dir", func(r *Root) { r.openNewDir() }},
 			{'o', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
 			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
+			// "ma" — added later, per the user's own explicit request —
+			// makes literal the pairing "mA"'s own doc comment already
+			// describes: plain "a"/"A" is already Select all/Deselect
+			// all's own lower/uppercase pairing (see plainCommands
+			// above), so this chord family mirrors it exactly instead
+			// of inventing a different one. Listed before "mA", the
+			// same select-before-deselect order plainCommands' own a/A
+			// already has.
+			{'a', "Select all", func(r *Root) { r.panel.selectAll() }},
 			{'A', "Deselect all", func(r *Root) { r.panel.deselectAll() }},
 			// "Clear clipboard" — per the user's own explicit request,
 			// the unconditional counterpart to Copy/Cut's own toggle
