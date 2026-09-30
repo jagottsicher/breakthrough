@@ -1429,6 +1429,12 @@ Read-only, full-screen.
   screen). `q` or `Ctrl+C` quits back into breakthrough, same as
   Tail -f below. Needs mpv installed; without it, Look reports that
   directly rather than opening an empty overlay.
+- **CSV/TSV** (`.csv`, `.tsv`, `.tab`) renders as a plain, fixed-width-
+  aligned table instead of its own raw delimited text — each column
+  padded to its own widest cell, the same shape the POSIX `column -t`
+  command already produces. Falls back to ordinary syntax-highlighted
+  text if a file merely named that way isn't actually parseable as
+  delimited data.
 
 Set `pager = external` to hand text files to `bat`/`batcat`, `$PAGER`,
 or `less`/`more` in your real terminal instead.
@@ -2411,15 +2417,19 @@ already open; `Ctrl`+`Delete` regardless of terminal support).
 | `Ctrl`+`T` | Tab switcher; also walks to the next tab while the switcher is already open, which `t` alone can't | `t` |
 | `Ctrl`+`Tab` / `Ctrl`+`Shift`+`Tab` | Step through tabs | |
 
-`Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`, or `.tar.xz` file
-opens a browsable listing of its own contents right here in the panel,
-instead of Look — navigate it exactly like a real directory (`..` steps
-back out to the real one it lives in), mark entries with `Space`, and
-Copy (`c`) them out to a real destination with Paste (`v`). Browsing
-inside one is read-only otherwise: renaming, editing, chmod/chown, Cut,
-and Move to Trash/Remove are all refused there. An archive found
-*inside* another archive is never opened this way automatically — it
-stays a plain, copyable file, extracted whole if you copy it out.
+`Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, `.7z`, or
+`.rar` file opens a browsable listing of its own contents right here in
+the panel, instead of Look — navigate it exactly like a real directory
+(`..` steps back out to the real one it lives in), mark entries with
+`Space`, and Copy (`c`) them out to a real destination with Paste
+(`v`). zip and tar are read entirely in Go; 7z and RAR shell out to the
+real `7z` and `unrar` binaries instead (see [Optional external
+tools](installation.md) — neither format has a pure-Go story this
+project depends on). Browsing inside one is read-only otherwise:
+renaming, editing, chmod/chown, Cut, and Move to Trash/Remove are all
+refused there. An archive found *inside* another archive is never
+opened this way automatically — it stays a plain, copyable file,
+extracted whole if you copy it out.
 
 Click, pause, click again on an already-selected name renames it. The
 pause is deliberately generous — about a second — so an unhurried second

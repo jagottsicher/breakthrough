@@ -269,3 +269,130 @@ func TestExtractNeverEscapesDestDir(t *testing.T) {
 		t.Errorf("Extract wrote outside the destination directory, at %s", escaped)
 	}
 }
+
+// TestExtractSevenZip mirrors TestExtractZipFileAndDirectory exactly,
+// for a real .7z archive instead — same source layout, same "browse
+// into src, mark both children" setup, same expected result. Confirms
+// extractSevenZip's own temp-dir-then-move path (see moveExtractedTree)
+// reaches the same destDir/<base name> shape zip/tar's own direct
+// stream-based extraction already gives, even though 7z has no stream
+// this package can read from directly the way zip/tar do.
+func TestExtractSevenZip(t *testing.T) {
+	requireTool(t, "7z")
+	src := t.TempDir()
+	archivePath := writeSevenZip(t, src, "a.7z", map[string]string{
+		"README.md":       "hello\n",
+		"src/main.go":     "package main\n",
+		"src/lib/util.go": "package lib\n",
+	})
+
+	entries, err := List(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := Children(entries, "src")
+	if len(members) != 2 {
+		t.Fatalf("setup: expected 2 members (lib synthesized + main.go), got %d: %v", len(members), members)
+	}
+
+	dest := t.TempDir()
+	if err := Extract(archivePath, members, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	got := listExtractedFiles(t, dest)
+	want := []string{"lib/util.go", "main.go"}
+	if !equalStrings(got, want) {
+		t.Errorf("extracted files = %v, want %v", got, want)
+	}
+	if got := readFile(t, filepath.Join(dest, "main.go")); got != "package main\n" {
+		t.Errorf("main.go content = %q, want %q", got, "package main\n")
+	}
+	if got := readFile(t, filepath.Join(dest, "lib/util.go")); got != "package lib\n" {
+		t.Errorf("lib/util.go content = %q, want %q", got, "package lib\n")
+	}
+}
+
+// TestExtractRar mirrors TestExtractSevenZip exactly, for a real .rar
+// archive — confirms extractRar's own directory-member handling (the
+// "sub/*" wildcard extractRar's own doc comment documents unrar
+// specifically needing, unlike 7z) actually extracts the requested
+// subtree and nothing else, once routed back through the same
+// moveExtractedTree relocation step.
+func TestExtractRar(t *testing.T) {
+	requireTool(t, "unrar")
+	src := t.TempDir()
+	archivePath := writeRar(t, src, "a.rar", map[string]string{
+		"README.md":       "hello\n",
+		"src/main.go":     "package main\n",
+		"src/lib/util.go": "package lib\n",
+	})
+
+	entries, err := List(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := Children(entries, "src")
+	if len(members) != 2 {
+		t.Fatalf("setup: expected 2 members (lib synthesized + main.go), got %d: %v", len(members), members)
+	}
+
+	dest := t.TempDir()
+	if err := Extract(archivePath, members, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	got := listExtractedFiles(t, dest)
+	want := []string{"lib/util.go", "main.go"}
+	if !equalStrings(got, want) {
+		t.Errorf("extracted files = %v, want %v", got, want)
+	}
+	if got := readFile(t, filepath.Join(dest, "main.go")); got != "package main\n" {
+		t.Errorf("main.go content = %q, want %q", got, "package main\n")
+	}
+	if got := readFile(t, filepath.Join(dest, "lib/util.go")); got != "package lib\n" {
+		t.Errorf("lib/util.go content = %q, want %q", got, "package lib\n")
+	}
+}
+
+// TestExtractRarExtractsOnlyTheRequestedMember pins the exact bug
+// extractRar's own wildcard handling exists to avoid: asking unrar to
+// extract a bare directory name with no "/*" suffix silently extracts
+// the *entire* archive instead (verified live against a real unrar,
+// not assumed — see extractRar's own doc comment), which would corrupt
+// a Copy/Paste-sourced request into "everything in the archive, not
+// just what was marked" the instant a second top-level entry existed.
+func TestExtractRarExtractsOnlyTheRequestedMember(t *testing.T) {
+	requireTool(t, "unrar")
+	src := t.TempDir()
+	archivePath := writeRar(t, src, "a.rar", map[string]string{
+		"src/main.go": "package main\n",
+		"sibling.txt": "should never be extracted\n",
+	})
+
+	entries, err := List(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := Children(entries, "")
+	var srcDir Entry
+	for _, m := range members {
+		if m.Path == "src" {
+			srcDir = m
+		}
+	}
+	if srcDir.Path == "" {
+		t.Fatalf("setup: expected a top-level %q member, got %v", "src", members)
+	}
+
+	dest := t.TempDir()
+	if err := Extract(archivePath, []Entry{srcDir}, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	got := listExtractedFiles(t, dest)
+	want := []string{"src/main.go"}
+	if !equalStrings(got, want) {
+		t.Errorf("extracted files = %v, want %v (sibling.txt must not be extracted)", got, want)
+	}
+}

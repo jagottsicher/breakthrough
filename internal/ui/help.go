@@ -145,16 +145,18 @@ var helpText = strings.TrimLeft(`
                   as "D" regardless, which always works
   Enter           Open the selected directory, or try Look on a file —
                   double-clicking a name does the same either way. A
-                  zip/tar/tar.gz/tar.bz2/tar.xz file opens into a
+                  zip/tar/tar.gz/tar.bz2/tar.xz/7z/rar file opens into a
                   browsable listing of its own contents instead, right
                   here in the panel — navigate it exactly like a real
                   directory (".." steps back out), mark entries with
                   Space and Copy ("c") them out to a real destination
-                  with Paste ("v"). Read-only otherwise: renaming,
-                  editing, chmod/chown, Cut, and Trash/Remove are all
-                  refused while browsing inside one. An archive found
-                  *inside* another archive is never opened this way
-                  automatically — it stays a plain, copyable file.
+                  with Paste ("v"). zip/tar are read entirely in Go; 7z
+                  and RAR need the real 7z and unrar tools installed
+                  (nothing else here does). Read-only otherwise:
+                  renaming, editing, chmod/chown, Cut, and Trash/Remove
+                  are all refused while browsing inside one. An archive
+                  found *inside* another archive is never opened this
+                  way automatically — it stays a plain, copyable file.
   Space           Select/deselect the selected file
   Shift+Up/Down   Extend or shrink a range selection from wherever the
                   cursor sat when Shift was first pressed — the keyboard
@@ -911,6 +913,13 @@ var helpText = strings.TrimLeft(`
   exactly like Tail -f. Needs no graphical window: falls back to
   mpv's own true-color terminal renderer where none is available (an
   SSH/tmux/screen session, this app's usual home).
+
+  A .csv/.tsv/.tab file renders as a plain, fixed-width-aligned table
+  instead of its own raw, comma/tab-separated text — each column
+  padded to its widest cell, the same shape the POSIX "column -t"
+  command already produces. Falls back to ordinary syntax-highlighted
+  text if the file isn't actually parseable as delimited data despite
+  its own extension.
 
 [::b]Chmod dialog (context menu's "chmod")[::-]
 

@@ -252,14 +252,34 @@ func (r *Root) showBuiltinLook(path string) bool {
 		}
 
 	case viewer.KindText:
-		// Syntax coloring happens here rather than in internal/viewer:
-		// that package deliberately stays tview-free (see its own doc
-		// comment), classifying content into TokenKinds without
-		// knowing anything about how they're painted. renderSyntax
-		// does the escaping every token needs — see its own doc
-		// comment on why this can't just escape result.Content
-		// wholesale any more.
-		text := renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
+		// A .csv/.tsv/.tab file gets rendered as an aligned table instead
+		// of syntax-colored raw text (see viewer.FormatCSVTable) — a
+		// table's own comma/tab-separated content is real content, not
+		// source code, so nothing here runs it through a language lexer
+		// at all; tview.Escape alone is enough, the same escaping
+		// centeredMessage's own doc comment already explains the need
+		// for. Falls through to the ordinary syntax-highlighted path
+		// below if FormatCSVTable itself fails (a file merely *named*
+		// .csv that isn't actually delimited data at all) rather than
+		// showing an error for what's still perfectly readable as plain
+		// text.
+		var text string
+		var tableRendered bool
+		if delim, ok := viewer.CSVDelimiterFor(path); ok {
+			if table, err := viewer.FormatCSVTable(result.Content, delim); err == nil {
+				text, tableRendered = tview.Escape(table), true
+			}
+		}
+		if !tableRendered {
+			// Syntax coloring happens here rather than in internal/viewer:
+			// that package deliberately stays tview-free (see its own doc
+			// comment), classifying content into TokenKinds without
+			// knowing anything about how they're painted. renderSyntax
+			// does the escaping every token needs — see its own doc
+			// comment on why this can't just escape result.Content
+			// wholesale any more.
+			text = renderSyntax(viewer.Highlight(path, result.Content), paletteFor(r.theme.AccentBackground))
+		}
 		if result.Truncated {
 			text += fmt.Sprintf("\n\n[%s]— showing only the first part of this file (larger than Look's own preview limit) — use Tail -f to follow it live instead[-]", colorTag(r.theme.MutedTextColor))
 		}
