@@ -382,6 +382,32 @@ func chordFamilies() []chordFamily {
 			// current selection has since moved on from whatever's
 			// actually still held.
 			{'c', "Clear clipboard", func(r *Root) { r.setClipboard(nil, false) }},
+			// "Cancel Paste"/"Cancel Rsync"/"Cancel Compress" — a
+			// second, mnemonic keyboard path to the same three
+			// background-job cancellations Ctrl+C already reaches (see
+			// RequestCancel), per the user's own explicit request:
+			// capital "V"/"R"/"C" for Paste/Rsync/Compress, so a "cancel
+			// exactly this one, not the others" reach exists alongside
+			// Ctrl+C's own combined/priority-based one. "V" for Paste
+			// (not "P", already free, but "V" mirrors "v" Paste's own
+			// plain-key mnemonic the same lower/uppercase-sibling
+			// pairing plainCommands' own c/C, d/D, e/E, v/V pairs
+			// already use) — a no-op with no job running, unlike
+			// Ctrl+C's own broader fallback chain, since this key means
+			// specifically "Paste", nothing else to fall through to.
+			// "R"/"C" open their own confirmation dialog (see
+			// bgjobcancel.go) rather than acting immediately, since
+			// unlike Paste's own pause-first Ctrl+C answer, cancelling a
+			// backgrounded rsync/Compress is immediately destructive the
+			// moment it's chosen — also a no-op if neither a job nor a
+			// queued one exists for that specific kind.
+			{'V', "Cancel Paste", func(r *Root) {
+				if r.pasteJob != nil {
+					r.requestPastePause()
+				}
+			}},
+			{'R', "Cancel Rsync", func(r *Root) { r.openRsyncCancelDialog() }},
+			{'C', "Cancel Compress", func(r *Root) { r.openCompressCancelDialog() }},
 		}},
 		// "j" itself carries no mnemonic of its own — by the time this
 		// family was added, every other letter already meant something

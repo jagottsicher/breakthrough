@@ -207,6 +207,45 @@ func TestCancelCompressJobStopsTheProcessAndClearsTheQueue(t *testing.T) {
 	}
 }
 
+// TestCancelCompressKeepQueueStopsOnlyCurrentAndStartsNext mirrors
+// TestCancelRsyncKeepQueueStopsOnlyCurrentAndStartsNext.
+func TestCancelCompressKeepQueueStopsOnlyCurrentAndStartsNext(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &compressJob{ctx: ctx, cancel: cancel}
+	r.compressJob = job
+	r.compressQueue = []compressRequest{{
+		command:    "true",
+		errContext: "compress",
+		verb:       "Compressing",
+		label:      "queued.zip",
+		destDir:    r.panel.path,
+	}}
+
+	r.cancelCompressKeepQueue()
+
+	if job.ctx.Err() == nil {
+		t.Error("the cancelled job's own context should report an error")
+	}
+	if len(r.compressQueue) != 0 {
+		t.Error("the queued entry should have started, not stayed queued")
+	}
+	if r.compressJob == nil || r.compressJob.label != "queued.zip" {
+		t.Errorf("r.compressJob = %+v, want the queued run started", r.compressJob)
+	}
+	r.cancelCompressJob() // don't leave a real process running past this test
+}
+
+// TestCancelCompressKeepQueueIsANoOpWhenNothingRunning mirrors
+// TestCancelRsyncKeepQueueIsANoOpWhenNothingRunning.
+func TestCancelCompressKeepQueueIsANoOpWhenNothingRunning(t *testing.T) {
+	r := newTestRootForCompressJob(t)
+	r.cancelCompressKeepQueue() // must not panic
+	if r.compressJob != nil {
+		t.Error("r.compressJob should still be nil")
+	}
+}
+
 // TestStartCompressJobQueuesBehindARunningJob pins startCompressJob's
 // own dispatch: a second request while one is already running is
 // appended to compressQueue rather than started immediately, or racing

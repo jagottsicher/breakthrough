@@ -236,7 +236,12 @@ terminal.
   job and let whatever's queued run, or cancel everything; whatever
   item was already mid-transfer finishes normally for a Copy, or, for a
   Cut, stops immediately with its own source left untouched, but only
-  if you actually choose to cancel. Any real failure (permission, a full disk, ...) is
+  if you actually choose to cancel. A backgrounded Rsync or
+  Compress/Extract is cancelled separately: Ctrl+C with no Paste
+  running asks to cancel both together (dropping both their own
+  queues), while the "mR"/"mC" chords and a clickable "✕" on each
+  progress segment reach each one individually, "current job only" or
+  "current plus its own queue" apart from the other. Any real failure (permission, a full disk, ...) is
   collected rather than stopping at the first one, and reported once
   the whole Paste is done. Every open tab showing the destination
   reloads automatically as items actually land, not just once the

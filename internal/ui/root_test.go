@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -202,6 +203,62 @@ func TestConfirmingQuitWhilePastingCancelsTheJobThenQuits(t *testing.T) {
 	// nothing further to observe about the quit half beyond it not
 	// panicking, which a failing t.Fatalf above would already have
 	// caught if reached in a broken state.
+}
+
+// TestRequestCancelAsksBeforeCancellingRsyncAndCompress pins the
+// combined Ctrl+C path's own confirmation — per the user's own explicit
+// request, added on top of the existing "cancel both, drop both
+// queues" behavior rather than replacing it: Ctrl+C with no Paste
+// running, and at least one of Rsync/Compress active, now opens
+// confirmDialog instead of cancelling immediately.
+func TestRequestCancelAsksBeforeCancellingRsyncAndCompress(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	rctx, rcancel := context.WithCancel(context.Background())
+	r.rsyncJob = &rsyncJob{ctx: rctx, cancel: rcancel}
+	cctx, ccancel := context.WithCancel(context.Background())
+	r.compressJob = &compressJob{ctx: cctx, cancel: ccancel}
+
+	r.RequestCancel()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirmation dialog open", r.activePage)
+	}
+	if r.rsyncJob == nil || r.compressJob == nil {
+		t.Error("neither job should be cancelled yet — only asked about so far")
+	}
+}
+
+// TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues
+// pins the confirmed answer's own effect: both jobs stop, and — per the
+// user's own explicit request that this combined path stay
+// all-or-nothing, unlike "mR"/"mC" — both their own queues are dropped
+// too.
+func TestRequestCancelConfirmedCancelsBothRsyncAndCompressAndBothQueues(t *testing.T) {
+	r := newTestRootForRsyncJob(t)
+	rctx, rcancel := context.WithCancel(context.Background())
+	rjob := &rsyncJob{ctx: rctx, cancel: rcancel}
+	r.rsyncJob = rjob
+	r.rsyncQueue = []queuedRsync{{label: "queued rsync"}}
+	cctx, ccancel := context.WithCancel(context.Background())
+	cjob := &compressJob{ctx: cctx, cancel: ccancel}
+	r.compressJob = cjob
+	r.compressQueue = []compressRequest{{label: "queued compress"}}
+
+	r.RequestCancel()
+	r.acceptConfirm()
+
+	if rjob.ctx.Err() == nil {
+		t.Error("the rsync job should be cancelled")
+	}
+	if cjob.ctx.Err() == nil {
+		t.Error("the compress job should be cancelled")
+	}
+	if len(r.rsyncQueue) != 0 {
+		t.Error("the rsync queue should have been dropped too")
+	}
+	if len(r.compressQueue) != 0 {
+		t.Error("the compress queue should have been dropped too")
+	}
 }
 
 // TestMouseStatusText pins the exact wording buildStatusBar's own

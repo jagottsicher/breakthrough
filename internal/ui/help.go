@@ -89,7 +89,11 @@ var helpText = strings.TrimLeft(`
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mo Open with… · mt tail -f · mA Deselect all ·
-                mc Clear clipboard
+                mc Clear clipboard · mV Cancel Paste (same as Ctrl+C
+                while one is running; does nothing otherwise) · mR
+                Cancel Rsync (asks: current job only, or current plus
+                its own queue) · mC Cancel Compress/Extract (same
+                question) — mR/mC never touch each other or Paste
     j  tools    jc Compress… · je Extract · jE Extract, delete original ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
@@ -802,12 +806,20 @@ var helpText = strings.TrimLeft(`
   status bar instead, parsed from that same --info=progress2 output;
   only one background rsync runs at a time, a second one asked for
   queues behind it the same way a second Paste already does. Ctrl+C/
-  Ctrl+Delete cancels a running background rsync outright, unaffected
-  by whatever a concurrently running Paste's own Ctrl+C pause dialog
-  (see "Paste conflicts" above) ends up answering — the two are
-  entirely independent. The one thing it can't do that "Run" can:
-  answer an interactive prompt, since its own stdin deliberately reads
-  from nothing. "Run in background" refuses outright, before
+  Ctrl+Delete asks to cancel a running background rsync — and a
+  running Compress/Extract, if one happens to be active too, both in
+  the same confirmation — unaffected by whatever a concurrently
+  running Paste's own Ctrl+C pause dialog (see "Paste conflicts"
+  above) ends up answering, and always all-or-nothing (both jobs,
+  both their own queues). The status bar's own rsync segment has a
+  clickable "✕" too, for stopping just the current run without a
+  queue asked about at all; "mR" opens its own dialog instead, asking
+  "current job only" or "current plus its own queue" specifically for
+  rsync, leaving any running Compress/Extract completely untouched
+  either way (see the Keyboard Reference's "m" family). The one thing
+  none of these can do that "Run" can: answer an interactive prompt,
+  since a backgrounded rsync's own stdin deliberately reads from
+  nothing. "Run in background" refuses outright, before
   starting anything, if Source or Destination is still a connection
   that last authenticated with a typed password — pointing to "Run"
   instead, which can answer that prompt on its own attached terminal;
@@ -993,7 +1005,14 @@ var helpText = strings.TrimLeft(`
   Runs in the background, the same way Copy/Cut/Paste already do — no
   terminal takes over the screen, and the destination reloads on its
   own once it's actually done (see the status bar for a spinner and
-  elapsed time while it runs; Ctrl+C cancels it).
+  elapsed time while it runs). Ctrl+C asks to cancel it — and a
+  running background rsync too, if one happens to be active — both in
+  one confirmation, always all-or-nothing (see "Rsync: Run in
+  background" above for the full reasoning). The status bar's own
+  segment has a clickable "✕" for stopping just the current run,
+  no queue involved; "mC" opens its own dialog for "current job only"
+  vs. "current plus its own queue", leaving a running rsync completely
+  untouched either way.
 
 [::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
 
@@ -1090,7 +1109,13 @@ var helpText = strings.TrimLeft(`
   if one of the two Cancel answers is actually chosen — Continue picks
   up exactly where it paused, including re-showing this conflict dialog
   if one was open. A different overlay merely open while a Paste
-  continues in the background is unaffected.
+  continues in the background is unaffected. "mV" reaches the same
+  pause dialog as a second keyboard path, but only while a Paste is
+  actually running — it does nothing otherwise, unlike Ctrl+C's own
+  broader fallback chain. The status bar's own progress segment also
+  has a clickable "✕" for a quicker, narrower answer: a plain yes/no
+  "stop the current job?" — always just the current one, queue left
+  running, no pause step at all.
 
   Whatever's currently on the clipboard shows two ways: every row it
   holds gets a full-row grey tint (a lighter shade for Cut than Copy),
