@@ -725,15 +725,26 @@ terminal.
   still-frame thumbnail, grabbed via mpv 10% into its own duration to
   skip past a typically black/blank opening.
 - Archive browsing: `Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`,
-  or `.tar.xz` file opens a browsable listing of its own contents right
-  in the panel, exactly like a real directory — `..` steps back out to
-  the real one it lives in. Mark entries with `Space` and Copy (`c`)
-  them out to a real destination with Paste (`v`), nested folders and
-  all. Read-only otherwise, by design: renaming, editing, chmod/chown,
+  `.tar.xz`, `.7z`, or `.rar` file opens a browsable listing of its own
+  contents right in the panel, exactly like a real directory — `..`
+  steps back out to the real one it lives in. Mark entries with `Space`
+  and Copy (`c`) them out to a real destination with Paste (`v`), nested
+  folders and all. zip and tar are read entirely in Go, no external
+  tool needed; 7z and RAR shell out to the real `7z` and `unrar`
+  binaries instead — neither format has a pure-Go story this project is
+  willing to depend on (7z: no actively maintained, complete reader;
+  RAR: a proprietary format with no legally clean Go implementation at
+  all). Read-only otherwise, by design: renaming, editing, chmod/chown,
   Cut, and Move to Trash/Remove are all refused while browsing inside
   one. An archive found *inside* another is never opened this way
   automatically — it stays a plain file, extracted whole if you copy it
   out.
+- CSV/TSV tables: Look renders a `.csv`, `.tsv`, or `.tab` file as a
+  plain, fixed-width-aligned table instead of its own raw delimited
+  text — each column padded to its own widest cell, the same shape the
+  POSIX `column -t` command already produces. Falls back to ordinary
+  syntax-highlighted text if a file merely named that way isn't
+  actually parseable as delimited data.
 - Activity log: off by default, turned on under Options with a single
   `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
   superset of the one before it — plus eight independent on/off
@@ -928,13 +939,18 @@ esac
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
+sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
 ```
 
 Without root, drop it somewhere on your own `PATH` instead:
 
 ```sh
 mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
+mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
 ```
+
+(The `.deb`/`.rpm` packages install the man page automatically — no
+separate step needed there; see `man breakthrough` once installed.)
 
 On macOS, Gatekeeper quarantines anything downloaded with a browser. If
 you get "cannot be opened because the developer cannot be verified",

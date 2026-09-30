@@ -86,6 +86,32 @@ func TestShowBuiltinLookEscapesFileContent(t *testing.T) {
 	}
 }
 
+// TestShowBuiltinLookRendersCSVAsAlignedTable pins the .csv-specific
+// branch in showBuiltinLook's own KindText case: a comma-separated file
+// renders as a fixed-width table (see viewer.FormatCSVTable), not its
+// own raw, unaligned text.
+func TestShowBuiltinLookRendersCSVAsAlignedTable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.csv")
+	if err := os.WriteFile(path, []byte("name,age\nAlice,30\nBob,7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	r.showBuiltinLook(path)
+
+	got := r.viewerView.GetText(true)
+	want := "name   age\nAlice  30\nBob    7\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("viewerView text = %q, want it to contain the aligned table %q", got, want)
+	}
+}
+
 // TestShowBuiltinLookOnBinaryFileShowsError pins the "decline clearly
 // rather than render garbage" behavior for content viewer.Sniff doesn't
 // recognize as text — see viewer.KindUnsupported.

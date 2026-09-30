@@ -58,8 +58,8 @@
     },
     {
       "path": ".goreleaser.yaml",
-      "size": 7287,
-      "sha256": "89ea2b33bec9bf3b04b2c5e3f05743550bdd12fcb2f0f8234dd83600972e13b6"
+      "size": 9022,
+      "sha256": "5dd615b84a14ad20a2ac98e191d14e7d8ab01629030921dd96c5f1ffecdb9c30"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 62583,
-      "sha256": "ca6a392e0e6617537dbe2fa80f6b79129cf5bc3b0adb85b64dcc7d69d232f273"
+      "size": 63617,
+      "sha256": "80a32a8fa00e1613809bfc39189c34fe16e736216f9f8ba41fcd3fa8864d7443"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -132,14 +132,19 @@
       "sha256": "a4cf407e1b31b165f48873cc51e42bdf69c2e4c3929957ff516fa118f57ad250"
     },
     {
+      "path": "docs/breakthrough.1",
+      "size": 3087,
+      "sha256": "0b344b614dac7069d23ceeecef5e2dea18d470e52e3a125f376a8ddbb2504d6a"
+    },
+    {
       "path": "docs/consultants.txt",
       "size": 560,
       "sha256": "5d5718d1313afef2a5b08c4c288478c78d811e2befbf8edf2a0c3439a819ec12"
     },
     {
       "path": "docs/installation.md",
-      "size": 11675,
-      "sha256": "06d52ee98bf29fcebcdbae9baf08ade0675b2c94fca43907afe82cd6a5f365ce"
+      "size": 11890,
+      "sha256": "45beb9c86b0695a6f9aeb0ee4390a210097bf97100ac5379c5b6d14fa4f7fe25"
     },
     {
       "path": "docs/notes.md",
@@ -148,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 138355,
-      "sha256": "2a17952583ada1155fe3b4322f2cad9e329ca9ff8aeb16260343a0fb2b880036"
+      "size": 138954,
+      "sha256": "5cc25fa2e52a87067586e5f60625cb35e06d0d8573b79492ed02b3fbdc4e9bcf"
     },
     {
       "path": "docs/whitepaper.md",
@@ -233,23 +238,23 @@
     },
     {
       "path": "internal/archive/archive.go",
-      "size": 8080,
-      "sha256": "27621d9346b05c36d2b603005ed6e2b966b61e6f0053a9e4b08e7f91ca128e1d"
+      "size": 17165,
+      "sha256": "7d9b7a4b55bf07f3f04ca901f44e59825d2f24e433ed83574d71a04306b431bd"
     },
     {
       "path": "internal/archive/archive_test.go",
-      "size": 9630,
-      "sha256": "659cfd2af8862b25ae111f436c7752fb6b1377c61d6a9eb1a12eed9031f8c30c"
+      "size": 15915,
+      "sha256": "b9e0f10833c02940930240d92eb47ffe7f05dc8e93ba56f2ae9c43bc05763629"
     },
     {
       "path": "internal/archive/extract.go",
-      "size": 10094,
-      "sha256": "bee6bb893a83f24fc6ce5e099bcb0df45fe6794f9d78ce451f6b23374f48f4b8"
+      "size": 15897,
+      "sha256": "1cb28d222295258ebf2e80cd7e0c24290c467e48002c15f80d60d886396249fe"
     },
     {
       "path": "internal/archive/extract_test.go",
-      "size": 8981,
-      "sha256": "d8d5f0865f6aa10fb1cd27d61e830ffdf54090c17d35512b4ec12041c382eac0"
+      "size": 13358,
+      "sha256": "da800259bdd335c855308cb38becbc1267acd9497bca14131bee18d627a43364"
     },
     {
       "path": "internal/archive/tree.go",
@@ -1483,8 +1488,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 75204,
-      "sha256": "0d90cca54cbb024c6d0ebc4e4ede5e6df2fe508f112bcdea9369647496fe822a"
+      "size": 75725,
+      "sha256": "eced208358b78d9f70357821a91260ed621dfee52130f1e7a6b4b8fc352719bc"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1943,13 +1948,23 @@
     },
     {
       "path": "internal/ui/viewer.go",
-      "size": 26849,
-      "sha256": "5da304bddc9eea14924983fcda1c1312f9581389fb15211f1a0063fb24563818"
+      "size": 27784,
+      "sha256": "c8f97e146aef90f954e48c6949d197bd75d558b4e1272de7dc9a7b7a3f7b3c04"
     },
     {
       "path": "internal/ui/viewer_test.go",
-      "size": 11487,
-      "sha256": "4b06358ece79d21e3a70851840954ea901195b391a61fd40c056c2403de564c9"
+      "size": 12307,
+      "sha256": "431398fe236e72449fecf9b3051842e4367626f83c57dc3832b00ef44e2052ad"
+    },
+    {
+      "path": "internal/viewer/csv.go",
+      "size": 3175,
+      "sha256": "a20030610f2408e62c2a9941ca9c78961ed269b896ae3683e7e45410f0d5f23f"
+    },
+    {
+      "path": "internal/viewer/csv_test.go",
+      "size": 2525,
+      "sha256": "7a755c3ea8f626057c9d35f6e0b00af55f899d1a4f9dd9eaa42edd5bd18d83e7"
     },
     {
       "path": "internal/viewer/doc.go",
@@ -2136,6 +2151,7 @@
         "compress/gzip",
         "errors",
         "fmt",
+        "github.com/jagottsicher/breakthrough/internal/fsops",
         "github.com/ulikunitz/xz",
         "io",
         "io/fs",
@@ -2144,6 +2160,7 @@
         "path",
         "path/filepath",
         "sort",
+        "strconv",
         "strings",
         "testing",
         "time"
@@ -2935,6 +2952,8 @@
       "directory": "internal/viewer",
       "name": "viewer",
       "files": [
+        "internal/viewer/csv.go",
+        "internal/viewer/csv_test.go",
         "internal/viewer/doc.go",
         "internal/viewer/highlight.go",
         "internal/viewer/highlight_test.go",
@@ -2954,6 +2973,7 @@
       "imports": [
         "bytes",
         "context",
+        "encoding/csv",
         "fmt",
         "github.com/alecthomas/chroma/v2",
         "github.com/alecthomas/chroma/v2/lexers",
@@ -2974,7 +2994,8 @@
         "strconv",
         "strings",
         "testing",
-        "time"
+        "time",
+        "unicode/utf8"
       ]
     }
   ],
@@ -3689,98 +3710,112 @@
       "file": "internal/archive/archive.go",
       "name": "Kind",
       "kind": "type",
-      "line": 27
+      "line": 43
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "KindZip",
       "kind": "const",
-      "line": 32
+      "line": 48
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "KindTar",
       "kind": "const",
-      "line": 39
+      "line": 55
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "KindSevenZip",
+      "kind": "const",
+      "line": 60
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "KindRar",
+      "kind": "const",
+      "line": 63
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "archiveExtensions",
       "kind": "var",
-      "line": 46
+      "line": 70
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compression",
       "kind": "type",
-      "line": 68
+      "line": 94
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compNone",
       "kind": "const",
-      "line": 71
+      "line": 97
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compGzip",
       "kind": "const",
-      "line": 72
+      "line": 98
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compBzip2",
       "kind": "const",
-      "line": 73
+      "line": 99
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compXz",
       "kind": "const",
-      "line": 74
+      "line": 100
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "Classify",
       "kind": "function",
-      "line": 81
+      "line": 107
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "compressionFor",
       "kind": "function",
-      "line": 94
+      "line": 120
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "Entry",
       "kind": "type",
-      "line": 107
+      "line": 133
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "List",
       "kind": "function",
-      "line": 126
+      "line": 152
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "UnsupportedFormatError",
       "kind": "type",
-      "line": 145
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
@@ -3788,28 +3823,98 @@
       "name": "Error",
       "kind": "method",
       "receiver": "*UnsupportedFormatError",
-      "line": 147
+      "line": 177
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "listZip",
       "kind": "function",
-      "line": 154
+      "line": 184
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "listTar",
       "kind": "function",
-      "line": 179
+      "line": 209
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive.go",
       "name": "openTarStream",
       "kind": "function",
-      "line": 217
+      "line": 247
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "sevenZipBinaries",
+      "kind": "var",
+      "line": 283
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "sevenZipBinary",
+      "kind": "function",
+      "line": 287
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "listSevenZip",
+      "kind": "function",
+      "line": 303
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "parseSevenZipListing",
+      "kind": "function",
+      "line": 321
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "sevenZipEntryFrom",
+      "kind": "function",
+      "line": 350
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "listRar",
+      "kind": "function",
+      "line": 374
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "parseRarListing",
+      "kind": "function",
+      "line": 386
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "rarEntryFrom",
+      "kind": "function",
+      "line": 427
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "parseLSPermString",
+      "kind": "function",
+      "line": 447
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive.go",
+      "name": "parseToolTimestamp",
+      "kind": "function",
+      "line": 472
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
@@ -3823,175 +3928,266 @@
       "file": "internal/archive/archive_test.go",
       "name": "FuzzClassify",
       "kind": "function",
-      "line": 54
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "writeZip",
       "kind": "function",
-      "line": 78
+      "line": 81
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "writeTar",
       "kind": "function",
-      "line": 112
+      "line": 115
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "writeTarPlain",
       "kind": "function",
-      "line": 136
+      "line": 139
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "writeTarGz",
       "kind": "function",
-      "line": 145
+      "line": 148
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "writeTarXz",
       "kind": "function",
-      "line": 163
+      "line": 166
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "pathsOf",
       "kind": "function",
-      "line": 188
+      "line": 191
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListZip",
       "kind": "function",
-      "line": 197
+      "line": 200
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListZipWithExplicitDirectoryEntry",
       "kind": "function",
-      "line": 222
+      "line": 225
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListTarPlain",
       "kind": "function",
-      "line": 247
+      "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListTarGz",
       "kind": "function",
-      "line": 265
+      "line": 268
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListTarBz2",
       "kind": "function",
-      "line": 278
+      "line": 281
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListTarXz",
       "kind": "function",
-      "line": 320
+      "line": 323
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "TestListUnsupportedFormat",
       "kind": "function",
-      "line": 333
+      "line": 336
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "requireTool",
+      "kind": "function",
+      "line": 351
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "writeSourceTree",
+      "kind": "function",
+      "line": 366
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "archiveTopLevelNames",
+      "kind": "function",
+      "line": 392
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "writeSevenZip",
+      "kind": "function",
+      "line": 410
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "writeRar",
+      "kind": "function",
+      "line": 430
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "TestListSevenZip",
+      "kind": "function",
+      "line": 444
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "TestListSevenZipWithoutSevenZipBinary",
+      "kind": "function",
+      "line": 479
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "TestListRar",
+      "kind": "function",
+      "line": 491
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/archive_test.go",
+      "name": "TestListRarWithoutUnrarBinary",
+      "kind": "function",
+      "line": 526
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/archive_test.go",
       "name": "equalStrings",
       "kind": "function",
-      "line": 344
+      "line": 538
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "Extract",
       "kind": "function",
-      "line": 33
+      "line": 38
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "resolveDest",
       "kind": "function",
-      "line": 74
+      "line": 83
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "destFile",
       "kind": "function",
-      "line": 88
+      "line": 97
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "ensureDir",
       "kind": "function",
-      "line": 106
+      "line": 115
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "relativeDest",
       "kind": "function",
-      "line": 122
+      "line": 131
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "extractZip",
       "kind": "function",
-      "line": 139
+      "line": 148
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "extractZipFile",
       "kind": "function",
-      "line": 172
+      "line": 181
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "createOverwriting",
       "kind": "function",
-      "line": 220
+      "line": 229
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "extractTar",
       "kind": "function",
-      "line": 230
+      "line": 239
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
       "file": "internal/archive/extract.go",
       "name": "extractTarFile",
       "kind": "function",
-      "line": 272
+      "line": 281
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract.go",
+      "name": "extractSevenZip",
+      "kind": "function",
+      "line": 315
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract.go",
+      "name": "extractRar",
+      "kind": "function",
+      "line": 349
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract.go",
+      "name": "memberPathsOf",
+      "kind": "function",
+      "line": 381
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract.go",
+      "name": "moveExtractedTree",
+      "kind": "function",
+      "line": 407
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
@@ -4055,6 +4251,27 @@
       "name": "TestExtractNeverEscapesDestDir",
       "kind": "function",
       "line": 250
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract_test.go",
+      "name": "TestExtractSevenZip",
+      "kind": "function",
+      "line": 280
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract_test.go",
+      "name": "TestExtractRar",
+      "kind": "function",
+      "line": 322
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/archive",
+      "file": "internal/archive/extract_test.go",
+      "name": "TestExtractRarExtractsOnlyTheRequestedMember",
+      "kind": "function",
+      "line": 365
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/archive",
@@ -23425,7 +23642,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1210
+      "line": 1219
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23433,7 +23650,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1233
+      "line": 1242
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23441,7 +23658,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1250
+      "line": 1259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23449,7 +23666,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1266
+      "line": 1275
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23457,7 +23674,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1286
+      "line": 1295
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23465,7 +23682,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1302
+      "line": 1311
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23473,7 +23690,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1328
+      "line": 1337
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23481,7 +23698,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1358
+      "line": 1367
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -23489,7 +23706,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1376
+      "line": 1385
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -39971,21 +40188,21 @@
       "name": "showUnsupportedLook",
       "kind": "method",
       "receiver": "*Root",
-      "line": 323
+      "line": 343
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
       "name": "probablyImageExtensions",
       "kind": "var",
-      "line": 348
+      "line": 368
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
       "name": "looksLikeImagePath",
       "kind": "function",
-      "line": 353
+      "line": 373
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -39993,7 +40210,7 @@
       "name": "showPDFPage",
       "kind": "method",
       "receiver": "*Root",
-      "line": 372
+      "line": 392
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40001,7 +40218,7 @@
       "name": "renderPDFPageContent",
       "kind": "method",
       "receiver": "*Root",
-      "line": 408
+      "line": 428
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40009,7 +40226,7 @@
       "name": "turnPDFPage",
       "kind": "method",
       "receiver": "*Root",
-      "line": 451
+      "line": 471
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40017,7 +40234,7 @@
       "name": "setPDFViewMode",
       "kind": "method",
       "receiver": "*Root",
-      "line": 468
+      "line": 488
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40025,21 +40242,21 @@
       "name": "LookShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 484
+      "line": 504
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
       "name": "batBinary",
       "kind": "function",
-      "line": 496
+      "line": 516
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
       "name": "externalPagerCommand",
       "kind": "function",
-      "line": 513
+      "line": 533
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40047,7 +40264,7 @@
       "name": "runExternalPager",
       "kind": "method",
       "receiver": "*Root",
-      "line": 533
+      "line": 553
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40055,7 +40272,7 @@
       "name": "playVideoFullscreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 562
+      "line": 582
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40063,7 +40280,7 @@
       "name": "tailCurrentEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 585
+      "line": 605
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40071,7 +40288,7 @@
       "name": "runTailFollow",
       "kind": "method",
       "receiver": "*Root",
-      "line": 608
+      "line": 628
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40097,58 +40314,121 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
+      "name": "TestShowBuiltinLookRendersCSVAsAlignedTable",
+      "kind": "function",
+      "line": 93
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/viewer_test.go",
       "name": "TestShowBuiltinLookOnBinaryFileShowsError",
       "kind": "function",
-      "line": 92
+      "line": 118
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestShowBuiltinLookRendersRealImage",
       "kind": "function",
-      "line": 116
+      "line": 142
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestShowUnsupportedLookRecommendsToolForKnownImageExtension",
       "kind": "function",
-      "line": 157
+      "line": 183
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestShowUnsupportedLookRecommendsToolWhenLoadReportsReason",
       "kind": "function",
-      "line": 191
+      "line": 217
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestShowBuiltinLookOnDirectoryShowsError",
       "kind": "function",
-      "line": 233
+      "line": 259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestExternalPagerCommandChain",
       "kind": "function",
-      "line": 253
+      "line": 279
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "writeFakeExecutable",
       "kind": "function",
-      "line": 299
+      "line": 325
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer_test.go",
       "name": "TestOpenLookDispatchesToExternalPagerWhenConfigured",
       "kind": "function",
-      "line": 313
+      "line": 339
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv.go",
+      "name": "CSVDelimiterFor",
+      "kind": "function",
+      "line": 17
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv.go",
+      "name": "FormatCSVTable",
+      "kind": "function",
+      "line": 49
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestCSVDelimiterFor",
+      "kind": "function",
+      "line": 5
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestFormatCSVTableAlignsColumns",
+      "kind": "function",
+      "line": 26
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestFormatCSVTableTab",
+      "kind": "function",
+      "line": 40
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestFormatCSVTableRaggedRows",
+      "kind": "function",
+      "line": 57
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestFormatCSVTableEmptyContent",
+      "kind": "function",
+      "line": 70
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/viewer",
+      "file": "internal/viewer/csv_test.go",
+      "name": "TestFormatCSVTableTrimsLeadingSpaceAfterDelimiter",
+      "kind": "function",
+      "line": 85
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/viewer",
@@ -40879,5 +41159,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "1d3a148e881721ca1a1474d696af2977ce11769cc809a36044b73f28410248c9"
+  "merkle_root": "4fbb276ea2a44fb585d12d74b6e0f9fc3ff23d2e01d898905e36b1f61757352c"
 }
