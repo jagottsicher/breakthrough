@@ -939,13 +939,18 @@ esac
 curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERSION}/breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
+sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
 ```
 
 Without root, drop it somewhere on your own `PATH` instead:
 
 ```sh
 mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
+mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
 ```
+
+(The `.deb`/`.rpm` packages install the man page automatically — no
+separate step needed there; see `man breakthrough` once installed.)
 
 On macOS, Gatekeeper quarantines anything downloaded with a browser. If
 you get "cannot be opened because the developer cannot be verified",

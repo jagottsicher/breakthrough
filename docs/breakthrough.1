@@ -1,0 +1,102 @@
+.TH BREAKTHROUGH 1 "2026-09-30" "breakthrough" "User Commands"
+.SH NAME
+breakthrough \- POSIX-friendly, window/menu-based TUI file manager
+.SH SYNOPSIS
+.B breakthrough
+[\fB\-\-debug\fR] [\fIPATH\fR]
+.br
+.B breakthrough
+\fB\-\-version\fR | \fB\-v\fR
+.SH DESCRIPTION
+.B breakthrough
+is a terminal file manager for Linux system administration, sysops, and
+devops work, built with
+.B tcell
+and
+.BR tview .
+It favors mouse-friendly window/menu operation and real shell
+workflows over reimplementing a shell or cloning Midnight Commander
+\-\- every mouse action has a keyboard equivalent, and existing POSIX tools
+.RI ( du ", " df ", " find ", " grep ", " sed ", " rsync ", ...)
+are used directly wherever their own established behavior is more
+useful than a reimplementation.
+.PP
+Run with no arguments, it opens in the current working directory.
+Everything else \-\- keybindings, panels, Look/Edit, archive browsing,
+remote (SFTP) connections, Search, batch rename, and the rest \-\- is
+documented in the application's own built\-in help
+.RB ( ?
+key) and the online user guide (see
+.B SEE ALSO
+below), not repeated here: unlike this options summary, that reference
+can never drift out of sync with a running binary, since it ships
+inside it.
+.SH OPTIONS
+.TP
+.I PATH
+Open this directory instead of the current working directory. Also
+becomes the panel's own "Start" button target for the rest of the
+session.
+.TP
+.BR \-\-version ", " \-v
+Print the version, commit, build date, and builder, then exit without
+starting the TUI.
+.TP
+.B \-\-debug
+Redirect this process's own stderr \-\- including an uncaught panic and
+its full traceback \-\- to a log file for the whole run, instead of it
+being lost behind the TUI's alternate screen buffer. See
+.B FILES
+below for the log's location. Also enables a full, all\-goroutine
+traceback (rather than just the panicking one) for the rare panic that
+reaches the runtime's own default handler uncaught.
+.SH FILES
+.TP
+.I /etc/breakthrough/config
+System\-wide default configuration, flat
+.I key = value
+syntax. Absent unless installed via a
+.B .deb
+or
+.B .rpm
+package, which ships a documented starting point there.
+.TP
+.I $XDG_CONFIG_HOME/breakthrough/config
+(or
+.I ~/.config/breakthrough/config
+if
+.I $XDG_CONFIG_HOME
+is unset)
+Per\-user configuration, overriding the system\-wide default above.
+Created lazily the first time a setting is actually changed from
+within the application \-\- absent until then.
+.TP
+.I $XDG_DATA_HOME/breakthrough/trash
+(or
+.I ~/.local/share/breakthrough/trash
+if
+.I $XDG_DATA_HOME
+is unset)
+Where "Move to Trash" relocates a deleted entry, instead of removing
+it outright. Created lazily on first use.
+.TP
+.I $XDG_STATE_HOME/breakthrough/debug.log
+(or
+.I ~/.local/state/breakthrough/debug.log
+if
+.I $XDG_STATE_HOME
+is unset)
+.B \-\-debug's
+own log file (see
+.B OPTIONS
+above).
+.SH SEE ALSO
+Full documentation \-\- every keybinding, configuration key, and
+feature \-\- lives at
+.UR https://github.com/jagottsicher/breakthrough
+.UE
+and in the application's own built\-in help, opened with the
+.B ?
+key.
+.SH AUTHOR
+jagottsicher

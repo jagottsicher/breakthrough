@@ -33,6 +33,14 @@ before:
     # unmarshal !!map into string" — so this stays the plain string form
     # despite the map form existing elsewhere in GoReleaser's own schema.
     - sh -c "mkdir -p .goreleaser-generated && go run ./cmd/gen-etc-config > .goreleaser-generated/etc-breakthrough-config"
+    # Man pages are conventionally shipped gzip-compressed — both the
+    # .deb/.rpm packages below and a manual install into a real
+    # MANPATH expect that, not a plain .1 file. docs/breakthrough.1 is
+    # itself a checked-in, hand-maintained roff source (verified
+    # against real groff/-man output, not guessed) — this hook only
+    # ever compresses it, never generates its content, unlike the
+    # etc-config hook just above.
+    - sh -c "mkdir -p .goreleaser-generated && gzip -9 -c docs/breakthrough.1 > .goreleaser-generated/breakthrough.1.gz"
 
 builds:
   - id: breakthrough
@@ -72,6 +80,17 @@ archives:
       - LICENSE
       - NOTICE
       - README.md
+      # The map form (not just a bare glob, like the three above) is
+      # what lets this land at a fixed, predictable name inside the
+      # archive — schema verified against the current GoReleaser docs
+      # (goreleaser.com/customization/archive), not guessed: this
+      # form's own file-metadata key is "info", not nfpms.contents'
+      # own "file_info" a few sections down — the two are genuinely
+      # different schemas despite the similar job.
+      - src: .goreleaser-generated/breakthrough.1.gz
+        dst: breakthrough.1.gz
+        info:
+          mode: 0o644
 
 checksum:
   name_template: "checksums.txt"
@@ -127,6 +146,17 @@ nfpms:
         type: dir
         file_info:
           mode: 0o755
+      # /usr/share/man/man1 is the standard section-1 location both
+      # Debian's and Red Hat's own packaging conventions expect —
+      # man-db (Debian/Ubuntu) and mandb-equivalent indexing (RPM-based
+      # distros) both already trigger off files appearing there via
+      # their own package-manager hooks, so nothing further (no
+      # postinst scriptlet) is needed for `man breakthrough` to find
+      # this right after install.
+      - src: .goreleaser-generated/breakthrough.1.gz
+        dst: /usr/share/man/man1/breakthrough.1.gz
+        file_info:
+          mode: 0o644
 
 changelog:
   use: git
