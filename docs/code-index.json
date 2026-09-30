@@ -58,8 +58,8 @@
     },
     {
       "path": ".goreleaser.yaml",
-      "size": 7287,
-      "sha256": "89ea2b33bec9bf3b04b2c5e3f05743550bdd12fcb2f0f8234dd83600972e13b6"
+      "size": 9022,
+      "sha256": "5dd615b84a14ad20a2ac98e191d14e7d8ab01629030921dd96c5f1ffecdb9c30"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 63317,
-      "sha256": "40b71ee4ae6150020da60815abf55a69b7b1f1390c756683f947aa3e8c4c9dc5"
+      "size": 63617,
+      "sha256": "80a32a8fa00e1613809bfc39189c34fe16e736216f9f8ba41fcd3fa8864d7443"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -130,6 +130,11 @@
       "path": "cmd/gen-etc-config/main_test.go",
       "size": 840,
       "sha256": "a4cf407e1b31b165f48873cc51e42bdf69c2e4c3929957ff516fa118f57ad250"
+    },
+    {
+      "path": "docs/breakthrough.1",
+      "size": 3087,
+      "sha256": "0b344b614dac7069d23ceeecef5e2dea18d470e52e3a125f376a8ddbb2504d6a"
     },
     {
       "path": "docs/consultants.txt",
@@ -41154,5 +41159,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7d8986e31cff3ec9fed75c21a8eb87f7954af84b5dfad48f09252e1dcbcb42d6"
+  "merkle_root": "4fbb276ea2a44fb585d12d74b6e0f9fc3ff23d2e01d898905e36b1f61757352c"
 }
