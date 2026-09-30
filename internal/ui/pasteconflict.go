@@ -900,6 +900,29 @@ func (r *Root) pasteOne(job *pasteJob, src, dst string, force bool, mode fsops.O
 	}
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 	job.ioMu.Lock()
+	// waitWhilePaused here, not (only) in pasteWalk's own per-item loop,
+	// is what actually makes a pause take effect: pasteWalk itself
+	// dispatches every item's own goroutine near-instantly (see its own
+	// doc comment — no real I/O happens there at all, just an os.Lstat
+	// per item), so for anything short of a very large job, every item
+	// is typically already spawned and queued on job.ioMu well before a
+	// user could react and press Ctrl+C at all — a pause check only in
+	// that dispatch loop would then find nothing left to gate. ioMu
+	// itself is the one genuine serialization point (see its own doc
+	// comment: only one item's real I/O ever runs at a time, regardless
+	// of how many goroutines are already alive), so checking here,
+	// already holding it, is what actually guarantees "the current file
+	// finishes, then nothing further starts, regardless of dispatch
+	// order": whichever goroutine holds ioMu when a pause lands simply
+	// finishes its own real Copy/Move normally; every other one already
+	// queued behind Lock above only reaches this point, and blocks here,
+	// once it's actually its own turn — never racing ahead of the pause
+	// the way a check only before Lock could.
+	job.waitWhilePaused()
+	if job.ctx.Err() != nil {
+		job.ioMu.Unlock()
+		return
+	}
 	var err error
 	switch {
 	case job.cut && job.followSymlinks:
@@ -988,6 +1011,14 @@ func (r *Root) pasteOneRemote(job *pasteJob, src, dst string, force bool, mode f
 	onBytes := func(copiedBytes int64) { job.currentFileBytes.Store(copiedBytes) }
 
 	job.ioMu.Lock()
+	// See pasteOne's own doc comment on why this has to be checked here,
+	// already holding ioMu, rather than only in pasteWalk's own dispatch
+	// loop.
+	job.waitWhilePaused()
+	if job.ctx.Err() != nil {
+		job.ioMu.Unlock()
+		return
+	}
 	skipped, err := runPasteTransferItem(srcSide, destSide, src, dst, force, mode, onFile, onBytes, &job.skippedSymlinks)
 	if err == nil && job.cut && !skipped {
 		// !skipped: src itself was a symlink, left untouched — nothing
