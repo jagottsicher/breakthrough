@@ -308,8 +308,22 @@ func (r *Root) buildStatusBar() string {
 	switch {
 	case r.pasteJob != nil:
 		write(pasteProgressText(r.pasteJob, len(r.pasteQueue)))
+		write(" ")
+		// The cancel button — Sessions' own Close glyph ("✕"), the same
+		// mouse-first, discoverable shape clipboardClearSpan already has
+		// just below, per the user's own explicit request that all
+		// three background-job segments get one. Always means "stop
+		// just the current job", never the queue behind it (see
+		// confirmCancelCurrentPaste in bgjobcancel.go) — asks first
+		// rather than acting immediately.
+		pasteCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.pasteCancelSpan = buttonBarSpan{startCol: pasteCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentPaste() }}
 		sep()
 	default:
+		// Stale otherwise — no Paste running, so nothing for a leftover
+		// span to still match a click against.
+		r.pasteCancelSpan = buttonBarSpan{}
 		// The clipboard's own contents, if anything — right after the
 		// chord indicator and before the username, the same leading,
 		// fixed position and the same reasoning: it needs to be seen
@@ -347,8 +361,13 @@ func (r *Root) buildStatusBar() string {
 	// running at the same time (see rsyncjob.go's own package doc
 	// comment): both get their own segment rather than one having to
 	// yield to the other the way paste and the clipboard indicator do.
+	r.rsyncCancelSpan = buttonBarSpan{}
 	if r.rsyncJob != nil {
 		write(rsyncProgressText(r.rsyncJob, len(r.rsyncQueue)))
+		write(" ")
+		rsyncCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.rsyncCancelSpan = buttonBarSpan{startCol: rsyncCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentRsync() }}
 		sep()
 	}
 
@@ -357,8 +376,13 @@ func (r *Root) buildStatusBar() string {
 	// same reason: a separate process tree, free to run alongside
 	// either of the other two (see compressjob.go's own package doc
 	// comment).
+	r.compressCancelSpan = buttonBarSpan{}
 	if r.compressJob != nil {
 		write(compressProgressText(r.compressJob, len(r.compressQueue)))
+		write(" ")
+		compressCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.compressCancelSpan = buttonBarSpan{startCol: compressCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentCompress() }}
 		sep()
 	}
 
@@ -1006,7 +1030,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compressCancelSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break

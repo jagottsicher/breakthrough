@@ -420,6 +420,26 @@ func (r *Root) cancelRsyncJob() {
 	r.rsyncQueue = nil
 }
 
+// cancelRsyncKeepQueue is cancelRsyncJob's narrower sibling — stops only
+// the currently running background rsync, if any, and lets whatever's
+// already queued behind it start next (see advanceRsyncQueue), rather
+// than dropping that too. Reached from the status bar's own "✕" button
+// on the rsync progress segment, and from the "mR" chord's own "Cancel
+// current" answer — both, per the user's own explicit request, always
+// mean "just this one", never the queue as well; "Cancel everything"
+// stays cancelRsyncJob's own job. A no-op if the job already finished
+// on its own by the time this runs — real, given a confirmation dialog
+// sits between the click/chord and this call (see openRsyncCancelDialog/
+// confirmCancelCurrentRsync): the same "if there's nothing left to do,
+// do nothing" contract cancelRsyncJob's own nil check already has.
+func (r *Root) cancelRsyncKeepQueue() {
+	if r.rsyncJob == nil {
+		return
+	}
+	r.rsyncJob.cancel()
+	r.advanceRsyncQueue()
+}
+
 // advanceRsyncQueue starts the next queued background rsync, if any —
 // the same shape advancePasteQueue already has for Paste.
 func (r *Root) advanceRsyncQueue() {

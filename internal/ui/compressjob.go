@@ -318,6 +318,24 @@ func (r *Root) cancelCompressJob() {
 	r.compressQueue = nil
 }
 
+// cancelCompressKeepQueue is cancelCompressJob's narrower sibling —
+// mirrors cancelRsyncKeepQueue exactly, for the identical reason (see
+// its own doc comment): stops only the currently running Compress/
+// Extract, if any, and lets whatever's already queued behind it start
+// next (see advanceCompressQueue) rather than dropping that too.
+// Reached from the status bar's own "✕" button on the compress
+// progress segment, and the "mC" chord's own "Cancel current" answer.
+// A no-op if the job already finished on its own by the time this
+// runs — real, given a confirmation dialog sits between the click/
+// chord and this call.
+func (r *Root) cancelCompressKeepQueue() {
+	if r.compressJob == nil {
+		return
+	}
+	r.compressJob.cancel()
+	r.advanceCompressQueue()
+}
+
 // advanceCompressQueue starts the next queued Compress/Extract, if any
 // — the same shape advanceRsyncQueue already has.
 func (r *Root) advanceCompressQueue() {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -256,6 +257,75 @@ func TestChordGoMessagesOpensTheMessagesScreen(t *testing.T) {
 	if root.activePage != messagesPage {
 		t.Errorf("activePage = %q, want the Messages screen", root.activePage)
 	}
+}
+
+// TestChordMenuCancelPasteOpensThePauseDialogOnlyWhilePasteIsRunning
+// pins "mV"'s own distinguishing behavior versus Ctrl+C (RequestCancel):
+// it reaches the exact same pause dialog while a Paste is running, but
+// — unlike Ctrl+C's own broader fallback chain — does nothing at all
+// otherwise, per the user's own explicit request that this key mean
+// specifically "Paste", with nothing else to fall through to.
+func TestChordMenuCancelPasteOpensThePauseDialogOnlyWhilePasteIsRunning(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('V'))
+	if root.activePage == pastePausePage {
+		t.Error("\"mV\" should do nothing at all with no Paste running")
+	}
+
+	job := newPasteTestJob(root, false, root.panel.path, 1)
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('V'))
+	if root.activePage != pastePausePage {
+		t.Errorf("activePage = %q, want the pause dialog open", root.activePage)
+	}
+	if job.resumeCh == nil {
+		t.Error("the job should be paused")
+	}
+}
+
+// TestChordMenuCancelRsyncOpensItsOwnDialog pins "mR" reaching
+// openRsyncCancelDialog (see bgjobcancel.go) — a no-op with nothing
+// running, opens with one.
+func TestChordMenuCancelRsyncOpensItsOwnDialog(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('R'))
+	if root.activePage == bgJobCancelPage {
+		t.Error("\"mR\" should do nothing at all with no Rsync running")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.rsyncJob = &rsyncJob{ctx: ctx, cancel: cancel}
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('R'))
+	if root.activePage != bgJobCancelPage {
+		t.Errorf("activePage = %q, want the cancel dialog open", root.activePage)
+	}
+	root.cancelRsyncJob() // don't leave a real rsync process running past this test
+}
+
+// TestChordMenuCancelCompressOpensItsOwnDialog mirrors
+// TestChordMenuCancelRsyncOpensItsOwnDialog for "mC".
+func TestChordMenuCancelCompressOpensItsOwnDialog(t *testing.T) {
+	root := newPlainKeyRoot(t)
+
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('C'))
+	if root.activePage == bgJobCancelPage {
+		t.Error("\"mC\" should do nothing at all with no Compress/Extract running")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.compressJob = &compressJob{ctx: ctx, cancel: cancel}
+	root.HandlePlainKey(runeEvent('m'))
+	root.HandlePlainKey(runeEvent('C'))
+	if root.activePage != bgJobCancelPage {
+		t.Errorf("activePage = %q, want the cancel dialog open", root.activePage)
+	}
+	root.cancelCompressJob() // don't leave a real process running past this test
 }
 
 func TestChordGoUpNavigatesToParent(t *testing.T) {

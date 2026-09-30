@@ -203,6 +203,12 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.pastePauseDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.pastePauseDialogTitleBar.SetTextColor(theme.TextColor)
 
+	// Same single-layer, always-modal reasoning — see bgjobcancel.go's
+	// own package doc comment.
+	styleList(r.bgJobCancelDialog, theme)
+	r.bgJobCancelDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.bgJobCancelDialogTitleBar.SetTextColor(theme.TextColor)
+
 	styleList(r.picker, theme)
 
 	r.errorView.SetTextColor(theme.Text)
