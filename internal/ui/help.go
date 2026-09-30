@@ -187,8 +187,10 @@ var helpText = strings.TrimLeft(`
 [::b]Details sidebar ("I")[::-]
 
   A read-only, live-updating panel of file info (stat fields; for an
-  image or PDF, a preview with its own click zone/"l" for fullscreen;
-  hashes, or for a directory, its total size) for whichever entry is
+  image, PDF, or video (a frame grabbed ~10% into its own duration,
+  via mpv — the same tool "l" hands full-screen playback to), a
+  preview with its own click zone/"l" for fullscreen; hashes, or for a
+  directory, its total size) for whichever entry is
   currently selected. The "<" button at the far end of the path bar
   (right after the tab strip) expands it the same way "I" does; once
   open, the ">" button in its own top-right corner collapses it again.
@@ -221,7 +223,7 @@ var helpText = strings.TrimLeft(`
   selected rather than the one the panel itself is showing. Nothing
   shown for a plain file, or outside a git repository. Fetched a
   moment after the cursor actually stops on a directory, the same
-  cursor-rests-briefly-first debounce the image/PDF preview above
+  cursor-rests-briefly-first debounce the image/PDF/video preview above
   already uses, so holding an arrow key down through a long list of
   directories costs nothing.
 
@@ -903,6 +905,12 @@ var helpText = strings.TrimLeft(`
                     realistic terminal size, so this is a manual
                     override, not just whichever tier auto-detection
                     picked
+
+  A video file hands the real terminal to mpv instead (install
+  required) for full-screen playback — q or Ctrl+C to quit and return,
+  exactly like Tail -f. Needs no graphical window: falls back to
+  mpv's own true-color terminal renderer where none is available (an
+  SSH/tmux/screen session, this app's usual home).
 
 [::b]Chmod dialog (context menu's "chmod")[::-]
 

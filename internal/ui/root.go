@@ -1089,11 +1089,18 @@ type Root struct {
 	// apart wherever that matters (see renderDetailsSidebar). It's set
 	// independently of detailsImage: PDFPageCount can succeed even when
 	// rendering the page image itself fails (no pdftoppm installed).
-	detailsTarget          string
-	detailsStat            fsops.Info
-	detailsStatErr         error
-	detailsImage           *viewer.Result
-	detailsPDFPageCount    int
+	detailsTarget       string
+	detailsStat         fsops.Info
+	detailsStatErr      error
+	detailsImage        *viewer.Result
+	detailsPDFPageCount int
+	// detailsIsVideo mirrors detailsPDFPageCount's own role, just for a
+	// video's extracted-frame preview (see viewer.LoadVideoThumbnailContext)
+	// instead of a rasterized PDF page — both share the same detailsImage
+	// field (a video thumbnail is, from here on, just another KindImage
+	// Result — see detailsPreviewFor), so this is what tells
+	// renderDetailsSidebar which "Type" line and hints to show for it.
+	detailsIsVideo         bool
 	detailsPreviewRowStart int
 	detailsPreviewRowEnd   int
 
