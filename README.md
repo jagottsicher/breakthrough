@@ -715,7 +715,15 @@ terminal.
   required. `PageUp`/`PageDown` move between pages either way; `g`/`t`
   switch a given page between rendered-image and extracted-text view
   on demand — handy since a text-heavy page rendered as an image
-  downsamples into illegible mush at any realistic terminal size.
+  downsamples into illegible mush at any realistic terminal size. A
+  video file (MP4, MKV, WebM, AVI, MOV, and the rest of the usual
+  container formats) hands the real terminal over to
+  [mpv](https://mpv.io/) instead, for full-screen playback — no
+  graphical window needed, mpv falls back to its own true-color
+  terminal renderer over SSH/tmux/screen. `q` or `Ctrl+C` quits back
+  into breakthrough. The Details sidebar shows the same video as a
+  still-frame thumbnail, grabbed via mpv 10% into its own duration to
+  skip past a typically black/blank opening.
 - Archive browsing: `Enter` on a `.zip`, `.tar`, `.tar.gz`, `.tar.bz2`,
   or `.tar.xz` file opens a browsable listing of its own contents right
   in the panel, exactly like a real directory — `..` steps back out to
