@@ -307,7 +307,17 @@ func (r *Root) buildStatusBar() string {
 	// clipboard normally empties out right as its Paste finishes).
 	switch {
 	case r.pasteJob != nil:
-		write(pasteProgressText(r.pasteJob, len(r.pasteQueue)))
+		// The "✕" sits right after pasteProgressPrefix's own relatively
+		// stable text and before pasteProgressSuffix's own current-file
+		// name — never after it — per the user's own explicit,
+		// real-world report: a click target placed after a name that
+		// changes completely, for every single file, throughout the
+		// whole job is one nobody can reliably hit at all. See
+		// pasteProgressText's own doc comment for the full reasoning,
+		// and rsyncProgressText/compressProgressText just below for why
+		// their own two segments didn't need the identical split (no
+		// per-file name of their own to begin with).
+		write(pasteProgressPrefix(r.pasteJob))
 		write(" ")
 		// The cancel button — Sessions' own Close glyph ("✕"), the same
 		// mouse-first, discoverable shape clipboardClearSpan already has
@@ -319,6 +329,10 @@ func (r *Root) buildStatusBar() string {
 		pasteCancelStart := col
 		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
 		r.pasteCancelSpan = buttonBarSpan{startCol: pasteCancelStart, endCol: col, run: func(r *Root) { r.confirmCancelCurrentPaste() }}
+		if suffix := pasteProgressSuffix(r.pasteJob, len(r.pasteQueue)); suffix != "" {
+			write(" ")
+			write(suffix)
+		}
 		sep()
 	default:
 		// Stale otherwise — no Paste running, so nothing for a leftover
@@ -649,36 +663,48 @@ func formatETA(d time.Duration) string {
 }
 
 // pasteProgressText renders buildStatusBar's own "a Paste is running"
-// segment, replacing the clipboard indicator for as long as job is
-// non-nil (see buildStatusBar's own doc comment on why one wins over
-// the other): a spinner (reusing hashAnimationFrames — the same visual
-// language as every other "in progress" indicator this app already
-// has, driven by animatePasteProgress's own ticker), "Copying"/"Moving"
-// naming which of the two this actually is, how many of the clipboard's
-// own top-level items have a final outcome so far, a leading
+// segment in full, composed from pasteProgressPrefix/pasteProgressSuffix
+// below (see their own doc comments for what each half actually shows)
+// — kept as one function for callers (and tests) that just want the
+// whole line; buildStatusBar itself calls the two halves separately
+// instead, with the "✕" cancel button sandwiched between them (see its
+// own doc comment there for why: the suffix's own current-file name
+// changes length on every single file, which would otherwise carry the
+// button's own column position along with it, making it effectively
+// unclickable on anything but the smallest paste — a real, user-reported
+// problem, not a hypothetical one).
+func pasteProgressText(job *pasteJob, queued int) string {
+	prefix := pasteProgressPrefix(job)
+	if suffix := pasteProgressSuffix(job, queued); suffix != "" {
+		return prefix + " " + suffix
+	}
+	return prefix
+}
+
+// pasteProgressPrefix is pasteProgressText's own stable half: a spinner
+// (reusing hashAnimationFrames — the same visual language as every
+// other "in progress" indicator this app already has, driven by
+// animatePasteProgress's own ticker), "Copying"/"Moving" naming which
+// of the two this actually is, how many of the clipboard's own
+// top-level items have a final outcome so far, a leading
 // byte-percentage column and a dual progress bar once the job's own
 // byte total is known (see pasteBytesColumn/pasteDualBar and
 // pasteJob.bytesTotal's own doc comment for what "known" means and why
-// it isn't known from the very first tick), an estimated remaining
-// duration once that same total makes one possible (see pasteETA), and
-// the real file fsCopy/fsMove most recently reported touching (see
-// pasteJob.currentFile) — its bare name, not the full path: the path is
-// wherever the paste's own destination already says it's going, and a
-// long one would crowd out every segment after it.
+// it isn't known from the very first tick), and an estimated remaining
+// duration once that same total makes one possible (see pasteETA).
+// "Stable" only relative to pasteProgressSuffix's own current-file name
+// — the byte column/ETA's own digits still grow/shrink somewhat as a
+// paste progresses, just nowhere near as unpredictably as a filename
+// that changes completely, for every single file, throughout the whole
+// job.
 //
 // The N/total count and the dual bar's own top half are per top-level
 // clipboard item, not per file: a directory only advances either one
 // once, when the whole thing finishes, no matter how many files it
-// contains — currentFile (and the bar's own bottom half) is what
-// actually moves during that stretch, updating per real file
-// underneath it even while the top half sits still.
-//
-// queued is len(r.pasteQueue) at render time — a trailing "(+N
-// queued)" once a further Paste is waiting behind this one (see
-// startPaste/advancePasteQueue), omitted entirely at zero rather than
-// shown as "(+0 queued)": the whole point is to say something is
-// waiting, not to always report a count that's usually zero.
-func pasteProgressText(job *pasteJob, queued int) string {
+// contains — currentFile (see pasteProgressSuffix) and the bar's own
+// bottom half are what actually move during that stretch, updating per
+// real file underneath it even while the top half sits still.
+func pasteProgressPrefix(job *pasteJob) string {
 	verb := "Copying"
 	if job.cut {
 		verb = "Moving"
@@ -716,13 +742,32 @@ func pasteProgressText(job *pasteJob, queued int) string {
 		}
 	}
 
+	return b.String()
+}
+
+// pasteProgressSuffix is pasteProgressText's own volatile half: the
+// real file fsCopy/fsMove most recently reported touching (see
+// pasteJob.currentFile) — its bare name, not the full path: the path is
+// wherever the paste's own destination already says it's going, and a
+// long one would crowd out every segment after it — followed by
+// queued's own trailing "(+N queued)" once a further Paste is waiting
+// behind this one (see startPaste/advancePasteQueue), omitted entirely
+// at zero rather than shown as "(+0 queued)": the whole point is to say
+// something is waiting, not to always report a count that's usually
+// zero. Placed *after* the status bar's own "✕" cancel button rather
+// than before it (see pasteProgressText's own doc comment) — this is
+// the one part of the whole segment that changes length on every real
+// file, for as long as the job runs.
+func pasteProgressSuffix(job *pasteJob, queued int) string {
+	var b strings.Builder
 	if current := job.currentFile.Load(); current != nil && *current != "" {
-		b.WriteByte(' ')
 		b.WriteString(filepath.Base(*current))
 	}
-
 	if queued > 0 {
-		fmt.Fprintf(&b, " (+%d queued)", queued)
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "(+%d queued)", queued)
 	}
 	return b.String()
 }
