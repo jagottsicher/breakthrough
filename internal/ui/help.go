@@ -101,7 +101,7 @@ var helpText = strings.TrimLeft(`
                 Cancel Rsync (asks: current job only, or current plus
                 its own queue) · mC Cancel Compress/Extract (same
                 question) — mR/mC never touch each other or Paste
-    j  tools    jc Compress… · je Extract · jE Extract, delete original ·
+    j  tools    jc Compress… · je Extract · jE Extract, del org ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
@@ -1050,7 +1050,7 @@ var helpText = strings.TrimLeft(`
   vs. "current plus its own queue", leaving a running rsync completely
   untouched either way.
 
-[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
+[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, del org")[::-]
 
   Unpacks the archive currently under the cursor in one step, without
   first entering it — into the archive's own directory, or, if a split

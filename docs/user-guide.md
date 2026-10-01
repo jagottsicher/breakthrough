@@ -103,7 +103,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, delete original · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -483,7 +483,7 @@ as wide as that title, even when every row inside is shorter.
   `md`), `tail -f` (files only, `t`, also `mt`), `chown` (`o`), `chmod`
   (`m`), `sed` (`S`), Batch rename (`B`), Undo last rename (`u`),
   Compare (`C`), Rsync (`R`), [Compress…](#compress) (`c`, also `jc`),
-  [Extract](#extract)/"Extract, delete original" (`e`/`E`, also
+  [Extract](#extract)/"Extract, del org" (`e`/`E`, also
   `je`/`jE`, shown only for a recognized archive), Remove (`D`, the
   permanent, asks-first sibling of Move to Trash above), Paste
   following symlinks (`V`).
@@ -631,7 +631,7 @@ reimplementation of any compression algorithm): `zip`, `tar`, and
 | Field | Meaning |
 |---|---|
 | Target | Read-only — what this Compress run is for |
-| Format | zip, tar, tar.gz, tar.bz2, tar.xz, or tar.zst |
+| Format | zip, tar, tar.gz, tar.bz2, tar.xz, tar.zst, or 7z |
 | Output name | The archive's own name, without extension — the selected Format's own extension is added automatically |
 
 A live Preview line always shows the exact file name that will be
@@ -658,10 +658,18 @@ through the real compressor binary (`gzip`/`bzip2`/`xz`/`zstd`), rather
 than relying on tar's own bundled compression support — that varies by
 which `tar` is actually installed (GNU tar vs. macOS/BSD's own
 `bsdtar`), while a plain pipe through the real compressor works
-identically everywhere it's installed. Whichever tool a format needs
-has to actually be on `$PATH` — a missing one is reported by name
-("`zstd` not found on \$PATH — install it first…") rather than a bare,
-buried "command not found".
+identically everywhere it's installed. 7z runs the real `7z` binary
+(`7za`/`7zr` instead, whichever is actually installed — the same
+resolution order [browsing into a `.7z`](#file-panel) already uses).
+Whichever tool a format needs has to actually be on `$PATH` — a missing
+one is reported by name ("`zstd` not found on \$PATH — install it
+first…") rather than a bare, buried "command not found".
+
+No "Compress to .rar": [Extract](#extract) can open an existing RAR
+archive (the real, freeware `unrar` binary), but creating one needs the
+proprietary `rar` command-line tool instead — not something this app
+depends on or asks you to install, so RAR never appears in this Format
+dropdown at all, only in Extract.
 
 Runs in the background, the same as [Copy, Cut and Paste](#copy-cut-and-paste) —
 no terminal takes over the screen; a spinner and elapsed time show in
@@ -677,11 +685,13 @@ leaving a running rsync completely untouched either way.
 ## Extract
 
 `j` then `e` (keep the original) or `E` (also delete it), or the
-context menu's **Extract**/**Extract, delete original** (both shown
-only once the cursor is actually on a recognized archive). Unpacks the
-whole archive in one step, without first browsing into it — real
-`unzip`/`tar` (piped through the matching decompressor), never a
-reimplementation, the same as [Compress](#compress) above.
+context menu's **Extract**/**Extract, del org** (both shown
+only once the cursor is actually on a recognized archive — zip, every
+tar variant, 7z, or RAR). Unpacks the whole archive in one step, without
+first browsing into it — real `unzip`/`tar` (piped through the matching
+decompressor), `7z`, or `unrar`, never a reimplementation, the same as
+[Compress](#compress) above. RAR is extract-only here too — see
+[Compress](#compress)'s own note on why there's no "Compress to .rar".
 
 The destination depends on whether a split is currently active:
 
@@ -690,7 +700,7 @@ The destination depends on whether a split is currently active:
 | Off | The archive's own directory ("extract here") |
 | On | The other pane's own current directory — the same default [Rsync](#rsync)/[Compare](#compare) already use once a split exists |
 
-`jE`/"Extract, delete original" additionally moves the original archive
+`jE`/"Extract, del org" additionally moves the original archive
 to the Trash, but only once extraction has actually succeeded. If that
 move fails outright (Trash unavailable, or the move itself errors),
 this never silently leaves the archive behind and never silently

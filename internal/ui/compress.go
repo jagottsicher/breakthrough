@@ -12,18 +12,20 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // Compress and Extract: real archive creation and unpacking, both
 // always through a real external tool (zip/unzip/tar/gzip/bzip2/xz/
-// zstd) — never a reimplementation of any compression algorithm, the
-// same "shell out to the real tool" principle already used for Rsync
-// and Sed Replace. Deliberately separate from internal/archive (which
-// only ever browses/lists/extracts specific members of an already-open
-// archive in pure Go): this is "the whole archive, in one step",
-// reachable directly from plain browsing without ever entering it.
+// zstd/7z/unrar) — never a reimplementation of any compression
+// algorithm, the same "shell out to the real tool" principle already
+// used for Rsync and Sed Replace. Deliberately separate from
+// internal/archive (which only ever browses/lists/extracts specific
+// members of an already-open archive in pure Go): this is "the whole
+// archive, in one step", reachable directly from plain browsing without
+// ever entering it.
 
 const compressPage = "compress"
 
@@ -50,14 +52,25 @@ type archiveFormat struct {
 	// format's own extension — used by archiveFormatFor to recognize an
 	// existing file as extractable.
 	matches func(lower string) bool
+
+	// extractOnly marks a format Extract can open but Compress can never
+	// create — RAR, specifically: unrar (extraction) is freeware, but
+	// creating a real .rar needs the proprietary rar binary, which this
+	// app has no business depending on or encouraging. compressibleFormats
+	// filters these out of the Compress dialog's own Format dropdown and
+	// its Options-screen default picker; archiveFormatFor (Extract's own
+	// lookup) sees every format regardless, extractOnly included.
+	extractOnly bool
 }
 
 // archiveFormats is every Compress/Extract format, in the order the
-// Format dropdown offers them — the same five extensions
-// internal/archive already recognizes for browsing (zip, tar, tar.gz,
-// tar.bz2, tar.xz), plus tar.zst: that package can't read it back (no
-// zstd decompressor in Go's own standard library), but a real zstd
-// binary handles it exactly like any of the others here.
+// Format dropdown offers them (minus whichever are extractOnly — see
+// compressibleArchiveFormats) — every extension internal/archive also
+// recognizes for browsing (zip, tar, tar.gz, tar.bz2, tar.xz, 7z, rar),
+// plus tar.zst, which that package can't read back at all (no zstd
+// decompressor in Go's own standard library, nor any Go support at all
+// for creating one): a real zstd binary handles both directions here
+// exactly like any of the others.
 //
 // Every tar-based compressed format runs a plain "tar -cf -" (or "tar
 // -x") piped through the one real compressor binary for that
@@ -154,7 +167,79 @@ func archiveFormats() []archiveFormat {
 				return strings.HasSuffix(lower, ".tar.zst") || strings.HasSuffix(lower, ".tzst")
 			},
 		},
+		sevenZipFormat(),
+		{
+			label: "rar (.rar) — extract only",
+			ext:   ".rar",
+			// No compressTools, and no compress closure at all (left
+			// nil): this format never reaches Compress in the first
+			// place (see extractOnly/compressibleArchiveFormats), so
+			// there's nothing for checkTools to check, or compress to
+			// build a command line for.
+			// `-y` auto-confirms the handful of unrar prompts a real
+			// archive can otherwise trigger (e.g. its own path already
+			// existing) — see extractSevenZip's own `-y` for the same
+			// reason. Trailing separator on destDir (unrar's own own
+			// syntax for "extract into exactly this directory", the
+			// same requirement extractRar in internal/archive already
+			// documents) is appended by runExtract's own caller, not
+			// here — see its own doc comment.
+			extract: func(archivePath, destDir string) string {
+				return "unrar x -y " + archivePath + " " + destDir + "/"
+			},
+			matches:     func(lower string) bool { return strings.HasSuffix(lower, ".rar") },
+			extractOnly: true,
+		},
 	}
+}
+
+// sevenZipFormat is archiveFormats' own ".7z" entry, split out since it
+// needs to resolve which real binary is actually on $PATH (7z, 7za, or
+// 7zr — see archive.SevenZipBinary, shared with internal/archive's own
+// browse-into-archive feature rather than a second, possibly drifting
+// copy of that same three-name search order) before it can build
+// either direction's own command line. Falls back to the plain "7z"
+// name when none of the three is found — checkTools then reports that
+// exact name as missing, the same clear, actionable error every other
+// format's own missing tool already gets.
+func sevenZipFormat() archiveFormat {
+	bin, err := archive.SevenZipBinary()
+	if err != nil {
+		bin = "7z"
+	}
+	return archiveFormat{
+		label:         "7z (.7z)",
+		ext:           ".7z",
+		compressTools: []string{bin},
+		extractTools:  []string{bin},
+		compress: func(out string, targets []string) string {
+			return bin + " a " + out + " " + strings.Join(targets, " ")
+		},
+		extract: func(archivePath, destDir string) string {
+			return bin + " x -y -o" + destDir + " " + archivePath
+		},
+		matches: func(lower string) bool { return strings.HasSuffix(lower, ".7z") },
+	}
+}
+
+// compressibleArchiveFormats is archiveFormats filtered down to what
+// Compress's own Format dropdown (and the Options screen's matching
+// default picker) should actually offer — every format Extract
+// recognizes, minus whichever ones are extractOnly (RAR, specifically
+// — see its own doc comment in archiveFormats). archiveFormatFor
+// (Extract's own lookup, by file extension rather than dropdown index)
+// deliberately keeps reading the full, unfiltered archiveFormats
+// instead: an extractOnly format is exactly as real an archive to
+// Extract as any other, just never one Compress can create.
+func compressibleArchiveFormats() []archiveFormat {
+	all := archiveFormats()
+	out := make([]archiveFormat, 0, len(all))
+	for _, f := range all {
+		if !f.extractOnly {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // archiveFormatID is one archiveFormat's own stable identifier for
@@ -258,7 +343,7 @@ func (r *Root) openCompress() {
 	}
 
 	r.compressTargets = targets
-	r.compressFormatIndex = archiveFormatIndexByID(archiveFormats(), r.settings.CompressFormat)
+	r.compressFormatIndex = archiveFormatIndexByID(compressibleArchiveFormats(), r.settings.CompressFormat)
 	r.compressOutputName = defaultCompressOutputName(targets, r.panel.path)
 	r.renderCompressForm()
 	r.renderCompressPreview()
@@ -324,7 +409,7 @@ func (r *Root) renderCompressForm() {
 
 	r.compressForm.AddTextView("Target", duplicateTargetsLabel(r.compressTargets), 0, 1, true, false)
 
-	formats := archiveFormats()
+	formats := compressibleArchiveFormats()
 	labels := make([]string, len(formats))
 	for i, f := range formats {
 		labels[i] = f.label
@@ -370,7 +455,7 @@ func (r *Root) renderCompressPreview() {
 	if r.compressPreviewView == nil {
 		return
 	}
-	format := archiveFormats()[r.compressFormatIndex]
+	format := compressibleArchiveFormats()[r.compressFormatIndex]
 	name := strings.TrimSpace(r.compressOutputName)
 	if name == "" {
 		r.compressPreviewView.SetText("Preview: (enter an output name)")
@@ -460,7 +545,7 @@ func compressTargetName(target, destDir string) string {
 // existing "no split, no guessing" reasoning defaultRsyncDestination's
 // own doc comment already gives.
 func (r *Root) runCompress() {
-	format := archiveFormats()[r.compressFormatIndex]
+	format := compressibleArchiveFormats()[r.compressFormatIndex]
 	name := strings.TrimSpace(r.compressOutputName)
 	if name == "" {
 		r.showError(fmt.Errorf("compress: an output name is required"))

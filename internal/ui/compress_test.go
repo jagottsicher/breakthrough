@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
+	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -31,6 +32,8 @@ func TestArchiveFormatForRecognizesEveryExtension(t *testing.T) {
 		"a.txz":         "tar.xz (.tar.xz, .txz)",
 		"a.tar.zst":     "tar.zst (.tar.zst, .tzst)",
 		"a.tzst":        "tar.zst (.tar.zst, .tzst)",
+		"a.7z":          "7z (.7z)",
+		"a.rar":         "rar (.rar) — extract only",
 		"/dir/A.ZIP":    "zip (.zip)", // case-insensitive, same convention internal/archive.Classify uses
 		"a.tar.gz.part": "",           // a real suffix, just not one of ours
 	}
@@ -138,6 +141,96 @@ func TestCompressAndExtractCommandsForEveryRemainingArchiveFormat(t *testing.T) 
 				t.Errorf("extract command = %q, want %q", got, c.wantExtract)
 			}
 		})
+	}
+}
+
+// TestSevenZipCompressAndExtractCommandsUseTheResolvedBinary pins the
+// ".7z" format's own command strings against whichever real binary
+// archive.SevenZipBinary actually resolves to (7z, 7za, or 7zr — see
+// its own doc comment) rather than hardcoding "7z": this test has to
+// pass the same way on a system where only 7za or 7zr is installed, not
+// just the common case.
+func TestSevenZipCompressAndExtractCommandsUseTheResolvedBinary(t *testing.T) {
+	bin, err := archive.SevenZipBinary()
+	if err != nil {
+		bin = "7z" // sevenZipFormat's own fallback — see its doc comment
+	}
+
+	format, ok := archiveFormatFor("x.7z")
+	if !ok {
+		t.Fatal("archiveFormatFor(x.7z) should match")
+	}
+
+	gotCompress := format.compress("'out.7z'", []string{"'a.txt'"})
+	wantCompress := bin + " a 'out.7z' 'a.txt'"
+	if gotCompress != wantCompress {
+		t.Errorf("compress command = %q, want %q", gotCompress, wantCompress)
+	}
+
+	gotExtract := format.extract("'x.7z'", "'/dest'")
+	wantExtract := bin + " x -y -o'/dest' 'x.7z'"
+	if gotExtract != wantExtract {
+		t.Errorf("extract command = %q, want %q", gotExtract, wantExtract)
+	}
+}
+
+// TestRarFormatIsExtractOnly pins the one deliberate asymmetry in
+// archiveFormats: RAR can be extracted (via the real, freeware unrar
+// binary) but never created (that needs the proprietary rar binary,
+// which this app has no business depending on) — see archiveFormats'
+// own doc comment on extractOnly.
+func TestRarFormatIsExtractOnly(t *testing.T) {
+	format, ok := archiveFormatFor("x.rar")
+	if !ok {
+		t.Fatal("archiveFormatFor(x.rar) should match")
+	}
+	if !format.extractOnly {
+		t.Error("the rar format should be marked extractOnly")
+	}
+	if format.compress != nil {
+		t.Error("the rar format should have no compress closure at all")
+	}
+	if len(format.compressTools) != 0 {
+		t.Errorf("compressTools = %v, want none", format.compressTools)
+	}
+
+	gotExtract := format.extract("'x.rar'", "'/dest'")
+	wantExtract := "unrar x -y 'x.rar' '/dest'/"
+	if gotExtract != wantExtract {
+		t.Errorf("extract command = %q, want %q", gotExtract, wantExtract)
+	}
+}
+
+// TestCompressibleArchiveFormatsExcludesExtractOnly pins
+// compressibleArchiveFormats' own one real job: every format Extract
+// recognizes shows up in Compress's own Format dropdown too, except
+// whichever ones are extractOnly (RAR, specifically, today).
+func TestCompressibleArchiveFormatsExcludesExtractOnly(t *testing.T) {
+	all := archiveFormats()
+	compressible := compressibleArchiveFormats()
+
+	if len(compressible) != len(all)-1 {
+		t.Fatalf("compressibleArchiveFormats has %d entries, want %d (all but the one extractOnly format)", len(compressible), len(all)-1)
+	}
+	for _, f := range compressible {
+		if f.extractOnly {
+			t.Errorf("compressibleArchiveFormats should never include an extractOnly format, found %q", f.label)
+		}
+	}
+	for _, f := range all {
+		if f.ext == ".rar" {
+			continue
+		}
+		found := false
+		for _, c := range compressible {
+			if c.ext == f.ext {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("compressibleArchiveFormats is missing %q", f.label)
+		}
 	}
 }
 
@@ -403,7 +496,7 @@ func TestExtractCurrentArchiveRefusedOnRemotePanel(t *testing.T) {
 }
 
 // TestMenuTargetIsArchiveMatchesOnlyRealArchiveFiles pins the context
-// menu's own visibility gate for "Extract"/"Extract, delete original" —
+// menu's own visibility gate for "Extract"/"Extract, del org" —
 // hidden for a directory, hidden for a plain file, shown only once the
 // cursor is actually on something archiveFormatFor recognizes.
 func TestMenuTargetIsArchiveMatchesOnlyRealArchiveFiles(t *testing.T) {

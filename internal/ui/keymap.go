@@ -495,7 +495,7 @@ func chordFamilies() []chordFamily {
 			// letter left to spare for a fourth verb here.
 			{'c', "Compress…", func(r *Root) { r.openCompress() }},
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
-			{'E', "Extract, delete original", func(r *Root) { r.extractCurrentArchive(true) }},
+			{'E', "Extract, del org", func(r *Root) { r.extractCurrentArchive(true) }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},

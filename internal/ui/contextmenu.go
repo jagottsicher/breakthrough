@@ -190,7 +190,7 @@ func contextMenuTree() []menuEntry {
 			// safety net here is deleteExtractedArchive's own Trash-first
 			// behavior (see its own doc comment), not physical distance in
 			// the menu.
-			{label: "Extract, delete original", visible: menuTargetIsArchive, mnemonic: 'E', action: func(r *Root) { r.extractCurrentArchive(true) }},
+			{label: "Extract, del org", visible: menuTargetIsArchive, mnemonic: 'E', action: func(r *Root) { r.extractCurrentArchive(true) }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the

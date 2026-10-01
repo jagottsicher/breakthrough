@@ -274,7 +274,7 @@ func openTarStream(archivePath string) (r io.Reader, closeAll func(), err error)
 	}
 }
 
-// sevenZipBinaries is sevenZipBinary's own search order — the full,
+// sevenZipBinaries is SevenZipBinary's own search order — the full,
 // actively-maintained `7z` first, then the older, LZMA-only `7za`/
 // `7zr` names some distros still package separately — the same "check
 // what's actually there, in priority order" convention
@@ -282,9 +282,13 @@ func openTarStream(archivePath string) (r io.Reader, closeAll func(), err error)
 // a different optional external tool.
 var sevenZipBinaries = []string{"7z", "7za", "7zr"}
 
-// sevenZipBinary returns whichever of sevenZipBinaries is actually on
-// $PATH, or an error naming all three if none is.
-func sevenZipBinary() (string, error) {
+// SevenZipBinary returns whichever of sevenZipBinaries is actually on
+// $PATH, or an error naming all three if none is. Exported for
+// internal/ui's own Compress/Extract dialog (see compress.go's own
+// archiveFormats), which needs the exact same real-binary resolution
+// for its own ".7z" format rather than a second, possibly drifting
+// copy of this same three-name list.
+func SevenZipBinary() (string, error) {
 	for _, name := range sevenZipBinaries {
 		if _, err := exec.LookPath(name); err == nil {
 			return name, nil
@@ -301,7 +305,7 @@ func sevenZipBinary() (string, error) {
 // which packs Path into a fixed-width column that truncates or wraps a
 // long one.
 func listSevenZip(archivePath string) ([]Entry, error) {
-	bin, err := sevenZipBinary()
+	bin, err := SevenZipBinary()
 	if err != nil {
 		return nil, err
 	}
