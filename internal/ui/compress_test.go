@@ -496,7 +496,7 @@ func TestExtractCurrentArchiveRefusedOnRemotePanel(t *testing.T) {
 }
 
 // TestMenuTargetIsArchiveMatchesOnlyRealArchiveFiles pins the context
-// menu's own visibility gate for "Extract"/"Extract, delete original" —
+// menu's own visibility gate for "Extract"/"Extract, del org" —
 // hidden for a directory, hidden for a plain file, shown only once the
 // cursor is actually on something archiveFormatFor recognizes.
 func TestMenuTargetIsArchiveMatchesOnlyRealArchiveFiles(t *testing.T) {
