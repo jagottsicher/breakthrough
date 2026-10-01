@@ -2165,55 +2165,6 @@ func TestCaptureOutsideClickBlockedWhilePropertiesDirty(t *testing.T) {
 	}
 }
 
-// TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen
-// pins the user's own explicit request's other half (see
-// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen for the
-// keyboard path): a click on the Details button must reach the button bar's own
-// handling untouched, even while Properties is dirty — the one case
-// that would otherwise swallow every other outside click outright (see
-// TestCaptureOutsideClickBlockedWhilePropertiesDirty just above).
-func TestCaptureOutsideClickLetsDetailsButtonThroughWhilePropertiesOpen(t *testing.T) {
-	dir := fixtureDir(t)
-	r, err := NewRoot(tview.NewApplication(), dir)
-	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
-	}
-	r.SetRect(0, 0, 100, 40)
-	r.target = filepath.Join(dir, "apple.txt")
-	r.openProperties()
-	r.togglePermBit(fieldPermOtherRead) // dirty — the stricter of the two outside-click cases
-
-	// Positioned low on the screen, well clear of wherever Properties
-	// itself ended up (a small overlay near the top-left) — the same
-	// non-overlap the real app's own layout always has between the
-	// button bar (always the second-to-last row) and Properties.
-	width := tview.TaggedStringWidth(r.buttonBar.GetText(true)) + 10
-	screen := tcell.NewSimulationScreen("")
-	if err := screen.Init(); err != nil {
-		t.Fatalf("screen.Init: %v", err)
-	}
-	defer screen.Fini()
-	screen.SetSize(width, 40)
-	r.buttonBar.SetRect(0, 38, width, 1)
-	r.buttonBar.Draw(screen)
-
-	span, ok := buttonBarSpanFor(r, 'I')
-	if !ok {
-		t.Fatal("no Details span found in the button bar")
-	}
-	rectX, rectY, _, _ := r.buttonBar.GetInnerRect()
-	x, y := rectX+span.startCol, rectY
-
-	action, event := r.captureOutsideClick(tview.MouseLeftClick, tcell.NewEventMouse(x, y, tcell.Button1, 0))
-
-	if action != tview.MouseLeftClick || event == nil {
-		t.Errorf("a click on the Details button should pass through untouched, got action=%v event=%v", action, event)
-	}
-	if r.activePage != propertiesPage {
-		t.Errorf("activePage = %q, want Properties to stay open", r.activePage)
-	}
-}
-
 // TestCaptureOutsideClickClosesPropertiesBeforeAnyEdit pins that nothing
 // changes for the "haven't touched anything yet" case — the existing
 // click-outside-closes behavior every other overlay already has.

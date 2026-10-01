@@ -542,6 +542,34 @@ func (r *Root) runBashCommand(command string) {
 	r.runShellCommandFullScreen(command, activitylog.CategoryShell)
 }
 
+// executeCurrentEntry is the plain-letter "E"/context menu's own
+// "Execute" action: runs the current row's own file directly, full
+// screen, through runShellCommandFullScreen — the same path "htop" or
+// "./script.sh" already take when typed into the bash line (see
+// runBashCommand), just reached without typing the name out. A no-op
+// for a directory (including ".." — rowRef always reports it as one),
+// since there's nothing to execute there; the shell itself reports
+// "Permission denied" for a file that isn't actually marked executable,
+// the same as it would for any manually typed command.
+func (r *Root) executeCurrentEntry() {
+	if r.panel.inArchiveView() {
+		r.showError(errNotSupportedInArchive)
+		return
+	}
+	row, path, ok := r.panel.CurrentRowPath()
+	if !ok {
+		return
+	}
+	if r.panel.remote != nil {
+		r.showError(errNotSupportedRemote)
+		return
+	}
+	if ref, ok := r.panel.rowRef(row); ok && ref.isDir {
+		return
+	}
+	r.runShellCommandFullScreen(shellQuoteArg(path), activitylog.CategoryShell)
+}
+
 // runShellCommandFullScreen suspends the TUI (see
 // tview.Application.Suspend) and runs command through userShell, with
 // the real terminal handed over for the duration and the panel's
