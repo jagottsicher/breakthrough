@@ -627,3 +627,51 @@ func TestCompletionBasename(t *testing.T) {
 		}
 	}
 }
+
+// TestExecuteCurrentEntryRunsTheSelectedFile pins executeCurrentEntry's
+// own dispatch to runShellCommandFullScreen, the same path "./file"
+// typed into the bash line already takes (see runBashCommand) — app.Suspend
+// is a no-op in this screenless test environment (see
+// TestCaptureBashLineKeyEnterVsNewline's own doc comment just above), so
+// this only pins the wiring (no error reported, bash line cleared) not
+// that the file actually ran.
+func TestExecuteCurrentEntryRunsTheSelectedFile(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(2) // apple.txt — see fixtureDir
+	r.bashLine.SetText("stale", true)
+
+	r.executeCurrentEntry()
+
+	if r.activePage == errorPage {
+		t.Errorf("executing a real file should not report an error, got: %q", r.errorView.GetText(true))
+	}
+	if got := r.bashLine.GetText(); got != "" {
+		t.Errorf("bash line text = %q after Execute, want cleared", got)
+	}
+}
+
+// TestExecuteCurrentEntryIsANoOpForADirectory pins that Execute does
+// nothing for a directory (including ".." — rowRef always reports it as
+// one, see Panel.rowRef) — there's nothing to run there.
+func TestExecuteCurrentEntryIsANoOpForADirectory(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // app-data/ — see fixtureDir
+	r.bashLine.SetText("stale", true)
+
+	r.executeCurrentEntry()
+
+	if r.activePage == errorPage {
+		t.Errorf("Execute on a directory should not report an error, got: %q", r.errorView.GetText(true))
+	}
+	if got := r.bashLine.GetText(); got != "stale" {
+		t.Errorf("bash line text = %q after Execute on a directory, want it untouched", got)
+	}
+}

@@ -170,37 +170,48 @@ terminal.
 - A context menu on `mm` (the `m` chord's own doubled prefix, the same
   "gg"/"oo" shape every other family uses for its main destination) or
   right-click, showing only what actually applies right now rather than
-  a fixed list of everything it can ever do: Look, Edit, Open with…
-  (both dropped for a directory), Rename, Copy/Cut/Multiply, Paste (only
-  once the clipboard has something in it), Move to Trash, Properties (editable — name,
-  permissions, click a bit or type the octal value directly, owner and
-  group via a scrollable picker of every local user/group, modified
-  date and time), plus three `▸` submenus that replace the list in
-  place when chosen (Windows Explorer's own cascading-menu idea,
-  without needing room to open beside it): "More actions" (New file,
-  New dir, `tail -f`, chown, chmod, Sed Replace, Batch rename, Undo
-  last rename, Compare, Rsync, Compress…, Extract/Extract-delete-original
-  (the latter two only for a recognized archive), Remove), "Selection" (Select all/
-  Deselect all/glob-pattern Select +/-), and "Tabs & Split" (New/
-  close tab, Switch tab..., Split on/off, orientation and Swap panes —
-  the last two only once a split actually exists). Right arrow drills
-  into a submenu with no Enter needed; `◂ Back`, `Escape`, or Left arrow
-  step back out one level at a time. Browsing the Trash
-  itself replaces the whole menu with just Restore/Empty Trash/
-  Properties, since almost nothing else still applies there. Once open,
-  `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Rename/Copy/
-  Cut/Move to Trash/Properties already have on their own — fire that
-  entry directly, without arrowing down to it first; one whose own
-  entry isn't currently showing does nothing. `o`/`t`/`A` do too, for
-  Open with…, `tail -f`, and Deselect all — all three also directly
-  reachable as `mo`/`mt`/`mA` from plain browsing, without opening the
-  menu at all. `m` again (`mmm` from plain browsing) fires Multiply,
-  the one entry with no keyboard route of its own anywhere else, since
-  its own natural letter is already this chord's own prefix key.
-  `mf`/`md` reach New file/New dir directly from plain browsing too,
-  without opening the menu at all — both create their new entry
+  a fixed list of everything it can ever do: Look, Edit, Execute, Open
+  with… (all three of the latter dropped for a directory), Rename,
+  Copy/Cut/Multiply, Paste (only once the clipboard has something in
+  it), Move to Trash, Properties (editable — name, permissions, click a
+  bit or type the octal value directly, owner and group via a
+  scrollable picker of every local user/group, modified date and time),
+  plus three `▸` submenus that replace the list in place when chosen
+  (Windows Explorer's own cascading-menu idea, without needing room to
+  open beside it): "More actions" (New file, New dir, `tail -f`, chown,
+  chmod, Sed Replace, Batch rename, Undo last rename, Compare, Rsync,
+  Compress…, Extract/Extract-delete-original (the latter two only for a
+  recognized archive), Remove, Paste following symlinks), "Selection"
+  (Select all/Deselect all/glob-pattern Select +/-), and "Tabs & Split"
+  (New/close tab, Switch tab..., Split on/off, orientation and Swap
+  panes — the last two only once a split actually exists). Right arrow
+  drills into a submenu with no Enter needed; `◂ Back`, `Escape`, or
+  Left arrow step back out one level at a time — `◂ Back` is also a
+  clickable button in the status line itself whenever a submenu is
+  open, not just a row inside the list. Browsing the Trash itself
+  replaces the whole menu with just Restore/Empty Trash/Properties,
+  since almost nothing else still applies there. Once open,
+  `l`/`e`/`E`/`r`/`c`/`x`/`d`/`i` — the same letters Look/Edit/Execute/
+  Rename/Copy/Cut/Move to Trash/Properties already have on their own —
+  fire that entry directly, without arrowing down to it first; one
+  whose own entry isn't currently showing does nothing. `o`/`t`/`A` do
+  too, for Open with…, `tail -f`, and Deselect all — all three also
+  directly reachable as `mw`/`mt`/`mA` from plain browsing (not `mo`:
+  the plain-letter layer's own key for Open with… is `W`, since
+  lowercase `o` is already the `o` chord's own prefix), without opening
+  the menu at all. `m` again (`mmm` from plain browsing) fires
+  Multiply, the one entry with no keyboard route of its own anywhere
+  else, since its own natural letter is already this chord's own prefix
+  key. `mf`/`md` reach New file/New dir directly from plain browsing
+  too, without opening the menu at all — both create their new entry
   directly inside the active panel's own current directory (remote-aware
-  the same way Rename already is), prompting only for a name.
+  the same way Rename already is), prompting only for a name. Every
+  entry one level into a submenu has its own mnemonic too, each reusing
+  whichever letter/case that same action already answers to elsewhere
+  (chown/chmod reuse the `p` chord's own `po`/`pm`, Compress/Extract the
+  `j` chord's own `jc`/`je`/`jE`, and so on) — the status line's own
+  legend always lists the currently open submenu's own entries, the
+  same way it lists the top level's.
 - Copy/Cut/Paste (`c`/`x`/`v`, or the context menu): works on the whole
   current selection, not just one file. Pasting into the very directory
   a file is already in, or a directory into one of its own
@@ -384,8 +395,15 @@ terminal.
   Behavior → Duplicate) — the one setting group in this whole app that
   adapts itself this way — but only once "Duplicate" is actually
   pressed; Cancel never touches the sticky default.
-- Open with… (context menu, files only): runs any program you type
-  against the selected file instead of always the configured editor —
+- Execute (`E`, or the context menu, files only): runs the current
+  entry directly, full screen — the same path typing its path into the
+  command line already takes, just without having to type it out. Does
+  nothing for a directory; the real shell reports "Permission denied"
+  for a file that isn't actually marked executable. Not supported yet
+  for a remote connection.
+- Open with… (`W`, or the context menu, files only): runs any program
+  you type against the selected file instead of always the configured
+  editor —
   prefilled with whatever you typed last time, handed to your real
   shell exactly as typed (so a multi-word command with its own flags,
   like `libreoffice --writer` or `code -w`, works the same as at a real
@@ -393,7 +411,7 @@ terminal.
   does: downloads a local temp copy, runs the typed command against it,
   and uploads the result back over the connection only if it actually
   changed.
-- Sed Replace (`E`, or the context menu): runs a real `sed(1)`
+- Sed Replace (`S`, or the context menu): runs a real `sed(1)`
   substitution against the current selection — one file or several, not
   a directory tree. A guided Find/Replace pair (Regex, Extended regex
   `-E`, Case-insensitive, and Replace-all-per-line toggles) builds the
@@ -567,25 +585,29 @@ terminal.
   curated subset of the keyboard layer's own letters as a quick legend —
   each key set off in its own petrol background, one space either side,
   so the letter-to-action mapping reads at a glance: Copy (`c`), Cut
-  (`x`), Paste (`v`), Move to Trash (`d`), toggle hidden files (`.` —
+  (`x`), Paste (`v`), Look (`l`), Edit (`e`), Execute (`E`), Move to
+  Trash (`d`), Rename (`r`), Properties (`i`), Split view (`s`),
+  Connect… (`@`), the tab switcher (`t`), toggle hidden files (`.` —
   labeled Hide or Unhide, whichever it would do next, not whichever
-  state you're currently in), Properties (`i`), Details sidebar (`I`),
-  Split view (`s`), the tab switcher (`t`), Look (`l`), and Help (`?`),
-  plus the six chord families marked with an ellipsis to show they
-  lead to more keys (`g…` go, `p…` permissions, `m…` menu, `z…` display
-  toggles, `o…` options, `j…` tools) — every member of an open chord's own legend is
-  clickable too, the same highlighted-key treatment, so pointing at one
-  works as well as typing its second letter. A few of these change
-  meaning while actually browsing the
+  state you're currently in), and Help (`?`), plus the six chord
+  families marked with an ellipsis and no space after it to show they
+  lead to more keys (`g…goto`, `p…perms`, `m…menu`, `z…disp`, `o…opts`,
+  `j…tools`) — every member of an open chord's own legend is clickable
+  too, the same highlighted-key treatment, so pointing at one works as
+  well as typing its second letter. Details sidebar (`I`) doesn't have
+  its own slot in this row any more — it was crowding it — but is still
+  fully live from the keyboard and the header's own `<` button. A few of
+  these change meaning while actually browsing the
   trash itself: `d` asks to remove permanently instead of moving
-  something already-trashed to the trash again, `r` (not shown in this
-  row, but still fully live) restores instead of renaming, and `D`
-  empties the whole trash instead of removing just the selection — the
-  button labels themselves stay put either way, since a bar that changed
-  shape underfoot would be its own kind of confusing. Every entry here
-  is also reachable from the context menu
-  and fully documented (including everything that doesn't fit this one
-  row) in the in-app help (`?`), and each still works the same way
+  something already-trashed to the trash again, `r` restores instead of
+  renaming, and `D` empties the whole trash instead of removing just the
+  selection — the button labels themselves stay put either way, since a
+  bar that changed shape underfoot would be its own kind of confusing.
+  Every entry here is also reachable from the context menu, whose own
+  status-line legend follows the exact same pattern one level into a
+  submenu, complete with a clickable `◂ Back` button of its own. Every
+  key is fully documented (including everything that doesn't fit this
+  one row) in the in-app help (`?`), and each still works the same way
   whichever panel or field currently has focus, except while the command
   line itself is expanded and needs those same keys for its own editing.
   Hidden-files/size-format/mtime-format toggles are remembered across

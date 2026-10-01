@@ -93,7 +93,7 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 	openMenuOnRow(t, r, 2) // apple.txt — see fixtureDir
 
 	want := []string{
-		"Look", "Edit", "Open with…", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
+		"Look", "Edit", "Execute", "Open with…", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
 		menuGroupGlyph + "More actions",
 		menuGroupGlyph + "Selection",
 		menuGroupGlyph + "Tabs & Split",
@@ -109,8 +109,8 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 }
 
 // TestContextMenuHidesEditAndTailForADirectory pins menuTargetIsFile:
-// "Edit", "Open with…", and (inside "More actions") "tail -f" don't
-// apply to a directory and shouldn't be offered for one.
+// "Edit", "Execute", "Open with…", and (inside "More actions") "tail -f"
+// don't apply to a directory and shouldn't be offered for one.
 func TestContextMenuHidesEditAndTailForADirectory(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
@@ -124,6 +124,9 @@ func TestContextMenuHidesEditAndTailForADirectory(t *testing.T) {
 	}
 	if menuItemIndex(r, "Edit") >= 0 {
 		t.Error(`"Edit" should not be offered for a directory`)
+	}
+	if menuItemIndex(r, "Execute") >= 0 {
+		t.Error(`"Execute" should not be offered for a directory`)
 	}
 	if menuItemIndex(r, "Open with…") >= 0 {
 		t.Error(`"Open with…" should not be offered for a directory`)
@@ -588,5 +591,211 @@ func TestContextMenuMnemonicIgnoresCtrlAndAltModified(t *testing.T) {
 	}
 	if len(r.clipboard) != 0 {
 		t.Error("Ctrl+c must not have fired Copy")
+	}
+}
+
+// assertHintBarListsEveryLeaf pins the real bug reported live: a
+// submenu entry with no mnemonic of its own silently fell out of the
+// status-line legend (contextMenuHintBar skips anything with
+// entry.mnemonic == 0), even though arrowing to it and pressing Enter
+// always worked — so "the menu looks right, the legend doesn't" went
+// unnoticed for every submenu, which this checks generically for
+// whichever level r.menu currently shows: every visible, actionable
+// entry (a leaf, not a group heading — those never get a mnemonic, see
+// menuMnemonicEntry's own doc comment) must have its own resolved label
+// findable in the legend text.
+func assertHintBarListsEveryLeaf(t *testing.T, r *Root) {
+	t.Helper()
+	hint := r.buttonBar.GetText(true)
+	for _, entry := range r.visibleMenuEntries() {
+		if entry.action == nil {
+			continue // a group heading (its own submenu) — never in the legend
+		}
+		if label := entry.resolvedLabel(r); !strings.Contains(hint, label) {
+			t.Errorf("hint bar %q is missing %q", hint, label)
+		}
+	}
+}
+
+// TestContextMenuHintBarCoversEveryMoreActionsEntry pins
+// assertHintBarListsEveryLeaf for "More actions" — the longest submenu,
+// and the one every entry above now has a mnemonic for.
+func TestContextMenuHintBarCoversEveryMoreActionsEntry(t *testing.T) {
+	r, _, file := newTestRootWithFile(t)
+	r.target = file
+	r.targetRow = 1
+	r.copyToClipboard() // so "Paste, following symlinks" is visible too
+
+	r.showMenu(0, 0)
+	selectMenuItem(t, r, menuGroupGlyph+"More actions")
+
+	assertHintBarListsEveryLeaf(t, r)
+}
+
+// TestContextMenuHintBarCoversEverySelectionEntry mirrors
+// TestContextMenuHintBarCoversEveryMoreActionsEntry for "Selection".
+func TestContextMenuHintBarCoversEverySelectionEntry(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+	selectMenuItem(t, r, menuGroupGlyph+"Selection")
+
+	assertHintBarListsEveryLeaf(t, r)
+}
+
+// TestContextMenuHintBarCoversEveryTabsAndSplitEntry mirrors
+// TestContextMenuHintBarCoversEveryMoreActionsEntry for "Tabs & Split",
+// with a split active so every one of its conditional entries (split
+// orientation, Swap panes) is visible too.
+func TestContextMenuHintBarCoversEveryTabsAndSplitEntry(t *testing.T) {
+	r, _, _ := newSplitRoot(t)
+	r.enterSplit(1)
+
+	openMenuOnRow(t, r, 0) // ".." — see TestContextMenuShowsSplitOrientationAndSwapOnlyOnceSplitIsActive
+	selectMenuItem(t, r, menuGroupGlyph+"Tabs & Split")
+
+	assertHintBarListsEveryLeaf(t, r)
+}
+
+// TestNoDuplicateContextMenuMnemonicsPerLevel mirrors
+// TestNoDuplicatePlainKeyBindings (keymap_test.go) for the context
+// menu's own mnemonics: a collision is only a problem within the same
+// level (the top level, or one specific submenu) — menuMnemonicEntry
+// and contextMenuHintBar both only ever look at r.currentMenuTree(), so
+// the same letter reused across two different submenus (or between a
+// submenu and the top level) is never ambiguous in practice.
+func TestNoDuplicateContextMenuMnemonicsPerLevel(t *testing.T) {
+	checkLevel := func(t *testing.T, name string, entries []menuEntry) {
+		t.Helper()
+		seen := map[rune]string{}
+		for _, entry := range entries {
+			if entry.mnemonic == 0 || entry.action == nil {
+				continue
+			}
+			if other, dup := seen[entry.mnemonic]; dup {
+				t.Errorf("%s: mnemonic %q is bound to both %q and %q", name, string(entry.mnemonic), other, entry.label)
+			}
+			seen[entry.mnemonic] = entry.label
+		}
+	}
+
+	top := contextMenuTree()
+	checkLevel(t, "top level", top)
+	for _, entry := range top {
+		if entry.submenu != nil {
+			checkLevel(t, entry.label, entry.submenu)
+		}
+	}
+}
+
+// TestContextMenuHintBarHasNoBackButtonAtTopLevel pins that the "◂
+// Back" button is specific to a submenu being open — nothing to go
+// back to from the top level, so it isn't shown there at all.
+func TestContextMenuHintBarHasNoBackButtonAtTopLevel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+
+	if strings.Contains(r.buttonBar.GetText(true), "Back") {
+		t.Errorf("hint bar at the top level = %q, want no \"Back\" button", r.buttonBar.GetText(true))
+	}
+}
+
+// TestContextMenuHintBarBackButtonReturnsToTopLevel pins the user's own
+// explicit request: the hint bar's own "◂ Back" button, clicked the
+// same way any other button-bar button is, drives the open menu back
+// out of a submenu exactly like Escape/Left-arrow or clicking the
+// list's own leading "◂ Back" row already do.
+func TestContextMenuHintBarBackButtonReturnsToTopLevel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRow(t, r, 2) // apple.txt
+	selectMenuItem(t, r, menuGroupGlyph+"Selection")
+	if r.menuInSubmenu == nil {
+		t.Fatal("setup: should be inside the \"Selection\" submenu")
+	}
+
+	text := r.buttonBar.GetText(true)
+	col := strings.Index(text, "Back")
+	if col < 0 {
+		t.Fatal("hint bar has no \"Back\" button while a submenu is open")
+	}
+	clickButtonBar(t, r, len([]rune(text[:col])))
+
+	if r.menuInSubmenu != nil {
+		t.Error("clicking \"Back\" should have returned to the top level")
+	}
+	if r.activePage != contextMenuPage {
+		t.Errorf("activePage = %q, want the menu to stay open at the top level", r.activePage)
+	}
+}
+
+// TestContextMenuMouseClickIntoSubmenuKeepsMenuFocused is the regression
+// test for a real, reproduced bug found live: clicking a group row
+// ("More actions"/"Selection"/"Tabs & Split") with the mouse silently
+// moved real keyboard focus off r.menu and onto the panel's own table
+// underneath — tview.List's own MouseHandler has no case at all for
+// MouseLeftDown (only MouseLeftClick and the four scroll actions), so
+// an unconsumed one fell straight through to the table's default,
+// Box-inherited mouse handling, which grabs focus on exactly that
+// action (the same class of bug TestClickingColumnHeaderKeepsTableFocused
+// in mousefocus_test.go already caught once for columnHeader — see
+// captureContextMenuMouse's own doc comment). Once that happened, every
+// mnemonic letter — "a"/"A" included, per the user's own explicit
+// report — silently stopped reaching the menu at all, even though the
+// click itself still correctly drilled into the submenu. Uses clickAt
+// (mousefocus_test.go) deliberately: it sends the real
+// MouseLeftDown-then-MouseLeftClick pair a genuine click produces,
+// exactly what a MouseLeftClick-only test (as every other mouse test in
+// this file sends) can never catch — see clickAt's own doc comment.
+func TestContextMenuMouseClickIntoSubmenuKeepsMenuFocused(t *testing.T) {
+	dir := fixtureDir(t)
+	root, screen := drawnRootTwice(t, dir)
+
+	root.target = filepath.Join(dir, "apple.txt")
+	root.targetRow = 2
+	root.showMenu(5, 5)
+	root.Draw(screen)
+	root.Draw(screen)
+
+	idx := -1
+	for i := 0; i < root.menu.GetItemCount(); i++ {
+		main, _ := root.menu.GetItemText(i)
+		if main == menuGroupGlyph+"Selection" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatal("no \"Selection\" row in the top-level menu")
+	}
+	rectX, rectY, _, _ := root.menu.GetInnerRect()
+	clickAt(root, rectX, rectY+idx)
+	root.Draw(screen)
+
+	if root.menuInSubmenu == nil {
+		t.Fatal("setup: should be inside the \"Selection\" submenu")
+	}
+	if got := root.app.GetFocus(); got != root.menu {
+		t.Fatalf("focus after clicking into a submenu = %T, want r.menu", got)
+	}
+
+	// The real-world symptom: "a" (Select all) must still reach the
+	// menu's own mnemonic dispatch, not silently do nothing.
+	event := tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone)
+	if got := root.captureContextMenuKey(event); got != nil {
+		t.Error("\"a\" should have been consumed by the Selection submenu's own mnemonic")
+	}
+	if len(root.panel.SelectedPaths()) == 0 {
+		t.Error("\"a\" should have fired Select all")
 	}
 }

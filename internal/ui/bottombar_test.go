@@ -491,15 +491,18 @@ func TestBuildButtonBarSpansLocateButtons(t *testing.T) {
 	wantLabels := map[rune]string{
 		'?': " ? Help",
 		'l': " l Look",
+		'e': " e Edit",
+		'E': " E Exe",
+		'W': " W With",
 		'i': " i Props",
-		'I': " I Details",
 		'c': " c Copy",
 		'x': " x Cut",
 		'v': " v Paste",
 		'd': " d Trash",
+		'r': " r Ren",
 		'.': " . Hide", // ShowHidden defaults to true — see config.DefaultSettings
 		's': " s Split",
-		'@': " @ Connect",
+		'@': " @ Conn",
 		't': " t Tabs",
 	}
 	found := map[rune]bool{}
@@ -541,7 +544,7 @@ func TestBuildButtonBarShowsChordCascades(t *testing.T) {
 
 	_, spans := r.buildButtonBar()
 
-	want := map[rune]string{'g': " g … go to", 'p': " p … perms", 'm': " m … menu", 'z': " z … display", 'o': " o … options", 'j': " j … tools"}
+	want := map[rune]string{'g': " g …goto", 'p': " p …perms", 'm': " m …menu", 'z': " z …disp", 'o': " o …opts", 'j': " j …tools"}
 	for _, s := range spans {
 		if label, ok := want[s.key]; ok {
 			if got := renderedTextAt(t, r, s.startCol, s.endCol); got != label {

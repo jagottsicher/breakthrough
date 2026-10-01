@@ -200,7 +200,7 @@ func (r *Root) buildButtonBar() (text string, spans []buttonBarSpan) {
 		}
 		family := f // capture per iteration, not the loop variable
 		buttons = append(buttons, buttonSpec{
-			label: highlightKey(family.prefix) + "… " + family.name,
+			label: highlightKey(family.prefix) + "…" + family.name,
 			key:   family.prefix,
 			run:   func(r *Root) { r.startChord(family) },
 			chord: true,

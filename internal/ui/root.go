@@ -1852,7 +1852,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.menu.SetHighlightFullLine(true)
 	r.menu.SetBorderPadding(0, 0, 1, 1) // 1-char left/right padding; no border needed for this
 	r.menu.SetInputCapture(r.captureContextMenuKey)
-	r.menu.SetDoneFunc(r.closeMenuOrGoBack) // Escape
+	r.menu.SetMouseCapture(r.captureContextMenuMouse) // works around a real tview.List quirk — see its own doc comment
+	r.menu.SetDoneFunc(r.closeMenuOrGoBack)           // Escape
 
 	// A one-row "Menu" title bar above it, the same shape every other
 	// panel's now has (toolWindow, Details, Properties — see
@@ -2751,22 +2752,7 @@ func (r *Root) closeAllOverlays() {
 // already can in the background regardless (see pasteWalk), only the
 // one open question is blocked on the user actually answering it.
 //
-// The Details button specifically is a third, narrower exception,
-// checked before either of the above: a click on it reaches the button
-// bar's own handling (see buttonBarActionAt) completely untouched,
-// toggling the Details sidebar alongside
-// Properties rather than being swallowed as an "outside click" or
-// (while dirty) ignored outright — per the user's own explicit request
-// to open or close Details *while Properties stays open*, the same
-// "also works while Properties is open" carve-out the "I" key's own
-// alsoOverProperties flag gives the keyboard path (see keymap.go). The
-// two already coexist independently of this (see ComputeHashesShortcut's
-// own doc comment); this is only what let the click reach that existing
-// mechanism in the first place. Scoped to
-// Properties and to Details alone — every other overlay, and every
-// other button-bar click, still gets the ordinary handling below.
-//
-// The rename field (renamePage) is a fourth exception, and the only one
+// The rename field (renamePage) is a third exception, and the only one
 // that changes *what* an outside click does rather than whether it does
 // anything at all: it commits the name currently typed (via
 // finishRename(tcell.KeyEnter), the exact same path Enter itself
@@ -2812,12 +2798,6 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 		if span, ok := r.buttonBarActionAt(x, y); ok && span.run != nil {
 			span.run(r)
 			return tview.MouseConsumed, nil
-		}
-	}
-
-	if r.activePage == propertiesPage && action == tview.MouseLeftClick {
-		if span, ok := r.buttonBarActionAt(x, y); ok && span.key == 'I' {
-			return action, event
 		}
 	}
 

@@ -116,37 +116,67 @@ type plainCommand struct {
 func plainCommands() []plainCommand {
 	return []plainCommand{
 		// --- Ebene 1: everyday verbs -----------------------------------
+		// Declaration order here doubles as the button bar's own
+		// left-to-right order (see buildButtonBar, which just filters
+		// this slice by "quick") — per the user's own explicit request:
+		// c x v l e E W d r i s @ t . ? ('I' Details sidebar is bound
+		// here but deliberately not quick — see its own entry below),
+		// then the quick chord-family cascades, unchanged.
 		{key: 'c', label: "Copy", quick: true, short: "Copy", action: func(r *Root) { r.copyCurrentSelection() }},
 		{key: 'x', label: "Cut", quick: true, short: "Cut", action: func(r *Root) { r.cutCurrentSelection() }},
 		{key: 'v', label: "Paste", quick: true, short: "Paste", action: func(r *Root) { r.pasteClipboard() }},
+		{key: 'l', label: "Look", quick: true, short: "Look", alsoOverProperties: true, action: func(r *Root) { r.lookCurrentEntry() }},
+		{key: 'e', label: "Edit", quick: true, short: "Edit", action: func(r *Root) { r.editCurrentEntry() }},
+		// "Execute" — the context menu and button bar's own direct
+		// counterpart to Look/Edit above, per the user's own explicit
+		// request for a full, unchorded letter rather than another "m"/"j"
+		// chord member: runs the current entry the same way typing its
+		// path into the bash line already does (see executeCurrentEntry).
+		{key: 'E', label: "Execute", quick: true, short: "Exe", action: func(r *Root) { r.executeCurrentEntry() }},
+		// 'W' rather than 'o' (which the context menu's own "Open with…"
+		// mnemonic still uses, unlike every other mirrored action's
+		// matching letter — see contextmenu.go's own doc comment on this
+		// one): lowercase 'o' is already the "options" chord prefix (see
+		// chordFamilies), and uppercase 'O' reads oddly for "With" next to
+		// it — per the user's own explicit request to add this as a
+		// direct letter, right after Execute.
+		{key: 'W', label: "Open with…", quick: true, short: "With", action: func(r *Root) { r.openCurrentEntryWith() }},
 		{key: 'd', label: "Move to Trash", quick: true, short: "Trash", action: func(r *Root) { r.moveSelectionToTrash() }},
-		{key: 'r', label: "Rename (Restore, while browsing the Trash)", action: func(r *Root) {
+		{key: 'r', label: "Rename (Restore, while browsing the Trash)", quick: true, short: "Ren", action: func(r *Root) {
 			if r.inTrash() {
 				r.restoreSelectionFromTrash()
 				return
 			}
 			r.renameCurrentEntry()
 		}},
-		{key: 'e', label: "Edit", action: func(r *Root) { r.editCurrentEntry() }},
 		{key: 'f', label: "Find", action: func(r *Root) { r.openSearch() }},
 		{key: '/', label: "Filter", action: func(r *Root) { r.openFilterMenu() }},
-		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
 		{key: 'i', label: "Properties", quick: true, short: "Props", action: func(r *Root) { r.propertiesCurrentEntry() }},
+		// Not quick any more — per the user's own explicit request, the
+		// button bar was getting too wide. This does cost something real:
+		// the button bar used to be the only always-present, clickable
+		// route to toggling Details *while Properties is open with
+		// unsaved changes* (every other button-bar click is swallowed in
+		// that state — see captureOutsideClick's own carve-out, keyed on
+		// 'I' specifically). The key itself still works everywhere it did
+		// before (alsoOverProperties, unchanged); only the mouse-click
+		// shortcut in that one specific state is gone.
+		{key: 'I', label: "Details sidebar", short: "Details", alsoOverProperties: true, action: func(r *Root) { r.toggleDetailsSidebar() }},
 		{key: 's', label: "Split view on/off", quick: true, short: "Split", action: func(r *Root) { r.toggleSplit() }},
 		// Direct top-level key for the connection dropdown — per the
 		// user's own explicit request, alongside the existing "gc" chord
 		// and the header's own "@" button (see connectionmenu.go and
 		// buildHeaderSpans), not a replacement for either: same action,
 		// three ways to reach it.
-		{key: '@', label: "Connect…", quick: true, short: "Connect", action: func(r *Root) { r.openConnectionMenu() }},
+		{key: '@', label: "Connect…", quick: true, short: "Conn", action: func(r *Root) { r.openConnectionMenu() }},
 		{key: 't', label: "Tab switcher", quick: true, short: "Tabs", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
+		{key: '.', label: "Toggle hidden files", quick: true, short: "Hide", action: func(r *Root) { r.toggleHidden() }},
+		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
 		{key: 'n', label: "New tab", action: func(r *Root) { r.newTabHere() }},
 		{key: 'w', label: "Close tab", action: func(r *Root) { r.closeCurrentTab() }},
 		{key: 'q', label: "Quit", action: func(r *Root) { r.RequestQuit() }},
 		{key: 'a', label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
 		{key: 'u', label: "Undo last rename (Batch Rename's own undo — the only kind there is yet)", action: func(r *Root) { r.undoLastBatchRename() }},
-		{key: 'l', label: "Look", quick: true, short: "Look", alsoOverProperties: true, action: func(r *Root) { r.lookCurrentEntry() }},
-		{key: '?', label: "Help", quick: true, short: "Help", action: func(r *Root) { r.openHelp() }},
 		{key: ':', label: "Bash command line", action: func(r *Root) { r.app.SetFocus(r.bashLine) }},
 
 		// --- Ebene 2: the bigger sibling of the letter above -----------
@@ -166,14 +196,6 @@ func plainCommands() []plainCommand {
 		// gated behind its own confirmation dialog (see
 		// pasteClipboardFollowingSymlinks) rather than a single keypress.
 		{key: 'V', label: "Paste, following symlinks", action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
-		// quick despite the narrower row this leaves: the button bar is
-		// the only always-present, clickable route to toggling Details
-		// *while Properties is open with unsaved changes* — every other
-		// button-bar click is swallowed in that state (see
-		// captureOutsideClick's own carve-out, keyed on 'I' specifically),
-		// so dropping this from the permanent legend would quietly cost a
-		// deliberately-built mouse gesture, not just a documented one.
-		{key: 'I', label: "Details sidebar", quick: true, short: "Details", alsoOverProperties: true, action: func(r *Root) { r.toggleDetailsSidebar() }},
 		// The three Properties/Details-aware tools: each already targets
 		// "whichever of Properties/Details currently applies" on its own
 		// (see ComputeHashesShortcut/ComputeDirSizeShortcut/
@@ -184,7 +206,9 @@ func plainCommands() []plainCommand {
 		{key: 'h', label: "Compute hashes (Properties/Details, whichever applies)", alsoOverProperties: true, action: func(r *Root) { r.ComputeHashesShortcut() }},
 		{key: 'k', label: "Compute directory size, recursively (Details)", alsoOverProperties: true, action: func(r *Root) { r.ComputeDirSizeShortcut() }},
 		{key: 'M', label: "Load image metadata (Details) — not implemented yet", alsoOverProperties: true, action: func(r *Root) { r.FetchMetadataShortcut() }},
-		{key: 'E', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
+		// Moved off 'E' to make room for "Execute" above (per the user's
+		// own explicit request) — 'S' was free and still reads as "Sed".
+		{key: 'S', label: "Sed Replace", action: func(r *Root) { r.openSedReplace() }},
 		{key: 'B', label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
 		{key: 'C', label: "Compare (two marked items, or split view)", action: func(r *Root) { r.openCompare() }},
 		{key: 'R', label: "Rsync", action: func(r *Root) { r.openRsync() }},
@@ -284,7 +308,7 @@ func chordFamilies() []chordFamily {
 		// step along the *same* axis those buttons do (start, home, then
 		// three ways to move relative to where you already are), before
 		// gr/gb — jumps to a fixed, unrelated place — close it out.
-		{prefix: 'g', name: "go to", quick: true, members: []chordMember{
+		{prefix: 'g', name: "goto", quick: true, members: []chordMember{
 			{'g', "Top", func(r *Root) { r.panel.focusRow(0) }},
 			{'h', "Home", func(r *Root) { r.showError(r.panel.navigate(userHomeDir())) }},
 			// Mirrors actionUp's own filepath.Dir(p.path) — see its own
@@ -347,7 +371,7 @@ func chordFamilies() []chordFamily {
 		// then the menu's own Multiply mnemonic) instead of the
 		// previous two keystrokes.
 		//
-		// "mo"/"mt"/"mA" close this family's own remaining gap, per the
+		// "mw"/"mt"/"mA" close this family's own remaining gap, per the
 		// user's own explicit request that a chord reach everything the
 		// context menu can: cross-checked against every entry in
 		// contextMenuTree (see contextmenu.go), exactly three actions
@@ -358,9 +382,13 @@ func chordFamilies() []chordFamily {
 		// deliberately left as the documented "mmm" exception rather
 		// than a fourth member here, since its own natural key, "m", is
 		// already this family's own prefix key for opening the real
-		// menu). "mo" mirrors "Open with…"'s own mnemonic inside the
-		// menu itself ('o' — see menuEntry.mnemonic in contextmenu.go);
-		// "mt" is new there too (tail -f had no mnemonic of its own
+		// menu). "mw" — not "mo", despite the context menu's own
+		// mnemonic there still being 'o' (see menuEntry.mnemonic in
+		// contextmenu.go) — matches the plain-letter layer's own key for
+		// this same action instead ('W' — see plainCommands above):
+		// per the user's own explicit report, "mo" was too easy to
+		// misremember once 'W' existed elsewhere for the identical
+		// action. "mt" is new there too (tail -f had no mnemonic of its own
 		// before this). "mA" is deliberately not "mu": plain "u" already
 		// means Undo elsewhere, and reusing it here for the unrelated,
 		// opposite-of-"Select all" action invites exactly the mix-up
@@ -372,7 +400,7 @@ func chordFamilies() []chordFamily {
 			{'m', "Context menu", func(r *Root) { r.MenuShortcut() }},
 			{'f', "New file", func(r *Root) { r.openNewFile() }},
 			{'d', "New dir", func(r *Root) { r.openNewDir() }},
-			{'o', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
+			{'w', "Open with…", func(r *Root) { r.openCurrentEntryWith() }},
 			{'t', "tail -f", func(r *Root) { r.tailCurrentEntry() }},
 			// "ma" — added later, per the user's own explicit request —
 			// makes literal the pairing "mA"'s own doc comment already
@@ -480,7 +508,7 @@ func chordFamilies() []chordFamily {
 			{'m', "chmod", func(r *Root) { r.openChmod() }},
 			{'o', "chown", func(r *Root) { r.openChown() }},
 		}},
-		{prefix: 'z', name: "display", quick: true, members: []chordMember{
+		{prefix: 'z', name: "disp", quick: true, members: []chordMember{
 			// N/S/T toggle the active panel's own sort key exactly the
 			// way clicking that column's header already does (see
 			// Panel.setSortKey): the same key sorts by it, ascending, if
@@ -518,7 +546,7 @@ func chordFamilies() []chordFamily {
 		// setting worth a direct toggle without opening the screen at all
 		// (see toggleMouseReporting's own doc comment on why "z" —
 		// display — wasn't the right fit for it either).
-		{prefix: 'o', name: "options", quick: true, members: []chordMember{
+		{prefix: 'o', name: "opts", quick: true, members: []chordMember{
 			{'o', "Options screen", func(r *Root) { r.openOptions() }},
 			{'m', "Mouse reporting", func(r *Root) { r.toggleMouseReporting() }},
 		}},
