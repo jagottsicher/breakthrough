@@ -1488,8 +1488,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 76908,
-      "sha256": "e8e3196e36a73d6ae8260ad1dbfa71cee4ad37992a9fd4203c8bba95ab54e303"
+      "size": 76900,
+      "sha256": "e3de49d2a6843e7c8402bb203615f82523afabbcd25673983c0f6127c40ba9a2"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1518,8 +1518,8 @@
     },
     {
       "path": "internal/ui/keymap.go",
-      "size": 45392,
-      "sha256": "dcb783eefcddec916b804532f7af81863fce07b731df64971277b5f07abac710"
+      "size": 45384,
+      "sha256": "c58a169fff7ab17b1d2617b69e9bc9a048da3fbc87d5aa6e92c3ddeabaac8276"
     },
     {
       "path": "internal/ui/keymap_test.go",
@@ -41289,5 +41289,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "231bbe476459139d9b122fbf09674b7e6c6b40e99e415dfdfcc4f3785073f280"
+  "merkle_root": "7f8ef5f656fb798cea8568515ee472221606f9863f307a03ff7ab3f98e5dbfb3"
 }
