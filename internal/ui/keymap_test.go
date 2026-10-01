@@ -492,6 +492,30 @@ func TestChordSwapsTheButtonBarAndRestoresIt(t *testing.T) {
 // fixed constant chordTimeout used to be before this setting existed —
 // starting a chord with a deliberately distinctive configured timeout
 // must produce a deadline reflecting it, not the old 4-second default.
+// TestChordTimeoutOptionClampsToTenSeconds pins the user's own explicit
+// upper bound on the Options screen's own "Chord timeout (ms)" setting:
+// a value entered above chordTimeoutMaxMS is clamped down to it rather
+// than accepted verbatim or rejected outright.
+func TestChordTimeoutOptionClampsToTenSeconds(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	opt, ok := optionSpecByKey("chord_timeout_ms")
+	if !ok {
+		t.Fatal("no chord_timeout_ms optionSpec")
+	}
+
+	opt.apply(root, "25000")
+
+	if root.settings.ChordTimeoutMS != chordTimeoutMaxMS {
+		t.Errorf("ChordTimeoutMS = %d, want it clamped to %d", root.settings.ChordTimeoutMS, chordTimeoutMaxMS)
+	}
+
+	opt.apply(root, "3000")
+
+	if root.settings.ChordTimeoutMS != 3000 {
+		t.Errorf("ChordTimeoutMS = %d, want 3000 — a value within bounds must pass through untouched", root.settings.ChordTimeoutMS)
+	}
+}
+
 func TestChordTimeoutIsAConfiguredSetting(t *testing.T) {
 	root := newPlainKeyRoot(t)
 	root.settings.ChordTimeoutMS = 60000 // a value nothing else here would produce by coincidence

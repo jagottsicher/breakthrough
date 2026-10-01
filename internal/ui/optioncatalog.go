@@ -651,9 +651,14 @@ func optionCategories() []optionCategory {
 						"button bar's own legend for the chord's members first, short enough "+
 						"that an abandoned chord doesn't sit waiting indefinitely for a "+
 						"keystroke that might arrive minutes later and mean something "+
-						"completely different by then.",
+						"completely different by then.\n\n"+
+						"Capped at 10000 (ten seconds) — a value entered above that is clamped "+
+						"down to it instead of being rejected.",
 					func(r *Root) int { return r.settings.ChordTimeoutMS },
 					func(r *Root, n int) {
+						if n > chordTimeoutMaxMS {
+							n = chordTimeoutMaxMS
+						}
 						r.settings.ChordTimeoutMS = n
 						r.persistSetting("chord_timeout_ms", strconv.Itoa(n))
 					},

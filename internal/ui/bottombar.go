@@ -283,19 +283,13 @@ func (r *Root) buildStatusBar() string {
 	write := func(s string) { b.WriteString(s); col += tview.TaggedStringWidth(s) }
 	sep := func() { write(" │ ") }
 
-	// A pending chord's own countdown (see chordIndicatorText), leading
-	// rather than trailing: it needs to be seen immediately, and the
-	// segments after it (disk usage, uptime, load) are each already
-	// optional on their own platform, so anything placed after them
-	// would shift around depending on what happened to be available —
-	// exactly the instability a fixed leading position avoids. Still
-	// purely informational, same as every other segment here: it has no
-	// click target of its own, matching this bar's own long-standing
-	// "no buttons at all" rule.
-	if chord := r.chordIndicatorText(); chord != "" {
-		write(chord)
-		sep()
-	}
+	// A pending chord's own countdown used to get its own leading
+	// segment here (see chordIndicatorText) — folded into the button
+	// bar's own chord legend instead (see chordHintBar/
+	// refreshChordHintBar), since the prefix letter it names was
+	// already showing there and nowhere else, and repeating it a second
+	// time one row down was needless per the user's own explicit
+	// request.
 
 	// A running Paste's own progress takes this same leading spot instead
 	// of the clipboard indicator below while one is actually in flight —

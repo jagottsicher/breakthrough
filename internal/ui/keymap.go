@@ -605,6 +605,12 @@ func (r *Root) chordTimeout() time.Duration {
 	return time.Duration(r.settings.ChordTimeoutMS) * time.Millisecond
 }
 
+// chordTimeoutMaxMS caps the Options screen's own "Chord timeout (ms)"
+// setting (see optioncatalog.go) at 10 seconds — the user's own
+// explicit limit: long past this, a pending chord is no longer a
+// quick second keystroke, just a confusing mode the UI is stuck in.
+const chordTimeoutMaxMS = 10000
+
 // chordTickInterval is how often the status bar's own countdown
 // indicator (see chordIndicatorText) is repainted while a chord is
 // pending — frequent enough that the shrinking bar reads as continuous
@@ -680,9 +686,26 @@ func (r *Root) acceptsPropertiesAwareKey() bool {
 	return r.activePage == propertiesPage && !r.propertiesEditField.HasFocus()
 }
 
+// refreshChordHintBar rebuilds and redraws the button bar's own chord
+// legend for whichever family is currently pending — animateChordCountdown's
+// own per-tick call, so the countdown glyph chordHintBar now folds into
+// "prefix… " actually advances on screen; a no-op if nothing is pending
+// (r.pendingChord already cleared, e.g. by a resolveChord that ran
+// between two ticks), since there would be no family to look up.
+func (r *Root) refreshChordHintBar() {
+	family, ok := chordFamilyFor(r.pendingChord)
+	if !ok {
+		return
+	}
+	text, spans := r.chordHintBar(family)
+	r.buttonBarSpans = spans
+	r.buttonBar.SetText(text)
+}
+
 // startChord puts the application into chord mode: the button bar
-// becomes family's own legend (see chordHintBar) and the status bar
-// starts counting the timeout down.
+// becomes family's own legend (see chordHintBar), which also carries
+// the countdown glyph now (see refreshChordHintBar/chordCountdownGlyph)
+// rather than a separate status-bar segment.
 func (r *Root) startChord(family chordFamily) {
 	r.pendingChord = family.prefix
 	r.chordDeadline = time.Now().Add(r.chordTimeout())
@@ -781,7 +804,7 @@ func (r *Root) animateChordCountdown(ctx context.Context) {
 					r.cancelChord()
 					return
 				}
-				r.refreshStatusBar()
+				r.refreshChordHintBar()
 			})
 		case <-ctx.Done():
 			return
@@ -796,23 +819,20 @@ func (r *Root) animateChordCountdown(ctx context.Context) {
 // user's own explicit request.
 var chordCountdownBlocks = []rune{'█', '▇', '▆', '▅', '▄', '▃', '▂', '▁'}
 
-// chordIndicatorText renders the status bar's own leading segment while
-// a chord is pending — "" the rest of the time, so buildStatusBar's own
-// call site can simply skip a separator when this is empty rather than
-// needing its own branch.
-//
-// Named together with the waiting prefix letter ("g▆"), not the block
-// alone: the block by itself says "something is running out" without
-// saying what, which is the detail that actually matters here — the
-// button bar's own legend (see chordHintBar) already answers "what can
-// I press", so this only has to answer "how long do I still have".
-func (r *Root) chordIndicatorText() string {
+// chordCountdownGlyph is chordIndicatorText's own underlying fraction-
+// to-glyph step, factored out so chordHintBar can fold the same
+// countdown into its own leading "prefix… " text instead of this
+// living as a second, separate segment in the status bar (see that
+// func's own doc comment for why the two were merged) — returns
+// ok=false exactly when chordIndicatorText itself would have returned
+// "" (no chord pending, or its deadline already passed).
+func (r *Root) chordCountdownGlyph() (rune, bool) {
 	if r.pendingChord == 0 {
-		return ""
+		return 0, false
 	}
 	remaining := time.Until(r.chordDeadline)
 	if remaining <= 0 {
-		return ""
+		return 0, false
 	}
 	// elapsedFrac, not remaining/chordTimeout directly: chordCountdownBlocks
 	// runs full-to-empty (index 0 is '█'), and the block should read
@@ -830,7 +850,18 @@ func (r *Root) chordIndicatorText() string {
 	if idx < 0 {
 		idx = 0
 	}
-	return fmt.Sprintf("%c%c", r.pendingChord, chordCountdownBlocks[idx])
+	return chordCountdownBlocks[idx], true
+}
+
+// chordIndicatorText names the pending chord's own prefix together with
+// its countdown glyph ("g▆") — "" once chordCountdownGlyph itself
+// reports nothing to show.
+func (r *Root) chordIndicatorText() string {
+	glyph, ok := r.chordCountdownGlyph()
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%c%c", r.pendingChord, glyph)
 }
 
 // chordHintBar renders the button bar's own legend for one chord family
@@ -881,7 +912,17 @@ func (r *Root) chordHintBar(family chordFamily) (text string, spans []buttonBarS
 		col += tview.TaggedStringWidth(s)
 	}
 
-	write(fmt.Sprintf("%c… ", family.prefix))
+	// The countdown glyph (see chordCountdownGlyph) leads straight into
+	// the prefix itself — "▅m… " — rather than appearing a second time
+	// as its own segment in the status bar the way it used to: the
+	// prefix letter only ever shows up here, in this same legend, so
+	// per the user's own explicit request the countdown now lives right
+	// next to it instead of being duplicated one row down.
+	if glyph, ok := r.chordCountdownGlyph(); ok {
+		write(fmt.Sprintf("%c%c… ", glyph, family.prefix))
+	} else {
+		write(fmt.Sprintf("%c… ", family.prefix))
+	}
 
 	keyBG := colorTag(r.theme.ButtonBackground)
 	for i, m := range family.members {
