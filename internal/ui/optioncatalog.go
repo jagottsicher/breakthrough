@@ -681,8 +681,9 @@ func optionCategories() []optionCategory {
 						r.persistSetting("compress_format", v)
 					},
 					choices: func(*Root) []optionChoice {
-						out := make([]optionChoice, 0, len(archiveFormats()))
-						for _, f := range archiveFormats() {
+						formats := compressibleArchiveFormats()
+						out := make([]optionChoice, 0, len(formats))
+						for _, f := range formats {
 							out = append(out, optionChoice{value: archiveFormatID(f), label: f.label})
 						}
 						return out
