@@ -631,7 +631,7 @@ reimplementation of any compression algorithm): `zip`, `tar`, and
 | Field | Meaning |
 |---|---|
 | Target | Read-only — what this Compress run is for |
-| Format | zip, tar, tar.gz, tar.bz2, tar.xz, or tar.zst |
+| Format | zip, tar, tar.gz, tar.bz2, tar.xz, tar.zst, or 7z |
 | Output name | The archive's own name, without extension — the selected Format's own extension is added automatically |
 
 A live Preview line always shows the exact file name that will be
@@ -658,10 +658,18 @@ through the real compressor binary (`gzip`/`bzip2`/`xz`/`zstd`), rather
 than relying on tar's own bundled compression support — that varies by
 which `tar` is actually installed (GNU tar vs. macOS/BSD's own
 `bsdtar`), while a plain pipe through the real compressor works
-identically everywhere it's installed. Whichever tool a format needs
-has to actually be on `$PATH` — a missing one is reported by name
-("`zstd` not found on \$PATH — install it first…") rather than a bare,
-buried "command not found".
+identically everywhere it's installed. 7z runs the real `7z` binary
+(`7za`/`7zr` instead, whichever is actually installed — the same
+resolution order [browsing into a `.7z`](#file-panel) already uses).
+Whichever tool a format needs has to actually be on `$PATH` — a missing
+one is reported by name ("`zstd` not found on \$PATH — install it
+first…") rather than a bare, buried "command not found".
+
+No "Compress to .rar": [Extract](#extract) can open an existing RAR
+archive (the real, freeware `unrar` binary), but creating one needs the
+proprietary `rar` command-line tool instead — not something this app
+depends on or asks you to install, so RAR never appears in this Format
+dropdown at all, only in Extract.
 
 Runs in the background, the same as [Copy, Cut and Paste](#copy-cut-and-paste) —
 no terminal takes over the screen; a spinner and elapsed time show in
@@ -678,10 +686,12 @@ leaving a running rsync completely untouched either way.
 
 `j` then `e` (keep the original) or `E` (also delete it), or the
 context menu's **Extract**/**Extract, delete original** (both shown
-only once the cursor is actually on a recognized archive). Unpacks the
-whole archive in one step, without first browsing into it — real
-`unzip`/`tar` (piped through the matching decompressor), never a
-reimplementation, the same as [Compress](#compress) above.
+only once the cursor is actually on a recognized archive — zip, every
+tar variant, 7z, or RAR). Unpacks the whole archive in one step, without
+first browsing into it — real `unzip`/`tar` (piped through the matching
+decompressor), `7z`, or `unrar`, never a reimplementation, the same as
+[Compress](#compress) above. RAR is extract-only here too — see
+[Compress](#compress)'s own note on why there's no "Compress to .rar".
 
 The destination depends on whether a split is currently active:
 

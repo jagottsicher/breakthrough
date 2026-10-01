@@ -302,7 +302,7 @@ func extractTarFile(tr *tar.Reader, hdr *tar.Header, destDir, rel string) error 
 }
 
 // extractSevenZip extracts members out of archivePath via the real 7z
-// binary (see sevenZipBinary) into a fresh temp directory — 7z's own
+// binary (see SevenZipBinary) into a fresh temp directory — 7z's own
 // `x` command recreates each requested member's full internal path
 // under whatever `-o<dir>` names (verified directly: asking for a bare
 // directory member name, e.g. "sub", correctly recurses into
@@ -313,7 +313,7 @@ func extractTarFile(tr *tar.Reader, hdr *tar.Header, destDir, rel string) error 
 // (see Extract's own doc comment on that contract, and
 // relativeDest for the shared logic zip/tar already use for it).
 func extractSevenZip(archivePath string, members []Entry, destDir string) error {
-	bin, err := sevenZipBinary()
+	bin, err := SevenZipBinary()
 	if err != nil {
 		return err
 	}

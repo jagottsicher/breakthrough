@@ -538,8 +538,11 @@ terminal.
 - Compress (`j` then `c`, or the context menu's "Compress…") and
   Extract (`j` then `e`/`E`, or the context menu's "Extract"/"Extract,
   delete original"): real archive creation and unpacking, through a
-  real external tool (zip, tar, gzip, bzip2, xz, or zstd) in both
-  directions, never a reimplementation. Compress archives the current
+  real external tool (zip, tar, gzip, bzip2, xz, zstd, or 7z) for
+  Compress, plus RAR (via the real, freeware `unrar`) for Extract only
+  — creating a `.rar` needs the proprietary `rar` binary instead, which
+  this app doesn't depend on, so it never appears as a Compress format
+  — never a reimplementation either way. Compress archives the current
   selection — a file, several files, or a whole directory — into a new
   file right beside it, or, once a split is active, straight into the
   other pane's own directory instead; pick a Format, type an Output
@@ -820,8 +823,9 @@ end result `ssh-copy-id` produces — never a duplicate, existing
 `authorized_keys` backed up first, strict permissions set explicitly —
 followed automatically by a non-interactive check that the new key
 alone now actually works passwordless), real
-Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz, and
-zstd, and a notification system for background jobs finishing while
+Compress/Extract (`jc`/`je`/`jE`) through zip, tar, gzip, bzip2, xz,
+zstd, 7z, and (extract-only) RAR, and a notification system for
+background jobs finishing while
 you're looking elsewhere (a backgrounded Rsync run, the paste/move
 queue, the Firewall screen's own self-lockout rollback) — a transient
 status-bar toast, a persistent unread badge, and a full Messages screen
