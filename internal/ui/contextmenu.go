@@ -121,12 +121,18 @@ func contextMenuTree() []menuEntry {
 		// menu's own most-likely-wanted default.
 		{label: "Look", mnemonic: 'l', action: func(r *Root) { r.lookCurrentEntry() }},
 		{label: "Edit", visible: menuTargetIsFile, mnemonic: 'e', action: func(r *Root) { r.editCurrentEntry() }},
-		// No plain-key equivalent to mirror — this only ever opens from
-		// here — so, like "Multiply", its mnemonic is just its own first
-		// letter (see menuEntry.mnemonic's own doc comment on that
-		// exception). Works for a remote file exactly like Edit does:
-		// download, run the typed command against the local copy,
-		// upload back only if it changed (see openCurrentEntryWith).
+		// Mirrors the plain-letter layer's own "E" (see keymap.go) — same
+		// visibility gate as Edit just above: a directory has nothing to
+		// execute.
+		{label: "Execute", visible: menuTargetIsFile, mnemonic: 'E', action: func(r *Root) { r.executeCurrentEntry() }},
+		// Mnemonic is its own first letter, like "Multiply", rather than
+		// the plain-letter layer's own matching key for this same action
+		// ('W' — see keymap.go): lowercase 'o' is already the global
+		// "options" chord prefix, so the two layers deliberately disagree
+		// on which letter this is, just this once. Works for a remote
+		// file exactly like Edit does: download, run the typed command
+		// against the local copy, upload back only if it changed (see
+		// openCurrentEntryWith).
 		{label: "Open with…", visible: menuTargetIsFile, mnemonic: 'o', action: func(r *Root) { r.openCurrentEntryWith() }},
 		{label: "Rename", mnemonic: 'r', action: func(r *Root) { r.openRename() }},
 		{label: "Copy", mnemonic: 'c', action: func(r *Root) { r.copyToClipboard() }},
@@ -151,60 +157,83 @@ func contextMenuTree() []menuEntry {
 			// member (see keymap.go) — matches this action's own new
 			// keyboard-only route rather than an unrelated letter.
 			{label: "tail -f", visible: menuTargetIsFile, mnemonic: 't', action: func(r *Root) { r.tailCurrentEntry() }},
-			{label: "chown", action: func(r *Root) { r.openChown() }},
-			{label: "chmod", action: func(r *Root) { r.openChmod() }},
-			{label: "sed", action: func(r *Root) { r.openSedReplace() }},
-			{label: "Batch rename", action: func(r *Root) { r.openBatchRename() }},
-			{label: "Undo last rename", action: func(r *Root) { r.undoLastBatchRename() }},
-			{label: "Compare", action: func(r *Root) { r.openCompare() }},
-			{label: "Rsync", action: func(r *Root) { r.openRsync() }},
+			// Every mnemonic from here down (per the user's own explicit
+			// report that the menu's own status-line legend — see
+			// contextMenuHintBar — looked incomplete once drilled into
+			// this submenu: most entries here never had one at all, so
+			// they silently dropped out of that legend even though
+			// arrowing to them and pressing Enter always worked)
+			// deliberately reuses whatever letter/case that same action
+			// already answers to elsewhere in this app — the "po"/"pm"
+			// chord for chown/chmod, the plain "S"/"B"/"u"/"C"/"R" keys,
+			// the "jc"/"je"/"jE" chord for Compress/Extract — rather than
+			// an unrelated free letter, so one already-learned shortcut
+			// means the same thing here too.
+			{label: "chown", mnemonic: 'o', action: func(r *Root) { r.openChown() }},
+			{label: "chmod", mnemonic: 'm', action: func(r *Root) { r.openChmod() }},
+			{label: "sed", mnemonic: 'S', action: func(r *Root) { r.openSedReplace() }},
+			{label: "Batch rename", mnemonic: 'B', action: func(r *Root) { r.openBatchRename() }},
+			{label: "Undo last rename", mnemonic: 'u', action: func(r *Root) { r.undoLastBatchRename() }},
+			{label: "Compare", mnemonic: 'C', action: func(r *Root) { r.openCompare() }},
+			{label: "Rsync", mnemonic: 'R', action: func(r *Root) { r.openRsync() }},
 			// Compress works on any selection (a file, several files, or a
 			// whole directory tree) — no visibility gate of its own, the
 			// same as Rsync/sed/chmod/chown just above.
-			{label: "Compress…", action: func(r *Root) { r.openCompress() }},
+			{label: "Compress…", mnemonic: 'c', action: func(r *Root) { r.openCompress() }},
 			// Extract only makes sense once the target is actually a
 			// recognized archive (see menuTargetIsArchive) — the same
 			// "hide what doesn't apply" reasoning menuTargetIsFile already
 			// follows for Edit/Open with… above.
-			{label: "Extract", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(false) }},
+			{label: "Extract", visible: menuTargetIsArchive, mnemonic: 'e', action: func(r *Root) { r.extractCurrentArchive(false) }},
 			// The dangerous sibling of "Extract" just above — kept right
 			// next to it rather than a further step away, since the real
 			// safety net here is deleteExtractedArchive's own Trash-first
 			// behavior (see its own doc comment), not physical distance in
 			// the menu.
-			{label: "Extract, delete original", visible: menuTargetIsArchive, action: func(r *Root) { r.extractCurrentArchive(true) }},
+			{label: "Extract, delete original", visible: menuTargetIsArchive, mnemonic: 'E', action: func(r *Root) { r.extractCurrentArchive(true) }},
 			// The dangerous sibling of "Move to Trash" above — kept out
 			// of the top level on purpose, the same "punctual action up
 			// top, consequential one a step further away" shape the
 			// plain-letter keyboard layer's own d/D pair already uses.
-			{label: "Remove", action: func(r *Root) { r.openRemoveConfirm() }},
+			{label: "Remove", mnemonic: 'D', action: func(r *Root) { r.openRemoveConfirm() }},
 			// The dereferencing sibling of "Paste" above, kept out of the
 			// top level for the same reason — the keyboard layer's own
 			// v/V pair uses this exact placement too (see keymap.go).
 			// Same visibility gate as plain Paste: nothing to offer once
 			// the clipboard is empty either way.
-			{label: "Paste, following symlinks", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
+			{label: "Paste, following symlinks", visible: menuClipboardHasContent, mnemonic: 'V', action: func(r *Root) { r.pasteClipboardFollowingSymlinks() }},
 		}},
 		{label: "Selection", submenu: []menuEntry{
-			{label: "Select all", action: func(r *Root) { r.panel.selectAll() }},
+			// mnemonic 'a', matching the plain-letter layer's own key for
+			// this exact action (see plainCommands) — the same reasoning
+			// "More actions"'s own entries just above now follow too.
+			{label: "Select all", mnemonic: 'a', action: func(r *Root) { r.panel.selectAll() }},
 			// mnemonic 'A', added alongside the "m" chord's own new "mA"
 			// member (see keymap.go) — capital, matching that member's
 			// own reasoning: plain "a" already means "Select all"
 			// itself, both outside this menu and as this very entry's
 			// own sibling just above.
 			{label: "Deselect all", mnemonic: 'A', action: func(r *Root) { r.panel.deselectAll() }},
-			{label: "Select +", action: func(r *Root) { r.openSelectPlus() }},
-			{label: "Select -", action: func(r *Root) { r.openSelectMinus() }},
+			// '+'/'-' match the plain-letter layer's own keys for these
+			// two (see plainCommands) exactly, punctuation and all.
+			{label: "Select +", mnemonic: '+', action: func(r *Root) { r.openSelectPlus() }},
+			{label: "Select -", mnemonic: '-', action: func(r *Root) { r.openSelectMinus() }},
 		}},
 		{label: "Tabs & Split", submenu: []menuEntry{
-			{label: "New tab", action: func(r *Root) { r.newTabHere() }},
-			{label: "Close tab", action: func(r *Root) { r.closeCurrentTab() }},
-			{label: "Switch tab...", action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
-			{dynamicLabel: func(r *Root) string { return splitToggleLabel(r.splitActive) }, action: func(r *Root) { r.toggleSplit() }},
+			// Every mnemonic here matches its own equivalent elsewhere —
+			// see "More actions"'s own doc comment above for why — except
+			// "Swap panes": its usual chord equivalent ("zw") would
+			// collide with "Close tab" just below reusing the plain-
+			// letter layer's own 'w', so it gets the capital instead,
+			// the only letter left unclaimed in this one submenu.
+			{label: "New tab", mnemonic: 'n', action: func(r *Root) { r.newTabHere() }},
+			{label: "Close tab", mnemonic: 'w', action: func(r *Root) { r.closeCurrentTab() }},
+			{label: "Switch tab...", mnemonic: 't', action: func(r *Root) { r.openTabSwitcher(r.activeTab) }},
+			{dynamicLabel: func(r *Root) string { return splitToggleLabel(r.splitActive) }, mnemonic: 's', action: func(r *Root) { r.toggleSplit() }},
 			// Only once there's an actual split to orient/swap — before
 			// that, neither means anything (see splitIsActive).
-			{dynamicLabel: func(r *Root) string { return splitOrientationLabel(r.settings.SplitStacked) }, visible: menuSplitIsActive, action: func(r *Root) { r.toggleSplitStacked() }},
-			{label: "Swap panes", visible: menuSplitIsActive, action: func(r *Root) { r.swapPanesOrExplain() }},
+			{dynamicLabel: func(r *Root) string { return splitOrientationLabel(r.settings.SplitStacked) }, visible: menuSplitIsActive, mnemonic: 'o', action: func(r *Root) { r.toggleSplitStacked() }},
+			{label: "Swap panes", visible: menuSplitIsActive, mnemonic: 'W', action: func(r *Root) { r.swapPanesOrExplain() }},
 		}},
 	}
 }
@@ -333,6 +362,21 @@ func (r *Root) contextMenuHintBar() (text string, spans []buttonBarSpan) {
 
 	write("Menu: ")
 	keyBG := colorTag(r.theme.ButtonBackground)
+	// "◂ Back" — a clickable mirror of the list's own leading row (see
+	// renderContextMenu), per the user's own explicit request: the
+	// legend already lets every other menu action fire without touching
+	// the list itself, so going back out of a submenu should too, not
+	// just Escape/Left-arrow/clicking the row inside the list.
+	if r.menuInSubmenu != nil {
+		start := col
+		write(fmt.Sprintf("[:%s:] ◂ [-:-:-]Back", keyBG))
+		spans = append(spans, buttonBarSpan{
+			startCol: start,
+			endCol:   col,
+			run:      func(r *Root) { r.closeMenuOrGoBack() },
+		})
+		write(" ")
+	}
 	first := true
 	for _, entry := range r.currentMenuTree() {
 		if entry.mnemonic == 0 || entry.action == nil {
@@ -456,18 +500,113 @@ func (r *Root) captureContextMenuKey(event *tcell.EventKey) *tcell.EventKey {
 // submenu group. The "◂ Back" row (when present) has no entry of its
 // own to report.
 func (r *Root) currentMenuEntryAtCursor() (menuEntry, bool) {
-	idx := r.menu.GetCurrentItem()
+	return r.menuEntryAtRow(r.menu.GetCurrentItem())
+}
+
+// menuEntryAtRow is currentMenuEntryAtCursor's own row-index-based
+// half, factored out so captureContextMenuMouse can map an arbitrary
+// clicked row the exact same way, not just the cursor's own current
+// one.
+func (r *Root) menuEntryAtRow(row int) (menuEntry, bool) {
 	if r.menuInSubmenu != nil {
-		if idx == 0 {
+		if row == 0 {
 			return menuEntry{}, false
 		}
-		idx--
+		row--
 	}
 	entries := r.visibleMenuEntries()
-	if idx < 0 || idx >= len(entries) {
+	if row < 0 || row >= len(entries) {
 		return menuEntry{}, false
 	}
-	return entries[idx], true
+	return entries[row], true
+}
+
+// menuRowAtPoint mirrors tview.List's own (unexported) indexAtPoint —
+// the row index r.menu would resolve (x, y) to, or ok=false if that
+// position is outside the list's own inner rect or past its last row.
+// Reimplemented here (rather than called directly) only because it
+// isn't exported; r.menu never shows secondary text or shortcuts, so
+// this skips the parts of indexAtPoint's own math that exist only for
+// those.
+func (r *Root) menuRowAtPoint(x, y int) (row int, ok bool) {
+	rectX, rectY, width, height := r.menu.GetInnerRect()
+	if x < rectX || x >= rectX+width || y < rectY || y >= rectY+height {
+		return 0, false
+	}
+	offset, _ := r.menu.GetOffset()
+	row = y - rectY + offset
+	if row >= r.menu.GetItemCount() {
+		return 0, false
+	}
+	return row, true
+}
+
+// captureContextMenuMouse intercepts a left-click on a submenu group
+// row or the "◂ Back" row before it ever reaches tview.List's own
+// MouseHandler — working around a real, reproduced upstream quirk
+// there, not a hypothetical one: our own Selected callback
+// (enterMenuSubmenu/closeMenuOrGoBack) rebuilds r.menu synchronously —
+// Clear, then fresh rows for whatever's being switched to, often a very
+// different item count. List.MouseHandler's own left-click case calls
+// that Selected callback, then — once it returns — unconditionally
+// overwrites List's own currentItem with the row index it computed
+// *before* the callback ran, with no bounds check against the list's
+// new item count. Drilling into a submenu *shorter* than the top-level
+// menu (Selection, Tabs & Split — unlike "More actions", which has
+// more rows than the top level, so this never showed up there) leaves
+// the list positioned on a row that no longer exists: List.Draw's own
+// itemOffset math then skips every real row, so the submenu renders as
+// if it were completely empty until an arrow key re-clamps currentItem
+// back into range (see List.InputHandler's own end-of-switch clamp) —
+// exactly the symptom reported: fine with the keyboard, blank on a
+// mouse switch into either submenu, until the first arrow key.
+//
+// Reporting the click as fully consumed (a nil event) here means
+// List's own buggy tail code for this one click never runs at all.
+// Every other row (an ordinary leaf action, or any non-left-click
+// action) is passed through completely unchanged, for List's own
+// ordinary, already-correct handling.
+func (r *Root) captureContextMenuMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	// Suppresses a second, real bug found alongside the one this
+	// function was first written for (see its own doc comment above) —
+	// the same class suppressButtonFocusSteal/captureColumnHeaderMouse
+	// already guard their own widgets against: tview.List's own
+	// MouseHandler has no case at all for MouseLeftDown (only
+	// MouseLeftClick and the four scroll actions), so an unconsumed one
+	// here fell straight through to whatever's drawn underneath the
+	// menu — the panel's own table — whose default, Box-inherited mouse
+	// handling grabs real keyboard focus on exactly that action. Once
+	// that happened, every mnemonic letter (and every other key this
+	// menu answers to) silently stopped reaching it at all, even though
+	// the click itself still correctly fired or drilled into a submenu
+	// — per the user's own explicit report that "a"/"A" and every other
+	// shortcut stopped working the moment a submenu was entered with the
+	// mouse rather than the keyboard. MouseLeftClick itself is left
+	// alone here (handled below, or passed through to List's own
+	// correct default handling), and so are the four scroll actions —
+	// consuming those too would silently break the menu's own
+	// mouse-wheel scrolling instead of fixing anything.
+	if action == tview.MouseLeftDown && r.menu.InRect(event.Position()) {
+		return tview.MouseConsumed, nil
+	}
+	if action != tview.MouseLeftClick {
+		return action, event
+	}
+	x, y := event.Position()
+	row, ok := r.menuRowAtPoint(x, y)
+	if !ok {
+		return action, event
+	}
+	if r.menuInSubmenu != nil && row == 0 {
+		r.closeMenuOrGoBack()
+		return tview.MouseConsumed, nil
+	}
+	entry, ok := r.menuEntryAtRow(row)
+	if !ok || entry.submenu == nil {
+		return action, event // a leaf row — List's own handling already does the right thing
+	}
+	r.enterMenuSubmenu(entry)
+	return tview.MouseConsumed, nil
 }
 
 // menuMnemonicEntry finds the currently visible entry, in whichever

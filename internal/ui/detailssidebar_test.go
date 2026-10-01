@@ -413,12 +413,17 @@ func TestDetailsMetadataHintAndStubNeverWrapAtMinWidth(t *testing.T) {
 	}
 }
 
-// TestCaptureButtonBarMouseDetailsClickTogglesSidebar pins the "I
-// Details" button (see buildButtonBar) to the same toggleDetailsSidebar
-// the "I" key itself runs — one action, two ways to reach it, and
-// unguarded (see toggleDetailsSidebar's own doc comment on why a click
-// doesn't need the same gating the keyboard path does).
-func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
+// TestDetailsSidebarHasNoButtonBarEntry pins a deliberate removal, per
+// the user's own explicit request that the main button bar was getting
+// too wide: "I" no longer has a quick/button-bar entry (see keymap.go),
+// even though the key itself, and alsoOverProperties, both still work
+// exactly as before (see TestToggleDetailsSidebarShortcutShowsAndHides/
+// TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen). The header
+// row's own "<" button (see TestDetailsExpandButtonShowsSidebar) remains
+// the mouse-only alternative. A regression test, not a feature test —
+// it exists so a future change can't silently reintroduce this entry
+// without someone noticing.
+func TestDetailsSidebarHasNoButtonBarEntry(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -426,19 +431,8 @@ func TestCaptureButtonBarMouseDetailsClickTogglesSidebar(t *testing.T) {
 	}
 	r.SetRect(0, 0, 100, 40)
 
-	span, ok := buttonBarSpanFor(r, 'I')
-	if !ok {
-		t.Fatal("no Details span found")
-	}
-
-	clickButtonBar(t, r, span.startCol)
-	if !r.detailsSidebarVisible {
-		t.Error("clicking Details should show the sidebar")
-	}
-
-	clickButtonBar(t, r, span.startCol)
-	if r.detailsSidebarVisible {
-		t.Error("clicking Details again should hide the sidebar")
+	if _, ok := buttonBarSpanFor(r, 'I'); ok {
+		t.Error("\"I\" should not have a button-bar span any more")
 	}
 }
 

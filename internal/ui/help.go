@@ -38,14 +38,14 @@ var helpText = strings.TrimLeft(`
   x   Cut               D   Remove permanently    I   Details sidebar
   v   Paste             u   Undo last rename       h  Compute hashes
   r   Rename            e   Edit                   k  Directory size
-  f   Find                   M  Image metadata
+  f   Find              E   Execute                M  Image metadata
   n   New tab           w   Close tab             l   Look
   s   Split view         @  Connect…              t   Tab switcher
   a   Select all         *  Invert selection      .   Toggle hidden
                                                    +/- Select/deselect
                                                        by pattern
-  B   Batch rename       E  Sed Replace           G   Go to last row
-  C   Compare            R  Rsync
+  B   Batch rename       S  Sed Replace           G   Go to last row
+  C   Compare            R  Rsync                 W  Open with…
   q   Quit                ? This help              :  Bash command line
 
   h/k/M target whichever of Properties/Details is relevant (Properties
@@ -55,6 +55,13 @@ var helpText = strings.TrimLeft(`
   M, l, and I all also work while Properties specifically is open, on
   top of their usual reach, so Look, Details, and the tool trio stay
   reachable without first closing it.
+
+  "E" (Execute) runs the current entry directly, full screen — the same
+  path typing its name into the bash line already takes (see ":" above
+  and "Bash line" below), just without having to type it out. Does
+  nothing on a directory; the shell itself reports "Permission denied"
+  for a file that isn't actually marked executable, same as it would
+  for anything run by hand.
 
   A capital letter is the bigger sibling of its own lowercase one where
   both exist: "d" is reversible (the Trash), "D" is not (asks first).
@@ -82,13 +89,13 @@ var helpText = strings.TrimLeft(`
   "Chord timeout (ms)" under Options (Behavior, Miscellaneous),
   4000ms by default:
 
-    g  go to    gg top · gh home · gu up · gp back · gn forward ·
+    g  goto     gg top · gh home · gu up · gp back · gn forward ·
                 gr / (root) · gb Trashbin · gc Connect… · gm Messages ·
                 ge Email (launches neomutt/aerc/himalaya/mail/mailx,
                 whichever is installed — configurable under Options)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
-                mo Open with… · mt tail -f · ma Select all · mA Deselect all ·
+                mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
                 mc Clear clipboard · mV Cancel Paste (same as Ctrl+C
                 while one is running; does nothing otherwise) · mR
                 Cancel Rsync (asks: current job only, or current plus
@@ -101,12 +108,12 @@ var helpText = strings.TrimLeft(`
                 js Sessions screen (local screen/tmux/zellij sessions) ·
                 jk SSH Keys screen (local key pairs under ~/.ssh)
     p  perms    pm chmod · po chown
-    z  display  zN sort by name · zS sort by size · zT sort by time ·
+    z  disp     zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zf filter · zo split
                 orientation · zw swap panes · zr reload
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
-    o  options  oo Options screen · om Mouse reporting on/off
+    o  opts     oo Options screen · om Mouse reporting on/off
 
   Escape cancels a pending chord; any other key that isn't one of its
   own members cancels it too and says so, in a notice that clears
@@ -177,14 +184,26 @@ var helpText = strings.TrimLeft(`
                   mnemonic, without arrowing down to it first:
                   "l"/"e"/"r"/"c"/"x"/"d"/"i" (the same letters those
                   seven already have on their own outside the menu),
-                  "o" for Open with… and "t" for tail -f (also directly
-                  reachable as "mo"/"mt" without opening the menu at
-                  all — see the "m" chord above), and "A" for Deselect
+                  "o" for Open with… and "t" for tail -f ("t" also
+                  directly reachable as "mt" without opening the menu
+                  at all, and "o" similarly as "mw" — a deliberate
+                  mismatch, see the "m" chord above), and "A" for Deselect
                   all (likewise "mA"). "m" again (so "mmm" from plain
                   browsing) fires Multiply — the one entry with no
                   keyboard route of its own anywhere else, since its
                   natural letter, "m", is already this family's own
                   prefix key.
+
+                  Once drilled into "More actions"/"Selection"/"Tabs &
+                  Split", the same idea continues one level in: every
+                  entry there has its own mnemonic too, each reusing
+                  whichever letter/case that same action already answers
+                  to elsewhere (chown/chmod reuse the "p" chord's own
+                  "po"/"pm", Compress/Extract reuse the "j" chord's own
+                  "jc"/"je"/"jE", and so on — see contextmenu.go for the
+                  full list) — and the status line at the bottom always
+                  lists the current submenu's own legend, exactly like
+                  the top level's.
 
 [::b]Details sidebar ("I")[::-]
 

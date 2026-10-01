@@ -31,7 +31,7 @@ const (
 var sedFlagOrder = []string{sedLabelRegex, sedLabelExtendedRegex, sedLabelCaseInsensitive, sedLabelGlobal, sedLabelBackup}
 
 // openSedReplace is the context menu's "sed", and the plain-letter
-// layer's "E" (see keymap.go) action: opens a dialog to run a real
+// layer's "S" (see keymap.go) action: opens a dialog to run a real
 // sed(1) substitution against the current selection (or the current
 // row) — see internal/replace's own package doc for why this shells out
 // to real sed rather than reimplementing its regex/scripting engine,
@@ -622,7 +622,7 @@ func (r *Root) confirmApplySed() {
 
 // SedReplaceShortcut used to be Ctrl+S's global action — nothing in
 // cmd/breakthrough calls it any more. Sed Replace's own real keyboard
-// path is the plain-letter layer's "E" (see openSedReplace/keymap.go),
+// path is the plain-letter layer's "S" (see openSedReplace/keymap.go),
 // which needs no such guard of its own (acceptsPlainKeyCommand already
 // covers the same ground more precisely). Kept rather than deleted as
 // an exported building block, the same shape bottombar.go's

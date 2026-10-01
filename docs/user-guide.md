@@ -16,6 +16,7 @@ material, always matching the version you are actually running.
 - [New file and New dir](#new-file-and-new-dir)
 - [Multiply](#multiply)
 - [Open with…](#open-with)
+- [Execute](#execute)
 - [Compress](#compress)
 - [Extract](#extract)
 - [Batch rename](#batch-rename)
@@ -61,14 +62,14 @@ dialog open.
 | `x` | Cut | `D` | Remove permanently | `I` | Details sidebar |
 | `v` | Paste | `u` | Undo last rename | `l` | Look |
 | `r` | Rename | `e` | Edit | `/` | Filter |
-| `@` | Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) | `f` | Find | `.` | Toggle hidden files |
-| `n` | New tab | `w` | Close tab | `t` | Tab switcher |
-| `s` | Split view on/off | `V` | Paste, following symlinks | `a` | Select all |
-| `*` | Invert selection | `+`/`-` | Select/deselect by pattern | `B` | Batch rename |
-| `E` | Sed Replace | `G` | Go to the last row | `q` | Quit |
-| `h` | Compute hashes | `k` | Directory size | `M` | Image metadata |
-| `?` | This help | `:` | Bash command line | `C` | Compare |
-| `R` | Rsync | | | | |
+| `E` | Execute | `W` | Open with… | `.` | Toggle hidden files |
+| `@` | Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) | `f` | Find | `t` | Tab switcher |
+| `n` | New tab | `w` | Close tab | `s` | Split view on/off |
+| `V` | Paste, following symlinks | `a` | Select all | `*` | Invert selection |
+| `+`/`-` | Select/deselect by pattern | `B` | Batch rename | `S` | Sed Replace |
+| `G` | Go to the last row | `q` | Quit | `h` | Compute hashes |
+| `k` | Directory size | `M` | Image metadata | `?` | This help |
+| `:` | Bash command line | `C` | Compare | `R` | Rsync |
 
 A capital letter is the bigger sibling of its own lowercase one
 wherever both exist: `d` is reversible (the Trash), `D` asks first and
@@ -98,7 +99,7 @@ bar becomes that chord's own legend:
 |---|---|
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
-| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mo` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
+| `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mw` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
 | `z` — display | `zs` size format · `zt` time format · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
@@ -112,11 +113,15 @@ with the mouse, the same as an ordinary button — no need to type the
 second letter if you'd rather point at it.
 
 **The button bar** below the command line always shows a curated subset
-of these keys as a quick legend — Copy/Cut/Paste, Move to Trash,
-Properties, Details, Split, the tab switcher, Look, Help, and the six
-chord families — with the actual key to press set off by its own
-background color, one space either side, so the letter-to-action
-mapping is easy to scan at a glance. Every other key still works
+of these keys as a quick legend — Copy/Cut/Paste, Look, Edit, Execute,
+Open with…, Move to Trash, Rename, Properties, Split view, Connect…,
+the tab switcher, toggle hidden files, Help, and the six chord families
+(shown abbreviated — `goto`, `disp`, `opts`) — with the actual key to
+press set off by its own background color, one space either side, so
+the letter-to-action mapping is easy to scan at a glance. Details
+sidebar (`I`) doesn't have its own slot here (it was crowding the row);
+it's still fully live from the keyboard, and the header's own `<`
+button reaches it with the mouse too. Every other key still works
 exactly the same whether or not it's shown there; `?` documents all of
 them.
 
@@ -402,6 +407,7 @@ everything the menu can ever do. On a plain file, that's:
 ```
 Look
 Edit
+Execute
 Open with…
 Rename
 Copy
@@ -414,26 +420,42 @@ Properties
 ▸ Tabs & Split
 ```
 
-A few of these come and go on their own: **Edit** and **Open with…**
-(and, one level into "More actions", **tail -f**) drop out entirely for
-a directory — none of the three mean anything there. **Paste** only
+A few of these come and go on their own: **Edit**, **Execute**, and
+**Open with…** (and, one level into "More actions", **tail -f**) drop
+out entirely for a directory — none of the four mean anything there.
+**Paste** only
 appears once Copy or Cut has actually put something in the clipboard.
 Inside "Tabs & Split", **Split orientation** and **Swap panes** only
 show up once a split is actually active — there's nothing to orient or
 swap before that.
 
-Once the menu is open, `l`/`e`/`r`/`c`/`x`/`d`/`i` — the same letters
-**Look**/**Edit**/**Rename**/**Copy**/**Cut**/**Move to Trash**/
-**Properties** already have as their own single-key shortcuts — fire
-that entry directly, without arrowing down to it first. A letter whose
-own entry isn't currently showing (`e` for a directory, say) does
-nothing. `o`/`t`/`A` do too, for **Open with…**, `tail -f`, and
-**Deselect all** — see [Open with…](#open-with) — all three also
-directly reachable as `mo`/`mt`/`mA` from plain browsing, without
-opening the menu at all. `m` again (`mmm` from plain browsing) fires
-**Multiply** — the one entry with no keyboard route of its own anywhere
-else, since its own natural letter is already this chord's own prefix
-key — see [Multiply](#multiply).
+Once the menu is open, `l`/`e`/`E`/`r`/`c`/`x`/`d`/`i` — the same
+letters **Look**/**Edit**/**Execute**/**Rename**/**Copy**/**Cut**/
+**Move to Trash**/**Properties** already have as their own single-key
+shortcuts — fire that entry directly, without arrowing down to it
+first. A letter whose own entry isn't currently showing (`e`/`E` for a
+directory, say) does nothing. `o`/`t`/`A` do too, for **Open with…**,
+`tail -f`, and **Deselect all** — see [Open with…](#open-with) — even
+though none of those three has a matching single-key shortcut of its
+own outside the menu; `o`/`t` are instead directly reachable as
+`mw`/`mt` from plain browsing (`A` as `mA`), without opening the menu at
+all — `mw`, not `mo`, since the plain-letter layer's own key for Open
+with… is `W`, not `o` (lowercase `o` is already the `o` chord's own
+prefix). `m` again (`mmm` from plain browsing) fires **Multiply** — the
+one entry with no keyboard route of its own anywhere else, since its
+own natural letter is already this chord's own prefix key — see
+[Multiply](#multiply).
+
+Every entry one level into a submenu has its own mnemonic too, each
+reusing whichever letter/case that same action already answers to
+elsewhere in the app (chown/chmod reuse the `p` chord's own `po`/`pm`,
+Compress/Extract reuse the `j` chord's own `jc`/`je`/`jE`, and so on —
+see the bullet lists below for the full set) — and the button bar's own
+legend always lists the currently open submenu's own entries, exactly
+the same way it lists the top level's. A `◂ Back` button leads that
+legend whenever a submenu is open, clickable the same way every other
+button here is, alongside `Escape`/Left arrow/clicking the list's own
+`◂ Back` row.
 
 **While browsing the Trash itself**, the whole menu is replaced by a
 much shorter one — almost nothing about the ordinary list still applies
@@ -457,16 +479,21 @@ itself. The menu's own title bar names where you are — "Menu" at the
 top, "Menu › Selection" one level in — and the menu is always at least
 as wide as that title, even when every row inside is shorter.
 
-- **▸ More actions** — New file (`mf`), New dir (`md`), `tail -f`
-  (files only, `mt`), `chown`, `chmod`, `sed`, Batch rename, Undo last
-  rename, Compare, Rsync, [Compress…](#compress) (`jc`),
-  [Extract](#extract)/"Extract, delete original" (`je`/`jE`, shown only
-  for a recognized archive), Remove (the permanent, asks-first sibling
-  of Move to Trash above), Paste following symlinks.
-- **▸ Selection** — Select all, Deselect all (`mA`), Select +, Select -
-  (checkbox-based, the same these already reach on their own keys).
-- **▸ Tabs & Split** — New tab, Close tab, Switch tab..., Split on/off,
-  Split orientation, Swap panes.
+- **▸ More actions** — New file (`f`, also `mf`), New dir (`d`, also
+  `md`), `tail -f` (files only, `t`, also `mt`), `chown` (`o`), `chmod`
+  (`m`), `sed` (`S`), Batch rename (`B`), Undo last rename (`u`),
+  Compare (`C`), Rsync (`R`), [Compress…](#compress) (`c`, also `jc`),
+  [Extract](#extract)/"Extract, delete original" (`e`/`E`, also
+  `je`/`jE`, shown only for a recognized archive), Remove (`D`, the
+  permanent, asks-first sibling of Move to Trash above), Paste
+  following symlinks (`V`).
+- **▸ Selection** — Select all (`a`), Deselect all (`A`, also `mA`),
+  Select + (`+`), Select - (`-`) — all four the same letters these
+  already reach on their own outside the menu.
+- **▸ Tabs & Split** — New tab (`n`), Close tab (`w`), Switch tab...
+  (`t`), Split on/off (`s`), Split orientation (`o`), Swap panes (`W`
+  — capital, since lowercase `w` already means Close tab in this one
+  submenu).
 
 Everything in the menu is also reachable from the keyboard or the
 button bar — the menu is a discovery aid, never the only path to a
@@ -549,9 +576,10 @@ then **Cancel** never touches the sticky default at all.
 
 ## Open with…
 
-The context menu's **Open with…** (files only) — runs any program you
-type against the selected file, instead of always the configured
-editor (see [The keyboard layer](#the-keyboard-layer) for `e`/Edit).
+`W`, or the context menu's **Open with…** (files only) — runs any
+program you type against the selected file, instead of always the
+configured editor (see [The keyboard layer](#the-keyboard-layer) for
+`e`/Edit).
 Prefilled with whatever you typed last time, so opening the next file
 with the same program takes one Enter, not a full retype.
 
@@ -571,6 +599,26 @@ copy, runs the typed command against it, and uploads the result back
 over the connection only if it actually changed — nothing about a file
 living on another machine needs a different command or a separate
 step.
+
+## Execute
+
+`E`, or the context menu's **Execute** (files only). Runs the current
+entry directly, full screen — the exact same path typing its path into
+the command line already takes (see [The command
+line](#the-command-line)), just without having to type it out. Useful
+for a `.sh` script or any other executable program sitting right there
+in the listing: Look and Edit both only ever read it; this runs it.
+
+Does nothing for a directory — there's nothing to execute there. The
+real shell underneath reports "Permission denied" for a file that isn't
+actually marked executable, exactly as it would for anything run by
+hand at a real prompt; breakthrough doesn't second-guess that, or offer
+to flip the executable bit on your behalf.
+
+Not supported yet for a remote connection — unlike Look/Edit/Open
+with…, which stage a local copy first (see [Remote connections
+(SFTP)](#remote-connections-sftp)), there's no local binary to actually
+run for a file that only exists on the other end.
 
 ## Compress
 
