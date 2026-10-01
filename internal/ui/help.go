@@ -1050,7 +1050,7 @@ var helpText = strings.TrimLeft(`
   vs. "current plus its own queue", leaving a running rsync completely
   untouched either way.
 
-[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, delete original")[::-]
+[::b]Extract ("je"/"jE", or the context menu's "Extract"/"Extract, del org")[::-]
 
   Unpacks the archive currently under the cursor in one step, without
   first entering it — into the archive's own directory, or, if a split

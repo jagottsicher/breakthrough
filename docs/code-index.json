@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 142177,
-      "sha256": "adceecb9834e62d6e7676dafacbb1b56483c3e13c0e212c4529b5e4a6795ac84"
+      "size": 142145,
+      "sha256": "7a95c096af69cd29a715b485f0681d40b930a175acad3c4ad0d5ddbd34246f6d"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1328,8 +1328,8 @@
     },
     {
       "path": "internal/ui/compress_test.go",
-      "size": 37922,
-      "sha256": "db75dd5dcdaf73f0084836cd66595ec75009f168a24c09c7619e543d46ac9b26"
+      "size": 37914,
+      "sha256": "b36f9ba61854431e13937b6f7c396d450417f9465317a9753500664b04abe555"
     },
     {
       "path": "internal/ui/compressjob.go",
@@ -1368,8 +1368,8 @@
     },
     {
       "path": "internal/ui/contextmenu.go",
-      "size": 31136,
-      "sha256": "6edd4fdea04154fb1e81c67e579fc15f2ca97d87270006ff709893ee67c9f2cf"
+      "size": 31128,
+      "sha256": "bf5ea3e972da1daa2d63366b91872a46457a1994477796c815bcc3007cfbb423"
     },
     {
       "path": "internal/ui/contextmenu_test.go",
@@ -1488,8 +1488,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 76900,
-      "sha256": "e3de49d2a6843e7c8402bb203615f82523afabbcd25673983c0f6127c40ba9a2"
+      "size": 76892,
+      "sha256": "5df219dcef62ea56d4109affb6d719729a04b27e431893b06bf3b9fc251ff9df"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -41289,5 +41289,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7f8ef5f656fb798cea8568515ee472221606f9863f307a03ff7ab3f98e5dbfb3"
+  "merkle_root": "1d393d02de5d3b11feec58dc01f2b19886f1be5a0b32a3e0a8dba71f063f0241"
 }
