@@ -22,7 +22,7 @@ startup files and expands its aliases, whichever shell that actually is
 
 ![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20082338.png)
 
-![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/BScreenshot%202026-10-02%20090321.png)
+![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png)
 
 ![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20084756.png)
 
