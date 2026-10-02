@@ -20,7 +20,11 @@ interactive login shell would be — so it sources that shell's own
 startup files and expands its aliases, whichever shell that actually is
 — not a reimplementation of one.
 
-![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-08-30%2022-46-12.png)
+![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20082338.png)
+
+![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/BScreenshot%202026-10-02%20090321.png)
+
+![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20084756.png)
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
