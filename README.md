@@ -20,11 +20,15 @@ interactive login shell would be — so it sources that shell's own
 startup files and expands its aliases, whichever shell that actually is
 — not a reimplementation of one.
 
-![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20082338.png)
-
-![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png)
-
-![screenshot](https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20084756.png)
+<p align="left">
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20082338.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20082338.png" width="32%"></a>&nbsp;
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20090321.png" width="32%"></a>&nbsp;
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20084756.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20084756.png" width="32%">
+  </a>
+</p>
 
 It is explicitly not an attempt to rebuild Midnight Commander — the goal is
 its own UX philosophy, closer to classic GUI file managers, just in the
