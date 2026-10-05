@@ -430,6 +430,30 @@ func TestToggleMtimeUnix(t *testing.T) {
 	}
 }
 
+// TestToggleFileIcons mirrors TestToggleHidden for the "zi" Nerd Font
+// icon toggle.
+func TestToggleFileIcons(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if r.panel.fileIcons {
+		t.Fatal("setup: the plain type character should be the default")
+	}
+
+	r.toggleFileIcons()
+
+	if !r.panel.fileIcons {
+		t.Error("fileIcons should be true after toggling once")
+	}
+
+	r.toggleFileIcons()
+	if r.panel.fileIcons {
+		t.Error("fileIcons should be false again after toggling twice")
+	}
+}
+
 // Copy/Cut/Paste's own round-trip tests (on-disk effect, clipboard
 // clearing, Details refresh, and the whole paste-conflict-resolution
 // feature) live in pasteconflict_test.go now, alongside the async

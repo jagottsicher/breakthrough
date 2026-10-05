@@ -2477,6 +2477,12 @@ func (r *Root) wirePanel(panel *Panel) {
 	// not this specific panel" shape as onOpenFilterMenu just above.
 	panel.onOpenConnectionMenu = func() { r.openConnectionMenu() }
 
+	// The header row's own "ⓘ" button toggles Nerd Font icon mode (see
+	// Panel.onToggleFileIcons/buildHeaderSpans' own doc comments and
+	// Root.toggleFileIcons) — same "closure captures r, not this
+	// specific panel" shape as onOpenConnectionMenu just above.
+	panel.onToggleFileIcons = func() { r.toggleFileIcons() }
+
 	// Browsing the trash itself shows each item's own original path and
 	// deletion time instead of its real on-disk name/mtime (see
 	// Panel.onDescribeRows/Root.describeTrashRows' own doc comments).
@@ -3562,6 +3568,27 @@ func (r *Root) setMtimeUnix(unix bool) {
 	})
 	r.settings.MtimeUnix = unix
 	r.persistSetting("mtime_unix", strconv.FormatBool(unix))
+}
+
+// toggleFileIcons is the "z" chord's own "i" member, and the header
+// row's own "ⓘ" button (see Panel.onToggleFileIcons): flips whether the
+// listing's type column shows a Nerd Font icon per entry
+// (internal/fileicons) or typeGlyph's plain MC-style character —
+// otherwise a copy of toggleSizeBytes/toggleMtimeUnix, see their own
+// doc comments.
+func (r *Root) toggleFileIcons() {
+	r.setFileIcons(!r.panel.fileIcons)
+}
+
+// setFileIcons is toggleFileIcons with the target value passed in —
+// see setShowHidden's own doc comment for why this split exists.
+func (r *Root) setFileIcons(icons bool) {
+	r.forEachTab(func(p *Panel) {
+		p.fileIcons = icons
+		r.showError(p.load(p.path))
+	})
+	r.settings.FileIcons = icons
+	r.persistSetting("file_icons", strconv.FormatBool(icons))
 }
 
 // setFilterPersistent is the Options screen's own "filter_persistent"

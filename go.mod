@@ -9,6 +9,7 @@ require (
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/pkg/sftp v1.13.11
 	github.com/rivo/tview v0.42.0
+	github.com/rivo/uniseg v0.4.7
 	github.com/ulikunitz/xz v0.5.16
 	golang.org/x/crypto v0.55.0
 	golang.org/x/image v0.45.0
@@ -21,6 +22,5 @@ require (
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )

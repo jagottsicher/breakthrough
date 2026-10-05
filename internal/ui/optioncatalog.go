@@ -253,6 +253,18 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.panel.mtimeUnix },
 					func(r *Root, b bool) { r.setMtimeUnix(b) },
 				),
+				boolOption("file_icons", "Nerd Font icons",
+					"Whether the type column shows a Nerd Font icon per entry "+
+						"(folder, symlink, archive, a handful of languages) instead "+
+						"of the plain MC-style type character.\n\n"+
+						"Only shows real glyphs if your terminal is actually using a "+
+						"Nerd Font — this application has no way to detect that, so "+
+						"it's off by default. The \"zi\" chord and the header row's "+
+						"own \"ⓘ\" button are quicker ways to try it and switch back.",
+					false,
+					func(r *Root) bool { return r.panel.fileIcons },
+					func(r *Root, b bool) { r.setFileIcons(b) },
+				),
 			},
 		},
 		{
@@ -1252,6 +1264,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.SizeBytes), true
 	case "mtime_unix":
 		return strconv.FormatBool(s.MtimeUnix), true
+	case "file_icons":
+		return strconv.FormatBool(s.FileIcons), true
 	case "pager":
 		return s.Pager, true
 	case "trash_confirm":

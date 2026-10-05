@@ -14,6 +14,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fileicons"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
@@ -44,7 +45,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/a/bb/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -57,11 +58,12 @@ func TestBuildHeaderSpans(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 31, action: actionOpenConnectionMenu},
-		{start: 32, end: 33, action: actionNavigate, target: "/"},
-		{start: 33, end: 34, action: actionNavigate, target: "/a"},
-		{start: 35, end: 37, action: actionNavigate, target: "/a/bb"},
-		{start: 38, end: 39, action: actionNavigate, target: "/a/bb/c"},
+		{start: 28, end: 31, action: actionToggleFileIcons},
+		{start: 32, end: 35, action: actionOpenConnectionMenu},
+		{start: 36, end: 37, action: actionNavigate, target: "/"},
+		{start: 37, end: 38, action: actionNavigate, target: "/a"},
+		{start: 39, end: 41, action: actionNavigate, target: "/a/bb"},
+		{start: 42, end: 43, action: actionNavigate, target: "/a/bb/c"},
 	}
 
 	if len(spans) != len(want) {
@@ -119,17 +121,17 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
 
-	// 7 nav buttons + the connection button + the root span.
-	if len(spans) != 9 {
-		t.Fatalf("got %d spans, want 9: %+v", len(spans), spans)
+	// 8 nav buttons + the connection button + the root span.
+	if len(spans) != 10 {
+		t.Fatalf("got %d spans, want 10: %+v", len(spans), spans)
 	}
 	root := spans[len(spans)-1]
-	if root != (headerSpan{start: 32, end: 33, action: actionNavigate, target: "/"}) {
+	if root != (headerSpan{start: 36, end: 37, action: actionNavigate, target: "/"}) {
 		t.Errorf("root span = %+v, want the trailing '/' span", root)
 	}
 }
@@ -144,7 +146,7 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
 	text, spans := buildHeaderSpans("/文档/c", theme, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " @  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -157,10 +159,11 @@ func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 		{start: 16, end: 19, action: actionBack},
 		{start: 20, end: 23, action: actionForward},
 		{start: 24, end: 27, action: actionReload},
-		{start: 28, end: 31, action: actionOpenConnectionMenu},
-		{start: 32, end: 33, action: actionNavigate, target: "/"},
-		{start: 33, end: 37, action: actionNavigate, target: "/文档"},
-		{start: 38, end: 39, action: actionNavigate, target: "/文档/c"},
+		{start: 28, end: 31, action: actionToggleFileIcons},
+		{start: 32, end: 35, action: actionOpenConnectionMenu},
+		{start: 36, end: 37, action: actionNavigate, target: "/"},
+		{start: 37, end: 41, action: actionNavigate, target: "/文档"},
+		{start: 42, end: 43, action: actionNavigate, target: "/文档/c"},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("got %d spans, want %d: %+v", len(spans), len(want), spans)
@@ -1231,6 +1234,71 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	}
 	if got := p.table.GetCell(hardlinkRow, colType).Text; got != " " {
 		t.Errorf("hardlinked.txt type cell = %q, want blank (a plain, non-executable file)", got)
+	}
+}
+
+// TestAddRowRendersFileIconsWhenEnabled pins the "zi" icon mode's own
+// rendering: with Panel.fileIcons set, the type cell shows
+// fileicons.For's own glyph (not typeGlyph's plain character) and picks
+// up entryColor — the deliberate exception TestAddRowTypeCellStaysPlainText
+// pins for the default, disabled mode (see addRow's own doc comment).
+func TestAddRowRendersFileIconsWhenEnabled(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "broken-link")); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	settings := config.DefaultSettings()
+	settings.FileIcons = true
+	p, err := NewPanel(tview.NewApplication(), dir, theme, settings)
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	byName := make(map[string]int)
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
+			byName[ref.name] = row
+		}
+	}
+	cellForeground := func(cell *tview.TableCell) tcell.Color {
+		fg, _, _ := cell.Style.Decompose()
+		return fg
+	}
+
+	goRow, ok := byName["main.go"]
+	if !ok {
+		t.Fatal("main.go row not found")
+	}
+	wantGoGlyph := string(fileicons.For(fsops.TypeFile, "main.go", 0o644))
+	if got := p.table.GetCell(goRow, colType).Text; got != wantGoGlyph {
+		t.Errorf("main.go type cell = %q, want the Go language icon %q, not typeGlyph's plain character", got, wantGoGlyph)
+	}
+	if got := cellForeground(p.table.GetCell(goRow, colType)); got != theme.EntryNormal {
+		t.Errorf("main.go type cell foreground = %v, want theme.EntryNormal (%v), same as entryColor gives its name cell", got, theme.EntryNormal)
+	}
+
+	execRow, ok := byName["run.sh"]
+	if !ok {
+		t.Fatal("run.sh row not found")
+	}
+	if got := cellForeground(p.table.GetCell(execRow, colType)); got != theme.EntryExecutable {
+		t.Errorf("run.sh type cell foreground = %v, want theme.EntryExecutable (%v) in icon mode", got, theme.EntryExecutable)
+	}
+
+	brokenRow, ok := byName["broken-link"]
+	if !ok {
+		t.Fatal("broken-link row not found")
+	}
+	if got := cellForeground(p.table.GetCell(brokenRow, colType)); got != theme.EntryError {
+		t.Errorf("broken-link type cell foreground = %v, want theme.EntryError (%v) in icon mode", got, theme.EntryError)
 	}
 }
 
@@ -2657,7 +2725,7 @@ func TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode(t *testing.T) {
 // TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
 // real user report that switching the header into edit mode reset the
 // editable path's own start column to 0 instead of lining up with
-// where p.header was already showing it, right after the "∎/~↑<>⭯ "
+// where p.header was already showing it, right after the "∎/~↑<>⭯ⓘ "
 // buttons. headerEdit's own label (see NewPanel) is what reserves that
 // same width now — there's nothing further for openEdit itself to do
 // per call, so this only needs checking once, right after construction.
