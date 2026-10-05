@@ -304,11 +304,22 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     survive only until breakthrough's own exit now survives a
 //     restart as well.
 type Settings struct {
-	ColorScheme       string
-	Language          string
-	ShowHidden        bool
-	SizeBytes         bool
-	MtimeUnix         bool
+	ColorScheme string
+	Language    string
+	ShowHidden  bool
+	SizeBytes   bool
+	MtimeUnix   bool
+
+	// FileIcons is the "zi" chord's own setting: whether the listing's
+	// type column shows a Nerd Font icon per entry (internal/fileicons)
+	// instead of the plain MC-style type character (ui.typeGlyph).
+	// False by default — unlike ShowHidden/SizeBytes/MtimeUnix, this
+	// isn't just a display preference but depends on whether the user's
+	// own terminal font actually renders Nerd Font glyphs, which this
+	// application has no way to detect (see internal/fileicons' own
+	// package doc comment) — so the safe, always-correct choice is the
+	// unconditional ASCII/MC-compatible fallback until the user opts in.
+	FileIcons         bool
 	Pager             string
 	TrashConfirm      bool
 	TrashPersistent   bool
@@ -469,6 +480,7 @@ func DefaultSettings() Settings {
 		ShowHidden:        true,
 		SizeBytes:         false,
 		MtimeUnix:         false,
+		FileIcons:         false,
 		Pager:             "builtin",
 		TrashConfirm:      false,
 		TrashPersistent:   true,
@@ -584,6 +596,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.SizeBytes)
 	case "mtime_unix":
 		return parseBool(&s.MtimeUnix)
+	case "file_icons":
+		return parseBool(&s.FileIcons)
 	case "pager":
 		s.Pager = value
 	case "trash_confirm":

@@ -161,7 +161,8 @@ terminal.
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trashbin), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
-  format, `zo` split orientation, `zw` swap panes), `o` for Options
+  format, `zi` Nerd Font icons, `zo` split orientation, `zw` swap panes),
+  `o` for Options
   (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
   toggles without opening the screen at all). See
   [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).

@@ -111,8 +111,11 @@ var helpText = strings.TrimLeft(`
                 jk SSH Keys screen (local key pairs under ~/.ssh)
     p  perms    pm chmod · po chown
     z  disp     zN sort by name · zS sort by size · zT sort by time ·
-                zs size format · zt time format · zf filter · zo split
-                orientation · zw swap panes · zr reload
+                zs size format · zt time format · zi Nerd Font icons
+                (needs a terminal font that actually has them — off by
+                default; the header row's own "ⓘ" button, right after
+                the reload "⭯" one, does the same) · zf filter · zo
+                split orientation · zw swap panes · zr reload
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
     o  opts     oo Options screen · om Mouse reporting on/off
