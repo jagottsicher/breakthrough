@@ -19,6 +19,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/fileicons"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -244,6 +245,11 @@ type Panel struct {
 	// onExpandDetails both exist.
 	onOpenConnectionMenu func()
 
+	// onToggleFileIcons is Root's own wiring for the header's "ⓘ"
+	// button (see buildHeaderSpans/actionToggleFileIcons, and
+	// Root.toggleFileIcons) — same reason onOpenConnectionMenu exists.
+	onToggleFileIcons func()
+
 	// detailsExpandBtn sits right after filterMenuBtn in the same header
 	// row (see NewPanel) — a "<" button that expands the Details
 	// sidebar, per the user's own explicit request for a mouse
@@ -420,18 +426,26 @@ type Panel struct {
 	// once hidden, without each one needing its own "is this row actually
 	// hidden right now" check.
 	//
-	// All three are seeded in NewPanel from the on-disk settings (see
-	// config.Settings.ShowHidden/SizeBytes/MtimeUnix, and
+	// All four are seeded in NewPanel from the on-disk settings (see
+	// config.Settings.ShowHidden/SizeBytes/MtimeUnix/FileIcons, and
 	// config.DefaultSettings for what a fresh install starts with), and
 	// persisted back to it on every toggle (see Root.toggleHidden/
-	// toggleSizeBytes/toggleMtimeUnix) — per the user's own request,
-	// breakthrough remembers the last session's choice for these three
-	// specifically, rather than always resetting to the built-in default.
+	// toggleSizeBytes/toggleMtimeUnix/toggleFileIcons) — per the user's
+	// own request, breakthrough remembers the last session's choice for
+	// these specifically, rather than always resetting to the built-in
+	// default.
 	sortKey        sortKey
 	sortDescending bool
 	sizeBytes      bool
 	mtimeUnix      bool
 	showHidden     bool
+
+	// fileIcons is the "zi" chord's own setting: true shows a Nerd Font
+	// icon per entry (internal/fileicons.For) in the type column instead
+	// of typeGlyph's plain MC-style character — see addRow. False by
+	// default (config.Settings.FileIcons's own doc comment explains
+	// why).
+	fileIcons bool
 
 	// onError reports failures the user should see (a directory that
 	// can't be read, a refused rename) to whoever owns the UI's error
@@ -641,6 +655,7 @@ const (
 	actionForward                                // step forward in history
 	actionUp                                     // go up one level (the parent directory)
 	actionReload                                 // re-read the current directory from disk
+	actionToggleFileIcons                        // flip the "zi" Nerd Font icon toggle (see Root.toggleFileIcons)
 	actionOpenConnectionMenu                     // open the connection dropdown (see connectionmenu.go)
 )
 
@@ -760,6 +775,7 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		showHidden:       settings.ShowHidden,
 		sizeBytes:        settings.SizeBytes,
 		mtimeUnix:        settings.MtimeUnix,
+		fileIcons:        settings.FileIcons,
 		filterPersistent: settings.FilterPersistent,
 		lastNameClickRow: -1, // see its own doc comment: 0 is a real row, -1 isn't
 	}
@@ -2015,7 +2031,21 @@ func (p *Panel) addRow(row int, ref rowRef) {
 	// user's own explicit request. MC's own skin colors both; this app
 	// deliberately doesn't, so the narrow type column reads as pure
 	// punctuation rather than a second, redundant color cue.
-	typeCell := tview.NewTableCell(string(typeGlyph(ref))).SetTextColor(p.theme.Text)
+	//
+	// Icon mode (p.fileIcons, the "zi" chord — see internal/fileicons)
+	// is the one deliberate exception: a monochrome Nerd Font glyph
+	// reads as decoration rather than information unless it's colored,
+	// so it reuses entryColor, the exact color the name cell right next
+	// to it already gets, rather than inventing a second color scheme.
+	var typeText string
+	typeColor := p.theme.Text
+	if p.fileIcons {
+		typeText = string(fileicons.For(ref.entryType, ref.name, ref.mode))
+		typeColor = p.entryColor(ref)
+	} else {
+		typeText = string(typeGlyph(ref))
+	}
+	typeCell := tview.NewTableCell(typeText).SetTextColor(typeColor)
 	p.table.SetCell(row, colType, typeCell)
 
 	modCell := tview.NewTableCell(string(modifierGlyph(ref))).SetTextColor(p.theme.Text)
@@ -3640,9 +3670,9 @@ func (p *Panel) previousPath() (string, bool) {
 	return prev.path, true
 }
 
-// headerButtons is the fixed definition of the seven nav buttons shown
+// headerButtons is the fixed definition of the eight nav buttons shown
 // at the start of the header row — Start/Root/Home/Up/Back/Forward/
-// Reload — as one shared slice so buildHeaderSpans (the colored,
+// Reload/Icons — as one shared slice so buildHeaderSpans (the colored,
 // clickable rendering) and headerButtonPrefix (headerEdit's own
 // plain-text label — see its own doc comment) can never drift out of
 // column-alignment with each other, verified by
@@ -3685,6 +3715,18 @@ func (p *Panel) previousPath() (string, bool) {
 // user's own explicit request to reorder it there. The g chord
 // family's own go-to members (gg/gh/gu/gp/gn — see chordFamilies in
 // keymap.go) mirror this same order, per that same request.
+//
+// "ⓘ" (U+24D8, circled Latin small letter i) is the "zi" chord's own
+// mouse equivalent (Root.toggleFileIcons/actionToggleFileIcons) — per
+// the user's own explicit request, placed right after Reload. Plain
+// BMP Unicode (Enclosed Alphanumerics), not a Nerd Font PUA glyph: the
+// button that turns Nerd Font icons on has to render on its own,
+// without a Nerd Font, the same reasoning connectionButtonGlyph's own
+// doc comment gives for picking "@" over a pictograph. Its own column
+// never changes — on/off is shown by whether the row it labels has
+// actually switched to icon mode, not by swapping this glyph itself,
+// the same "fixed glyph, state read elsewhere" shape
+// connectionButtonGlyph already establishes.
 var headerButtons = []struct {
 	glyph  string
 	action headerAction
@@ -3696,6 +3738,7 @@ var headerButtons = []struct {
 	{"<", actionBack},
 	{">", actionForward},
 	{"⭯", actionReload},
+	{"ⓘ", actionToggleFileIcons},
 }
 
 // headerButtonSeparator is the plain, normal-background column between
@@ -4015,6 +4058,10 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 		// behavior the "z" chord's own Reload member and
 		// setShowHidden/toggleHidden already have too.
 		p.reportError(p.load(p.path))
+	case actionToggleFileIcons:
+		if p.onToggleFileIcons != nil {
+			p.onToggleFileIcons()
+		}
 	case actionNavigate:
 		p.reportError(p.navigate(span.target))
 	}
@@ -4025,7 +4072,7 @@ func (p *Panel) runHeaderAction(span headerSpan) {
 // showing (see effectiveBrowsePath), since p.path itself stays frozen
 // at wherever the panel was before the search throughout that mode —
 // and moves keyboard focus there. headerEdit's own label (see NewPanel)
-// already reserves the "∎/~↑<>⭯ " prefix's own width, so the path text
+// already reserves the "∎/~↑<>⭯ⓘ " prefix's own width, so the path text
 // itself lines up with wherever p.header was just showing it — nothing
 // further to do here for that.
 func (p *Panel) openEdit() {

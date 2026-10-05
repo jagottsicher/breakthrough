@@ -96,6 +96,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "file_icons",
+			Default:     strconv.FormatBool(d.FileIcons),
+			Kind:        KindBool,
+			Summary:     "Show a Nerd Font icon per entry instead of the plain type character.",
+			Implemented: true,
+		},
+		{
 			Key:         "restore_tabs",
 			Default:     strconv.FormatBool(d.RestoreTabs),
 			Kind:        KindBool,
