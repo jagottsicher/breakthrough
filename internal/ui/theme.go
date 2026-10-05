@@ -493,7 +493,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
 	r.sshShellMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshShellMenuTitleBar.SetTextColor(theme.Text)
+	// TextColor, not Text: this title bar carries its own close glyph
+	// (toolWindowCloseButtonCol/toolWindowCloseGlyph, see sshshell.go),
+	// the same shape every other close-glyph title bar in this app uses
+	// (propertiesTitleBar, searchTitleBar, ...) — all of them paint with
+	// TextColor. connectionMenuTitleBar's own Text above is a different
+	// widget (newPlainTitleBar, no close glyph at all) that this one's
+	// doc comment wrongly borrowed the color field from along with the
+	// background. Both fields are "white" in DefaultTheme, so this was
+	// invisible there — a custom scheme where they differ would show it.
+	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.duplicateForm.SetLabelColor(theme.TextColor)

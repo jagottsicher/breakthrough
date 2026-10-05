@@ -1848,8 +1848,8 @@
     },
     {
       "path": "internal/ui/sshshell.go",
-      "size": 26177,
-      "sha256": "838d0f149c5132c9d22593f61f0eee0c939ca6742e0b59173b8d67ba49ea225f"
+      "size": 26760,
+      "sha256": "d99df988121324641b66bb1d1a36a5c4324891cff8e3743ce17c5f6a425a4611"
     },
     {
       "path": "internal/ui/sshshell_test.go",
@@ -1923,8 +1923,8 @@
     },
     {
       "path": "internal/ui/theme.go",
-      "size": 32822,
-      "sha256": "23f955d3af121c887f77dbc9e4c2c9f9f62fbc3ff78037848c282f737df22d81"
+      "size": 33458,
+      "sha256": "1dfb251763489f8e4d4d3c69eae5f336ddf0e98b312716fb01c56f064a9d131e"
     },
     {
       "path": "internal/ui/toolbox.go",
@@ -37572,7 +37572,7 @@
       "name": "SetFormAttributes",
       "kind": "method",
       "receiver": "*plainFormCheckbox",
-      "line": 370
+      "line": 379
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37580,7 +37580,7 @@
       "name": "openSSHShellDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 381
+      "line": 390
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37588,7 +37588,7 @@
       "name": "newSSHShellForm",
       "kind": "method",
       "receiver": "*Root",
-      "line": 419
+      "line": 428
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37596,7 +37596,7 @@
       "name": "newSSHShellButtons",
       "kind": "method",
       "receiver": "*Root",
-      "line": 472
+      "line": 481
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37604,7 +37604,7 @@
       "name": "newSSHShellLayout",
       "kind": "method",
       "receiver": "*Root",
-      "line": 507
+      "line": 516
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37612,7 +37612,7 @@
       "name": "renderSSHShellTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 526
+      "line": 535
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37620,7 +37620,7 @@
       "name": "captureSSHShellTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 540
+      "line": 549
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37628,7 +37628,7 @@
       "name": "setSSHShellStatus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 553
+      "line": 562
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37636,7 +37636,7 @@
       "name": "cancelSSHShell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 558
+      "line": 567
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37644,14 +37644,14 @@
       "name": "runSSHShellFromDialog",
       "kind": "method",
       "receiver": "*Root",
-      "line": 566
+      "line": 575
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "sshConnectionFailedExitCode",
       "kind": "const",
-      "line": 607
+      "line": 616
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37659,21 +37659,21 @@
       "name": "launchSSHShell",
       "kind": "method",
       "receiver": "*Root",
-      "line": 627
+      "line": 636
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "sshShellArgv",
       "kind": "function",
-      "line": 661
+      "line": 670
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/sshshell.go",
       "name": "defaultSSHPort",
       "kind": "const",
-      "line": 692
+      "line": 701
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -39487,35 +39487,35 @@
       "file": "internal/ui/theme.go",
       "name": "styleButton",
       "kind": "function",
-      "line": 630
+      "line": 639
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleList",
       "kind": "function",
-      "line": 645
+      "line": 654
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleInput",
       "kind": "function",
-      "line": 654
+      "line": 663
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDisabledInput",
       "kind": "function",
-      "line": 667
+      "line": 676
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDropDown",
       "kind": "function",
-      "line": 676
+      "line": 685
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41768,5 +41768,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "d70c24d35fcfecf3ef2d7617505109d96750464860bfec1b0a032be4fdf5e0f6"
+  "merkle_root": "e78d31633c5eb802a3b7a7a1c96536a2c2417ebeb0ab367ca3a35e881f39531b"
 }

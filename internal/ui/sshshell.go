@@ -355,6 +355,15 @@ func newPlainFormCheckbox(label string) *plainFormCheckbox {
 // reads as plain text sitting on the dialog's own background, not a
 // second input box next to the real ones.
 func (c *plainFormCheckbox) paint(theme config.ResolvedTheme) {
+	// Box's own backgroundColor (tview's default Styles.
+	// PrimitiveBackgroundColor unless set here) is what Draw actually
+	// fills the whole item's rect with before the label/dot are drawn
+	// on top — labelStyle itself never carries a background (SetLabel-
+	// Color only ever touches its foreground, see tview's own Checkbox),
+	// so leaving this call out left that default color showing behind
+	// the label text and the padding after the dot, the exact "falsche
+	// Backgroundfarbe (zum größten Teil)" the user reported live.
+	c.SetBackgroundColor(theme.SurfaceBackground)
 	c.SetLabelColor(theme.TextColor)
 	style := tcell.StyleDefault.Foreground(theme.TextColor).Background(theme.SurfaceBackground)
 	c.SetUncheckedStyle(style)
