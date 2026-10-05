@@ -1054,6 +1054,34 @@ func TestTypeGlyph(t *testing.T) {
 	}
 }
 
+// TestFallbackTypeText pins fallbackTypeText's own enrichment on top of
+// typeGlyph for the non-icon mode: every case typeGlyph already marks
+// stays exactly as typeGlyph says (first three cases below, one
+// representative each), and only the blank "plain, non-executable
+// file" case gets a square/text/image mark instead, based on name.
+func TestFallbackTypeText(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  rowRef
+		want string
+	}{
+		{"directory unaffected", rowRef{entryType: fsops.TypeDir}, "/"},
+		{"executable unaffected", rowRef{entryType: fsops.TypeFile, mode: 0o755}, "*"},
+		{"broken symlink unaffected", rowRef{entryType: fsops.TypeSymlinkBroken}, "!"},
+		{"plain file, no extension", rowRef{entryType: fsops.TypeFile, name: "README"}, fallbackFile},
+		{"plain file, unrelated extension", rowRef{entryType: fsops.TypeFile, name: "data.bin"}, fallbackFile},
+		{"text-ish extension", rowRef{entryType: fsops.TypeFile, name: "notes.txt"}, fallbackTextLines},
+		{"text-ish extension, case-insensitive", rowRef{entryType: fsops.TypeFile, name: "NOTES.TXT"}, fallbackTextLines},
+		{"conf counts as text-ish here", rowRef{entryType: fsops.TypeFile, name: "app.conf"}, fallbackTextLines},
+		{"image extension", rowRef{entryType: fsops.TypeFile, name: "photo.png"}, fallbackImage},
+	}
+	for _, tt := range tests {
+		if got := fallbackTypeText(tt.ref); got != tt.want {
+			t.Errorf("%s: fallbackTypeText() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestEntryColor(t *testing.T) {
 	p := Panel{theme: config.DefaultTheme().Resolve()}
 
@@ -1232,8 +1260,8 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	if got := p.table.GetCell(hardlinkRow, colModifier).Text; got != "&" {
 		t.Errorf("hardlinked.txt modifier cell = %q, want %q", got, "&")
 	}
-	if got := p.table.GetCell(hardlinkRow, colType).Text; got != " " {
-		t.Errorf("hardlinked.txt type cell = %q, want blank (a plain, non-executable file)", got)
+	if got := p.table.GetCell(hardlinkRow, colType).Text; got != fallbackTextLines {
+		t.Errorf("hardlinked.txt type cell = %q, want %q (fallbackTypeText's own text-ish mark for .txt)", got, fallbackTextLines)
 	}
 }
 

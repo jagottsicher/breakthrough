@@ -2043,7 +2043,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		typeText = string(fileicons.For(ref.entryType, ref.name, ref.mode))
 		typeColor = p.entryColor(ref)
 	} else {
-		typeText = string(typeGlyph(ref))
+		typeText = fallbackTypeText(ref)
 	}
 	typeCell := tview.NewTableCell(typeText).SetTextColor(typeColor)
 	p.table.SetCell(row, colType, typeCell)
@@ -2676,6 +2676,71 @@ func typeGlyph(ref rowRef) byte {
 		}
 	}
 	return ' '
+}
+
+// fallbackFile/fallbackTextLines/fallbackImage are addRow's own
+// enrichment on top of typeGlyph's strict MC compatibility, for the
+// non-icon mode (p.fileIcons off — see fallbackTypeText): a plain
+// Unicode mark instead of typeGlyph's bare blank for an ordinary,
+// non-executable file, per the user's own explicit request — a
+// bisected square (reading as a closed book/folded document) for
+// anything else, three stacked lines for a text-ish extension, a
+// landscape rectangle for an image one. Deliberately plain Unicode
+// (Geometric Shapes/Mathematical Operators, not a Nerd Font PUA
+// glyph): this is the mode that has to render correctly with no
+// special font at all, the same "breakthrough already commits to
+// UTF-8 support" territory checkboxText's own doc comment already
+// stakes out for ○/●, not internal/fileicons' own territory.
+const (
+	fallbackFile      = "◫" // U+25EB WHITE SQUARE WITH VERTICAL BISECTING LINE — per the user's own explicit pick
+	fallbackTextLines = "≡" // U+2261 IDENTICAL TO — reads as three stacked horizontal lines
+	fallbackImage     = "▭" // U+25AD WHITE RECTANGLE — a landscape frame, suggesting a picture
+)
+
+// fallbackTextExtensions/fallbackImageExtensions are this fallback
+// scheme's own small, independent copies — not internal/fileicons'
+// textExtensions/imageExtensions (those pick a Nerd Font icon for a
+// much finer-grained set of types, including some, like ".conf", that
+// get their own distinct icon there rather than sharing the text one —
+// this coarser, font-free scheme only ever distinguishes three things:
+// "looks like text", "looks like an image", or "anything else").
+var fallbackTextExtensions = []string{".txt", ".md", ".yml", ".yaml", ".conf"}
+var fallbackImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}
+
+// fallbackTypeText is what addRow shows in the type column when icon
+// mode (p.fileIcons) is off: typeGlyph's own MC-compatible character
+// for every case it already marks (directory, symlink, executable, the
+// four special device/IPC types — never touched here), but
+// fallbackImage/fallbackTextLines/fallbackFile instead of a bare
+// blank for an ordinary, non-executable file, so this mode
+// distinguishes a plain file from a text-ish or image-ish one too, not
+// only from everything typeGlyph already marks.
+func fallbackTypeText(ref rowRef) string {
+	glyph := typeGlyph(ref)
+	if glyph != ' ' {
+		return string(glyph)
+	}
+	lower := strings.ToLower(ref.name)
+	if hasAnyNameSuffix(lower, fallbackImageExtensions) {
+		return fallbackImage
+	}
+	if hasAnyNameSuffix(lower, fallbackTextExtensions) {
+		return fallbackTextLines
+	}
+	return fallbackFile
+}
+
+// hasAnyNameSuffix reports whether lowerName ends in one of exts (each
+// already lowercase) — the same shape isArchiveName's own loop uses,
+// shared here since fallbackTypeText needs it against two different
+// extension lists.
+func hasAnyNameSuffix(lowerName string, exts []string) bool {
+	for _, ext := range exts {
+		if strings.HasSuffix(lowerName, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // entryColor sets a row's name apart by color for every case worth
