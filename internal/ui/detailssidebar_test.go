@@ -315,12 +315,15 @@ func TestToggleDetailsSidebarShortcutWorksWhilePropertiesOpen(t *testing.T) {
 	}
 }
 
-// TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight pins the
-// sizing contract from the user's own request: at least a third of the
-// screen's width, flush against its right edge, and — for now — its
-// full height top to bottom (see detailsSidebarSize's own doc comment
-// on why the top/bottom margin is deliberately not done here yet).
-func TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight(t *testing.T) {
+// TestInfoSidebarSizeIsAtLeastOneThirdWidthAndClearsTheBottomBars pins
+// the sizing contract from the user's own request: at least a third of
+// the screen's width, flush against its right edge, full height top to
+// bottom minus detailsSidebarBottomRows at the end — kept clear of
+// mainLayout's own bashConsole/buttonBar/statusBar rows there, which
+// used to sit directly on top of the sidebar's own last three content
+// lines (see detailsSidebarSize's own doc comment). Leaving two rows
+// clear at the top as well is a separate, still undone follow-up.
+func TestInfoSidebarSizeIsAtLeastOneThirdWidthAndClearsTheBottomBars(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -346,8 +349,8 @@ func TestInfoSidebarSizeIsAtLeastOneThirdWidthAndFullHeight(t *testing.T) {
 	if x+width != 90 {
 		t.Errorf("sidebar isn't flush against the right edge: x=%d width=%d, screen width=90", x, width)
 	}
-	if y != 0 || height != 40 {
-		t.Errorf("y,height = %d,%d, want 0,40 (the screen's full height)", y, height)
+	if want := 40 - detailsSidebarBottomRows; y != 0 || height != want {
+		t.Errorf("y,height = %d,%d, want 0,%d (the screen's height minus the bottom bars)", y, height, want)
 	}
 }
 
