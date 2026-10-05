@@ -377,8 +377,8 @@ func (c *plainFormCheckbox) paint(theme config.ResolvedTheme) {
 // comment). labelWidth/labelColor still apply, the same as every
 // other item sharing this form, so labels all line up and match.
 func (c *plainFormCheckbox) SetFormAttributes(labelWidth int, labelColor, bgColor, fieldTextColor, fieldBgColor tcell.Color) tview.FormItem {
-	c.Checkbox.SetLabelWidth(labelWidth)
-	c.Checkbox.SetLabelColor(labelColor)
+	c.SetLabelWidth(labelWidth)
+	c.SetLabelColor(labelColor)
 	return c
 }
 
