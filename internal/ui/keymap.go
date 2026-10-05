@@ -343,7 +343,15 @@ func chordFamilies() []chordFamily {
 			// header's own "@" button (see buildHeaderSpans) is this
 			// same action's mouse equivalent.
 			{'c', "Connect…", func(r *Root) { r.openConnectionMenu() }},
-			// "Messages", after gr/gb/gc: the status bar's own badge
+			// "SSH shell…" ("go ssh"), right after Connect: the same
+			// "go to a whole further place" role, just landing in a
+			// real interactive remote shell (Suspend + exec ssh, see
+			// sshshell.go) instead of mounting an SFTP panel. Reuses
+			// the exact same connections.json history gc/"@" already
+			// read and write — per the user's own explicit request —
+			// so a host saved from either one shows up in both.
+			{'s', "SSH shell…", func(r *Root) { r.openSSHShellMenu() }},
+			// "Messages", after gr/gb/gc/gs: the status bar's own badge
 			// (bottombar.go) is this same action's mouse equivalent, the
 			// same "gehe zu einem ganzen weiteren Ort" role gb/gc already
 			// have — see feature_ideas.txt's own "3a. Benachrichtigungen".

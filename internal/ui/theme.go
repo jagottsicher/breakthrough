@@ -463,6 +463,53 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.connectionMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
 	r.connectionMenuTitleBar.SetTextColor(theme.Text)
 
+	// The "gs" SSH shell dropdown/dialog pair (see sshshell.go) — the
+	// identical two blocks just above, mirrored one-for-one: "Add new
+	// ssh connection" styled like connectForm/connectLayout, the
+	// dropdown ("Open shell to") styled like connectionMenuTable/
+	// TitleBar. Every new widget in this app needs its own explicit
+	// line here — nothing above or below gets colored automatically
+	// just by existing.
+	r.sshShellForm.SetBackgroundColor(theme.SurfaceBackground)
+	r.sshShellForm.SetLabelColor(theme.TextColor)
+	r.sshShellForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
+	r.sshShellForm.SetFieldTextColor(theme.TextColor)
+	// The four checkboxes' own dot/label colors — repainted explicitly,
+	// not left to Form's own generic pass above: see plainFormCheckbox's
+	// own doc comment (sshshell.go) for why that pass must never be
+	// allowed to reach them the way it does every ordinary field.
+	r.sshShellAgentCheckbox.paint(theme)
+	r.sshShellCompressionCheckbox.paint(theme)
+	r.sshShellVerboseCheckbox.paint(theme)
+	r.sshShellX11Checkbox.paint(theme)
+	r.sshShellStatus.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.sshShellCancelBtn, theme)
+	styleButton(r.sshShellOpenBtn, theme)
+	r.sshShellTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.sshShellTitleBar.SetTextColor(theme.TextColor)
+
+	r.sshShellMenuTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.sshShellMenuTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
+	// InputFocusedBackground, not SurfaceBackground: the user's own
+	// explicit, live, twice-repeated report was that this didn't read as
+	// a real title bar at all next to every other one in the app (Help,
+	// Properties, Search, ...), all of which paint with
+	// InputFocusedBackground — see that same list of SetBackgroundColor
+	// calls above. connectionMenuTitleBar's own SurfaceBackground a few
+	// lines up is a deliberate, different choice for that specific
+	// widget (a small dropdown anchored under a header button, no close
+	// glyph at all — see its own doc comment) that this one's own first
+	// draft wrongly copied along with the close-glyph padding logic it
+	// borrowed from renderHelpTitleBar instead.
+	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	// TextColor, not Text — see this block's own doc comment just above:
+	// every close-glyph title bar in this app (propertiesTitleBar,
+	// searchTitleBar, ...) paints with TextColor, not connectionMenu-
+	// TitleBar's own Text.
+	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
+
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)
 	r.duplicateForm.SetLabelColor(theme.TextColor)
 	r.duplicateForm.SetFieldBackgroundColor(theme.InputFocusedBackground)
