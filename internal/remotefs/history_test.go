@@ -140,6 +140,38 @@ func TestRecordAttemptTrimsHistoryToTheMaxEntryCount(t *testing.T) {
 	}
 }
 
+// TestRecordAttemptKeepsDistinctShellFlagVariantsAsSeparateEntries
+// pins the user's own explicit request for the "gs" SSH shell dropdown
+// (see internal/ui's sshshell.go): the same Host/User, opened once
+// with a shell flag on and once with it off, must both land in
+// history as their own entry rather than one overwriting the other —
+// unlike every other RecordAttempt case above, where re-recording the
+// exact same Connection is deliberately a move-to-front, not a second
+// entry.
+func TestRecordAttemptKeepsDistinctShellFlagVariantsAsSeparateEntries(t *testing.T) {
+	withTestConfigHome(t)
+	plain := Connection{Host: "a.example.com", User: "jens"}
+	withCompression := Connection{Host: "a.example.com", User: "jens", ShellCompression: true}
+
+	if err := RecordAttempt(plain, false); err != nil {
+		t.Fatalf("RecordAttempt(plain): %v", err)
+	}
+	if err := RecordAttempt(withCompression, false); err != nil {
+		t.Fatalf("RecordAttempt(withCompression): %v", err)
+	}
+
+	entries, err := LoadHistory()
+	if err != nil {
+		t.Fatalf("LoadHistory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("len(entries) = %d, want 2 — a flag-only difference must stay a separate entry, not overwrite the other", len(entries))
+	}
+	if !entries[0].ShellCompression || entries[1].ShellCompression {
+		t.Errorf("entries = %+v, want the most recently recorded (ShellCompression=true) at the front, the plain one still behind it", entries)
+	}
+}
+
 func TestRemoveFromHistoryDropsExactlyThatOneEntry(t *testing.T) {
 	withTestConfigHome(t)
 	a := Connection{Host: "a.example.com", User: "jens"}

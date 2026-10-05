@@ -165,20 +165,33 @@ func (r *Root) captureDetailsTitleBarMouse(action tview.MouseAction, event *tcel
 	return tview.MouseConsumed, nil
 }
 
+// detailsSidebarBottomRows is how many rows detailsSidebarSize leaves
+// clear at the screen's own bottom edge — mainLayout's own bashConsole/
+// buttonBar/statusBar (root.go), one row each, always reserved there
+// regardless of whether the bash console is actually shown. Before this,
+// the sidebar ran flush to the screen's last row, same as those three
+// bars' own row span, so its own last three content lines sat directly
+// behind them — the user's own explicit, live report.
+const detailsSidebarBottomRows = 3
+
 // detailsSidebarSize sizes the sidebar against the whole screen (Root's
 // own rect, like helpSize — see clampToScreen's own doc comment on why
 // Help uses the same base instead of clampToPanel): at least a third of
-// the screen's width, and — for now — its full height, top to bottom.
-// Leaving two rows clear at the top and three at the bottom (to stay
-// clear of the header and the button bar/status bar/bash console rows)
-// is a deliberate follow-up, not done here yet.
+// the screen's width, full height top to bottom minus
+// detailsSidebarBottomRows at the very end. Leaving two rows clear at
+// the top as well (to stay clear of the header) is a separate, still
+// undone follow-up — not part of the user's own request here.
 func (r *Root) detailsSidebarSize() (width, height int) {
 	_, _, screenWidth, screenHeight := r.GetRect()
 	width = screenWidth / 3
 	if width < detailsSidebarMinWidth {
 		width = detailsSidebarMinWidth
 	}
-	return width, screenHeight
+	height = screenHeight - detailsSidebarBottomRows
+	if height < 1 {
+		height = screenHeight
+	}
+	return width, height
 }
 
 // repositionDetailsSidebar (re)computes the sidebar's own rect from

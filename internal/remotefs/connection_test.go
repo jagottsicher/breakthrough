@@ -45,3 +45,23 @@ func TestConnectionEqualDistinguishesDifferentUsersOnTheSameHost(t *testing.T) {
 		t.Error("Equal(a, b) = true, want false — different users are different endpoints, even on the same host")
 	}
 }
+
+// TestConnectionEqualDistinguishesDifferentShellFlags pins the user's
+// own explicit request: the same Host/User/Port, opened once with an
+// SSH shell flag on and once with it off, must stay two distinct
+// history entries rather than being treated as the same connection.
+func TestConnectionEqualDistinguishesDifferentShellFlags(t *testing.T) {
+	a := Connection{Host: "example.com", User: "jens"}
+	b := Connection{Host: "example.com", User: "jens", ShellCompression: true}
+	if a.Equal(b) {
+		t.Error("Equal(a, b) = true, want false — differing only in ShellCompression must still compare unequal")
+	}
+}
+
+func TestConnectionEqualIgnoresNothingWhenAllShellFlagsMatch(t *testing.T) {
+	a := Connection{Host: "example.com", User: "jens", ShellAgentForwarding: true, ShellVerbose: true}
+	b := Connection{Host: "example.com", User: "jens", ShellAgentForwarding: true, ShellVerbose: true}
+	if !a.Equal(b) {
+		t.Error("Equal(a, b) = false, want true — identical Host/User/Port and identical shell flags are the same endpoint")
+	}
+}
