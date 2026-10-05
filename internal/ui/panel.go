@@ -2043,7 +2043,7 @@ func (p *Panel) addRow(row int, ref rowRef) {
 		typeText = string(fileicons.For(ref.entryType, ref.name, ref.mode))
 		typeColor = p.entryColor(ref)
 	} else {
-		typeText = string(typeGlyph(ref))
+		typeText = fallbackTypeText(ref)
 	}
 	typeCell := tview.NewTableCell(typeText).SetTextColor(typeColor)
 	p.table.SetCell(row, colType, typeCell)
@@ -2678,6 +2678,125 @@ func typeGlyph(ref rowRef) byte {
 	return ' '
 }
 
+// fallbackFile/fallbackTextLines/fallbackImage are addRow's own
+// enrichment on top of typeGlyph's strict MC compatibility, for the
+// non-icon mode (p.fileIcons off — see fallbackTypeText): a plain
+// Unicode mark instead of typeGlyph's bare blank for an ordinary,
+// non-executable file, per the user's own explicit request — a
+// bisected square (reading as a closed book/folded document) for
+// anything else, three stacked lines for a text-ish extension, a
+// square containing a smaller one for an image, a dotted circle —
+// standing in for the Nerd Font gear/wrench icons internal/fileicons
+// uses for the same two cases (glyphConfig/glyphBuildTool), which this
+// font-free mode has no safe equivalent of — for a config file or
+// Makefile, a square with one quadrant filled for an archive/
+// compressed file, and a square with horizontal fill for a PDF.
+// Deliberately plain Unicode (Geometric Shapes/Mathematical
+// Operators, not a Nerd Font PUA glyph): this is the mode that has to
+// render correctly with no special font at all, the same "breakthrough
+// already commits to UTF-8 support" territory checkboxText's own doc
+// comment already stakes out for ○/●, not internal/fileicons' own
+// territory.
+const (
+	fallbackFile      = "◫" // U+25EB WHITE SQUARE WITH VERTICAL BISECTING LINE — per the user's own explicit pick
+	fallbackTextLines = "≡" // U+2261 IDENTICAL TO — reads as three stacked horizontal lines
+	fallbackImage     = "▣" // U+25A3 WHITE SQUARE CONTAINING BLACK SMALL SQUARE — per the user's own explicit pick
+	fallbackTool      = "◌" // U+25CC DOTTED CIRCLE — per the user's own explicit pick, as a gear/wrench stand-in
+	fallbackArchive   = "◲" // U+25F2 WHITE SQUARE WITH LOWER RIGHT QUADRANT — per the user's own explicit pick
+	fallbackPDF       = "▤" // U+25A4 SQUARE WITH HORIZONTAL FILL — per the user's own explicit pick
+)
+
+// fallbackTextExtensions/fallbackImageExtensions/fallbackToolExtensions/
+// fallbackArchiveExtensions/fallbackPDFExtensions are this fallback
+// scheme's own small, independent copies — not internal/fileicons'
+// textExtensions/imageExtensions/extensionIcons/archiveExtensions/
+// compressedExtensions (those pick a Nerd Font icon for a much
+// finer-grained set of types, including splitting a real multi-file
+// container from a bare single-file compression format — this
+// coarser, font-free scheme lumps both into one "archive" mark, per
+// the user's own explicit request covering both "zip" and "archive").
+// fallbackToolNames mirrors exactNameIcons' own "Makefile" special
+// case the same way, independently.
+var fallbackTextExtensions = []string{".txt", ".md", ".yml", ".yaml"}
+var fallbackImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}
+var fallbackToolExtensions = []string{".conf"}
+var fallbackToolNames = []string{"makefile"}
+var fallbackArchiveExtensions = []string{
+	".zip", ".tar", ".tgz", ".tbz", ".tbz2", ".txz",
+	".tar.gz", ".tar.bz2", ".tar.xz",
+	".7z", ".rar", ".jar",
+	".gz", ".bz2", ".xz", ".lzma", ".lz", ".zst",
+}
+var fallbackPDFExtensions = []string{".pdf"}
+
+// diskImageExtensions is entryColor's own small list for the disk-image
+// name color (statusLoadColor) — mirrors internal/fileicons' own
+// ".iso"/".img" entries (glyphDiskImage) independently, the same
+// "small, independent copy" shape every other fallback*/entryColor
+// extension list here already uses.
+var diskImageExtensions = []string{".iso", ".img"}
+
+// isFallbackToolName reports whether lowerName (already lowercased)
+// exactly matches one of fallbackToolNames — shared by fallbackTypeText
+// and entryColor so both agree on what counts as a build-tool file by
+// name alone.
+func isFallbackToolName(lowerName string) bool {
+	for _, name := range fallbackToolNames {
+		if lowerName == name {
+			return true
+		}
+	}
+	return false
+}
+
+// fallbackTypeText is what addRow shows in the type column when icon
+// mode (p.fileIcons) is off: typeGlyph's own MC-compatible character
+// for every case it already marks (directory, symlink, executable, the
+// four special device/IPC types — never touched here), but
+// fallbackImage/fallbackTextLines/fallbackTool/fallbackFile instead of
+// a bare blank for an ordinary, non-executable file, so this mode
+// distinguishes a plain file from a text-ish, image-ish, or tool-ish
+// one too, not only from everything typeGlyph already marks.
+func fallbackTypeText(ref rowRef) string {
+	glyph := typeGlyph(ref)
+	if glyph != ' ' {
+		return string(glyph)
+	}
+	lower := strings.ToLower(ref.name)
+	if isFallbackToolName(lower) {
+		return fallbackTool
+	}
+	if hasAnyNameSuffix(lower, fallbackArchiveExtensions) {
+		return fallbackArchive
+	}
+	if hasAnyNameSuffix(lower, fallbackPDFExtensions) {
+		return fallbackPDF
+	}
+	if hasAnyNameSuffix(lower, fallbackImageExtensions) {
+		return fallbackImage
+	}
+	if hasAnyNameSuffix(lower, fallbackToolExtensions) {
+		return fallbackTool
+	}
+	if hasAnyNameSuffix(lower, fallbackTextExtensions) {
+		return fallbackTextLines
+	}
+	return fallbackFile
+}
+
+// hasAnyNameSuffix reports whether lowerName ends in one of exts (each
+// already lowercase) — the same shape isArchiveName's own loop uses,
+// shared here since fallbackTypeText needs it against two different
+// extension lists.
+func hasAnyNameSuffix(lowerName string, exts []string) bool {
+	for _, ext := range exts {
+		if strings.HasSuffix(lowerName, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 // entryColor sets a row's name apart by color for every case worth
 // flagging beyond the type glyph alone, per p.theme's own Entry* fields
 // (the default scheme's red/green for EntryError/EntryExecutable match
@@ -2733,6 +2852,26 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 		return p.theme.EntryExecutable
 	case ref.name != ".." && strings.HasPrefix(ref.name, "."):
 		return p.theme.EntryHidden
+	// The five cases below color a plain file's own name by what it
+	// looks like — images, PDFs, config/build-tool files, text, and
+	// disk images — reusing the exact colors the status bar's own
+	// disk/inode/kernel/uptime/load segments already use (per the
+	// user's own explicit request), not a dedicated theme field. They
+	// sit here, below every behavioral/structural state above
+	// (broken, special, unreadable, archive, symlink, executable,
+	// hidden): those facts about the entry outrank a cosmetic "this
+	// looks like a document" hint, so none of them is ever overridden
+	// by one.
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackImageExtensions):
+		return statusDiskColor
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackPDFExtensions):
+		return statusInodeColor
+	case !ref.isDir && (isFallbackToolName(strings.ToLower(ref.name)) || hasAnyNameSuffix(strings.ToLower(ref.name), fallbackToolExtensions)):
+		return statusKernelColor
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackTextExtensions):
+		return statusUptimeColor
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), diskImageExtensions):
+		return statusLoadColor
 	default:
 		return p.theme.EntryNormal
 	}

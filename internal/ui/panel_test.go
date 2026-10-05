@@ -1054,6 +1054,42 @@ func TestTypeGlyph(t *testing.T) {
 	}
 }
 
+// TestFallbackTypeText pins fallbackTypeText's own enrichment on top of
+// typeGlyph for the non-icon mode: every case typeGlyph already marks
+// stays exactly as typeGlyph says (first three cases below, one
+// representative each), and only the blank "plain, non-executable
+// file" case gets a square/text/image mark instead, based on name.
+func TestFallbackTypeText(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  rowRef
+		want string
+	}{
+		{"directory unaffected", rowRef{entryType: fsops.TypeDir}, "/"},
+		{"executable unaffected", rowRef{entryType: fsops.TypeFile, mode: 0o755}, "*"},
+		{"broken symlink unaffected", rowRef{entryType: fsops.TypeSymlinkBroken}, "!"},
+		{"plain file, no extension", rowRef{entryType: fsops.TypeFile, name: "README"}, fallbackFile},
+		{"plain file, unrelated extension", rowRef{entryType: fsops.TypeFile, name: "data.bin"}, fallbackFile},
+		{"text-ish extension", rowRef{entryType: fsops.TypeFile, name: "notes.txt"}, fallbackTextLines},
+		{"text-ish extension, case-insensitive", rowRef{entryType: fsops.TypeFile, name: "NOTES.TXT"}, fallbackTextLines},
+		{"image extension", rowRef{entryType: fsops.TypeFile, name: "photo.png"}, fallbackImage},
+		{"conf counts as tool-ish here", rowRef{entryType: fsops.TypeFile, name: "app.conf"}, fallbackTool},
+		{"Makefile exact name", rowRef{entryType: fsops.TypeFile, name: "Makefile"}, fallbackTool},
+		{"Makefile case-insensitive", rowRef{entryType: fsops.TypeFile, name: "MAKEFILE"}, fallbackTool},
+		{"makefile.bak is not the exact name", rowRef{entryType: fsops.TypeFile, name: "makefile.bak"}, fallbackFile},
+		{"zip archive", rowRef{entryType: fsops.TypeFile, name: "backup.zip"}, fallbackArchive},
+		{"tar.gz archive", rowRef{entryType: fsops.TypeFile, name: "archive.tar.gz"}, fallbackArchive},
+		{"bare compressed file", rowRef{entryType: fsops.TypeFile, name: "data.gz"}, fallbackArchive},
+		{"pdf", rowRef{entryType: fsops.TypeFile, name: "report.pdf"}, fallbackPDF},
+		{"pdf case-insensitive", rowRef{entryType: fsops.TypeFile, name: "REPORT.PDF"}, fallbackPDF},
+	}
+	for _, tt := range tests {
+		if got := fallbackTypeText(tt.ref); got != tt.want {
+			t.Errorf("%s: fallbackTypeText() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestEntryColor(t *testing.T) {
 	p := Panel{theme: config.DefaultTheme().Resolve()}
 
@@ -1129,6 +1165,44 @@ func TestEntryColor(t *testing.T) {
 	}
 	if got := p.entryColor(rowRef{entryType: fsops.TypeSymlinkBroken, name: ".old-link"}); got != p.theme.EntryError {
 		t.Errorf("a broken symlink that's also a dotfile should still show EntryError, got %v, want %v", got, p.theme.EntryError)
+	}
+
+	// The five name-based colors below reuse the status bar's own
+	// disk/inode/kernel/uptime/load segment colors, per the user's own
+	// explicit request — checked last, so none of them ever overrides
+	// a behavioral/structural state (unreadable, archive, symlink,
+	// executable, hidden) already covered above.
+	nameColorCases := []struct {
+		name string
+		want tcell.Color
+	}{
+		{"photo.png", statusDiskColor},
+		{"report.pdf", statusInodeColor},
+		{"app.conf", statusKernelColor},
+		{"Makefile", statusKernelColor},
+		{"notes.txt", statusUptimeColor},
+		{"README.md", statusUptimeColor},
+		{"disk.iso", statusLoadColor},
+		{"disk.img", statusLoadColor},
+	}
+	for _, c := range nameColorCases {
+		if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: c.name}); got != c.want {
+			t.Errorf("%s color = %v, want %v", c.name, got, c.want)
+		}
+	}
+	// A directory merely named like one of these must not pick up the
+	// color either — the same "name alone isn't enough, isDir matters"
+	// rule isArchiveName's own test above already pins for EntryArchive.
+	if got := p.entryColor(rowRef{entryType: fsops.TypeDir, isDir: true, name: "report.pdf"}); got != p.theme.EntryNormal {
+		t.Errorf("a directory named like a PDF should NOT get the PDF color, got %v, want %v (EntryNormal)", got, p.theme.EntryNormal)
+	}
+	// An executable file wins over any of the five name colors.
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: "notes.txt", mode: 0o755}); got != p.theme.EntryExecutable {
+		t.Errorf("an executable .txt file should show EntryExecutable, not the text name color, got %v, want %v", got, p.theme.EntryExecutable)
+	}
+	// A hidden dotfile wins over any of the five name colors too.
+	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".notes.txt"}); got != p.theme.EntryHidden {
+		t.Errorf("a hidden .txt file should show EntryHidden, not the text name color, got %v, want %v", got, p.theme.EntryHidden)
 	}
 }
 
@@ -1232,8 +1306,8 @@ func TestAddRowRendersTypeAndModifierColumns(t *testing.T) {
 	if got := p.table.GetCell(hardlinkRow, colModifier).Text; got != "&" {
 		t.Errorf("hardlinked.txt modifier cell = %q, want %q", got, "&")
 	}
-	if got := p.table.GetCell(hardlinkRow, colType).Text; got != " " {
-		t.Errorf("hardlinked.txt type cell = %q, want blank (a plain, non-executable file)", got)
+	if got := p.table.GetCell(hardlinkRow, colType).Text; got != fallbackTextLines {
+		t.Errorf("hardlinked.txt type cell = %q, want %q (fallbackTypeText's own text-ish mark for .txt)", got, fallbackTextLines)
 	}
 }
 
