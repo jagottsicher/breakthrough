@@ -45,6 +45,12 @@ const (
 	connectDialogPage  = "connect-dialog"
 	hostKeyConfirmPage = "host-key-confirm"
 	connectionMenuPage = "connection-menu"
+	// The "gs" SSH shell dropdown and its own dialog (see sshshell.go)
+	// — reuses the exact same connections.json history connectdialog.go/
+	// connectionmenu.go read and write, just for a real interactive
+	// shell instead of mounting an SFTP panel.
+	sshShellMenuPage   = "ssh-shell-menu"
+	sshShellDialogPage = "ssh-shell-dialog"
 	// pasteConflictPage's own dialog is built in pasteconflict.go
 	// (newPasteConflictDialog), not here — kept in this block anyway,
 	// like every other page name, so cmd/breakthrough and tests never
@@ -770,6 +776,46 @@ type Root struct {
 	// in its place, the same "✕" pattern connectionHistoryRemoveGlyph
 	// already established rather than a dedicated row of its own.
 	connectionMenuActiveRow int
+
+	// sshShellMenuTable/TitleBar/Layout is the "gs" chord's own dropdown
+	// (see sshshell.go) — the same per-cell Table shape
+	// connectionMenuTable just above establishes, reading the exact
+	// same history, just with no "active"/eject concept of its own:
+	// launching a shell is a one-off, there's nothing ongoing to detach
+	// from the way an SFTP-mounted panel has. sshShellMenuTitleBar
+	// carries its own close glyph (see renderSSHShellMenuTitleBar), the
+	// same toolWindowCloseButtonCol convention Help/Properties already
+	// use — per the user's own explicit request that this dropdown (and
+	// the dialog below) offer a mouse-clickable close, not just Escape.
+	sshShellMenuTable       *tview.Table
+	sshShellMenuTitleBar    *tview.TextView
+	sshShellMenuLayout      *tview.Flex
+	sshShellMenuHistoryRows map[int]remotefs.Connection
+
+	// sshShellForm/.../sshShellLayout make up "Add new ssh connection"
+	// (see sshshell.go) — Host/Port/User, the same three fields
+	// connectForm already has, plus four checkboxes for the one-off
+	// ssh flags a saved entry can carry (see remotefs.Connection's own
+	// Shell* fields; plainFormCheckbox for why these are that type, not
+	// a bare *tview.Checkbox). No password field: a real `ssh` process
+	// gets the real terminal handed to it (see launchSSHShell), so it
+	// prompts for one itself exactly like running ssh from a bare shell
+	// would. sshShellTitleBar carries its own close glyph, the same as
+	// sshShellMenuTitleBar above (see renderSSHShellTitleBar).
+	sshShellForm                *tview.Form
+	sshShellHostField           *tview.InputField
+	sshShellPortField           *tview.InputField
+	sshShellUserField           *tview.InputField
+	sshShellAgentCheckbox       *plainFormCheckbox
+	sshShellCompressionCheckbox *plainFormCheckbox
+	sshShellVerboseCheckbox     *plainFormCheckbox
+	sshShellX11Checkbox         *plainFormCheckbox
+	sshShellStatus              *tview.TextView
+	sshShellCancelBtn           *tview.Button
+	sshShellOpenBtn             *tview.Button
+	sshShellButtons             *tview.Flex
+	sshShellTitleBar            *tview.TextView
+	sshShellLayout              *tview.Flex
 
 	// duplicateForm/duplicateButtons/duplicateLayout together make up the
 	// "Multiply" dialog (see duplicate.go). Unlike Sed Replace's own
@@ -2025,6 +2071,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.connectionMenuTitleBar = newPlainTitleBar("Connections")
 	r.connectionMenuLayout = r.newConnectionMenuLayout()
 
+	// The "gs" SSH shell dropdown ("Open shell to") and its own "Add
+	// new ssh connection" dialog (see sshshell.go) — the same
+	// two-pieces shape the Connect dialog/
+	// connection dropdown pair just above has, reading the exact same
+	// history.
+	r.sshShellForm = r.newSSHShellForm()
+	r.sshShellButtons = r.newSSHShellButtons()
+	r.sshShellLayout = r.newSSHShellLayout()
+	r.sshShellMenuTable = r.newSSHShellMenuTable()
+	r.sshShellMenuTitleBar = r.newSSHShellMenuTitleBar()
+	r.sshShellMenuLayout = r.newSSHShellMenuLayout()
+
 	// The Batch Rename screen (see batchrename.go) — built once here,
 	// the same as the Options screen just below; only its contents are
 	// rebuilt per open (see openBatchRename).
@@ -2274,6 +2332,8 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(connectDialogPage, r.connectLayout, false, false)
 	r.AddPage(hostKeyConfirmPage, r.hostKeyConfirmLayout, false, false)
 	r.AddPage(connectionMenuPage, r.connectionMenuLayout, false, false)
+	r.AddPage(sshShellDialogPage, r.sshShellLayout, false, false)
+	r.AddPage(sshShellMenuPage, r.sshShellMenuLayout, false, false)
 	r.newNotifyBar()
 
 	r.SetMouseCapture(r.captureOutsideClick)

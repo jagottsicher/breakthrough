@@ -48,6 +48,21 @@ type Connection struct {
 	User string
 
 	AuthMethod AuthMethod
+
+	// ShellAgentForwarding/ShellCompression/ShellVerbose/
+	// ShellX11Forwarding are only meaningful for a history entry
+	// created by internal/ui's "gs" SSH shell dropdown (sshshell.go) —
+	// Dial itself never reads them, an SFTP connection has no concept
+	// of any of the four. Carried right on Connection rather than a
+	// separate type specifically so Equal below (and therefore
+	// RecordAttempt's own dedup-on-reconnect) keys on them too: the
+	// user's own explicit request was that the same Host/User, opened
+	// once with a flag on and once with it off, stay two distinct
+	// history entries rather than overwriting each other.
+	ShellAgentForwarding bool `json:",omitempty"`
+	ShellCompression     bool `json:",omitempty"`
+	ShellVerbose         bool `json:",omitempty"`
+	ShellX11Forwarding   bool `json:",omitempty"`
 }
 
 // Port22IfZero returns c.Port, or defaultSFTPPort if it's unset.
@@ -83,7 +98,17 @@ func (c Connection) Label() string {
 
 // Equal reports whether c and other identify the same endpoint —
 // Port22IfZero'd on both sides first, so "no port typed" and an
-// explicit "22" compare equal, the same connection either way.
+// explicit "22" compare equal, the same connection either way. Also
+// compares the four Shell* fields (see Connection's own doc comment on
+// why): an SFTP-only Connection never sets any of them, so this
+// doesn't change anything for that case — both sides are already all
+// false — it only starts to matter once two SSH-shell history entries
+// share a Host/User/Port but differ in which flags they were opened
+// with, which must compare unequal to stay two separate entries.
 func (c Connection) Equal(other Connection) bool {
-	return c.Host == other.Host && c.User == other.User && c.Port22IfZero() == other.Port22IfZero()
+	return c.Host == other.Host && c.User == other.User && c.Port22IfZero() == other.Port22IfZero() &&
+		c.ShellAgentForwarding == other.ShellAgentForwarding &&
+		c.ShellCompression == other.ShellCompression &&
+		c.ShellVerbose == other.ShellVerbose &&
+		c.ShellX11Forwarding == other.ShellX11Forwarding
 }

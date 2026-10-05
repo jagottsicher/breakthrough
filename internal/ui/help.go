@@ -90,9 +90,11 @@ var helpText = strings.TrimLeft(`
   4000ms by default:
 
     g  goto     gg top · gh home · gu up · gp back · gn forward ·
-                gr / (root) · gb Trashbin · gc Connect… · gm Messages ·
-                ge Email (launches neomutt/aerc/himalaya/mail/mailx,
-                whichever is installed — configurable under Options)
+                gr / (root) · gb Trashbin · gc Connect… · gs SSH shell…
+                (a real interactive remote shell, same connection list
+                as gc) · gm Messages · ge Email (launches neomutt/aerc/
+                himalaya/mail/mailx, whichever is installed —
+                configurable under Options)
     m  menu     mm Context menu (what a bare "m" always opened before
                 this family existed) · mf New file · md New dir ·
                 mw Open with… · mt tail -f · ma Select all · mA Deselect all ·
@@ -296,6 +298,24 @@ var helpText = strings.TrimLeft(`
   describe the remote machine, not this one, once connected. chown,
   Compare, Batch rename, Sed Replace, and Properties as a whole still
   refuse outright for now.
+
+  "gs" opens a second dropdown ("Open shell to"), shaped like the one
+  above but for a real interactive SSH shell instead of mounting a
+  panel — reads and writes the exact same connection history, so a
+  host saved from either one shows up in both. Picking a row launches
+  a real ssh process with the whole terminal handed over (same Suspend
+  mechanism Email above uses), so a remote "sudo -i"/"su -" identity
+  switch just works, the same as typing it at any other real shell.
+  "+ New connection" (or "✎" on an existing row) opens "Add new ssh
+  connection": Host/Port/User plus four one-off flags — Agent forwarding (-A),
+  Compression (-C), Verbose (-v), X11 forwarding (-X) — no password
+  field, since the real ssh process prompts for one itself once it has
+  the terminal. Unlike the connection dropdown above, the same Host/
+  User can appear more than once here: each distinct combination of
+  the four flags is kept as its own history entry (shown with a
+  trailing "[A C]"-style suffix naming which ones), so "this host,
+  with compression" and "this host, without it" don't overwrite each
+  other. "x"/Delete removes a row from history, same as above.
 
   h   Compute hashes (SHA-256/SHA-1/MD5/SHA-512/BLAKE2b-512) for
       Properties if that's open, otherwise the Details sidebar; shown in
