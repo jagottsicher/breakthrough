@@ -1848,8 +1848,8 @@
     },
     {
       "path": "internal/ui/sshshell.go",
-      "size": 26760,
-      "sha256": "d99df988121324641b66bb1d1a36a5c4324891cff8e3743ce17c5f6a425a4611"
+      "size": 26742,
+      "sha256": "07ba1a7be3fa288315583256fe265b258c2d81ea80cb7fd751ee15ee8ce78d1b"
     },
     {
       "path": "internal/ui/sshshell_test.go",
@@ -41768,5 +41768,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "e78d31633c5eb802a3b7a7a1c96536a2c2417ebeb0ab367ca3a35e881f39531b"
+  "merkle_root": "c3a270446149b10a5c9cbbaa4be719c46beee4a92163aca3a0b04c953722a224"
 }
