@@ -492,16 +492,22 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.sshShellMenuTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.SelectionBackground).
 		Foreground(theme.TextColor))
-	r.sshShellMenuTitleBar.SetBackgroundColor(theme.SurfaceBackground)
-	// TextColor, not Text: this title bar carries its own close glyph
-	// (toolWindowCloseButtonCol/toolWindowCloseGlyph, see sshshell.go),
-	// the same shape every other close-glyph title bar in this app uses
-	// (propertiesTitleBar, searchTitleBar, ...) — all of them paint with
-	// TextColor. connectionMenuTitleBar's own Text above is a different
-	// widget (newPlainTitleBar, no close glyph at all) that this one's
-	// doc comment wrongly borrowed the color field from along with the
-	// background. Both fields are "white" in DefaultTheme, so this was
-	// invisible there — a custom scheme where they differ would show it.
+	// InputFocusedBackground, not SurfaceBackground: the user's own
+	// explicit, live, twice-repeated report was that this didn't read as
+	// a real title bar at all next to every other one in the app (Help,
+	// Properties, Search, ...), all of which paint with
+	// InputFocusedBackground — see that same list of SetBackgroundColor
+	// calls above. connectionMenuTitleBar's own SurfaceBackground a few
+	// lines up is a deliberate, different choice for that specific
+	// widget (a small dropdown anchored under a header button, no close
+	// glyph at all — see its own doc comment) that this one's own first
+	// draft wrongly copied along with the close-glyph padding logic it
+	// borrowed from renderHelpTitleBar instead.
+	r.sshShellMenuTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	// TextColor, not Text — see this block's own doc comment just above:
+	// every close-glyph title bar in this app (propertiesTitleBar,
+	// searchTitleBar, ...) paints with TextColor, not connectionMenu-
+	// TitleBar's own Text.
 	r.sshShellMenuTitleBar.SetTextColor(theme.TextColor)
 
 	r.duplicateForm.SetBackgroundColor(theme.SurfaceBackground)

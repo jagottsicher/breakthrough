@@ -1923,8 +1923,8 @@
     },
     {
       "path": "internal/ui/theme.go",
-      "size": 33458,
-      "sha256": "1dfb251763489f8e4d4d3c69eae5f336ddf0e98b312716fb01c56f064a9d131e"
+      "size": 33788,
+      "sha256": "a5663b5d968ae004e68c70f6430aefcc86922ff4c88ad4dce04694d0c7bd55a1"
     },
     {
       "path": "internal/ui/toolbox.go",
@@ -39487,35 +39487,35 @@
       "file": "internal/ui/theme.go",
       "name": "styleButton",
       "kind": "function",
-      "line": 639
+      "line": 645
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleList",
       "kind": "function",
-      "line": 654
+      "line": 660
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleInput",
       "kind": "function",
-      "line": 663
+      "line": 669
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDisabledInput",
       "kind": "function",
-      "line": 676
+      "line": 682
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDropDown",
       "kind": "function",
-      "line": 685
+      "line": 691
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -41768,5 +41768,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "c3a270446149b10a5c9cbbaa4be719c46beee4a92163aca3a0b04c953722a224"
+  "merkle_root": "8a4349c184dfa842d521b46c33aaca30dc79230abdf23aeedb5b7e1223c652df"
 }
