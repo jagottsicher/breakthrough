@@ -191,6 +191,20 @@ type Panel struct {
 	filterSizeText  string
 	filterMtimeText string
 
+	// filterLabelIDs is the filter-menu's own fourth filter row ("Labels",
+	// between Modified time and Exclude dirs) — ids 0-9 (0 "no label",
+	// 1-9 the real color labels), each independently toggleable, ORed
+	// together: any entry carrying one of the currently-on ids survives,
+	// per the user's own explicit request ("wählt man jetzt 2,3,4 ...
+	// also automatisch oder verknüpft"). All false is this filter's own
+	// "inactive" state — the same "nothing ticked means don't filter on
+	// this at all" contract filterSizeActive/filterMtimeActive already
+	// have, just expressed as "no id is on" rather than a single bool,
+	// since there's no one field here that would mean the same thing
+	// (see anyLabelFilterActive). Index 0 is "no label" (id 0, never a
+	// real color — see filelabels.MaxLabelID), not a placeholder.
+	filterLabelIDs [filelabels.MaxLabelID + 1]bool
+
 	// filterPersistent mirrors config.Settings.FilterPersistent (see its
 	// own doc comment there for the full reasoning) — set once from it
 	// in NewPanel, updated for every open tab together by
@@ -1297,11 +1311,13 @@ func (p *Panel) load(dir string) error {
 		p.filterSizeText = ""
 		p.filterMtimeText = ""
 		p.filterExcludeDirs = false
+		p.filterLabelIDs = [filelabels.MaxLabelID + 1]bool{}
 	}
 	beforeFilterCount := len(entries)
 	entries = filterByText(entries, p.filterText, p.filterRegex, p.filterGlobActive, p.filterExcludeDirs)
 	entries = filterBySize(entries, p.filterSizeText, p.filterSizeActive, p.filterExcludeDirs)
 	entries = filterByMtime(entries, p.filterMtimeText, p.filterMtimeActive, time.Now(), p.filterExcludeDirs)
+	entries = filterByLabel(entries, p.filterLabelIDs, p.filterExcludeDirs, p.labels, abs, p.isRemote(), p.inArchiveView())
 	// See filterMatchesNothing's own doc comment: beforeFilterCount > 0
 	// is what tells "the filter hid everything" apart from "this
 	// directory is simply empty" — filterByText itself is a no-op on an
@@ -1774,14 +1790,16 @@ func filterModeLabel(regex bool) string {
 // sit flush against this slot's own right edge (where the tab strip
 // picks up right after it) regardless of how wide the indicator is.
 //
-// Every one of the three rows only actually counts once it's both
+// Every one of the four rows only actually counts once it's both
 // switched on *and* has something to filter by — matching filterByText/
-// filterBySize/filterByMtime's own real no-op condition (see their own
-// doc comments) — since the indicator's whole point is "filtering is
-// genuinely narrowing the list right now", not just "a checkbox
-// happens to be checked" (a size/modified-time row ticked on with its
-// own expression field still empty doesn't filter anything yet either,
-// the same as the glob row's own checkbox with nothing typed into it).
+// filterBySize/filterByMtime/filterByLabel's own real no-op condition
+// (see their own doc comments) — since the indicator's whole point is
+// "filtering is genuinely narrowing the list right now", not just "a
+// checkbox happens to be checked" (a size/modified-time row ticked on
+// with its own expression field still empty doesn't filter anything
+// yet either, the same as the glob row's own checkbox with nothing
+// typed into it, or the Labels row with every one of its own ten ids
+// still off).
 //
 // Also colors the "Nx" itself EntryError's own red whenever
 // filterMatchesNothing is true (see its own doc comment) — a filter
@@ -1791,8 +1809,8 @@ func filterModeLabel(regex bool) string {
 // at "Nx" in a color already meaningful elsewhere as "something's
 // wrong" is far more likely to register than noticing a small, neutral
 // count is present at all.
-// activeFilterCount is how many of the filter-menu's three real filter
-// rows (glob, size, modified-time) are genuinely narrowing the listing
+// activeFilterCount is how many of the filter-menu's four real filter
+// rows (glob, size, modified-time, labels) are genuinely narrowing the listing
 // right now — matching filterByText/filterBySize/filterByMtime's own
 // real no-op condition (see their own doc comments): a row ticked on
 // with its own expression field still empty doesn't count, the same as
@@ -1812,6 +1830,9 @@ func (p *Panel) activeFilterCount() int {
 		count++
 	}
 	if p.filterMtimeActive && p.filterMtimeText != "" {
+		count++
+	}
+	if anyLabelFilterActive(p.filterLabelIDs) {
 		count++
 	}
 	return count
@@ -1966,6 +1987,66 @@ func filterByMtime(entries []fsops.Entry, expr string, active bool, now time.Tim
 			continue
 		}
 		if f.Match(e.ModTime) {
+			visible = append(visible, e)
+		}
+	}
+	return visible
+}
+
+// anyLabelFilterActive reports whether ids has at least one entry
+// toggled on — the filter-menu's own Labels row has no single bool the
+// way filterSizeActive/filterMtimeActive do (there's no one field that
+// means "this whole row is on" independent of which specific ids are
+// selected), so this is what filterByLabel/activeFilterCount/load's own
+// reset block all share instead of each looping ids themselves.
+func anyLabelFilterActive(ids [filelabels.MaxLabelID + 1]bool) bool {
+	for _, on := range ids {
+		if on {
+			return true
+		}
+	}
+	return false
+}
+
+// filterByLabel narrows entries to those whose own color label (id 0
+// "no label" included) is one of the ids currently toggled on in the
+// filter-menu's own Labels row — ORed together, per the user's own
+// explicit request ("wählt man jetzt 2,3,4 ... also automatisch oder
+// verknüpft"): any entry carrying one of them survives, not just one
+// matched in isolation.
+//
+// A no-op (every entry kept) when: no id is toggled on at all (see
+// anyLabelFilterActive — the same "nothing means don't filter"
+// contract every other filter-menu row already has); labels is nil (no
+// writable state directory — see filelabels.DefaultPath's own doc
+// comment, and Store.Get's own nil-receiver safety, which would
+// otherwise make id 0 ("no label") match everything and 1-9 match
+// nothing, a silently wrong result rather than "this filter has
+// nothing to say"); or remote/isArchiveView is true — a color label
+// is never tracked for either (see Panel.labelablePath's own identical
+// exclusion for rendering), so filtering by one there would compare
+// against local paths that merely happen to share a name.
+//
+// excludeDirs mirrors filterByText/filterBySize/filterByMtime's own
+// parameter of the same name: while on, a directory is never hidden by
+// this filter either, however it would otherwise have matched (or
+// failed to match) — including when id 0 ("no label") is one of the
+// selected ids, which would otherwise hide every unlabeled directory
+// too; the same uniform "Exclude dirs always means all directories
+// show" semantics the other three rows already have, deliberately not
+// special-cased here just because id 0 is involved.
+func filterByLabel(entries []fsops.Entry, ids [filelabels.MaxLabelID + 1]bool, excludeDirs bool, labels *filelabels.Store, dir string, remote, archiveView bool) []fsops.Entry {
+	if !anyLabelFilterActive(ids) || labels == nil || remote || archiveView {
+		return entries
+	}
+	visible := entries[:0]
+	for _, e := range entries {
+		if excludeDirs && e.IsDir {
+			visible = append(visible, e)
+			continue
+		}
+		id := labels.Get(filepath.Join(dir, e.Name))
+		if ids[id] {
 			visible = append(visible, e)
 		}
 	}
