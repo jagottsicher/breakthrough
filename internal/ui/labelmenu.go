@@ -208,3 +208,25 @@ func (r *Root) applyLabel(targets []string, id int) {
 	r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("%s color label on %d item(s)", verb, len(targets)))
 	r.forEachTab(func(p *Panel) { p.repaintLabels() })
 }
+
+// labelStatusBarText is buildStatusBar's own color-label segment (see
+// config.Settings.StatusBarShowLabel) — the cursor row's own label, as
+// the same swatch-plus-name labelMenuRows already renders, or ok false
+// when there's nothing to show: no current row, the row isn't labelable
+// at all (see Panel.labelablePath — the ".." row, a remote panel, an
+// archive-member hit, or browsing inside an archive), or it simply
+// carries no label right now. The overwhelmingly common case, so
+// quietly showing nothing (like every other optional status-bar
+// segment already does) rather than a placeholder is the right default.
+func labelStatusBarText(p *Panel, theme config.ResolvedTheme, settings config.Settings) (string, bool) {
+	row, _ := p.table.GetSelection()
+	ref, ok := p.rowRef(row)
+	if !ok || !p.labelablePath(ref) {
+		return "", false
+	}
+	id := p.labels.Get(ref.path)
+	if id == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("%s %s", labelSwatch(theme, id), settings.LabelName(id)), true
+}

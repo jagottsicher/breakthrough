@@ -34,10 +34,12 @@
 package filelabels
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -326,4 +328,83 @@ func (s *Store) Delete(path string) error {
 		return nil
 	}
 	return s.save()
+}
+
+// FindOrphans returns every currently labeled path whose own parent
+// directory is reachable and listable, but verifiably no longer
+// contains it — the Options screen's own "Remove orphaned labels"
+// cleanup (see internal/ui's labelorphans.go), after an external
+// change (outside breakthrough) removed or renamed something that was
+// labeled.
+//
+// Deliberately a single-level check, not a recursive one: a path whose
+// own parent can no longer even be read (an unmounted USB stick, a
+// disconnected network share) is left alone entirely rather than
+// guessed at from a failed stat — a label under a parent that merely
+// isn't reachable *right now* is not the same thing as one that's
+// provably gone, and treating the two the same would risk silently
+// discarding real, still-valid labels the moment their own filesystem
+// happens to be offline. One consequence of staying single-level: if a
+// labeled directory itself was deleted externally, its own labeled
+// descendants' parent (that now-gone directory) is itself unreadable,
+// so they're skipped too, not flagged orphaned — only an entry whose
+// immediate parent is itself still listable, but simply doesn't list
+// it, ever counts.
+//
+// Paths are grouped and checked by their shared parent directory (at
+// most one os.ReadDir per distinct parent, not per labeled path), both
+// for efficiency against a large label set and so ctx — checked once
+// per distinct parent, not per path — can actually stop a long scan
+// promptly rather than only between individually cheap map lookups. A
+// blocked syscall already in flight (a genuinely hung network mount)
+// can't itself be interrupted this way — no Go API makes that possible
+// — but every parent not yet reached stops being attempted the moment
+// ctx is done.
+func (s *Store) FindOrphans(ctx context.Context) []string {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	paths := make([]string, 0, len(s.labels))
+	for p := range s.labels {
+		paths = append(paths, p)
+	}
+	s.mu.RUnlock()
+	sort.Strings(paths) // deterministic order, and groups same-parent paths together
+
+	var orphans []string
+	var curParent string
+	var curEntries map[string]bool
+	var curErr error
+	haveParent := false
+	for _, p := range paths {
+		parent := filepath.Dir(p)
+		if parent == p {
+			continue // a filesystem root itself — nothing to check it against
+		}
+		if !haveParent || parent != curParent {
+			if ctx.Err() != nil {
+				return orphans
+			}
+			curParent = parent
+			haveParent = true
+			entries, err := os.ReadDir(parent)
+			curErr = err
+			if err == nil {
+				curEntries = make(map[string]bool, len(entries))
+				for _, e := range entries {
+					curEntries[e.Name()] = true
+				}
+			} else {
+				curEntries = nil
+			}
+		}
+		if curErr != nil {
+			continue // parent unreachable right now — skip, not orphaned
+		}
+		if !curEntries[filepath.Base(p)] {
+			orphans = append(orphans, p)
+		}
+	}
+	return orphans
 }

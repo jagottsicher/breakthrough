@@ -271,20 +271,21 @@ type Root struct {
 	// top of itself: a setting's explanation, and a one-line editor for
 	// a typed value. Enum settings need no window of their own —
 	// activating the row cycles them in place (see cycleOptionChoice).
-	optionsLayout           *tview.Flex
-	optionsTitleBar         *tview.TextView
-	optionsHint             *tview.TextView
-	optionsHintSpans        []listHintSpan
-	optionsCategories       *tview.List
-	optionsTable            *tview.Table
-	optionsButtons          *tview.Flex
-	optionsResetCategoryBtn *tview.Button
-	optionsResetAllBtn      *tview.Button
-	optionsEditFileBtn      *tview.Button
-	optionsNewSchemeBtn     *tview.Button
-	optionsCategory         int
-	optionsInfo             *tview.TextView
-	optionsInput            *tview.InputField
+	optionsLayout                *tview.Flex
+	optionsTitleBar              *tview.TextView
+	optionsHint                  *tview.TextView
+	optionsHintSpans             []listHintSpan
+	optionsCategories            *tview.List
+	optionsTable                 *tview.Table
+	optionsButtons               *tview.Flex
+	optionsResetCategoryBtn      *tview.Button
+	optionsResetAllBtn           *tview.Button
+	optionsEditFileBtn           *tview.Button
+	optionsNewSchemeBtn          *tview.Button
+	optionsRemoveOrphanLabelsBtn *tview.Button
+	optionsCategory              int
+	optionsInfo                  *tview.TextView
+	optionsInput                 *tview.InputField
 
 	// The Toolbox screen (see toolbox.go) — a full-screen catalog of
 	// real external networking/hardware tools, each one either run
@@ -1508,17 +1509,18 @@ type Root struct {
 	// empty, never-matching range) whenever its own segment isn't
 	// currently shown at all — the same way buttonBarSpans locate
 	// buttonBar's own many.
-	bashConsole        *tview.Flex
-	bashLine           *tview.TextArea
-	bashHint           *tview.TextView
-	buttonBar          *tview.TextView
-	buttonBarSpans     []buttonBarSpan
-	notifyBadgeSpan    buttonBarSpan
-	clipboardClearSpan buttonBarSpan
-	mailBadgeSpan      buttonBarSpan
-	pasteCancelSpan    buttonBarSpan
-	rsyncCancelSpan    buttonBarSpan
-	compressCancelSpan buttonBarSpan
+	bashConsole         *tview.Flex
+	bashLine            *tview.TextArea
+	bashHint            *tview.TextView
+	buttonBar           *tview.TextView
+	buttonBarSpans      []buttonBarSpan
+	notifyBadgeSpan     buttonBarSpan
+	clipboardClearSpan  buttonBarSpan
+	mailBadgeSpan       buttonBarSpan
+	pasteCancelSpan     buttonBarSpan
+	rsyncCancelSpan     buttonBarSpan
+	compressCancelSpan  buttonBarSpan
+	labelScanCancelSpan buttonBarSpan
 
 	statusBar *tview.TextView
 
@@ -1676,6 +1678,16 @@ type Root struct {
 	// compressQueue mirrors rsyncQueue for a further Compress/Extract
 	// asked for while one is already running — see advanceCompressQueue.
 	compressQueue []compressRequest
+
+	// labelScanCancel is set for as long as the Options screen's own
+	// "Remove orphaned labels" background scan is running (see
+	// labelorphans.go's startOrphanLabelScan) — nil whenever none is,
+	// the same "field itself says whether one is running" shape
+	// rsyncJob/compressJob use, just a bare CancelFunc rather than a
+	// whole job struct: a label scan has no queue, no byte-accurate
+	// progress to track, and nothing else it could ever need to carry.
+	labelScanCancel context.CancelFunc
+
 	// pasteConflictDialog is the one dialog every paste conflict shares
 	// (see newPasteConflictDialog) — built once here, the same as
 	// confirmDialog. pasteConflictDialogTitleBar IS the conflict message
@@ -2442,7 +2454,19 @@ func (r *Root) wirePanel(panel *Panel) {
 	// this sidebar needed one. refreshDetailsSidebar itself is a cheap
 	// no-op whenever the sidebar isn't actually visible, so this costs
 	// nothing extra during plain browsing the rest of the time.
-	panel.table.SetSelectionChangedFunc(func(int, int) { r.refreshDetailsSidebar() })
+	//
+	// refreshStatusBar alongside it, for the same reason: the status
+	// bar's own color-label segment (see buildStatusBar/
+	// StatusBarShowLabel) reads the cursor row too, and the status bar
+	// otherwise only redraws once a second (see its own ticker) — far
+	// too slow to feel responsive to an arrow key. Harmless from a
+	// background tab's own panel too, since buildStatusBar always reads
+	// r.panel (the active one) fresh regardless of which Panel's cursor
+	// actually moved.
+	panel.table.SetSelectionChangedFunc(func(int, int) {
+		r.refreshDetailsSidebar()
+		r.refreshStatusBar()
+	})
 
 	// A content-search match opens in the configured editor, at its
 	// own matched line, instead of just jumping to it (see

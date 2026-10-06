@@ -194,6 +194,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "status_bar_show_label",
+			Default:     strconv.FormatBool(d.StatusBarShowLabel),
+			Kind:        KindBool,
+			Summary:     "Show the cursor row's own color label (swatch and name) in the status bar.",
+			Implemented: true,
+		},
+		{
 			Key:         "duplicate_separator",
 			Default:     d.DuplicateSeparator,
 			Kind:        KindString,

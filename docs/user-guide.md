@@ -2322,6 +2322,16 @@ commented, every setting listed — if you don't have one yet. "New color
 scheme" copies the active scheme under a fresh name and opens that.
 Either way, changes are picked up as soon as the editor closes.
 
+"Remove orphaned labels" scans every path that currently carries a
+color label (see the `zl` chord) in the background — the status bar
+shows "Scanning for orphaned labels…" with a clickable `✕` to stop it
+early — and, once finished, asks before removing any it found (a path
+whose own parent directory is reachable but demonstrably no longer
+contains it; a path under a directory that isn't reachable right now,
+such as an unmounted drive, is left alone rather than guessed at).
+"No orphaned labels found" shows as a quick notification instead when
+there's nothing to remove.
+
 ### Config file format and locations
 
 Plain `key = value` lines, `#` for comments — deliberately the
@@ -2443,6 +2453,7 @@ Every key breakthrough recognizes, with its default:
 | `log_category_remote` | `true` | Log remote connections and SFTP transfers |
 | `log_category_shell` | `true` | Log the bash line, "Open with…", and Edit |
 | `label_1_name` through `label_9_name` | `Label 1` … `Label 9` | Display names for the 9 color labels (the `zl` chord) — label 0 ("no label") is fixed and has no key of its own |
+| `status_bar_show_label` | `true` | Show the cursor row's own color label (swatch and name) in the status bar |
 
 ## Keyboard reference
 

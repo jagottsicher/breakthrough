@@ -331,14 +331,25 @@ type Settings struct {
 	FilterPersistent  bool
 	ChordTimeoutMS    int
 
-	StatusBarShowUsername     bool
-	StatusBarShowMouse        bool
-	StatusBarShowDisk         bool
-	StatusBarShowInodes       bool
-	StatusBarShowKernel       bool
-	StatusBarShowUptime       bool
-	StatusBarShowLoad         bool
-	ShowGitStatus             bool
+	StatusBarShowUsername bool
+	StatusBarShowMouse    bool
+	StatusBarShowDisk     bool
+	StatusBarShowInodes   bool
+	StatusBarShowKernel   bool
+	StatusBarShowUptime   bool
+	StatusBarShowLoad     bool
+	ShowGitStatus         bool
+	// StatusBarShowLabel is whether the cursor row's own color label (see
+	// internal/filelabels and the "zl" chord) shows as its own segment
+	// in the status bar — a 3-character swatch plus the label's current
+	// display name, the same shape buildStatusBar's own git-status
+	// segment already has (also tied to the current row/directory, also
+	// independently toggle-able here). Quietly shows nothing when the
+	// cursor isn't on a labeled, labelable path (see
+	// Panel.labelablePath) — the same "just one less segment" behavior
+	// every other optional status-bar segment already follows.
+	StatusBarShowLabel bool
+
 	DuplicateSeparator        string
 	DuplicateStrategy         string
 	DuplicateSuffixText       string
@@ -546,6 +557,7 @@ func DefaultSettings() Settings {
 		StatusBarShowUptime:   true,
 		StatusBarShowLoad:     true,
 		ShowGitStatus:         true,
+		StatusBarShowLabel:    true,
 
 		DuplicateSeparator:        "_",
 		DuplicateStrategy:         "numbered",
@@ -690,6 +702,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.StatusBarShowLoad)
 	case "show_git_status":
 		return parseBool(&s.ShowGitStatus)
+	case "status_bar_show_label":
+		return parseBool(&s.StatusBarShowLabel)
 	case "duplicate_separator":
 		s.DuplicateSeparator = value
 	case "duplicate_strategy":

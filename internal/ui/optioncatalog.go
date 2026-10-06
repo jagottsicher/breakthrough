@@ -329,6 +329,14 @@ func optionCategories() []optionCategory {
 					func(r *Root) bool { return r.settings.ShowGitStatus },
 					func(r *Root, b bool) { r.settings.ShowGitStatus = b },
 				),
+				statusBarSegmentOption("status_bar_show_label", "Color label",
+					"Whether the cursor row's own color label shows in the status bar "+
+						"— a small colored swatch plus its current display name (see the "+
+						"\"zl\" chord). Quietly shows nothing while the cursor isn't on a "+
+						"labeled, labelable path.",
+					func(r *Root) bool { return r.settings.StatusBarShowLabel },
+					func(r *Root, b bool) { r.settings.StatusBarShowLabel = b },
+				),
 			},
 		},
 		{
@@ -1361,6 +1369,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.StatusBarShowLoad), true
 	case "show_git_status":
 		return strconv.FormatBool(s.ShowGitStatus), true
+	case "status_bar_show_label":
+		return strconv.FormatBool(s.StatusBarShowLabel), true
 	case "duplicate_separator":
 		return s.DuplicateSeparator, true
 	case "duplicate_strategy":

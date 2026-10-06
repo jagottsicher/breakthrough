@@ -1,6 +1,7 @@
 package filelabels
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -297,5 +298,83 @@ func TestEmptyPersistencePathDisablesPersistence(t *testing.T) {
 	}
 	if got := s.Get("/a"); got != 2 {
 		t.Fatalf("Get = %d, want 2 (in-memory should still work)", got)
+	}
+}
+
+func TestFindOrphansDetectsRemovedFile(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "present.txt")
+	if err := os.WriteFile(present, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(dir, "gone.txt") // never actually created
+
+	s, _ := newTestStore(t)
+	if err := s.SetMany([]string{present, gone}, 3); err != nil {
+		t.Fatalf("SetMany: %v", err)
+	}
+
+	orphans := s.FindOrphans(context.Background())
+	if len(orphans) != 1 || orphans[0] != gone {
+		t.Errorf("FindOrphans = %v, want [%s]", orphans, gone)
+	}
+}
+
+func TestFindOrphansSkipsUnreachableParent(t *testing.T) {
+	dir := t.TempDir()
+	missingParent := filepath.Join(dir, "does-not-exist", "file.txt")
+
+	s, _ := newTestStore(t)
+	if err := s.Set(missingParent, 1); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	orphans := s.FindOrphans(context.Background())
+	if len(orphans) != 0 {
+		t.Errorf("FindOrphans = %v, want none — an unreachable parent must be skipped, not flagged orphaned", orphans)
+	}
+}
+
+func TestFindOrphansEmptyWhenEverythingPresent(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.txt")
+	b := filepath.Join(dir, "b.txt")
+	for _, p := range []string{a, b} {
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s, _ := newTestStore(t)
+	if err := s.SetMany([]string{a, b}, 4); err != nil {
+		t.Fatalf("SetMany: %v", err)
+	}
+
+	if orphans := s.FindOrphans(context.Background()); len(orphans) != 0 {
+		t.Errorf("FindOrphans = %v, want none", orphans)
+	}
+}
+
+func TestFindOrphansRespectsCancelledContext(t *testing.T) {
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "gone.txt")
+
+	s, _ := newTestStore(t)
+	if err := s.Set(gone, 1); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	orphans := s.FindOrphans(ctx)
+	if len(orphans) != 0 {
+		t.Errorf("FindOrphans with an already-cancelled context = %v, want none found", orphans)
+	}
+}
+
+func TestFindOrphansNilStoreIsSafe(t *testing.T) {
+	var s *Store
+	if got := s.FindOrphans(context.Background()); got != nil {
+		t.Errorf("nil Store FindOrphans = %v, want nil", got)
 	}
 }
