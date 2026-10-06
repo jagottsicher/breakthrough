@@ -395,6 +395,17 @@ func (r *Root) CycleFocusShortcut() bool {
 			return true
 		}
 
+		// Raise next to the front of the tool-window stack *before*
+		// focusing it, the same ordering (and the same reason — see
+		// its own doc comment at the toolWindow.MouseHandler call site
+		// in toolwindow.go) a mouse click already raises one: never
+		// from inside a SetFocusFunc callback, since Root can still
+		// have real focus this early in a session and SendToFront's
+		// own re-delegation would otherwise land back inside this very
+		// SetFocus call.
+		if tw, ok := next.(*toolWindow); ok {
+			r.SendToFront(tw.id)
+		}
 		r.app.SetFocus(next)
 		return true
 	}

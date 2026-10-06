@@ -119,21 +119,7 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// EditableBackground (the lighter slate gray) while it isn't — the
 	// same two-state scheme Details' own title bar uses (see
 	// detailssidebar.go's newDetailsTitleBar).
-	tw.SetFocusFunc(func() {
-		tw.titleBar.SetBackgroundColor(root.theme.InputFocusedBackground)
-		// Raises this window to the top of the draw/input order among
-		// every other open tool window, per the user's own explicit
-		// report: with several open at once (e.g. ping and nmap side by
-		// side), the one opened first always drew underneath, even once
-		// focused — Pages draws in AddPage order, and nothing before
-		// this reordered it. Fires on both a mouse click (toolWindow's
-		// own MouseHandler calls setFocus(tw)) and Tab-cycling
-		// (CycleFocusShortcut's own r.app.SetFocus(next)), since both
-		// paths end up here. Root itself, not just toolWindow, deliberately
-		// excluded: the main panel and the Details sidebar aren't part of
-		// this dynamic, several-at-once Pages stack at all.
-		root.SendToFront(tw.id)
-	})
+	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputFocusedBackground) })
 	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputBackground) })
 
 	tw.content = tview.NewTextView()
@@ -354,6 +340,21 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 		}
 
 		if action == tview.MouseLeftDown {
+			// Raises this window to the top of the draw/input order
+			// among every other open tool window — before setFocus, not
+			// from inside a SetFocusFunc callback (an earlier version
+			// did exactly that and it was real-world broken: Root
+			// itself can still have focus at this point, early in a
+			// session, since Application.SetRoot's own SetFocus(root)
+			// call in cmd/breakthrough runs after NewRoot's own initial
+			// SetFocus(panel.table) — so SendToFront's own "if
+			// p.HasFocus() { p.Focus(p.setFocus) }" branch re-delegated
+			// focus back into this same in-flight SetFocus call,
+			// corrupting layout. Ordering it this way instead — raise,
+			// then focus — is exactly how pushOverlay (root.go) already
+			// does it for every other overlay, never from inside a
+			// focus callback.
+			tw.root.SendToFront(tw.id)
 			setFocus(tw)
 			switch {
 			case y == wy && x == toolWindowCloseButtonCol(wx, width): // the close glyph, one column in from the title bar's own top-right corner
