@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 )
 
 // filterMenuRow retrieves one of filterMenuLayout's own rows by index —
@@ -76,9 +79,9 @@ func filterMenuFieldRowField(t *testing.T, r *Root, rowIndex int) *tview.InputFi
 // Flex to reach one level deeper into.
 func filterMenuExcludeDirsCheckbox(t *testing.T, r *Root) *tview.TextView {
 	t.Helper()
-	checkbox, ok := filterMenuRow(t, r, 4).(*tview.TextView)
+	checkbox, ok := filterMenuRow(t, r, 5).(*tview.TextView)
 	if !ok {
-		t.Fatal("filterMenuLayout item 4 is not a *tview.TextView (the \"Exclude dirs\" checkbox)")
+		t.Fatal("filterMenuLayout item 5 is not a *tview.TextView (the \"Exclude dirs\" checkbox)")
 	}
 	return checkbox
 }
@@ -185,7 +188,7 @@ func TestClickingMtimeRowDoesNotToggleSizeRow(t *testing.T) {
 // up with a title bar plus all three rows (glob/regex, size,
 // modified-time), each already reflecting the active panel's own
 // current toggle state.
-func TestOpenFilterMenuShowsAllFourRows(t *testing.T) {
+func TestOpenFilterMenuShowsAllFiveRows(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -197,8 +200,8 @@ func TestOpenFilterMenuShowsAllFourRows(t *testing.T) {
 	if r.activePage != filterMenuPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, filterMenuPage)
 	}
-	if got := r.filterMenuLayout.GetItemCount(); got != 5 {
-		t.Fatalf("filterMenuLayout has %d items, want 5 (title bar + 4 rows)", got)
+	if got := r.filterMenuLayout.GetItemCount(); got != 6 {
+		t.Fatalf("filterMenuLayout has %d items, want 6 (title bar + 5 rows)", got)
 	}
 	if got, want := r.filterMenuTitleBar.GetText(true), " Filters "; got != want {
 		t.Errorf("filterMenuTitleBar text = %q, want %q", got, want)
@@ -804,11 +807,12 @@ func TestSlashViaHandlePlainKeyDoesNotReopenAnAlreadyOpenDropdown(t *testing.T) 
 // every one of the dropdown's own seven stops in order (glob checkbox,
 // glob/regex mode button, glob pattern field, size checkbox, size
 // expression field, modified-time checkbox, modified-time expression
-// field) and wrap back to the first, not just exit the dropdown
-// outright the way every one of them used to. Grew from five stops to
-// seven once the size/modified-time rows gained their own real
-// expression fields alongside their checkboxes.
-func TestFilterMenuTabCyclesFocusThroughAllEightStops(t *testing.T) {
+// field, the Labels row) and wrap back to the first, not just exit the
+// dropdown outright the way every one of them used to. Grew from five
+// stops to seven once the size/modified-time rows gained their own
+// real expression fields alongside their checkboxes, then to nine once
+// the Labels row arrived.
+func TestFilterMenuTabCyclesFocusThroughAllNineStops(t *testing.T) {
 	dir := fixtureDir(t)
 	r, err := NewRoot(tview.NewApplication(), dir)
 	if err != nil {
@@ -829,6 +833,10 @@ func TestFilterMenuTabCyclesFocusThroughAllEightStops(t *testing.T) {
 	sizeField := filterMenuFieldRowField(t, r, 2)
 	mtimeCheckbox := filterMenuFieldRowCheckbox(t, r, 3)
 	mtimeField := filterMenuFieldRowField(t, r, 3)
+	labelFilterRow, ok := filterMenuRow(t, r, 4).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 4 is not a *tview.TextView (the Labels row)")
+	}
 	excludeDirsCheckbox := filterMenuExcludeDirsCheckbox(t, r)
 
 	if !r.panel.filterField.HasFocus() {
@@ -859,8 +867,13 @@ func TestFilterMenuTabCyclesFocusThroughAllEightStops(t *testing.T) {
 	}
 
 	mtimeField.InputHandler()(tab, noop)
+	if !labelFilterRow.HasFocus() {
+		t.Error("Tab from the modified-time expression field should move focus to the Labels row")
+	}
+
+	labelFilterRow.InputHandler()(tab, noop)
 	if !excludeDirsCheckbox.HasFocus() {
-		t.Error("Tab from the modified-time expression field should move focus to the exclude-dirs checkbox")
+		t.Error("Tab from the Labels row should move focus to the exclude-dirs checkbox")
 	}
 
 	excludeDirsCheckbox.InputHandler()(tab, noop)
@@ -875,5 +888,186 @@ func TestFilterMenuTabCyclesFocusThroughAllEightStops(t *testing.T) {
 
 	if r.activePage != filterMenuPage {
 		t.Error("cycling focus with Tab should never close the dropdown")
+	}
+}
+
+// filterMenuLabelFilterRow retrieves the Labels row's own TextView.
+func filterMenuLabelFilterRow(t *testing.T, r *Root) *tview.TextView {
+	t.Helper()
+	row, ok := filterMenuRow(t, r, 4).(*tview.TextView)
+	if !ok {
+		t.Fatal("filterMenuLayout item 4 is not a *tview.TextView (the Labels row)")
+	}
+	return row
+}
+
+// TestLabelFilterRowSpaceTogglesCursorID pins the end-to-end path: the
+// row's own internal cursor starts on id 0, Space toggles exactly that
+// id (not some other one), and Right then Space toggles the next id
+// instead — never the one already toggled.
+func TestLabelFilterRowSpaceTogglesCursorID(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	row.InputHandler()(space, noop)
+	if !r.panel.filterLabelIDs[0] {
+		t.Error("Space on the row's initial cursor (id 0) should toggle id 0 on")
+	}
+	for id := 1; id <= filelabels.MaxLabelID; id++ {
+		if r.panel.filterLabelIDs[id] {
+			t.Errorf("id %d should still be off, only id 0 was toggled", id)
+		}
+	}
+
+	right := tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)
+	row.InputHandler()(right, noop)
+	row.InputHandler()(space, noop)
+	if !r.panel.filterLabelIDs[1] {
+		t.Error("Right then Space should toggle id 1 on")
+	}
+	if !r.panel.filterLabelIDs[0] {
+		t.Error("id 0 should still be on — moving the cursor must not clear a previous toggle")
+	}
+
+	if r.activePage != filterMenuPage {
+		t.Error("toggling a label id should not close the dropdown")
+	}
+}
+
+// TestLabelFilterRowLeftRightClampAtEnds pins that the row's own
+// internal cursor never wraps or goes out of range — Left at id 0
+// stays on id 0, Right at id filelabels.MaxLabelID stays there.
+func TestLabelFilterRowLeftRightClampAtEnds(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	left := tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)
+	right := tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)
+	space := tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone)
+	noop := func(tview.Primitive) {}
+
+	row.InputHandler()(left, noop) // already at 0 — must clamp, not wrap to 9
+	row.InputHandler()(space, noop)
+	if !r.panel.filterLabelIDs[0] {
+		t.Error("Left at the leftmost position should clamp to id 0, not wrap")
+	}
+
+	for i := 0; i <= filelabels.MaxLabelID+2; i++ { // overshoot on purpose
+		row.InputHandler()(right, noop)
+	}
+	row.InputHandler()(space, noop)
+	if !r.panel.filterLabelIDs[filelabels.MaxLabelID] {
+		t.Errorf("Right past the last id should clamp to id %d", filelabels.MaxLabelID)
+	}
+}
+
+// TestLabelFilterRowTabMovesToExcludeDirsCheckbox and
+// TestLabelFilterRowBacktabMovesToMtimeField pin the row's own
+// participation in the dropdown's shared Tab/Backtab cycling —
+// already exercised end-to-end by TestFilterMenuTabCyclesFocusThroughAllNineStops,
+// these two pin just this row's own two neighbors directly.
+func TestLabelFilterRowTabMovesToExcludeDirsCheckbox(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	row.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !filterMenuExcludeDirsCheckbox(t, r).HasFocus() {
+		t.Error("Tab from the Labels row should move focus to the exclude-dirs checkbox")
+	}
+}
+
+func TestLabelFilterRowBacktabMovesToMtimeField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	row.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), func(tview.Primitive) {})
+	if !filterMenuFieldRowField(t, r, 3).HasFocus() {
+		t.Error("Backtab from the Labels row should move focus to the modified-time expression field")
+	}
+}
+
+// TestLabelFilterRowEscapeClosesDropdown pins the same Escape contract
+// every other row's own filterMenuCheckboxCapture already has.
+func TestLabelFilterRowEscapeClosesDropdown(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	row.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
+	if r.activePage == filterMenuPage {
+		t.Error("Escape from the Labels row should close the dropdown")
+	}
+}
+
+// TestLabelFilterRowSlashJumpsToNextField pins that "/" from the
+// Labels row still reaches nextField's own target list, even though
+// this row itself was deliberately never added to it (see
+// newLabelFilterRow's own doc comment) — "/" from the row right before
+// Exclude dirs wraps around to the glob field, the first real field in
+// the dropdown.
+func TestLabelFilterRowSlashJumpsToNextField(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	r.app.SetFocus(row)
+
+	row.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone), func(tview.Primitive) {})
+	if !r.panel.filterField.HasFocus() {
+		t.Error("\"/\" from the Labels row should jump to the glob field (wrapping around)")
+	}
+}
+
+// TestLabelFilterRowStateSurvivesReopen mirrors
+// TestFilterMenuExcludeDirsStateSurvivesReopen for the new row: a
+// toggled id is still on, and the row's own re-render still marks it,
+// the next time the dropdown opens.
+func TestLabelFilterRowStateSurvivesReopen(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.filterLabelIDs[3] = true
+
+	r.openFilterMenu()
+	row := filterMenuLabelFilterRow(t, r)
+	if !strings.Contains(row.GetText(true), "●") {
+		t.Errorf("Labels row text = %q, want it to show at least one toggled-on (●) swatch", row.GetText(true))
 	}
 }

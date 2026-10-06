@@ -213,8 +213,8 @@ connection dropdown — see [Remote connections
 ### Filtering
 
 Click the "Y" button near the right edge of the path bar, or press
-`/`, to open a small dropdown with three rows, all combinable, plus a
-fourth "Exclude dirs" option that applies to all three at once. An "Nx"
+`/`, to open a small dropdown with four rows, all combinable, plus a
+fifth "Exclude dirs" option that applies to all four at once. An "Nx"
 count appears right before the button once one or more filters are
 actually narrowing the listing (omitted while none are) — glowing the
 same slow green breathing pulse the header's own "@" connection button
@@ -251,13 +251,25 @@ to).
   off the `before`/`after`/`between` keyword entirely and just typing a
   relative moment on its own — `last 7 days`, or plain `7 days` — is
   shorthand for "modified within that span", the most common case.
-- **Exclude dirs** — a single on/off switch below the three filters
+- **Labels filter** — ten small toggles, one per color label ("0 no
+  label" through 9 — see the `zl` chord), each shown as
+  its own colored swatch with no number or text next to it, "0" in the
+  dropdown's own plain background rather than a color, since "no
+  label" has none of its own. Toggling more than one ORs them together
+  — labels 2 and 3 toggled on shows anything carrying either one, not
+  only files carrying both. `Left`/`Right` move between the ten
+  swatches while this one row has focus (every other key below still
+  works the same as on any other row) — the swatch the keyboard is
+  currently on is marked with `<`/`>` around it, never by swapping out
+  its own color, so you can always tell which color a given toggle
+  actually is regardless of where the keyboard happens to be.
+- **Exclude dirs** — a single on/off switch below the four filters
   above, applying to all of them at once rather than being a filter of
   its own: while it's on, a directory is never hidden by any of the
-  three, however it would otherwise have matched (or failed to match)
-  — only plain files are ever actually filtered. Not counted toward the
-  "Nx" indicator itself, since it has nothing of its own to match
-  against.
+  four — the Labels filter included — however it would otherwise have
+  matched (or failed to match); only plain files are ever actually
+  filtered. Not counted toward the "Nx" indicator itself, since it has
+  nothing of its own to match against.
 
 Typing into the size or modified-time field auto-activates its own
 checkbox, exactly the way typing into the glob field already does —
@@ -269,35 +281,38 @@ at all rather than an error, so half-typed text never throws the
 listing into a confusing state.
 
 The dropdown stays open while you tick or fill in more than one of
-these — narrowing by name, size, and modified time all at once is the
-point. `Tab`/`Shift+Tab` cycle keyboard focus through all eight of its
-own pieces — the glob checkbox, its Glob/Regex button, the pattern
-field, the size checkbox, the size expression field, the modified-time
-checkbox, the modified-time expression field, and the "Exclude dirs"
-checkbox, wrapping back to the first — `Space` or `Enter` toggles
-whichever checkbox currently has focus, and `Escape` closes the whole
+these — narrowing by name, size, modified time, and label all at once
+is the point. `Tab`/`Shift+Tab` cycle keyboard focus through all nine
+of its own pieces — the glob checkbox, its Glob/Regex button, the
+pattern field, the size checkbox, the size expression field, the
+modified-time checkbox, the modified-time expression field, the Labels
+row, and the "Exclude dirs" checkbox, wrapping back to the first —
+`Space` or `Enter` toggles whichever checkbox (or, on the Labels row,
+whichever swatch) currently has focus, and `Escape` closes the whole
 dropdown from any of them, the same as clicking elsewhere or `Ctrl`+`C`
 already did.
 
 `/` itself, pressed again once the dropdown is already open, is a
 faster way to reach the size or modified-time field specifically: it
 jumps straight to the next of the three real fields (glob → size →
-modified-time → back to glob), skipping every checkbox and the
-Glob/Regex button in between — the same "press it again to advance
-further" behavior `Ctrl`+`T` already has for the tab switcher. This is
-safe to repurpose from typing a literal `/`: a bare filename can never
-contain one (it's the OS's own path separator), so none of these three
-expressions — a glob pattern, a size comparison, or a modified-time
-one — could ever legitimately need to type it. By default (the
-`filter_persistent` setting, see the reference below), all four carry
-straight over when you navigate to a different directory — browsing a
-whole tree with the same filter switched on is the point, and the "Nx"
-count in the path bar is what keeps a still-active filter from going
-unnoticed while you do. Set `filter_persistent = false` to go back to
-the original behavior instead: navigating to a different directory
-resets all four back to their own defaults (the glob/regex filter
-cleared and re-enabled, size/modified-time switched off and cleared,
-"Exclude dirs" switched off), so every new directory starts unfiltered.
+modified-time → back to glob), skipping every checkbox, the Glob/Regex
+button, and the Labels row in between (which has no field of its own
+to jump to) — the same "press it again to advance further" behavior
+`Ctrl`+`T` already has for the tab switcher. This is safe to repurpose
+from typing a literal `/`: a bare filename can never contain one (it's
+the OS's own path separator), so none of these three expressions — a
+glob pattern, a size comparison, or a modified-time one — could ever
+legitimately need to type it. By default (the `filter_persistent`
+setting, see the reference below), all five carry straight over when
+you navigate to a different directory — browsing a whole tree with the
+same filter switched on is the point, and the "Nx" count in the path
+bar is what keeps a still-active filter from going unnoticed while you
+do. Set `filter_persistent = false` to go back to the original
+behavior instead: navigating to a different directory resets all five
+back to their own defaults (the glob/regex filter cleared and
+re-enabled, size/modified-time switched off and cleared, every label
+toggle switched off, "Exclude dirs" switched off), so every new
+directory starts unfiltered.
 
 A name's color tells you what it is at a glance: dark-yellow highlight
 for anything `Enter` navigates into, dark green for executable, red for a
