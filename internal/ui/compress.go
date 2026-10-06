@@ -905,7 +905,10 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 
 	dir, err := r.trashDir()
 	if err == nil {
-		if err = fsops.MoveToTrash(archivePath, dir); err == nil {
+		var target string
+		target, err = fsops.MoveToTrash(archivePath, dir)
+		if err == nil {
+			_ = r.labels.Rehome(archivePath, target) // best-effort — see reallyMoveToTrash's own doc comment
 			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("moved extracted archive %q to trash", archivePath))
 			reloadSource()
 			return
@@ -919,6 +922,7 @@ func (r *Root) deleteExtractedArchive(archivePath string) {
 				r.showError(err)
 				return
 			}
+			_ = r.labels.Delete(archivePath)
 			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("permanently deleted extracted archive %q", archivePath))
 			reloadSource()
 		},

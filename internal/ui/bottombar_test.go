@@ -67,6 +67,11 @@ import (
 //     that doesn't exist" shape HISTFILE/userConfigFilePath already
 //     use above — so no test here so much as touches a real file
 //     unless it specifically opts back in with its own t.TempDir().
+//   - The persisted color-label store (internal/filelabels, wired in
+//     NewRoot via labelsPersistPath): the exact same class of problem,
+//     fixed the exact same way, for the exact same reason
+//     notifyPersistPath's own entry just above gives for not reusing
+//     $XDG_STATE_HOME directly.
 //   - The mail badge's own auto-detected system mailbox
 //     (mailDefaultMboxPath, mail.go): defaults to "" here too, the
 //     same reasoning as notifyPersistPath just above — a real,
@@ -79,6 +84,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
 
 	notifyPersistPath = func() string { return "" }
+	labelsPersistPath = func() string { return "" }
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real

@@ -144,6 +144,15 @@ func contextMenuTree() []menuEntry {
 		{label: "Paste", visible: menuClipboardHasContent, action: func(r *Root) { r.pasteClipboard() }},
 		{label: "Move to Trash", mnemonic: 'd', action: func(r *Root) { r.moveSelectionToTrash() }},
 		{label: "Properties", mnemonic: 'i', action: func(r *Root) { r.openProperties() }},
+		// Its own area, per the user's own explicit request, the same
+		// shape "More actions"/"Selection"/"Tabs & Split" already are —
+		// not folded into any of those three, since it isn't an action
+		// on the target at all (the way Rename/Copy/Cut/Move to Trash
+		// above are) nor a selection/tab operation, just a separate kind
+		// of per-path state. Hidden entirely rather than shown-but-
+		// broken wherever labeling isn't available at all right now
+		// (see menuLabelAvailable's own doc comment).
+		{label: "Label", visible: menuLabelAvailable, submenu: labelSubmenuEntries()},
 		{label: "More actions", submenu: []menuEntry{
 			// "f"/"d" match the "mf"/"md" chord that reaches these same
 			// two actions directly from plain browsing (see keymap.go's

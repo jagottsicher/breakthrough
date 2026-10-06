@@ -17,6 +17,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/batchrename"
 	"github.com/jagottsicher/breakthrough/internal/compare"
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
@@ -231,6 +232,20 @@ type Root struct {
 	// past this process exiting, restored the next time breakthrough
 	// starts, up to its own 999-entry cap.
 	notify *notify.Store
+
+	// labels is the shared, app-wide color-label store (see
+	// internal/filelabels) behind the "zl" chord — pushed down into
+	// every Panel via setLabels (see NewRoot/tabs.go), since Panel
+	// itself has no reference back to Root (see panel.go's own labels
+	// field doc comment). Built via NewWithPersistence, the same
+	// "survives a restart" shape notify.Store's own persistence already
+	// has — but, unlike notify, every call site here also has to
+	// tolerate a genuinely nil *filelabels.Store in normal use when
+	// session.StateDir() itself can't be resolved (see
+	// filelabels.DefaultPath's own doc comment); every filelabels.Store
+	// method already does (see the package's own doc comment on
+	// nil-receiver safety), so no caller needs its own nil check first.
+	labels *filelabels.Store
 
 	// settingOrigins says, per config key, which tier the value
 	// currently in force actually came from (see config.Origin) — shown
@@ -1869,6 +1884,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		settingOrigins: settingOrigins,
 		theme:          theme,
 		notify:         notify.NewWithPersistence(notifyPersistPath()),
+		labels:         filelabels.NewWithPersistence(labelsPersistPath()),
 		// Matches cmd/breakthrough's own version/commit/date/builtBy
 		// vars' own default literals exactly — see SetVersionInfo's own
 		// doc comment and the struct field comment above.
@@ -2405,6 +2421,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 // wire a panel means a new tab is wired exactly like the first one, by
 // construction.
 func (r *Root) wirePanel(panel *Panel) {
+	// Every Panel — the initial one and every tab opened or restored
+	// afterward (see tabs.go's own two callers) — shares the exact same
+	// color-label store: it's keyed by absolute path, not scoped to any
+	// one tab (see Panel's own labels field doc comment).
+	panel.setLabels(r.labels)
+
 	// "Esc: back to search" while search results are showing (see
 	// Panel.onSearchEscape's own doc comment) — a right-click on a
 	// search-result row already reaches r.menu the exact same way a
@@ -3779,6 +3801,9 @@ func (r *Root) finishRename(key tcell.Key) {
 		r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("rename %q to %q: %v", r.target, newName, err))
 		r.showError(err)
 		return
+	}
+	if r.panel.remote == nil {
+		_ = r.labels.Rehome(r.target, newPath) // see internal/filelabels.Store.Rehome's own doc comment
 	}
 	r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", r.target, newName))
 	r.refreshDetailsIfShowing(r.target, newPath)

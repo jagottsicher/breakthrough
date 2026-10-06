@@ -537,6 +537,18 @@ func chordFamilies() []chordFamily {
 			// mouse equivalent (Panel.onToggleFileIcons), per the user's
 			// own explicit request to place it right after Reload there.
 			{'i', "File icons", func(r *Root) { r.toggleFileIcons() }},
+			// "l" for "label" — opens a quick picker (see openLabelMenu
+			// in labelmenu.go) to set or clear one of the nine color
+			// labels on the focused row, or every checked row at once.
+			// Placed right after "i" (File icons), per the user's own
+			// explicit ordering request. A deliberate family
+			// inconsistency, documented rather than silently papered
+			// over: every other member of this "disp" family is a pure
+			// display toggle, while "zl" mutates real, persisted state
+			// (a path's own label assignment) — the user's own explicit
+			// choice of "zl" regardless, so it's implemented here, under
+			// this prefix, exactly as asked.
+			{'l', "Label", func(r *Root) { r.openLabelMenu() }},
 			// "f" for Filter, per the user's own explicit request and
 			// reasoning: this is display-scoped exactly like every other
 			// member here, narrowing what's currently shown rather than

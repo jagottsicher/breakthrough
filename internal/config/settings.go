@@ -331,15 +331,14 @@ type Settings struct {
 	FilterPersistent  bool
 	ChordTimeoutMS    int
 
-	StatusBarShowUsername bool
-	StatusBarShowMouse    bool
-	StatusBarShowDisk     bool
-	StatusBarShowInodes   bool
-	StatusBarShowKernel   bool
-	StatusBarShowUptime   bool
-	StatusBarShowLoad     bool
-	ShowGitStatus         bool
-
+	StatusBarShowUsername     bool
+	StatusBarShowMouse        bool
+	StatusBarShowDisk         bool
+	StatusBarShowInodes       bool
+	StatusBarShowKernel       bool
+	StatusBarShowUptime       bool
+	StatusBarShowLoad         bool
+	ShowGitStatus             bool
 	DuplicateSeparator        string
 	DuplicateStrategy         string
 	DuplicateSuffixText       string
@@ -466,6 +465,53 @@ type Settings struct {
 	FirewallDefaultDirection string
 	FirewallDefaultAction    string
 	FirewallDefaultProtocol  string
+
+	// Label1Name..Label9Name are the nine color labels' own display
+	// names, behind the "zl" chord (see internal/filelabels and
+	// internal/ui's own labelMenuRows) — nine flat keys, not a
+	// structured list, per CLAUDE.md's own flat-config rule. Label 0
+	// ("no label") is fixed and not renamable, so there is no
+	// Label0Name. Default "Label 1".."Label 9" (see DefaultSettings)
+	// until the user renames them — Phase 2's own Options "Label"
+	// section (not yet built).
+	Label1Name string
+	Label2Name string
+	Label3Name string
+	Label4Name string
+	Label5Name string
+	Label6Name string
+	Label7Name string
+	Label8Name string
+	Label9Name string
+}
+
+// LabelName returns the display name for color-label id (1-9) — the
+// one accessor internal/ui's labelMenuRows calls, rather than its own
+// 9-way switch over Settings' individual Label1Name..Label9Name
+// fields. Returns "" for id 0 or anything outside 1-9.
+func (s Settings) LabelName(id int) string {
+	switch id {
+	case 1:
+		return s.Label1Name
+	case 2:
+		return s.Label2Name
+	case 3:
+		return s.Label3Name
+	case 4:
+		return s.Label4Name
+	case 5:
+		return s.Label5Name
+	case 6:
+		return s.Label6Name
+	case 7:
+		return s.Label7Name
+	case 8:
+		return s.Label8Name
+	case 9:
+		return s.Label9Name
+	default:
+		return ""
+	}
 }
 
 // DefaultSettings is what a brand-new install has with neither config
@@ -560,6 +606,16 @@ func DefaultSettings() Settings {
 		FirewallDefaultDirection: "in",
 		FirewallDefaultAction:    "allow",
 		FirewallDefaultProtocol:  "",
+
+		Label1Name: "Label 1",
+		Label2Name: "Label 2",
+		Label3Name: "Label 3",
+		Label4Name: "Label 4",
+		Label5Name: "Label 5",
+		Label6Name: "Label 6",
+		Label7Name: "Label 7",
+		Label8Name: "Label 8",
+		Label9Name: "Label 9",
 	}
 }
 
@@ -736,6 +792,24 @@ func (s *Settings) apply(key, value string) error {
 		s.FirewallDefaultAction = value
 	case "firewall_default_protocol":
 		s.FirewallDefaultProtocol = value
+	case "label_1_name":
+		s.Label1Name = value
+	case "label_2_name":
+		s.Label2Name = value
+	case "label_3_name":
+		s.Label3Name = value
+	case "label_4_name":
+		s.Label4Name = value
+	case "label_5_name":
+		s.Label5Name = value
+	case "label_6_name":
+		s.Label6Name = value
+	case "label_7_name":
+		s.Label7Name = value
+	case "label_8_name":
+		s.Label8Name = value
+	case "label_9_name":
+		s.Label9Name = value
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
