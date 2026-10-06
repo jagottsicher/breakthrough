@@ -20,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/archive"
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fileicons"
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -384,6 +385,20 @@ type Panel struct {
 	// and back must still show the same rows highlighted.
 	clipboardPaths map[string]bool
 	clipboardCut   bool
+
+	// labels is the shared, app-wide color-label store (see
+	// internal/filelabels and Root.labels's own doc comment) — pushed
+	// down by setLabels right after NewPanel, the same "Panel has no
+	// reference to Root, so Root pushes down whatever shared state a
+	// Panel needs" shape clipboardPaths/clipboardCut above already
+	// establish. One single Store is shared by every tab/pane (it's
+	// keyed by absolute path, not scoped to any one tab), unlike
+	// clipboardPaths/clipboardCut, which are themselves already a
+	// snapshot of one Root-level value — nil until setLabels runs (e.g.
+	// every test Panel that never calls it), which rowLabelBackground
+	// treats as "nothing labeled" rather than a nil-pointer panic (see
+	// filelabels.Store's own nil-receiver-safe methods).
+	labels *filelabels.Store
 
 	// headerSpans locates each clickable region in the header's display
 	// text (see buildHeaderSpans), rebuilt on every load().
@@ -2101,6 +2116,57 @@ func (p *Panel) rowBackgroundInactive(ref rowRef) (bg tcell.Color, ok bool) {
 	return p.theme.ClipboardCopyBackgroundInactive, true
 }
 
+// labelablePath reports whether ref is even eligible for a color label
+// at all — the three exclusions the feature spec settled on: the ".."
+// row (checkable false — it has no real path of its own to label, see
+// rowRef.checkable's own doc comment), a remote listing (p.isRemote() —
+// SFTP/SSH paths aren't real local filesystem paths filelabels' own
+// path-keyed store could ever meaningfully track), and an archive-member
+// search hit (ref.archiveHit — path there names the containing archive
+// file on disk, not a real path to the member itself). Browsing *inside*
+// an archive (p.inArchiveView()) is excluded too, for the same
+// "ref.path doesn't name a real filesystem path" reason as archiveHit,
+// just at the whole-panel level rather than per-row.
+func (p *Panel) labelablePath(ref rowRef) bool {
+	return ref.checkable && !ref.archiveHit && !p.isRemote() && !p.inArchiveView()
+}
+
+// rowLabelBackground returns ref's own color-label background (see
+// internal/filelabels and internal/config.ResolvedTheme.LabelBackground)
+// — ok false when ref isn't labelable at all (see labelablePath), p.labels
+// is nil (no state directory available — see filelabels.DefaultPath's
+// own doc comment), or no label is actually set on this path.
+//
+// Deliberately NOT folded into rowBackground: rowBackground's own
+// result also flows into setRowCells, which paints it across the Name/
+// Size/Modified cells too (see setRowCells' own doc comment on why that
+// is right for a clipboard tint) — doing the same for a color label
+// would leak it into the Name column, exactly what the feature spec
+// explicitly rules out. paintFixedRowCells calls this directly instead,
+// alongside rowBackground, so a label only ever reaches colType and
+// colModifier — two live-tested corrections from the user, in order:
+// first, that painting all three of colCheckbox/colType/colModifier
+// read as "too much of the row" (a mountpoint's own "○  > " read as a
+// solid block of color); then, that colModifier alone — a single
+// character — read as "too little" to actually register as a color
+// swatch on a real terminal. colType+colModifier together, still never
+// colCheckbox, are the settled middle ground: two characters, always
+// immediately adjacent to colName, for every row kind alike (a plain
+// file's own pair is simply blank padding outside icon mode, so its
+// label tint shows as a thin two-character colored stripe there,
+// consistently with a mountpoint/hardlink row's actual glyph sitting in
+// the second of the two).
+func (p *Panel) rowLabelBackground(ref rowRef) (bg tcell.Color, ok bool) {
+	if !p.labelablePath(ref) {
+		return 0, false
+	}
+	id := p.labels.Get(ref.path)
+	if id == 0 {
+		return 0, false
+	}
+	return p.theme.LabelBackground(id), true
+}
+
 // rowSelectedStyle computes what ref's own cells should carry as their
 // SelectedStyle — the separate style tview only ever consults for
 // whichever row currently is the table's own cursor row (see
@@ -2130,11 +2196,62 @@ func (p *Panel) rowBackgroundInactive(ref rowRef) (bg tcell.Color, ok bool) {
 // selection, losing "where would the cursor land if I switched back"
 // exactly as thoroughly as the original bug lost "is this file still
 // on the clipboard at all".
+//
+// Deliberately clipboard-only, unlike paintFixedRowCells itself: this is
+// also setRowCells' own source for colName/colSize/colModified's
+// SelectedStyle (see its own doc comment), and a color label must never
+// reach those — see rowLabelBackground's own doc comment. Folding the
+// label in here too, the way an earlier revision did, leaked it across
+// the whole cursor row (Name included) the moment that row was both
+// labeled and the table's own current row while unfocused — a real,
+// live-tested regression report, and exactly the "genau das, wogegen
+// sich der Nutzer entschieden hat" the feature spec already warned
+// about for the plain background case. See fixedCellSelectedStyle for
+// colModifier's own, label-aware equivalent, used only by
+// paintFixedRowCells.
 func (p *Panel) rowSelectedStyle(ref rowRef, focused bool) tcell.Style {
 	if _, tinted := p.rowBackground(ref); !tinted || focused {
 		return tcell.StyleDefault
 	}
 	bg, _ := p.rowBackgroundInactive(ref)
+	return tcell.StyleDefault.Background(bg).Foreground(p.theme.Text)
+}
+
+// fixedCellSelectedStyle is colType/colModifier's own SelectedStyle —
+// plain rowSelectedStyle (the clipboard tint only) whenever that
+// applies, falling through to the color label's own color (see
+// rowLabelBackground) only once the clipboard has nothing to say, the
+// same precedence paintFixedRowCells' own background painting already
+// follows. Used only there, for those two cells specifically —
+// colCheckbox, and colName/colSize/colModified, all keep plain
+// rowSelectedStyle unchanged (a label never reaches any of those — see
+// rowLabelBackground's own doc comment).
+//
+// A label has no separate "Inactive" variant of its own the way the
+// clipboard tint does (see rowBackgroundInactive) — its one resolved
+// color is used unconditionally here while unfocused, a deliberate
+// Phase 1 simplification: a color label is comparatively rare and
+// long-lived state, not something that needs its own darker "also the
+// cursor, but unfocused" shade the way the clipboard's far more
+// transient, constantly-toggled tint does. While focused, this returns
+// plain tcell.StyleDefault regardless — per the user's own explicit
+// report that a labeled row under real keyboard focus (including via a
+// right-click, which moves the cursor there) must still show the
+// ordinary FocusedBackground, not the label's own color, exactly the
+// same "the focus/cursor indicator wins outright while focused" rule
+// rowSelectedStyle's own doc comment already establishes for the
+// clipboard case.
+func (p *Panel) fixedCellSelectedStyle(ref rowRef, focused bool) tcell.Style {
+	if _, clipTinted := p.rowBackground(ref); clipTinted {
+		return p.rowSelectedStyle(ref, focused)
+	}
+	if focused {
+		return tcell.StyleDefault
+	}
+	bg, ok := p.rowLabelBackground(ref)
+	if !ok {
+		return tcell.StyleDefault
+	}
 	return tcell.StyleDefault.Background(bg).Foreground(p.theme.Text)
 }
 
@@ -2172,19 +2289,40 @@ func (p *Panel) rowSelectedStyle(ref rowRef, focused bool) tcell.Style {
 // own darker Inactive variant win once it isn't, rather than picking
 // one of those two real, contradictory requirements to satisfy.
 func (p *Panel) paintFixedRowCells(row int, ref rowRef, focused bool) {
-	bg, tinted := p.rowBackground(ref)
+	clipBg, clipTinted := p.rowBackground(ref)
 	selStyle := p.rowSelectedStyle(ref, focused)
 	for _, col := range [...]int{colCheckbox, colType, colModifier} {
 		cell := p.table.GetCell(row, col)
 		if cell == nil {
 			continue
 		}
-		if tinted {
-			cell.SetBackgroundColor(bg)
-		} else {
+		switch {
+		case clipTinted:
+			cell.SetBackgroundColor(clipBg)
+			cell.SetSelectedStyle(selStyle)
+		case col == colType || col == colModifier:
+			// Only these two cells also consider a color label (see
+			// rowLabelBackground's own doc comment on why it's
+			// deliberately this narrow, and fixedCellSelectedStyle's for
+			// the matching SelectedStyle) — colCheckbox falls through to
+			// the plain untinted case below exactly like colName/
+			// colSize/colModified already do. Two cells, not one: a
+			// single character read as "too little" against a real
+			// terminal, per the user's own live-tested correction —
+			// colType+colModifier together are still never colCheckbox,
+			// and still always immediately adjacent to colName, just
+			// with enough width to actually register as a color swatch
+			// rather than a single colored character easy to miss.
+			if labelBg, labelTinted := p.rowLabelBackground(ref); labelTinted {
+				cell.SetBackgroundColor(labelBg)
+			} else {
+				cell.SetTransparency(true)
+			}
+			cell.SetSelectedStyle(p.fixedCellSelectedStyle(ref, focused))
+		default:
 			cell.SetTransparency(true)
+			cell.SetSelectedStyle(selStyle)
 		}
-		cell.SetSelectedStyle(selStyle)
 	}
 }
 
@@ -2208,6 +2346,37 @@ func (p *Panel) setClipboard(paths []string, cut bool) {
 	for row := 0; row < p.table.GetRowCount(); row++ {
 		if ref, ok := p.rowRef(row); ok {
 			p.setRowCells(row, ref, focused)
+			p.paintFixedRowCells(row, ref, focused)
+		}
+	}
+}
+
+// setLabels wires the shared color-label store into this Panel — called
+// once, right after NewPanel, for every tab/pane (see root.go/tabs.go),
+// the same "Panel has no reference to Root" push-down setClipboard
+// already establishes for the clipboard. Repaints whatever rows are
+// already on screen, the same as setClipboard, so a Panel that's
+// already showing a directory by the time this runs (never the case in
+// practice today — NewPanel's own load() happens before this is ever
+// called — but kept consistent with setClipboard rather than assumed
+// away) doesn't need a second reload to pick up any labels already set.
+func (p *Panel) setLabels(labels *filelabels.Store) {
+	p.labels = labels
+	p.repaintLabels()
+}
+
+// repaintLabels repaints whatever rows are already on screen against
+// the label store's current contents, without reassigning p.labels
+// itself — called by setLabels above, and again by Root whenever a
+// label is actually set/cleared on some path (see openLabelMenu in
+// labelmenu.go), across every open tab (see Root.forEachTab): the
+// store is shared app-wide (see Panel's own labels field doc comment),
+// so a path labeled from one tab may well also be on screen in
+// another.
+func (p *Panel) repaintLabels() {
+	focused := p.table.HasFocus()
+	for row := 0; row < p.table.GetRowCount(); row++ {
+		if ref, ok := p.rowRef(row); ok {
 			p.paintFixedRowCells(row, ref, focused)
 		}
 	}

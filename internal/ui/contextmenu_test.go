@@ -94,6 +94,7 @@ func TestContextMenuTopLevelForAFile(t *testing.T) {
 
 	want := []string{
 		"Look", "Edit", "Execute", "Open with…", "Rename", "Copy", "Cut", "Multiply", "Move to Trash", "Properties",
+		menuGroupGlyph + "Label",
 		menuGroupGlyph + "More actions",
 		menuGroupGlyph + "Selection",
 		menuGroupGlyph + "Tabs & Split",
@@ -797,5 +798,87 @@ func TestContextMenuMouseClickIntoSubmenuKeepsMenuFocused(t *testing.T) {
 	}
 	if len(root.panel.SelectedPaths()) == 0 {
 		t.Error("\"a\" should have fired Select all")
+	}
+}
+
+// openMenuOnRowFocused is openMenuOnRow plus the cursor move a real
+// right-click always makes first (see captureMouse's MouseRightClick
+// case) — needed for any test exercising an action that reads the
+// panel's live cursor (see labelTargets) rather than r.target itself.
+func openMenuOnRowFocused(t *testing.T, r *Root, row int) {
+	t.Helper()
+	r.panel.focusRow(row)
+	openMenuOnRow(t, r, row)
+}
+
+// TestContextMenuLabelSubmenuShowsColoredSwatchRows pins that the
+// "Label" group's own ten rows match labelMenuRows exactly — the same
+// swatch-plus-name text r.picker already shows for the "zl" chord (see
+// labelMenuRows' own doc comment), not a plain-text duplicate.
+func TestContextMenuLabelSubmenuShowsColoredSwatchRows(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	openMenuOnRowFocused(t, r, 2) // apple.txt
+
+	selectMenuItem(t, r, menuGroupGlyph+"Label")
+
+	want := labelMenuRows(r.theme, r.settings)
+	if got := r.menu.GetItemCount(); got != len(want)+1 { // +1 for "◂ Back"
+		t.Fatalf("Label submenu has %d items, want %d (9 colors + no-label + Back)", got, len(want)+1)
+	}
+	if main, _ := r.menu.GetItemText(0); main != menuBackGlyph {
+		t.Errorf("item 0 = %q, want %q", main, menuBackGlyph)
+	}
+	for i, row := range want {
+		if main, _ := r.menu.GetItemText(i + 1); main != row.text {
+			t.Errorf("item %d = %q, want %q", i+1, main, row.text)
+		}
+	}
+}
+
+// TestContextMenuLabelSubmenuPickingEntryAppliesLabelAndCloses pins the
+// end-to-end path: entering the "Label" submenu and picking entry id 4
+// sets label 4 on the right-clicked row's own path and closes the menu
+// — the same "one final choice, not a toggle" close behavior the
+// Options screen's own color-scheme picker already has (see
+// labelSubmenuEntries' own doc comment).
+func TestContextMenuLabelSubmenuPickingEntryAppliesLabelAndCloses(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	path := filepath.Join(dir, "apple.txt")
+	openMenuOnRowFocused(t, r, 2) // apple.txt — see fixtureDir
+	selectMenuItem(t, r, menuGroupGlyph+"Label")
+
+	r.menu.SetCurrentItem(5) // Back(0) + no-label(1) + ids 1..4 = index 5 is id 4
+	r.menu.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
+
+	if got := r.labels.Get(path); got != 4 {
+		t.Errorf("Get(%q) = %d, want 4", path, got)
+	}
+	if r.activePage == contextMenuPage {
+		t.Error("menu should have closed after picking a label")
+	}
+}
+
+// TestContextMenuLabelHiddenForRemotePanel pins menuLabelAvailable:
+// the "Label" group must not even appear for a remote panel — the same
+// exclusion openLabelMenu itself already enforces for the "zl" chord.
+func TestContextMenuLabelHiddenForRemotePanel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.remote = newTestFakeRemote(dir)
+	openMenuOnRowFocused(t, r, 2)
+
+	if idx := menuItemIndex(r, menuGroupGlyph+"Label"); idx >= 0 {
+		t.Error("\"Label\" group should not appear for a remote panel")
 	}
 }

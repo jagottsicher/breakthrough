@@ -136,7 +136,7 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 	var firstErr error
 	moved := 0
 	for _, src := range targets {
-		if err := fsops.MoveToTrash(src, dir); err != nil {
+		if target, err := fsops.MoveToTrash(src, dir); err != nil {
 			r.activityLog.Error(activitylog.CategoryFileOps, fmt.Sprintf("move to trash %q: %v", src, err))
 			if firstErr == nil {
 				firstErr = err
@@ -144,6 +144,15 @@ func (r *Root) reallyMoveToTrash(targets []string) {
 		} else {
 			moved++
 			r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("moved %q to trash", src))
+			// A color label follows the file to its real new location
+			// inside the trash directory — see internal/filelabels'
+			// own doc comment on why Rehome, not some separate
+			// trash-specific mechanism, is exactly right for this too.
+			// Best-effort: a failure here leaves the label orphaned on
+			// the now-gone original path rather than following the
+			// file, not worth surfacing over the move itself having
+			// already succeeded.
+			_ = r.labels.Rehome(src, target)
 			// Cleared ("") rather than followed to its real new location:
 			// that's an obscure, hash-named path under trashDir, not
 			// somewhere worth showing Details pointed at — "(nothing
@@ -236,6 +245,7 @@ func (r *Root) openRemoveConfirm() {
 				}
 			} else {
 				removed++
+				_ = r.labels.Delete(target) // a permanently deleted path's label is gone too, not rehomed anywhere
 				r.activityLog.Detail(activitylog.CategoryFileOps, fmt.Sprintf("permanently removed %q", target))
 				r.refreshDetailsIfShowing(target, "") // permanently gone — see refreshDetailsIfShowing's own doc comment
 			}

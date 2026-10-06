@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
@@ -327,6 +328,14 @@ func optionCategories() []optionCategory {
 						"Quietly shows nothing outside a git repository.",
 					func(r *Root) bool { return r.settings.ShowGitStatus },
 					func(r *Root, b bool) { r.settings.ShowGitStatus = b },
+				),
+				statusBarSegmentOption("status_bar_show_label", "Color label",
+					"Whether the cursor row's own color label shows in the status bar "+
+						"— a small colored swatch plus its current display name (see the "+
+						"\"zl\" chord). Quietly shows nothing while the cursor isn't on a "+
+						"labeled, labelable path.",
+					func(r *Root) bool { return r.settings.StatusBarShowLabel },
+					func(r *Root, b bool) { r.settings.StatusBarShowLabel = b },
 				),
 			},
 		},
@@ -1205,7 +1214,65 @@ func optionCategories() []optionCategory {
 				},
 			},
 		},
+		{
+			// Color label names — the "zl" chord's own nine display
+			// names (see labelmenu.go's own labelMenuRows and
+			// internal/filelabels). Just the names for now: Label 0
+			// ("no label") is fixed and has no entry here, and the
+			// "remove orphaned labels" cleanup button the feature spec's
+			// own Phase 2 describes isn't built yet — this category
+			// exists at all, ahead of the rest of Phase 2, only because
+			// every Implemented config key must be editable somewhere
+			// (see TestOptionCatalogMatchesSettingDocs) — renaming a
+			// label was the one part of that already fully specified
+			// and trivial to wire through the exact same stringOption
+			// helper every other free-text setting already uses.
+			name:    "Label",
+			options: labelNameOptions(),
+		},
 	}
+}
+
+// labelNameOptions builds the Options screen's own nine "label_N_name"
+// entries — one stringOption per color label (see optionCategories'
+// own "Label" category above), generated rather than typed out nine
+// times over: each one only differs from the next in its id.
+func labelNameOptions() []optionSpec {
+	opts := make([]optionSpec, 0, config.MaxLabelID)
+	for id := 1; id <= config.MaxLabelID; id++ {
+		id := id // captured per-iteration, not the shared loop variable
+		key := fmt.Sprintf("label_%d_name", id)
+		opts = append(opts, stringOption(key, fmt.Sprintf("Label %d name", id),
+			fmt.Sprintf("The display name for color label %d, shown in the \"zl\" chord's own "+
+				"quick picker (\"%d  <name>\") and, once built, the context menu's \"Color "+
+				"label\" submenu.\n\n\"Label %d\" by default.", id, id, id),
+			func(r *Root) string { return r.settings.LabelName(id) },
+			func(r *Root, v string) {
+				switch id {
+				case 1:
+					r.settings.Label1Name = v
+				case 2:
+					r.settings.Label2Name = v
+				case 3:
+					r.settings.Label3Name = v
+				case 4:
+					r.settings.Label4Name = v
+				case 5:
+					r.settings.Label5Name = v
+				case 6:
+					r.settings.Label6Name = v
+				case 7:
+					r.settings.Label7Name = v
+				case 8:
+					r.settings.Label8Name = v
+				case 9:
+					r.settings.Label9Name = v
+				}
+				r.persistSetting(key, v)
+			},
+		))
+	}
+	return opts
 }
 
 // activityLogCategoryOption builds one Activity log category toggle —
@@ -1302,6 +1369,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.StatusBarShowLoad), true
 	case "show_git_status":
 		return strconv.FormatBool(s.ShowGitStatus), true
+	case "status_bar_show_label":
+		return strconv.FormatBool(s.StatusBarShowLabel), true
 	case "duplicate_separator":
 		return s.DuplicateSeparator, true
 	case "duplicate_strategy":
@@ -1400,6 +1469,24 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return s.FirewallDefaultAction, true
 	case "firewall_default_protocol":
 		return s.FirewallDefaultProtocol, true
+	case "label_1_name":
+		return s.Label1Name, true
+	case "label_2_name":
+		return s.Label2Name, true
+	case "label_3_name":
+		return s.Label3Name, true
+	case "label_4_name":
+		return s.Label4Name, true
+	case "label_5_name":
+		return s.Label5Name, true
+	case "label_6_name":
+		return s.Label6Name, true
+	case "label_7_name":
+		return s.Label7Name, true
+	case "label_8_name":
+		return s.Label8Name, true
+	case "label_9_name":
+		return s.Label9Name, true
 	}
 	return "", false
 }

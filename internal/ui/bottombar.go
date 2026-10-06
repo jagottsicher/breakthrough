@@ -394,6 +394,23 @@ func (r *Root) buildStatusBar() string {
 		sep()
 	}
 
+	// The Options screen's own "Remove orphaned labels" background
+	// scan (see labelorphans.go) — independent of every segment above
+	// for the same reason rsync/Compress are independent of each
+	// other: nothing here shares state with a filesystem scan either.
+	// No queue of its own (unlike paste/rsync/Compress): starting a
+	// second scan while one is already running is simply a no-op (see
+	// startOrphanLabelScan), so there's nothing to report beyond "N
+	// queued" the way those three do.
+	r.labelScanCancelSpan = buttonBarSpan{}
+	if r.labelScanCancel != nil {
+		write("Scanning for orphaned labels… ")
+		labelScanCancelStart := col
+		write(wrapColor(r.theme.MutedTextColor, sessionsCloseGlyph))
+		r.labelScanCancelSpan = buttonBarSpan{startCol: labelScanCancelStart, endCol: col, run: func(r *Root) { r.cancelOrphanLabelScan() }}
+		sep()
+	}
+
 	// Every segment from here on is independently toggle-able (Options
 	// → Status bar — see optioncatalog.go), per the user's own explicit
 	// request: someone who never looks at load average, say, gets to
@@ -452,6 +469,12 @@ func (r *Root) buildStatusBar() string {
 	if r.settings.ShowGitStatus {
 		if git, ok := gitStatusForStatusBar(r.theme, r.panel.path); ok {
 			write(git)
+			sep()
+		}
+	}
+	if r.settings.StatusBarShowLabel {
+		if label, ok := labelStatusBarText(r.panel, r.theme, r.settings); ok {
+			write(label)
 			sep()
 		}
 	}
@@ -1069,7 +1092,7 @@ func (r *Root) captureStatusBarMouse(action tview.MouseAction, event *tcell.Even
 	x, _ := event.Position()
 	rectX, _, _, _ := r.statusBar.GetInnerRect()
 	col := x - rectX
-	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compressCancelSpan} {
+	for _, span := range []buttonBarSpan{r.notifyBadgeSpan, r.clipboardClearSpan, r.mailBadgeSpan, r.pasteCancelSpan, r.rsyncCancelSpan, r.compressCancelSpan, r.labelScanCancelSpan} {
 		if span.run != nil && col >= span.startCol && col < span.endCol {
 			span.run(r)
 			break

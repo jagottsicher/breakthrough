@@ -267,6 +267,14 @@ func (r *Root) newOptionsButtons() *tview.Flex {
 		{&r.optionsResetAllBtn, "Reset all", r.resetAllOptions},
 		{&r.optionsEditFileBtn, "Edit config file", r.editConfigFile},
 		{&r.optionsNewSchemeBtn, "New color scheme", r.duplicateColorScheme},
+		// Not tied to whichever category happens to be selected (unlike
+		// every button above, which all act on "the current category"
+		// or the whole screen) — placed here anyway rather than inside
+		// the "Label" category's own options table, since every row
+		// there is a typed get/set setting (see optionSpec) and this is
+		// an action, not a value. The whole row of buttons is always
+		// visible regardless of category, the same as the three above.
+		{&r.optionsRemoveOrphanLabelsBtn, "Remove orphaned labels", r.startOrphanLabelScan},
 	}
 
 	row := tview.NewFlex().SetDirection(tview.FlexColumn)
@@ -292,6 +300,7 @@ func (r *Root) optionsButtonList() []*tview.Button {
 		r.optionsResetAllBtn,
 		r.optionsEditFileBtn,
 		r.optionsNewSchemeBtn,
+		r.optionsRemoveOrphanLabelsBtn,
 	}
 }
 

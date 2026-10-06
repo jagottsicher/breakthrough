@@ -100,7 +100,7 @@ bar becomes that chord's own legend:
 | `g` — go to | `gg` top · `gh` home · `gu` up · `gp` back · `gn` forward · `gr` `/` (filesystem root) · `gb` Trashbin · `gc` Connect… (see [Remote connections (SFTP)](#remote-connections-sftp)) · `gm` [Messages](#notifications) · `ge` [Email](#email) |
 | `p` — permissions | `pm` chmod · `po` chown |
 | `m` — menu | `mm` [context menu](#the-context-menu) (what a bare `m` always opened before this chord existed) · `mf` New file · `md` New dir · `mw` [Open with…](#open-with) · `mt` `tail -f` · `ma` Select all · `mA` Deselect all · `mc` Clear clipboard · `mV` Cancel Paste (same as `Ctrl+C` while one is running, does nothing otherwise) · `mR` Cancel Rsync (asks: current job only, or current plus its own queue) · `mC` Cancel Compress/Extract (same question) — `mR`/`mC` never touch each other or Paste |
-| `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zo` split orientation · `zw` swap panes · `zr` reload |
+| `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zl` label (opens a quick picker to set/clear one of 9 colors on the focused row, or every checked row at once — the one member here that mutates state rather than just toggling a display) · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
 | `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
@@ -415,6 +415,7 @@ Cut
 Multiply
 Move to Trash
 Properties
+▸ Label
 ▸ More actions
 ▸ Selection
 ▸ Tabs & Split
@@ -479,6 +480,11 @@ itself. The menu's own title bar names where you are — "Menu" at the
 top, "Menu › Selection" one level in — and the menu is always at least
 as wide as that title, even when every row inside is shorter.
 
+- **▸ Label** — set or clear one of the 9 color labels (also reachable
+  directly as `zl`, without opening the menu at all) — each entry shows
+  a small colored swatch next to its own name, "0 no label" first, not
+  colored. No mnemonic of its own at the top level (unlike the three
+  submenus below): `l` already belongs to **Look**.
 - **▸ More actions** — New file (`f`, also `mf`), New dir (`d`, also
   `md`), `tail -f` (files only, `t`, also `mt`), `chown` (`o`), `chmod`
   (`m`), `sed` (`S`), Batch rename (`B`), Undo last rename (`u`),
@@ -2316,6 +2322,16 @@ commented, every setting listed — if you don't have one yet. "New color
 scheme" copies the active scheme under a fresh name and opens that.
 Either way, changes are picked up as soon as the editor closes.
 
+"Remove orphaned labels" scans every path that currently carries a
+color label (see the `zl` chord) in the background — the status bar
+shows "Scanning for orphaned labels…" with a clickable `✕` to stop it
+early — and, once finished, asks before removing any it found (a path
+whose own parent directory is reachable but demonstrably no longer
+contains it; a path under a directory that isn't reachable right now,
+such as an unmounted drive, is left alone rather than guessed at).
+"No orphaned labels found" shows as a quick notification instead when
+there's nothing to remove.
+
 ### Config file format and locations
 
 Plain `key = value` lines, `#` for comments — deliberately the
@@ -2436,6 +2452,8 @@ Every key breakthrough recognizes, with its default:
 | `log_category_rsync` | `true` | Log Rsync runs |
 | `log_category_remote` | `true` | Log remote connections and SFTP transfers |
 | `log_category_shell` | `true` | Log the bash line, "Open with…", and Edit |
+| `label_1_name` through `label_9_name` | `Label 1` … `Label 9` | Display names for the 9 color labels (the `zl` chord) — label 0 ("no label") is fixed and has no key of its own |
+| `status_bar_show_label` | `true` | Show the cursor row's own color label (swatch and name) in the status bar |
 
 ## Keyboard reference
 

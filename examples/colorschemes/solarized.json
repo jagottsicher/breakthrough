@@ -30,5 +30,14 @@
   "entry_archive": "#d33682",
   "entry_hidden": "#4b5960",
   "warning_text": "#cb4b16",
-  "critical_text": "#dc322f"
+  "critical_text": "#dc322f",
+  "label_1_background": "#dc322f",
+  "label_2_background": "#859900",
+  "label_3_background": "#b58900",
+  "label_4_background": "#268bd2",
+  "label_5_background": "#cb4b16",
+  "label_6_background": "#6c71c4",
+  "label_7_background": "#2aa198",
+  "label_8_background": "#d33682",
+  "label_9_background": "#eee8d5"
 }

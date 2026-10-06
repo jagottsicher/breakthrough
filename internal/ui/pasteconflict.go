@@ -1086,6 +1086,21 @@ func (r *Root) applyPasteOneResult(job *pasteJob, src, dst string, err error) {
 		// genuinely relocates the same real entry — Details needs to
 		// keep following it under its new path.
 		r.refreshDetailsIfShowing(src, dst)
+		// A color label follows a genuine move the same way it follows
+		// a rename (see root.go's own finishRename) or a Move-to-Trash
+		// (see reallyMoveToTrash) — but only once both ends are real
+		// local filesystem paths: job.srcClient/destClient non-nil means
+		// one end is a remote connection, whose paths filelabels' own
+		// local, path-keyed store was never meant to track (the same
+		// Panel.isRemote() exclusion rowLabelBackground already applies
+		// while browsing one). This one call covers both an ordinary
+		// Cut+Paste move and Restore-from-Trash in one go (see
+		// job.restoreDests' own doc comment on why Restore reuses this
+		// exact same machinery) — src/dst are real paths either way, so
+		// Rehome needed nothing special-cased for either.
+		if job.srcClient == nil && job.destClient == nil {
+			_ = r.labels.Rehome(src, dst)
+		}
 	}
 	if job.restoreDests != nil {
 		// The payload itself already landed safely at dst — this is

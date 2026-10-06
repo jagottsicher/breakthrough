@@ -161,8 +161,9 @@ terminal.
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trashbin), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
-  format, `zi` Nerd Font icons, `zo` split orientation, `zw` swap panes),
-  `o` for Options
+  format, `zi` Nerd Font icons, `zl` label — set/clear one of 9 colors
+  on the focused or checked row(s), `zo` split orientation, `zw` swap
+  panes), `o` for Options
   (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
   toggles without opening the screen at all). See
   [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).
@@ -185,9 +186,11 @@ terminal.
   it), Move to Trash, Properties (editable — name, permissions, click a
   bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
-  plus three `▸` submenus that replace the list in place when chosen
+  plus four `▸` submenus that replace the list in place when chosen
   (Windows Explorer's own cascading-menu idea, without needing room to
-  open beside it): "More actions" (New file, New dir, `tail -f`, chown,
+  open beside it): "Label" (set/clear one of 9 colors — see `zl` above
+  — each shown as a small colored swatch next to its name), "More
+  actions" (New file, New dir, `tail -f`, chown,
   chmod, Sed Replace, Batch rename, Undo last rename, Compare, Rsync,
   Compress…, Extract/Extract-delete-original (the latter two only for a
   recognized archive), Remove, Paste following symlinks), "Selection"

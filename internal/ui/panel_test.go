@@ -15,6 +15,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/fileicons"
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/search"
 )
@@ -3647,5 +3648,249 @@ func TestRowAtAndCurrentRowPathOnDotDot(t *testing.T) {
 	root.panel.table.Select(0, 0)
 	if row, path, ok := root.panel.CurrentRowPath(); !ok || path != dir || row != 0 {
 		t.Errorf("CurrentRowPath() = (%d, %q, %v), want (0, %q, true)", row, path, ok, dir)
+	}
+}
+
+// TestLabelTintsOnlyFixedThreeCells pins the feature spec's own
+// explicit rule: a color label paints colCheckbox/colType/colModifier
+// only, never colName/colSize/colModified — unlike the clipboard tint,
+// which deliberately does cover all of them (see rowBackground's own
+// doc comment). A label routed through rowBackground/setRowCells by
+// mistake would leak into the name column; this is the regression test
+// for that specific mistake.
+func TestLabelTintsOnlyTypeAndModifierCells(t *testing.T) {
+	dir := t.TempDir()
+	labeled := filepath.Join(dir, "labeled.txt")
+	if err := os.WriteFile(labeled, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set(labeled, 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+
+	row, ok := rowForPath(p, labeled)
+	if !ok {
+		t.Fatal("labeled.txt row not found")
+	}
+	want := theme.LabelBackground(3)
+	for _, col := range []int{colType, colModifier} {
+		bg, tinted := cellBackground(p.table.GetCell(row, col))
+		if !tinted || bg != want {
+			t.Errorf("labeled.txt col %d: background = %v, tinted = %v, want label color %v, tinted = true", col, bg, tinted, want)
+		}
+	}
+	for _, col := range []int{colCheckbox, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, tinted := cellBackground(p.table.GetCell(row, col)); tinted {
+			t.Errorf("labeled.txt col %d: unexpectedly tinted — a color label only ever reaches colType/colModifier", col)
+		}
+	}
+}
+
+// TestLabelCursorRowWhileUnfocusedTintsOnlyTypeAndModifierSelectedStyle
+// pins the exact regression a live-tested user report found: an
+// earlier revision gave every one of colCheckbox/colType/colModifier
+// (and, via a shared rowSelectedStyle, colName/colSize/colModified
+// too) the label's own SelectedStyle, so a labeled row that was also
+// the table's own current row — including via a right-click, which
+// moves the cursor there — showed the label color across the *entire*
+// row instead of the ordinary unfocused-cursor look. Only colType/
+// colModifier's own SelectedStyle may carry the label color; every
+// other cell's own SelectedStyle must stay tcell.StyleDefault, same as
+// an unlabeled row.
+func TestLabelCursorRowWhileUnfocusedTintsOnlyTypeAndModifierSelectedStyle(t *testing.T) {
+	dir := t.TempDir()
+	labeled := filepath.Join(dir, "labeled.txt")
+	if err := os.WriteFile(labeled, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set(labeled, 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+
+	row, ok := rowForPath(p, labeled)
+	if !ok {
+		t.Fatal("labeled.txt row not found")
+	}
+	want := theme.LabelBackground(3)
+	for _, col := range []int{colType, colModifier} {
+		bg, set := cellSelectedBackground(p.table.GetCell(row, col))
+		if !set || bg != want {
+			t.Errorf("col %d SelectedStyle = (%v, %v), want (%v, true)", col, bg, set, want)
+		}
+	}
+	for _, col := range []int{colCheckbox, colName, colSizeSep, colSize, colModifiedSep, colModified} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("col %d: SelectedStyle unexpectedly set — a color label must never reach this cell's SelectedStyle either", col)
+		}
+	}
+}
+
+// TestLabelCursorRowWhileFocusedShowsNoLabelColorAtAll pins the other
+// half of the same report: while the panel genuinely has keyboard
+// focus (a right-click already moves the cursor there, but doesn't by
+// itself take focus away from wherever it already was — this test
+// covers the case where it's also the focused panel), the ordinary
+// FocusedBackground must win outright, the same "focus wins over any
+// tint while focused" rule the clipboard case already follows — no
+// cell's own SelectedStyle may carry the label color here either.
+func TestLabelCursorRowWhileFocusedShowsNoLabelColorAtAll(t *testing.T) {
+	dir := t.TempDir()
+	labeled := filepath.Join(dir, "labeled.txt")
+	if err := os.WriteFile(labeled, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set(labeled, 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+
+	row, ok := rowForPath(p, labeled)
+	if !ok {
+		t.Fatal("labeled.txt row not found")
+	}
+	ref, ok := p.rowRef(row)
+	if !ok {
+		t.Fatal("rowRef lookup failed")
+	}
+	p.paintFixedRowCells(row, ref, true) // focused = true
+
+	for _, col := range []int{colCheckbox, colType, colModifier} {
+		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
+			t.Errorf("col %d: SelectedStyle unexpectedly set while focused, want tcell.StyleDefault", col)
+		}
+	}
+}
+
+// TestLabelClipboardTakesPrecedenceOverLabel pins the user's own
+// explicit priority rule: when a path is both on the clipboard and
+// carries a color label, the clipboard tint wins outright on the three
+// fixed cells, not the label's own color.
+func TestLabelClipboardTakesPrecedenceOverLabel(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "both.txt")
+	if err := os.WriteFile(target, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set(target, 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+	p.setClipboard([]string{target}, false)
+
+	row, ok := rowForPath(p, target)
+	if !ok {
+		t.Fatal("both.txt row not found")
+	}
+	bg, tinted := cellBackground(p.table.GetCell(row, colType))
+	if !tinted || bg != theme.ClipboardCopyBackground {
+		t.Errorf("colType background = %v, tinted = %v, want ClipboardCopyBackground (%v) — clipboard must win over the label", bg, tinted, theme.ClipboardCopyBackground)
+	}
+}
+
+// TestLabelExcludedForDotDotRow pins the feature spec's own explicit
+// exclusion: the ".." row itself is never labelable (ref.checkable is
+// false for it), even though its own ref.path (the parent directory —
+// see rowRef's own doc comment) is a real, otherwise-labelable path.
+func TestLabelExcludedForDotDotRow(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "sub")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set(parent, 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+
+	ref, ok := p.rowRef(0)
+	if !ok || ref.name != ".." {
+		t.Fatalf("row 0 = (%+v, %v), want the \"..\" row", ref, ok)
+	}
+	if ref.path != parent {
+		t.Fatalf("\"..\" row's own path = %q, want %q", ref.path, parent)
+	}
+	if _, tinted := p.rowLabelBackground(ref); tinted {
+		t.Error("rowLabelBackground(\"..\") = tinted, want false — the \"..\" row is never labelable")
+	}
+}
+
+// TestLabelExcludedWhileRemote and TestLabelExcludedForArchiveHit pin
+// the feature spec's other two rendering exclusions directly against
+// labelablePath/rowLabelBackground, without needing a real remote
+// session or archive fixture — both predicates only look at Panel/
+// rowRef state that's cheap to fake here.
+func TestLabelExcludedWhileRemote(t *testing.T) {
+	dir := t.TempDir()
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	path := filepath.Join(dir, "remote-ish.txt")
+	if err := store.Set(path, 1); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+	p.remote = &fakeRemoteClient{}
+
+	ref := rowRef{path: path, checkable: true}
+	if _, tinted := p.rowLabelBackground(ref); tinted {
+		t.Error("rowLabelBackground on a remote panel = tinted, want false")
+	}
+}
+
+func TestLabelExcludedForArchiveHit(t *testing.T) {
+	dir := t.TempDir()
+	p, err := NewPanel(tview.NewApplication(), dir, config.DefaultTheme().Resolve(), config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+	store := filelabels.NewWithPersistence("")
+	path := filepath.Join(dir, "archive.zip")
+	if err := store.Set(path, 1); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	p.setLabels(store)
+
+	ref := rowRef{path: path, checkable: true, archiveHit: true}
+	if _, tinted := p.rowLabelBackground(ref); tinted {
+		t.Error("rowLabelBackground on an archive-member hit = tinted, want false")
 	}
 }
