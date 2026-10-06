@@ -119,7 +119,21 @@ func newToolWindow(root *Root, id, title string) *toolWindow {
 	// EditableBackground (the lighter slate gray) while it isn't — the
 	// same two-state scheme Details' own title bar uses (see
 	// detailssidebar.go's newDetailsTitleBar).
-	tw.SetFocusFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputFocusedBackground) })
+	tw.SetFocusFunc(func() {
+		tw.titleBar.SetBackgroundColor(root.theme.InputFocusedBackground)
+		// Raises this window to the top of the draw/input order among
+		// every other open tool window, per the user's own explicit
+		// report: with several open at once (e.g. ping and nmap side by
+		// side), the one opened first always drew underneath, even once
+		// focused — Pages draws in AddPage order, and nothing before
+		// this reordered it. Fires on both a mouse click (toolWindow's
+		// own MouseHandler calls setFocus(tw)) and Tab-cycling
+		// (CycleFocusShortcut's own r.app.SetFocus(next)), since both
+		// paths end up here. Root itself, not just toolWindow, deliberately
+		// excluded: the main panel and the Details sidebar aren't part of
+		// this dynamic, several-at-once Pages stack at all.
+		root.SendToFront(tw.id)
+	})
 	tw.SetBlurFunc(func() { tw.titleBar.SetBackgroundColor(root.theme.InputBackground) })
 
 	tw.content = tview.NewTextView()
