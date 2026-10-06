@@ -642,6 +642,67 @@ func TestOpenToolCommandReportsStartFailure(t *testing.T) {
 // panel, with no Details sidebar open at all here (see
 // TestCycleFocusShortcutOrdersDetailsBeforeToolWindows for all three
 // together).
+// TestToolWindowFocusRaisesToFront pins the user's own explicit report:
+// with several tool windows open at once (e.g. ping and nmap side by
+// side), the one opened first always drew underneath the other, even
+// once it had keyboard focus — tview's Pages draws in AddPage order,
+// and nothing reordered it on focus alone. Covers both ways a window
+// can gain focus: a direct SetFocus call (the same thing a mouse click
+// triggers via toolWindow's own MouseHandler) and CycleFocusShortcut's
+// Tab-cycling.
+func TestToolWindowFocusRaisesToFront(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+
+	first := newToolWindow(r, "first", "ping")
+	first.cancel = func() {}
+	second := newToolWindow(r, "second", "nmap")
+	second.cancel = func() {}
+	r.toolWindows = append(r.toolWindows, first, second)
+	r.AddPage("first", first, false, true)
+	r.AddPage("second", second, false, true)
+
+	// indexOf finds name's position in GetPageNames' own front-to-back
+	// order — lower means closer to the front (drawn on top).
+	indexOf := func(names []string, name string) int {
+		for i, n := range names {
+			if n == name {
+				return i
+			}
+		}
+		t.Fatalf("%q not found in page order %v", name, names)
+		return -1
+	}
+
+	if got := r.GetPageNames(true); indexOf(got, "second") > indexOf(got, "first") {
+		t.Fatalf("setup: page order = %v, want \"second\" (opened later) in front of \"first\"", got)
+	}
+
+	r.app.SetFocus(first)
+	if got := r.GetPageNames(true); indexOf(got, "first") > indexOf(got, "second") {
+		t.Errorf("after focusing it directly, page order = %v, want \"first\" in front of \"second\"", got)
+	}
+
+	r.app.SetFocus(second)
+	if got := r.GetPageNames(true); indexOf(got, "second") > indexOf(got, "first") {
+		t.Errorf("after focusing it directly, page order = %v, want \"second\" in front of \"first\"", got)
+	}
+
+	// Tab-cycling: panel -> Details (not open) -> first -> second ->
+	// panel. Landing on "first" via CycleFocusShortcut should raise it
+	// the exact same way a direct SetFocus/mouse click already does.
+	r.app.SetFocus(r.panel.table)
+	if !r.CycleFocusShortcut() || r.app.GetFocus() != first {
+		t.Fatal("setup: Tab from the panel should land on the first tool window")
+	}
+	if got := r.GetPageNames(true); indexOf(got, "first") > indexOf(got, "second") {
+		t.Errorf("after Tab-cycling onto it, page order = %v, want \"first\" in front of \"second\"", got)
+	}
+}
+
 func TestCycleFocusShortcutReachesToolWindow(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {
