@@ -642,6 +642,114 @@ func TestOpenToolCommandReportsStartFailure(t *testing.T) {
 // panel, with no Details sidebar open at all here (see
 // TestCycleFocusShortcutOrdersDetailsBeforeToolWindows for all three
 // together).
+// TestToolWindowFocusRaisesToFront pins the user's own explicit report:
+// with several tool windows open at once (e.g. ping and nmap side by
+// side), the one opened first always drew underneath the other, even
+// once it had keyboard focus — tview's Pages draws in AddPage order,
+// and nothing reordered it on focus alone. Covers both ways a window
+// can gain focus: a real mouse click (via toolWindow's own
+// MouseHandler, not a direct app.SetFocus call — see below for why
+// that distinction matters) and CycleFocusShortcut's Tab-cycling.
+//
+// Calls app.SetRoot(r, true) before any of this, matching
+// cmd/breakthrough's own real startup order — not just for realism:
+// an earlier version of this fix raised the window from inside
+// toolWindow's own SetFocusFunc callback, which looked right and
+// passed every test here, but was real-world broken. Root itself can
+// still have real focus at this point in an actual session (Application.
+// SetRoot's own SetFocus(root) call runs *after* NewRoot's initial
+// SetFocus(panel.table) in cmd/breakthrough, and nothing blurs Root
+// again until the first focus change after that), so SendToFront's own
+// "if p.HasFocus() { p.Focus(p.setFocus) }" branch re-delegated focus
+// right back into the SetFocus call already in flight — corrupting
+// layout (reported live: an extremely wide window with its real
+// content squeezed into a one-column sliver at the right edge). Without
+// SetRoot here, Root.HasFocus() is false and that branch never runs,
+// which is exactly why the broken version's own tests (this one, before
+// being fixed) still passed. The real fix moves the raise to the call
+// sites that *initiate* the focus change (MouseHandler, CycleFocusShortcut)
+// — before SetFocus, never from inside a focus callback — matching how
+// pushOverlay (root.go) already does it for every other overlay.
+func TestToolWindowFocusRaisesToFront(t *testing.T) {
+	app := tview.NewApplication()
+	r, err := NewRoot(app, fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 100, 40)
+	app.SetRoot(r, true)
+
+	first := newToolWindow(r, "first", "ping")
+	first.cancel = func() {}
+	first.SetRect(2, 2, 30, 10)
+	second := newToolWindow(r, "second", "nmap")
+	second.cancel = func() {}
+	second.SetRect(5, 5, 30, 10)
+	r.toolWindows = append(r.toolWindows, first, second)
+	r.AddPage("first", first, false, true)
+	r.AddPage("second", second, false, true)
+
+	// indexOf finds name's position in GetPageNames' own front-to-back
+	// order — lower means closer to the front (drawn on top).
+	indexOf := func(names []string, name string) int {
+		for i, n := range names {
+			if n == name {
+				return i
+			}
+		}
+		t.Fatalf("%q not found in page order %v", name, names)
+		return -1
+	}
+
+	if got := r.GetPageNames(true); indexOf(got, "second") > indexOf(got, "first") {
+		t.Fatalf("setup: page order = %v, want \"second\" (opened later) in front of \"first\"", got)
+	}
+
+	// A real mouse click on "first" (its title bar, away from the
+	// close/reload buttons) — the actual path a click takes, not a
+	// direct app.SetFocus call, since that's exactly the distinction
+	// this test now has to cover (see the doc comment above).
+	click := func(tw *toolWindow, x, y int) {
+		handler := tw.MouseHandler()
+		handler(tview.MouseLeftDown, tcell.NewEventMouse(x, y, tcell.Button1, 0), func(p tview.Primitive) { r.app.SetFocus(p) })
+	}
+
+	click(first, 3, 2)
+	if r.app.GetFocus() != first {
+		t.Fatalf("clicking \"first\" should focus it, got %v", r.app.GetFocus())
+	}
+	if got := r.GetPageNames(true); indexOf(got, "first") > indexOf(got, "second") {
+		t.Errorf("after clicking it, page order = %v, want \"first\" in front of \"second\"", got)
+	}
+	fx, fy, fw, fh := first.GetRect()
+	if fx != 2 || fy != 2 || fw != 30 || fh != 10 {
+		t.Errorf("clicking \"first\" should not move/resize it, got x=%d y=%d w=%d h=%d", fx, fy, fw, fh)
+	}
+
+	click(second, 6, 5)
+	if r.app.GetFocus() != second {
+		t.Fatalf("clicking \"second\" should focus it, got %v", r.app.GetFocus())
+	}
+	if got := r.GetPageNames(true); indexOf(got, "second") > indexOf(got, "first") {
+		t.Errorf("after clicking it, page order = %v, want \"second\" in front of \"first\"", got)
+	}
+
+	// Tab-cycling: panel -> Details (not open) -> first -> second ->
+	// panel. Landing on "first" via CycleFocusShortcut should raise it
+	// the exact same way a real click already does.
+	r.app.SetFocus(r.panel.table)
+	if !r.CycleFocusShortcut() || r.app.GetFocus() != first {
+		t.Fatal("setup: Tab from the panel should land on the first tool window")
+	}
+	if got := r.GetPageNames(true); indexOf(got, "first") > indexOf(got, "second") {
+		t.Errorf("after Tab-cycling onto it, page order = %v, want \"first\" in front of \"second\"", got)
+	}
+	fx, fy, fw, fh = first.GetRect()
+	if fx != 2 || fy != 2 || fw != 30 || fh != 10 {
+		t.Errorf("Tab-cycling onto \"first\" should not move/resize it, got x=%d y=%d w=%d h=%d", fx, fy, fw, fh)
+	}
+}
+
 func TestCycleFocusShortcutReachesToolWindow(t *testing.T) {
 	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
 	if err != nil {

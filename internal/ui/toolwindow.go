@@ -340,6 +340,21 @@ func (tw *toolWindow) MouseHandler() func(action tview.MouseAction, event *tcell
 		}
 
 		if action == tview.MouseLeftDown {
+			// Raises this window to the top of the draw/input order
+			// among every other open tool window — before setFocus, not
+			// from inside a SetFocusFunc callback (an earlier version
+			// did exactly that and it was real-world broken: Root
+			// itself can still have focus at this point, early in a
+			// session, since Application.SetRoot's own SetFocus(root)
+			// call in cmd/breakthrough runs after NewRoot's own initial
+			// SetFocus(panel.table) — so SendToFront's own "if
+			// p.HasFocus() { p.Focus(p.setFocus) }" branch re-delegated
+			// focus back into this same in-flight SetFocus call,
+			// corrupting layout. Ordering it this way instead — raise,
+			// then focus — is exactly how pushOverlay (root.go) already
+			// does it for every other overlay, never from inside a
+			// focus callback.
+			tw.root.SendToFront(tw.id)
 			setFocus(tw)
 			switch {
 			case y == wy && x == toolWindowCloseButtonCol(wx, width): // the close glyph, one column in from the title bar's own top-right corner
