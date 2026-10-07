@@ -1263,20 +1263,23 @@ type Root struct {
 	viewerPDFPageCount int
 	viewerPDFMode      viewer.PDFViewMode
 
-	// viewerRemoteTempFile is the local temp file Look downloaded a
-	// remote PDF into (see downloadRemoteToTemp/openRemoteLook in
-	// remotestage.go), kept around only for as long as that PDF's own
-	// page turns (turnPDFPage) still need to read from it — "" whenever
-	// Look isn't currently showing a remote-staged PDF. A plain remote
-	// text/image Look never sets this at all: its whole content is
+	// viewerLookTempFile is the local temp file backing a Look that
+	// isn't reading path's own real, original content directly — either
+	// a remote PDF Look downloaded (see downloadRemoteToTemp/
+	// openRemoteLook in remotestage.go) or a decompressed bare .gz/.xz
+	// PDF Look (see viewer.DecompressForLook/openLook) — kept around
+	// only for as long as that PDF's own page turns (turnPDFPage) still
+	// need to read from it — "" whenever Look isn't currently showing
+	// either kind of staged PDF. A plain text/image Look, remote or
+	// decompressed, never sets this at all: its whole content is
 	// already read into r.viewerView by the time showBuiltinLook
 	// returns, so its own temp file is removed immediately afterward
 	// instead of kept around for nothing (see openRemoteLook's own doc
-	// comment). Cleaned up via cleanupViewerRemoteTempFile, called both
+	// comment). Cleaned up via cleanupViewerLookTempFile, called both
 	// from hideOverlay (the viewer overlay actually closing) and from
 	// showBuiltinLook's own top-of-function reset (a new Look opened
-	// without closing the previous remote PDF's overlay first).
-	viewerRemoteTempFile string
+	// without closing the previous one's overlay first).
+	viewerLookTempFile string
 
 	// The directory picker (see dirpicker.go/openDirPicker) — the
 	// "Tree" browse action shared by the search dialog's Start-at field
@@ -2781,7 +2784,7 @@ func (r *Root) hideOverlay() {
 		// the one point every way of actually closing it (Escape,
 		// Enter/Tab/Backtab, a click outside, Ctrl+C) funnels through,
 		// so it's also the one point cleanup can't be missed from.
-		r.cleanupViewerRemoteTempFile()
+		r.cleanupViewerLookTempFile()
 	}
 
 	if len(r.overlayStack) == 0 {

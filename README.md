@@ -799,6 +799,15 @@ terminal.
   POSIX `column -t` command already produces. Falls back to ordinary
   syntax-highlighted text if a file merely named that way isn't
   actually parseable as delimited data.
+- Bare `.gz`/`.xz` files: Look decompresses one to a temp file first,
+  then shows it exactly as if it had never been compressed — a rotated
+  log (`syslog.1.gz`, `kern.log.4.xz`, ...) opens the same way its own
+  uncompressed, currently-active version already does. A `.tar.gz`/
+  `.tgz`/`.tar.xz`/`.txz` is left alone (it's a real multi-file
+  container, already browsable by entering it like a directory — see
+  Archive browsing above); decompressed content that isn't actually
+  text still gets Look's own ordinary "no viewer for this file type"
+  response.
 - Activity log: off by default, turned on under Options with a single
   `log_level` dial — `errors`, `actions`, `detailed`, or `debug`, each a
   superset of the one before it — plus eight independent on/off

@@ -991,6 +991,13 @@ var helpText = strings.TrimLeft(`
   text if the file isn't actually parseable as delimited data despite
   its own extension.
 
+  A bare .gz/.xz file (syslog.1.gz, kern.log.4.xz, ... — never a
+  .tar.gz/.tgz/.tar.xz/.txz, already browsable by entering it like a
+  directory) is decompressed to a temp file first, then shown exactly
+  as if it had never been compressed — binary content inside still
+  gets the ordinary "no viewer for this file type" response, same as
+  any other file.
+
 [::b]Chmod dialog (context menu's "chmod")[::-]
 
   Tab / Shift+Tab   Move between fields/checkboxes

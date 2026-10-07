@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"image"
 	"image/color"
 	"image/png"
@@ -12,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/rivo/tview"
+	"github.com/ulikunitz/xz"
 )
 
 // TestLookShortcutOpensBuiltinViewer pins LookShortcut's own default
@@ -267,6 +270,171 @@ func TestShowBuiltinLookOnDirectoryShowsError(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want %q for a directory target", r.activePage, errorPage)
+	}
+}
+
+// writeGzipFile is this file's own small helper for building a .gz
+// fixture — the test-only mirror of internal/viewer's own writeGzip,
+// kept as its own small, independent copy rather than exporting that
+// one across package boundaries just for a handful of tests.
+func writeGzipFile(t *testing.T, path, content string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	gz := gzip.NewWriter(f)
+	if _, err := gz.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestOpenLookDecompressesBareGzip pins the user's own explicit
+// request: Look on a rotated, gzip-compressed log (syslog.1.gz,
+// kern.log.4.gz, ...) shows the same content Look on the uncompressed
+// file would, not "no viewer for this file type" for the raw gzip
+// bytes.
+func TestOpenLookDecompressesBareGzip(t *testing.T) {
+	dir := t.TempDir()
+	content := "Oct  7 10:00:00 host kernel: hello\n"
+	writeGzipFile(t, filepath.Join(dir, "syslog.1.gz"), content)
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1) // off ".." onto syslog.1.gz, the only other entry here
+
+	r.openLook()
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
+	}
+	if got := r.viewerView.GetText(true); got != content {
+		t.Errorf("viewerView text = %q, want the decompressed content %q", got, content)
+	}
+	// The plain-text case: content is already rendered into
+	// r.viewerView by the time openLook returns, so the decompressed
+	// temp file is disposable immediately afterward — the same
+	// "removed immediately unless it's a PDF" contract
+	// openDecompressedLook shares with openRemoteLook (see
+	// TestOpenRemoteLookOpensTheBuiltinViewerAndRemovesTheTempFile).
+	if r.viewerLookTempFile != "" {
+		t.Errorf("viewerLookTempFile = %q, want empty — a plain text Look's own temp file should be removed immediately", r.viewerLookTempFile)
+	}
+}
+
+// TestOpenLookDecompressesBareXz mirrors
+// TestOpenLookDecompressesBareGzip for .xz.
+func TestOpenLookDecompressesBareXz(t *testing.T) {
+	dir := t.TempDir()
+	content := "Oct  7 10:00:00 host kernel: world\n"
+	path := filepath.Join(dir, "kern.log.4.xz")
+	var buf bytes.Buffer
+	xw, err := xz.NewWriter(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := xw.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := xw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1)
+
+	r.openLook()
+
+	if r.activePage != viewerPage {
+		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
+	}
+	if got := r.viewerView.GetText(true); got != content {
+		t.Errorf("viewerView text = %q, want the decompressed content %q", got, content)
+	}
+}
+
+// TestOpenLookOnGzippedBinaryShowsError pins the other half of the
+// user's own explicit request: "wenn dann in der gz datei ein Binary
+// ... steckt, geht das eben nicht" — decompressed binary content gets
+// Look's own ordinary unsupported-content response, not a special
+// error of its own.
+func TestOpenLookOnGzippedBinaryShowsError(t *testing.T) {
+	dir := t.TempDir()
+	writeGzipFile(t, filepath.Join(dir, "data.gz"), "\x00\x01binary\x00stuff")
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1)
+
+	r.openLook()
+
+	if r.activePage != viewerPage && r.activePage != errorPage {
+		t.Errorf("activePage = %q, want %q or %q for unsupported decompressed content", r.activePage, viewerPage, errorPage)
+	}
+}
+
+// TestOpenLookDoesNotDecompressTarGz pins the user's own explicit
+// request that .tar.gz keep behaving exactly as it already does
+// ("das soll auch so bleiben") — Look must not try to decompress just
+// its outer gzip layer; openLook falls straight through to
+// showBuiltinLook's own ordinary handling of the raw (still binary)
+// bytes, the same as before this feature existed.
+func TestOpenLookDoesNotDecompressTarGz(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "backup.tar.gz")
+	// Real tar+gzip content, so this would decode as a tar stream if
+	// the outer gzip layer were ever stripped — the point of this test
+	// is that openLook never even tries.
+	var tgz bytes.Buffer
+	gz := gzip.NewWriter(&tgz)
+	tw := tar.NewWriter(gz)
+	member := []byte("hello\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "hello.txt", Size: int64(len(member)), Mode: 0o644}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(member); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, tgz.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(1)
+
+	r.openLook()
+
+	// The raw tar+gzip bytes are still binary content Load can't show
+	// — ending up on the error page (or the viewer page with an
+	// "unsupported" message, depending on showUnsupportedLook's own
+	// recommendation logic) either way, never showing hello.txt's own
+	// decompressed content the way TestOpenLookDecompressesBareGzip's
+	// equivalent check does.
+	if got := r.viewerView.GetText(true); strings.Contains(got, "hello") {
+		t.Errorf("viewerView text = %q, want it to NOT contain the tar member's own decompressed content", got)
 	}
 }
 
