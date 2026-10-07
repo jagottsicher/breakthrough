@@ -98,13 +98,13 @@
     },
     {
       "path": "cmd/breakthrough/main.go",
-      "size": 21356,
-      "sha256": "7091ac950d7aa66094be618d8e05ba8ab56dcc2b8627ca2fdfae37f0604cacf4"
+      "size": 22794,
+      "sha256": "e02828fec1c686f69be0b00073de3cf492feae78303d437169f902b20c074033"
     },
     {
       "path": "cmd/breakthrough/main_test.go",
-      "size": 3321,
-      "sha256": "0c410116d41368513e1bab2646e96c7b561fbd9d1b58d3dd6c51cacf580fbb10"
+      "size": 5344,
+      "sha256": "013b9db2bc94b08c6477fd4ba20e9e772661a8e50d3b9a21bb7bde392a24dedb"
     },
     {
       "path": "cmd/breakthrough/version.go",
@@ -1253,8 +1253,8 @@
     },
     {
       "path": "internal/ui/bashconsole.go",
-      "size": 32564,
-      "sha256": "f7ff26f03eaab4bc22e2300a434d90c70dd5a137bc09f822ee286e07c5124304"
+      "size": 32560,
+      "sha256": "3405b00ff7541fc56d654ada9cdf46564df811ce2f5ea5c3d43e9d07b04ef5c6"
     },
     {
       "path": "internal/ui/bashconsole_test.go",
@@ -1293,8 +1293,8 @@
     },
     {
       "path": "internal/ui/bottombar.go",
-      "size": 79482,
-      "sha256": "dc97b1f5f8c5c4b7bebd1de921636877a001466aaa1deabb39ad71075942309b"
+      "size": 79478,
+      "sha256": "51b54f79080330f86d67deba7ef457ad185cc64fffab277ae986463da594e0fe"
     },
     {
       "path": "internal/ui/bottombar_test.go",
@@ -1478,8 +1478,8 @@
     },
     {
       "path": "internal/ui/firewalladdrule.go",
-      "size": 28032,
-      "sha256": "26d4c1d89f7d57564cd54101a3cccfe23c6089ce4afbc959e3eb95fb0facf85b"
+      "size": 28028,
+      "sha256": "a2606fcfda7a893bcf5b347aa4e2714b14a547382917abf976be31437854b44e"
     },
     {
       "path": "internal/ui/firewalladdrule_test.go",
@@ -1583,8 +1583,8 @@
     },
     {
       "path": "internal/ui/mail.go",
-      "size": 4403,
-      "sha256": "01fc8f413c6000a534811213aec9e7c473b95c1ba513bbde563b84bd109f02d1"
+      "size": 4399,
+      "sha256": "39de8ddefd5c7598c0d3a4ecbe04ea06da2d78b9bcaaa92e9c464727e27e7cb7"
     },
     {
       "path": "internal/ui/mail_test.go",
@@ -1843,8 +1843,8 @@
     },
     {
       "path": "internal/ui/sessions.go",
-      "size": 19485,
-      "sha256": "757c8737103dd77e2c462ee6cf7ec9b12df22fb8dec60cf01a487e0039849b56"
+      "size": 19481,
+      "sha256": "07c17aff41e2fdd4d6be9dd18a2186a0bfd57786d4d4c23bbcac7571e0786e43"
     },
     {
       "path": "internal/ui/sessions_test.go",
@@ -1873,8 +1873,8 @@
     },
     {
       "path": "internal/ui/sshkeyscopy.go",
-      "size": 16589,
-      "sha256": "d733fd9ea915ef78729d51d1435af3f1e09acfeae675788ba0e41016a8dc23bf"
+      "size": 16585,
+      "sha256": "99f5364656bc3dadf7fc963cf0ab92843514686b587d456bd7a1a0cbb34253d4"
     },
     {
       "path": "internal/ui/sshkeyscopy_test.go",
@@ -1883,8 +1883,8 @@
     },
     {
       "path": "internal/ui/sshkeysgenerate.go",
-      "size": 14951,
-      "sha256": "b26e88a35ab3bbe3097358ae1537ff66b0b4cf8cf59264f343a02e106de97011"
+      "size": 14947,
+      "sha256": "cc524805efbe5a96532be1086ae0eb17d33aa3d76b9e3d612b6fc663564048ce"
     },
     {
       "path": "internal/ui/sshkeysgenerate_test.go",
@@ -1893,13 +1893,18 @@
     },
     {
       "path": "internal/ui/sshshell.go",
-      "size": 26742,
-      "sha256": "07ba1a7be3fa288315583256fe265b258c2d81ea80cb7fd751ee15ee8ce78d1b"
+      "size": 26738,
+      "sha256": "56831fa1170dd267e4d651eb39efd2bad1f438b6782f004f9733e36acb5e16f0"
     },
     {
       "path": "internal/ui/sshshell_test.go",
       "size": 16049,
       "sha256": "d8f8e29810a44e7d1d5c4d364213a5b93ebb7a64d3b7233547e3cd37fbe78a02"
+    },
+    {
+      "path": "internal/ui/suspend.go",
+      "size": 2214,
+      "sha256": "480add0d523d2d10ff441197765a388cb4741c0c13d3d6195bb99281d7376e5b"
     },
     {
       "path": "internal/ui/syntax.go",
@@ -2003,8 +2008,8 @@
     },
     {
       "path": "internal/ui/viewer.go",
-      "size": 27784,
-      "sha256": "c8f97e146aef90f954e48c6949d197bd75d558b4e1272de7dc9a7b7a3f7b3c04"
+      "size": 27772,
+      "sha256": "27f5945cb7e15b66f7076b3f32bd0709c3bead751e45471aad83f59dd13709f8"
     },
     {
       "path": "internal/ui/viewer_test.go",
@@ -2963,6 +2968,7 @@
         "internal/ui/sshkeysgenerate_test.go",
         "internal/ui/sshshell.go",
         "internal/ui/sshshell_test.go",
+        "internal/ui/suspend.go",
         "internal/ui/syntax.go",
         "internal/ui/syntax_test.go",
         "internal/ui/systeminfo.go",
@@ -3163,28 +3169,35 @@
       "file": "cmd/breakthrough/main.go",
       "name": "installSignalHandler",
       "kind": "function",
-      "line": 420
+      "line": 430
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
+      "file": "cmd/breakthrough/main.go",
+      "name": "shouldStop",
+      "kind": "function",
+      "line": 451
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "startDir",
       "kind": "function",
-      "line": 442
+      "line": 471
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "startDirWasGiven",
       "kind": "function",
-      "line": 458
+      "line": 487
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
       "file": "cmd/breakthrough/main.go",
       "name": "explicitStartDir",
       "kind": "function",
-      "line": 465
+      "line": 494
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
@@ -3206,6 +3219,20 @@
       "name": "TestInstallSignalHandlerCallsStopOnSIGHUP",
       "kind": "function",
       "line": 94
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
+      "file": "cmd/breakthrough/main_test.go",
+      "name": "TestInstallSignalHandlerIgnoresSIGINTWhileSuspended",
+      "kind": "function",
+      "line": 116
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
+      "file": "cmd/breakthrough/main_test.go",
+      "name": "TestShouldStop",
+      "kind": "function",
+      "line": 142
     },
     {
       "package": "github.com/jagottsicher/breakthrough/cmd/breakthrough",
@@ -22484,14 +22511,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -24659,14 +24686,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
@@ -39343,6 +39370,28 @@
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/suspend.go",
+      "name": "suspendDepth",
+      "kind": "var",
+      "line": 13
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/suspend.go",
+      "name": "SuspendedForExternalProcess",
+      "kind": "function",
+      "line": 33
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/suspend.go",
+      "name": "suspend",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 42
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/syntax.go",
       "name": "syntaxPalette",
       "kind": "type",
@@ -43294,5 +43343,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "3e8e5e247222ada3b88f47c2ec211be72320346620c23778037bd1f6e0e2e1e4"
+  "merkle_root": "46b181a96fe46bdb040eb4b54f78849cba97d1281cd2cf9c94469bbfcb5c8da6"
 }

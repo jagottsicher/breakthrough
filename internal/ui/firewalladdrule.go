@@ -508,7 +508,7 @@ func (r *Root) applyFirewallAddRule(backend firewall.Backend, spec firewall.NewR
 func (r *Root) runFirewallCommandFullScreen(command string) error {
 	full := "sudo " + command
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		fmt.Printf("$ %s\n", full)
 		cmd := exec.Command(userShell(), fullScreenShellArgs(full)...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

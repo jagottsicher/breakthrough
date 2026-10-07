@@ -1663,7 +1663,7 @@ func (r *Root) runCommandOnFileAndReload(command, path string, line int) {
 // passes 0.
 func (r *Root) runCommandOnFile(command, path string, line int) error {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		script := command + ` "$@"`
 		args := []string{"-c", script, "sh"}
 		if line > 0 {

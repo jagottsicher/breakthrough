@@ -93,7 +93,7 @@ func TestStartDirSkipsFlags(t *testing.T) {
 // which never sends any of the other two to itself.
 func TestInstallSignalHandlerCallsStopOnSIGHUP(t *testing.T) {
 	stopped := make(chan struct{}, 1)
-	installSignalHandler(func() { stopped <- struct{}{} })
+	installSignalHandler(func() { stopped <- struct{}{} }, func() bool { return false })
 
 	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
 		t.Fatalf("Kill(SIGHUP): %v", err)
@@ -103,5 +103,59 @@ func TestInstallSignalHandlerCallsStopOnSIGHUP(t *testing.T) {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
 		t.Fatal("stop was not called within 2s of sending this process its own SIGHUP")
+	}
+}
+
+// TestInstallSignalHandlerIgnoresSIGINTWhileSuspended pins the bug
+// shouldStop's own doc comment describes: a real SIGINT (standing in
+// for Ctrl+C reaching this process while a full-screen command has the
+// terminal — see installSignalHandler's own doc comment) must not call
+// stop while suspended reports true, but a SIGHUP right after still
+// must — confirming the goroutine kept looping on sigCh instead of
+// having already returned after the (ignored) SIGINT.
+func TestInstallSignalHandlerIgnoresSIGINTWhileSuspended(t *testing.T) {
+	stopped := make(chan struct{}, 1)
+	installSignalHandler(func() { stopped <- struct{}{} }, func() bool { return true })
+
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatalf("Kill(SIGINT): %v", err)
+	}
+
+	select {
+	case <-stopped:
+		t.Fatal("stop should not have been called for a SIGINT while suspended")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatalf("Kill(SIGHUP): %v", err)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stop was not called within 2s of sending this process its own SIGHUP")
+	}
+}
+
+// TestShouldStop pins every sig/suspended combination installSignalHandler's
+// own goroutine relies on, directly — no real signal needed at all.
+func TestShouldStop(t *testing.T) {
+	tests := []struct {
+		name      string
+		sig       os.Signal
+		suspended bool
+		want      bool
+	}{
+		{"SIGINT, not suspended", syscall.SIGINT, false, true},
+		{"SIGINT, suspended", syscall.SIGINT, true, false},
+		{"SIGHUP, not suspended", syscall.SIGHUP, false, true},
+		{"SIGHUP, suspended", syscall.SIGHUP, true, true},
+		{"SIGTERM, not suspended", syscall.SIGTERM, false, true},
+		{"SIGTERM, suspended", syscall.SIGTERM, true, true},
+	}
+	for _, tt := range tests {
+		if got := shouldStop(tt.sig, tt.suspended); got != tt.want {
+			t.Errorf("%s: shouldStop() = %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
