@@ -166,8 +166,10 @@ var scriptExtensions = []string{".sh", ".js", ".php", ".py"}
 // rather than giving it a distinct icon. ".yml"/".yaml" used to be here
 // too, but moved to extensionIcons' own glyphConfig entry per the
 // user's later, more specific request to treat them like ".conf"
-// instead (see extensionIcons' own doc comment).
-var textExtensions = []string{".txt", ".md"}
+// instead (see extensionIcons' own doc comment). ".rtf"/".text"/".asc"/
+// ".log"/".env"/".tex"/".htm"/".html" were added later still, same
+// request shape: "same color and both icons as .txt".
+var textExtensions = []string{".txt", ".md", ".rtf", ".text", ".asc", ".log", ".env", ".tex", ".htm", ".html"}
 
 // exactNameIcons recognizes a handful of filenames (not extensions)
 // that carry their own meaning regardless of what extension (if any)

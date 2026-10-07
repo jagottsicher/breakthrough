@@ -2974,7 +2974,12 @@ const (
 // the user's own explicit request covering both "zip" and "archive").
 // fallbackToolNames mirrors exactNameIcons' own "Makefile" special
 // case the same way, independently.
-var fallbackTextExtensions = []string{".txt", ".md"}
+// ".rtf"/".text"/".asc"/".log"/".env"/".tex"/".htm"/".html" were added
+// later, same request shape as ".txt"/".md" above: "same color and
+// both icons as .txt" — mirrors internal/fileicons' own textExtensions
+// independently, the same shape every other fallback*/entryColor list
+// here already uses.
+var fallbackTextExtensions = []string{".txt", ".md", ".rtf", ".text", ".asc", ".log", ".env", ".tex", ".htm", ".html"}
 var fallbackImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}
 
 // fallbackToolExtensions/confColorExtensions both cover the same

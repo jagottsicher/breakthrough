@@ -56,10 +56,19 @@ func TestForFileNameBased(t *testing.T) {
 		{"script.php", 0o644, glyphExecutable},
 		{"deploy.sh", 0o644, glyphExecutable}, // not even executable (mode 0o644) — scriptExtensions forces it regardless
 		{"lib.rs", 0o644, rune(0xE7A8)},
-		// txt/md share one icon, per the user's own explicit request —
-		// see textExtensions' own doc comment.
+		// txt/md/rtf/text/asc/log/env/tex/htm/html all share one icon,
+		// per the user's own explicit request — see textExtensions' own
+		// doc comment.
 		{"notes.txt", 0o644, glyphText},
 		{"README.md", 0o644, glyphText},
+		{"letter.rtf", 0o644, glyphText},
+		{"notes.text", 0o644, glyphText},
+		{"readme.asc", 0o644, glyphText},
+		{"server.log", 0o644, glyphText},
+		{".env", 0o644, glyphText},
+		{"paper.tex", 0o644, glyphText},
+		{"index.htm", 0o644, glyphText},
+		{"index.html", 0o644, glyphText},
 		{"docker-compose.yml", 0o644, glyphDocker}, // exact name wins over the .yml config icon
 		{"config.yml", 0o644, glyphConfig},
 		{"config.yaml", 0o644, glyphConfig},
