@@ -1253,8 +1253,8 @@
     },
     {
       "path": "internal/ui/bashconsole.go",
-      "size": 32560,
-      "sha256": "3405b00ff7541fc56d654ada9cdf46564df811ce2f5ea5c3d43e9d07b04ef5c6"
+      "size": 33155,
+      "sha256": "ab2369b0f043c293a8208550bce17b60dbefb4554433d9b1417417baf22683b5"
     },
     {
       "path": "internal/ui/bashconsole_test.go",
@@ -1508,8 +1508,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 80743,
-      "sha256": "6d63b2162bc434d236e4b793c00972b3f34ef0166e301077a263d7787409fadb"
+      "size": 81035,
+      "sha256": "d588917544d2bc17ad9a4e46d482e08f787baf24d291a1074ca30b51415f7a13"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -1948,13 +1948,13 @@
     },
     {
       "path": "internal/ui/tabs.go",
-      "size": 19936,
-      "sha256": "373c41540b3e70ca15d5a02f8ecc3f44368a0ff49f810e9fe0c2e2befffa3f35"
+      "size": 20624,
+      "sha256": "fb355686fbfce2170b8c25d4a535041e75ad633dbb40687ead90fe1f07043597"
     },
     {
       "path": "internal/ui/tabs_test.go",
-      "size": 38911,
-      "sha256": "704ec675fd4eb3b020a7e185c6c5784cbb275c894ebe1fe1ff57a2a9775915ca"
+      "size": 41256,
+      "sha256": "253ee808aee5eb3e1ca8f2b24a8ddd265e5dd68396ddd4461e2fcad938cb84e4"
     },
     {
       "path": "internal/ui/tabstrip.go",
@@ -15891,28 +15891,28 @@
       "name": "runShellCommandFullScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 623
+      "line": 632
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "fullScreenShellArgs",
       "kind": "function",
-      "line": 661
+      "line": 670
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "waitForEscape",
       "kind": "function",
-      "line": 680
+      "line": 689
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/bashconsole.go",
       "name": "parseCdCommand",
       "kind": "function",
-      "line": 711
+      "line": 720
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -15920,7 +15920,7 @@
       "name": "changeDirectory",
       "kind": "method",
       "receiver": "*Root",
-      "line": 729
+      "line": 738
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24700,14 +24700,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -24724,7 +24724,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1301
+      "line": 1306
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24732,7 +24732,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1324
+      "line": 1329
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24740,7 +24740,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1341
+      "line": 1346
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24748,7 +24748,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1357
+      "line": 1362
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24756,7 +24756,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1377
+      "line": 1382
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24764,7 +24764,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1393
+      "line": 1398
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24772,7 +24772,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1419
+      "line": 1424
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24780,7 +24780,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1449
+      "line": 1454
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -24788,7 +24788,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1467
+      "line": 1472
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -36175,14 +36175,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
@@ -40202,7 +40202,7 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/tabs.go",
-      "name": "tabPaths",
+      "name": "reloadAllTabs",
       "kind": "method",
       "receiver": "*Root",
       "line": 227
@@ -40210,10 +40210,18 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/tabs.go",
+      "name": "tabPaths",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 245
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tabs.go",
       "name": "saveTabs",
       "kind": "method",
       "receiver": "*Root",
-      "line": 241
+      "line": 259
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40221,7 +40229,7 @@
       "name": "RestoreSavedTabs",
       "kind": "method",
       "receiver": "*Root",
-      "line": 270
+      "line": 288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40229,7 +40237,7 @@
       "name": "restoreSavedSplit",
       "kind": "method",
       "receiver": "*Root",
-      "line": 342
+      "line": 360
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40237,7 +40245,7 @@
       "name": "newTabHere",
       "kind": "method",
       "receiver": "*Root",
-      "line": 394
+      "line": 412
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40245,7 +40253,7 @@
       "name": "newTabStartPath",
       "kind": "method",
       "receiver": "*Root",
-      "line": 409
+      "line": 427
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40253,7 +40261,7 @@
       "name": "closeCurrentTab",
       "kind": "method",
       "receiver": "*Root",
-      "line": 425
+      "line": 443
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40261,7 +40269,7 @@
       "name": "SwitchToTabShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 436
+      "line": 454
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40269,7 +40277,7 @@
       "name": "NextTabShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 458
+      "line": 476
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40277,7 +40285,7 @@
       "name": "PrevTabShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 461
+      "line": 479
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40285,7 +40293,7 @@
       "name": "TabSwitcherShortcut",
       "kind": "method",
       "receiver": "*Root",
-      "line": 486
+      "line": 504
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -40629,6 +40637,20 @@
       "name": "TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen",
       "kind": "function",
       "line": 1107
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tabs_test.go",
+      "name": "TestReloadAllTabsReloadsEveryTabsOwnDirectory",
+      "kind": "function",
+      "line": 1139
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/tabs_test.go",
+      "name": "TestReloadAllTabsSurfacesOnlyTheActivePanelsError",
+      "kind": "function",
+      "line": 1169
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43484,5 +43506,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "1773b38428e55190c6050d12b552e24ac74cf37f0b3996664456f6cb6df3473d"
+  "merkle_root": "1048f307f558027c9807014f79cb3a68c07444ec0d26e4c53587fff3f7fa3de9"
 }

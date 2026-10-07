@@ -731,7 +731,7 @@
 <!-- (*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs -->
 <g id="node20" class="node">
 <title>(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs</title>
-<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs | defined in tabs.go:270">
+<g id="a_node20"><a xlink:title="(*github.com/jagottsicher/breakthrough/internal/ui.Root).RestoreSavedTabs | defined in tabs.go:288">
 <path fill="#ffe4b5" stroke="#000000" stroke-width="1.5" d="M751.7338,-292.4C751.7338,-292.4 600.2662,-292.4 600.2662,-292.4 594.2662,-292.4 588.2662,-286.4 588.2662,-280.4 588.2662,-280.4 588.2662,-268.4 588.2662,-268.4 588.2662,-262.4 594.2662,-256.4 600.2662,-256.4 600.2662,-256.4 751.7338,-256.4 751.7338,-256.4 757.7338,-256.4 763.7338,-262.4 763.7338,-268.4 763.7338,-268.4 763.7338,-280.4 763.7338,-280.4 763.7338,-286.4 757.7338,-292.4 751.7338,-292.4"/>
 <text text-anchor="middle" x="676" y="-270.2" font-family="Verdana" font-size="14.00" fill="#000000">(*Root).RestoreSavedTabs</text>
 </a>

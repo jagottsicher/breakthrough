@@ -873,8 +873,9 @@ var helpText = strings.TrimLeft(`
   shell-quoted command line. "Run" suspends breakthrough the same way
   Edit or the bash command line already do and hands the real terminal
   to rsync, so its own --info=progress2 live progress renders exactly
-  as it would from a shell; breakthrough resumes and reloads the panel
-  once it exits. "Run in background" instead keeps breakthrough fully
+  as it would from a shell; breakthrough resumes and reloads every
+  open tab once it exits, not just the active one. "Run in background"
+  instead keeps breakthrough fully
   usable the whole time — Copy/Cut/Paste included, running at the same
   time if you start one — showing a live "rsync N%" percentage in the
   status bar instead, parsed from that same --info=progress2 output;
@@ -1273,7 +1274,11 @@ var helpText = strings.TrimLeft(`
                            sourced first, for every command, the same as
                            Midnight Commander's own command line. Once
                            it's done, press Escape to return (its own
-                           output stays on screen to read until then)
+                           output stays on screen to read until then) —
+                           every open tab reloads its own directory
+                           then, not just the active one, in case the
+                           command changed something a different tab
+                           happens to be showing
   Ctrl+J / Alt+Enter        Insert a newline (compose a multi-line script)
                            — Ctrl+J always works; Alt+Enter is intercepted
                            by some terminal emulators for their own use
