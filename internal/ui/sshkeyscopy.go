@@ -386,7 +386,7 @@ var runSSHKeysTestCommand = func(command string) error {
 // Shared with sshkeysgenerate.go's own identically-shaped need.
 func (r *Root) runSSHKeysCommandFullScreen(command string) error {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		fmt.Printf("$ %s\n", command)
 		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr

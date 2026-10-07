@@ -56,15 +56,17 @@ func downloadRemoteToTemp(remote remotefs.Client, remotePath string) (localPath 
 	return f.Name(), cleanup, nil
 }
 
-// cleanupViewerRemoteTempFile removes whatever temp file Look staged a
-// remote PDF into, if any — a no-op if there isn't one right now (the
-// ordinary, by far most common case: no Look open at all, or a local/
-// non-PDF remote Look, neither of which ever sets viewerRemoteTempFile
-// in the first place — see its own doc comment on the Root struct).
-func (r *Root) cleanupViewerRemoteTempFile() {
-	if r.viewerRemoteTempFile == "" {
+// cleanupViewerLookTempFile removes whatever temp file Look staged a
+// PDF into — remote (downloadRemoteToTemp) or a decompressed bare
+// .gz/.xz (viewer.DecompressForLook) — if any; a no-op if there isn't
+// one right now (the ordinary, by far most common case: no Look open
+// at all, or a non-PDF Look of either kind, neither of which ever sets
+// viewerLookTempFile in the first place — see its own doc comment on
+// the Root struct).
+func (r *Root) cleanupViewerLookTempFile() {
+	if r.viewerLookTempFile == "" {
 		return
 	}
-	_ = os.Remove(r.viewerRemoteTempFile)
-	r.viewerRemoteTempFile = ""
+	_ = os.Remove(r.viewerLookTempFile)
+	r.viewerLookTempFile = ""
 }

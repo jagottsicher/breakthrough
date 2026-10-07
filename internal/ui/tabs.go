@@ -216,6 +216,24 @@ func (r *Root) forEachTab(fn func(*Panel)) {
 	}
 }
 
+// reloadAllTabs reloads every open tab's own current directory — see
+// runShellCommandFullScreen's own doc comment for why a full-screen
+// shell command reloads every tab rather than just the active panel.
+// Each tab reloads its own path, independently; a background tab's
+// own reload failure is silently ignored (best-effort — nothing on
+// screen would show it anyway), while the active panel's own failure
+// is still surfaced via showError, exactly as it already was before
+// this covered more than one tab.
+func (r *Root) reloadAllTabs() {
+	for _, p := range r.tabs {
+		if p == r.panel {
+			continue
+		}
+		_ = p.load(p.path)
+	}
+	r.showError(r.panel.load(r.panel.path))
+}
+
 // tabPaths is every open tab's current directory, in tab order — what
 // gets saved for the next run (see saveTabs).
 //

@@ -100,8 +100,8 @@ func TestOpenRemoteLookOpensTheBuiltinViewerAndRemovesTheTempFile(t *testing.T) 
 	if got := r.viewerView.GetText(true); got != "remote file content" {
 		t.Errorf("viewerView text = %q, want the remote file's own content", got)
 	}
-	if r.viewerRemoteTempFile != "" {
-		t.Errorf("viewerRemoteTempFile = %q, want empty — a plain text Look's own temp file should be removed immediately", r.viewerRemoteTempFile)
+	if r.viewerLookTempFile != "" {
+		t.Errorf("viewerLookTempFile = %q, want empty — a plain text Look's own temp file should be removed immediately", r.viewerLookTempFile)
 	}
 }
 
@@ -119,13 +119,13 @@ func TestOpenRemoteLookOnAPDFKeepsTheTempFileForPageTurns(t *testing.T) {
 	if r.activePage != viewerPage {
 		t.Fatalf("activePage = %q, want %q", r.activePage, viewerPage)
 	}
-	if r.viewerRemoteTempFile == "" {
-		t.Fatal("viewerRemoteTempFile is empty, want the staged PDF's own local path")
+	if r.viewerLookTempFile == "" {
+		t.Fatal("viewerLookTempFile is empty, want the staged PDF's own local path")
 	}
-	if r.viewerPDFPath != r.viewerRemoteTempFile {
-		t.Errorf("viewerPDFPath = %q, want it to match viewerRemoteTempFile %q", r.viewerPDFPath, r.viewerRemoteTempFile)
+	if r.viewerPDFPath != r.viewerLookTempFile {
+		t.Errorf("viewerPDFPath = %q, want it to match viewerLookTempFile %q", r.viewerPDFPath, r.viewerLookTempFile)
 	}
-	if _, err := os.Stat(r.viewerRemoteTempFile); err != nil {
+	if _, err := os.Stat(r.viewerLookTempFile); err != nil {
 		t.Errorf("the staged PDF's own temp file is missing while Look is still open: %v", err)
 	}
 }
@@ -138,15 +138,15 @@ func TestClosingLookRemovesARemotePDFsOwnTempFile(t *testing.T) {
 	client := r.panel.remote.(*fakeRemoteClient)
 	client.content = map[string][]byte{"/remote/doc.pdf": buildMinimalPDF("Hello remote PDF")}
 	r.openRemoteLook(client, "/remote/doc.pdf")
-	tempFile := r.viewerRemoteTempFile
+	tempFile := r.viewerLookTempFile
 	if tempFile == "" {
 		t.Fatal("setup: expected a staged PDF temp file")
 	}
 
 	r.hideOverlay()
 
-	if r.viewerRemoteTempFile != "" {
-		t.Errorf("viewerRemoteTempFile = %q after closing Look, want it cleared", r.viewerRemoteTempFile)
+	if r.viewerLookTempFile != "" {
+		t.Errorf("viewerLookTempFile = %q after closing Look, want it cleared", r.viewerLookTempFile)
 	}
 	if _, err := os.Stat(tempFile); !os.IsNotExist(err) {
 		t.Errorf("Stat(%s) after closing Look: err = %v, want a not-exist error", tempFile, err)
@@ -166,7 +166,7 @@ func TestOpeningANewLookRemovesThePreviousRemotePDFsOwnTempFile(t *testing.T) {
 		"/remote/b.txt":   []byte("plain text"),
 	}
 	r.openRemoteLook(client, "/remote/doc.pdf")
-	firstTempFile := r.viewerRemoteTempFile
+	firstTempFile := r.viewerLookTempFile
 	if firstTempFile == "" {
 		t.Fatal("setup: expected a staged PDF temp file")
 	}

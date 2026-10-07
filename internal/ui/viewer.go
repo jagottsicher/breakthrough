@@ -135,11 +135,49 @@ func (r *Root) openLook() {
 		r.playVideoFullscreen(path)
 		return
 	}
+	if viewer.LooksLikeBareCompressedPath(path) {
+		r.openDecompressedLook(path)
+		return
+	}
 	if r.settings.Pager == "external" {
 		r.runExternalPager(path)
 		return
 	}
 	r.showBuiltinLook(path)
+}
+
+// openDecompressedLook is openLook's own bare-.gz/.xz half (see
+// viewer.LooksLikeBareCompressedPath/DecompressForLook) — decompresses
+// path into a local temp file and hands that off to whichever of the
+// two ordinary, unmodified local Look paths is configured, exactly the
+// same shape openRemoteLook already uses for a remote file (see its
+// own doc comment on the temp file's lifetime, including the PDF
+// exception), just with viewer.DecompressForLook standing in for
+// downloadRemoteToTemp. Per the user's own explicit request: this is
+// what makes Look on a rotated, gzip/xz-compressed log (syslog.1.gz,
+// kern.log.4.gz, ...) behave exactly like Look on the same file before
+// it was ever compressed — content Load still can't show (a real
+// binary inside the .gz, say) reaches Look's own ordinary "no viewer
+// for this file type" response from there, same as any other file.
+func (r *Root) openDecompressedLook(path string) {
+	tmpPath, cleanup, err := viewer.DecompressForLook(path, viewer.DefaultPreviewLimit)
+	if err != nil {
+		r.showError(fmt.Errorf("look %s: %w", path, err))
+		return
+	}
+
+	if r.settings.Pager == "external" {
+		defer cleanup()
+		r.runExternalPager(tmpPath)
+		return
+	}
+
+	opened := r.showBuiltinLook(tmpPath)
+	if !opened || r.viewerPDFPath != tmpPath {
+		cleanup()
+		return
+	}
+	r.viewerLookTempFile = tmpPath
 }
 
 // openRemoteLook is openLook's own remote-panel half: stages
@@ -153,7 +191,7 @@ func (r *Root) openLook() {
 // paging on demand (showPDFPage/turnPDFPage — see their own doc
 // comments), so its own temp file has to outlive this function,
 // surviving until the Look overlay actually closes instead
-// (r.viewerRemoteTempFile, cleaned up via hideOverlay's own per-page
+// (r.viewerLookTempFile, cleaned up via hideOverlay's own per-page
 // hook and showBuiltinLook's own reset — see the struct field's own
 // doc comment). showBuiltinLook's bool return is what tells this
 // apart from every other case (Load failed, unsupported content,
@@ -183,7 +221,7 @@ func (r *Root) openRemoteLook(remote remotefs.Client, remotePath string) {
 		cleanup()
 		return
 	}
-	r.viewerRemoteTempFile = localPath
+	r.viewerLookTempFile = localPath
 }
 
 // lookCurrentEntry is openLook under the name the context menu's own
@@ -222,14 +260,14 @@ func (r *Root) showBuiltinLook(path string) bool {
 	// very next, unrelated file opened afterward. viewerPDFMode resets
 	// alongside it: a 'g'/'t' choice made on one PDF never carries over
 	// to the next one opened — each PDF starts back at
-	// viewer.PDFViewAuto. cleanupViewerRemoteTempFile alongside both:
+	// viewer.PDFViewAuto. cleanupViewerLookTempFile alongside both:
 	// a remote PDF's own staged temp file (see openRemoteLook) is just
 	// as stale as viewerPDFPath itself the moment a new Look — remote
 	// or local — starts, whether or not the previous overlay was ever
 	// actually closed first.
 	r.viewerPDFPath = ""
 	r.viewerPDFMode = viewer.PDFViewAuto
-	r.cleanupViewerRemoteTempFile()
+	r.cleanupViewerLookTempFile()
 
 	result, err := viewer.Load(path, viewer.DefaultPreviewLimit)
 	if err != nil {
@@ -552,7 +590,7 @@ func externalPagerCommand() string {
 // still passing path through exactly as given.
 func (r *Root) runExternalPager(path string) {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		script := externalPagerCommand() + ` "$@"`
 		cmd := exec.Command(userShell(), "-c", script, "sh", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -585,7 +623,7 @@ func (r *Root) playVideoFullscreen(path string) {
 		return
 	}
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command("mpv", "--vo=gpu,tct", "--fullscreen", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
@@ -627,7 +665,7 @@ func (r *Root) tailCurrentEntry() {
 // default to.
 func (r *Root) runTailFollow(path string) {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command("tail", "-f", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()

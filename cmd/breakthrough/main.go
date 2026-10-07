@@ -360,31 +360,32 @@ func run() error {
 
 	// See installSignalHandler's own doc comment for why this matters at
 	// all for a full-screen terminal application — a dropped SSH
-	// connection is exactly the scenario this exists for.
-	installSignalHandler(app.Stop)
+	// connection is exactly the scenario this exists for. ui.
+	// SuspendedForExternalProcess is what tells a SIGINT meant for
+	// whatever full-screen command currently holds the terminal (Ctrl+C
+	// during `tail -f` from the bash console, say) apart from one that
+	// actually means "quit breakthrough" — see its own doc comment.
+	installSignalHandler(app.Stop, ui.SuspendedForExternalProcess)
 
 	return app.SetRoot(root, true).Run()
 }
 
 // installSignalHandler arranges for stop to run, in its own goroutine,
-// the first time this process receives SIGHUP, SIGTERM, or SIGINT —
-// split out from run itself so a test can pass a fake stop and send a
-// real signal to the very process running it, without needing a real
-// tview.Application/tcell.Screen at all.
+// the first time this process receives a signal shouldStop (see its
+// own doc comment) says should actually quit — split out from run
+// itself so a test can pass a fake stop (and a fake suspended) and
+// send a real signal to the very process running it, without needing
+// a real tview.Application/tcell.Screen at all.
 //
 // tcell only ever installs its own signal handler for SIGWINCH
 // (terminal resize) — verified directly against its own tty_unix.go,
-// not assumed. Left uncaught, Go's runtime applies each of these three
-// signals' own default disposition, which is to terminate the process
-// immediately: no deferred cleanup runs at all, tcell's own
-// screen.Fini() included. A dropped SSH connection delivers exactly one
-// of these (SIGHUP — literally "hang up", the name predating SSH by
-// decades but describing exactly this) once the session tears down; so
-// does `kill`/systemd stopping the process (SIGTERM), or a stray SIGINT
-// reaching this process from outside its own terminal (Ctrl+C itself
-// never generates one here — tcell's raw mode intercepts it as a key
-// event first, see run's own SetInputCapture — but nothing guarantees
-// every caller of this binary goes through a terminal at all). Left
+// not assumed. Left uncaught, Go's runtime applies each of SIGHUP/
+// SIGTERM/SIGINT's own default disposition, which is to terminate the
+// process immediately: no deferred cleanup runs at all, tcell's own
+// screen.Fini() included. A dropped SSH connection delivers exactly
+// one of these (SIGHUP — literally "hang up", the name predating SSH
+// by decades but describing exactly this) once the session tears
+// down; so does `kill`/systemd stopping the process (SIGTERM). Left
 // this way, whichever raw modes tcell turned on (mouse reporting, the
 // alternate screen buffer, ...) stay switched on at the terminal
 // emulator itself once the process is simply gone — showing as garbled
@@ -396,15 +397,24 @@ func run() error {
 // handler installed leaves a blank pane instead ("Pane is dead (status
 // 0, ...)") — the alternate screen was actually exited before exit.
 //
-// This can only help, never hurt: a connection that's already
-// genuinely, fully severed can't be fixed after the fact regardless —
-// there is no channel left to send a reset sequence over by then — but
-// plenty of real disconnects still leave the underlying pty willing to
-// accept one last write for a brief window before it's actually torn
-// down, and this is what spends that window on exactly the sequence
-// that matters instead of wasting it on nothing at all, the same reason
-// vim/htop/less and most other full-screen terminal programs all
-// install a handler like this one.
+// SIGINT is a different story from the other two, which is exactly why
+// shouldStop needs suspended at all: ordinarily Ctrl+C never generates
+// one here in the first place — tcell's raw mode intercepts it as a key
+// event first, see run's own SetInputCapture — but a full-screen
+// command run through one of Root's own suspend calls (the bash
+// console's full-screen commands, Look/Edit, mail, the SSH key/shell
+// dialogs, Sessions' own screen/tmux attach, ...) hands the real
+// terminal to a child process, raw mode and all, for exactly as long as
+// that command runs. A real SIGINT reaches this process for the whole
+// of that window, and the user almost always meant it for whatever
+// they're watching (`tail -f`, `less`, an editor, ...), not for
+// breakthrough itself — a real, user-reported bug otherwise: Ctrl+C
+// during `tail -f` from the bash console used to exit breakthrough
+// outright instead of just interrupting tail and returning to it. Kept
+// registered via signal.Notify regardless (never simply dropped from
+// the call below), so a genuine stray SIGINT from outside this
+// process's own terminal — `kill -INT`, say — still gets the same
+// graceful screen.Fini() as SIGHUP/SIGTERM, once shouldStop says yes.
 //
 // stop is app.Stop in production — tview's own documented, concurrency-
 // safe way to call screen.Fini() from outside its own event loop
@@ -417,13 +427,32 @@ func run() error {
 // kill should not persist a half-finished state nobody actually chose"
 // reasoning saveTabs' own doc comment already gives for skipping it
 // there too.
-func installSignalHandler(stop func()) {
+func installSignalHandler(stop func(), suspended func() bool) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		<-sigCh
-		stop()
+		for sig := range sigCh {
+			if !shouldStop(sig, suspended()) {
+				continue
+			}
+			stop()
+			return
+		}
 	}()
+}
+
+// shouldStop decides whether sig, arriving while suspended reports
+// whatever installSignalHandler's own call currently says, should
+// actually call stop — split out as a pure function so a test can pin
+// every combination directly, without needing to raise a real signal
+// at all (see installSignalHandler's own doc comment for the SIGINT/
+// suspended reasoning this implements). SIGHUP/SIGTERM always do;
+// SIGINT only while suspended is false.
+func shouldStop(sig os.Signal, suspended bool) bool {
+	if sig == syscall.SIGINT && suspended {
+		return false
+	}
+	return true
 }
 
 // startDir picks the directory breakthrough opens in: an explicit
