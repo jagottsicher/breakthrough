@@ -182,8 +182,8 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 }
 
 // renderLogAuditSelection fills the selection table: a checkbox column
-// (✔ checked, blank otherwise), the family's own base name, and
-// logAuditGroupInfo's own summary.
+// (○/● — see checkboxText in panel.go), the family's own base name,
+// and logAuditGroupInfo's own summary.
 func (r *Root) renderLogAuditSelection() {
 	r.logAuditTable.Clear()
 
@@ -210,12 +210,14 @@ func (r *Root) renderLogAuditSelection() {
 	enableTableSelection(r.logAuditTable)
 	for i, g := range r.logAuditGroups {
 		row := i + 1
-		mark := " "
-		if r.logAuditChecked[i] {
-			mark = "✔"
-		}
+		// checkboxText (panel.go) — the same ○/● convention every other
+		// checkbox column in this app already uses, rather than a
+		// glyph of this screen's own invention: "✔" turned out to be a
+		// double-width glyph in some terminals/fonts, bleeding its own
+		// green color into the next column instead of staying a single,
+		// plain-colored cell.
 		r.logAuditTable.SetCell(row, logAuditSelCheck,
-			tview.NewTableCell(mark).SetTextColor(r.theme.EntryExecutable).SetSelectable(true))
+			tview.NewTableCell(checkboxText(r.logAuditChecked[i])).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelName,
 			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelInfo,
