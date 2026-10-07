@@ -2354,3 +2354,69 @@ func TestLabelStatusBarTextExcludesDotDotRow(t *testing.T) {
 		t.Errorf("labelStatusBarText on \"..\" = (%q, true), want ok=false", label)
 	}
 }
+
+// TestBuildStatusBarLabelIsTheFirstSegmentWithoutClipboard pins the
+// user's own explicit request: with nothing on the clipboard, the
+// cursor row's own color label is the very first thing on the line —
+// ahead of username, disk, everything.
+func TestBuildStatusBarLabelIsTheFirstSegmentWithoutClipboard(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	path := filepath.Join(dir, "apple.txt")
+	if err := r.labels.Set(path, 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	r.panel.focusRow(2) // apple.txt — see fixtureDir
+
+	got := r.buildStatusBar()
+	labelName := r.settings.LabelName(5)
+	labelIdx := strings.Index(got, labelName)
+	if labelIdx < 0 {
+		t.Fatalf("status bar = %q, want it to contain the label's own name %q", got, labelName)
+	}
+	userIdx := strings.Index(got, r.currentUser)
+	if userIdx >= 0 && labelIdx > userIdx {
+		t.Errorf("label at %d, username at %d — want the label first, with nothing on the clipboard", labelIdx, userIdx)
+	}
+}
+
+// TestBuildStatusBarLabelIsSecondSegmentWithClipboardActive pins the
+// other half of the same request: once something is actually on the
+// clipboard (Copy/Cut), that segment's own urgency wins the very first
+// spot, and the color label moves to second place right behind it —
+// still ahead of everything else.
+func TestBuildStatusBarLabelIsSecondSegmentWithClipboardActive(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	path := filepath.Join(dir, "apple.txt")
+	if err := r.labels.Set(path, 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	r.panel.focusRow(2) // apple.txt — see fixtureDir
+	r.target = path     // clipboardTargets() falls back to r.target, not the bare cursor
+	r.copyToClipboard()
+
+	got := r.buildStatusBar()
+	labelName := r.settings.LabelName(5)
+	labelIdx := strings.Index(got, labelName)
+	if labelIdx < 0 {
+		t.Fatalf("status bar = %q, want it to contain the label's own name %q", got, labelName)
+	}
+	clipIdx := strings.Index(got, "Copy")
+	if clipIdx < 0 {
+		t.Fatalf("status bar = %q, want it to contain the clipboard's own \"Copy\" indicator", got)
+	}
+	if labelIdx < clipIdx {
+		t.Errorf("label at %d, clipboard indicator at %d — want the clipboard indicator first once something is staged", labelIdx, clipIdx)
+	}
+	userIdx := strings.Index(got, r.currentUser)
+	if userIdx >= 0 && labelIdx > userIdx {
+		t.Errorf("label at %d, username at %d — want the label still ahead of username, just behind the clipboard indicator", labelIdx, userIdx)
+	}
+}

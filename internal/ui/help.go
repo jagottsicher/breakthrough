@@ -393,13 +393,17 @@ var helpText = strings.TrimLeft(`
   Left to right, whatever's actually staged or in flight (a pending
   chord's countdown, a running Paste's progress, the clipboard's own
   contents, or a running "Remove orphaned labels" scan — see Options
-  below), then: username (green, red while running as root), Mouse
-  on/off, disk space, inode usage, git status, the cursor row's own
-  color label (a swatch plus its name, shown only while the cursor is
-  on a labeled, labelable path), kernel version, uptime, load average,
-  and a clock. Disk and inode usage, git, kernel, uptime and load each
-  have their own fixed color so they stand out from one another at a
-  glance. Every one of these segments switches off independently under
+  below), then the cursor row's own color label (a swatch plus its
+  name, shown only while the cursor is on a labeled, labelable path) —
+  the very first segment on the whole line normally, but pushed to
+  second place, right after it, whenever something is actually on the
+  clipboard (Copy/Cut's own staged selection takes priority over
+  whatever's merely under the cursor) — then: username (green, red
+  while running as root), Mouse on/off, disk space, inode usage, git
+  status, kernel version, uptime, load average, and a clock. Disk and
+  inode usage, git, kernel, uptime and load each have their own fixed
+  color so they stand out from one another at a glance. Every one of
+  these segments switches off independently under
   Options → Status bar.
 
   Disk space reads "free/total" — how much room is left; inode usage

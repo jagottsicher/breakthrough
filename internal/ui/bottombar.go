@@ -283,6 +283,31 @@ func (r *Root) buildStatusBar() string {
 	write := func(s string) { b.WriteString(s); col += tview.TaggedStringWidth(s) }
 	sep := func() { write(" │ ") }
 
+	// The cursor row's own color label — per the user's own explicit
+	// request, the very first segment on the whole line normally, but
+	// pushed to second place (right after the clipboard's own
+	// indicator/the Paste progress that occupies the same leading slot)
+	// whenever there's actually something on the clipboard: Copy/Cut's
+	// own staged selection is more urgent to see unmissably first than
+	// whatever's merely under the cursor right now. clipboardActive
+	// mirrors clipboardIndicatorText's own "nothing to show" condition
+	// (dirs and files both zero) rather than re-deriving it, so the two
+	// never disagree about what counts as "the clipboard has
+	// something".
+	clipboardActive := r.clipboardDirs != 0 || r.clipboardFiles != 0
+	writeLabelSegment := func() {
+		if !r.settings.StatusBarShowLabel {
+			return
+		}
+		if label, ok := labelStatusBarText(r.panel, r.theme, r.settings); ok {
+			write(label)
+			sep()
+		}
+	}
+	if !clipboardActive {
+		writeLabelSegment()
+	}
+
 	// A pending chord's own countdown used to get its own leading
 	// segment here (see chordIndicatorText) — folded into the button
 	// bar's own chord legend instead (see chordHintBar/
@@ -362,6 +387,9 @@ func (r *Root) buildStatusBar() string {
 			// the last time it wasn't empty can never still match a click.
 			r.clipboardClearSpan = buttonBarSpan{}
 		}
+	}
+	if clipboardActive {
+		writeLabelSegment()
 	}
 
 	// A backgrounded rsync's own progress -- entirely independent of the
@@ -469,12 +497,6 @@ func (r *Root) buildStatusBar() string {
 	if r.settings.ShowGitStatus {
 		if git, ok := gitStatusForStatusBar(r.theme, r.panel.path); ok {
 			write(git)
-			sep()
-		}
-	}
-	if r.settings.StatusBarShowLabel {
-		if label, ok := labelStatusBarText(r.panel, r.theme, r.settings); ok {
-			write(label)
 			sep()
 		}
 	}
