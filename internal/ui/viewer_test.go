@@ -283,7 +283,7 @@ func writeGzipFile(t *testing.T, path, content string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gz := gzip.NewWriter(f)
 	if _, err := gz.Write([]byte(content)); err != nil {
 		t.Fatal(err)
