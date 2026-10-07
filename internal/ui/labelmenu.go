@@ -136,18 +136,50 @@ func (r *Root) openLabelMenu() {
 	}
 	r.picker.SetDoneFunc(func() { r.hideOverlay() })
 
+	// All ten rows, always — never capped at pickerHeight the way the
+	// owner/group picker's own much longer list is (see pickerHeight's
+	// own doc comment: that one scrolls by design, with the current
+	// value centered). A real, live-tested report: capping this one the
+	// same way left four of the ten rows unreachable without scrolling,
+	// for a list short enough to just show in full instead.
 	width, _ := listSize(r.picker)
-	height := pickerHeight
-	rows := len(labelMenuRows(r.theme, r.settings))
-	if rows < height {
-		height = rows
-	}
-	x, y := r.menuAnchorForCurrentRow()
+	height := len(labelMenuRows(r.theme, r.settings))
+
+	x, belowY := r.menuAnchorForCurrentRow()
+	y := r.pickerOpenY(belowY, height)
 	x, y, width, height = r.clampToPanel(x, y, width, height)
 	r.picker.SetRect(x, y, width, height)
 	r.picker.SetCurrentItem(0)
 
 	r.pushOverlay(pickerPage, r.picker, nil)
+}
+
+// pickerOpenY decides which way a picker anchored just below a cursor
+// row (belowY — see menuAnchorForCurrentRow's own "+1, just below the
+// row" offset) should actually open, now that it's tall enough
+// (height) to risk running off the bottom of the screen: anchored at
+// the top and growing downward (the ordinary belowY, unchanged) while
+// the row is in the screen's own top half, or anchored at the row's
+// own top edge and growing upward instead once the row is in the
+// bottom half — per the user's own explicit request, so every row
+// stays visible without the terminal needing to scroll either way,
+// regardless of where in the panel the cursor happens to be.
+//
+// Deliberately keyed off which half of the whole screen the row is in,
+// not just "would it overflow" (the narrower fix clampToPanel's own
+// reposition-to-fit already does elsewhere): the user's own report was
+// specifically about a picker that technically still fit once
+// repositioned, but only by being shoved most of the way up the
+// screen — this picks the natural growth direction for the row's own
+// position up front instead, so clampToPanel's own fit-adjustment
+// afterward is rarely needed at all for a reasonably sized terminal.
+func (r *Root) pickerOpenY(belowY, height int) int {
+	_, _, _, screenHeight := r.GetRect()
+	rowY := belowY - 1 // undo menuAnchorForCurrentRow's own "+1, just below" offset
+	if rowY > screenHeight/2 {
+		return rowY - height
+	}
+	return belowY
 }
 
 // menuLabelAvailable gates the context menu's own "Label" group (see

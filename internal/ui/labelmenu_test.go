@@ -181,3 +181,48 @@ func TestOpenLabelMenuExcludedWhileRemote(t *testing.T) {
 		t.Errorf("activePage = %q, want the error overlay", root.activePage)
 	}
 }
+
+// TestOpenLabelMenuShowsAllTenRowsWithoutScrolling pins the live-tested
+// fix: the picker's own rect must be tall enough for every one of the
+// ten rows, never capped the way the much longer owner/group picker's
+// own pickerHeight is.
+func TestOpenLabelMenuShowsAllTenRowsWithoutScrolling(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+
+	root.openLabelMenu()
+
+	_, _, _, height := root.picker.GetRect()
+	if height != config.MaxLabelID+1 {
+		t.Errorf("picker height = %d, want %d (every row visible, no scrolling)", height, config.MaxLabelID+1)
+	}
+}
+
+// TestPickerOpenYTopHalfOpensDownward pins the ordinary, unchanged
+// case: a row in the screen's own top half opens exactly where
+// menuAnchorForCurrentRow already puts it, growing downward.
+func TestPickerOpenYTopHalfOpensDownward(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+
+	belowY := 5 // row itself at y=4, well within the top half of a 40-row screen
+	if got := root.pickerOpenY(belowY, 10); got != belowY {
+		t.Errorf("pickerOpenY(%d, 10) = %d, want %d (open downward, unchanged)", belowY, got, belowY)
+	}
+}
+
+// TestPickerOpenYBottomHalfOpensUpward pins the user's own explicit
+// request: a row in the screen's own bottom half opens upward instead,
+// its own bottom edge landing at the row's own top — so a tall picker
+// never needs the terminal to scroll to show every row.
+func TestPickerOpenYBottomHalfOpensUpward(t *testing.T) {
+	root := newPlainKeyRoot(t)
+	root.SetRect(0, 0, 100, 40)
+
+	belowY := 35 // row itself at y=34, in the bottom half of a 40-row screen
+	height := 10
+	want := 34 - height // the row's own top edge, minus the picker's own height
+	if got := root.pickerOpenY(belowY, height); got != want {
+		t.Errorf("pickerOpenY(%d, %d) = %d, want %d (open upward)", belowY, height, got, want)
+	}
+}

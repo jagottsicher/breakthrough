@@ -1553,13 +1553,13 @@
     },
     {
       "path": "internal/ui/labelmenu.go",
-      "size": 9994,
-      "sha256": "d6bd8cfe0a636e1fb6a7a27a9d251620d102a2000a87a397cc9eb3e089e90bbb"
+      "size": 11859,
+      "sha256": "c18337ba72ba08088d9e6a01e7aacc0f94c1c1bcef5bcebb2904ffc200b1cda8"
     },
     {
       "path": "internal/ui/labelmenu_test.go",
-      "size": 6214,
-      "sha256": "1bc7027152ba6279392c35b3bf1616cbd473f8b051df975714039fbab6e6a818"
+      "size": 8048,
+      "sha256": "62c7c8dff888c82d6e949183d9691f48e1ccafa4bcbdd5d2d5528dadfbcbe920"
     },
     {
       "path": "internal/ui/labelorphans.go",
@@ -22449,14 +22449,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -25486,16 +25486,24 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/labelmenu.go",
+      "name": "pickerOpenY",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 176
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/labelmenu.go",
       "name": "menuLabelAvailable",
       "kind": "function",
-      "line": 158
+      "line": 190
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/labelmenu.go",
       "name": "labelSubmenuEntries",
       "kind": "function",
-      "line": 176
+      "line": 208
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25503,14 +25511,14 @@
       "name": "applyLabel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 198
+      "line": 230
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/labelmenu.go",
       "name": "labelStatusBarText",
       "kind": "function",
-      "line": 221
+      "line": 253
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25560,6 +25568,27 @@
       "name": "TestOpenLabelMenuExcludedWhileRemote",
       "kind": "function",
       "line": 174
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/labelmenu_test.go",
+      "name": "TestOpenLabelMenuShowsAllTenRowsWithoutScrolling",
+      "kind": "function",
+      "line": 189
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/labelmenu_test.go",
+      "name": "TestPickerOpenYTopHalfOpensDownward",
+      "kind": "function",
+      "line": 204
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/labelmenu_test.go",
+      "name": "TestPickerOpenYBottomHalfOpensUpward",
+      "kind": "function",
+      "line": 218
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -43115,5 +43144,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "b0fcbbf2c4e23ca3a66ea2e09522930b68743c550c5c078a97bdcce5c7f2ed37"
+  "merkle_root": "5f28ada07da3c226c757cf83f62acaa5eed1cc6ae2479e52d14c11264f0e6825"
 }
