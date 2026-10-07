@@ -1,6 +1,6 @@
 .TH BREAKTHROUGH 1 "2026-09-30" "breakthrough" "User Commands"
 .SH NAME
-breakthrough \- POSIX-friendly, window/menu-based TUI file manager
+breakthrough, brk \- POSIX-friendly, window/menu-based TUI file manager
 .SH SYNOPSIS
 .B breakthrough
 [\fB\-\-debug\fR] [\fIPATH\fR]
@@ -20,6 +20,12 @@ workflows over reimplementing a shell or cloning Midnight Commander
 .RI ( du ", " df ", " find ", " grep ", " sed ", " rsync ", ...)
 are used directly wherever their own established behavior is more
 useful than a reimplementation.
+.PP
+.B brk
+is a short alias for
+.BR breakthrough ,
+installed alongside it by the .deb/.rpm packages, and takes the same
+arguments.
 .PP
 Run with no arguments, it opens in the current working directory.
 Everything else \-\- keybindings, panels, Look/Edit, archive browsing,
