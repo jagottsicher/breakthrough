@@ -21,6 +21,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -551,6 +552,47 @@ type Root struct {
 	activityLogHintSpans    []listHintSpan
 	activityLogAllEntries   []activitylog.Entry
 	activityLogReadErr      error
+
+	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
+	// opened on whichever directory the active panel currently shows
+	// (unlike every full-screen catalog above, which always shows the
+	// same thing regardless of where the panel is). Two overlay layers,
+	// stacked via pushOverlay rather than one screen with an internal
+	// mode switch: logAuditSelectionLayout lists the logrotate families
+	// Discover found in that directory with a checkbox per group (see
+	// logAuditChecked), logAuditViewerLayout — pushed on top once
+	// opened — shows the merged, chronological result of whichever
+	// groups were checked. Escape from the viewer reveals the selection
+	// screen again rather than closing straight to the panel, the same
+	// "layer by layer" unwind every other stacked overlay in this app
+	// already gives for free.
+	logAuditSelectionLayout *tview.Flex
+	logAuditTitleBar        *tview.TextView
+	logAuditTable           *tview.Table
+	logAuditHint            *tview.TextView
+	logAuditHintSpans       []listHintSpan
+	logAuditDir             string
+	logAuditGroups          []logview.FileGroup
+	logAuditChecked         map[int]bool // index into logAuditGroups
+	logAuditDiscoverErr     error
+
+	logAuditViewerLayout *tview.Flex
+	logAuditViewerTitle  *tview.TextView
+	logAuditKeywordField *tview.InputField
+	logAuditViewerTable  *tview.Table
+	logAuditViewerHint   *tview.TextView
+	logAuditViewerSpans  []listHintSpan
+	logAuditGroupsOpen   []logview.FileGroup // the groups the viewer is currently showing — see reopenLogAuditViewer
+	logAuditAllEntries   []logview.Entry
+	logAuditFiles        int
+	logAuditSkipped      int
+	logAuditParseErr     error
+
+	// The detail modal ("Enter" on a viewer row) — same shape as
+	// messagesDetailLayout/messagesDetailView (messagedetail.go).
+	logAuditDetailTitleBar *tview.TextView
+	logAuditDetailView     *tview.TextView
+	logAuditDetailLayout   *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -2207,6 +2249,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shape.
 	r.newActivityLogScreen()
 
+	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
+	// two stacked overlay layers built once here, populated on open.
+	r.newLogAuditScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -2360,6 +2406,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
 	r.AddPage(activityLogPage, r.activityLogLayout, true, false)
+	// resize=true: the Log Audit screen's own selection and viewer
+	// layers both deliberately fill the whole terminal too, the same
+	// reasoning the Options/Toolbox/Mounts/Firewall/Sessions/SSH Keys/
+	// Activity Log screens' own comments above give; the detail modal
+	// (false) is centered and sized to its own content instead, the
+	// same as messagesDetailPage just above.
+	r.AddPage(logAuditSelectionPage, r.logAuditSelectionLayout, true, false)
+	r.AddPage(logAuditViewerPage, r.logAuditViewerLayout, true, false)
+	r.AddPage(logAuditDetailPage, r.logAuditDetailLayout, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
