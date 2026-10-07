@@ -54,12 +54,12 @@ func TestOpenLogAuditDiscoversGroups(t *testing.T) {
 	}
 }
 
-func TestToggleLogAuditGroupAndOpenViewer(t *testing.T) {
+func TestOpenLogAuditViewerOpensGroupUnderCursor(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.toggleLogAuditGroup(1) // row 1 = logAuditGroups[0], the app.log group (sorted before syslog)
+	r.logAuditTable.Select(1, 0) // row 1 = logAuditGroups[0], the app.log group (sorted before syslog)
 	r.openLogAuditViewer()
 
 	if r.activePage != logAuditViewerPage {
@@ -70,19 +70,6 @@ func TestToggleLogAuditGroupAndOpenViewer(t *testing.T) {
 	}
 	if len(r.logAuditAllEntries) != 2 {
 		t.Fatalf("len(logAuditAllEntries) = %d, want 2", len(r.logAuditAllEntries))
-	}
-}
-
-func TestOpenLogAuditViewerFallsBackToCursorRowWhenNothingChecked(t *testing.T) {
-	dir := t.TempDir()
-	writeLogAuditFixture(t, dir)
-	r := newTestRootForLogAudit(t, dir)
-
-	r.logAuditTable.Select(1, 0) // app.log's own row, nothing checked
-	r.openLogAuditViewer()
-
-	if r.logAuditFiles != 1 {
-		t.Fatalf("logAuditFiles = %d, want 1 (cursor-row fallback)", r.logAuditFiles)
 	}
 }
 
@@ -105,7 +92,7 @@ func TestNavigateLogAuditLevelFindsAndWrapsErrors(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.toggleLogAuditGroup(1)
+	r.logAuditTable.Select(1, 0)
 	r.openLogAuditViewer()
 
 	r.logAuditViewerTable.Select(1, 0)
@@ -122,7 +109,7 @@ func TestRenderLogAuditViewerFiltersByKeyword(t *testing.T) {
 	writeLogAuditFixture(t, dir)
 	r := newTestRootForLogAudit(t, dir)
 
-	r.toggleLogAuditGroup(1)
+	r.logAuditTable.Select(1, 0)
 	r.openLogAuditViewer()
 
 	r.logAuditKeywordField.SetText("timeout")
@@ -136,11 +123,15 @@ func TestLogAuditGroupInfo(t *testing.T) {
 		{Base: "access.log", Files: []logview.CandidateFile{
 			{Path: "access.log", Compressed: false, Supported: true},
 			{Path: "access.log.1.gz", Compressed: true, Supported: true},
-			{Path: "access.log.2.xz", Compressed: true, Supported: false},
+			// A hypothetical, currently-impossible extension Open
+			// doesn't recognize at all — every real one Discover can
+			// produce today (gz/xz/zst/bz2) is always Supported (see
+			// logAuditGroupInfo's own doc comment).
+			{Path: "access.log.2.foo", Compressed: true, Supported: false},
 		}},
 	}
 	got := logAuditGroupInfo(groups[0])
-	if got != "3 files (2 compressed) — 1 not yet supported" {
+	if got != "3 files (2 compressed) — 1 unsupported compression" {
 		t.Errorf("logAuditGroupInfo = %q", got)
 	}
 }

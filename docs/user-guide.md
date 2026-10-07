@@ -2431,8 +2431,7 @@ collapse into one row).
 
 | Key | Action |
 |---|---|
-| `Space` | Toggle the row under the cursor |
-| `Enter` | Open the Log Audit view — every checked group, or just the group under the cursor if nothing is checked |
+| `Enter` | Open the Log Audit view for the family under the cursor |
 | `r` | Re-scan the directory |
 | `Escape` | Close |
 
@@ -2455,10 +2454,9 @@ shows running counts (events/files/skipped/errors/warnings).
 | `r` | Re-read the same files (while the list has focus) |
 | `Escape` | Back to file selection |
 
-`.gz` files are decompressed inline. `.xz`/`.zst`/`.bz2` are detected
-and listed — so a group containing one says so plainly — but not
-decompressed yet; that is tracked as a later phase in
-`feature_ideas.txt`, not silently dropped.
+`.gz`, `.xz`, `.zst`, and `.bz2` files are all decompressed
+transparently and inline — the selection screen's own Info column
+notes how many of a group's files are compressed, nothing more.
 
 ## Settings reference
 

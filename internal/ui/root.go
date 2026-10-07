@@ -559,13 +559,14 @@ type Root struct {
 	// same thing regardless of where the panel is). Two overlay layers,
 	// stacked via pushOverlay rather than one screen with an internal
 	// mode switch: logAuditSelectionLayout lists the logrotate families
-	// Discover found in that directory with a checkbox per group (see
-	// logAuditChecked), logAuditViewerLayout — pushed on top once
-	// opened — shows the merged, chronological result of whichever
-	// groups were checked. Escape from the viewer reveals the selection
-	// screen again rather than closing straight to the panel, the same
-	// "layer by layer" unwind every other stacked overlay in this app
-	// already gives for free.
+	// Discover found in that directory, logAuditViewerLayout — pushed
+	// on top once opened — shows the merged, chronological result of
+	// whichever one the cursor was on when Enter was pressed (no
+	// checkbox/multi-select — see openLogAuditViewer's own doc comment
+	// for why). Escape from the viewer reveals the selection screen
+	// again rather than closing straight to the panel, the same "layer
+	// by layer" unwind every other stacked overlay in this app already
+	// gives for free.
 	logAuditSelectionLayout *tview.Flex
 	logAuditTitleBar        *tview.TextView
 	logAuditTable           *tview.Table
@@ -573,7 +574,6 @@ type Root struct {
 	logAuditHintSpans       []listHintSpan
 	logAuditDir             string
 	logAuditGroups          []logview.FileGroup
-	logAuditChecked         map[int]bool // index into logAuditGroups
 	logAuditDiscoverErr     error
 
 	logAuditViewerLayout *tview.Flex
@@ -582,7 +582,7 @@ type Root struct {
 	logAuditViewerTable  *tview.Table
 	logAuditViewerHint   *tview.TextView
 	logAuditViewerSpans  []listHintSpan
-	logAuditGroupsOpen   []logview.FileGroup // the groups the viewer is currently showing — see reopenLogAuditViewer
+	logAuditGroupOpen    logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
 	logAuditAllEntries   []logview.Entry
 	logAuditFiles        int
 	logAuditSkipped      int

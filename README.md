@@ -832,10 +832,9 @@ terminal.
   merges them into one chronological stream with automatic format
   detection (JSON Lines — including Docker's json-file log driver,
   syslog RFC 3164/5424, a generic "timestamp level message" line, or
-  plain text as a fallback), gzip decompression, a live keyword filter
-  with match highlighting, and "e"/"w" to jump between errors and
-  warnings. `.xz`/`.zst`/`.bz2` files are detected and listed, but not
-  decompressed yet.
+  plain text as a fallback), transparent `.gz`/`.xz`/`.zst`/`.bz2`
+  decompression, a live keyword filter with match highlighting, and
+  "e"/"w" to jump between errors and warnings.
 
 ## Status
 

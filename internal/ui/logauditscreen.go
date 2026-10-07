@@ -32,8 +32,7 @@ const (
 )
 
 const (
-	logAuditSelCheck = iota
-	logAuditSelName
+	logAuditSelName = iota
 	logAuditSelInfo
 )
 
@@ -50,10 +49,6 @@ const logAuditDetailMaxWidth = 90
 
 func logAuditSelectionHintEntries() []listHintEntry {
 	return []listHintEntry{
-		hintKey("Space", "toggle", func(r *Root) {
-			row, _ := r.logAuditTable.GetSelection()
-			r.toggleLogAuditGroup(row)
-		}),
 		hintKey("Enter", "open log audit", func(r *Root) { r.openLogAuditViewer() }),
 		hintKey("r", "re-scan directory", func(r *Root) { r.reloadLogAuditDiscovery() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeLogAuditSelection() }),
@@ -156,8 +151,12 @@ func (r *Root) newLogAuditDetailScreen() {
 }
 
 // logAuditGroupInfo describes one FileGroup for the selection table's
-// own Info column — file count, how many are compressed, and a clear
-// call-out for any file Open can't decompress yet (Phase 1b).
+// own Info column — file count, how many are compressed (gzip, xz,
+// zstd, and bzip2 are all decompressed transparently — see
+// logview.Open), and a call-out for any file whose compression Open
+// doesn't recognize at all, which stays possible even though every
+// extension familyBase/compressedExt currently parses out is
+// supported today.
 func logAuditGroupInfo(g logview.FileGroup) string {
 	compressed, unsupported := 0, 0
 	for _, f := range g.Files {
@@ -176,14 +175,15 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 		info += fmt.Sprintf(" (%d compressed)", compressed)
 	}
 	if unsupported > 0 {
-		info += fmt.Sprintf(" — %d not yet supported", unsupported)
+		info += fmt.Sprintf(" — %d unsupported compression", unsupported)
 	}
 	return info
 }
 
-// renderLogAuditSelection fills the selection table: a checkbox column
-// (○/● — see checkboxText in panel.go), the family's own base name,
-// and logAuditGroupInfo's own summary.
+// renderLogAuditSelection fills the selection table: the family's own
+// base name and logAuditGroupInfo's own summary — no checkbox column;
+// Enter simply opens whichever row the cursor is already on (see
+// openLogAuditViewer's own doc comment for why).
 func (r *Root) renderLogAuditSelection() {
 	r.logAuditTable.Clear()
 
@@ -194,7 +194,6 @@ func (r *Root) renderLogAuditSelection() {
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
 	}
-	header(logAuditSelCheck, " ")
 	header(logAuditSelName, "Name")
 	header(logAuditSelInfo, "Info")
 
@@ -210,14 +209,6 @@ func (r *Root) renderLogAuditSelection() {
 	enableTableSelection(r.logAuditTable)
 	for i, g := range r.logAuditGroups {
 		row := i + 1
-		// checkboxText (panel.go) — the same ○/● convention every other
-		// checkbox column in this app already uses, rather than a
-		// glyph of this screen's own invention: "✔" turned out to be a
-		// double-width glyph in some terminals/fonts, bleeding its own
-		// green color into the next column instead of staying a single,
-		// plain-colored cell.
-		r.logAuditTable.SetCell(row, logAuditSelCheck,
-			tview.NewTableCell(checkboxText(r.logAuditChecked[i])).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelName,
 			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelInfo,
@@ -452,25 +443,18 @@ func (r *Root) closeLogAuditDetail() {
 	r.hideOverlay()
 }
 
-// captureLogAuditSelectionTableKey: Space toggles the row under the
-// cursor (see toggleLogAuditGroup), "r" re-scans the directory, Escape
+// captureLogAuditSelectionTableKey: "r" re-scans the directory, Escape
 // closes — the same shape captureActivityLogTableKey already
-// establishes.
+// establishes. Enter is handled by SetSelectedFunc, not here (see
+// newLogAuditSelectionScreen).
 func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeLogAuditSelection()
 		return nil
 	}
-	if event.Key() == tcell.KeyRune {
-		switch event.Rune() {
-		case ' ':
-			row, _ := r.logAuditTable.GetSelection()
-			r.toggleLogAuditGroup(row)
-			return nil
-		case 'r':
-			r.reloadLogAuditDiscovery()
-			return nil
-		}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
+		r.reloadLogAuditDiscovery()
+		return nil
 	}
 	return event
 }

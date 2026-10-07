@@ -586,20 +586,18 @@ var helpText = strings.TrimLeft(`
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
   into one row) with a checkbox and a summary of how many of its own
-  files are compressed, or not yet supported (see below).
+  files are compressed.
 
-    Space    Toggle the row under the cursor
-    Enter    Open the Log Audit view — every checked group, or just the
-             group under the cursor if nothing is checked
+    Enter    Open the Log Audit view for the family under the cursor
     r        Re-scan the directory
     Esc      Close
 
   Step 2 — Log Audit view: every selected file's own lines, merged into
   one chronological stream. The format of each file (JSON Lines, syslog
   RFC 3164/5424, a generic "timestamp level message" line, or plain
-  text as a fallback) is detected automatically; gzip-compressed files
-  are decompressed transparently. The title bar shows running counts
-  (events/files/skipped/errors/warnings).
+  text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
+  files are decompressed transparently. The title bar shows running
+  counts (events/files/skipped/errors/warnings).
 
     Filter          Case-insensitive substring over Source and Message,
                      narrowing the list live and highlighting every
@@ -611,11 +609,6 @@ var helpText = strings.TrimLeft(`
                      filter still highlighted
     r               Re-read the same files (while the list has focus)
     Esc             Back to file selection
-
-  .gz files are decompressed inline; .xz/.zst/.bz2 are detected and
-  listed (so you can see they exist) but not decompressed yet — a
-  group containing one says so plainly rather than silently dropping
-  it.
 
 [::b]Sessions screen ("js")[::-]
 

@@ -2,10 +2,14 @@ package logview
 
 import (
 	"compress/gzip"
+	"encoding/base64"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
+	"github.com/ulikunitz/xz"
 )
 
 func writeFile(t *testing.T, dir, name, content string) {
@@ -71,20 +75,89 @@ func TestDiscoverGroupsLogrotateFamily(t *testing.T) {
 	}
 }
 
-func TestDiscoverMarksUnsupportedCompression(t *testing.T) {
+// writeXzFile/writeZstdFile use the same libraries Open itself
+// decodes with (github.com/ulikunitz/xz, github.com/klauspost/compress/zstd)
+// to encode a fixture — both provide a real Writer, unlike bzip2 (see
+// bz2FixtureBase64's own doc comment below).
+func writeXzFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	f, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("Create %s: %v", name, err)
+	}
+	defer func() { _ = f.Close() }()
+	xw, err := xz.NewWriter(f)
+	if err != nil {
+		t.Fatalf("xz.NewWriter %s: %v", name, err)
+	}
+	if _, err := xw.Write([]byte(content)); err != nil {
+		t.Fatalf("xz Write %s: %v", name, err)
+	}
+	if err := xw.Close(); err != nil {
+		t.Fatalf("xz Close %s: %v", name, err)
+	}
+}
+
+func writeZstdFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	f, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("Create %s: %v", name, err)
+	}
+	defer func() { _ = f.Close() }()
+	zw, err := zstd.NewWriter(f)
+	if err != nil {
+		t.Fatalf("zstd.NewWriter %s: %v", name, err)
+	}
+	if _, err := zw.Write([]byte(content)); err != nil {
+		t.Fatalf("zstd Write %s: %v", name, err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zstd Close %s: %v", name, err)
+	}
+}
+
+// bz2Fixture is "hello from bzip2\n" compressed with the real `bzip2`
+// command-line tool — compress/bzip2 (Go's standard library) only ever
+// implements the decoder, never an encoder, so there is no Go-side way
+// to produce this fixture at test time the way writeXzFile/
+// writeZstdFile do. Embedded as base64 rather than shelling out to
+// `bzip2` from the test itself, so the test stays hermetic regardless
+// of whether that binary happens to be installed wherever it runs.
+const bz2FixtureBase64 = "QlpoOTFBWSZTWVXpr+UAAAPZgAAQQAAQABNm0BAgACKaMmnpH6hAAA0q9CbgvywBYu5IpwoSCr01/KA="
+
+func writeBz2File(t *testing.T, dir, name string) {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString(bz2FixtureBase64)
+	if err != nil {
+		t.Fatalf("decode bz2 fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		t.Fatalf("WriteFile %s: %v", name, err)
+	}
+}
+
+// TestDiscoverSupportsEveryCompressedExtension pins that Phase 1b
+// closed the gap TestDiscoverMarksUnsupportedCompression used to pin
+// for .xz specifically — every extension supportedCompressedExts lists
+// is now Supported, not just .gz.
+func TestDiscoverSupportsEveryCompressedExtension(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "app.log.1.xz", "placeholder\n")
+	writeXzFile(t, dir, "app.log.1.xz", "placeholder\n")
+	writeZstdFile(t, dir, "app.log.2.zst", "placeholder\n")
+	writeBz2File(t, dir, "app.log.3.bz2")
 
 	groups, err := Discover(dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(groups) != 1 || len(groups[0].Files) != 1 {
+	if len(groups) != 1 || len(groups[0].Files) != 3 {
 		t.Fatalf("groups = %+v", groups)
 	}
-	f := groups[0].Files[0]
-	if !f.Compressed || f.Supported {
-		t.Errorf("xz file Compressed/Supported = %v/%v, want true/false", f.Compressed, f.Supported)
+	for _, f := range groups[0].Files {
+		if !f.Compressed || !f.Supported {
+			t.Errorf("%s: Compressed/Supported = %v/%v, want true/true", f.Path, f.Compressed, f.Supported)
+		}
 	}
 }
 
@@ -109,6 +182,75 @@ func TestOpenDecompressesGzip(t *testing.T) {
 		t.Fatalf("ReadAll: %v", err)
 	}
 	if string(data) != "hello from gzip\n" {
+		t.Errorf("data = %q", data)
+	}
+}
+
+func TestOpenDecompressesXz(t *testing.T) {
+	dir := t.TempDir()
+	writeXzFile(t, dir, "access.log.1.xz", "hello from xz\n")
+
+	groups, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	r, err := Open(groups[0].Files[0])
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(data) != "hello from xz\n" {
+		t.Errorf("data = %q", data)
+	}
+}
+
+func TestOpenDecompressesZstd(t *testing.T) {
+	dir := t.TempDir()
+	writeZstdFile(t, dir, "access.log.1.zst", "hello from zstd\n")
+
+	groups, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	r, err := Open(groups[0].Files[0])
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(data) != "hello from zstd\n" {
+		t.Errorf("data = %q", data)
+	}
+}
+
+func TestOpenDecompressesBzip2(t *testing.T) {
+	dir := t.TempDir()
+	writeBz2File(t, dir, "access.log.1.bz2")
+
+	groups, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	r, err := Open(groups[0].Files[0])
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(data) != "hello from bzip2\n" {
 		t.Errorf("data = %q", data)
 	}
 }

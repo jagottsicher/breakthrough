@@ -1,13 +1,18 @@
 package logview
 
 import (
+	"compress/bzip2"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
+	"github.com/ulikunitz/xz"
 )
 
 // FileGroup is one logrotate family — "access.log",
@@ -23,8 +28,8 @@ type FileGroup struct {
 // CandidateFile is one file discovered by Discover.
 type CandidateFile struct {
 	Path       string
-	Compressed bool // true for .gz (see Open) or an as-yet-unsupported format
-	Supported  bool // false for a compression Open can't decompress yet (.xz/.zst/.bz2 — Phase 1b)
+	Compressed bool // true for any of supportedCompressedExts, or a compression Open doesn't recognize at all
+	Supported  bool // false only for a compression extension Open doesn't recognize at all — every one it does (gz/xz/zst/bz2) is always Supported
 }
 
 // rotationSuffixes strips, in order, the pieces a logrotate'd file name
@@ -66,11 +71,12 @@ func compressedExt(name string) string {
 	return strings.ToLower(strings.TrimPrefix(m, "."))
 }
 
-// supportedCompressedExts is what Open can actually decompress today —
-// gzip only, Phase 1; .xz/.zst/.bz2 are still discovered and grouped
-// (so the selection screen can show them, clearly marked unsupported)
-// but Open refuses them until Phase 1b adds their own decoders.
-var supportedCompressedExts = map[string]bool{"gz": true}
+// supportedCompressedExts is what Open can actually decompress — gzip,
+// xz, zstd, and bzip2 (Phase 1b), all pure Go, no CGO: gzip and bzip2
+// via stdlib, xz via the already-present github.com/ulikunitz/xz
+// (internal/viewer's own Look decompression already depends on it),
+// zstd via github.com/klauspost/compress/zstd, newly added for this.
+var supportedCompressedExts = map[string]bool{"gz": true, "xz": true, "zst": true, "bz2": true}
 
 // Discover lists dir's own regular files (one level, not recursive —
 // this mirrors how "jL" is invoked: on whichever directory is open
@@ -132,10 +138,11 @@ func rotationSortKey(path string) string {
 }
 
 // Open returns a decompressing reader for f — a plain os.File for an
-// uncompressed CandidateFile, or a gzip.Reader wrapped around one for
-// a ".gz" (see supportedCompressedExts). Callers must check f.Supported
-// first; Open itself still refuses an unsupported compression rather
-// than silently handing back raw compressed bytes.
+// uncompressed CandidateFile, or the right decoder wrapped around one
+// for a compressed extension (see supportedCompressedExts). Callers
+// must check f.Supported first; Open itself still refuses an
+// unsupported compression (an unrecognized extension sneaking in some
+// other way) rather than silently handing back raw compressed bytes.
 func Open(f CandidateFile) (io.ReadCloser, error) {
 	file, err := os.Open(f.Path)
 	if err != nil {
@@ -144,29 +151,71 @@ func Open(f CandidateFile) (io.ReadCloser, error) {
 	if !f.Compressed {
 		return file, nil
 	}
-	gz, err := gzip.NewReader(file)
-	if err != nil {
+
+	switch compressedExt(filepath.Base(f.Path)) {
+	case "gz":
+		gz, err := gzip.NewReader(file)
+		if err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		return &closingReader{Reader: gz, closer: gz, file: file}, nil
+	case "xz":
+		xr, err := xz.NewReader(file)
+		if err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		// xz.Reader owns no resource of its own beyond the file —
+		// pure Go decompression, nothing to release but the fd.
+		return &closingReader{Reader: xr, file: file}, nil
+	case "zst":
+		zr, err := zstd.NewReader(file)
+		if err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		return &closingReader{Reader: zr, closer: zstdCloser{zr}, file: file}, nil
+	case "bz2":
+		// bzip2.NewReader returns a plain io.Reader — like xz, the Go
+		// standard library only ever implements bzip2 decoding, never
+		// encoding, and needs no Close of its own beyond the file.
+		return &closingReader{Reader: bzip2.NewReader(file), file: file}, nil
+	default:
 		_ = file.Close()
-		return nil, err
+		return nil, fmt.Errorf("%s: unsupported compression", f.Path)
 	}
-	return &gzipReadCloser{gz: gz, file: file}, nil
 }
 
-// gzipReadCloser closes both the gzip.Reader and the underlying file —
-// gzip.Reader.Close only releases the decompressor's own state, not
-// the file descriptor it was reading from.
-type gzipReadCloser struct {
-	gz   *gzip.Reader
-	file *os.File
+// closingReader pairs a decompressing io.Reader with the underlying
+// file it reads from, closing both — closer is the decoder's own
+// Close (gzip.Reader, zstdCloser), left nil for a decoder that has
+// none (xz.Reader, bzip2's own Reader), the same "only close what
+// actually owns a resource" reasoning gzipReadCloser used to need its
+// own dedicated type for.
+type closingReader struct {
+	io.Reader
+	closer io.Closer
+	file   *os.File
 }
 
-func (g *gzipReadCloser) Read(p []byte) (int, error) { return g.gz.Read(p) }
-
-func (g *gzipReadCloser) Close() error {
-	gzErr := g.gz.Close()
-	fileErr := g.file.Close()
-	if gzErr != nil {
-		return gzErr
+func (c *closingReader) Close() error {
+	var closerErr error
+	if c.closer != nil {
+		closerErr = c.closer.Close()
+	}
+	fileErr := c.file.Close()
+	if closerErr != nil {
+		return closerErr
 	}
 	return fileErr
+}
+
+// zstdCloser adapts *zstd.Decoder's own Close (which returns nothing)
+// to io.Closer, so closingReader can treat it the same as gzip.Reader.
+type zstdCloser struct{ zr *zstd.Decoder }
+
+func (z zstdCloser) Close() error {
+	z.zr.Close()
+	return nil
 }
