@@ -622,7 +622,7 @@ func (r *Root) executeCurrentEntry() {
 // in the directory currently on screen.
 func (r *Root) runShellCommandFullScreen(command string, category activitylog.Category) {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		fmt.Printf("$ %s\n", command)
 		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
 		if r.panel.remote == nil {

@@ -552,7 +552,7 @@ func externalPagerCommand() string {
 // still passing path through exactly as given.
 func (r *Root) runExternalPager(path string) {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		script := externalPagerCommand() + ` "$@"`
 		cmd := exec.Command(userShell(), "-c", script, "sh", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -585,7 +585,7 @@ func (r *Root) playVideoFullscreen(path string) {
 		return
 	}
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command("mpv", "--vo=gpu,tct", "--fullscreen", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()
@@ -627,7 +627,7 @@ func (r *Root) tailCurrentEntry() {
 // default to.
 func (r *Root) runTailFollow(path string) {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command("tail", "-f", path)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()

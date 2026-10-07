@@ -106,7 +106,7 @@ func (r *Root) openMail() {
 	}
 
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command(argv[0], argv[1:]...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()

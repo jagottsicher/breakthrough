@@ -637,7 +637,7 @@ func (r *Root) launchSSHShell(conn remotefs.Connection) {
 	argv := sshShellArgv(conn)
 
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		cmd := exec.Command("ssh", argv...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		runErr = cmd.Run()

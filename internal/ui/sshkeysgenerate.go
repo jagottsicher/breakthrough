@@ -348,7 +348,7 @@ func (r *Root) applySSHKeysGenerate(command string) {
 // this file's own package doc comment).
 func (r *Root) runSSHKeysGenerateCommandFullScreen(command string) error {
 	var runErr error
-	r.app.Suspend(func() {
+	r.suspend(func() {
 		fmt.Printf("$ %s\n", command)
 		cmd := exec.Command(userShell(), fullScreenShellArgs(command)...)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
