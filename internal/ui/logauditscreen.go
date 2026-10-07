@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filterexpr"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 )
 
@@ -65,6 +66,8 @@ func logAuditViewerHintEntries() []listHintEntry {
 			r.openLogAuditDetail(row)
 		}),
 		hintKey("r", "re-read files (while the list has focus)", func(r *Root) { r.reopenLogAuditViewer() }),
+		hintKey("f", "toggle follow (while the list has focus)", func(r *Root) { r.toggleLogAuditFollow() }),
+		hintKey("s", "statistics (while the list has focus)", func(r *Root) { r.openLogAuditStats() }),
 		hintKey("Esc", "back to file selection", func(r *Root) { r.closeLogAuditViewer() }),
 	}
 }
@@ -76,6 +79,7 @@ func (r *Root) newLogAuditScreen() {
 	r.newLogAuditSelectionScreen()
 	r.newLogAuditViewerScreen()
 	r.newLogAuditDetailScreen()
+	r.newLogAuditStatsScreen()
 }
 
 func (r *Root) newLogAuditSelectionScreen() {
@@ -109,9 +113,49 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
 	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
-	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) { r.logAuditViewerFieldDone(key) })
+	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
+		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
+	})
 	r.logAuditKeywordField.SetFocusFunc(func() { styleInput(r.logAuditKeywordField, r.theme, true) })
 	r.logAuditKeywordField.SetBlurFunc(func() { styleInput(r.logAuditKeywordField, r.theme, false) })
+
+	// Time reuses filterexpr.ParseMtime verbatim (see
+	// logAuditEntryVisible) — the exact same "before"/"after"/
+	// "between ... and ..."/relative grammar the panel's own
+	// Modified-time filter and the Action Log's own Time field
+	// already accept, rather than a third date grammar for what is,
+	// structurally, the same kind of question.
+	r.logAuditTimeField = tview.NewInputField()
+	r.logAuditTimeField.SetLabel("Time (e.g. \"last 7 days\", \"after 2026-09-01\"): ")
+	r.logAuditTimeField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
+	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
+		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
+	})
+	r.logAuditTimeField.SetFocusFunc(func() { styleInput(r.logAuditTimeField, r.theme, true) })
+	r.logAuditTimeField.SetBlurFunc(func() { styleInput(r.logAuditTimeField, r.theme, false) })
+
+	// Level is a *minimum* severity ("warn" shows WARN and everything
+	// above it — ERROR, FATAL — not only exact WARN matches), the same
+	// "t Zeitfilter"/severity-threshold idea the original mockup asked
+	// for: a quick "show me the bad stuff" narrowing, not a precise
+	// equality filter nobody actually wants while triaging.
+	r.logAuditLevelField = tview.NewInputField()
+	r.logAuditLevelField.SetLabel("Level >= (e.g. warn): ")
+	r.logAuditLevelField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
+	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
+		r.logAuditViewerFieldDone(key, r.logAuditViewerTable, r.logAuditTimeField)
+	})
+	r.logAuditLevelField.SetFocusFunc(func() { styleInput(r.logAuditLevelField, r.theme, true) })
+	r.logAuditLevelField.SetBlurFunc(func() { styleInput(r.logAuditLevelField, r.theme, false) })
+
+	filterRow := tview.NewFlex().
+		AddItem(r.logAuditKeywordField, 0, 2, true).
+		AddItem(r.logAuditTimeField, 0, 2, false).
+		AddItem(r.logAuditLevelField, 0, 1, false)
+
+	r.logAuditTimelineView = tview.NewTextView()
+	r.logAuditTimelineView.SetWrap(false)
+	r.logAuditTimelineView.SetDynamicColors(true)
 
 	r.logAuditViewerTable = tview.NewTable()
 	r.logAuditViewerTable.SetBorders(false)
@@ -131,7 +175,8 @@ func (r *Root) newLogAuditViewerScreen() {
 
 	r.logAuditViewerLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditViewerTitle, 1, 0, false).
-		AddItem(r.logAuditKeywordField, 1, 0, false).
+		AddItem(filterRow, 1, 0, false).
+		AddItem(r.logAuditTimelineView, 1, 0, false).
 		AddItem(r.logAuditViewerTable, 0, 1, true).
 		AddItem(r.logAuditViewerHint, 1, 0, false)
 }
@@ -257,6 +302,59 @@ func logAuditMatchesKeyword(e logview.Entry, keyword string) bool {
 	return strings.Contains(strings.ToLower(e.Message), keyword) || strings.Contains(strings.ToLower(e.Source), keyword)
 }
 
+// logAuditMinLevel parses levelText (e.g. "warn", "ERROR") into a
+// minimum-severity threshold — ok is false for blank or unparseable
+// text, the same graceful-degradation contract filterActivityLogEntries
+// already has for an unparseable time expression: that half of the
+// filter simply isn't applied, no error state shown for it.
+func logAuditMinLevel(levelText string) (logview.Level, bool) {
+	levelText = strings.TrimSpace(levelText)
+	if levelText == "" {
+		return logview.LevelUnknown, false
+	}
+	level := logview.ParseLevel(levelText)
+	if level == logview.LevelUnknown {
+		return logview.LevelUnknown, false
+	}
+	return level, true
+}
+
+// logAuditEntryVisible combines all three viewer filters (AND, the
+// same combination rule filterActivityLogEntries' own keyword+time
+// pair already uses): keyword over Source/Message, a time range via
+// filterexpr.ParseMtime (the exact same grammar the Action Log's own
+// Time field already accepts), and a minimum Level severity. An entry
+// with LevelUnknown never passes a Level filter, even ">= trace" —
+// "no level recognized" and "this severity or worse" are different
+// claims, and the filter is explicitly about the latter.
+func logAuditEntryVisible(e logview.Entry, keyword, timeExpr, levelText string, now time.Time) bool {
+	if !logAuditMatchesKeyword(e, keyword) {
+		return false
+	}
+	if strings.TrimSpace(timeExpr) != "" {
+		if f, err := filterexpr.ParseMtime(timeExpr, now); err == nil && !f.Match(e.Time) {
+			return false
+		}
+	}
+	if minLevel, ok := logAuditMinLevel(levelText); ok {
+		if e.Level == logview.LevelUnknown || e.Level < minLevel {
+			return false
+		}
+	}
+	return true
+}
+
+// logAuditMaxRenderedRows caps how many matching entries
+// renderLogAuditViewer actually builds TableCells for — a real
+// /var/log/nginx/access.log family can run into the hundreds of
+// thousands of lines, and rebuilding that many tview.TableCell values
+// on every keystroke in the filter field would make typing feel
+// sluggish long before anything else about this screen does. The
+// title bar's own count still reports the true total (see
+// renderLogAuditViewer) so narrowing the filter further is always the
+// visible next step, not a silent truncation.
+const logAuditMaxRenderedRows = 2000
+
 // logAuditHighlight escapes text for safe use inside a tview cell (see
 // panel.go's own addRow doc comment on why escaping has to happen
 // before any tag is added, not after) and, if keyword is non-empty,
@@ -313,6 +411,10 @@ func (r *Root) renderLogAuditViewer() {
 	header(logAuditColMessage, "Message")
 
 	keyword := r.logAuditKeywordField.GetText()
+	timeExpr := r.logAuditTimeField.GetText()
+	levelText := r.logAuditLevelField.GetText()
+	now := time.Now()
+
 	var shown []logview.Entry
 	errCount, warnCount := 0, 0
 	for _, e := range r.logAuditAllEntries {
@@ -322,13 +424,22 @@ func (r *Root) renderLogAuditViewer() {
 		case logview.LevelWarn:
 			warnCount++
 		}
-		if logAuditMatchesKeyword(e, keyword) {
+		if logAuditEntryVisible(e, keyword, timeExpr, levelText, now) {
 			shown = append(shown, e)
 		}
 	}
 
-	r.logAuditViewerTitle.SetText(fmt.Sprintf(" Log Audit — %d events │ %d files │ %d skipped │ %d errors │ %d warnings ",
-		len(r.logAuditAllEntries), r.logAuditFiles, r.logAuditSkipped, errCount, warnCount))
+	title := fmt.Sprintf(" Log Audit — %d events │ %d files │ %d skipped │ %d errors │ %d warnings",
+		len(r.logAuditAllEntries), r.logAuditFiles, r.logAuditSkipped, errCount, warnCount)
+	if len(shown) != len(r.logAuditAllEntries) {
+		title += fmt.Sprintf(" │ %d matching", len(shown))
+	}
+	if r.logAuditFollowing {
+		title += " │ ● following"
+	}
+	r.logAuditViewerTitle.SetText(title + " ")
+
+	r.renderLogAuditTimeline(shown)
 
 	if r.logAuditParseErr != nil {
 		showTablePlaceholder(r.logAuditViewerTable, r.logAuditParseErr.Error(), r.theme.EntryError)
@@ -343,9 +454,17 @@ func (r *Root) renderLogAuditViewer() {
 		return
 	}
 
+	// logAuditMaxRenderedRows caps the table itself, not the counts
+	// above or the timeline (both still reflect every matching entry)
+	// — see its own doc comment for why.
+	rendered := shown
+	if len(rendered) > logAuditMaxRenderedRows {
+		rendered = rendered[:logAuditMaxRenderedRows]
+	}
+
 	enableTableSelection(r.logAuditViewerTable)
 	bg := r.theme.ButtonBackground
-	for i, e := range shown {
+	for i, e := range rendered {
 		row := i + 1
 		levelColor := logAuditLevelColor(r.theme, e.Level)
 		cell := func(col int, text string, color tcell.Color) {
@@ -359,7 +478,7 @@ func (r *Root) renderLogAuditViewer() {
 		r.logAuditViewerTable.GetCell(row, logAuditColTime).SetReference(e)
 	}
 
-	if cur, _ := r.logAuditViewerTable.GetSelection(); cur < 1 || cur > len(shown) {
+	if cur, _ := r.logAuditViewerTable.GetSelection(); cur < 1 || cur > len(rendered) {
 		r.logAuditViewerTable.Select(1, 0)
 	}
 }
@@ -426,11 +545,21 @@ func (r *Root) openLogAuditDetail(row int) {
 	bg := r.theme.ButtonBackground
 	header := fmt.Sprintf("%s  %s  %s\n", logAuditTimeText(e.Time), e.Level.String(), e.File)
 	body := strings.Join(wrapText(e.Message, width), "\n")
-	text := tview.Escape(header) + logAuditHighlight(body, keyword, bg)
+	full := header + body
+
+	// Raw only earns its own section when it actually differs from
+	// Message — identical for FormatPlain (see Entry.Raw's own doc
+	// comment), where showing it twice would be noise, not help.
+	if e.Raw != e.Message {
+		rawBody := strings.Join(wrapText(e.Raw, width), "\n")
+		full += "\n\nRaw:\n" + rawBody
+	}
+
+	text := tview.Escape(header) + logAuditHighlight(full[len(header):], keyword, bg)
 	r.logAuditDetailView.SetText(text)
 	r.logAuditDetailTitleBar.SetText(" Log entry ")
 
-	textWidth, textHeight := textSize(header + body)
+	textWidth, textHeight := textSize(full)
 	height := textHeight + 1 // +1 for the title bar row
 	_, _, screenWidth, screenHeight := r.GetRect()
 	x, y, boxWidth, boxHeight := r.clampToScreen((screenWidth-textWidth)/2, (screenHeight-height)/2, textWidth, height)
@@ -459,30 +588,40 @@ func (r *Root) captureLogAuditSelectionTableKey(event *tcell.EventKey) *tcell.Ev
 	return event
 }
 
-// logAuditViewerFieldDone is the keyword field's own SetDoneFunc: Tab/
-// Enter moves focus to the table, Escape closes the viewer — there is
-// only one field here, unlike Activity Log's keyword/time pair, so
-// there's no Backtab/"previous field" case to handle.
-func (r *Root) logAuditViewerFieldDone(key tcell.Key) {
+// logAuditViewerFieldDone is each filter field's own SetDoneFunc — the
+// same shape activityLogFieldDone already establishes for Activity
+// Log's own keyword/time pair, just cycling through three fields
+// (Keyword → Time → Level → table) instead of two: Tab/Enter moves to
+// next, Backtab to prev, Escape closes the viewer regardless of which
+// field it was pressed in.
+func (r *Root) logAuditViewerFieldDone(key tcell.Key, next, prev tview.Primitive) {
 	switch key {
 	case tcell.KeyEscape:
 		r.closeLogAuditViewer()
-	case tcell.KeyTab, tcell.KeyBacktab, tcell.KeyEnter:
-		r.app.SetFocus(r.logAuditViewerTable)
+	case tcell.KeyTab, tcell.KeyEnter:
+		r.app.SetFocus(next)
+	case tcell.KeyBacktab:
+		r.app.SetFocus(prev)
 	}
 }
 
-// captureLogAuditViewerTableKey: Tab returns focus to the keyword
-// field, "e"/"w" jump to the next error/warning, "r" re-reads the same
-// files, Escape closes the viewer (back to the selection screen, see
-// closeLogAuditViewer/pushOverlay).
+// captureLogAuditViewerTableKey: Tab returns focus to the Keyword
+// field (restarting the three-field cycle), Backtab to Level (the
+// field right before the table in that cycle) — "e"/"w" jump to the
+// next error/warning, "r" re-reads the same files, "f" toggles follow,
+// "s" opens the Statistics modal, Escape closes the viewer (back to
+// the selection screen, see closeLogAuditViewer/pushOverlay).
 func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeLogAuditViewer()
 		return nil
 	}
-	if event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab {
+	if event.Key() == tcell.KeyTab {
 		r.app.SetFocus(r.logAuditKeywordField)
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.app.SetFocus(r.logAuditLevelField)
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -495,6 +634,12 @@ func (r *Root) captureLogAuditViewerTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'r':
 			r.reopenLogAuditViewer()
+			return nil
+		case 'f':
+			r.toggleLogAuditFollow()
+			return nil
+		case 's':
+			r.openLogAuditStats()
 			return nil
 		}
 	}
@@ -534,6 +679,10 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditViewerTitle.SetTextColor(theme.TextColor)
 	styleInput(r.logAuditKeywordField, theme, r.logAuditKeywordField.HasFocus())
 	r.logAuditKeywordField.SetLabelColor(theme.TextColor)
+	styleInput(r.logAuditTimeField, theme, r.logAuditTimeField.HasFocus())
+	r.logAuditTimeField.SetLabelColor(theme.TextColor)
+	styleInput(r.logAuditLevelField, theme, r.logAuditLevelField.HasFocus())
+	r.logAuditLevelField.SetLabelColor(theme.TextColor)
 	r.logAuditViewerHint.SetBackgroundColor(theme.InputBackground)
 	r.logAuditViewerHint.SetTextColor(theme.MutedTextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())
@@ -546,4 +695,6 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditDetailView.SetTextColor(theme.TextColor)
 	r.logAuditDetailTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditDetailTitleBar.SetTextColor(theme.TextColor)
+
+	r.applyLogAuditStatsTheme(theme)
 }

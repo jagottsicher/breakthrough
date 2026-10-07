@@ -7,6 +7,7 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -77,38 +78,55 @@ func (r *Root) openLogAuditViewer() {
 	r.logAuditGroupOpen = group
 	r.refreshLogAuditViewerData()
 	r.logAuditKeywordField.SetText("")
+	r.logAuditTimeField.SetText("")
+	r.logAuditLevelField.SetText("")
 	r.renderLogAuditViewer()
 	r.pushOverlay(logAuditViewerPage, r.logAuditViewerLayout, nil)
 	r.app.SetFocus(r.logAuditKeywordField)
 }
 
 // refreshLogAuditViewerData re-reads and re-merges logAuditGroupOpen's
-// own files — the actual read/parse/merge work, factored out of
-// openLogAuditViewer so reopenLogAuditViewer's own manual refresh
-// ("r") can redo it in place, without pushing a second viewer overlay
-// on top of the one already open.
+// own files and stores the result directly on r — used for every
+// *synchronous* read (the initial open, and "r"'s own manual refresh):
+// a one-off, user-triggered action blocking briefly is the same
+// tradeoff reloadActivityLog's own synchronous file read already
+// makes elsewhere in this package. startLogAuditFollow does NOT use
+// this directly — see readLogAuditGroup's own doc comment for why a
+// *repeating* read needs the heavier I/O kept off the UI goroutine
+// instead.
 func (r *Root) refreshLogAuditViewerData() {
+	entries, files, skipped, err := readLogAuditGroup(r.logAuditGroupOpen)
+	r.logAuditAllEntries = entries
+	r.logAuditFiles = files
+	r.logAuditSkipped = skipped
+	r.logAuditParseErr = err
+}
+
+// readLogAuditGroup does the actual read/parse/merge work for group,
+// touching no tview widget and no Root field of its own — safe to
+// call from a background goroutine (see startLogAuditFollow), unlike
+// refreshLogAuditViewerData's own direct field writes. A real log file
+// can take hundreds of milliseconds to read and parse (300k lines,
+// ~700ms, measured) — running that on the UI goroutine every single
+// follow tick would stutter the whole app repeatedly, not just once,
+// the way a manual "r" press's own one-off blocking read does not.
+func readLogAuditGroup(group logview.FileGroup) (entries []logview.Entry, files, skipped int, err error) {
 	var allEntries [][]logview.Entry
-	files, skipped := 0, 0
-	var lastErr error
-	for _, f := range r.logAuditGroupOpen.Files {
+	for _, f := range group.Files {
 		if !f.Supported {
 			skipped++
 			continue
 		}
-		entries, err := readLogAuditFile(f)
-		if err != nil {
-			lastErr = err
+		fileEntries, ferr := readLogAuditFile(f)
+		if ferr != nil {
+			err = ferr
 			continue
 		}
 		files++
-		allEntries = append(allEntries, entries)
+		allEntries = append(allEntries, fileEntries)
 	}
-
-	r.logAuditAllEntries = logview.Merge(allEntries...)
-	r.logAuditFiles = files
-	r.logAuditSkipped = skipped
-	r.logAuditParseErr = lastErr
+	entries = logview.Merge(allEntries...)
+	return entries, files, skipped, err
 }
 
 // readLogAuditFile opens, decompresses, and parses one file — fallback
@@ -141,6 +159,120 @@ func (r *Root) reopenLogAuditViewer() {
 	r.renderLogAuditViewer()
 }
 
+// closeLogAuditViewer always stops a running follow first — leaving a
+// ticker behind after the overlay closed would keep re-reading files
+// and calling tview methods against a screen nobody can see, the same
+// "cancel background work before it outlives the thing it's updating"
+// rule every other ticker-driven overlay in this package already
+// follows (see cancelChord/animateChordCountdown for the same shape).
 func (r *Root) closeLogAuditViewer() {
+	r.stopLogAuditFollow()
 	r.hideOverlay()
+}
+
+// logAuditFollowInterval is how often a running follow re-reads
+// logAuditGroupOpen's own files — frequent enough to feel live for an
+// admin watching an active service, infrequent enough that it isn't
+// re-parsing a growing file every fraction of a second. Phase 2 reads
+// every file fresh each tick (see refreshLogAuditViewerData) rather
+// than tailing byte offsets — the simpler, correct-by-construction
+// choice for a first version; worth revisiting only if a real,
+// large log file makes 2s full re-reads feel sluggish.
+const logAuditFollowInterval = 2 * time.Second
+
+// toggleLogAuditFollow is "f" in the viewer — starts or stops a
+// running follow.
+func (r *Root) toggleLogAuditFollow() {
+	if r.logAuditFollowing {
+		r.stopLogAuditFollow()
+		return
+	}
+	r.startLogAuditFollow()
+}
+
+// startLogAuditFollow begins re-reading logAuditGroupOpen's own files
+// every logAuditFollowInterval, the "tail -f, but for the merged
+// audit view" the user asked for explicitly — a no-op if already
+// running.
+func (r *Root) startLogAuditFollow() {
+	if r.logAuditFollowing {
+		return
+	}
+	r.logAuditFollowing = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.logAuditFollowCancel = cancel
+
+	// safeGo, the same as every other background ticker in this
+	// package (see startChord/animateChordCountdown): a panic here
+	// ends the follow cleanly instead of taking the whole process
+	// down silently. group is captured once, by value, here — not
+	// read from r.logAuditGroupOpen inside the ticker loop itself —
+	// so this goroutine never touches a Root field concurrently with
+	// the UI goroutine; see readLogAuditGroup's own doc comment for
+	// why the read work itself has to happen out here, off the UI
+	// goroutine, with only the already-computed result (not the I/O)
+	// handed to QueueUpdateDraw.
+	group := r.logAuditGroupOpen
+	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
+		ticker := time.NewTicker(logAuditFollowInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if ctx.Err() != nil {
+					return
+				}
+				entries, files, skipped, err := readLogAuditGroup(group)
+				if ctx.Err() != nil {
+					return
+				}
+				r.app.QueueUpdateDraw(func() {
+					if ctx.Err() != nil {
+						return
+					}
+					r.tickLogAuditFollow(entries, files, skipped, err)
+				})
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+}
+
+// stopLogAuditFollow ends a running follow, however it ended (toggled
+// off, the viewer closed, or a background panic) — safe to call even
+// when nothing is running.
+func (r *Root) stopLogAuditFollow() {
+	if r.logAuditFollowCancel != nil {
+		r.logAuditFollowCancel()
+		r.logAuditFollowCancel = nil
+	}
+	r.logAuditFollowing = false
+}
+
+// tickLogAuditFollow applies one follow tick's own already-read result
+// (see readLogAuditGroup/startLogAuditFollow — the actual file I/O
+// already happened off the UI goroutine by the time this runs) and
+// re-renders — stayedAtBottom captures, before applying it, whether
+// the cursor was already on the last row (the only case Select should
+// move it: an admin watching the tail end should keep seeing the
+// tail end once new lines arrive, but one who scrolled up to read an
+// older entry must not be yanked away from it).
+func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, err error) {
+	rowCount := r.logAuditViewerTable.GetRowCount()
+	cur, _ := r.logAuditViewerTable.GetSelection()
+	stayedAtBottom := rowCount > 1 && cur == rowCount-1
+
+	r.logAuditAllEntries = entries
+	r.logAuditFiles = files
+	r.logAuditSkipped = skipped
+	r.logAuditParseErr = err
+	r.renderLogAuditViewer()
+
+	if stayedAtBottom {
+		if newCount := r.logAuditViewerTable.GetRowCount(); newCount > 1 {
+			r.logAuditViewerTable.Select(newCount-1, 0)
+		}
+	}
 }

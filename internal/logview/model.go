@@ -85,6 +85,7 @@ type Entry struct {
 	Level   Level
 	Source  string // e.g. a JSON "service"/"logger" field, a syslog tag, or "" if none
 	Message string
+	Raw     string // the original, unparsed line — identical to Message for FormatPlain, otherwise the full structured line Message was extracted from
 	File    string // base name of the file this line came from
 	Line    int    // 1-based line number within File — tie-breaker for Merge
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -167,5 +168,120 @@ func TestLogAuditHighlightEscapesLiteralBrackets(t *testing.T) {
 	got := logAuditHighlight(text, "", tcell.ColorRed)
 	if want := tview.Escape(text); got != want {
 		t.Errorf("logAuditHighlight(keyword=\"\") = %q, want tview.Escape's own output %q", got, want)
+	}
+}
+
+func TestLogAuditMinLevel(t *testing.T) {
+	if _, ok := logAuditMinLevel(""); ok {
+		t.Error("blank level text should not parse")
+	}
+	if _, ok := logAuditMinLevel("not-a-level"); ok {
+		t.Error("unparseable level text should not parse")
+	}
+	level, ok := logAuditMinLevel("  Warn  ")
+	if !ok || level != logview.LevelWarn {
+		t.Errorf("logAuditMinLevel(\"  Warn  \") = %v, %v, want LevelWarn, true", level, ok)
+	}
+}
+
+func TestLogAuditEntryVisibleCombinesAllThreeFilters(t *testing.T) {
+	now := time.Date(2026, 10, 7, 18, 0, 0, 0, time.UTC)
+	e := logview.Entry{
+		Time:    time.Date(2026, 10, 7, 16, 4, 21, 0, time.UTC),
+		Level:   logview.LevelWarn,
+		Source:  "app",
+		Message: "database connection timeout",
+	}
+
+	if !logAuditEntryVisible(e, "", "", "", now) {
+		t.Error("no filters at all should show everything")
+	}
+	if !logAuditEntryVisible(e, "timeout", "", "warn", now) {
+		t.Error("matching keyword + matching minimum level should show the entry")
+	}
+	if logAuditEntryVisible(e, "timeout", "", "error", now) {
+		t.Error("Warn entry must not pass a >= Error level filter")
+	}
+	if logAuditEntryVisible(e, "bogus", "", "", now) {
+		t.Error("non-matching keyword should hide the entry regardless of level/time")
+	}
+	if !logAuditEntryVisible(e, "", "before 2026-10-07T17:00:00Z", "", now) {
+		t.Error("entry's own Time is before the time filter's cutoff, should pass")
+	}
+	if logAuditEntryVisible(e, "", "after 2026-10-07T17:00:00Z", "", now) {
+		t.Error("entry's own Time is before the time filter's cutoff, should be excluded by 'after'")
+	}
+}
+
+func TestLogAuditEntryVisibleExcludesUnknownLevelFromLevelFilter(t *testing.T) {
+	e := logview.Entry{Level: logview.LevelUnknown, Message: "no level recognized here"}
+	if logAuditEntryVisible(e, "", "", "trace", time.Now()) {
+		t.Error("an entry with no recognized level should not pass even a >= trace filter")
+	}
+	if !logAuditEntryVisible(e, "", "", "", time.Now()) {
+		t.Error("with no level filter at all, the same entry should still show")
+	}
+}
+
+func TestToggleLogAuditFollowStartsAndStopsTicker(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	if r.logAuditFollowing {
+		t.Fatal("follow should start off")
+	}
+	r.toggleLogAuditFollow()
+	if !r.logAuditFollowing || r.logAuditFollowCancel == nil {
+		t.Fatal("toggle should start following")
+	}
+	r.toggleLogAuditFollow()
+	if r.logAuditFollowing || r.logAuditFollowCancel != nil {
+		t.Fatal("toggle again should stop following")
+	}
+}
+
+func TestCloseLogAuditViewerStopsFollow(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	r.startLogAuditFollow()
+	r.closeLogAuditViewer()
+
+	if r.logAuditFollowing {
+		t.Error("closing the viewer should stop a running follow")
+	}
+}
+
+func TestOpenLogAuditDetailShowsRawOnlyWhenDifferentFromMessage(t *testing.T) {
+	// app.log (JSON Lines) — Raw is the full JSON line, Message only
+	// the extracted "msg" field, so the two differ and Raw: must show.
+	jsonDir := t.TempDir()
+	writeLogAuditFixture(t, jsonDir)
+	r := newTestRootForLogAudit(t, jsonDir)
+	r.logAuditTable.Select(1, 0) // app.log group, sorted before syslog
+	r.openLogAuditViewer()
+	r.openLogAuditDetail(1)
+	if got := r.logAuditDetailView.GetText(true); !strings.Contains(got, "Raw:") {
+		t.Errorf("detail view for a JSON entry = %q, want a Raw: section", got)
+	}
+
+	// A FormatPlain file — Raw and Message are identical (the whole
+	// line, verbatim), so no redundant second copy should appear.
+	plainDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(plainDir, "plain.log"), []byte("just some unstructured text\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile plain.log: %v", err)
+	}
+	r2 := newTestRootForLogAudit(t, plainDir)
+	r2.logAuditTable.Select(1, 0)
+	r2.openLogAuditViewer()
+	r2.openLogAuditDetail(1)
+	if got := r2.logAuditDetailView.GetText(true); strings.Contains(got, "Raw:") {
+		t.Errorf("detail view for a FormatPlain entry = %q, want no redundant Raw: section", got)
 	}
 }

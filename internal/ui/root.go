@@ -579,6 +579,9 @@ type Root struct {
 	logAuditViewerLayout *tview.Flex
 	logAuditViewerTitle  *tview.TextView
 	logAuditKeywordField *tview.InputField
+	logAuditTimeField    *tview.InputField
+	logAuditLevelField   *tview.InputField
+	logAuditTimelineView *tview.TextView
 	logAuditViewerTable  *tview.Table
 	logAuditViewerHint   *tview.TextView
 	logAuditViewerSpans  []listHintSpan
@@ -587,12 +590,25 @@ type Root struct {
 	logAuditFiles        int
 	logAuditSkipped      int
 	logAuditParseErr     error
+	// logAuditFollowing/logAuditFollowCancel — "f" toggles a live
+	// re-read of logAuditGroupOpen every logAuditFollowInterval (see
+	// startLogAuditFollow/stopLogAuditFollow in logaudit.go), the
+	// "tail -f, but for the merged stream" view asked for explicitly.
+	logAuditFollowing    bool
+	logAuditFollowCancel context.CancelFunc
 
 	// The detail modal ("Enter" on a viewer row) — same shape as
 	// messagesDetailLayout/messagesDetailView (messagedetail.go).
 	logAuditDetailTitleBar *tview.TextView
 	logAuditDetailView     *tview.TextView
 	logAuditDetailLayout   *tview.Flex
+
+	// The Statistics modal ("s" on a viewer row) — counts by level and
+	// by source over whatever the viewer currently shows (see
+	// logAuditStats in logauditstats.go).
+	logAuditStatsTitleBar *tview.TextView
+	logAuditStatsView     *tview.TextView
+	logAuditStatsLayout   *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -2415,6 +2431,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(logAuditSelectionPage, r.logAuditSelectionLayout, true, false)
 	r.AddPage(logAuditViewerPage, r.logAuditViewerLayout, true, false)
 	r.AddPage(logAuditDetailPage, r.logAuditDetailLayout, false, false)
+	r.AddPage(logAuditStatsPage, r.logAuditStatsLayout, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
