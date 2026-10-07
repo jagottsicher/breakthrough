@@ -1034,6 +1034,19 @@ var (
 	statusLoadColor   = tcell.GetColor("#7a9cc6") // slate blue: the "load" label itself, its own three numbers colored by the scheme below
 )
 
+// yamlColor is .yaml/.yml/.toml's own name color (see entryColor in
+// panel.go) — not one of the five status-bar segment colors above:
+// those are each already spoken for by a different file-type case
+// there (image/PDF/config-tool/text/disk-image), and the user's own
+// explicit request was for .yaml/.yml/.toml to read as visually
+// distinct from .conf's own statusKernelColor despite sharing its gear
+// icon (see internal/fileicons' own extensionIcons doc comment on why
+// the icon itself stays shared). A warm terracotta, picked to stay
+// clearly apart in hue from every statusXColor above (blue/violet/
+// gold/teal/slate-blue) on this app's own dark default panel
+// background.
+var yamlColor = tcell.GetColor("#e0875f")
+
 // notifyBadgeCount pads unread's own display text to a fixed 3 columns
 // — "123" as-is, " 23" right-aligned, " 3 " centered — per the user's
 // own explicit choice, so the badge's own width barely shifts as the

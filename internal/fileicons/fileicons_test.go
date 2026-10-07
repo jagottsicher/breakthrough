@@ -50,16 +50,39 @@ func TestForFileNameBased(t *testing.T) {
 		mode os.FileMode
 		want rune
 	}{
-		{"main.go", 0o644, glyphFile},   // .go deliberately falls through, see extensionIcons' own doc comment
-		{"script.py", 0o644, glyphFile}, // .py deliberately falls through too, see extensionIcons' own doc comment
+		{"main.go", 0o644, glyphFile},         // .go deliberately falls through, see extensionIcons' own doc comment
+		{"script.py", 0o644, glyphExecutable}, // .py now shares .sh's own executable treatment — see scriptExtensions
+		{"script.js", 0o644, glyphExecutable},
+		{"script.php", 0o644, glyphExecutable},
+		{"deploy.sh", 0o644, glyphExecutable}, // not even executable (mode 0o644) — scriptExtensions forces it regardless
 		{"lib.rs", 0o644, rune(0xE7A8)},
-		// txt/md/yml/yaml all share one icon, per the user's own
-		// explicit request — see textExtensions' own doc comment.
+		// txt/md/rtf/text/asc/log/env/tex/htm/html all share one icon,
+		// per the user's own explicit request — see textExtensions' own
+		// doc comment.
 		{"notes.txt", 0o644, glyphText},
 		{"README.md", 0o644, glyphText},
-		{"docker-compose.yml", 0o644, glyphDocker}, // exact name wins over the .yml text icon
-		{"config.yml", 0o644, glyphText},
-		{"config.yaml", 0o644, glyphText},
+		{"letter.rtf", 0o644, glyphText},
+		{"notes.text", 0o644, glyphText},
+		{"readme.asc", 0o644, glyphText},
+		{"server.log", 0o644, glyphText},
+		{".env", 0o644, glyphText},
+		{"paper.tex", 0o644, glyphText},
+		{"index.htm", 0o644, glyphText},
+		{"index.html", 0o644, glyphText},
+		{"docker-compose.yml", 0o644, glyphDocker}, // exact name wins over the .yml config icon
+		{"config.yml", 0o644, glyphConfig},
+		{"config.yaml", 0o644, glyphConfig},
+		{"config.toml", 0o644, glyphConfig},
+		{"settings.pom", 0o644, glyphConfig},
+		{"app.config", 0o644, glyphConfig},
+		{"app.properties", 0o644, glyphConfig},
+		{"app.cfg", 0o644, glyphConfig},
+		{"app.ini", 0o644, glyphConfig},
+		{"app.rc", 0o644, glyphConfig},
+		{"app.cnf", 0o644, glyphConfig},
+		{"settings.json", 0o644, glyphDataFile},
+		{"query.sql", 0o644, glyphDataFile},
+		{"data.csv", 0o644, glyphDataFile},
 		{"Dockerfile", 0o644, glyphDocker},
 		{"DOCKERFILE", 0o644, glyphDocker}, // case-insensitive, matching Docker itself
 		{"Makefile", 0o644, glyphBuildTool},
@@ -72,13 +95,12 @@ func TestForFileNameBased(t *testing.T) {
 		{"data.gz", 0o644, glyphCompressed},     // bare single-file compression, not a container
 		{"backup.tar.bz2", 0o644, glyphArchive}, // the ".tar." prefix still reads as a container, not just "ends in .bz2"
 		{"photo.PNG", 0o644, glyphImage},        // case-insensitive extension match
-		// PDF/Word/JSON/.deb were all tried and dropped (too small to
-		// make out — see extensionIcons' own doc comment), so they fall
+		// PDF/Word/.deb were all tried and dropped (too small to make
+		// out — see extensionIcons' own doc comment), so they fall
 		// through to the generic file icon like any other unmatched
-		// extension.
+		// extension. .json is handled separately above (glyphDataFile).
 		{"report.pdf", 0o644, glyphFile},
 		{"letter.docx", 0o644, glyphFile},
-		{"settings.json", 0o644, glyphFile},
 		{"package.deb", 0o644, glyphFile},
 		{"disk.iso", 0o644, glyphDiskImage},
 		{"disk.img", 0o644, glyphDiskImage},
@@ -106,7 +128,7 @@ func TestGlyphsAreSingleWidth(t *testing.T) {
 		glyphSymlinkBroken, glyphSocket, glyphFIFO, glyphCharDevice,
 		glyphBlockDevice, glyphExecutable, glyphArchive, glyphCompressed,
 		glyphImage, glyphDocker, glyphText, glyphDiskImage, glyphBuildTool,
-		glyphConfig, glyphFile,
+		glyphConfig, glyphDataFile, glyphFile,
 	}
 	for _, g := range extensionIcons {
 		glyphs = append(glyphs, g)

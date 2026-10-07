@@ -71,14 +71,18 @@ terminal.
   both the identifying start and the extension survive. This matters most
   in split view, where each pane is half as wide: before, Size collapsed
   to `…` and Modified disappeared off the right edge entirely.
-- A live filter, tucked behind a compact "Y" button in the top row (an
+- A live filter, tucked behind a compact "Ÿ" button in the top row (an
   "Nx" count appears right before it once one or more are actually
   narrowing the listing — glowing the same slow green breathing pulse
   the header's own "@" connection button uses (see below), or turning
   solid red instead if one is currently hiding everything a directory
   would otherwise show): click it, or press `/`, to open a small
   dropdown with three independently combinable rows, each narrowing the
-  listing live as you type:
+  listing live as you type. A compact "f" button sits right next to it
+  (one column of breathing room between the two) — click it, or press
+  `f`, to open Find instead: a separate, draggable dialog with its own
+  close button, for locating a file by name or content anywhere under a
+  chosen starting directory, by `find` or `locate`.
   - **Glob/regex** — the original filter, with a Glob/Regex toggle for
     how the pattern is interpreted and its own checkbox to switch it
     off without losing what's typed.
@@ -816,7 +820,7 @@ terminal.
 ## Status
 
 Actively developed and usable day to day. Everything described above is
-built and tested: browsing, tabs, split view, the trash, Search, Look,
+built and tested: browsing, tabs, split view, the trash, Find, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
 covering every setting breakthrough recognizes, a Toolbox screen of
 built-in networking and hardware tools with its own Network Tools
@@ -968,6 +972,9 @@ curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERS
 sudo dnf install "./breakthrough_${VERSION}_linux_${PKG}.rpm"   # or: sudo zypper install ./...
 ```
 
+Both packages also install `brk` as a short alias for `breakthrough` — the
+same binary, invoked under either name.
+
 Both packages also create `/etc/breakthrough/config` — fully documented,
 every setting listed and commented out — and `/etc/breakthrough/colorschemes/`,
 so a system administrator has a real starting point for machine-wide
@@ -991,6 +998,7 @@ curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERS
 tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
 sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
+sudo ln -sf breakthrough /usr/local/bin/brk
 ```
 
 Without root, drop it somewhere on your own `PATH` instead:
@@ -998,10 +1006,12 @@ Without root, drop it somewhere on your own `PATH` instead:
 ```sh
 mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
 mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
+ln -sf breakthrough ~/.local/bin/brk
 ```
 
-(The `.deb`/`.rpm` packages install the man page automatically — no
-separate step needed there; see `man breakthrough` once installed.)
+(The `.deb`/`.rpm` packages install the man page and the `brk` alias
+automatically — no separate step needed there; see `man breakthrough`
+once installed.)
 
 On macOS, Gatekeeper quarantines anything downloaded with a browser. If
 you get "cannot be opened because the developer cannot be verified",

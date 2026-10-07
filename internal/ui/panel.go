@@ -237,21 +237,37 @@ type Panel struct {
 	filterMatchesNothing bool
 
 	// filterMenuBtn replaces filterField/filterRegexBtn's own old,
-	// always-visible slot in the header row — a compact "Nx Y" button
-	// (see renderFilterMenuBtn), "Y" chosen for its own passing
-	// resemblance to a funnel and "N" naming how many of the three
-	// filter-menu rows are currently active, omitted entirely while
-	// none are (see the user's own explicit request for exactly this
-	// shape). Clicking it (or activating it from the keyboard) opens
-	// the dropdown (see onOpenFilterMenu/Root.openFilterMenu) that now
-	// holds everything filterField/filterRegexBtn/the two not-yet-built
-	// size/modified-time filters need — freeing most of the header row
-	// back to the path itself, which is the entire point: the six nav
-	// buttons just to its left grew considerably wider becoming real
-	// buttons (see buildHeaderSpans), and this is what pays for that
-	// space back.
+	// always-visible slot in the header row — a compact "f Nx Ÿ" button
+	// (see renderFilterMenuBtn): "Ÿ" (originally a plain "Y", swapped
+	// out per the user's own later, explicit request once "f" sat right
+	// beside it) for its own passing resemblance to a funnel, "N"
+	// naming how many of the filter-menu's four rows are currently
+	// active (omitted entirely while none are, per the user's own
+	// explicit request for exactly this shape), and "f" (per the
+	// user's own later, explicit request) a direct shortcut for Find —
+	// the same action the top-level 'f' key already runs (see
+	// keymap.go), mirrored here as a mouse-clickable button right next
+	// to the filter one, with a column of breathing room between them
+	// (see findButtonWidth). Clicking "Ÿ" (or activating
+	// it from the keyboard) opens the dropdown (see onOpenFilterMenu/
+	// Root.openFilterMenu) that holds everything filterField/
+	// filterRegexBtn/the size/modified-time/labels filters need —
+	// freeing most of the header row back to the path itself, which is
+	// the entire point: the six nav buttons just to its left grew
+	// considerably wider becoming real buttons (see buildHeaderSpans),
+	// and this is what pays for that space back. Clicking "f" opens
+	// Find/Search instead (see onOpenFind/Root.openSearch) — a
+	// different action, sharing this one widget only for the sake of
+	// controlling the exact column spacing between the two buttons
+	// (see renderFilterMenuBtn); the mouse capture below tells them
+	// apart by click column.
 	filterMenuBtn    *tview.TextView
 	onOpenFilterMenu func()
+
+	// onOpenFind is Root's own wiring for filterMenuBtn's own "f"
+	// button (see its doc comment just above) — Panel has no direct
+	// reference to Root, the same reason onOpenFilterMenu exists.
+	onOpenFind func()
 
 	// onOpenConnectionMenu is Root's own wiring for the header's
 	// connection button (see buildHeaderSpans/actionOpenConnectionMenu,
@@ -770,13 +786,42 @@ const (
 	headerFilterWidth        = 17
 	headerDetailsExpandWidth = 3
 
-	// filterMenuBtnWidth is filterMenuBtn's own fixed width in the
-	// header row — enough for the widest indicator ("3x", since at most
-	// three filter-menu rows can ever be active at once) plus the
-	// three-column " Y " button itself, with the button always flush
-	// against this slot's own right edge (see renderFilterMenuBtn) so
-	// it never shifts as the indicator appears/disappears alongside it.
-	filterMenuBtnWidth = 6
+	// filterIndicatorWidth is the "Nx Ÿ" portion's own fixed width —
+	// enough for the widest indicator ("4x", one of the filter-menu's
+	// four real rows — see activeFilterCount) plus the three-column
+	// " Ÿ " button itself, with the button always flush against this
+	// region's own right edge (see renderFilterMenuBtn) so it never
+	// shifts as the indicator appears/disappears alongside it.
+	filterIndicatorWidth = 6
+
+	// findButtonWidth is the " f " button's own fixed width — per the
+	// user's own explicit request for a Find shortcut "oben rechts,
+	// aber links vom Y[/Ÿ]... mit einem Zeichen Abstand". No separate
+	// gap column is added after it: " f "'s own trailing space, plus
+	// filterIndicatorWidth's own existing pad (which already always
+	// reserves at least one blank column directly before "Nx"/"Ÿ" —
+	// see renderFilterMenuBtn) already supplies that one column of
+	// breathing room on its own, confirmed live — an extra, separately
+	// inserted gap column on top of that measured 6 blank columns
+	// between "f" and "Ÿ" with no filter active, not 1, since it stacked
+	// on top of filterIndicatorWidth's own reserved "Nx" room instead of
+	// sharing it.
+	findButtonWidth = 3
+
+	// filterMenuBtnWidth is filterMenuBtn's own total fixed width in the
+	// header row — findButtonWidth + filterIndicatorWidth, the two
+	// pieces renderFilterMenuBtn lays
+	// out left to right. "Ÿ" stays flush against this slot's own right
+	// edge exactly as before (filterIndicatorWidth is unchanged), so
+	// widening this slot only ever eats into headerPages' own
+	// proportional space to its left, never shifting tabStrip/
+	// detailsExpandBtn after it.
+	filterMenuBtnWidth = findButtonWidth + filterIndicatorWidth
+
+	// filterMenuGlyph ('Ÿ', U+0178 LATIN CAPITAL LETTER Y WITH
+	// DIAERESIS) replaces the plain "Y" this button used to show, per
+	// the user's own explicit request.
+	filterMenuGlyph = 'Ÿ'
 
 	// headerTabStripGap is one column of lead-in the tab strip draws for
 	// itself before its own first glyph ("+", or the first tab number) —
@@ -940,8 +985,21 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 		if !p.filterMenuBtn.InRect(event.Position()) {
 			return action, event
 		}
-		if action == tview.MouseLeftClick && p.onOpenFilterMenu != nil {
-			p.onOpenFilterMenu()
+		if action == tview.MouseLeftClick {
+			// "f" occupies this widget's own leftmost findButtonWidth
+			// columns (see renderFilterMenuBtn) — everything from there
+			// on (the one-column gap included, harmlessly) still means
+			// "Ÿ", exactly as the whole widget already meant before "f"
+			// existed.
+			rectX, _, _, _ := p.filterMenuBtn.GetRect()
+			clickX, _ := event.Position()
+			if clickX < rectX+findButtonWidth {
+				if p.onOpenFind != nil {
+					p.onOpenFind()
+				}
+			} else if p.onOpenFilterMenu != nil {
+				p.onOpenFilterMenu()
+			}
 		}
 		return tview.MouseConsumed, nil
 	})
@@ -1780,15 +1838,24 @@ func filterModeLabel(regex bool) string {
 	return "Glob"
 }
 
-// renderFilterMenuBtn fills in filterMenuBtn's own text: an "Nx"
-// indicator (N = how many of the filter-menu's three rows are actually
-// in effect right now) immediately before a three-column " Y " button —
-// "Y" per the user's own explicit choice, for its own passing
-// resemblance to a funnel. Omitted entirely once N is 0, per the same
-// explicit request, rather than ever showing "0x" — left-padded up to
-// filterMenuBtnWidth instead, so the button's own three columns always
-// sit flush against this slot's own right edge (where the tab strip
-// picks up right after it) regardless of how wide the indicator is.
+// renderFilterMenuBtn fills in filterMenuBtn's own text: a three-column
+// " f " button (see findButtonWidth/onOpenFind) directly ahead of an
+// "Nx" indicator (N = how many of the filter-menu's four rows are
+// actually in effect right now) immediately before a three-column
+// " Ÿ " button — "Ÿ" per the user's own explicit choice, for its own
+// passing resemblance to a funnel. "Nx" is omitted entirely once N is
+// 0, per the same explicit request, rather than ever showing "0x" —
+// left-padded up to filterIndicatorWidth instead, so the "Ÿ" button's
+// own three columns always sit flush against that region's own right
+// edge (where the tab strip picks up right after the whole widget)
+// regardless of how wide the indicator is. No separate gap column sits
+// between "f" and that padded region: " f "'s own trailing space, plus
+// this padding (which — see just below — always reserves at least one
+// blank column of its own before "Nx"/"Ÿ") already keeps the two
+// visibly apart without one; a dedicated gap column, tried first, only
+// added to that existing padding instead of sharing it, measured live
+// at 6 blank columns between "f" and "Ÿ" with no filter active rather
+// than the one actually wanted.
 //
 // Every one of the four rows only actually counts once it's both
 // switched on *and* has something to filter by — matching filterByText/
@@ -1864,12 +1931,19 @@ func (p *Panel) renderFilterMenuBtn() {
 	}
 
 	keyBG := colorTag(p.theme.ButtonBackground)
-	button := fmt.Sprintf("[:%s:] Y [-:-:-]", keyBG)
+	button := fmt.Sprintf("[:%s:] %c [-:-:-]", keyBG, filterMenuGlyph)
 	visible := tview.TaggedStringWidth(prefix) + 3 // the button's own 3 visible columns
-	if pad := filterMenuBtnWidth - visible; pad > 0 {
+	if pad := filterIndicatorWidth - visible; pad > 0 {
 		prefix = strings.Repeat(" ", pad) + prefix
 	}
-	p.filterMenuBtn.SetText(prefix + button)
+	// findButton comes first, directly adjacent to prefix+button — no
+	// extra gap column of its own: its own trailing space, stacked on
+	// prefix's own pad (always at least one blank column — see just
+	// above), already keeps "f" and "Ÿ" visibly apart. See
+	// findButtonWidth's own doc comment for why a separate gap column
+	// here once made that worse, not better.
+	findButton := fmt.Sprintf("[:%s:] f [-:-:-]", keyBG)
+	p.filterMenuBtn.SetText(findButton + prefix + button)
 }
 
 // filterByText narrows entries to those whose name matches filterText —
@@ -2954,6 +3028,13 @@ const (
 	fallbackTool      = "◌" // U+25CC DOTTED CIRCLE — per the user's own explicit pick, as a gear/wrench stand-in
 	fallbackArchive   = "◲" // U+25F2 WHITE SQUARE WITH LOWER RIGHT QUADRANT — per the user's own explicit pick
 	fallbackPDF       = "▤" // U+25A4 SQUARE WITH HORIZONTAL FILL — per the user's own explicit pick
+	// fallbackData (▦) is internal/fileicons.glyphDataFile's own
+	// codepoint, reused verbatim rather than a separate pick for this
+	// font-free mode: U+25A6 is already plain Unicode (Geometric
+	// Shapes), not a Nerd Font PUA glyph, so unlike fallbackTool's own
+	// stand-in for glyphConfig, there's no reason for this mode to need
+	// a different symbol at all — see glyphDataFile's own doc comment.
+	fallbackData = "▦" // U+25A6 SQUARE WITH ORTHOGONAL CROSSHATCH FILL — per the user's own explicit pick
 )
 
 // fallbackTextExtensions/fallbackImageExtensions/fallbackToolExtensions/
@@ -2967,9 +3048,44 @@ const (
 // the user's own explicit request covering both "zip" and "archive").
 // fallbackToolNames mirrors exactNameIcons' own "Makefile" special
 // case the same way, independently.
-var fallbackTextExtensions = []string{".txt", ".md", ".yml", ".yaml"}
+// ".rtf"/".text"/".asc"/".log"/".env"/".tex"/".htm"/".html" were added
+// later, same request shape as ".txt"/".md" above: "same color and
+// both icons as .txt" — mirrors internal/fileicons' own textExtensions
+// independently, the same shape every other fallback*/entryColor list
+// here already uses.
+var fallbackTextExtensions = []string{".txt", ".md", ".rtf", ".text", ".asc", ".log", ".env", ".tex", ".htm", ".html"}
 var fallbackImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}
-var fallbackToolExtensions = []string{".conf"}
+
+// fallbackToolExtensions/confColorExtensions both cover the same
+// "looks like a config/settings file" family as internal/fileicons'
+// own extensionIcons glyphConfig entries (independent copy, same shape
+// as every other fallback*/entryColor list here), but for two
+// different purposes that happen to mostly, not entirely, overlap:
+// fallbackToolExtensions is this fallback scheme's own icon list (the
+// dotted-circle fallbackTool mark, shared with yamlToolExtensions
+// below), while confColorExtensions is entryColor's own name-color
+// list (statusKernelColor) and additionally includes ".json" — .json
+// gets a different icon (fallbackData, like .sql/.csv — see
+// fallbackDataExtensions) but the same name color as this whole
+// family, per the user's own explicit request.
+var fallbackToolExtensions = []string{".conf", ".pom", ".config", ".properties", ".cfg", ".ini", ".rc", ".cnf"}
+var confColorExtensions = []string{".conf", ".pom", ".config", ".properties", ".cfg", ".ini", ".rc", ".cnf", ".json"}
+
+// yamlToolExtensions shares fallbackToolExtensions' own dotted-circle
+// fallbackTool icon (and, in icon mode, internal/fileicons' own
+// glyphConfig) but gets a distinct name color (yamlColor, not
+// statusKernelColor) in entryColor — the user's own explicit request to
+// set .yaml/.yml/.toml visually apart from the rest of the config/
+// settings family while still having no safe, available alternative
+// icon for them (see internal/fileicons' own extensionIcons doc
+// comment).
+var yamlToolExtensions = []string{".yaml", ".yml", ".toml"}
+
+// fallbackDataExtensions is .json/.sql/.csv's own fallbackData mark —
+// see fallbackData's own doc comment on why this mode needs no
+// separate symbol from the Nerd-Font icon mode's own glyphDataFile.
+var fallbackDataExtensions = []string{".json", ".sql", ".csv"}
+
 var fallbackToolNames = []string{"makefile"}
 var fallbackArchiveExtensions = []string{
 	".zip", ".tar", ".tgz", ".tbz", ".tbz2", ".txz",
@@ -2985,6 +3101,12 @@ var fallbackPDFExtensions = []string{".pdf"}
 // "small, independent copy" shape every other fallback*/entryColor
 // extension list here already uses.
 var diskImageExtensions = []string{".iso", ".img"}
+
+// scriptColorExtensions is entryColor's own independent copy of
+// internal/fileicons' own scriptExtensions — see that var's own doc
+// comment for why these force an executable look regardless of the
+// actual mode bit.
+var scriptColorExtensions = []string{".sh", ".js", ".php", ".py"}
 
 // isFallbackToolName reports whether lowerName (already lowercased)
 // exactly matches one of fallbackToolNames — shared by fallbackTypeText
@@ -3025,7 +3147,10 @@ func fallbackTypeText(ref rowRef) string {
 	if hasAnyNameSuffix(lower, fallbackImageExtensions) {
 		return fallbackImage
 	}
-	if hasAnyNameSuffix(lower, fallbackToolExtensions) {
+	if hasAnyNameSuffix(lower, fallbackDataExtensions) {
+		return fallbackData
+	}
+	if hasAnyNameSuffix(lower, fallbackToolExtensions) || hasAnyNameSuffix(lower, yamlToolExtensions) {
 		return fallbackTool
 	}
 	if hasAnyNameSuffix(lower, fallbackTextExtensions) {
@@ -3098,26 +3223,36 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 		return p.theme.EntryArchive
 	case ref.entryType == fsops.TypeSymlinkFile:
 		return p.theme.EntrySymlink
-	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
+	// scriptColorExtensions forces EntryExecutable regardless of the
+	// actual executable bit — same reasoning as internal/fileicons' own
+	// scriptExtensions (independent copy, mirroring its doc comment):
+	// .sh is conventionally chmod +x already, but .js/.php/.py commonly
+	// aren't, and the user's own explicit request was for all four to
+	// look the same either way.
+	case ref.entryType == fsops.TypeFile && (ref.mode&0o111 != 0 || hasAnyNameSuffix(strings.ToLower(ref.name), scriptColorExtensions)):
 		return p.theme.EntryExecutable
 	case ref.name != ".." && strings.HasPrefix(ref.name, "."):
 		return p.theme.EntryHidden
-	// The five cases below color a plain file's own name by what it
-	// looks like — images, PDFs, config/build-tool files, text, and
-	// disk images — reusing the exact colors the status bar's own
-	// disk/inode/kernel/uptime/load segments already use (per the
-	// user's own explicit request), not a dedicated theme field. They
-	// sit here, below every behavioral/structural state above
-	// (broken, special, unreadable, archive, symlink, executable,
-	// hidden): those facts about the entry outrank a cosmetic "this
-	// looks like a document" hint, so none of them is ever overridden
-	// by one.
+	// The cases below color a plain file's own name by what it looks
+	// like — images, PDFs, config/settings files (plus .yaml/.yml/
+	// .toml, colored apart from the rest of that family — see
+	// yamlColor's own doc comment), text, and disk images — reusing the
+	// status bar's own disk/inode/kernel/uptime/load segment colors
+	// where the user asked for that (per their own explicit request),
+	// or yamlColor where they asked for something distinct instead; not
+	// a dedicated theme field either way. They sit here, below every
+	// behavioral/structural state above (broken, special, unreadable,
+	// archive, symlink, executable, hidden): those facts about the
+	// entry outrank a cosmetic "this looks like a document" hint, so
+	// none of them is ever overridden by one.
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackImageExtensions):
 		return statusDiskColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackPDFExtensions):
 		return statusInodeColor
-	case !ref.isDir && (isFallbackToolName(strings.ToLower(ref.name)) || hasAnyNameSuffix(strings.ToLower(ref.name), fallbackToolExtensions)):
+	case !ref.isDir && (isFallbackToolName(strings.ToLower(ref.name)) || hasAnyNameSuffix(strings.ToLower(ref.name), confColorExtensions)):
 		return statusKernelColor
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), yamlToolExtensions):
+		return yamlColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackTextExtensions):
 		return statusUptimeColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), diskImageExtensions):

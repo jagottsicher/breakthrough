@@ -80,6 +80,7 @@ breaking when something is missing:
 | Path | Purpose |
 |---|---|
 | `/usr/bin/breakthrough` | the binary |
+| `/usr/bin/brk` | symlink to `breakthrough` — a short alternative invocation |
 | `/etc/breakthrough/config` | system-wide settings, fully commented, all values inactive |
 | `/etc/breakthrough/colorschemes/` | empty directory for system-wide color schemes |
 
@@ -95,7 +96,10 @@ is your choice (`/usr/local/bin` and `~/.local/bin` are the usual two).
 No `/etc/breakthrough` is created; breakthrough runs perfectly well
 without one, falling back to its built-in defaults, and the Options
 screen's own "Edit config file" button creates your personal config on
-first use.
+first use. There is no `brk` alias either unless you create one yourself
+(`ln -sf breakthrough /usr/local/bin/brk` or the `~/.local/bin`
+equivalent) — see the README's own [tar.gz install
+section](../README.md#any-linux-macos-or-freebsd-targz).
 
 ## Files breakthrough creates while running
 
@@ -203,9 +207,10 @@ breakthrough --version
 ## Uninstalling
 
 ```sh
-sudo apt remove breakthrough        # Debian/Ubuntu
-sudo dnf remove breakthrough        # Fedora/RHEL
+sudo apt remove breakthrough        # Debian/Ubuntu — also removes /usr/bin/brk
+sudo dnf remove breakthrough        # Fedora/RHEL — also removes /usr/bin/brk
 sudo rm /usr/local/bin/breakthrough # tar.gz install
+sudo rm -f /usr/local/bin/brk        # tar.gz install, only if you created the alias
 ```
 
 That leaves your own files alone. To remove those too:

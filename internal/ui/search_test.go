@@ -166,8 +166,12 @@ func TestOpenSearchHasATitleBar(t *testing.T) {
 
 	r.openSearch()
 
-	if got, want := r.searchTitleBar.GetText(true), " Search "; got != want {
-		t.Errorf("searchTitleBar text = %q, want %q", got, want)
+	titleBarText := r.searchTitleBar.GetText(true)
+	if !strings.HasPrefix(titleBarText, " Find ") {
+		t.Errorf("searchTitleBar text = %q, want it to start with %q", titleBarText, " Find ")
+	}
+	if !strings.Contains(titleBarText, string(toolWindowCloseGlyph)) {
+		t.Errorf("searchTitleBar text = %q, want it to contain the close glyph %q", titleBarText, string(toolWindowCloseGlyph))
 	}
 	if r.searchTitleBar.HasFocus() {
 		t.Error("real keyboard focus should not have landed on the title bar")
@@ -1967,5 +1971,100 @@ func TestRunSearchNeverPersistsOnAnAbortedAttempt(t *testing.T) {
 
 	if data, err := os.ReadFile(configPath); err == nil && strings.Contains(string(data), "search_") {
 		t.Errorf("persisted config should not mention any search_* key at all; got:\n%s", data)
+	}
+}
+
+// TestSearchCloseGlyphActsLikeCancel pins the user's own explicit
+// request for a mouse-clickable close button on the search dialog's
+// own title bar that behaves exactly like Cancel — the same request
+// already granted to Properties (see
+// TestPropertiesCloseGlyphActsLikeCancel, this test's own direct
+// template).
+func TestSearchCloseGlyphActsLikeCancel(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	r.openSearch()
+
+	wx, wy, width, _ := r.searchPages.GetRect()
+	closeX := wx + toolWindowCloseButtonCol(0, width)
+
+	got, _ := r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(closeX, wy, tcell.ButtonPrimary, 0))
+
+	if got != tview.MouseConsumed {
+		t.Fatal("clicking the close glyph should consume the click")
+	}
+	if r.searchDragging {
+		t.Error("clicking the close glyph should not start a drag")
+	}
+	if r.activePage == searchPage {
+		t.Error("activePage is still the search dialog, want it closed")
+	}
+}
+
+// TestSearchDragCanMoveUpAndLeft pins the same up/left drag fix
+// TestPropertiesDragCanMoveUpAndLeft pins for Properties — see that
+// test's own doc comment for the full reasoning (a real, user-reported
+// bug there, guarded against here from the start instead).
+func TestSearchDragCanMoveUpAndLeft(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 300, 40)
+	r.openSearch()
+
+	r.moveSearch(150, 20)
+	startX, startY, width, height := r.searchPages.GetRect()
+
+	// Press on the title bar to start the drag — dragSearchMouseCapture
+	// itself, the same way pages.SetMouseCapture's own real dispatch
+	// would reach it on an in-bounds press.
+	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+	if !r.searchDragging {
+		t.Fatal("setup: pressing the title bar should have started a drag")
+	}
+
+	newX, newY := startX-5, startY-3
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(newX+2, newY, tcell.ButtonPrimary, 0))
+	r.captureOutsideClick(tview.MouseLeftUp, tcell.NewEventMouse(newX+2, newY, tcell.ButtonNone, 0))
+
+	gotX, gotY, gotWidth, gotHeight := r.searchPages.GetRect()
+	if gotX != newX || gotY != newY {
+		t.Errorf("rect = (%d,%d), want (%d,%d) — dragging up/left should move the window exactly like dragging down/right does", gotX, gotY, newX, newY)
+	}
+	if gotWidth != width || gotHeight != height {
+		t.Errorf("size changed during a pure move: (%d,%d) -> (%d,%d), want unchanged", width, height, gotWidth, gotHeight)
+	}
+	if r.searchDragging {
+		t.Error("searchDragging should be false after MouseLeftUp")
+	}
+}
+
+// TestSearchDragStopsOnStrayButtonRelease mirrors
+// TestPropertiesDragStopsOnStrayButtonRelease: a MouseMove arriving
+// with the button no longer held (released somewhere this code's own
+// MouseLeftUp case never saw) must stop the drag, not follow the
+// cursor forever.
+func TestSearchDragStopsOnStrayButtonRelease(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+	r.openSearch()
+
+	startX, startY, _, _ := r.searchPages.GetRect()
+	r.dragSearchMouseCapture(tview.MouseLeftDown, tcell.NewEventMouse(startX+2, startY, tcell.ButtonPrimary, 0))
+
+	r.captureOutsideClick(tview.MouseMove, tcell.NewEventMouse(startX-5, startY-3, tcell.ButtonNone, 0))
+
+	if r.searchDragging {
+		t.Error("searchDragging should be false once a move arrives with no button held")
 	}
 }
