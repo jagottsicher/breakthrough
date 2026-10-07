@@ -138,15 +138,36 @@ const (
 	// just confirmed legible — not independently re-verified, but the
 	// closest available evidence.
 	glyphConfig = rune(0xF085) // nf-fa-cogs
-	glyphFile   = rune(0xF016) // nf-fa-file_o — plain, non-executable file, nothing more specific matched
+	// glyphDataFile (▦) is U+25A6 SQUARE WITH ORTHOGONAL CROSSHATCH FILL
+	// — the user's own explicit pick for .json/.sql/.csv, deliberately a
+	// plain Unicode Geometric Shapes codepoint rather than a Nerd Font
+	// PUA glyph: the user asked for the exact same mark in both icon
+	// modes (this Nerd-Font one and the font-free fallback in panel.go's
+	// own fallbackData), which a PUA codepoint could never do since the
+	// font-free mode can't render one at all. No legibility risk either
+	// way — it's the same character every terminal font already knows.
+	glyphDataFile = rune(0x25A6)
+	glyphFile     = rune(0xF016) // nf-fa-file_o — plain, non-executable file, nothing more specific matched
 )
+
+// scriptExtensions forces glyphExecutable for these extensions
+// regardless of the actual executable bit, per the user's own explicit
+// request: .sh scripts are conventionally chmod +x and so already get
+// glyphExecutable via the mode check below, but .js/.php/.py scripts
+// commonly aren't marked executable at all and should still look the
+// same as .sh. Checked ahead of, and independently from, the mode&0o111
+// fallback in For, so a non-executable .sh/.js/.php/.py still matches.
+var scriptExtensions = []string{".sh", ".js", ".php", ".py"}
 
 // textExtensions all share glyphText — plain or structured text a
 // person reads/edits directly, as opposed to compiled/binary content.
 // ".md" is deliberately here rather than mapped to its own Devicons
-// markdown glyph: the user's own explicit request groups it with
-// txt/yml/yaml rather than giving it a distinct icon.
-var textExtensions = []string{".txt", ".md", ".yml", ".yaml"}
+// markdown glyph: the user's own explicit request groups it with txt
+// rather than giving it a distinct icon. ".yml"/".yaml" used to be here
+// too, but moved to extensionIcons' own glyphConfig entry per the
+// user's later, more specific request to treat them like ".conf"
+// instead (see extensionIcons' own doc comment).
+var textExtensions = []string{".txt", ".md"}
 
 // exactNameIcons recognizes a handful of filenames (not extensions)
 // that carry their own meaning regardless of what extension (if any)
@@ -191,15 +212,45 @@ var exactNameIcons = map[string]rune{
 // on-topic FontAwesome 4 glyph was found for "PDF", "Word document", or
 // "package" specifically, so all five extensions fall through to
 // glyphFile rather than keep guessing at codepoints sight-unseen.
-// ".json" was never actually reported bad, but shares the exact same
-// small "_o" file-outline cluster (nf-fa-file_code_o, right next to the
-// PDF/Word codepoints that failed) — dropped preemptively rather than
-// wait for a third round of the same complaint.
+// ".json" was originally dropped the same way for sharing that same
+// small "_o" file-outline cluster — since superseded by the user's own
+// explicit, later request for a dedicated glyphDataFile icon instead
+// (shared with .sql/.csv — see glyphDataFile's own doc comment), which
+// sidesteps the legibility risk entirely by not being from that cluster
+// (or any Nerd Font PUA range) at all.
+//
+// ".pom"/".config"/".properties"/".cfg"/".ini"/".rc"/".cnf"/".yaml"/
+// ".yml"/".toml" all share glyphConfig with ".conf" itself, per the
+// user's own explicit request to treat this whole "settings/config
+// file" family the same way — .yaml/.yml/.toml deliberately included
+// despite reading as "data" rather than "config" the way the others
+// do: the user asked for a distinct icon there only if one could be
+// found without the same missing/wrong-glyph risk every other new
+// codepoint in this file has already run into (see glyphDataFile's own
+// doc comment on why that one specifically was safe) — no such
+// risk-free alternative exists for YAML/TOML specifically, so they stay
+// on glyphConfig, kept visually apart instead by name color alone (see
+// internal/ui/panel.go's own yamlColor).
 var extensionIcons = map[string]rune{
-	".rs":   rune(0xE7A8), // nf-dev-rust — not yet reported broken, but same Devicons risk as nf-dev-go/nf-dev-python above
-	".iso":  glyphDiskImage,
-	".img":  glyphDiskImage,
-	".conf": glyphConfig,
+	".rs":  rune(0xE7A8), // nf-dev-rust — not yet reported broken, but same Devicons risk as nf-dev-go/nf-dev-python above
+	".iso": glyphDiskImage,
+	".img": glyphDiskImage,
+
+	".conf":       glyphConfig,
+	".pom":        glyphConfig,
+	".config":     glyphConfig,
+	".properties": glyphConfig,
+	".cfg":        glyphConfig,
+	".ini":        glyphConfig,
+	".rc":         glyphConfig,
+	".cnf":        glyphConfig,
+	".yaml":       glyphConfig,
+	".yml":        glyphConfig,
+	".toml":       glyphConfig,
+
+	".json": glyphDataFile,
+	".sql":  glyphDataFile,
+	".csv":  glyphDataFile,
 }
 
 // archiveExtensions is a real multi-file container format — mirrors
@@ -287,7 +338,7 @@ func For(entryType fsops.EntryType, name string, mode os.FileMode) rune {
 	if glyph, ok := extensionIcons[strings.ToLower(filepath.Ext(name))]; ok {
 		return glyph
 	}
-	if mode&0o111 != 0 {
+	if hasAnySuffix(lower, scriptExtensions) || mode&0o111 != 0 {
 		return glyphExecutable
 	}
 	return glyphFile

@@ -1075,6 +1075,19 @@ func TestFallbackTypeText(t *testing.T) {
 		{"text-ish extension, case-insensitive", rowRef{entryType: fsops.TypeFile, name: "NOTES.TXT"}, fallbackTextLines},
 		{"image extension", rowRef{entryType: fsops.TypeFile, name: "photo.png"}, fallbackImage},
 		{"conf counts as tool-ish here", rowRef{entryType: fsops.TypeFile, name: "app.conf"}, fallbackTool},
+		{"config extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.config"}, fallbackTool},
+		{"properties extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.properties"}, fallbackTool},
+		{"cfg extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.cfg"}, fallbackTool},
+		{"ini extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.ini"}, fallbackTool},
+		{"rc extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.rc"}, fallbackTool},
+		{"cnf extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "app.cnf"}, fallbackTool},
+		{"pom extension counts as tool-ish too", rowRef{entryType: fsops.TypeFile, name: "settings.pom"}, fallbackTool},
+		{"yaml shares the tool-ish mark despite its own distinct color", rowRef{entryType: fsops.TypeFile, name: "config.yaml"}, fallbackTool},
+		{"yml shares the tool-ish mark too", rowRef{entryType: fsops.TypeFile, name: "config.yml"}, fallbackTool},
+		{"toml shares the tool-ish mark too", rowRef{entryType: fsops.TypeFile, name: "config.toml"}, fallbackTool},
+		{"json gets its own data mark, not the tool-ish one", rowRef{entryType: fsops.TypeFile, name: "settings.json"}, fallbackData},
+		{"sql gets the data mark too", rowRef{entryType: fsops.TypeFile, name: "query.sql"}, fallbackData},
+		{"csv gets the data mark too", rowRef{entryType: fsops.TypeFile, name: "data.csv"}, fallbackData},
 		{"Makefile exact name", rowRef{entryType: fsops.TypeFile, name: "Makefile"}, fallbackTool},
 		{"Makefile case-insensitive", rowRef{entryType: fsops.TypeFile, name: "MAKEFILE"}, fallbackTool},
 		{"makefile.bak is not the exact name", rowRef{entryType: fsops.TypeFile, name: "makefile.bak"}, fallbackFile},
@@ -1180,7 +1193,18 @@ func TestEntryColor(t *testing.T) {
 		{"photo.png", statusDiskColor},
 		{"report.pdf", statusInodeColor},
 		{"app.conf", statusKernelColor},
+		{"app.config", statusKernelColor},
+		{"app.properties", statusKernelColor},
+		{"app.cfg", statusKernelColor},
+		{"app.ini", statusKernelColor},
+		{"app.rc", statusKernelColor},
+		{"app.cnf", statusKernelColor},
+		{"settings.pom", statusKernelColor},
+		{"settings.json", statusKernelColor}, // same color as .conf, despite its own distinct icon (fallbackData)
 		{"Makefile", statusKernelColor},
+		{"config.yaml", yamlColor}, // distinct from statusKernelColor, despite sharing its icon
+		{"config.yml", yamlColor},
+		{"config.toml", yamlColor},
 		{"notes.txt", statusUptimeColor},
 		{"README.md", statusUptimeColor},
 		{"disk.iso", statusLoadColor},
@@ -1204,6 +1228,16 @@ func TestEntryColor(t *testing.T) {
 	// A hidden dotfile wins over any of the five name colors too.
 	if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: ".notes.txt"}); got != p.theme.EntryHidden {
 		t.Errorf("a hidden .txt file should show EntryHidden, not the text name color, got %v, want %v", got, p.theme.EntryHidden)
+	}
+
+	// .js/.php/.py (and .sh, redundantly with its own mode bit) get
+	// EntryExecutable even without the mode bit set — the user's own
+	// explicit request that these look like .sh regardless of whether
+	// they're actually marked executable.
+	for _, name := range []string{"script.sh", "script.js", "app.php", "script.py"} {
+		if got := p.entryColor(rowRef{entryType: fsops.TypeFile, name: name, mode: 0o644}); got != p.theme.EntryExecutable {
+			t.Errorf("%s (not marked executable) color = %v, want %v (EntryExecutable)", name, got, p.theme.EntryExecutable)
+		}
 	}
 }
 

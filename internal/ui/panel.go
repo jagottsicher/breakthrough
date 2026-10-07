@@ -2954,6 +2954,13 @@ const (
 	fallbackTool      = "◌" // U+25CC DOTTED CIRCLE — per the user's own explicit pick, as a gear/wrench stand-in
 	fallbackArchive   = "◲" // U+25F2 WHITE SQUARE WITH LOWER RIGHT QUADRANT — per the user's own explicit pick
 	fallbackPDF       = "▤" // U+25A4 SQUARE WITH HORIZONTAL FILL — per the user's own explicit pick
+	// fallbackData (▦) is internal/fileicons.glyphDataFile's own
+	// codepoint, reused verbatim rather than a separate pick for this
+	// font-free mode: U+25A6 is already plain Unicode (Geometric
+	// Shapes), not a Nerd Font PUA glyph, so unlike fallbackTool's own
+	// stand-in for glyphConfig, there's no reason for this mode to need
+	// a different symbol at all — see glyphDataFile's own doc comment.
+	fallbackData = "▦" // U+25A6 SQUARE WITH ORTHOGONAL CROSSHATCH FILL — per the user's own explicit pick
 )
 
 // fallbackTextExtensions/fallbackImageExtensions/fallbackToolExtensions/
@@ -2967,9 +2974,39 @@ const (
 // the user's own explicit request covering both "zip" and "archive").
 // fallbackToolNames mirrors exactNameIcons' own "Makefile" special
 // case the same way, independently.
-var fallbackTextExtensions = []string{".txt", ".md", ".yml", ".yaml"}
+var fallbackTextExtensions = []string{".txt", ".md"}
 var fallbackImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}
-var fallbackToolExtensions = []string{".conf"}
+
+// fallbackToolExtensions/confColorExtensions both cover the same
+// "looks like a config/settings file" family as internal/fileicons'
+// own extensionIcons glyphConfig entries (independent copy, same shape
+// as every other fallback*/entryColor list here), but for two
+// different purposes that happen to mostly, not entirely, overlap:
+// fallbackToolExtensions is this fallback scheme's own icon list (the
+// dotted-circle fallbackTool mark, shared with yamlToolExtensions
+// below), while confColorExtensions is entryColor's own name-color
+// list (statusKernelColor) and additionally includes ".json" — .json
+// gets a different icon (fallbackData, like .sql/.csv — see
+// fallbackDataExtensions) but the same name color as this whole
+// family, per the user's own explicit request.
+var fallbackToolExtensions = []string{".conf", ".pom", ".config", ".properties", ".cfg", ".ini", ".rc", ".cnf"}
+var confColorExtensions = []string{".conf", ".pom", ".config", ".properties", ".cfg", ".ini", ".rc", ".cnf", ".json"}
+
+// yamlToolExtensions shares fallbackToolExtensions' own dotted-circle
+// fallbackTool icon (and, in icon mode, internal/fileicons' own
+// glyphConfig) but gets a distinct name color (yamlColor, not
+// statusKernelColor) in entryColor — the user's own explicit request to
+// set .yaml/.yml/.toml visually apart from the rest of the config/
+// settings family while still having no safe, available alternative
+// icon for them (see internal/fileicons' own extensionIcons doc
+// comment).
+var yamlToolExtensions = []string{".yaml", ".yml", ".toml"}
+
+// fallbackDataExtensions is .json/.sql/.csv's own fallbackData mark —
+// see fallbackData's own doc comment on why this mode needs no
+// separate symbol from the Nerd-Font icon mode's own glyphDataFile.
+var fallbackDataExtensions = []string{".json", ".sql", ".csv"}
+
 var fallbackToolNames = []string{"makefile"}
 var fallbackArchiveExtensions = []string{
 	".zip", ".tar", ".tgz", ".tbz", ".tbz2", ".txz",
@@ -2985,6 +3022,12 @@ var fallbackPDFExtensions = []string{".pdf"}
 // "small, independent copy" shape every other fallback*/entryColor
 // extension list here already uses.
 var diskImageExtensions = []string{".iso", ".img"}
+
+// scriptColorExtensions is entryColor's own independent copy of
+// internal/fileicons' own scriptExtensions — see that var's own doc
+// comment for why these force an executable look regardless of the
+// actual mode bit.
+var scriptColorExtensions = []string{".sh", ".js", ".php", ".py"}
 
 // isFallbackToolName reports whether lowerName (already lowercased)
 // exactly matches one of fallbackToolNames — shared by fallbackTypeText
@@ -3025,7 +3068,10 @@ func fallbackTypeText(ref rowRef) string {
 	if hasAnyNameSuffix(lower, fallbackImageExtensions) {
 		return fallbackImage
 	}
-	if hasAnyNameSuffix(lower, fallbackToolExtensions) {
+	if hasAnyNameSuffix(lower, fallbackDataExtensions) {
+		return fallbackData
+	}
+	if hasAnyNameSuffix(lower, fallbackToolExtensions) || hasAnyNameSuffix(lower, yamlToolExtensions) {
 		return fallbackTool
 	}
 	if hasAnyNameSuffix(lower, fallbackTextExtensions) {
@@ -3098,26 +3144,36 @@ func (p *Panel) entryColor(ref rowRef) tcell.Color {
 		return p.theme.EntryArchive
 	case ref.entryType == fsops.TypeSymlinkFile:
 		return p.theme.EntrySymlink
-	case ref.entryType == fsops.TypeFile && ref.mode&0o111 != 0:
+	// scriptColorExtensions forces EntryExecutable regardless of the
+	// actual executable bit — same reasoning as internal/fileicons' own
+	// scriptExtensions (independent copy, mirroring its doc comment):
+	// .sh is conventionally chmod +x already, but .js/.php/.py commonly
+	// aren't, and the user's own explicit request was for all four to
+	// look the same either way.
+	case ref.entryType == fsops.TypeFile && (ref.mode&0o111 != 0 || hasAnyNameSuffix(strings.ToLower(ref.name), scriptColorExtensions)):
 		return p.theme.EntryExecutable
 	case ref.name != ".." && strings.HasPrefix(ref.name, "."):
 		return p.theme.EntryHidden
-	// The five cases below color a plain file's own name by what it
-	// looks like — images, PDFs, config/build-tool files, text, and
-	// disk images — reusing the exact colors the status bar's own
-	// disk/inode/kernel/uptime/load segments already use (per the
-	// user's own explicit request), not a dedicated theme field. They
-	// sit here, below every behavioral/structural state above
-	// (broken, special, unreadable, archive, symlink, executable,
-	// hidden): those facts about the entry outrank a cosmetic "this
-	// looks like a document" hint, so none of them is ever overridden
-	// by one.
+	// The cases below color a plain file's own name by what it looks
+	// like — images, PDFs, config/settings files (plus .yaml/.yml/
+	// .toml, colored apart from the rest of that family — see
+	// yamlColor's own doc comment), text, and disk images — reusing the
+	// status bar's own disk/inode/kernel/uptime/load segment colors
+	// where the user asked for that (per their own explicit request),
+	// or yamlColor where they asked for something distinct instead; not
+	// a dedicated theme field either way. They sit here, below every
+	// behavioral/structural state above (broken, special, unreadable,
+	// archive, symlink, executable, hidden): those facts about the
+	// entry outrank a cosmetic "this looks like a document" hint, so
+	// none of them is ever overridden by one.
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackImageExtensions):
 		return statusDiskColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackPDFExtensions):
 		return statusInodeColor
-	case !ref.isDir && (isFallbackToolName(strings.ToLower(ref.name)) || hasAnyNameSuffix(strings.ToLower(ref.name), fallbackToolExtensions)):
+	case !ref.isDir && (isFallbackToolName(strings.ToLower(ref.name)) || hasAnyNameSuffix(strings.ToLower(ref.name), confColorExtensions)):
 		return statusKernelColor
+	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), yamlToolExtensions):
+		return yamlColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), fallbackTextExtensions):
 		return statusUptimeColor
 	case !ref.isDir && hasAnyNameSuffix(strings.ToLower(ref.name), diskImageExtensions):
