@@ -968,6 +968,9 @@ curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERS
 sudo dnf install "./breakthrough_${VERSION}_linux_${PKG}.rpm"   # or: sudo zypper install ./...
 ```
 
+Both packages also install `brk` as a short alias for `breakthrough` — the
+same binary, invoked under either name.
+
 Both packages also create `/etc/breakthrough/config` — fully documented,
 every setting listed and commented out — and `/etc/breakthrough/colorschemes/`,
 so a system administrator has a real starting point for machine-wide
@@ -991,6 +994,7 @@ curl -LO "https://github.com/jagottsicher/breakthrough/releases/download/v${VERS
 tar xzf "breakthrough_${VERSION}_${OS}_${ARCH}.tar.gz"
 sudo install -m 0755 breakthrough /usr/local/bin/breakthrough
 sudo install -m 0644 breakthrough.1.gz /usr/local/share/man/man1/
+sudo ln -sf breakthrough /usr/local/bin/brk
 ```
 
 Without root, drop it somewhere on your own `PATH` instead:
@@ -998,10 +1002,12 @@ Without root, drop it somewhere on your own `PATH` instead:
 ```sh
 mkdir -p ~/.local/bin && install -m 0755 breakthrough ~/.local/bin/
 mkdir -p ~/.local/share/man/man1 && install -m 0644 breakthrough.1.gz ~/.local/share/man/man1/
+ln -sf breakthrough ~/.local/bin/brk
 ```
 
-(The `.deb`/`.rpm` packages install the man page automatically — no
-separate step needed there; see `man breakthrough` once installed.)
+(The `.deb`/`.rpm` packages install the man page and the `brk` alias
+automatically — no separate step needed there; see `man breakthrough`
+once installed.)
 
 On macOS, Gatekeeper quarantines anything downloaded with a browser. If
 you get "cannot be opened because the developer cannot be verified",
