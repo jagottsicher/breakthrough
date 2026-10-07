@@ -1071,3 +1071,60 @@ func TestLabelFilterRowStateSurvivesReopen(t *testing.T) {
 		t.Errorf("Labels row text = %q, want it to show at least one toggled-on (●) swatch", row.GetText(true))
 	}
 }
+
+// TestFilterMenuBtnFindRegionOpensFind pins the mouse-click
+// discrimination inside filterMenuBtn's own capture (see NewPanel):
+// a click on the widget's own leftmost findButtonWidth columns ("f")
+// must reach onOpenFind, not onOpenFilterMenu — the same widget covers
+// both buttons now (see renderFilterMenuBtn's own doc comment), so
+// nothing but this column check tells them apart.
+func TestFilterMenuBtnFindRegionOpensFind(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+
+	findOpened, filterOpened := false, false
+	r.panel.onOpenFind = func() { findOpened = true }
+	r.panel.onOpenFilterMenu = func() { filterOpened = true }
+
+	x, y, _, _ := r.panel.filterMenuBtn.GetRect()
+	clickAt(r, x+1, y) // well inside the "f" region (columns 0..findButtonWidth-1)
+
+	if !findOpened {
+		t.Error("clicking the \"f\" region should have called onOpenFind")
+	}
+	if filterOpened {
+		t.Error("clicking the \"f\" region should not have called onOpenFilterMenu")
+	}
+}
+
+// TestFilterMenuBtnYRegionOpensFilterMenu is
+// TestFilterMenuBtnFindRegionOpensFind's counterpart: a click past the
+// "f" region (anywhere in the padding/"Nx"/"Ÿ" region after it) must
+// still reach onOpenFilterMenu, exactly as it always did before "f"
+// existed.
+func TestFilterMenuBtnYRegionOpensFilterMenu(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	drawRoot(t, r, 120, 30)
+
+	findOpened, filterOpened := false, false
+	r.panel.onOpenFind = func() { findOpened = true }
+	r.panel.onOpenFilterMenu = func() { filterOpened = true }
+
+	x, y, w, _ := r.panel.filterMenuBtn.GetRect()
+	clickAt(r, x+w-2, y) // well inside the trailing " Ÿ " button itself
+
+	if !filterOpened {
+		t.Error("clicking the \"Ÿ\" region should have called onOpenFilterMenu")
+	}
+	if findOpened {
+		t.Error("clicking the \"Ÿ\" region should not have called onOpenFind")
+	}
+}

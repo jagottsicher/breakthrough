@@ -335,13 +335,16 @@ var helpText = strings.TrimLeft(`
 
   Click a path segment in the header to jump straight there; click the
   path itself to type a new one (Tab completes it, Enter goes); click
-  a column heading to sort by it; click the "Y" button near the right
-  edge of the path bar (an "Nx" count appears before it once one or
-  more are actually narrowing the listing — glowing the same slow
-  green breathing pulse the header's own "@" connection button uses,
-  or turning solid red instead if a filter is hiding everything a
-  directory would otherwise show) — or press "/" — to open the filter
-  dropdown, four independently combinable (AND across rows) rows, each
+  a column heading to sort by it; click the "f" button near the right
+  edge of the path bar — or press "f" — to open Find (see its own
+  section below); click the "Ÿ" button right next to it, one column
+  of breathing room between them (an "Nx" count appears before it
+  once one or more are actually narrowing the listing — glowing the
+  same slow green breathing pulse the header's own "@" connection
+  button uses, or turning solid red instead if a filter is hiding
+  everything a directory would otherwise show) — or press "/" — to
+  open the filter dropdown, four independently combinable (AND across
+  rows) rows, each
   narrowing the listing live as you type:
 
     Glob/regex      type to narrow the list live; its own button
@@ -1118,7 +1121,7 @@ var helpText = strings.TrimLeft(`
   remote), and whichever tab shows the destination reloads once it's
   done.
 
-[::b]Search dialog ("f")[::-]
+[::b]Find dialog ("f")[::-]
 
   Tab / Shift+Tab   Move between fields
   Enter             Commit a field and stay — except in Filename,
@@ -1127,6 +1130,11 @@ var helpText = strings.TrimLeft(`
   Escape            Cancel and close; from the results page, back
                     to the form instead, with everything exactly as
                     it was left
+
+  The title bar is draggable with the mouse, like the Properties
+  dialog's own — grab it anywhere and move it, though it still opens
+  centered on screen, same as always. Its own close glyph (✕), in
+  the top-right corner, behaves exactly like Cancel.
 
   Start-at's own Tab always completes the path instead — it never
   moves on to the next field this way; click elsewhere, or Shift+Tab,

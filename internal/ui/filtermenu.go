@@ -51,7 +51,7 @@ const (
 // it's part of the page tree this function's own showOverlay call
 // puts it in — a bare SetFocus on it while that page was never shown
 // bypasses that entirely. Going through this function does everything
-// a real click on the "Y" button already does instead, including
+// a real click on the "Ÿ" button already does instead, including
 // rewiring the whole dropdown's own keyboard focus-cycling (see
 // renderFilterMenu's own doc comment) fresh for this specific open.
 //

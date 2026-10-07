@@ -1601,6 +1601,14 @@ type Root struct {
 	propertiesDragging                           bool
 	propertiesDragOffsetX, propertiesDragOffsetY int
 
+	// searchDragging/searchDragOffsetX/Y are dragSearchMouseCapture's
+	// own equivalent of propertiesDragging/propertiesDragOffsetX/Y just
+	// above, for the search dialog's own title bar (search.go) — same
+	// shape, same reasoning, per the user's own explicit request that
+	// it become movable (with a close glyph) too.
+	searchDragging                       bool
+	searchDragOffsetX, searchDragOffsetY int
+
 	// propertiesFocusIndex is Properties' own keyboard-navigation cursor
 	// (see setPropertiesFocus/movePropertiesFocus/capturePropertiesKey):
 	// -1 (nothing focused, Properties' state right after opening) or an
@@ -2517,6 +2525,13 @@ func (r *Root) wirePanel(panel *Panel) {
 	// onOpenTabSwitcher above already uses.
 	panel.onOpenFilterMenu = func() { r.openFilterMenu() }
 
+	// filterMenuBtn's own "f" button opens Find/Search (see
+	// Panel.onOpenFind's own doc comment and Root.openSearch) — the
+	// same action the top-level 'f' key already runs (see keymap.go),
+	// same "closure captures r, not this specific panel" shape as
+	// onOpenFilterMenu just above.
+	panel.onOpenFind = func() { r.openSearch() }
+
 	// The header row's own "@" button opens the connection dropdown
 	// (see Panel.onOpenConnectionMenu/buildHeaderSpans' own doc
 	// comments and Root.openConnectionMenu) — same "closure captures r,
@@ -2895,6 +2910,17 @@ func (r *Root) captureOutsideClick(action tview.MouseAction, event *tcell.EventM
 	if r.propertiesDragging {
 		out, outEvent, _ := r.dragPropertiesMouseCapture(action, event)
 		return out, outEvent
+	}
+
+	// A search-dialog drag in progress — same reasoning as
+	// propertiesDragging just above (dragSearchMouseCapture's own doc
+	// comment has the details): must keep receiving every subsequent
+	// move/release itself regardless of whether the cursor still falls
+	// inside the dialog's own rect, or an upward/leftward drag could
+	// only ever move it down/right, the same bug propertiesDragging's
+	// own check exists to prevent.
+	if r.searchDragging {
+		return r.dragSearchMouseCapture(action, event)
 	}
 
 	if r.activePage == "" {

@@ -370,14 +370,30 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	r.searchFieldsPages.AddPage("fields", fields, true, true)
 	r.searchFieldsPages.AddPage("editfield", r.searchEditField, false, false)
 
-	// A one-row "Search" title bar, the same shape Properties' own (see
+	// A one-row "Find" title bar, the same shape Properties' own (see
 	// newPropertiesView) already has — per the user's own explicit
 	// request that every pane/overlay/dialog in this app get one, the
 	// owner/group picker excepted. Positioned as its own absolutely-
 	// positioned page within pages (see resizeSearchPages), the same
 	// split; SetBorderPadding(1, 0, 0, 0) shrinks the resize=true "form"
 	// page's own inner rect from the top to leave room for it.
-	r.searchTitleBar = newPlainTitleBar("Search")
+	//
+	// "Find" rather than "Search" — the user's own later, explicit
+	// request, matching the top-level 'f' key and the header's own new
+	// "f" shortcut button (both labeled/named "Find" already — see
+	// keymap.go/Panel.onOpenFind) and the dialog's own "Find" button
+	// (newSearchButtons), which was always named that, unlike this
+	// title bar.
+	//
+	// Not newPlainTitleBar any more, unlike when this was first added:
+	// renderSearchTitleBar below fills in real text instead, the same
+	// "needs the window's own current width, not yet known at
+	// construction time" reason renderPropertiesTitleBar isn't built
+	// via newPlainTitleBar either — this dialog's own width is fixed
+	// (searchFormWidth), but resizeSearchPages/moveSearch still have to
+	// be the ones calling it, once a real rect actually exists.
+	r.searchTitleBar = tview.NewTextView()
+	r.searchTitleBar.SetWrap(false)
 
 	pages := tview.NewPages()
 	pages.SetBorderPadding(1, 0, 0, 0)
@@ -399,6 +415,17 @@ func (r *Root) newSearchDialog() *tview.Pages {
 	// before this ordering was fixed.
 	pages.AddPage("titlebar", r.searchTitleBar, false, true)
 	pages.AddPage("form", r.searchFieldsPages, true, true)
+
+	// Installed on pages itself, the shared ancestor of "titlebar" and
+	// "form" — the same reason Properties' own hashesMouseCapture is
+	// installed on its own outer pages (see newPropertiesView), so a
+	// click lands here regardless of which of the two is currently
+	// focused. dragSearchMouseCapture only ever claims a click that
+	// actually lands on the title bar (or continues an already-started
+	// drag); anything else returns the event unchanged, letting it fall
+	// through to spanArea's own captureSearchMouse or searchButtons
+	// exactly as before this existed.
+	pages.SetMouseCapture(r.dragSearchMouseCapture)
 	return pages
 }
 
@@ -963,6 +990,92 @@ func (r *Root) resizeSearchPages() {
 	x, y, w, h := r.clampToScreen(x, y, searchFormWidth, searchFormHeight)
 	r.searchPages.SetRect(x, y, w, h)
 	r.searchTitleBar.SetRect(x, y, w, 1)
+	r.renderSearchTitleBar(w)
+}
+
+// renderSearchTitleBar sets searchTitleBar's own text to " Find ",
+// padded out to width columns, with a close glyph
+// (toolWindowCloseGlyph, the same one toolWindow's/Properties' own
+// title bars already use — see their own doc comments) in its own
+// top-right corner — per the user's own explicit request for a
+// mouse-clickable close button that behaves exactly like Cancel (see
+// dragSearchMouseCapture's own close-glyph check), the same request
+// already granted to Properties (see renderPropertiesTitleBar, this
+// function's own direct template).
+func (r *Root) renderSearchTitleBar(width int) {
+	const label = " Find "
+	closeCol := toolWindowCloseButtonCol(0, width)
+	padding := closeCol - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.searchTitleBar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+}
+
+// moveSearch repositions the search dialog to (x, y) without touching
+// its own current width/height — mirrors moveProperties, simpler only
+// because searchFormWidth/Height are always fixed (see
+// resizeSearchPages's own doc comment), so there's no equivalent of
+// moveProperties/resizeProperties' own size-vs-position split to worry
+// about: one function covers both the initial open and every drag move.
+func (r *Root) moveSearch(x, y int) {
+	_, _, width, height := r.searchPages.GetRect()
+	x, y, width, height = r.clampToScreen(x, y, width, height)
+
+	r.searchPages.SetRect(x, y, width, height)
+	r.searchTitleBar.SetRect(x, y, width, 1)
+	r.renderSearchTitleBar(width)
+}
+
+// dragSearchMouseCapture makes the search dialog's own title bar
+// draggable, plus a close glyph in its own top-right corner that
+// behaves exactly like Cancel — mirrors dragPropertiesMouseCapture
+// (see its own, considerably longer doc comment for the full
+// reasoning, including why captureOutsideClick needs its own
+// searchDragging check the same way it already has one for
+// propertiesDragging: dragging up/left past the not-yet-updated rect
+// would otherwise stop reaching this capture at all). Unlike
+// dragPropertiesMouseCapture, this doesn't need a three-return
+// "handled" signal of its own: there's no further, unrelated capture
+// downstream of this one that still needs to run when a click isn't
+// about the title bar at all (searchSpanAt/searchButtons are reached
+// by tview's own ordinary dispatch instead, once this returns the
+// event unchanged) — Properties' own hashesMouseCapture needed that
+// signal only because it has its own, separate hash-section handling
+// to fall through to afterwards; this dialog doesn't.
+func (r *Root) dragSearchMouseCapture(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	x, y := event.Position()
+
+	if r.searchDragging {
+		switch action {
+		case tview.MouseMove:
+			if event.Buttons()&tcell.ButtonPrimary == 0 {
+				r.searchDragging = false
+				return tview.MouseConsumed, nil
+			}
+			r.moveSearch(x-r.searchDragOffsetX, y-r.searchDragOffsetY)
+			return tview.MouseConsumed, nil
+		case tview.MouseLeftUp:
+			r.searchDragging = false
+			return tview.MouseConsumed, nil
+		}
+		return tview.MouseConsumed, nil // swallow everything else for the duration of the drag
+	}
+
+	if action == tview.MouseLeftDown && r.searchTitleBar.InRect(x, y) {
+		wx, wy, width, _ := r.searchPages.GetRect()
+		if y == wy && x == wx+toolWindowCloseButtonCol(0, width) {
+			// The close glyph itself — per the user's own explicit
+			// request, behaves exactly like Cancel, not a drag start.
+			r.closeSearch()
+			return tview.MouseConsumed, nil
+		}
+		r.searchDragging = true
+		r.searchDragOffsetX, r.searchDragOffsetY = x-wx, y-wy
+		return tview.MouseConsumed, nil
+	}
+
+	return action, event
 }
 
 // showSearchError shows msg as the panel's own (otherwise empty)
