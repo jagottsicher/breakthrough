@@ -71,14 +71,18 @@ terminal.
   both the identifying start and the extension survive. This matters most
   in split view, where each pane is half as wide: before, Size collapsed
   to `…` and Modified disappeared off the right edge entirely.
-- A live filter, tucked behind a compact "Y" button in the top row (an
+- A live filter, tucked behind a compact "Ÿ" button in the top row (an
   "Nx" count appears right before it once one or more are actually
   narrowing the listing — glowing the same slow green breathing pulse
   the header's own "@" connection button uses (see below), or turning
   solid red instead if one is currently hiding everything a directory
   would otherwise show): click it, or press `/`, to open a small
   dropdown with three independently combinable rows, each narrowing the
-  listing live as you type:
+  listing live as you type. A compact "f" button sits right next to it
+  (one column of breathing room between the two) — click it, or press
+  `f`, to open Find instead: a separate, draggable dialog with its own
+  close button, for locating a file by name or content anywhere under a
+  chosen starting directory, by `find` or `locate`.
   - **Glob/regex** — the original filter, with a Glob/Regex toggle for
     how the pattern is interpreted and its own checkbox to switch it
     off without losing what's typed.
@@ -816,7 +820,7 @@ terminal.
 ## Status
 
 Actively developed and usable day to day. Everything described above is
-built and tested: browsing, tabs, split view, the trash, Search, Look,
+built and tested: browsing, tabs, split view, the trash, Find, Look,
 archive browsing, Sed Replace, Batch rename, Compare, a full Options screen
 covering every setting breakthrough recognizes, a Toolbox screen of
 built-in networking and hardware tools with its own Network Tools
