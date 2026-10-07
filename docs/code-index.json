@@ -2013,8 +2013,8 @@
     },
     {
       "path": "internal/ui/viewer_test.go",
-      "size": 17948,
-      "sha256": "99f5d8175d7ce2dc18bf7bfafd5a8107472ddec0686fa42d7d18180245468c13"
+      "size": 17965,
+      "sha256": "6f5be330596974ec1e6d24bbee09ce0aa3611d31c08c2dc92183e051350a01a2"
     },
     {
       "path": "internal/viewer/compressed.go",
@@ -2023,8 +2023,8 @@
     },
     {
       "path": "internal/viewer/compressed_test.go",
-      "size": 5373,
-      "sha256": "c839292c56ffed15ecc83c440dd6e43bc2b2a27dbe213a47ca527faa9fa297f7"
+      "size": 5390,
+      "sha256": "199288ed72335f3e4048dc9b4ad1f3e241dbcf4a580a9c1260c7c69b06488f93"
     },
     {
       "path": "internal/viewer/csv.go",
@@ -43484,5 +43484,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "0ae130614a6aab978dcff29d3412eab670b347346106a69476132b3f04d207f3"
+  "merkle_root": "1773b38428e55190c6050d12b552e24ac74cf37f0b3996664456f6cb6df3473d"
 }
