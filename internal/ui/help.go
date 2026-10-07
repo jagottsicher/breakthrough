@@ -114,8 +114,10 @@ var helpText = strings.TrimLeft(`
                 zs size format · zt time format · zi Nerd Font icons
                 (needs a terminal font that actually has them — off by
                 default; the header row's own "ⓘ" button, right after
-                the reload "⭯" one, does the same) · zf filter · zo
-                split orientation · zw swap panes · zr reload
+                the reload "⭯" one, does the same) · zl label (set/clear
+                one of 9 colors on the focused or checked row(s)) · zf
+                filter · zo split orientation · zw swap panes · zr
+                reload
     y  yank     yp/yn/ya full path/name/all selected — reserved, not
                 built yet (needs its own system-clipboard design first)
     o  opts     oo Options screen · om Mouse reporting on/off
@@ -180,9 +182,11 @@ var helpText = strings.TrimLeft(`
                   slower than that is just a fresh first click again
   Right-click     Context menu (Look, Rename, Edit, Open with…, Copy,
                   Cut, Multiply, Paste, Move to Trash, Properties, and
-                  submenus for rarer actions — New file/New dir/tail -f/
-                  chown/chmod/sed/Batch rename/Undo last rename/Remove/
-                  Paste following symlinks, Selection, Tabs & Split).
+                  submenus for rarer actions — Label (set/clear one of
+                  9 colors, also directly reachable as "zl"), New
+                  file/New dir/tail -f/chown/chmod/sed/Batch rename/
+                  Undo last rename/Remove/Paste following symlinks,
+                  Selection, Tabs & Split).
                   "mm" opens the same menu from the keyboard (see the
                   "m" chord above). Once it's open, a plain letter fires
                   whichever entry already carries it as its own
@@ -337,8 +341,8 @@ var helpText = strings.TrimLeft(`
   green breathing pulse the header's own "@" connection button uses,
   or turning solid red instead if a filter is hiding everything a
   directory would otherwise show) — or press "/" — to open the filter
-  dropdown, three independently combinable (AND) rows, each narrowing
-  the listing live as you type:
+  dropdown, four independently combinable (AND across rows) rows, each
+  narrowing the listing live as you type:
 
     Glob/regex      type to narrow the list live; its own button
                     switches glob/regex, its own checkbox disables it
@@ -352,22 +356,28 @@ var helpText = strings.TrimLeft(`
                     relative ("7 days", "2 hours ago", "last 30
                     minutes") — sec/min/hour/day/week/month/year,
                     singular or plural
+    Labels          ten color-label swatches (0 "no label" through 9,
+                    each its own color, no number shown), toggled
+                    independently and OR'd together — Left/Right move
+                    between them while the row has focus, Space/Enter
+                    toggles whichever one the cursor is on
 
-  A fourth row, "Exclude dirs", sits below all three: not a filter of
-  its own, but a single on/off switch that applies to all three at
+  A fifth row, "Exclude dirs", sits below all four: not a filter of
+  its own, but a single on/off switch that applies to all four at
   once — while on, a directory is never hidden by any of them, however
   it would otherwise have matched (or failed to match); only plain
   files are ever actually filtered.
 
   Typing into a field auto-activates its own row. Tab/Shift+Tab cycle
-  all eight of the dropdown's own pieces; "/" — once the dropdown is
-  already open — jumps straight to the next of the three fields
-  instead, the same "press it again to advance further" trick Ctrl+T
-  uses for the tab switcher. Escape closes it. By default
-  (filter_persistent) all four carry over across a directory change,
-  so browsing a whole tree with the same filter on is the normal way
-  to use it; set filter_persistent = false to have every new directory
-  start unfiltered instead.
+  all nine of the dropdown's own pieces; "/" — once the dropdown is
+  already open — jumps straight to the next of the three real fields
+  instead (the Labels row has none of its own, so it's skipped), the
+  same "press it again to advance further" trick Ctrl+T uses for the
+  tab switcher. Escape closes it. By default (filter_persistent) all
+  five carry over across a directory change, so browsing a whole tree
+  with the same filter on is the normal way to use it; set
+  filter_persistent = false to have every new directory start
+  unfiltered instead.
 
   While plainly browsing (not editing the path, not in the filter
   dropdown) and the Details sidebar is shown, Tab moves keyboard focus
@@ -381,12 +391,16 @@ var helpText = strings.TrimLeft(`
 [::b]Status bar (the bottom line, purely informational)[::-]
 
   Left to right, whatever's actually staged or in flight (a pending
-  chord's countdown, a running Paste's progress, or the clipboard's own
-  contents), then: username (green, red while running as root), Mouse
-  on/off, disk space, inode usage, git status, kernel version, uptime,
-  load average, and a clock. Disk and inode usage, git, kernel, uptime
-  and load each have their own fixed color so they stand out from one
-  another at a glance.
+  chord's countdown, a running Paste's progress, the clipboard's own
+  contents, or a running "Remove orphaned labels" scan — see Options
+  below), then: username (green, red while running as root), Mouse
+  on/off, disk space, inode usage, git status, the cursor row's own
+  color label (a swatch plus its name, shown only while the cursor is
+  on a labeled, labelable path), kernel version, uptime, load average,
+  and a clock. Disk and inode usage, git, kernel, uptime and load each
+  have their own fixed color so they stand out from one another at a
+  glance. Every one of these segments switches off independently under
+  Options → Status bar.
 
   Disk space reads "free/total" — how much room is left; inode usage
   reads "used/total" — how many you've used up, since that's the
@@ -404,7 +418,7 @@ var helpText = strings.TrimLeft(`
   instant there's a real merge conflict; a figure that's zero is left
   out entirely rather than shown as "+0".
 
-  Every one of these eight segments can be turned off individually —
+  Every one of these nine segments can be turned off individually —
   see "oo" → Status bar below.
 
 [::b]Options screen ("oo")[::-]
@@ -433,6 +447,13 @@ var helpText = strings.TrimLeft(`
   with every setting listed and commented out if you don't have one yet.
   "New color scheme" copies the current scheme and opens that for
   editing; either way the change is picked up when the editor closes.
+  "Remove orphaned labels" scans every color-labeled path in the
+  background (cancelable from the status bar while it runs) and, once
+  done, asks before removing any whose own file or directory no longer
+  exists where it was set — a path under a directory that isn't
+  reachable right now (an unmounted drive, say) is left alone rather
+  than guessed at. The "Label" category holds the 9 color labels' own
+  renamable names.
 
 [::b]Toolbox screen ("jn"/"jh")[::-]
 

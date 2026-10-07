@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/rivo/tview"
 )
@@ -524,5 +525,128 @@ func TestFilterFieldDoneReturnsFocusToTableWithoutClearing(t *testing.T) {
 	}
 	if !r.panel.table.HasFocus() {
 		t.Error("focus should return to the table after Enter closes the filter menu")
+	}
+}
+
+func TestFilterByLabelNoneSelectedIsNoop(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
+	var ids [filelabels.MaxLabelID + 1]bool // every id off
+	got := filterByLabel(entries, ids, false, store, "/dir", false, false)
+	if len(got) != 2 {
+		t.Errorf("filterByLabel with no id selected = %v, want all entries kept", entryNames(got))
+	}
+}
+
+func TestFilterByLabelOrsMultipleIDs(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := store.Set("/dir/banana.txt", 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := store.Set("/dir/cherry.txt", 4); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}, {Name: "cherry.txt"}}
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[2] = true
+	ids[3] = true
+	got := filterByLabel(entries, ids, false, store, "/dir", false, false)
+	want := []string{"apple.txt", "banana.txt"}
+	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
+		t.Errorf("filterByLabel(2,3) = %v, want %v", entryNames(got), want)
+	}
+}
+
+func TestFilterByLabelZeroMatchesUnlabeled(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}} // banana.txt never labeled
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[0] = true
+	got := filterByLabel(entries, ids, false, store, "/dir", false, false)
+	want := []string{"banana.txt"}
+	if len(got) != len(want) || got[0].Name != want[0] {
+		t.Errorf("filterByLabel(0) = %v, want %v", entryNames(got), want)
+	}
+}
+
+func TestFilterByLabelExcludeDirsKeepsDirectoriesRegardless(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{
+		{Name: "apple.txt"},
+		{Name: "banana.txt"},
+		{Name: "zzz-dir", IsDir: true}, // never labeled, not id 0-selected either
+	}
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[2] = true
+	got := filterByLabel(entries, ids, true, store, "/dir", false, false)
+	want := []string{"apple.txt", "zzz-dir"}
+	if len(got) != len(want) || got[0].Name != want[0] || got[1].Name != want[1] {
+		t.Errorf("filterByLabel(2, excludeDirs) = %v, want %v", entryNames(got), want)
+	}
+}
+
+// TestFilterByLabelNilStoreIsNoop pins the one case that would
+// otherwise be silently wrong: with no store at all, id 0 would
+// "match" every entry (Store.Get's own nil-receiver safety returns 0
+// for anything) while 1-9 would match nothing — filterByLabel must
+// treat "no store" as "this filter has nothing to say" instead.
+func TestFilterByLabelNilStoreIsNoop(t *testing.T) {
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[0] = true
+	got := filterByLabel(entries, ids, false, nil, "/dir", false, false)
+	if len(got) != 2 {
+		t.Errorf("filterByLabel with a nil store = %v, want all entries kept", entryNames(got))
+	}
+}
+
+func TestFilterByLabelRemoteIsNoop(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[2] = true
+	got := filterByLabel(entries, ids, false, store, "/dir", true, false)
+	if len(got) != 2 {
+		t.Errorf("filterByLabel on a remote panel = %v, want all entries kept (labels aren't tracked for remote paths)", entryNames(got))
+	}
+}
+
+func TestFilterByLabelArchiveViewIsNoop(t *testing.T) {
+	store := filelabels.NewWithPersistence("")
+	if err := store.Set("/dir/apple.txt", 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	entries := []fsops.Entry{{Name: "apple.txt"}, {Name: "banana.txt"}}
+	var ids [filelabels.MaxLabelID + 1]bool
+	ids[2] = true
+	got := filterByLabel(entries, ids, false, store, "/dir", false, true)
+	if len(got) != 2 {
+		t.Errorf("filterByLabel while browsing inside an archive = %v, want all entries kept", entryNames(got))
+	}
+}
+
+func TestAnyLabelFilterActive(t *testing.T) {
+	var ids [filelabels.MaxLabelID + 1]bool
+	if anyLabelFilterActive(ids) {
+		t.Error("anyLabelFilterActive with every id off = true, want false")
+	}
+	ids[7] = true
+	if !anyLabelFilterActive(ids) {
+		t.Error("anyLabelFilterActive with one id on = false, want true")
 	}
 }

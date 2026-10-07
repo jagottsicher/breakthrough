@@ -92,23 +92,36 @@ terminal.
     time) or a relative one (`7 days`, `2 hours ago`); a bare relative
     expression on its own (`last 7 days`) means "modified within
     that span".
+  - **Labels** — ten small toggles, one per color label (`0` "no label"
+    through `9`), each shown as its own colored swatch with no
+    number or text alongside it — id 0 shown in the dropdown's own
+    plain background rather than a color, since "no label" has none of
+    its own. Toggling more than one ORs them together (label 2 or 3,
+    say, shows both at once). Left/Right move between the ten swatches
+    while this row has focus; the one the keyboard is currently on is
+    marked `<` `>` around it, its own color always staying exactly what
+    it already was — never swapped out just because the keyboard
+    happens to be on it.
 
-  A fourth row, **Exclude dirs**, sits below all three: not a filter of
-  its own, but a single on/off switch that applies to all three at
+  A sixth row, **Exclude dirs**, sits below all four: not a filter of
+  its own, but a single on/off switch that applies to all four at
   once — while on, a directory is never hidden by any of them, however
   it would otherwise have matched (or failed to match); only plain
   files are ever actually filtered.
 
   Typing into any field auto-activates its own row, the same way it
-  already did for glob. `Tab`/`Shift+Tab` cycle through all eight of
+  already did for glob. `Tab`/`Shift+Tab` cycle through all nine of
   the dropdown's own pieces (checkbox + field for size and
-  modified-time, checkbox + mode button + field for glob, plus the
-  "Exclude dirs" checkbox), `Space`/`Enter` toggles whichever checkbox
-  has focus, `/` — once the dropdown is already open — jumps straight
-  to the next of the three fields instead (the same "press it again to
-  advance further" trick `Ctrl+T` already does for the tab switcher;
-  safe to repurpose since a bare filename can never contain `/` in the
-  first place), and `Escape` closes it from any of them.
+  modified-time, checkbox + mode button + field for glob, the Labels
+  row, plus the "Exclude dirs" checkbox), `Space`/`Enter` toggles
+  whichever checkbox (or, on the Labels row, whichever swatch) has
+  focus, `/` — once the dropdown is already open — jumps straight
+  to the next of the three expression fields instead (the same "press
+  it again to advance further" trick `Ctrl+T` already does for the tab
+  switcher; safe to repurpose since a bare filename can never contain
+  `/` in the first place; the Labels row has no field of its own, so
+  `/` from it jumps straight past to whichever field comes next), and
+  `Escape` closes it from any of them.
   Carries over across a directory change by default (`filter_persistent`),
   so browsing a whole tree with the same filter switched on is the
   normal way to use it, not a special case; set it to `false` to go
@@ -161,8 +174,9 @@ terminal.
   button bar): `g` to jump somewhere (`gg` top,
   `gh` home, `gr` `/`, `gb` Trashbin), `p` for permissions (`pm` chmod,
   `po` chown), `z` for display toggles (`zs` size format, `zt` time
-  format, `zi` Nerd Font icons, `zo` split orientation, `zw` swap panes),
-  `o` for Options
+  format, `zi` Nerd Font icons, `zl` label — set/clear one of 9 colors
+  on the focused or checked row(s), `zo` split orientation, `zw` swap
+  panes), `o` for Options
   (`oo` the screen itself, `om` mouse reporting on/off — quick, direct
   toggles without opening the screen at all). See
   [docs/user-guide.md](docs/user-guide.md#the-keyboard-layer).
@@ -185,9 +199,11 @@ terminal.
   it), Move to Trash, Properties (editable — name, permissions, click a
   bit or type the octal value directly, owner and group via a
   scrollable picker of every local user/group, modified date and time),
-  plus three `▸` submenus that replace the list in place when chosen
+  plus four `▸` submenus that replace the list in place when chosen
   (Windows Explorer's own cascading-menu idea, without needing room to
-  open beside it): "More actions" (New file, New dir, `tail -f`, chown,
+  open beside it): "Label" (set/clear one of 9 colors — see `zl` above
+  — each shown as a small colored swatch next to its name), "More
+  actions" (New file, New dir, `tail -f`, chown,
   chmod, Sed Replace, Batch rename, Undo last rename, Compare, Rsync,
   Compress…, Extract/Extract-delete-original (the latter two only for a
   recognized archive), Remove, Paste following symlinks), "Selection"

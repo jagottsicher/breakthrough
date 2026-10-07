@@ -37,10 +37,10 @@ func TestMoveToTrashAndListRoundTrip(t *testing.T) {
 	mustWriteFile(t, fileA, "hello")
 	mustWriteFile(t, fileB, "world")
 
-	if err := MoveToTrash(fileA, trashDir); err != nil {
+	if _, err := MoveToTrash(fileA, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(a): %v", err)
 	}
-	if err := MoveToTrash(fileB, trashDir); err != nil {
+	if _, err := MoveToTrash(fileB, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(b): %v", err)
 	}
 
@@ -75,7 +75,7 @@ func TestMoveToTrashRecursiveDirectory(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dir, "top.txt"), "x")
 	mustWriteFile(t, filepath.Join(dir, "sub", "nested.txt"), "y")
 
-	if err := MoveToTrash(dir, trashDir); err != nil {
+	if _, err := MoveToTrash(dir, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(dir): %v", err)
 	}
 	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
@@ -97,7 +97,7 @@ func TestListTrashSelfHealsAfterExternalDeletion(t *testing.T) {
 	fileA := filepath.Join(srcDir, "a.txt")
 	mustWriteFile(t, fileA, "hello")
 
-	if err := MoveToTrash(fileA, trashDir); err != nil {
+	if _, err := MoveToTrash(fileA, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestRestoreFromTrashRoundTrip(t *testing.T) {
 	fileA := filepath.Join(srcDir, "a.txt")
 	mustWriteFile(t, fileA, "hello")
 
-	if err := MoveToTrash(fileA, trashDir); err != nil {
+	if _, err := MoveToTrash(fileA, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 	items, err := ListTrash(trashDir)
@@ -176,7 +176,7 @@ func TestRestoreFromTrashRefusesToOverwrite(t *testing.T) {
 	fileA := filepath.Join(srcDir, "a.txt")
 	mustWriteFile(t, fileA, "original")
 
-	if err := MoveToTrash(fileA, trashDir); err != nil {
+	if _, err := MoveToTrash(fileA, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 	items, err := ListTrash(trashDir)
@@ -208,7 +208,7 @@ func TestEmptyTrashRemovesEverything(t *testing.T) {
 		mustWriteFile(t, filepath.Join(srcDir, name), name)
 	}
 	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
-		if err := MoveToTrash(filepath.Join(srcDir, name), trashDir); err != nil {
+		if _, err := MoveToTrash(filepath.Join(srcDir, name), trashDir); err != nil {
 			t.Fatalf("MoveToTrash(%s): %v", name, err)
 		}
 	}
@@ -298,10 +298,10 @@ func TestPruneTrashRemovesItemsOlderThanMaxAge(t *testing.T) {
 	mustWriteFile(t, oldFile, "old")
 	mustWriteFile(t, newFile, "new")
 
-	if err := MoveToTrash(oldFile, trashDir); err != nil {
+	if _, err := MoveToTrash(oldFile, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(old): %v", err)
 	}
-	if err := MoveToTrash(newFile, trashDir); err != nil {
+	if _, err := MoveToTrash(newFile, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(new): %v", err)
 	}
 	items, err := ListTrash(trashDir)
@@ -329,7 +329,7 @@ func TestPruneTrashZeroMaxAgeDisablesAgePruning(t *testing.T) {
 	trashDir := filepath.Join(t.TempDir(), "trash")
 	f := filepath.Join(srcDir, "ancient.txt")
 	mustWriteFile(t, f, "x")
-	if err := MoveToTrash(f, trashDir); err != nil {
+	if _, err := MoveToTrash(f, trashDir); err != nil {
 		t.Fatal(err)
 	}
 	items, err := ListTrash(trashDir)
@@ -356,7 +356,7 @@ func TestPruneTrashQuotaRemovesOldestFirstUntilUnderQuota(t *testing.T) {
 	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
 		f := filepath.Join(srcDir, name)
 		mustWriteFile(t, f, "0123456789")
-		if err := MoveToTrash(f, trashDir); err != nil {
+		if _, err := MoveToTrash(f, trashDir); err != nil {
 			t.Fatalf("MoveToTrash(%s): %v", name, err)
 		}
 	}
@@ -389,7 +389,7 @@ func TestPruneTrashZeroQuotaPercentDisablesQuotaPruning(t *testing.T) {
 	trashDir := filepath.Join(t.TempDir(), "trash")
 	f := filepath.Join(srcDir, "big.txt")
 	mustWriteFile(t, f, "0123456789")
-	if err := MoveToTrash(f, trashDir); err != nil {
+	if _, err := MoveToTrash(f, trashDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -413,7 +413,7 @@ func TestPruneTrashQuotaSkippedWhenDiskUsageUnavailable(t *testing.T) {
 	trashDir := filepath.Join(t.TempDir(), "trash")
 	f := filepath.Join(srcDir, "a.txt")
 	mustWriteFile(t, f, "x")
-	if err := MoveToTrash(f, trashDir); err != nil {
+	if _, err := MoveToTrash(f, trashDir); err != nil {
 		t.Fatal(err)
 	}
 

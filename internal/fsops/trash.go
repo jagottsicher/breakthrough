@@ -84,35 +84,43 @@ func randomTrashID() (string, error) {
 // directory goes in whole, recursively, exactly the way a plain move
 // always has — there is nothing to warn about since nothing is actually
 // being destroyed yet.
-func MoveToTrash(src, trashDir string) error {
+// target, the trashed payload's own real on-disk location, is returned
+// alongside the usual error — internal/ui's own callers use it to
+// rehome a moved file's color label (see internal/filelabels.Store.Rehome
+// and internal/ui/trash.go's own reallyMoveToTrash) from src to exactly
+// where the payload actually ended up, the same real path TrashItem.Path
+// would later compute from a freshly-listed TrashItem. "" alongside a
+// non-nil error — nothing was actually moved, so there is nothing a
+// caller could meaningfully rehome a label to.
+func MoveToTrash(src, trashDir string) (target string, err error) {
 	if err := ensureTrashSkeleton(trashDir); err != nil {
-		return err
+		return "", err
 	}
 
 	absSrc, err := filepath.Abs(src)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	base := filepath.Base(src)
-	var id, target string
+	var id string
 	for attempt := 0; ; attempt++ {
 		id, err = randomTrashID()
 		if err != nil {
-			return err
+			return "", err
 		}
 		target = filepath.Join(trashFilesDir(trashDir), id+"_"+base)
 		if _, err := os.Lstat(target); os.IsNotExist(err) {
 			break
 		}
 		if attempt > 100 {
-			return fmt.Errorf("fsops: could not find a free trash slot for %s", src)
+			return "", fmt.Errorf("fsops: could not find a free trash slot for %s", src)
 		}
 	}
 	slug := id + "_" + base
 
 	if err := Move(src, target, MoveOptions{}); err != nil { // zero value: Force false, mode never consulted
-		return err
+		return "", err
 	}
 
 	// The move already succeeded at this point — if writing the sidecar
@@ -134,7 +142,15 @@ func MoveToTrash(src, trashDir string) error {
 		// randomTrashID — and has nothing to do with deletion order).
 		"deleted_at": time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	return writeTrashInfo(trashInfoPath(trashDir, slug), values)
+	// target is returned even if writeTrashInfo below fails: the payload
+	// really did land there (see this function's own doc comment on
+	// that trade-off), so a caller rehoming a label onto it is still
+	// correct — restoring it later without a sidecar is a separate,
+	// pre-existing gap this change doesn't widen.
+	if err := writeTrashInfo(trashInfoPath(trashDir, slug), values); err != nil {
+		return target, err
+	}
+	return target, nil
 }
 
 // writeTrashInfo reuses config.SetKey (atomic temp-file-plus-rename

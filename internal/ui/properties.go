@@ -865,6 +865,7 @@ func (r *Root) savePropertiesEdit() {
 			firstErr = err
 		} else {
 			r.activityLog.Action(activitylog.CategoryFileOps, fmt.Sprintf("renamed %q to %q", target, r.stagedName))
+			_ = r.labels.Rehome(target, newPath) // see internal/filelabels.Store.Rehome's own doc comment
 			target = newPath
 		}
 	}

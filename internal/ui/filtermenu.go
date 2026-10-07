@@ -1,33 +1,38 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/filelabels"
 )
 
 const filterMenuPage = "filter-menu"
 
 // filterMenuLabelWidth/filterMenuExprWidth/filterMenuWidth/Height are
 // the dropdown's own fixed size: a one-row title bar over three
-// fixed-height filter rows (glob/regex, size, modified-time) plus one
-// more, "Exclude dirs" — a modifier that applies to all three rather
-// than a filter of its own, kept the same fixed height below them
-// rather than folded into any single one. filterMenuWidth is sized off
-// the size/modified-time rows now, not the glob row — "Modified time
-// filter" (the longer of their two labels) plus its own checkbox glyph
-// and a space is filterMenuLabelWidth wide, with a little breathing
-// room to spare before filterMenuExprWidth's own expression field
-// starts; the glob row's own filterField simply stretches to fill
-// whatever that leaves (see renderFilterMenu's own proportional AddItem
-// for it) rather than needing a width constant of its own to stay in
-// sync with these two.
+// fixed-height filter rows (glob/regex, size, modified-time), a fourth,
+// "Labels" (ten independently toggleable color-label swatches, ORed
+// together — see renderLabelFilterRow), and one more, "Exclude dirs" —
+// a modifier that applies to all four rather than a filter of its own,
+// kept the same fixed height below them rather than folded into any
+// single one. filterMenuWidth is sized off the size/modified-time rows
+// now, not the glob row — "Modified time filter" (the longer of their
+// two labels) plus its own checkbox glyph and a space is
+// filterMenuLabelWidth wide, with a little breathing room to spare
+// before filterMenuExprWidth's own expression field starts; the glob
+// row's own filterField simply stretches to fill whatever that leaves
+// (see renderFilterMenu's own proportional AddItem for it) rather than
+// needing a width constant of its own to stay in sync with these two.
 const (
 	filterMenuLabelWidth = 25
 	filterMenuExprWidth  = 22
 	filterMenuWidth      = filterMenuLabelWidth + filterMenuExprWidth + 2
-	filterMenuHeight     = 5
+	filterMenuHeight     = 6
 )
 
 // openFilterMenu shows the filter-menu dropdown for the currently
@@ -376,7 +381,10 @@ func (r *Root) renderFilterMenu() {
 	})
 	order = append(order, mtimeField)
 
-	// excludeDirsCheckbox is the dropdown's own fourth row — a single
+	labelFilterRow := r.newLabelFilterRow(panel, moveFocus, nextField, closeMenu)
+	order = append(order, labelFilterRow)
+
+	// excludeDirsCheckbox is the dropdown's own fifth row — a single
 	// on/off toggle applying to all three filters above rather than a
 	// filter of its own (see Panel.filterExcludeDirs' own doc comment),
 	// so it's a plain checkbox+label TextView spanning the whole row,
@@ -421,6 +429,7 @@ func (r *Root) renderFilterMenu() {
 		AddItem(globRow, 1, 0, true).
 		AddItem(sizeRow, 1, 0, false).
 		AddItem(mtimeRow, 1, 0, false).
+		AddItem(labelFilterRow, 1, 0, false).
 		AddItem(excludeDirsCheckbox, 1, 0, false)
 }
 
@@ -505,4 +514,146 @@ func (r *Root) newFilterMenuFieldRow(active *bool, text *string, label, placehol
 		AddItem(checkbox, filterMenuLabelWidth, 0, false).
 		AddItem(field, 0, 1, false)
 	return row, checkbox, field
+}
+
+// labelFilterSwatchWidth is how many columns each of the Labels row's
+// ten toggles occupies: an open marker, the checkbox glyph itself, and
+// a close marker (see renderLabelFilterRow) — " ● " normally, "<●>"
+// while the row's own internal keyboard cursor is on it. One column of
+// plain gap follows every swatch but the last (see renderLabelFilterRow),
+// so consecutive swatches never visually merge into one solid block.
+const labelFilterSwatchWidth = 3
+
+// newLabelFilterRow builds the filter-menu's own fourth row — "Labels",
+// between Modified time and Exclude dirs — ten independently
+// toggleable color-label swatches (id 0 "no label" through id
+// filelabels.MaxLabelID), ORed together when more than one is on (see
+// filterByLabel's own doc comment).
+//
+// A single TextView, not ten separate focusable primitives: Left/Right
+// move an internal cursor between the ten swatches while this row
+// itself holds real keyboard focus, the same "one focusable stop, its
+// own internal horizontal position" shape nothing else in this
+// dropdown needed before (every other row is one single boolean
+// toggle). Up/Down/Tab/Backtab still move to the adjacent row in the
+// dropdown's own order, exactly like every other row's own
+// filterMenuCheckboxCapture — this row needs its own InputCapture
+// instead of that shared one specifically to also claim Left/Right.
+//
+// The cursor's own position is marked with "<"/">" rather than "["/"]":
+// a literal "[" needs tview's own escape dance to print as itself
+// (see tview.Escape's own doc comment) since every row here renders
+// through SetDynamicColors for the swatches' own background color tags
+// — "<"/">" need no escaping at all and are never ambiguous with tag
+// syntax, the simpler fix over escaping. Deliberately NOT swapping the
+// swatch's own background to mark the cursor instead — the user's own
+// explicit requirement ("die richtige Farbe behalten") is that a
+// swatch's color never changes just because the keyboard cursor is on
+// it, only the clipboard/label color itself may ever change that.
+//
+// Returns the row itself — the Labels row has no real comparison-
+// expression field of its own the way the size/modified-time rows do,
+// so it's deliberately never added to renderFilterMenu's own `fields`
+// slice (nextField's own "/" target list skips it, falling through to
+// whichever real field comes next, exactly as if this row didn't exist
+// for that one purpose).
+func (r *Root) newLabelFilterRow(panel *Panel, moveFocus func(tview.Primitive, int), nextField func(tview.Primitive), closeMenu func()) *tview.TextView {
+	row := tview.NewTextView().SetDynamicColors(true)
+	filterMenuRowStyle(row, panel.theme, false)
+
+	cursor := 0
+	// swatchCol is swatch id's own starting column within row's
+	// rendered text, filled in by renderLabelFilterRow on every render —
+	// read only by the mouse capture below, to turn a click's column
+	// back into which swatch it landed on.
+	var swatchCol [filelabels.MaxLabelID + 1]int
+
+	render := func() {
+		var b strings.Builder
+		b.WriteString("Labels ")
+		col := tview.TaggedStringWidth(b.String())
+		for id := 0; id <= filelabels.MaxLabelID; id++ {
+			swatchCol[id] = col
+			bg := panel.theme.SurfaceBackground // id 0 "no label": no color of its own — the row's own plain background stands in for it, per the user's own explicit request
+			if id > 0 {
+				bg = panel.theme.LabelBackground(id)
+			}
+			open, close := " ", " "
+			if id == cursor {
+				open, close = "<", ">"
+			}
+			fmt.Fprintf(&b, "[:%s:]%s%s%s[-:-:-]", colorTag(bg), open, checkboxText(panel.filterLabelIDs[id]), close)
+			col += labelFilterSwatchWidth
+			if id < filelabels.MaxLabelID {
+				b.WriteString(" ")
+				col++
+			}
+		}
+		row.SetText(b.String())
+	}
+	render()
+
+	toggle := func() {
+		panel.filterLabelIDs[cursor] = !panel.filterLabelIDs[cursor]
+		render()
+		panel.renderFilterMenuBtn()
+		panel.reportError(panel.load(panel.path))
+	}
+	moveCursor := func(delta int) {
+		next := cursor + delta
+		if next < 0 {
+			next = 0
+		}
+		if next > filelabels.MaxLabelID {
+			next = filelabels.MaxLabelID
+		}
+		cursor = next
+		render()
+	}
+
+	row.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if !row.InRect(event.Position()) {
+			return action, event
+		}
+		if action == tview.MouseLeftClick {
+			x, _ := event.Position()
+			rectX, _, _, _ := row.GetInnerRect()
+			col := x - rectX
+			for id := filelabels.MaxLabelID; id >= 0; id-- {
+				if col >= swatchCol[id] {
+					cursor = id
+					toggle()
+					break
+				}
+			}
+		}
+		return tview.MouseConsumed, nil
+	})
+	row.SetFocusFunc(func() { filterMenuRowStyle(row, panel.theme, true) })
+	row.SetBlurFunc(func() { filterMenuRowStyle(row, panel.theme, false) })
+	row.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		isSpace := event.Key() == tcell.KeyRune && event.Rune() == ' '
+		isSlash := event.Key() == tcell.KeyRune && event.Rune() == '/'
+		switch {
+		case event.Key() == tcell.KeyEscape:
+			closeMenu()
+		case event.Key() == tcell.KeyEnter, isSpace:
+			toggle()
+		case isSlash:
+			nextField(row)
+		case event.Key() == tcell.KeyLeft:
+			moveCursor(-1)
+		case event.Key() == tcell.KeyRight:
+			moveCursor(1)
+		case event.Key() == tcell.KeyDown, event.Key() == tcell.KeyTab:
+			moveFocus(row, 1)
+		case event.Key() == tcell.KeyUp, event.Key() == tcell.KeyBacktab:
+			moveFocus(row, -1)
+		default:
+			return event
+		}
+		return nil
+	})
+
+	return row
 }

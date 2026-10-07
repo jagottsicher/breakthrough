@@ -311,7 +311,7 @@ func TestRestoreConflictOpensTheSameSixOptionDialog(t *testing.T) {
 	}
 
 	trashDir := t.TempDir()
-	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+	if _, err := fsops.MoveToTrash(original, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 	// Something new now sits at the original path — restoring must
@@ -362,7 +362,7 @@ func TestRestoreConflictOverwriteRestoresAndRemovesSidecar(t *testing.T) {
 		t.Fatal(err)
 	}
 	trashDir := t.TempDir()
-	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+	if _, err := fsops.MoveToTrash(original, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 	if err := os.WriteFile(original, []byte("recreated after delete"), 0o644); err != nil {
@@ -423,7 +423,7 @@ func TestRestoreConflictSkipLeavesEverythingInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	trashDir := t.TempDir()
-	if err := fsops.MoveToTrash(original, trashDir); err != nil {
+	if _, err := fsops.MoveToTrash(original, trashDir); err != nil {
 		t.Fatalf("MoveToTrash: %v", err)
 	}
 	if err := os.WriteFile(original, []byte("recreated after delete"), 0o644); err != nil {
@@ -507,10 +507,10 @@ func TestRestoreMultiSelectFromDifferentOriginalDirsRestoresBoth(t *testing.T) {
 	}
 
 	trashDir := t.TempDir()
-	if err := fsops.MoveToTrash(fileA, trashDir); err != nil {
+	if _, err := fsops.MoveToTrash(fileA, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(a): %v", err)
 	}
-	if err := fsops.MoveToTrash(fileB, trashDir); err != nil {
+	if _, err := fsops.MoveToTrash(fileB, trashDir); err != nil {
 		t.Fatalf("MoveToTrash(b): %v", err)
 	}
 	trashItems, err := fsops.ListTrash(trashDir)

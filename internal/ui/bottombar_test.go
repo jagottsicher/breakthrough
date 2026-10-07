@@ -67,6 +67,11 @@ import (
 //     that doesn't exist" shape HISTFILE/userConfigFilePath already
 //     use above — so no test here so much as touches a real file
 //     unless it specifically opts back in with its own t.TempDir().
+//   - The persisted color-label store (internal/filelabels, wired in
+//     NewRoot via labelsPersistPath): the exact same class of problem,
+//     fixed the exact same way, for the exact same reason
+//     notifyPersistPath's own entry just above gives for not reusing
+//     $XDG_STATE_HOME directly.
 //   - The mail badge's own auto-detected system mailbox
 //     (mailDefaultMboxPath, mail.go): defaults to "" here too, the
 //     same reasoning as notifyPersistPath just above — a real,
@@ -79,6 +84,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_DATA_HOME", filepath.Join(os.TempDir(), "breakthrough-test-xdg-data"))          //nolint:errcheck
 
 	notifyPersistPath = func() string { return "" }
+	labelsPersistPath = func() string { return "" }
 
 	// mailDefaultMboxPath: the status bar's own mail badge (see
 	// mailBadgeCount in mail.go) auto-detects the current user's real
@@ -2250,5 +2256,101 @@ func TestCaptureStatusBarMouseClickOnMailBadgeLaunchesMail(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want the \"no mail client found\" notice after clicking the badge", r.activePage)
+	}
+}
+
+// TestBuildStatusBarShowsLabelOnCursorRow pins the "zl" chord's own
+// status-bar companion: a label set on whatever row the cursor is on
+// shows up as its own swatch-plus-name segment.
+func TestBuildStatusBarShowsLabelOnCursorRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	path := filepath.Join(dir, "apple.txt")
+	if err := r.labels.Set(path, 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	r.panel.focusRow(2) // apple.txt — see fixtureDir
+
+	got := r.buildStatusBar()
+	want := r.settings.LabelName(5)
+	if !strings.Contains(got, want) {
+		t.Errorf("status bar = %q, want it to contain the label's own name %q", got, want)
+	}
+}
+
+// TestBuildStatusBarOmitsLabelForUnlabeledRow pins the common case:
+// the cursor sitting on an ordinary, unlabeled row shows nothing extra.
+func TestBuildStatusBarOmitsLabelForUnlabeledRow(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.panel.focusRow(2) // apple.txt, never labeled
+
+	if label, ok := labelStatusBarText(r.panel, r.theme, r.settings); ok {
+		t.Errorf("labelStatusBarText = (%q, true), want ok=false for an unlabeled row", label)
+	}
+}
+
+// TestBuildStatusBarLabelToggleHidesOnlyThatSegment pins
+// status_bar_show_label's own independence from every other segment —
+// the same guarantee TestBuildStatusBarEachSegmentToggleHidesOnlyThatSegment
+// already pins for the others, kept separate since this one needs its
+// own labeled-row setup first.
+func TestBuildStatusBarLabelToggleHidesOnlyThatSegment(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	path := filepath.Join(dir, "apple.txt")
+	if err := r.labels.Set(path, 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	r.panel.focusRow(2)
+	want := r.settings.LabelName(5)
+
+	before := r.buildStatusBar()
+	if !strings.Contains(before, want) {
+		t.Fatalf("setup: status bar should already contain %q:\n%s", want, before)
+	}
+
+	r.settings.StatusBarShowLabel = false
+	after := r.buildStatusBar()
+	if strings.Contains(after, want) {
+		t.Errorf("status_bar_show_label off: status bar still contains %q:\n%s", want, after)
+	}
+	if !strings.Contains(after, r.currentUser) {
+		t.Errorf("toggling off the label segment also removed an unrelated segment:\n%s", after)
+	}
+}
+
+// TestLabelStatusBarTextExcludesDotDotRow pins the same rendering
+// exclusion rowLabelBackground already enforces (see its own doc
+// comment): the ".." row's own path is a real, otherwise-labelable
+// directory (the parent), but the row itself must never show a label.
+func TestLabelStatusBarTextExcludesDotDotRow(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "sub")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if err := r.labels.Set(parent, 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	r.panel.focusRow(0) // ".."
+
+	if label, ok := labelStatusBarText(r.panel, r.theme, r.settings); ok {
+		t.Errorf("labelStatusBarText on \"..\" = (%q, true), want ok=false", label)
 	}
 }

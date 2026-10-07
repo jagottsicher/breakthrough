@@ -216,6 +216,34 @@ type Theme struct {
 	// rather than a colored background field.
 	WarningText  string `json:"warning_text"`
 	CriticalText string `json:"critical_text"`
+
+	// Label1Background..Label9Background are the nine color labels
+	// behind the "zl" chord (see internal/filelabels and internal/ui's
+	// own Panel.rowLabelBackground) — MC/Finder-style per-file/-directory
+	// tagging, independent of DirectoryBackground. Nine separate named
+	// fields, the same shape every other field here already has, per
+	// CLAUDE.md's own flat-config rule — deliberately not a [9]string
+	// array, which would be this type's one outlier.
+	//
+	// Unlike every other field in this struct, an empty or unrecognized
+	// value here does NOT fall back to DefaultTheme's own (deliberately
+	// muted, dark-scheme-matched) value — see Resolve's own doc comment
+	// on why labelFallbackColors exists as a separate, scheme-independent
+	// table instead: a muted color is the right *default* for the
+	// "default" scheme, which always sets every one of these nine
+	// fields itself, but the wrong *fallback* for a third-party scheme
+	// that forgot to, where "never invisible" (loud and unmistakably a
+	// label, not another muted shade blending into that scheme's own
+	// palette) matters more than matching this app's own built-in taste.
+	Label1Background string `json:"label_1_background"`
+	Label2Background string `json:"label_2_background"`
+	Label3Background string `json:"label_3_background"`
+	Label4Background string `json:"label_4_background"`
+	Label5Background string `json:"label_5_background"`
+	Label6Background string `json:"label_6_background"`
+	Label7Background string `json:"label_7_background"`
+	Label8Background string `json:"label_8_background"`
+	Label9Background string `json:"label_9_background"`
 }
 
 // ResolvedTheme is Theme with every field parsed into a real tcell.Color
@@ -280,6 +308,52 @@ type ResolvedTheme struct {
 
 	WarningText  tcell.Color
 	CriticalText tcell.Color
+
+	// Label1Background..Label9Background mirror Theme's own same-named
+	// fields, already resolved — see LabelBackground for the id-indexed
+	// accessor internal/ui actually calls, rather than a 9-way switch of
+	// its own on these.
+	Label1Background tcell.Color
+	Label2Background tcell.Color
+	Label3Background tcell.Color
+	Label4Background tcell.Color
+	Label5Background tcell.Color
+	Label6Background tcell.Color
+	Label7Background tcell.Color
+	Label8Background tcell.Color
+	Label9Background tcell.Color
+}
+
+// LabelBackground returns the resolved background color for color
+// label id (1-9) — the one accessor internal/ui's Panel.rowLabelBackground
+// calls, so it doesn't need its own 9-way switch over ResolvedTheme's
+// individual Label1Background..Label9Background fields. id 0 ("no
+// label") or anything outside 1-9 returns tcell.ColorDefault; callers
+// are expected to have already excluded id 0 (see filelabels.Store.Get's
+// own doc comment: 0 always means "nothing set").
+func (t ResolvedTheme) LabelBackground(id int) tcell.Color {
+	switch id {
+	case 1:
+		return t.Label1Background
+	case 2:
+		return t.Label2Background
+	case 3:
+		return t.Label3Background
+	case 4:
+		return t.Label4Background
+	case 5:
+		return t.Label5Background
+	case 6:
+		return t.Label6Background
+	case 7:
+		return t.Label7Background
+	case 8:
+		return t.Label8Background
+	case 9:
+		return t.Label9Background
+	default:
+		return tcell.ColorDefault
+	}
 }
 
 // DefaultTheme is breakthrough's own built-in scheme: the exact colors
@@ -334,8 +408,62 @@ func DefaultTheme() Theme {
 
 		WarningText:  "orange",
 		CriticalText: "red",
+
+		// Muted, dark-scheme-matched defaults for the nine color labels
+		// (see Theme's own doc comment on why these — unlike every other
+		// field here — are NOT what Resolve falls back to for a
+		// third-party scheme that leaves one unset; see
+		// labelFallbackColors for that separate table). Desaturated,
+		// darkened variants of labelFallbackColors' own nine hues, kept
+		// in the same hue order (red, green, yellow, blue, orange,
+		// purple, teal, pink, lime) so a user switching between the
+		// default scheme and labelFallbackColors' own loud rendering of
+		// an unconfigured third-party scheme still recognizes "label 3"
+		// as the same hue family in both.
+		Label1Background: "#8a4a4a",
+		Label2Background: "#5a7a5a",
+		Label3Background: "#9a8a4a",
+		Label4Background: "#4a5a8a",
+		Label5Background: "#8a6a4a",
+		Label6Background: "#6a4a7a",
+		Label7Background: "#4a7a7a",
+		Label8Background: "#7a4a6a",
+		Label9Background: "#6a7a4a",
 	}
 }
+
+// labelFallbackColors is Resolve's own fallback for
+// Label1Background..Label9Background specifically — the one deliberate
+// exception to every other field's "fall back to DefaultTheme's own
+// value" rule (see resolve below and Theme's own doc comment on why).
+// DefaultTheme's nine label colors are deliberately muted to match its
+// own dark scheme; reusing them as the universal "this scheme forgot to
+// set this" fallback would silently hand a bright third-party scheme
+// another muted color that may well blend right into it, defeating the
+// whole point of a safety net whose job is specifically "never
+// invisible". A fixed, scheme-independent, maximally-separated set of
+// nine hues instead — picked from a print-cartography-style
+// distinct-color palette for exactly that separation, not tuned to
+// complement any one scheme's own palette, since the scheme that needs
+// this didn't give it anything to complement.
+var labelFallbackColors = [MaxLabelID]string{
+	"#e6194b", // 1 red
+	"#3cb44b", // 2 green
+	"#ffe119", // 3 yellow
+	"#4363d8", // 4 blue
+	"#f58231", // 5 orange
+	"#911eb4", // 6 purple
+	"#42d4f4", // 7 cyan
+	"#f032e6", // 8 magenta
+	"#bfef45", // 9 lime
+}
+
+// MaxLabelID is the highest real color-label id (1-9) — mirrors
+// filelabels.MaxLabelID, kept as this package's own copy rather than an
+// import: internal/filelabels is a UI-free state package with no reason
+// to depend on internal/config, and this is the one place config needs
+// the same constant, for labelFallbackColors' own array size.
+const MaxLabelID = 9
 
 // Resolve parses every field via tcell.GetColor, falling back to
 // DefaultTheme's own value field-by-field wherever t's own value is
@@ -419,6 +547,20 @@ func (t Theme) Resolve() ResolvedTheme {
 
 		WarningText:  resolve(t.WarningText, def.WarningText),
 		CriticalText: resolve(t.CriticalText, def.CriticalText),
+
+		// Deliberately resolve(value, labelFallbackColors[...]), not
+		// resolve(value, def.LabelNBackground) the way every field above
+		// falls back to DefaultTheme's own value — see labelFallbackColors'
+		// own doc comment for why.
+		Label1Background: resolve(t.Label1Background, labelFallbackColors[0]),
+		Label2Background: resolve(t.Label2Background, labelFallbackColors[1]),
+		Label3Background: resolve(t.Label3Background, labelFallbackColors[2]),
+		Label4Background: resolve(t.Label4Background, labelFallbackColors[3]),
+		Label5Background: resolve(t.Label5Background, labelFallbackColors[4]),
+		Label6Background: resolve(t.Label6Background, labelFallbackColors[5]),
+		Label7Background: resolve(t.Label7Background, labelFallbackColors[6]),
+		Label8Background: resolve(t.Label8Background, labelFallbackColors[7]),
+		Label9Background: resolve(t.Label9Background, labelFallbackColors[8]),
 	}
 }
 

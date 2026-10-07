@@ -56,6 +56,59 @@ func TestThemeResolveFallsBackPerFieldOnEmptyOrInvalidValue(t *testing.T) {
 	}
 }
 
+// TestLabelBackgroundFallsBackToLoudColorsNotDefaultTheme pins the one
+// deliberate exception to the generic per-field fallback rule (see
+// Theme's own doc comment on Label1Background..Label9Background and
+// labelFallbackColors' own doc comment): a third-party scheme that
+// leaves a label color unset must get labelFallbackColors' own loud,
+// scheme-independent value, NOT DefaultTheme's own muted one — unlike
+// every other field, where falling back to DefaultTheme is exactly
+// right.
+func TestLabelBackgroundFallsBackToLoudColorsNotDefaultTheme(t *testing.T) {
+	th := Theme{} // every field, including every label color, left unset
+	resolved := th.Resolve()
+	def := DefaultTheme().Resolve()
+
+	for id := 1; id <= MaxLabelID; id++ {
+		got := resolved.LabelBackground(id)
+		wantLoud := tcell.GetColor(labelFallbackColors[id-1])
+		if got != wantLoud {
+			t.Errorf("label %d fallback = %v, want labelFallbackColors' own %v", id, got, wantLoud)
+		}
+		if got == def.LabelBackground(id) {
+			t.Errorf("label %d fallback must not equal DefaultTheme's own (muted) value %v", id, got)
+		}
+	}
+}
+
+// TestLabelBackgroundAcceptsExplicitOverride pins that a scheme file
+// that *does* set its own label colors still gets exactly those, not
+// the loud fallback.
+func TestLabelBackgroundAcceptsExplicitOverride(t *testing.T) {
+	th := Theme{Label3Background: "maroon"}
+	resolved := th.Resolve()
+	if got := resolved.LabelBackground(3); got != tcell.GetColor("maroon") {
+		t.Errorf("label 3 = %v, want maroon", got)
+	}
+	// An unset sibling field must still fall back to its own loud
+	// default rather than silently inheriting label 3's override.
+	if got := resolved.LabelBackground(4); got != tcell.GetColor(labelFallbackColors[3]) {
+		t.Errorf("label 4 = %v, want its own loud fallback %v", got, tcell.GetColor(labelFallbackColors[3]))
+	}
+}
+
+// TestLabelBackgroundInvalidIDReturnsColorDefault pins
+// ResolvedTheme.LabelBackground's own documented behavior for id 0
+// ("no label") or anything outside 1-9.
+func TestLabelBackgroundInvalidIDReturnsColorDefault(t *testing.T) {
+	resolved := DefaultTheme().Resolve()
+	for _, id := range []int{0, -1, 10} {
+		if got := resolved.LabelBackground(id); got != tcell.ColorDefault {
+			t.Errorf("LabelBackground(%d) = %v, want tcell.ColorDefault", id, got)
+		}
+	}
+}
+
 // spread reports the difference between c's own brightest and dimmest
 // RGB channel — the absolute magnitude a viewer's eye actually reads
 // as "this has a color cast", independent of how dark or bright c is

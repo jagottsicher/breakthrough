@@ -69,6 +69,10 @@ const (
 	// self-lockout rollback firing — firewalladdrule.go's
 	// rollbackFirewallRule.
 	CategoryFirewall Category = "firewall"
+	// CategoryLabel covers the Options screen's own "Remove orphaned
+	// labels" background scan finishing — labelorphans.go's
+	// reportOrphanScanResult.
+	CategoryLabel Category = "label"
 )
 
 // Message is one recorded notification: Store's own Push builds one,
