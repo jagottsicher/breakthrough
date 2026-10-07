@@ -1125,3 +1125,59 @@ func TestTabSwitcherShortcutIgnoresAcceptsGlobalShortcutWhileOpen(t *testing.T) 
 			"even though AcceptsGlobalShortcut is false", got)
 	}
 }
+
+// TestReloadAllTabsReloadsEveryTabsOwnDirectory pins the user's own
+// explicit report: an ad-hoc shell command run through the bash
+// console (their own real case was rsync) can change a directory a
+// different, background tab is showing, not just the active one —
+// reloadAllTabs is what runShellCommandFullScreen now calls instead of
+// reloading only r.panel. Each tab reloads its own path independently
+// — a file dropped into the inactive tab's own directory from outside
+// Panel.load entirely (standing in for "some external command just
+// wrote here") must show up once this runs, even though that tab was
+// never the active one.
+func TestReloadAllTabsReloadsEveryTabsOwnDirectory(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)  // tab 2, now active, showing "other"
+	r.switchToTab(0) // back to tab 1, showing the fixture dir — tab 2 stays open in the background
+
+	if err := os.WriteFile(filepath.Join(other, "dropped-in.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	r.reloadAllTabs()
+
+	r.switchToTab(1)
+	found := false
+	for i := 0; i < r.panel.table.GetRowCount(); i++ {
+		if ref, ok := r.panel.rowRef(i); ok && ref.name == "dropped-in.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("tab 2 (background at the time reloadAllTabs ran) does not show dropped-in.txt — its own reload didn't happen")
+	}
+}
+
+// TestReloadAllTabsSurfacesOnlyTheActivePanelsError pins the "best
+// effort for background tabs, but the active one's own failure is
+// still shown" half of reloadAllTabs' own doc comment: a background
+// tab whose directory vanished entirely must not produce a visible
+// error (nothing on screen would show it anyway), while the active
+// panel's own identical failure still does, exactly as
+// runShellCommandFullScreen's prior, single-panel reload already did.
+func TestReloadAllTabsSurfacesOnlyTheActivePanelsError(t *testing.T) {
+	r, _, other := newTabbedRoot(t)
+	r.newTab(other)  // tab 2, now active
+	r.switchToTab(0) // tab 1 active again; tab 2 (other) stays open in the background
+
+	if err := os.RemoveAll(other); err != nil {
+		t.Fatalf("removing fixture dir: %v", err)
+	}
+
+	r.reloadAllTabs()
+
+	if r.activePage == errorPage {
+		t.Error("activePage is the error page, want no error surfaced for a background tab's own reload failure")
+	}
+}

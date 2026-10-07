@@ -618,8 +618,17 @@ func (r *Root) executeCurrentEntry() {
 // back, per the user's own explicit "soll man zurückkehren auf
 // breakthrough mit geschlossenem bash Feld".
 //
-// The panel reloads once the command exits, in case it changed anything
-// in the directory currently on screen.
+// Every open tab reloads once the command exits, not just the active
+// one — per the user's own explicit report: an ad-hoc command run
+// this way (their own real case was rsync, copying into a directory a
+// different tab happened to be showing) can just as easily change a
+// directory some other tab is showing as the one it actually ran
+// from, and there's no reliable way to tell from the command text
+// alone which directories it actually touched. Each tab reloads its
+// own current directory (see reloadAllTabs); only the active panel's
+// own reload failure is still surfaced via showError, matching this
+// function's own prior behavior exactly for that one tab — a
+// background tab's own reload is best-effort.
 func (r *Root) runShellCommandFullScreen(command string, category activitylog.Category) {
 	var runErr error
 	r.suspend(func() {
@@ -647,7 +656,7 @@ func (r *Root) runShellCommandFullScreen(command string, category activitylog.Ca
 		return
 	}
 	r.activityLog.Action(category, fmt.Sprintf("ran: %s", command))
-	r.showError(r.panel.load(r.panel.path))
+	r.reloadAllTabs()
 }
 
 // fullScreenShellArgs returns the argv (after userShell() itself) used to
