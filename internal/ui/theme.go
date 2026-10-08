@@ -669,6 +669,21 @@ func styleList(l *tview.List, theme config.ResolvedTheme) {
 // styleInput applies the shared normal/focused input contract. tview keeps
 // placeholder styling separate from the field style, so all three are set
 // here rather than being left to each dialog to interpret independently.
+//
+// SetLabelStyle's own background matters just as much as
+// SetFieldBackgroundColor's: InputField draws its label and its
+// editable area through one shared internal text area, but the two
+// have entirely separate styles — SetBackgroundColor (the Box this
+// InputField embeds) fills the *whole* widget's rect first, but the
+// label is then drawn directly on top of that fill using its own
+// style, whose background defaults to tcell.ColorDefault (not "this
+// field's own InputBackground") unless set explicitly here. Before
+// this, every labeled field styled through this function — e.g. Log
+// Audit's own Keyword/Time/Level row — showed its label on a plain
+// black background while the editable area next to it correctly
+// showed InputBackground/InputFocusedBackground, a real, user-
+// reported mismatch, not a hypothetical one. A field with no label at
+// all (most callers here) is unaffected either way.
 func styleInput(field *tview.InputField, theme config.ResolvedTheme, focused bool) {
 	background := theme.InputBackground
 	if focused {
@@ -677,6 +692,7 @@ func styleInput(field *tview.InputField, theme config.ResolvedTheme, focused boo
 	field.SetFieldBackgroundColor(background)
 	field.SetBackgroundColor(background)
 	field.SetFieldTextColor(theme.TextColor)
+	field.SetLabelStyle(tcell.StyleDefault.Background(background).Foreground(theme.TextColor))
 	field.SetPlaceholderStyle(tcell.StyleDefault.Background(background).Foreground(theme.MutedTextColor))
 }
 

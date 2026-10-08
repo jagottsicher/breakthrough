@@ -586,7 +586,8 @@ var helpText = strings.TrimLeft(`
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
   into one row) with a summary of how many of its own files are
-  compressed.
+  compressed. The "✕" glyph in the title bar's own top-right corner is
+  a mouse-clickable equivalent to Escape — both screens below have one.
 
     Enter    Open the Log Audit view for the family under the cursor
     r        Re-scan the directory

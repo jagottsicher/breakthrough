@@ -2427,7 +2427,9 @@ or any other directory, and press `jL` — no arguments, no flags.
 Step 1 — file selection: `internal/logview.Discover` lists that
 directory's own files (one level, not recursive) and groups them into
 logrotate families (`access.log`, `access.log.1`, `access.log.2.gz`
-collapse into one row).
+collapse into one row). The "✕" glyph in the title bar's own top-right
+corner is a mouse-clickable equivalent to `Escape` — both this screen
+and the audit view below have one.
 
 | Key | Action |
 |---|---|

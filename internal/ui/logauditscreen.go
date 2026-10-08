@@ -94,6 +94,13 @@ func (r *Root) newLogAuditScreen() {
 
 func (r *Root) newLogAuditSelectionScreen() {
 	r.logAuditTitleBar = newPlainTitleBar("Log Audit — select files")
+	// A clickable "✕" in the title bar's own top-right corner, per the
+	// user's own explicit request — see closeTitleBarButtonCol/
+	// renderCloseTitleBar/captureCloseTitleBarMouse (root.go). The
+	// glyph itself is drawn by renderLogAuditSelection, every time it
+	// renders (the same "render it fresh each time" shape
+	// renderReloadTitleBar's own callers already use).
+	r.logAuditTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditTitleBar, r.closeLogAuditSelection))
 
 	r.logAuditTable = tview.NewTable()
 	r.logAuditTable.SetBorders(false)
@@ -119,6 +126,12 @@ func (r *Root) newLogAuditSelectionScreen() {
 
 func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditViewerTitle = newPlainTitleBar("Log Audit")
+	// Same clickable "✕" as the selection screen's own title bar (see
+	// its own comment on this, just above in
+	// newLogAuditSelectionScreen) — drawn by renderLogAuditViewer
+	// itself, since this bar's own text is rebuilt fresh on every
+	// render anyway (the running counts).
+	r.logAuditViewerTitle.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditViewerTitle, r.closeLogAuditViewer))
 
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
@@ -240,6 +253,7 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 // Enter simply opens whichever row the cursor is already on (see
 // openLogAuditViewer's own doc comment for why).
 func (r *Root) renderLogAuditSelection() {
+	renderCloseTitleBar(r.logAuditTitleBar, " Log Audit — select files ", r.lastScreenWidth)
 	r.logAuditTable.Clear()
 
 	header := func(col int, text string) {
@@ -450,7 +464,7 @@ func (r *Root) renderLogAuditViewer() {
 	// One general note instead of repeating it on every affected hint
 	// — see logAuditViewerHintEntries' own doc comment for why.
 	title += " │ e/w/Enter/r/f/s need the list focused"
-	r.logAuditViewerTitle.SetText(title + " ")
+	renderCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
 
 	r.renderLogAuditTimeline(shown)
 
@@ -696,12 +710,12 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// mismatch this fixes.
 	r.logAuditFilterRow.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditTimelineView.SetBackgroundColor(theme.SurfaceBackground)
+	// Label color and background both come from styleInput itself —
+	// see its own doc comment (theme.go) on the background mismatch
+	// this used to leave in place.
 	styleInput(r.logAuditKeywordField, theme, r.logAuditKeywordField.HasFocus())
-	r.logAuditKeywordField.SetLabelColor(theme.TextColor)
 	styleInput(r.logAuditTimeField, theme, r.logAuditTimeField.HasFocus())
-	r.logAuditTimeField.SetLabelColor(theme.TextColor)
 	styleInput(r.logAuditLevelField, theme, r.logAuditLevelField.HasFocus())
-	r.logAuditLevelField.SetLabelColor(theme.TextColor)
 	r.logAuditViewerHint.SetBackgroundColor(theme.InputBackground)
 	r.logAuditViewerHint.SetTextColor(theme.MutedTextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())

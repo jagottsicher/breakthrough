@@ -385,10 +385,12 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	r.activityLogHint.SetText(activityLogHintText)
 	r.activityLogHintSpans = activityLogHintSpans
 
+	// Label color (and, as of this fix, background too) already comes
+	// from styleInput itself, via activityLogSetFieldStyle below — see
+	// its own doc comment on the background mismatch this used to
+	// leave in place.
 	r.activityLogSetFieldStyle(r.activityLogKeywordField, r.activityLogKeywordField.HasFocus())
 	r.activityLogSetFieldStyle(r.activityLogTimeField, r.activityLogTimeField.HasFocus())
-	r.activityLogKeywordField.SetLabelColor(theme.TextColor)
-	r.activityLogTimeField.SetLabelColor(theme.TextColor)
 
 	r.renderActivityLog() // cell colors are baked in per cell, not looked up live at draw time
 }
