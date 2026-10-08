@@ -581,6 +581,13 @@ type Root struct {
 	logAuditKeywordField *tview.InputField
 	logAuditTimeField    *tview.InputField
 	logAuditLevelField   *tview.InputField
+	// logAuditFilterRow is the Flex wrapping the three fields above —
+	// themed to the same SurfaceBackground as everything else on this
+	// screen (see applyLogAuditTheme) so a rounding gap between the
+	// three proportionally-sized fields shows the right color instead
+	// of tview's own default black, the background mismatch the
+	// user's own explicit report flagged.
+	logAuditFilterRow    *tview.Flex
 	logAuditTimelineView *tview.TextView
 	logAuditViewerTable  *tview.Table
 	logAuditViewerHint   *tview.TextView

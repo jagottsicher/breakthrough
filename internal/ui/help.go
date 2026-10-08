@@ -621,13 +621,18 @@ var helpText = strings.TrimLeft(`
                      filter still highlighted — plus a Raw section
                      with the original, unparsed line, but only when
                      it actually differs from the extracted message
-    r               Re-read the same files (while the list has focus)
+    r               Re-read the same files
     f               Toggle follow: re-reads the same files every two
                      seconds and keeps rendering, the cursor following
                      along if it was already on the last row
     s               Statistics: counts by level and by source (top 10),
                      over whatever currently matches the three filters
     Esc             Back to file selection
+
+  "e"/"w"/Enter/"r"/"f"/"s" all act on the list, not whichever filter
+  field currently has focus — typed into a field instead, they're
+  just ordinary characters. The title bar says this once ("...need the
+  list focused"), rather than repeating it on each of those six keys.
 
   All three filters combine (AND, the same rule the Action Log's own
   keyword/time pair already follows) — an unparseable Time or Level
