@@ -704,12 +704,21 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditViewerTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditViewerTitle.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditViewerTitle.SetTextColor(theme.TextColor)
-	// logAuditFilterRow/logAuditTimelineView themed explicitly to the
-	// same SurfaceBackground, rather than left at tview's own default —
-	// see logAuditFilterRow's own doc comment (root.go) for the visual
-	// mismatch this fixes.
+	// logAuditFilterRow themed explicitly to the same SurfaceBackground
+	// the table below it uses, rather than left at tview's own default
+	// — see logAuditFilterRow's own doc comment (root.go) for the
+	// visual mismatch this fixes.
 	r.logAuditFilterRow.SetBackgroundColor(theme.SurfaceBackground)
-	r.logAuditTimelineView.SetBackgroundColor(theme.SurfaceBackground)
+	// logAuditTimelineView deliberately does NOT match SurfaceBackground
+	// — per the user's own explicit report, a density strip that reads
+	// as part of the same surface as the list below it is confusing;
+	// it needs its own, visibly different tone. PopupBackground is
+	// reused here rather than a plain hardcoded color: it is already
+	// this app's own "distinct secondary surface" role (the Detail/
+	// Statistics modals both use it — see applyLogAuditTheme below),
+	// and darker than SurfaceBackground in the default scheme, fixing
+	// the user's second report ("zu hell") in the same change.
+	r.logAuditTimelineView.SetBackgroundColor(theme.PopupBackground)
 	// Label color and background both come from styleInput itself —
 	// see its own doc comment (theme.go) on the background mismatch
 	// this used to leave in place.
