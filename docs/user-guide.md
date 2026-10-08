@@ -2444,15 +2444,36 @@ format is detected automatically from a sample of its own lines
 gzip-compressed files are decompressed transparently. The title bar
 shows running counts (events/files/skipped/errors/warnings).
 
+A mini-timeline above the table shows the matching entries' own
+density over time — one block per time bucket, colored red if that
+bucket contains an error, the app's own warning color if it contains a
+warning but nothing worse.
+
 | Key | Action |
 |---|---|
 | Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
-| `Tab` | Move between the filter field and the list |
+| Time field | Same `before`/`after`/`between ... and ...`/relative expressions the Action Log's own Time field already accepts |
+| Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
+| `Tab` / `Shift+Tab` | Move between Filter, Time, Level, and the list |
 | `e` | Jump to the next error (wraps around) |
 | `w` | Jump to the next warning (wraps around) |
-| `Enter` | Show this entry's full text, with the current filter still highlighted |
+| `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |
 | `r` | Re-read the same files (while the list has focus) |
+| `f` | Toggle follow: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
+| `s` | Statistics: counts by level and by source (top 10), over whatever currently matches the three filters |
 | `Escape` | Back to file selection |
+
+All three filters combine (the same AND rule the Action Log's own
+keyword/time pair already follows); an unparseable Time or Level
+expression simply isn't applied, no error shown for it. The table
+itself renders at most 2,000 matching rows at once (a real
+`/var/log/nginx/access.log` family can run into the hundreds of
+thousands of lines) — the title bar's own counts always report the
+true total, so narrowing the filter further is still the visible next
+step. Follow re-reads every file from scratch on each tick (no
+byte-offset tailing yet) on a background goroutine, so even a large,
+actively-growing file doesn't stall the rest of breakthrough while
+following.
 
 `.gz`, `.xz`, `.zst`, and `.bz2` files are all decompressed
 transparently and inline — the selection screen's own Info column

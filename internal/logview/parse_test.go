@@ -28,6 +28,10 @@ func TestParseAllJSON(t *testing.T) {
 	if entries[0].File != "app.log" || entries[0].Line != 1 {
 		t.Errorf("entries[0] File/Line = %q/%d, want app.log/1", entries[0].File, entries[0].Line)
 	}
+	wantRaw := `{"time":"2026-10-07T16:04:21Z","level":"error","msg":"database connection timeout","service":"app"}`
+	if entries[0].Raw != wantRaw {
+		t.Errorf("entries[0].Raw = %q, want the original JSON line", entries[0].Raw)
+	}
 	wantTime := time.Date(2026, 10, 7, 16, 4, 21, 0, time.UTC)
 	if !entries[0].Time.Equal(wantTime) {
 		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
@@ -85,6 +89,9 @@ func TestParseAllPlainFallsBackToWholeLineAsMessage(t *testing.T) {
 	}
 	if entries[0].Message != "just some unstructured text" {
 		t.Errorf("entries[0].Message = %q", entries[0].Message)
+	}
+	if entries[0].Raw != entries[0].Message {
+		t.Errorf("entries[0].Raw = %q, want identical to Message for FormatPlain", entries[0].Raw)
 	}
 	if !entries[0].Time.Equal(fallback) {
 		t.Errorf("entries[0].Time = %v, want fallback %v", entries[0].Time, fallback)

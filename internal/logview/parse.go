@@ -59,6 +59,7 @@ func ParseAll(r io.Reader, fileName string, fallbackTime time.Time) ([]Entry, Fo
 			continue
 		}
 		e := parseLine(line, format, fallbackTime)
+		e.Raw = line
 		e.File = fileName
 		e.Line = i + 1
 		if e.Time.IsZero() {

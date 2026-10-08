@@ -585,8 +585,8 @@ var helpText = strings.TrimLeft(`
 
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
-  into one row) with a checkbox and a summary of how many of its own
-  files are compressed.
+  into one row) with a summary of how many of its own files are
+  compressed.
 
     Enter    Open the Log Audit view for the family under the cursor
     r        Re-scan the directory
@@ -597,18 +597,46 @@ var helpText = strings.TrimLeft(`
   RFC 3164/5424, a generic "timestamp level message" line, or plain
   text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
   files are decompressed transparently. The title bar shows running
-  counts (events/files/skipped/errors/warnings).
+  counts (events/files/skipped/errors/warnings, plus how many entries
+  currently match if the filters narrow it, and "● following" while
+  follow is on). A mini-timeline above the table shows the matching
+  entries' own density over time — red where a bucket contains an
+  error, the app's own warning color where it contains a warning but
+  nothing worse.
 
     Filter          Case-insensitive substring over Source and Message,
                      narrowing the list live and highlighting every
                      match
-    Tab             Move between Filter and the list
+    Time            Same "before"/"after"/"between ... and ..."/
+                     relative expressions the Action Log's own Time
+                     field already accepts
+    Level >=        A minimum severity ("warn" shows WARN and
+                     everything worse — ERROR, FATAL — not just exact
+                     WARN matches); an entry with no recognized level
+                     never passes this filter, even "trace"
+    Tab / Shift+Tab Move between Filter, Time, Level, and the list
     e               Jump to the next error (wraps around)
     w               Jump to the next warning (wraps around)
     Enter           Show this entry's full text, with the current
-                     filter still highlighted
+                     filter still highlighted — plus a Raw section
+                     with the original, unparsed line, but only when
+                     it actually differs from the extracted message
     r               Re-read the same files (while the list has focus)
+    f               Toggle follow: re-reads the same files every two
+                     seconds and keeps rendering, the cursor following
+                     along if it was already on the last row
+    s               Statistics: counts by level and by source (top 10),
+                     over whatever currently matches the three filters
     Esc             Back to file selection
+
+  All three filters combine (AND, the same rule the Action Log's own
+  keyword/time pair already follows) — an unparseable Time or Level
+  expression simply isn't applied, no error state shown for it. The
+  table itself renders at most 2,000 matching rows at once (a real
+  /var/log/nginx/access.log family can run into the hundreds of
+  thousands of lines); the title bar's own counts always report the
+  true total regardless, so narrowing the filter further is still the
+  visible next step.
 
 [::b]Sessions screen ("js")[::-]
 
