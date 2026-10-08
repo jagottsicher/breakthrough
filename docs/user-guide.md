@@ -2427,7 +2427,9 @@ or any other directory, and press `jL` — no arguments, no flags.
 Step 1 — file selection: `internal/logview.Discover` lists that
 directory's own files (one level, not recursive) and groups them into
 logrotate families (`access.log`, `access.log.1`, `access.log.2.gz`
-collapse into one row).
+collapse into one row). The "✕" glyph in the title bar's own top-right
+corner is a mouse-clickable equivalent to `Escape` — both this screen
+and the audit view below have one.
 
 | Key | Action |
 |---|---|
@@ -2458,10 +2460,15 @@ warning but nothing worse.
 | `e` | Jump to the next error (wraps around) |
 | `w` | Jump to the next warning (wraps around) |
 | `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |
-| `r` | Re-read the same files (while the list has focus) |
+| `r` | Re-read the same files |
 | `f` | Toggle follow: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
 | `s` | Statistics: counts by level and by source (top 10), over whatever currently matches the three filters |
 | `Escape` | Back to file selection |
+
+`e`/`w`/`Enter`/`r`/`f`/`s` all act on the list, not whichever filter
+field currently has focus — typed into a field instead, they're just
+ordinary characters. The title bar says this once ("...need the list
+focused") rather than repeating it on each of those six keys.
 
 All three filters combine (the same AND rule the Action Log's own
 keyword/time pair already follows); an unparseable Time or Level

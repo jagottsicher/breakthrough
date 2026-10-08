@@ -56,18 +56,28 @@ func logAuditSelectionHintEntries() []listHintEntry {
 	}
 }
 
+// logAuditViewerHintEntries: "e"/"w"/"Enter"/"r"/"f"/"s" are all bound
+// on the table's own InputCapture (see
+// newLogAuditViewerScreen/captureLogAuditViewerTableKey) — every one
+// of them fires only while the list itself has focus, typed into a
+// filter field otherwise. Rather than repeat "(while the list has
+// focus)" on each of those six entries (what this used to do — per
+// the user's own explicit report, both too long and inconsistently
+// applied, since "e"/"w" never got the suffix either even though the
+// same rule already covered them too), renderLogAuditViewer says this
+// once, in the title bar, covering the whole group together.
 func logAuditViewerHintEntries() []listHintEntry {
 	return []listHintEntry{
 		hintKey("Tab", "next field", simulateKeyOnFocused(tcell.KeyTab)),
 		hintKey("e", "next error", func(r *Root) { r.navigateLogAuditLevel(logview.LevelError) }),
 		hintKey("w", "next warning", func(r *Root) { r.navigateLogAuditLevel(logview.LevelWarn) }),
-		hintKey("Enter", "details (while the list has focus)", func(r *Root) {
+		hintKey("Enter", "details", func(r *Root) {
 			row, _ := r.logAuditViewerTable.GetSelection()
 			r.openLogAuditDetail(row)
 		}),
-		hintKey("r", "re-read files (while the list has focus)", func(r *Root) { r.reopenLogAuditViewer() }),
-		hintKey("f", "toggle follow (while the list has focus)", func(r *Root) { r.toggleLogAuditFollow() }),
-		hintKey("s", "statistics (while the list has focus)", func(r *Root) { r.openLogAuditStats() }),
+		hintKey("r", "re-read files", func(r *Root) { r.reopenLogAuditViewer() }),
+		hintKey("f", "toggle follow", func(r *Root) { r.toggleLogAuditFollow() }),
+		hintKey("s", "statistics", func(r *Root) { r.openLogAuditStats() }),
 		hintKey("Esc", "back to file selection", func(r *Root) { r.closeLogAuditViewer() }),
 	}
 }
@@ -84,6 +94,13 @@ func (r *Root) newLogAuditScreen() {
 
 func (r *Root) newLogAuditSelectionScreen() {
 	r.logAuditTitleBar = newPlainTitleBar("Log Audit — select files")
+	// A clickable "✕" in the title bar's own top-right corner, per the
+	// user's own explicit request — see closeTitleBarButtonCol/
+	// renderCloseTitleBar/captureCloseTitleBarMouse (root.go). The
+	// glyph itself is drawn by renderLogAuditSelection, every time it
+	// renders (the same "render it fresh each time" shape
+	// renderReloadTitleBar's own callers already use).
+	r.logAuditTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditTitleBar, r.closeLogAuditSelection))
 
 	r.logAuditTable = tview.NewTable()
 	r.logAuditTable.SetBorders(false)
@@ -109,6 +126,12 @@ func (r *Root) newLogAuditSelectionScreen() {
 
 func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditViewerTitle = newPlainTitleBar("Log Audit")
+	// Same clickable "✕" as the selection screen's own title bar (see
+	// its own comment on this, just above in
+	// newLogAuditSelectionScreen) — drawn by renderLogAuditViewer
+	// itself, since this bar's own text is rebuilt fresh on every
+	// render anyway (the running counts).
+	r.logAuditViewerTitle.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditViewerTitle, r.closeLogAuditViewer))
 
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
@@ -148,7 +171,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditLevelField.SetFocusFunc(func() { styleInput(r.logAuditLevelField, r.theme, true) })
 	r.logAuditLevelField.SetBlurFunc(func() { styleInput(r.logAuditLevelField, r.theme, false) })
 
-	filterRow := tview.NewFlex().
+	r.logAuditFilterRow = tview.NewFlex().
 		AddItem(r.logAuditKeywordField, 0, 2, true).
 		AddItem(r.logAuditTimeField, 0, 2, false).
 		AddItem(r.logAuditLevelField, 0, 1, false)
@@ -175,7 +198,7 @@ func (r *Root) newLogAuditViewerScreen() {
 
 	r.logAuditViewerLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditViewerTitle, 1, 0, false).
-		AddItem(filterRow, 1, 0, false).
+		AddItem(r.logAuditFilterRow, 1, 0, false).
 		AddItem(r.logAuditTimelineView, 1, 0, false).
 		AddItem(r.logAuditViewerTable, 0, 1, true).
 		AddItem(r.logAuditViewerHint, 1, 0, false)
@@ -230,6 +253,7 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 // Enter simply opens whichever row the cursor is already on (see
 // openLogAuditViewer's own doc comment for why).
 func (r *Root) renderLogAuditSelection() {
+	renderCloseTitleBar(r.logAuditTitleBar, " Log Audit — select files ", r.lastScreenWidth)
 	r.logAuditTable.Clear()
 
 	header := func(col int, text string) {
@@ -437,7 +461,10 @@ func (r *Root) renderLogAuditViewer() {
 	if r.logAuditFollowing {
 		title += " │ ● following"
 	}
-	r.logAuditViewerTitle.SetText(title + " ")
+	// One general note instead of repeating it on every affected hint
+	// — see logAuditViewerHintEntries' own doc comment for why.
+	title += " │ e/w/Enter/r/f/s need the list focused"
+	renderCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
 
 	r.renderLogAuditTimeline(shown)
 
@@ -677,12 +704,27 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	r.logAuditViewerTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditViewerTitle.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditViewerTitle.SetTextColor(theme.TextColor)
+	// logAuditFilterRow themed explicitly to the same SurfaceBackground
+	// the table below it uses, rather than left at tview's own default
+	// — see logAuditFilterRow's own doc comment (root.go) for the
+	// visual mismatch this fixes.
+	r.logAuditFilterRow.SetBackgroundColor(theme.SurfaceBackground)
+	// logAuditTimelineView deliberately does NOT match SurfaceBackground
+	// — per the user's own explicit report, a density strip that reads
+	// as part of the same surface as the list below it is confusing;
+	// it needs its own, visibly different tone. PopupBackground is
+	// reused here rather than a plain hardcoded color: it is already
+	// this app's own "distinct secondary surface" role (the Detail/
+	// Statistics modals both use it — see applyLogAuditTheme below),
+	// and darker than SurfaceBackground in the default scheme, fixing
+	// the user's second report ("zu hell") in the same change.
+	r.logAuditTimelineView.SetBackgroundColor(theme.PopupBackground)
+	// Label color and background both come from styleInput itself —
+	// see its own doc comment (theme.go) on the background mismatch
+	// this used to leave in place.
 	styleInput(r.logAuditKeywordField, theme, r.logAuditKeywordField.HasFocus())
-	r.logAuditKeywordField.SetLabelColor(theme.TextColor)
 	styleInput(r.logAuditTimeField, theme, r.logAuditTimeField.HasFocus())
-	r.logAuditTimeField.SetLabelColor(theme.TextColor)
 	styleInput(r.logAuditLevelField, theme, r.logAuditLevelField.HasFocus())
-	r.logAuditLevelField.SetLabelColor(theme.TextColor)
 	r.logAuditViewerHint.SetBackgroundColor(theme.InputBackground)
 	r.logAuditViewerHint.SetTextColor(theme.MutedTextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())

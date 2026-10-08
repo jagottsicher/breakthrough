@@ -581,6 +581,13 @@ type Root struct {
 	logAuditKeywordField *tview.InputField
 	logAuditTimeField    *tview.InputField
 	logAuditLevelField   *tview.InputField
+	// logAuditFilterRow is the Flex wrapping the three fields above —
+	// themed to the same SurfaceBackground as everything else on this
+	// screen (see applyLogAuditTheme) so a rounding gap between the
+	// three proportionally-sized fields shows the right color instead
+	// of tview's own default black, the background mismatch the
+	// user's own explicit report flagged.
+	logAuditFilterRow    *tview.Flex
 	logAuditTimelineView *tview.TextView
 	logAuditViewerTable  *tview.Table
 	logAuditViewerHint   *tview.TextView
@@ -3848,6 +3855,56 @@ func captureReloadTitleBarMouse(bar *tview.TextView, reload func()) func(tview.M
 			return action, event
 		}
 		reload()
+		return tview.MouseConsumed, nil
+	}
+}
+
+// closeTitleBarButtonCol mirrors reloadTitleBarButtonCol's own column
+// convention exactly (one column in from the right edge) — reused for
+// a close ("✕") button instead of a reload one, on a screen with no
+// reload button of its own competing for that same corner (see the
+// Log Audit viewer/selection screens, which want Escape's own close
+// action reachable with the mouse too, directly in the title bar,
+// per the user's own explicit request).
+func closeTitleBarButtonCol(width int) int {
+	return width - 2
+}
+
+// renderCloseTitleBar is renderReloadTitleBar's own close-button
+// twin — same padding arithmetic, toolWindowCloseGlyph (the shared
+// '✕' every close button in this app already uses — toolWindow's own
+// corner button, Sessions' row-level Close) instead of the reload
+// glyph. label is the bar's own full text, already including any
+// dynamic content (e.g. the Log Audit viewer's own running counts) —
+// this only appends the button, it doesn't know or care what came
+// before it.
+func renderCloseTitleBar(bar *tview.TextView, label string, width int) {
+	col := closeTitleBarButtonCol(width)
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+}
+
+// captureCloseTitleBarMouse is captureReloadTitleBarMouse's own
+// close-button twin — invokes close when a click lands exactly on the
+// glyph renderCloseTitleBar placed, inert everywhere else on the bar.
+// Same deliberate resize limitation as the reload button (see
+// captureReloadTitleBarMouse's own doc comment): the button catches up
+// the next time the screen re-renders on its own, not instantly on a
+// live terminal resize.
+func captureCloseTitleBarMouse(bar *tview.TextView, close func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY || x != rectX+closeTitleBarButtonCol(width) {
+			return action, event
+		}
+		close()
 		return tview.MouseConsumed, nil
 	}
 }
