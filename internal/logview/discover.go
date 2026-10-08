@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
@@ -25,11 +26,31 @@ type FileGroup struct {
 	Files []CandidateFile
 }
 
+// Newest returns g's own most-recently-rotated file — Files[0], since
+// Files is always sorted newest-rotation-first (see this type's own
+// doc comment) — and ok=false only for a group Discover could never
+// actually produce (an empty Files), kept as a real check rather than
+// an assumption since logAuditGroupInfo's own Size/Modified columns
+// call this directly against whatever the selection table currently
+// holds.
+func (g FileGroup) Newest() (CandidateFile, bool) {
+	if len(g.Files) == 0 {
+		return CandidateFile{}, false
+	}
+	return g.Files[0], true
+}
+
 // CandidateFile is one file discovered by Discover.
 type CandidateFile struct {
 	Path       string
 	Compressed bool // true for any of supportedCompressedExts, or a compression Open doesn't recognize at all
 	Supported  bool // false only for a compression extension Open doesn't recognize at all — every one it does (gz/xz/zst/bz2) is always Supported
+	// Size/ModTime come from the same os.ReadDir entry Discover already
+	// has in hand — no extra os.Stat call — for the selection screen's
+	// own Size/Modified columns (see logAuditGroupInfo), per the user's
+	// own explicit request to see those without opening the group first.
+	Size    int64
+	ModTime time.Time
 }
 
 // rotationSuffixes strips, in order, the pieces a logrotate'd file name
@@ -102,10 +123,18 @@ func Discover(dir string) ([]FileGroup, error) {
 		name := e.Name()
 		base := familyBase(name)
 		ext := compressedExt(name)
+		var size int64
+		var modTime time.Time
+		if info, err := e.Info(); err == nil {
+			size = info.Size()
+			modTime = info.ModTime()
+		}
 		groups[base] = append(groups[base], CandidateFile{
 			Path:       filepath.Join(dir, name),
 			Compressed: ext != "",
 			Supported:  ext == "" || supportedCompressedExts[ext],
+			Size:       size,
+			ModTime:    modTime,
 		})
 	}
 

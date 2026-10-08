@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,88 @@ func TestOpenLogAuditViewerOpensGroupUnderCursor(t *testing.T) {
 	}
 }
 
+// TestOpenLogAuditViewerFocusesTheList pins the user's own explicit
+// request: opening the viewer should land ready to read/navigate
+// entries right away, not typing into the keyword filter first.
+func TestOpenLogAuditViewerFocusesTheList(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	if !r.logAuditViewerTable.HasFocus() {
+		t.Error("opening the viewer should focus the list, not a filter field")
+	}
+}
+
+// TestLogAuditFocusIndicatorReflectsTableFocus pins the user's own
+// explicit request for a visible cue that the list currently has
+// keyboard focus — repurposing the row between the timeline and the
+// table's own header, previously just blank border padding.
+func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer() // focuses the table — see the test above
+
+	if got := r.logAuditFocusIndicator.GetText(true); got == "" {
+		t.Error("focus indicator should show something while the list has focus")
+	}
+
+	r.app.SetFocus(r.logAuditKeywordField)
+	if got := r.logAuditFocusIndicator.GetText(true); got != "" {
+		t.Errorf("focus indicator = %q, want blank once focus moves to a filter field", got)
+	}
+}
+
+// TestLogAuditTimeHeaderClickTogglesSortOrder pins the "Time" header's
+// own click handler — the same "click to sort, click again to
+// reverse" convention the panel's own column headers already use (see
+// sortArrow, panel.go) — per the user's own explicit request to read
+// the list old->new or new->old.
+func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir) // app.log: error @16:04:21, then info @16:04:23
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	firstEntry := func() logview.Entry {
+		e, ok := r.logAuditEntryAt(1)
+		if !ok {
+			t.Fatal("row 1 has no entry reference")
+		}
+		return e
+	}
+
+	if got := firstEntry(); got.Level != logview.LevelError {
+		t.Fatalf("before toggling, row 1 = %+v, want the oldest entry (Error @16:04:21)", got)
+	}
+
+	header := r.logAuditViewerTable.GetCell(0, logAuditColTime)
+	if header.Clicked == nil {
+		t.Fatal("Time header has no Clicked handler")
+	}
+	header.Clicked()
+	if !r.logAuditNewestFirst {
+		t.Fatal("clicking the Time header should have set logAuditNewestFirst")
+	}
+	if got := firstEntry(); got.Level != logview.LevelInfo {
+		t.Errorf("after toggling newest-first, row 1 = %+v, want the newest entry (Info @16:04:23)", got)
+	}
+	// Re-fetched, not the same cell object header still points at:
+	// renderLogAuditViewer (called from the Clicked handler itself)
+	// replaces row 0's cell outright via SetCell, same as every other
+	// row — header's own copy is now stale.
+	if got := r.logAuditViewerTable.GetCell(0, logAuditColTime).Text; !strings.Contains(got, "↓") {
+		t.Errorf("Time header = %q, want a ↓ arrow once newest-first is active", got)
+	}
+}
+
 func TestCloseLogAuditViewerReturnsToSelection(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
@@ -119,6 +202,69 @@ func TestRenderLogAuditViewerFiltersByKeyword(t *testing.T) {
 	}
 }
 
+// TestRenderLogAuditViewerNotesTruncationInTitle pins a real, user-
+// reported point of confusion: logAuditMaxRenderedRows silently capped
+// the table while the title bar's own counts still claimed every file
+// was read in full, reading as a bug rather than a documented limit.
+func TestRenderLogAuditViewerNotesTruncationInTitle(t *testing.T) {
+	dir := t.TempDir()
+	var b strings.Builder
+	for i := 0; i < logAuditMaxRenderedRows+5; i++ {
+		b.WriteString("just some unstructured text\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "big.log"), []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("WriteFile big.log: %v", err)
+	}
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	title := r.logAuditViewerTitle.GetText(true)
+	if !strings.Contains(title, fmt.Sprintf("showing first %d", logAuditMaxRenderedRows)) {
+		t.Errorf("title = %q, want an explicit truncation notice", title)
+	}
+	if got := r.logAuditViewerTable.GetRowCount(); got != logAuditMaxRenderedRows+1 { // +1 header
+		t.Errorf("GetRowCount() = %d, want %d (header + cap)", got, logAuditMaxRenderedRows+1)
+	}
+}
+
+// TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails pins a real,
+// independently-discovered bug directly on point for the user's own
+// "nicht alle Logeinträge sichtbar" report: a parse error from just
+// one rotation of a logrotate family (here, a corrupted .gz) used to
+// blank out the whole merged view, hiding every entry readLogAuditGroup
+// had already successfully read from the family's other, perfectly
+// fine files.
+func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.log"), []byte("just some unstructured text\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.log: %v", err)
+	}
+	// Not a valid gzip stream at all — logview.Open's gzip.NewReader
+	// call fails on it, the same shape a truncated/corrupted rotated
+	// file would hit in the wild.
+	if err := os.WriteFile(filepath.Join(dir, "app.log.1.gz"), []byte("not actually gzip"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.log.1.gz: %v", err)
+	}
+
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	if r.logAuditParseErr == nil {
+		t.Fatal("setup: expected app.log.1.gz to fail to parse")
+	}
+	if len(r.logAuditAllEntries) != 1 {
+		t.Fatalf("len(logAuditAllEntries) = %d, want 1 (app.log's own entry, kept despite the other file's error)", len(r.logAuditAllEntries))
+	}
+	if got := r.logAuditViewerTable.GetRowCount(); got != 2 { // header + the one good entry
+		t.Errorf("GetRowCount() = %d, want 2 (header + 1 entry) — the error must not blank the whole table", got)
+	}
+	if title := r.logAuditViewerTitle.GetText(true); !strings.Contains(title, "1 file failed") {
+		t.Errorf("title = %q, want the error surfaced as a note, not silently dropped", title)
+	}
+}
+
 func TestLogAuditGroupInfo(t *testing.T) {
 	groups := []logview.FileGroup{
 		{Base: "access.log", Files: []logview.CandidateFile{
@@ -134,6 +280,24 @@ func TestLogAuditGroupInfo(t *testing.T) {
 	got := logAuditGroupInfo(groups[0])
 	if got != "3 files (2 compressed) — 1 unsupported compression" {
 		t.Errorf("logAuditGroupInfo = %q", got)
+	}
+}
+
+// TestRenderLogAuditSelectionShowsSizeAndModified pins the user's own
+// explicit request to see the family's own newest file's size/mtime
+// in the selection list without opening the group first.
+func TestRenderLogAuditSelectionShowsSizeAndModified(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir) // app.log has real content, non-zero size/mtime
+	r := newTestRootForLogAudit(t, dir)
+
+	sizeText := r.logAuditTable.GetCell(1, logAuditSelSize).Text
+	modText := r.logAuditTable.GetCell(1, logAuditSelModified).Text
+	if sizeText == "" {
+		t.Error("Size column is empty, want the newest file's humanized size")
+	}
+	if modText == "" {
+		t.Error("Modified column is empty, want the newest file's mtime")
 	}
 }
 

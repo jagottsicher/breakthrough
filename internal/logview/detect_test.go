@@ -40,6 +40,18 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// Python's logging.Formatter default datefmt — a comma, not
+			// a dot, before the milliseconds. A real gap this pattern
+			// used to miss entirely (see reGenericTAB's own doc
+			// comment), falling back to FormatPlain for the whole file.
+			name: "generic timestamp+level with comma milliseconds",
+			want: FormatGeneric,
+			in: []string{
+				"2026-10-07 16:04:23,123 ERROR database connection timeout",
+				"2026-10-07 16:04:24,456 INFO connection established",
+			},
+		},
+		{
 			name: "plain fallback",
 			want: FormatPlain,
 			in: []string{

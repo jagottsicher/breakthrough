@@ -57,6 +57,31 @@ func TestParseAllGeneric(t *testing.T) {
 	}
 }
 
+// TestParseAllGenericCommaMilliseconds pins Python's own
+// logging.Formatter default datefmt ("2026-10-07 16:04:23,123 INFO
+// message") — a real gap this used to fall straight through to
+// FormatPlain for (see reGenericTAB's own doc comment, detect.go):
+// Level/Source always empty and the timestamp showing up as plain
+// message text instead of being parsed at all.
+func TestParseAllGenericCommaMilliseconds(t *testing.T) {
+	input := "2026-10-07 16:04:23,123 ERROR database connection timeout\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "app.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	if entries[0].Level != LevelError || entries[0].Message != "database connection timeout" {
+		t.Errorf("entries[0] = %+v", entries[0])
+	}
+	wantTime := time.Date(2026, 10, 7, 16, 4, 23, 123000000, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+}
+
 func TestParseAllRFC3164UsesFallbackYear(t *testing.T) {
 	input := "Oct  7 16:04:22 server kernel: eth0: link down\n"
 	fallback := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

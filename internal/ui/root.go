@@ -589,14 +589,29 @@ type Root struct {
 	// user's own explicit report flagged.
 	logAuditFilterRow    *tview.Flex
 	logAuditTimelineView *tview.TextView
-	logAuditViewerTable  *tview.Table
-	logAuditViewerHint   *tview.TextView
-	logAuditViewerSpans  []listHintSpan
-	logAuditGroupOpen    logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
-	logAuditAllEntries   []logview.Entry
-	logAuditFiles        int
-	logAuditSkipped      int
-	logAuditParseErr     error
+	// logAuditFocusIndicator fills the row between logAuditTimelineView
+	// and logAuditViewerTable's own header — previously just the
+	// table's own blank top border-padding, repurposed per the user's
+	// own explicit request as a "the list has focus" indicator, so
+	// Tab-cycling through the three filter fields and landing back on
+	// the list is visible at a glance rather than only inferable from
+	// which row is highlighted.
+	logAuditFocusIndicator *tview.TextView
+	logAuditViewerTable    *tview.Table
+	logAuditViewerHint     *tview.TextView
+	logAuditViewerSpans    []listHintSpan
+	logAuditGroupOpen      logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
+	logAuditAllEntries     []logview.Entry
+	logAuditFiles          int
+	logAuditSkipped        int
+	logAuditParseErr       error
+	// logAuditNewestFirst toggles the viewer table's own sort order —
+	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
+	// own explicit request to be able to read either direction without
+	// reopening the group. false (oldest-first, Merge's own natural
+	// chronological order) is the default — the same order "tail -f"
+	// itself reads in, which matters most while Follow is on.
+	logAuditNewestFirst bool
 	// logAuditFollowing/logAuditFollowCancel — "f" toggles a live
 	// re-read of logAuditGroupOpen every logAuditFollowInterval (see
 	// startLogAuditFollow/stopLogAuditFollow in logaudit.go), the
