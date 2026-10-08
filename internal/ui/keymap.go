@@ -508,9 +508,23 @@ func chordFamilies() []chordFamily {
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},
 			{'h', "Hardware Tools", func(r *Root) { r.openHardwareTools() }},
-			{'l', "Activity Log", func(r *Root) { r.openActivityLog() }},
+			// "Action Log" — renamed from "Activity Log" per the user's
+			// own explicit request, to avoid reading as a sibling of the
+			// new "jL" (Log Audit, capital L) right next to it: this one
+			// is still exactly the same screen (activitylogscreen.go),
+			// browsing breakthrough's own recorded actions, nothing about
+			// it changed but the label.
+			{'l', "Action Log", func(r *Root) { r.openActivityLog() }},
 			{'s', "Sessions", func(r *Root) { r.openSessions() }},
 			{'k', "SSH Keys", func(r *Root) { r.openSSHKeys() }},
+			// "Log Audit" — capital L, this family's own second
+			// capitalized member alongside "jE" (see its own doc comment
+			// above for that convention): reads *other* log files on
+			// disk (internal/logview), scoped to wherever the active
+			// panel currently is rather than a fixed destination — see
+			// logaudit.go's own doc comment on openLogAudit for why that
+			// makes it unlike every other member of this family.
+			{'L', "Log Audit", func(r *Root) { r.openLogAudit() }},
 		}},
 		{prefix: 'p', name: "perms", quick: true, members: []chordMember{
 			{'m', "chmod", func(r *Root) { r.openChmod() }},

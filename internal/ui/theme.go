@@ -333,6 +333,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Activity Log screen (see activitylogscreen.go/applyActivityLogTheme).
 	r.applyActivityLogTheme(theme)
 
+	// The Log Audit screen (see logauditscreen.go/applyLogAuditTheme).
+	r.applyLogAuditTheme(theme)
+
 	if r.compareTreeTable != nil {
 		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
 		r.compareTreeHint.SetText(compareTreeHintText)

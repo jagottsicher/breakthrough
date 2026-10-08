@@ -550,7 +550,7 @@ var helpText = strings.TrimLeft(`
   says plainly that nothing matches (falling through to the backend's
   own default policy, which this app doesn't read).
 
-[::b]Activity Log screen ("jl")[::-]
+[::b]Action Log screen ("jl")[::-]
 
   A read-only, live view of the real activity log file (see the
   "Activity log" Options category) — Copy/Cut/Paste, Rename, Trash,
@@ -573,6 +573,42 @@ var helpText = strings.TrimLeft(`
   the log itself is written oldest-first, but read the other way around
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
+
+[::b]Log Audit screen ("jL")[::-]
+
+  Not a fixed destination like every other member of the "j" family —
+  "jL" reads whichever log files are in the active panel's own current
+  directory right now, the same way "l" (Look) always acts on whatever
+  is currently selected. No arguments, no flags: stand somewhere (e.g.
+  /var/log, /var/log/nginx, a Docker container's own log directory) and
+  press "jL".
+
+  Step 1 — file selection: every logrotate family found in that
+  directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
+  into one row) with a checkbox and a summary of how many of its own
+  files are compressed.
+
+    Enter    Open the Log Audit view for the family under the cursor
+    r        Re-scan the directory
+    Esc      Close
+
+  Step 2 — Log Audit view: every selected file's own lines, merged into
+  one chronological stream. The format of each file (JSON Lines, syslog
+  RFC 3164/5424, a generic "timestamp level message" line, or plain
+  text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
+  files are decompressed transparently. The title bar shows running
+  counts (events/files/skipped/errors/warnings).
+
+    Filter          Case-insensitive substring over Source and Message,
+                     narrowing the list live and highlighting every
+                     match
+    Tab             Move between Filter and the list
+    e               Jump to the next error (wraps around)
+    w               Jump to the next warning (wraps around)
+    Enter           Show this entry's full text, with the current
+                     filter still highlighted
+    r               Re-read the same files (while the list has focus)
+    Esc             Back to file selection
 
 [::b]Sessions screen ("js")[::-]
 

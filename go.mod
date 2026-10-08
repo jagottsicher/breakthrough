@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/creack/pty v1.1.24
 	github.com/gdamore/tcell/v2 v2.13.10
+	github.com/klauspost/compress v1.20.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/pkg/sftp v1.13.11
 	github.com/rivo/tview v0.42.0
