@@ -21,6 +21,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
+	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -551,6 +552,70 @@ type Root struct {
 	activityLogHintSpans    []listHintSpan
 	activityLogAllEntries   []activitylog.Entry
 	activityLogReadErr      error
+
+	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
+	// opened on whichever directory the active panel currently shows
+	// (unlike every full-screen catalog above, which always shows the
+	// same thing regardless of where the panel is). Two overlay layers,
+	// stacked via pushOverlay rather than one screen with an internal
+	// mode switch: logAuditSelectionLayout lists the logrotate families
+	// Discover found in that directory, logAuditViewerLayout — pushed
+	// on top once opened — shows the merged, chronological result of
+	// whichever one the cursor was on when Enter was pressed (no
+	// checkbox/multi-select — see openLogAuditViewer's own doc comment
+	// for why). Escape from the viewer reveals the selection screen
+	// again rather than closing straight to the panel, the same "layer
+	// by layer" unwind every other stacked overlay in this app already
+	// gives for free.
+	logAuditSelectionLayout *tview.Flex
+	logAuditTitleBar        *tview.TextView
+	logAuditTable           *tview.Table
+	logAuditHint            *tview.TextView
+	logAuditHintSpans       []listHintSpan
+	logAuditDir             string
+	logAuditGroups          []logview.FileGroup
+	logAuditDiscoverErr     error
+
+	logAuditViewerLayout *tview.Flex
+	logAuditViewerTitle  *tview.TextView
+	logAuditKeywordField *tview.InputField
+	logAuditTimeField    *tview.InputField
+	logAuditLevelField   *tview.InputField
+	// logAuditFilterRow is the Flex wrapping the three fields above —
+	// themed to the same SurfaceBackground as everything else on this
+	// screen (see applyLogAuditTheme) so a rounding gap between the
+	// three proportionally-sized fields shows the right color instead
+	// of tview's own default black, the background mismatch the
+	// user's own explicit report flagged.
+	logAuditFilterRow    *tview.Flex
+	logAuditTimelineView *tview.TextView
+	logAuditViewerTable  *tview.Table
+	logAuditViewerHint   *tview.TextView
+	logAuditViewerSpans  []listHintSpan
+	logAuditGroupOpen    logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
+	logAuditAllEntries   []logview.Entry
+	logAuditFiles        int
+	logAuditSkipped      int
+	logAuditParseErr     error
+	// logAuditFollowing/logAuditFollowCancel — "f" toggles a live
+	// re-read of logAuditGroupOpen every logAuditFollowInterval (see
+	// startLogAuditFollow/stopLogAuditFollow in logaudit.go), the
+	// "tail -f, but for the merged stream" view asked for explicitly.
+	logAuditFollowing    bool
+	logAuditFollowCancel context.CancelFunc
+
+	// The detail modal ("Enter" on a viewer row) — same shape as
+	// messagesDetailLayout/messagesDetailView (messagedetail.go).
+	logAuditDetailTitleBar *tview.TextView
+	logAuditDetailView     *tview.TextView
+	logAuditDetailLayout   *tview.Flex
+
+	// The Statistics modal ("s" on a viewer row) — counts by level and
+	// by source over whatever the viewer currently shows (see
+	// logAuditStats in logauditstats.go).
+	logAuditStatsTitleBar *tview.TextView
+	logAuditStatsView     *tview.TextView
+	logAuditStatsLayout   *tview.Flex
 
 	// panel is the tab the user is currently looking at — repointed by
 	// switchToTab, so every other reference to "the panel" in this
@@ -2207,6 +2272,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// shape.
 	r.newActivityLogScreen()
 
+	// The Log Audit screen (see logaudit.go/logauditscreen.go) — "jL",
+	// two stacked overlay layers built once here, populated on open.
+	r.newLogAuditScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -2360,6 +2429,16 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// terminal too, the same reasoning the Options/Toolbox/Mounts/
 	// Firewall screens' own comments above give.
 	r.AddPage(activityLogPage, r.activityLogLayout, true, false)
+	// resize=true: the Log Audit screen's own selection and viewer
+	// layers both deliberately fill the whole terminal too, the same
+	// reasoning the Options/Toolbox/Mounts/Firewall/Sessions/SSH Keys/
+	// Activity Log screens' own comments above give; the detail modal
+	// (false) is centered and sized to its own content instead, the
+	// same as messagesDetailPage just above.
+	r.AddPage(logAuditSelectionPage, r.logAuditSelectionLayout, true, false)
+	r.AddPage(logAuditViewerPage, r.logAuditViewerLayout, true, false)
+	r.AddPage(logAuditDetailPage, r.logAuditDetailLayout, false, false)
+	r.AddPage(logAuditStatsPage, r.logAuditStatsLayout, false, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
@@ -3776,6 +3855,56 @@ func captureReloadTitleBarMouse(bar *tview.TextView, reload func()) func(tview.M
 			return action, event
 		}
 		reload()
+		return tview.MouseConsumed, nil
+	}
+}
+
+// closeTitleBarButtonCol mirrors reloadTitleBarButtonCol's own column
+// convention exactly (one column in from the right edge) — reused for
+// a close ("✕") button instead of a reload one, on a screen with no
+// reload button of its own competing for that same corner (see the
+// Log Audit viewer/selection screens, which want Escape's own close
+// action reachable with the mouse too, directly in the title bar,
+// per the user's own explicit request).
+func closeTitleBarButtonCol(width int) int {
+	return width - 2
+}
+
+// renderCloseTitleBar is renderReloadTitleBar's own close-button
+// twin — same padding arithmetic, toolWindowCloseGlyph (the shared
+// '✕' every close button in this app already uses — toolWindow's own
+// corner button, Sessions' row-level Close) instead of the reload
+// glyph. label is the bar's own full text, already including any
+// dynamic content (e.g. the Log Audit viewer's own running counts) —
+// this only appends the button, it doesn't know or care what came
+// before it.
+func renderCloseTitleBar(bar *tview.TextView, label string, width int) {
+	col := closeTitleBarButtonCol(width)
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowCloseGlyph) + " ")
+}
+
+// captureCloseTitleBarMouse is captureReloadTitleBarMouse's own
+// close-button twin — invokes close when a click lands exactly on the
+// glyph renderCloseTitleBar placed, inert everywhere else on the bar.
+// Same deliberate resize limitation as the reload button (see
+// captureReloadTitleBarMouse's own doc comment): the button catches up
+// the next time the screen re-renders on its own, not instantly on a
+// live terminal resize.
+func captureCloseTitleBarMouse(bar *tview.TextView, close func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY || x != rectX+closeTitleBarButtonCol(width) {
+			return action, event
+		}
+		close()
 		return tview.MouseConsumed, nil
 	}
 }

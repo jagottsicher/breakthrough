@@ -550,7 +550,7 @@ var helpText = strings.TrimLeft(`
   says plainly that nothing matches (falling through to the backend's
   own default policy, which this app doesn't read).
 
-[::b]Activity Log screen ("jl")[::-]
+[::b]Action Log screen ("jl")[::-]
 
   A read-only, live view of the real activity log file (see the
   "Activity log" Options category) — Copy/Cut/Paste, Rename, Trash,
@@ -573,6 +573,76 @@ var helpText = strings.TrimLeft(`
   the log itself is written oldest-first, but read the other way around
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
+
+[::b]Log Audit screen ("jL")[::-]
+
+  Not a fixed destination like every other member of the "j" family —
+  "jL" reads whichever log files are in the active panel's own current
+  directory right now, the same way "l" (Look) always acts on whatever
+  is currently selected. No arguments, no flags: stand somewhere (e.g.
+  /var/log, /var/log/nginx, a Docker container's own log directory) and
+  press "jL".
+
+  Step 1 — file selection: every logrotate family found in that
+  directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
+  into one row) with a summary of how many of its own files are
+  compressed. The "✕" glyph in the title bar's own top-right corner is
+  a mouse-clickable equivalent to Escape — both screens below have one.
+
+    Enter    Open the Log Audit view for the family under the cursor
+    r        Re-scan the directory
+    Esc      Close
+
+  Step 2 — Log Audit view: every selected file's own lines, merged into
+  one chronological stream. The format of each file (JSON Lines, syslog
+  RFC 3164/5424, a generic "timestamp level message" line, or plain
+  text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
+  files are decompressed transparently. The title bar shows running
+  counts (events/files/skipped/errors/warnings, plus how many entries
+  currently match if the filters narrow it, and "● following" while
+  follow is on). A mini-timeline above the table shows the matching
+  entries' own density over time — red where a bucket contains an
+  error, the app's own warning color where it contains a warning but
+  nothing worse.
+
+    Filter          Case-insensitive substring over Source and Message,
+                     narrowing the list live and highlighting every
+                     match
+    Time            Same "before"/"after"/"between ... and ..."/
+                     relative expressions the Action Log's own Time
+                     field already accepts
+    Level >=        A minimum severity ("warn" shows WARN and
+                     everything worse — ERROR, FATAL — not just exact
+                     WARN matches); an entry with no recognized level
+                     never passes this filter, even "trace"
+    Tab / Shift+Tab Move between Filter, Time, Level, and the list
+    e               Jump to the next error (wraps around)
+    w               Jump to the next warning (wraps around)
+    Enter           Show this entry's full text, with the current
+                     filter still highlighted — plus a Raw section
+                     with the original, unparsed line, but only when
+                     it actually differs from the extracted message
+    r               Re-read the same files
+    f               Toggle follow: re-reads the same files every two
+                     seconds and keeps rendering, the cursor following
+                     along if it was already on the last row
+    s               Statistics: counts by level and by source (top 10),
+                     over whatever currently matches the three filters
+    Esc             Back to file selection
+
+  "e"/"w"/Enter/"r"/"f"/"s" all act on the list, not whichever filter
+  field currently has focus — typed into a field instead, they're
+  just ordinary characters. The title bar says this once ("...need the
+  list focused"), rather than repeating it on each of those six keys.
+
+  All three filters combine (AND, the same rule the Action Log's own
+  keyword/time pair already follows) — an unparseable Time or Level
+  expression simply isn't applied, no error state shown for it. The
+  table itself renders at most 2,000 matching rows at once (a real
+  /var/log/nginx/access.log family can run into the hundreds of
+  thousands of lines); the title bar's own counts always report the
+  true total regardless, so narrowing the filter further is still the
+  visible next step.
 
 [::b]Sessions screen ("js")[::-]
 

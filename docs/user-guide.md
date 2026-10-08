@@ -103,7 +103,7 @@ bar becomes that chord's own legend:
 | `z` — display | `zs` size format · `zt` time format · `zi` Nerd Font icons (needs a terminal font that actually has them — off by default) · `zl` label (opens a quick picker to set/clear one of 9 colors on the focused row, or every checked row at once — the one member here that mutates state rather than just toggling a display) · `zo` split orientation · `zw` swap panes · `zr` reload |
 | `o` — options | `oo` Options screen · `om` Mouse reporting on/off |
 | `y` — yank | reserved for a future system-clipboard feature (copy path/name); each member says so rather than doing nothing |
-| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Activity Log](#activity-log-screen-jl) screen |
+| `j` — tools | `jc` [Compress…](#compress) · `je` [Extract](#extract) · `jE` Extract, del org · `jm` [Mounts](#mounts) screen (what's mounted right now) · `jn` [Toolbox](#toolbox): Network Tools screen · `jf` [Firewall](#firewall) screen (this host's own actual rules) · `jh` Toolbox: Hardware Tools screen · `jl` [Action Log](#action-log-screen-jl) screen · `jL` [Log Audit](#log-audit-screen-jl) screen (reads other log files in the current directory) |
 
 `Escape` cancels a pending chord, and so does any key that isn't one of
 its members — which says so, the same as an unrecognized second key
@@ -2392,14 +2392,18 @@ format and locations](#config-file-format-and-locations)), with a
 one-time notice the first time that fallback happens. Append-only —
 breakthrough never rotates or truncates it; that is `logrotate`'s job.
 
-### Activity Log screen ("jl")
+### Action Log screen ("jl")
 
 A read-only, live view of the real log file above — no second, parallel
 recording, just `activitylog.ParseLine` reading the same file back.
+Named "Action Log" (not "Activity Log") to avoid reading as a sibling
+of the Log Audit screen (`jL`) right next to it in the same chord
+family — it is breakthrough's own recorded actions, nothing about the
+screen itself changed.
 
 | Key | Action |
 |---|---|
-| `jl` | Open the Activity Log screen |
+| `jl` | Open the Action Log screen |
 | Keyword field | Filter by a case-insensitive substring of the message |
 | Time field | Filter by when it happened — the exact same `before`/`after`/`between ... and ...`/relative ("last 7 days") expressions the panel's own Modified-time filter already accepts |
 | `Tab` / `Shift+Tab` | Move between Keyword, Time, and the list |
@@ -2410,6 +2414,77 @@ Both fields narrow the list live as you type, the same feel the panel's
 own filter dropdown already has. Entries show newest first — the file
 itself is written oldest-first, but a log is usually read the other way
 around, the same "tail, not head" reasoning as a live log.
+
+### Log Audit screen ("jL")
+
+Reads *other* log files on disk — unlike every other member of the `j`
+chord family, `jL` has no fixed destination: it acts on whichever
+directory the active panel currently shows, the same "act on wherever
+you are" idea `l` (Look) already has for a single file. Stand in
+`/var/log`, `/var/log/nginx`, a Docker container's own log directory,
+or any other directory, and press `jL` — no arguments, no flags.
+
+Step 1 — file selection: `internal/logview.Discover` lists that
+directory's own files (one level, not recursive) and groups them into
+logrotate families (`access.log`, `access.log.1`, `access.log.2.gz`
+collapse into one row). The "✕" glyph in the title bar's own top-right
+corner is a mouse-clickable equivalent to `Escape` — both this screen
+and the audit view below have one.
+
+| Key | Action |
+|---|---|
+| `Enter` | Open the Log Audit view for the family under the cursor |
+| `r` | Re-scan the directory |
+| `Escape` | Close |
+
+Step 2 — the audit view: every selected file's own lines, merged into
+one chronological stream (`internal/logview.Merge`). Each file's
+format is detected automatically from a sample of its own lines
+(`internal/logview.Detect`) — JSON Lines (including Docker's
+`json-file` log driver), syslog RFC 3164, syslog RFC 5424, a generic
+"timestamp level message" line, or plain text as a fallback — and
+gzip-compressed files are decompressed transparently. The title bar
+shows running counts (events/files/skipped/errors/warnings).
+
+A mini-timeline above the table shows the matching entries' own
+density over time — one block per time bucket, colored red if that
+bucket contains an error, the app's own warning color if it contains a
+warning but nothing worse.
+
+| Key | Action |
+|---|---|
+| Filter field | Case-insensitive substring over Source and Message, narrowing the list live and highlighting every match |
+| Time field | Same `before`/`after`/`between ... and ...`/relative expressions the Action Log's own Time field already accepts |
+| Level field (`>=`) | A *minimum* severity ("warn" shows WARN and everything worse — ERROR, FATAL — not just exact matches); an entry with no recognized level never passes this filter, even "trace" |
+| `Tab` / `Shift+Tab` | Move between Filter, Time, Level, and the list |
+| `e` | Jump to the next error (wraps around) |
+| `w` | Jump to the next warning (wraps around) |
+| `Enter` | Show this entry's full text, with the current filter still highlighted, plus a Raw section with the original, unparsed line — shown only when it actually differs from the extracted message |
+| `r` | Re-read the same files |
+| `f` | Toggle follow: re-reads the same files every two seconds and re-renders; the cursor follows along if it was already on the last row |
+| `s` | Statistics: counts by level and by source (top 10), over whatever currently matches the three filters |
+| `Escape` | Back to file selection |
+
+`e`/`w`/`Enter`/`r`/`f`/`s` all act on the list, not whichever filter
+field currently has focus — typed into a field instead, they're just
+ordinary characters. The title bar says this once ("...need the list
+focused") rather than repeating it on each of those six keys.
+
+All three filters combine (the same AND rule the Action Log's own
+keyword/time pair already follows); an unparseable Time or Level
+expression simply isn't applied, no error shown for it. The table
+itself renders at most 2,000 matching rows at once (a real
+`/var/log/nginx/access.log` family can run into the hundreds of
+thousands of lines) — the title bar's own counts always report the
+true total, so narrowing the filter further is still the visible next
+step. Follow re-reads every file from scratch on each tick (no
+byte-offset tailing yet) on a background goroutine, so even a large,
+actively-growing file doesn't stall the rest of breakthrough while
+following.
+
+`.gz`, `.xz`, `.zst`, and `.bz2` files are all decompressed
+transparently and inline — the selection screen's own Info column
+notes how many of a group's files are compressed, nothing more.
 
 ## Settings reference
 

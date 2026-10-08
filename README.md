@@ -821,10 +821,25 @@ terminal.
   `actions` records every real, state-changing action (Copy, Rename,
   chmod, Compress, a Rsync run, an SFTP connect…), enough to answer
   "what did I actually do with breakthrough" after the fact, and the
-  foundation a future Undo will build on. An Activity Log screen (`jl`)
+  foundation a future Undo will build on. An Action Log screen (`jl`)
   browses the real log file itself — newest entries first, with a
   keyword filter (full text over the message) and a time-range filter
   reusing the panel's own Modified-time filter syntax.
+- Log Audit (`jL`): reads *other* log files on disk — whichever
+  directory the active panel currently shows, no arguments or flags.
+  Discovers logrotate families (`access.log`, `access.log.1`,
+  `access.log.2.gz`, ...), lets you check which ones to include, then
+  merges them into one chronological stream with automatic format
+  detection (JSON Lines — including Docker's json-file log driver,
+  syslog RFC 3164/5424, a generic "timestamp level message" line, or
+  plain text as a fallback), transparent `.gz`/`.xz`/`.zst`/`.bz2`
+  decompression, a live keyword filter with match highlighting, a Time
+  field (same syntax as the Action Log) and a minimum-severity Level
+  field alongside it, a mini-timeline showing event density colored by
+  severity, a Statistics overlay (counts by level and top sources),
+  "e"/"w" to jump between errors and warnings, a follow mode ("f") that
+  re-reads every two seconds, and a raw-line section in the detail view
+  whenever the original line differs from the extracted message.
 
 ## Status
 
@@ -843,9 +858,11 @@ for a new rule, confirms it before running it via sudo, and
 automatically reverts an SSH-relevant rule if it isn't explicitly kept
 within 30 seconds, a Simulate form (`t`, every backend including
 nftables) that reports which rule, if any, decides a hypothetical
-request, an Activity
+request, an Action
 Log screen (`jl`) browsing the real activity log with keyword/time
-filtering, a Sessions screen (`js`) listing local GNU screen, tmux, and
+filtering, a Log Audit screen (`jL`) reading and merging *other* log
+files found in whichever directory the active panel currently shows,
+a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once

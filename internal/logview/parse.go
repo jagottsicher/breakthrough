@@ -1,0 +1,253 @@
+package logview
+
+import (
+	"bufio"
+	"encoding/json"
+	"io"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// ReadSample reads up to detectSampleSize non-blank lines from r,
+// without consuming more of it than that — callers that still need the
+// rest of the stream (there are none today; ParseAll re-reads from a
+// fresh Open instead) would need their own io.MultiReader around the
+// already-buffered part.
+func ReadSample(r io.Reader) []string {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var lines []string
+	for len(lines) < detectSampleSize && scanner.Scan() {
+		if strings.TrimSpace(scanner.Text()) != "" {
+			lines = append(lines, scanner.Text())
+		}
+	}
+	return lines
+}
+
+// ParseAll reads every line of r, detects its format from the first
+// lines, and parses the whole stream against that one format —
+// fileName is stamped onto every Entry.Line/Entry.File, fallbackTime
+// seeds a line's own Time when the format or line itself carries none
+// at all (RFC 3164's own missing year, or FormatPlain's total absence
+// of a timestamp) so entries from a timestamp-less file still sort
+// close to where they actually belong instead of all collapsing onto
+// the zero time.
+func ParseAll(r io.Reader, fileName string, fallbackTime time.Time) ([]Entry, Format, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, FormatPlain, err
+	}
+
+	sampleN := detectSampleSize
+	if sampleN > len(lines) {
+		sampleN = len(lines)
+	}
+	format := Detect(lines[:sampleN])
+
+	entries := make([]Entry, 0, len(lines))
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		e := parseLine(line, format, fallbackTime)
+		e.Raw = line
+		e.File = fileName
+		e.Line = i + 1
+		if e.Time.IsZero() {
+			e.Time = fallbackTime
+		}
+		entries = append(entries, e)
+	}
+	return entries, format, nil
+}
+
+func parseLine(line string, format Format, fallbackTime time.Time) Entry {
+	switch format {
+	case FormatJSON:
+		if e, ok := parseJSONLine(line); ok {
+			return e
+		}
+	case FormatSyslogRFC5424:
+		if e, ok := parseRFC5424Line(line); ok {
+			return e
+		}
+	case FormatSyslogRFC3164:
+		if e, ok := parseRFC3164Line(line, fallbackTime.Year()); ok {
+			return e
+		}
+	case FormatGeneric:
+		if e, ok := parseGenericLine(line); ok {
+			return e
+		}
+	}
+	return Entry{Message: line}
+}
+
+// jsonTimeKeys/jsonLevelKeys/jsonMessageKeys/jsonSourceKeys are, in
+// priority order, the field names real structured loggers actually use
+// — slog/zap/logrus's own JSON encoders ("time"/"level"/"msg"), and
+// Docker's json-file log driver ("time"... "log", no level/source at
+// all, which parseJSONLine's own empty-Level/Source result already
+// handles plainly).
+var (
+	jsonTimeKeys    = []string{"time", "ts", "timestamp", "@timestamp"}
+	jsonLevelKeys   = []string{"level", "lvl", "severity", "loglevel"}
+	jsonMessageKeys = []string{"msg", "message", "log"}
+	jsonSourceKeys  = []string{"logger", "service", "source", "container", "stream", "name"}
+)
+
+func parseJSONLine(line string) (Entry, bool) {
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &fields); err != nil {
+		return Entry{}, false
+	}
+
+	e := Entry{}
+	if v := firstStringField(fields, jsonTimeKeys); v != "" {
+		e.Time = parseAnyTime(v)
+	}
+	if v := firstStringField(fields, jsonLevelKeys); v != "" {
+		e.Level = ParseLevel(v)
+	}
+	e.Source = firstStringField(fields, jsonSourceKeys)
+	e.Message = firstStringField(fields, jsonMessageKeys)
+	if e.Message == "" {
+		// No recognized message field (an unfamiliar JSON log schema) —
+		// the raw line is still far more useful than an empty cell.
+		e.Message = line
+	}
+	return e, true
+}
+
+func firstStringField(fields map[string]any, keys []string) string {
+	for _, k := range keys {
+		if v, ok := fields[k]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// reRFC5424Fields captures PRI, VERSION, TIMESTAMP, HOSTNAME,
+// APP-NAME, PROCID, MSGID, and the rest (structured data + message) —
+// RFC 5424 §6.
+var reRFC5424Fields = regexp.MustCompile(`^<(\d{1,3})>(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$`)
+
+func parseRFC5424Line(line string) (Entry, bool) {
+	m := reRFC5424Fields.FindStringSubmatch(line)
+	if m == nil {
+		return Entry{}, false
+	}
+	pri, _ := strconv.Atoi(m[1])
+	severity := pri % 8
+	rest := m[8]
+	// Structured data ("[...]" or "-") precedes the actual message —
+	// stripped rather than shown, since it's metadata, not the message
+	// a keyword search should match against.
+	if strings.HasPrefix(rest, "-") {
+		rest = strings.TrimSpace(strings.TrimPrefix(rest, "-"))
+	} else if strings.HasPrefix(rest, "[") {
+		if idx := strings.Index(rest, "] "); idx >= 0 {
+			rest = rest[idx+2:]
+		}
+	}
+	return Entry{
+		Time:    parseAnyTime(m[3]),
+		Level:   rfc5424SeverityLevel(severity),
+		Source:  m[5], // APP-NAME
+		Message: rest,
+	}, true
+}
+
+func rfc5424SeverityLevel(severity int) Level {
+	switch severity {
+	case 0, 1, 2, 3:
+		return LevelError
+	case 4:
+		return LevelWarn
+	case 5, 6:
+		return LevelInfo
+	case 7:
+		return LevelDebug
+	default:
+		return LevelUnknown
+	}
+}
+
+// reRFC3164Fields captures TIMESTAMP (no year), HOSTNAME, TAG (with
+// optional "[pid]"), and MESSAGE — RFC 3164 §4.1, the classic
+// "Mon _2 15:04:05 host tag[pid]: message" shape.
+var reRFC3164Fields = regexp.MustCompile(`^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+([^:\[\s]+)(?:\[\d+\])?:\s*(.*)$`)
+
+func parseRFC3164Line(line string, year int) (Entry, bool) {
+	m := reRFC3164Fields.FindStringSubmatch(line)
+	if m == nil {
+		return Entry{}, false
+	}
+	t, err := time.Parse("Jan _2 15:04:05", m[1])
+	if err != nil {
+		return Entry{}, false
+	}
+	t = t.AddDate(year, 0, 0)
+	return Entry{
+		Time:    t,
+		Source:  m[3],
+		Message: m[4],
+	}, true
+}
+
+// reGenericFields captures TIMESTAMP, LEVEL, MESSAGE for the
+// "2026-10-07 16:04:23 ERROR something happened" shape — the same
+// pattern detect.go's own reGenericTAB already uses to recognize the
+// format in the first place, just with the three parts split into
+// groups here.
+var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s*(.*)$`)
+
+func parseGenericLine(line string) (Entry, bool) {
+	m := reGenericFields.FindStringSubmatch(line)
+	if m == nil {
+		return Entry{}, false
+	}
+	return Entry{
+		Time:    parseAnyTime(m[1]),
+		Level:   ParseLevel(m[2]),
+		Message: m[3],
+	}, true
+}
+
+// timeLayouts are tried in order by parseAnyTime — RFC3339(Nano) first
+// (what every JSON/generic encoder above actually produces in
+// practice), then the handful of other shapes a hand-written logger
+// might use instead.
+var timeLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+}
+
+// parseAnyTime tries every timeLayouts entry and returns the zero Time
+// on total failure — a line whose timestamp doesn't parse keeps
+// everything else about it (see parseLine's own fallbackTime handling
+// for what happens next), rather than being discarded outright.
+func parseAnyTime(s string) time.Time {
+	s = strings.TrimSpace(s)
+	for _, layout := range timeLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
