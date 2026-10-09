@@ -608,8 +608,11 @@ var helpText = strings.TrimLeft(`
   milliseconds, level itself optional (dpkg.log's own timestamped-
   but-level-less lines) or module-prefixed (Apache's own
   "[core:error]"), PHP-FPM's and Apache's own bracketed date shapes
-  included; or plain text as a fallback. .gz/.xz/.zst/.bz2 files are
-  decompressed transparently.
+  included; apt's own /var/log/apt/history.log (a transaction's own
+  Start-Date carried forward onto every untimestamped line in it,
+  Commandline/Install/Upgrade/... included, until the next Start-Date
+  or the transaction's own End-Date); or plain text as a fallback.
+  .gz/.xz/.zst/.bz2 files are decompressed transparently.
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar

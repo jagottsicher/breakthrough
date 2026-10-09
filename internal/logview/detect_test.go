@@ -144,6 +144,20 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// apt's own history.log — a multi-line transaction record,
+			// only Start-Date/End-Date timestamped, confirmed against
+			// the user's own real file. See FormatAptHistory's own doc
+			// comment (detect.go) for the full shape.
+			name: "apt history.log",
+			want: FormatAptHistory,
+			in: []string{
+				"Start-Date: 2026-02-25  21:04:11",
+				"Commandline: apt install nodejs",
+				"Install: nodejs:amd64 (18.19.0)",
+				"End-Date: 2026-02-25  21:04:19",
+			},
+		},
+		{
 			name: "plain fallback",
 			want: FormatPlain,
 			in: []string{

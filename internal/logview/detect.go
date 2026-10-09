@@ -25,6 +25,18 @@ const (
 	// timestamp isn't at the start of the line at all (host/ident/
 	// authuser come first), so it can never collide with any of them.
 	FormatCLF
+	// FormatAptHistory is apt's own /var/log/apt/history.log — a
+	// multi-line record format unlike every other format here: a
+	// transaction spans several lines (Start-Date, an optional
+	// Requested-By, Commandline, any of Install/Upgrade/Remove/Purge/
+	// Downgrade/Reinstall, End-Date), and only Start-Date/End-Date
+	// carry their own timestamp at all — "Commandline: apt install
+	// nodejs" has none of its own. Confirmed against the user's own
+	// real history.log. See parseAptHistoryEntries' own doc comment
+	// (parse.go) for why this is the one format ParseAll gives a
+	// genuinely different, stateful parsing pass instead of the
+	// ordinary line-by-line parseLine loop every other format uses.
+	FormatAptHistory
 )
 
 // String names Format for diagnostics and the selection screen's own
@@ -41,6 +53,8 @@ func (f Format) String() string {
 		return "timestamp"
 	case FormatCLF:
 		return "access log (Apache/nginx/CUPS)"
+	case FormatAptHistory:
+		return "apt history.log"
 	default:
 		return "plain text"
 	}
@@ -144,6 +158,13 @@ var (
 	// all (host comes first), so unlike every format above, this one
 	// never risks colliding with any of them.
 	reCLF = regexp.MustCompile(`^\S+\s+\S+\s+\S+\s+\[\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2}\s[+-]\d{4}\]\s+"`)
+	// reAptHistoryField matches any of apt history.log's own fixed
+	// field labels — every non-blank line in a real history.log starts
+	// with one of these (see FormatAptHistory's own doc comment for
+	// the full shape), so this alone is enough to recognize the whole
+	// file; parseAptHistoryEntries (parse.go) does the real,
+	// stateful per-field work.
+	reAptHistoryField = regexp.MustCompile(`^(?:Start-Date|End-Date|Commandline|Requested-By|Install|Upgrade|Remove|Purge|Downgrade|Reinstall|Error):\s`)
 )
 
 // detectSampleSize is how many of a file's own leading non-blank lines
@@ -189,6 +210,8 @@ func Detect(sample []string) Format {
 			counts[FormatSyslogRFC3164]++
 		case reCLF.MatchString(l):
 			counts[FormatCLF]++
+		case reAptHistoryField.MatchString(l):
+			counts[FormatAptHistory]++
 		case reGenericTAB.MatchString(l):
 			counts[FormatGeneric]++
 		}

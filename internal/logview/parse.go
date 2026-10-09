@@ -53,6 +53,10 @@ func ParseAll(r io.Reader, fileName string, fallbackTime time.Time) ([]Entry, Fo
 	}
 	format := Detect(lines[:sampleN])
 
+	if format == FormatAptHistory {
+		return parseAptHistoryEntries(lines, fileName, fallbackTime), format, nil
+	}
+
 	entries := make([]Entry, 0, len(lines))
 	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -301,6 +305,81 @@ func parseCLFLine(line string) (Entry, bool) {
 		Source:  m[1],
 		Message: m[3],
 	}, true
+}
+
+// aptHistoryStartPrefix/aptHistoryEndPrefix are apt history.log's own
+// two timestamped field labels — every other field (Commandline,
+// Install, Upgrade, Remove, Purge, Downgrade, Reinstall, Requested-By)
+// carries no timestamp of its own at all.
+const (
+	aptHistoryStartPrefix = "Start-Date:"
+	aptHistoryEndPrefix   = "End-Date:"
+)
+
+// parseAptHistoryEntries is apt history.log's own dedicated parsing
+// pass — genuinely different from every other format's parseXLine
+// function, which ParseAll calls once per line with no memory of
+// what came before: a real apt history.log transaction spans several
+// lines (Start-Date, an optional Requested-By, Commandline, one or
+// more of Install/Upgrade/Remove/..., End-Date), and only Start-Date/
+// End-Date carry a timestamp of their own — "Commandline: apt install
+// nodejs" doesn't. Every other line in the same transaction is given
+// the most recently seen Start-Date instead (current, carried forward
+// across the loop) rather than falling back to the whole file's own
+// mtime the way an ordinary timestamp-less line would — still
+// approximate (a transaction can span several minutes, see Start-
+// Date/End-Date in the user's own real file), but far closer than one
+// flat fallback for the entire file, and correctly distinct between
+// one transaction and the next. Confirmed against the user's own real
+// history.log, including multiple rotated files sharing one family
+// (see logaudit.go's own Merge call, which this feeds into exactly
+// like every other format's entries).
+func parseAptHistoryEntries(lines []string, fileName string, fallbackTime time.Time) []Entry {
+	entries := make([]Entry, 0, len(lines))
+	current := fallbackTime
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		t := current
+		if start, ok := parseAptHistoryTimestamp(line, aptHistoryStartPrefix); ok {
+			current = start
+			t = start
+		} else if end, ok := parseAptHistoryTimestamp(line, aptHistoryEndPrefix); ok {
+			// End-Date's own real timestamp for its own line only —
+			// current stays at the transaction's Start-Date for
+			// whatever (if anything) still follows before the next
+			// Start-Date resets it.
+			t = end
+		}
+		entries = append(entries, Entry{
+			Time:    t,
+			Message: line,
+			Raw:     line,
+			File:    fileName,
+			Line:    i + 1,
+		})
+	}
+	return entries
+}
+
+// parseAptHistoryTimestamp reports line's own timestamp if it starts
+// with prefix, false otherwise. strings.Fields/strings.Join collapses
+// whatever whitespace actually separates the date and time — the
+// user's own real file uses two spaces ("2026-02-25  21:04:11"), but a
+// layout hardcoded to that exact count would be brittle for no real
+// reason — into exactly one, which "2006-01-02 15:04:05" can then
+// parse unconditionally.
+func parseAptHistoryTimestamp(line, prefix string) (time.Time, bool) {
+	if !strings.HasPrefix(line, prefix) {
+		return time.Time{}, false
+	}
+	normalized := strings.Join(strings.Fields(strings.TrimPrefix(line, prefix)), " ")
+	t, err := time.Parse("2006-01-02 15:04:05", normalized)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // timeLayouts are tried in order by parseAnyTime — RFC3339(Nano) first

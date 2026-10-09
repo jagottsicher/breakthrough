@@ -266,6 +266,70 @@ func TestParseAllGenericNginxErrorLog(t *testing.T) {
 	}
 }
 
+// TestParseAllAptHistoryUsesMostRecentStartDate pins the real, user-
+// reported gap: apt history.log's own non-timestamped lines
+// (Commandline, Install, ...) used to all collapse onto the whole
+// file's own single fallback mtime, rather than each transaction's own
+// Start-Date. Two transactions here, back to back, to also confirm
+// the second Start-Date correctly replaces the first as "current" —
+// not just that the first one works in isolation.
+func TestParseAllAptHistoryUsesMostRecentStartDate(t *testing.T) {
+	input := strings.Join([]string{
+		"Start-Date: 2026-02-18  18:39:28",
+		"Commandline: apt install thunderbird",
+		"Install: thunderbird:amd64 (1:140.7.1esr-1+b1)",
+		"End-Date: 2026-02-18  18:39:39",
+		"",
+		"Start-Date: 2026-02-25  21:04:11",
+		"Requested-By: jens (1000)",
+		"Commandline: apt install nodejs",
+		"End-Date: 2026-02-25  21:04:19",
+	}, "\n") + "\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "history.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatAptHistory {
+		t.Fatalf("format = %v, want FormatAptHistory", format)
+	}
+	if len(entries) != 8 { // 9 non-blank lines minus the blank separator
+		t.Fatalf("len(entries) = %d, want 8", len(entries))
+	}
+
+	wantMessages := []string{
+		"Start-Date: 2026-02-18  18:39:28",
+		"Commandline: apt install thunderbird",
+		"Install: thunderbird:amd64 (1:140.7.1esr-1+b1)",
+		"End-Date: 2026-02-18  18:39:39",
+	}
+	for i, want := range wantMessages {
+		if entries[i].Message != want {
+			t.Errorf("entries[%d].Message = %q, want %q", i, entries[i].Message, want)
+		}
+	}
+
+	firstStart := time.Date(2026, 2, 18, 18, 39, 28, 0, time.UTC)
+	if !entries[0].Time.Equal(firstStart) {
+		t.Errorf("entries[0].Time (Start-Date line) = %v, want %v", entries[0].Time, firstStart)
+	}
+	if !entries[1].Time.Equal(firstStart) {
+		t.Errorf("entries[1].Time (Commandline, no timestamp of its own) = %v, want the transaction's own Start-Date %v", entries[1].Time, firstStart)
+	}
+	wantEnd := time.Date(2026, 2, 18, 18, 39, 39, 0, time.UTC)
+	if !entries[3].Time.Equal(wantEnd) {
+		t.Errorf("entries[3].Time (End-Date line) = %v, want its own %v", entries[3].Time, wantEnd)
+	}
+
+	secondStart := time.Date(2026, 2, 25, 21, 4, 11, 0, time.UTC)
+	if !entries[4].Time.Equal(secondStart) {
+		t.Errorf("entries[4].Time (second Start-Date) = %v, want %v", entries[4].Time, secondStart)
+	}
+	if !entries[5].Time.Equal(secondStart) {
+		t.Errorf("entries[5].Time (Requested-By, second transaction) = %v, want %v — must not still be the first transaction's Start-Date", entries[5].Time, secondStart)
+	}
+}
+
 func TestParseAllRFC3164UsesFallbackYear(t *testing.T) {
 	input := "Oct  7 16:04:22 server kernel: eth0: link down\n"
 	fallback := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
