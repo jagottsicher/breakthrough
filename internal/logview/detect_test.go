@@ -81,6 +81,69 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// TeamViewer's own log format: slashes in the date
+			// ("2023/12/31 22:33:22.756"), two numeric PID/TID fields
+			// and its own "S"/"S!!" severity marker (not a recognized
+			// level) before the message. A real, user-reported gap —
+			// same "/" vs "-" shape confirmed only loses the timestamp
+			// for the sole reason that the separator differs.
+			name: "generic timestamp with slash date, no recognized level",
+			want: FormatGeneric,
+			in: []string{
+				"2023/12/31 22:33:22.756 11924 11924 S!! DBus: unable to unregister Object Path",
+				"2023/12/31 22:33:22.755 11924 11924 S   NetworkControl shutdown done",
+			},
+		},
+		{
+			// Apache/CUPS/nginx's own Common/Combined Log Format access
+			// log — confirmed against the user's own real CUPS
+			// access_log, and the exact format nginx/apache2's own
+			// default access logs already use too (both explicitly
+			// asked about).
+			name: "CLF access log (Apache/nginx/CUPS)",
+			want: FormatCLF,
+			in: []string{
+				`localhost - - [03/Oct/2026:14:15:46 +0200] "POST / HTTP/1.1" 200 183 Renew-Subscription successful-ok`,
+				`127.0.0.1 - - [10/Oct/2026:13:55:36 +0200] "GET /index.html HTTP/1.1" 200 2326 "-" "Mozilla/5.0"`,
+			},
+		},
+		{
+			// PHP-FPM's own default log shape — a real gap, same as
+			// dpkg.log's: the bracketed "DD-Mon-YYYY HH:MM:SS" timestamp
+			// matched no format at all before.
+			name: "generic with PHP-FPM bracketed timestamp",
+			want: FormatGeneric,
+			in: []string{
+				"[10-Oct-2026 13:55:36] WARNING: [pool www] child 1234 said into stderr: a warning",
+				"[10-Oct-2026 13:55:37] NOTICE: fpm is running, pid 1234",
+			},
+		},
+		{
+			// Apache's own error log default format (httpd's
+			// ErrorLogFormat %{u}t) — a real gap, same reasoning: the
+			// bracketed "Day Mon DD HH:MM:SS.ffffff YYYY" timestamp
+			// matched no format at all before, nor did "[core:error]"'s
+			// own module-prefixed level.
+			name: "generic with Apache error log timestamp",
+			want: FormatGeneric,
+			in: []string{
+				"[Thu Oct 09 13:55:36.123456 2026] [core:error] [pid 1234:tid 5678] AH00646: something failed",
+				"[Thu Oct 09 13:55:37.654321 2026] [core:warn] a warning",
+			},
+		},
+		{
+			// Nginx's own error log default format — needs no new
+			// timestamp alternative at all (its slash date already
+			// matches the plain ISO-ish one), only the broadened level
+			// vocabulary ("notice"/"crit" weren't recognized before).
+			name: "generic nginx error log",
+			want: FormatGeneric,
+			in: []string{
+				`2026/10/09 13:55:36 [error] 1234#0: *5 connect() failed`,
+				`2026/10/09 13:55:37 [notice] 1234#0: signal process started`,
+			},
+		},
+		{
 			name: "plain fallback",
 			want: FormatPlain,
 			in: []string{

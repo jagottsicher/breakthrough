@@ -18,6 +18,13 @@ const (
 	FormatSyslogRFC3164
 	FormatSyslogRFC5424
 	FormatGeneric // "TIMESTAMP [LEVEL] message" — level is optional
+	// FormatCLF is the Apache/CUPS Common/Combined Log Format access
+	// log shape — "HOST - - [DD/Mon/YYYY:HH:MM:SS +ZZZZ] \"REQUEST\"
+	// STATUS SIZE ...", confirmed against the user's own real CUPS
+	// access_log. Checked separately from every format above: its own
+	// timestamp isn't at the start of the line at all (host/ident/
+	// authuser come first), so it can never collide with any of them.
+	FormatCLF
 )
 
 // String names Format for diagnostics and the selection screen's own
@@ -32,6 +39,8 @@ func (f Format) String() string {
 		return "syslog (RFC 5424)"
 	case FormatGeneric:
 		return "timestamp"
+	case FormatCLF:
+		return "access log (Apache/nginx/CUPS)"
 	default:
 		return "plain text"
 	}
@@ -89,7 +98,52 @@ var (
 	// hostname+tag: structure above is never miscounted as this
 	// instead, even though both now accept the exact same timestamp
 	// shape.
-	reGenericTAB = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+(?:\[?(?i:TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s+)?\S`)
+	// \d{4}[-/]\d{2}[-/]\d{2}, not just dashes: TeamViewer's own log
+	// format uses slashes ("2023/12/31 22:33:22.756 11924 11924 S!!
+	// message") — a real, user-reported gap, same symptom as the
+	// comma-milliseconds and no-level gaps above: the timestamp itself
+	// fell back to FormatPlain entirely rather than just losing Level/
+	// Source, for the sole reason that the date used "/" instead of
+	// "-". TeamViewer's own two numeric PID/TID fields right after the
+	// timestamp, and its own "S"/"S!!" severity marker, aren't a
+	// recognized level, so the whole "PID TID S!! message" remainder
+	// lands in Message, same as dpkg.log's own level-less lines — still
+	// a real improvement over losing the timestamp outright.
+	// genericTimestampAlt adds two more timestamp shapes, both bracket-
+	// wrapped, both real user-reported gaps (nginx/apache2/php-fpm
+	// explicitly asked about): PHP-FPM's own "[10-Oct-2026 13:55:36]"
+	// and Apache's own error log "[Thu Oct 09 13:55:36.123456 2026]"
+	// (httpd's ErrorLogFormat default %{u}t). Nginx's own error log
+	// ("2026/10/09 13:55:36 [error] ...") needs no new timestamp
+	// alternative at all — its slash-separated date already matches the
+	// plain ISO-ish alternative above (see its own "[-/]" doc comment).
+	// Shared between reGenericTAB (detection) and reGenericFields
+	// (parse.go) so both stay in exact agreement.
+	genericTimestampAlt = `\[\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}:\d{2}\]|\[[A-Za-z]{3} [A-Za-z]{3} \d{1,2} \d{2}:\d{2}:\d{2}(?:\.\d+)? \d{4}\]`
+	// genericLevelToken mirrors ParseLevel's own full vocabulary
+	// (model.go) exactly, not just the handful reGenericTAB originally
+	// checked — nginx's own "notice"/"crit"/"alert"/"emerg" and
+	// PHP-FPM's own "NOTICE"/"ALERT" are levels ParseLevel already knew
+	// how to map, just never reachable because this regex's own token
+	// list never captured them in the first place. An optional
+	// "MODULE:" prefix inside the brackets (`(?:[A-Za-z0-9_]+:)?`)
+	// covers Apache's own newer "[core:error]" shape, module name
+	// first, level second, both inside the one bracket pair.
+	// The level word itself is a real capture group (used by
+	// reGenericFields, parse.go), harmless extra bookkeeping for
+	// reGenericTAB's own purely boolean MatchString use here.
+	genericLevelToken = `(?:[A-Za-z0-9_]+:)?(TRACE|DEBUG|DBG|INFO(?:RMATION)?|NOTICE|WARN(?:ING)?|ERR(?:OR)?|CRIT(?:ICAL)?|ALERT|EMERG(?:ENCY)?|FATAL|PANIC)`
+	reGenericTAB      = regexp.MustCompile(`(?i)^(?:\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?|` + genericTimestampAlt + `)\s+(?:\[?` + genericLevelToken + `\]?:?\s+)?\S`)
+	// reCLF is the Apache/CUPS Common/Combined Log Format access log
+	// shape — "HOST IDENT AUTHUSER [DD/Mon/YYYY:HH:MM:SS +ZZZZ]
+	// "REQUEST" STATUS SIZE ...". Confirmed against the user's own real
+	// CUPS access_log; the exact same shape Apache's and nginx's own
+	// default "combined"/"common" access log formats already use (both
+	// explicitly asked about) — CUPS deliberately reuses Apache's own
+	// format for this file. No level/timestamp-first structure here at
+	// all (host comes first), so unlike every format above, this one
+	// never risks colliding with any of them.
+	reCLF = regexp.MustCompile(`^\S+\s+\S+\s+\S+\s+\[\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2}\s[+-]\d{4}\]\s+"`)
 )
 
 // detectSampleSize is how many of a file's own leading non-blank lines
@@ -133,6 +187,8 @@ func Detect(sample []string) Format {
 			counts[FormatSyslogRFC5424]++
 		case reRFC3164.MatchString(l):
 			counts[FormatSyslogRFC3164]++
+		case reCLF.MatchString(l):
+			counts[FormatCLF]++
 		case reGenericTAB.MatchString(l):
 			counts[FormatGeneric]++
 		}

@@ -88,6 +88,10 @@ func parseLine(line string, format Format, fallbackTime time.Time) Entry {
 		if e, ok := parseGenericLine(line); ok {
 			return e
 		}
+	case FormatCLF:
+		if e, ok := parseCLFLine(line); ok {
+			return e
+		}
 	}
 	return Entry{Message: line}
 }
@@ -238,16 +242,63 @@ func parseRFC3164Line(line string, year int) (Entry, bool) {
 // case; ParseLevel("") already correctly answers LevelUnknown (see its
 // own test), the same honest "no level recognized" this format already
 // gives a line whose level word isn't one of the known ones.
-var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?:\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s+)?(.*)$`)
+// [-/], not just "-" — see reGenericTAB's own doc comment (detect.go)
+// for why: TeamViewer's own log format uses slashes in its date.
+// genericTimestampAlt/genericLevelToken (detect.go) add PHP-FPM's own
+// "[10-Oct-2026 13:55:36]" and Apache's own error log
+// "[Thu Oct 09 13:55:36.123456 2026]" timestamps, and broaden the
+// level vocabulary to match ParseLevel's own full synonym list
+// (notice/crit/alert/emerg/..., not just the original handful) — see
+// their own doc comments for the full reasoning (nginx/apache2/
+// php-fpm, explicitly asked about).
+var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?|` + genericTimestampAlt + `)\s+(?:\[?` + genericLevelToken + `\]?:?\s+)?(.*)$`)
 
 func parseGenericLine(line string) (Entry, bool) {
 	m := reGenericFields.FindStringSubmatch(line)
 	if m == nil {
 		return Entry{}, false
 	}
+	// m[1] carries its own brackets intact for the two bracket-wrapped
+	// alternatives (PHP-FPM/Apache) — stripped here rather than from
+	// within the regex itself, so the same single capture group still
+	// works for the plain ISO-ish alternative, which never has them.
+	ts := strings.TrimSuffix(strings.TrimPrefix(m[1], "["), "]")
 	return Entry{
-		Time:    parseAnyTime(m[1]),
+		Time:    parseAnyTime(ts),
 		Level:   ParseLevel(m[2]),
+		Message: m[3],
+	}, true
+}
+
+// reCLFFields captures HOST and TIMESTAMP from the Apache/CUPS Common/
+// Combined Log Format shape (see reCLF's own doc comment, detect.go) —
+// IDENT/AUTHUSER (almost always "-") are matched but not captured,
+// nothing useful to show. Everything from the quoted request line
+// onward (status, size, and whatever else "combined" format tacks on —
+// referer, user-agent, or CUPS's own trailing job-status words) stays
+// together as Message rather than being split into fields of its own:
+// none of them map onto Entry's own Level/Source, and showing the
+// whole thing verbatim is more useful than discarding any of it.
+var reCLFFields = regexp.MustCompile(`^(\S+)\s+\S+\s+\S+\s+\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2}\s[+-]\d{4})\]\s+(.*)$`)
+
+// clfTimeLayout is Apache/CUPS's own bracketed access-log timestamp —
+// "09/Oct/2026:13:55:36 +0200", the one true fixed shape this format
+// ever uses, so a dedicated layout (rather than parseAnyTime's whole
+// list) is both correct and slightly cheaper.
+const clfTimeLayout = "02/Jan/2006:15:04:05 -0700"
+
+func parseCLFLine(line string) (Entry, bool) {
+	m := reCLFFields.FindStringSubmatch(line)
+	if m == nil {
+		return Entry{}, false
+	}
+	t, err := time.Parse(clfTimeLayout, m[2])
+	if err != nil {
+		return Entry{}, false
+	}
+	return Entry{
+		Time:    t,
+		Source:  m[1],
 		Message: m[3],
 	}, true
 }
@@ -268,6 +319,23 @@ var timeLayouts = []string{
 	// comment (detect.go) for the full reasoning.
 	"2006-01-02 15:04:05,999999999",
 	"2006-01-02 15:04:05",
+	// TeamViewer's own date separator ("2023/12/31 22:33:22.756") —
+	// see reGenericTAB's own doc comment (detect.go) for the full
+	// reasoning.
+	"2006/01/02 15:04:05.999999999",
+	"2006/01/02 15:04:05",
+	// PHP-FPM's own date shape ("10-Oct-2026 13:55:36") — see
+	// genericTimestampAlt's own doc comment (detect.go).
+	"02-Jan-2006 15:04:05",
+	// Apache's own error log timestamp (httpd's ErrorLogFormat default
+	// %{u}t, "Thu Oct 09 13:55:36.123456 2026") — both zero-padded and
+	// space-padded day, with and without fractional seconds, since
+	// Go's time.Parse treats "02" and "_2" as genuinely different
+	// layouts rather than one lenient one.
+	"Mon Jan 02 15:04:05.999999999 2006",
+	"Mon Jan 02 15:04:05 2006",
+	"Mon Jan _2 15:04:05.999999999 2006",
+	"Mon Jan _2 15:04:05 2006",
 }
 
 // parseAnyTime tries every timeLayouts entry and returns the zero Time
