@@ -8,8 +8,7 @@ package ui
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"path"
 	"time"
 
 	"github.com/jagottsicher/breakthrough/internal/logview"
@@ -35,7 +34,7 @@ func (r *Root) openLogAudit() {
 // same "reflect the real, current state" contract reloadActivityLog
 // already has for "r".
 func (r *Root) reloadLogAuditDiscovery() {
-	groups, err := logview.Discover(r.logAuditDir)
+	groups, err := logview.Discover(r.currentLogAuditSource(), r.logAuditDir)
 	r.logAuditGroups = groups
 	r.logAuditDiscoverErr = err
 	r.renderLogAuditSelection()
@@ -106,7 +105,7 @@ func (r *Root) openLogAuditViewer() {
 // *repeating* read needs the heavier I/O kept off the UI goroutine
 // instead.
 func (r *Root) refreshLogAuditViewerData() {
-	entries, files, skipped, err := readLogAuditGroup(r.logAuditGroupOpen)
+	entries, files, skipped, err := readLogAuditGroup(r.currentLogAuditSource(), r.logAuditGroupOpen)
 	r.logAuditAllEntries = entries
 	r.logAuditFiles = files
 	r.logAuditSkipped = skipped
@@ -121,14 +120,14 @@ func (r *Root) refreshLogAuditViewerData() {
 // ~700ms, measured) — running that on the UI goroutine every single
 // follow tick would stutter the whole app repeatedly, not just once,
 // the way a manual "r" press's own one-off blocking read does not.
-func readLogAuditGroup(group logview.FileGroup) (entries []logview.Entry, files, skipped int, err error) {
+func readLogAuditGroup(source logview.FileSource, group logview.FileGroup) (entries []logview.Entry, files, skipped int, err error) {
 	var allEntries [][]logview.Entry
 	for _, f := range group.Files {
 		if !f.Supported {
 			skipped++
 			continue
 		}
-		fileEntries, ferr := readLogAuditFile(f)
+		fileEntries, ferr := readLogAuditFile(source, f)
 		if ferr != nil {
 			err = ferr
 			continue
@@ -145,19 +144,23 @@ func readLogAuditGroup(group logview.FileGroup) (entries []logview.Entry, files,
 // FormatPlain line with no timestamp at all) is the file's own mtime,
 // a far better guess at "roughly when this happened" than the zero
 // time every such line would otherwise collapse onto in Merge.
-func readLogAuditFile(f logview.CandidateFile) ([]logview.Entry, error) {
-	fallback := time.Now()
-	if st, err := os.Stat(f.Path); err == nil {
-		fallback = st.ModTime()
+func readLogAuditFile(source logview.FileSource, f logview.CandidateFile) ([]logview.Entry, error) {
+	// f.ModTime, not a fresh os.Stat — Discover already populated it
+	// from the exact same directory listing this file came from (see
+	// CandidateFile's own doc comment), which works identically for a
+	// remote connection too; a direct os.Stat call here never could.
+	fallback := f.ModTime
+	if fallback.IsZero() {
+		fallback = time.Now()
 	}
 
-	r, err := logview.Open(f)
+	r, err := logview.Open(source, f)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
 
-	entries, _, err := logview.ParseAll(r, filepath.Base(f.Path), fallback)
+	entries, _, err := logview.ParseAll(r, path.Base(f.Path), fallback)
 	return entries, err
 }
 
@@ -225,6 +228,7 @@ func (r *Root) startLogAuditFollow() {
 	// goroutine, with only the already-computed result (not the I/O)
 	// handed to QueueUpdateDraw.
 	group := r.logAuditGroupOpen
+	source := r.currentLogAuditSource()
 	r.safeGo("log audit follow", func() { r.stopLogAuditFollow() }, func() {
 		ticker := time.NewTicker(logAuditFollowInterval)
 		defer ticker.Stop()
@@ -234,7 +238,7 @@ func (r *Root) startLogAuditFollow() {
 				if ctx.Err() != nil {
 					return
 				}
-				entries, files, skipped, err := readLogAuditGroup(group)
+				entries, files, skipped, err := readLogAuditGroup(source, group)
 				if ctx.Err() != nil {
 					return
 				}
