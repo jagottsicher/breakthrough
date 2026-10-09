@@ -586,7 +586,8 @@ var helpText = strings.TrimLeft(`
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
   into one row) with a summary of how many of its own files are
-  compressed. The "✕" glyph in the title bar's own top-right corner is
+  compressed, plus the family's own newest file's Size and Modified
+  time. The "✕" glyph in the title bar's own top-right corner is
   a mouse-clickable equivalent to Escape — both screens below have one.
 
     Enter    Open the Log Audit view for the family under the cursor
@@ -594,16 +595,25 @@ var helpText = strings.TrimLeft(`
     Esc      Close
 
   Step 2 — Log Audit view: every selected file's own lines, merged into
-  one chronological stream. The format of each file (JSON Lines, syslog
-  RFC 3164/5424, a generic "timestamp level message" line, or plain
-  text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
-  files are decompressed transparently. The title bar shows running
-  counts (events/files/skipped/errors/warnings, plus how many entries
-  currently match if the filters narrow it, and "● following" while
-  follow is on). A mini-timeline above the table shows the matching
-  entries' own density over time — red where a bucket contains an
-  error, the app's own warning color where it contains a warning but
-  nothing worse.
+  one chronological stream, opening with the list itself already
+  focused (the row just above its header shows "● List" while it is —
+  Tab/Shift+Tab move focus to Filter/Time/Level instead, see below).
+  The format of each file (JSON Lines, syslog RFC 3164/5424, a generic
+  "timestamp level message" line — comma or dot before the
+  milliseconds, either one — or plain text as a fallback) is detected
+  automatically; .gz/.xz/.zst/.bz2 files are decompressed transparently.
+  A parse error in one file of the family (a corrupted rotation, say)
+  only blanks the view when every file failed — otherwise the entries
+  that did read fine still show, with the error noted in the title bar
+  instead. The title bar shows running counts (events/files/skipped/
+  errors/warnings, plus how many entries currently match if the filters
+  narrow it, and "● following" while follow is on). Clicking the Time
+  column header reverses the list between oldest-first (the default)
+  and newest-first, the same arrow-suffix convention the panel's own
+  Name/Size/Modified column headers already use. A mini-timeline above
+  the table shows the matching entries' own density over time — red
+  where a bucket contains an error, the app's own warning color where
+  it contains a warning but nothing worse.
 
     Filter          Case-insensitive substring over Source and Message,
                      narrowing the list live and highlighting every

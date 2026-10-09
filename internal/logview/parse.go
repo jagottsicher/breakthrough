@@ -212,7 +212,10 @@ func parseRFC3164Line(line string, year int) (Entry, bool) {
 // pattern detect.go's own reGenericTAB already uses to recognize the
 // format in the first place, just with the three parts split into
 // groups here.
-var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s*(.*)$`)
+// [.,]\d+, not \.\d+ — see reGenericTAB's own doc comment (detect.go)
+// for why: Python's logging.Formatter default datefmt uses a comma
+// before milliseconds, not a dot.
+var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s*(.*)$`)
 
 func parseGenericLine(line string) (Entry, bool) {
 	m := reGenericFields.FindStringSubmatch(line)
@@ -235,6 +238,12 @@ var timeLayouts = []string{
 	time.RFC3339,
 	"2006-01-02T15:04:05",
 	"2006-01-02 15:04:05.999999999",
+	// The comma variant of the layout above — Go's time package treats
+	// "," exactly like "." as the fractional-seconds separator (verified
+	// directly against time.Parse, not assumed) — for Python's own
+	// logging.Formatter default datefmt; see reGenericTAB's own doc
+	// comment (detect.go) for the full reasoning.
+	"2006-01-02 15:04:05,999999999",
 	"2006-01-02 15:04:05",
 }
 

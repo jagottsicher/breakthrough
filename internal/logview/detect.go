@@ -38,9 +38,16 @@ func (f Format) String() string {
 }
 
 var (
-	reRFC5424    = regexp.MustCompile(`^<\d{1,3}>\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+`)
-	reRFC3164    = regexp.MustCompile(`^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+`)
-	reGenericTAB = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+\[?(?i:TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s`)
+	reRFC5424 = regexp.MustCompile(`^<\d{1,3}>\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+`)
+	reRFC3164 = regexp.MustCompile(`^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+`)
+	// [.,]\d+, not \.\d+: Python's own logging.Formatter default
+	// datefmt ("2026-10-08 21:00:00,123 INFO message") uses a comma
+	// before the milliseconds, not a dot — one concrete, very common
+	// real-world shape this pattern used to miss entirely, falling all
+	// the way back to FormatPlain for it: Level/Source always empty,
+	// and the timestamp itself showing up as plain message text instead
+	// of being recognized at all — matching the user's own report.
+	reGenericTAB = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+\[?(?i:TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s`)
 )
 
 // detectSampleSize is how many of a file's own leading non-blank lines

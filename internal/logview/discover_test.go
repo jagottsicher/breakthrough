@@ -75,6 +75,37 @@ func TestDiscoverGroupsLogrotateFamily(t *testing.T) {
 	}
 }
 
+// TestDiscoverPopulatesSizeAndModTime pins the selection screen's own
+// Size/Modified columns (added per the user's own explicit request) —
+// both come straight from the os.ReadDir entry Discover already has in
+// hand, no extra os.Stat call.
+func TestDiscoverPopulatesSizeAndModTime(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "access.log", "0123456789\n") // 11 bytes
+
+	groups, err := Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	f, ok := groups[0].Newest()
+	if !ok {
+		t.Fatalf("Newest() = false, want a file")
+	}
+	if f.Size != 11 {
+		t.Errorf("Size = %d, want 11", f.Size)
+	}
+	if f.ModTime.IsZero() {
+		t.Error("ModTime is zero, want the file's real mtime")
+	}
+}
+
+func TestFileGroupNewestOnEmptyGroup(t *testing.T) {
+	g := FileGroup{Base: "empty.log"}
+	if _, ok := g.Newest(); ok {
+		t.Error("Newest() = true for an empty group, want false")
+	}
+}
+
 // writeXzFile/writeZstdFile use the same libraries Open itself
 // decodes with (github.com/ulikunitz/xz, github.com/klauspost/compress/zstd)
 // to encode a fixture — both provide a real Writer, unlike bzip2 (see
