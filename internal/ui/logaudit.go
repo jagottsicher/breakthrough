@@ -80,6 +80,12 @@ func (r *Root) openLogAuditViewer() {
 	r.logAuditKeywordField.SetText("")
 	r.logAuditTimeField.SetText("")
 	r.logAuditLevelField.SetText("")
+	// Newest-first, not the Merge's own oldest-first order — per the
+	// user's own explicit request, the same "most recent at the top"
+	// default every other reasonable default for triaging a log
+	// actually wants. Still just the opening default: the Time column
+	// header (logauditscreen.go) toggles it for the rest of the session.
+	r.logAuditNewestFirst = true
 	r.renderLogAuditViewer()
 	r.pushOverlay(logAuditViewerPage, r.logAuditViewerLayout, nil)
 	// The list, not logAuditKeywordField — per the user's own explicit

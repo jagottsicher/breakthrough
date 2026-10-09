@@ -94,7 +94,10 @@ func TestOpenLogAuditViewerFocusesTheList(t *testing.T) {
 // TestLogAuditFocusIndicatorReflectsTableFocus pins the user's own
 // explicit request for a visible cue that the list currently has
 // keyboard focus — repurposing the row between the timeline and the
-// table's own header, previously just blank border padding.
+// table's own header, previously just blank border padding, as a
+// background-color indicator (no text of its own — an earlier "●
+// List" label was dropped per the user's own later, explicit report
+// that the color alone already says it).
 func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir)
@@ -103,13 +106,13 @@ func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 	r.logAuditTable.Select(1, 0)
 	r.openLogAuditViewer() // focuses the table — see the test above
 
-	if got := r.logAuditFocusIndicator.GetText(true); got == "" {
-		t.Error("focus indicator should show something while the list has focus")
+	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
+		t.Errorf("focus indicator background = %v, want InputFocusedBackground %v while the list has focus", got, r.theme.InputFocusedBackground)
 	}
 
 	r.app.SetFocus(r.logAuditKeywordField)
-	if got := r.logAuditFocusIndicator.GetText(true); got != "" {
-		t.Errorf("focus indicator = %q, want blank once focus moves to a filter field", got)
+	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.SurfaceBackground {
+		t.Errorf("focus indicator background = %v, want SurfaceBackground %v once focus moves to a filter field", got, r.theme.SurfaceBackground)
 	}
 }
 
@@ -117,7 +120,11 @@ func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 // own click handler — the same "click to sort, click again to
 // reverse" convention the panel's own column headers already use (see
 // sortArrow, panel.go) — per the user's own explicit request to read
-// the list old->new or new->old.
+// the list old->new or new->old. Opens newest-first by default (see
+// openLogAuditViewer's own doc comment on logAuditNewestFirst, per a
+// later, separate explicit request), so this test's own "before"
+// state is newest-first, toggling to oldest-first — the opposite
+// direction from when that default was still oldest-first.
 func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 	dir := t.TempDir()
 	writeLogAuditFixture(t, dir) // app.log: error @16:04:21, then info @16:04:23
@@ -133,8 +140,11 @@ func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 		return e
 	}
 
-	if got := firstEntry(); got.Level != logview.LevelError {
-		t.Fatalf("before toggling, row 1 = %+v, want the oldest entry (Error @16:04:21)", got)
+	if !r.logAuditNewestFirst {
+		t.Fatal("setup: opening the viewer should default to newest-first")
+	}
+	if got := firstEntry(); got.Level != logview.LevelInfo {
+		t.Fatalf("before toggling, row 1 = %+v, want the newest entry (Info @16:04:23) — newest-first is the default", got)
 	}
 
 	header := r.logAuditViewerTable.GetCell(0, logAuditColTime)
@@ -142,18 +152,18 @@ func TestLogAuditTimeHeaderClickTogglesSortOrder(t *testing.T) {
 		t.Fatal("Time header has no Clicked handler")
 	}
 	header.Clicked()
-	if !r.logAuditNewestFirst {
-		t.Fatal("clicking the Time header should have set logAuditNewestFirst")
+	if r.logAuditNewestFirst {
+		t.Fatal("clicking the Time header should have cleared logAuditNewestFirst")
 	}
-	if got := firstEntry(); got.Level != logview.LevelInfo {
-		t.Errorf("after toggling newest-first, row 1 = %+v, want the newest entry (Info @16:04:23)", got)
+	if got := firstEntry(); got.Level != logview.LevelError {
+		t.Errorf("after toggling to oldest-first, row 1 = %+v, want the oldest entry (Error @16:04:21)", got)
 	}
 	// Re-fetched, not the same cell object header still points at:
 	// renderLogAuditViewer (called from the Clicked handler itself)
 	// replaces row 0's cell outright via SetCell, same as every other
 	// row — header's own copy is now stale.
-	if got := r.logAuditViewerTable.GetCell(0, logAuditColTime).Text; !strings.Contains(got, "↓") {
-		t.Errorf("Time header = %q, want a ↓ arrow once newest-first is active", got)
+	if got := r.logAuditViewerTable.GetCell(0, logAuditColTime).Text; !strings.Contains(got, "↑") {
+		t.Errorf("Time header = %q, want a ↑ arrow once sorted oldest-first", got)
 	}
 }
 

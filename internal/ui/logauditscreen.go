@@ -442,30 +442,33 @@ func logAuditHighlight(text, keyword string, bg tcell.Color) string {
 	return b.String()
 }
 
-// renderLogAuditFocusIndicator shows "● List" while focused is true
-// (logAuditViewerTable itself has keyboard focus), blank otherwise —
-// the user's own explicit request for a visible cue that Tab-cycling
+// renderLogAuditFocusIndicator paints the row itself in
+// theme.InputFocusedBackground while focused is true (logAuditViewer-
+// Table itself has keyboard focus), theme.SurfaceBackground otherwise
+// — the user's own explicit request for a visible cue that Tab-cycling
 // has landed back on the list (as opposed to one of the three filter
 // fields above it), rather than only being inferable from which row
-// happens to be highlighted. Takes focused explicitly rather than
-// querying logAuditViewerTable.HasFocus() itself: tview.Box.Blur()
-// (verified directly against its own box.go) runs the blur callback
-// *before* flipping its own hasFocus flag, so a blur-triggered call
-// here would otherwise still see focus as true — the exact same
-// "pass the known state in, don't re-derive it" shape styleInput's own
-// FocusFunc/BlurFunc pairs already use elsewhere in this file.
-// Called from the table's own SetFocusFunc/SetBlurFunc (see
-// newLogAuditViewerScreen) and once from applyLogAuditTheme (passing
-// the table's own current, settled HasFocus — safe there, since that
-// call never happens from inside a Blur callback) so a live theme
-// switch repaints it in the right color either way.
+// happens to be highlighted. No text of its own (an earlier "● List"
+// label was dropped per the user's own explicit, later report that it
+// added nothing the background color alone doesn't already say).
+// Takes focused explicitly rather than querying logAuditViewerTable.
+// HasFocus() itself: tview.Box.Blur() (verified directly against its
+// own box.go) runs the blur callback *before* flipping its own
+// hasFocus flag, so a blur-triggered call here would otherwise still
+// see focus as true — the exact same "pass the known state in, don't
+// re-derive it" shape styleInput's own FocusFunc/BlurFunc pairs
+// already use elsewhere in this file. Called from the table's own
+// SetFocusFunc/SetBlurFunc (see newLogAuditViewerScreen) and once from
+// applyLogAuditTheme (passing the table's own current, settled
+// HasFocus — safe there, since that call never happens from inside a
+// Blur callback) so a live theme switch repaints it in the right
+// color either way.
 func (r *Root) renderLogAuditFocusIndicator(focused bool) {
-	if !focused {
-		r.logAuditFocusIndicator.SetText("")
-		return
+	background := r.theme.SurfaceBackground
+	if focused {
+		background = r.theme.InputFocusedBackground
 	}
-	r.logAuditFocusIndicator.SetText(" ● List")
-	r.logAuditFocusIndicator.SetTextColor(r.theme.Text)
+	r.logAuditFocusIndicator.SetBackgroundColor(background)
 }
 
 // renderLogAuditViewer fills the viewer table with every entry
@@ -826,7 +829,10 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// and darker than SurfaceBackground in the default scheme, fixing
 	// the user's second report ("zu hell") in the same change.
 	r.logAuditTimelineView.SetBackgroundColor(theme.PopupBackground)
-	r.logAuditFocusIndicator.SetBackgroundColor(theme.SurfaceBackground)
+	// logAuditFocusIndicator's own background comes entirely from
+	// renderLogAuditFocusIndicator (SurfaceBackground or
+	// InputFocusedBackground, depending on the list's current focus) —
+	// no separate line needed here.
 	r.renderLogAuditFocusIndicator(r.logAuditViewerTable.HasFocus())
 	// Label color and background both come from styleInput itself —
 	// see its own doc comment (theme.go) on the background mismatch
