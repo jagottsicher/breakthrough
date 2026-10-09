@@ -41,11 +41,11 @@ const gitBreachFetchTimeout = 3 * time.Second
 // same way, once git.Root actually runs.
 func (r *Root) openGitBreach() {
 	if r.panel.isRemote() || r.panel.inArchiveView() {
-		r.showError(fmt.Errorf("Git breach: only available for a real local working tree, not a remote connection or an archive view"))
+		r.showError(fmt.Errorf("git breach: only available for a real local working tree, not a remote connection or an archive view"))
 		return
 	}
 	if !git.Available() {
-		r.showError(fmt.Errorf("Git breach: git itself was not found on $PATH"))
+		r.showError(fmt.Errorf("git breach: git itself was not found on $PATH"))
 		return
 	}
 
@@ -53,11 +53,11 @@ func (r *Root) openGitBreach() {
 	defer cancel()
 	root, inRepo, err := git.Root(ctx, r.panel.path)
 	if err != nil {
-		r.showError(fmt.Errorf("Git breach: %w", err))
+		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
 	if !inRepo {
-		r.showError(fmt.Errorf("Git breach: %q is not inside a git working tree", r.panel.path))
+		r.showError(fmt.Errorf("git breach: %q is not inside a git working tree", r.panel.path))
 		return
 	}
 
@@ -172,7 +172,7 @@ func (r *Root) toggleGitBreachStage() {
 		err = git.Stage(ctx, r.gitBreachRoot, []string{gr.path})
 	}
 	if err != nil {
-		r.showError(fmt.Errorf("Git breach: %w", err))
+		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
 	r.reloadGitBreach()
@@ -204,7 +204,7 @@ func (r *Root) gitBreachRowAt(row int) (gitBreachRow, bool) {
 // reason the user didn't already know about from the Files box itself.
 func (r *Root) openGitBreachCommitPrompt() {
 	if len(r.gitBreachStatus.Staged) == 0 {
-		r.showError(fmt.Errorf("Git breach: nothing staged to commit"))
+		r.showError(fmt.Errorf("git breach: nothing staged to commit"))
 		return
 	}
 
@@ -233,7 +233,7 @@ func (r *Root) commitGitBreach(message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
 	if err := git.Commit(ctx, r.gitBreachRoot, message); err != nil {
-		r.showError(fmt.Errorf("Git breach: %w", err))
+		r.showError(fmt.Errorf("git breach: %w", err))
 		return
 	}
 	r.reloadGitBreach()
