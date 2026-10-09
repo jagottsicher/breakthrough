@@ -11,7 +11,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/fsops"
 	"github.com/jagottsicher/breakthrough/internal/logview"
+	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
 
 // newTestRootForLogAudit builds a Root whose active panel points at
@@ -40,6 +42,79 @@ func writeLogAuditFixture(t *testing.T, dir string) {
 	sysLog := "Oct  7 16:04:22 server kernel: eth0: link down\n"
 	if err := os.WriteFile(filepath.Join(dir, "syslog"), []byte(sysLog), 0o644); err != nil {
 		t.Fatalf("WriteFile syslog: %v", err)
+	}
+}
+
+// TestOpenLogAuditDiscoversAndReadsRemoteFiles pins the user's own
+// explicit request: "jL" used to always browse the local filesystem
+// even while the active panel was already connected to a remote
+// session — the connection was already up, so the whole point of
+// pointing Log Audit at a directory on it was to read through its own
+// log files, not this machine's. Verifies both halves end to end
+// through the real currentLogAuditSource/remoteLogFileSource wiring:
+// discovery (the family shows up at all) and actually reading the
+// remote file's own content (the entry's own Level, not just its
+// presence, proving the bytes really came from the fake remote client,
+// not an empty/local fallback).
+func TestOpenLogAuditDiscoversAndReadsRemoteFiles(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	remote := newTestFakeRemote("/remote")
+	remote.content = map[string][]byte{}
+	content := "2026-10-07 16:04:23 ERROR database connection timeout\n"
+	remote.entries["/remote"] = []fsops.Entry{
+		{Name: "app.log", Type: fsops.TypeFile, Size: int64(len(content)), ModTime: time.Now()},
+	}
+	remote.content["/remote/app.log"] = []byte(content)
+
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "testhost"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+
+	r.openLogAudit()
+	if len(r.logAuditGroups) != 1 || r.logAuditGroups[0].Base != "app.log" {
+		t.Fatalf("logAuditGroups = %+v, want one group for app.log — Discover must have gone through the remote client, not the local filesystem", r.logAuditGroups)
+	}
+
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	if r.logAuditFiles != 1 {
+		t.Fatalf("logAuditFiles = %d, want 1", r.logAuditFiles)
+	}
+	if len(r.logAuditAllEntries) != 1 {
+		t.Fatalf("len(logAuditAllEntries) = %d, want 1", len(r.logAuditAllEntries))
+	}
+	if r.logAuditAllEntries[0].Level != logview.LevelError {
+		t.Errorf("entries[0].Level = %v, want LevelError — the remote file's own real content should have been read and parsed", r.logAuditAllEntries[0].Level)
+	}
+}
+
+// TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote
+// pins CLAUDE.md's own "remote views must never describe local paths
+// or metadata" rule applied in the other direction: once the
+// selection screen genuinely reads through a remote connection, it
+// must say so (and which one) rather than looking exactly like a
+// local listing — the user has no other way to tell from this screen
+// alone.
+func TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	if got := r.logAuditTitleBar.GetText(true); strings.Contains(got, "testhost") {
+		t.Errorf("local title = %q, want no connection name", got)
+	}
+
+	remote := newTestFakeRemote("/remote")
+	if err := r.panel.connectRemote(remote, remotefs.Connection{Host: "testhost"}); err != nil {
+		t.Fatalf("connectRemote: %v", err)
+	}
+	r.openLogAudit()
+	if got := r.logAuditTitleBar.GetText(true); !strings.Contains(got, "testhost") {
+		t.Errorf("remote title = %q, want it to name the connection (testhost)", got)
 	}
 }
 

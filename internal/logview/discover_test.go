@@ -45,7 +45,7 @@ func TestDiscoverGroupsLogrotateFamily(t *testing.T) {
 		t.Fatalf("Mkdir: %v", err)
 	}
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestDiscoverPopulatesSizeAndModTime(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "access.log", "0123456789\n") // 11 bytes
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestDiscoverSupportsEveryCompressedExtension(t *testing.T) {
 	writeZstdFile(t, dir, "app.log.2.zst", "placeholder\n")
 	writeBz2File(t, dir, "app.log.3.bz2")
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
@@ -196,13 +196,13 @@ func TestOpenDecompressesGzip(t *testing.T) {
 	dir := t.TempDir()
 	writeGzipFile(t, dir, "access.log.1.gz", "hello from gzip\n")
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
 	f := groups[0].Files[0]
 
-	r, err := Open(f)
+	r, err := Open(LocalFileSource{}, f)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -221,11 +221,11 @@ func TestOpenDecompressesXz(t *testing.T) {
 	dir := t.TempDir()
 	writeXzFile(t, dir, "access.log.1.xz", "hello from xz\n")
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	r, err := Open(groups[0].Files[0])
+	r, err := Open(LocalFileSource{}, groups[0].Files[0])
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -244,11 +244,11 @@ func TestOpenDecompressesZstd(t *testing.T) {
 	dir := t.TempDir()
 	writeZstdFile(t, dir, "access.log.1.zst", "hello from zstd\n")
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	r, err := Open(groups[0].Files[0])
+	r, err := Open(LocalFileSource{}, groups[0].Files[0])
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -267,11 +267,11 @@ func TestOpenDecompressesBzip2(t *testing.T) {
 	dir := t.TempDir()
 	writeBz2File(t, dir, "access.log.1.bz2")
 
-	groups, err := Discover(dir)
+	groups, err := Discover(LocalFileSource{}, dir)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	r, err := Open(groups[0].Files[0])
+	r, err := Open(LocalFileSource{}, groups[0].Files[0])
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

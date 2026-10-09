@@ -581,7 +581,10 @@ var helpText = strings.TrimLeft(`
   directory right now, the same way "l" (Look) always acts on whatever
   is currently selected. No arguments, no flags: stand somewhere (e.g.
   /var/log, /var/log/nginx, a Docker container's own log directory) and
-  press "jL".
+  press "jL". Works the same way while the active panel is connected
+  to a remote session ("gc"/"@") — reads through that same connection
+  instead of the local filesystem, since it's already open; the
+  selection screen's own title names which connection in that case.
 
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed

@@ -2673,7 +2673,7 @@ func (r *Root) wirePanel(panel *Panel) {
 	// syncClipboardHighlight's own doc comment for why this is
 	// Root-level, shared state rather than something a tab could ever
 	// start blank on.
-	panel.setClipboard(r.clipboard, r.clipboardCut)
+	panel.setClipboard(r.clipboard, r.clipboardCut, r.clipboardSourceClient)
 }
 
 // captureMouseOnPanel makes panel the active one before handing the
@@ -4204,7 +4204,7 @@ func (r *Root) setClipboard(paths []string, cut bool) {
 // reload.
 func (r *Root) syncClipboardHighlight() {
 	r.forEachTab(func(p *Panel) {
-		p.setClipboard(r.clipboard, r.clipboardCut)
+		p.setClipboard(r.clipboard, r.clipboardCut, r.clipboardSourceClient)
 	})
 }
 

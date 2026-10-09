@@ -286,7 +286,17 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 // Enter simply opens whichever row the cursor is already on (see
 // openLogAuditViewer's own doc comment for why).
 func (r *Root) renderLogAuditSelection() {
-	renderCloseTitleBar(r.logAuditTitleBar, " Log Audit — select files ", r.lastScreenWidth)
+	title := " Log Audit — select files"
+	if r.panel.isRemote() {
+		// Named explicitly, not just "(remote)" — per CLAUDE.md's own
+		// "remote views must never describe local paths or metadata"
+		// rule: this screen now genuinely reads through a remote
+		// connection (see currentLogAuditSource, logauditsource.go),
+		// so saying so, and which one, is the honest thing to show
+		// right where the directory itself is already named.
+		title += " — " + r.panel.remoteConn.Label()
+	}
+	renderCloseTitleBar(r.logAuditTitleBar, title+" ", r.lastScreenWidth)
 	r.logAuditTable.Clear()
 
 	header := func(col int, text string) {
@@ -315,17 +325,22 @@ func (r *Root) renderLogAuditSelection() {
 		row := i + 1
 		r.logAuditTable.SetCell(row, logAuditSelName,
 			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true))
+		// Text, not MutedTextColor — per the user's own explicit report:
+		// Name already uses Text (white), and Info/Size/Modified looked
+		// inconsistently dimmer next to it for no real reason (none of
+		// these three carry any "this is secondary" meaning Name
+		// itself doesn't also have).
 		r.logAuditTable.SetCell(row, logAuditSelInfo,
-			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
+			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.Text).SetSelectable(true))
 		sizeText, modText := "", ""
 		if newest, ok := g.Newest(); ok {
 			sizeText = humanSize(newest.Size)
 			modText = logAuditTimeText(newest.ModTime)
 		}
 		r.logAuditTable.SetCell(row, logAuditSelSize,
-			tview.NewTableCell(sizeText).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
+			tview.NewTableCell(sizeText).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelModified,
-			tview.NewTableCell(modText).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
+			tview.NewTableCell(modText).SetTextColor(r.theme.Text).SetSelectable(true))
 	}
 
 	if cur, _ := r.logAuditTable.GetSelection(); cur < 1 || cur > len(r.logAuditGroups) {
