@@ -161,7 +161,12 @@ func (r *Root) newLogAuditViewerScreen() {
 	// structurally, the same kind of question.
 	r.logAuditTimeField = tview.NewInputField()
 	r.logAuditTimeField.SetLabel("Time: ")
-	r.logAuditTimeField.SetPlaceholder(`last 7 days, after 2026-09-01`)
+	// A third example covering "between", per the user's own explicit
+	// request — filterexpr.ParseMtime's own grammar (see
+	// logAuditEntryVisible's doc comment above) needs exactly two
+	// moments joined by "and", unlike "last"/"after" which take just
+	// one.
+	r.logAuditTimeField.SetPlaceholder(`last 7 days, after 2026-09-01, between 2026-09-01 and 2026-09-30`)
 	r.logAuditTimeField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)

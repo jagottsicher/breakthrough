@@ -1643,8 +1643,8 @@
     },
     {
       "path": "internal/ui/logauditscreen.go",
-      "size": 37999,
-      "sha256": "1341aa24eff558fb4b69b8ad2db26f543e07239bd9327fd976d78767b3a307ee"
+      "size": 38299,
+      "sha256": "d0cfb58371be603b3b0aa160836069c544a7c23030208f89847085b55e4fe752"
     },
     {
       "path": "internal/ui/logauditstats.go",
@@ -27170,14 +27170,14 @@
       "name": "newLogAuditDetailScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 235
+      "line": 240
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditGroupInfo",
       "kind": "function",
-      "line": 256
+      "line": 261
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27185,56 +27185,56 @@
       "name": "renderLogAuditSelection",
       "kind": "method",
       "receiver": "*Root",
-      "line": 283
+      "line": 288
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditTimeText",
       "kind": "function",
-      "line": 333
+      "line": 338
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditLevelColor",
       "kind": "function",
-      "line": 343
+      "line": 348
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditMatchesKeyword",
       "kind": "function",
-      "line": 360
+      "line": 365
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditMinLevel",
       "kind": "function",
-      "line": 373
+      "line": 378
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditEntryVisible",
       "kind": "function",
-      "line": 393
+      "line": 398
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditMaxRenderedRows",
       "kind": "const",
-      "line": 419
+      "line": 424
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditscreen.go",
       "name": "logAuditHighlight",
       "kind": "function",
-      "line": 430
+      "line": 435
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27242,7 +27242,7 @@
       "name": "logAuditFilterFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 457
+      "line": 462
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27250,7 +27250,7 @@
       "name": "restyleLogAuditFilterFields",
       "kind": "method",
       "receiver": "*Root",
-      "line": 489
+      "line": 494
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27258,7 +27258,7 @@
       "name": "renderLogAuditFocusIndicator",
       "kind": "method",
       "receiver": "*Root",
-      "line": 516
+      "line": 521
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27266,7 +27266,7 @@
       "name": "renderLogAuditViewer",
       "kind": "method",
       "receiver": "*Root",
-      "line": 538
+      "line": 543
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27274,7 +27274,7 @@
       "name": "logAuditEntryAt",
       "kind": "method",
       "receiver": "*Root",
-      "line": 677
+      "line": 682
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27282,7 +27282,7 @@
       "name": "navigateLogAuditLevel",
       "kind": "method",
       "receiver": "*Root",
-      "line": 692
+      "line": 697
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27290,7 +27290,7 @@
       "name": "openLogAuditDetail",
       "kind": "method",
       "receiver": "*Root",
-      "line": 720
+      "line": 725
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27298,7 +27298,7 @@
       "name": "closeLogAuditDetail",
       "kind": "method",
       "receiver": "*Root",
-      "line": 758
+      "line": 763
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27306,7 +27306,7 @@
       "name": "captureLogAuditSelectionTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 766
+      "line": 771
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27314,7 +27314,7 @@
       "name": "logAuditViewerFieldDone",
       "kind": "method",
       "receiver": "*Root",
-      "line": 784
+      "line": 789
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27322,7 +27322,7 @@
       "name": "captureLogAuditViewerTableKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 801
+      "line": 806
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27330,7 +27330,7 @@
       "name": "captureLogAuditDetailKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 838
+      "line": 843
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27338,7 +27338,7 @@
       "name": "applyLogAuditTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 848
+      "line": 853
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -45231,5 +45231,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "9db03b0ac7d0ffe88c0f937c0558fa9669c1846564e6f670706c3a9bfe84a820"
+  "merkle_root": "406fc68541ebfea928e1555a787b252660251021e9db211fbeac7dbbda22bc26"
 }
