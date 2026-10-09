@@ -1574,7 +1574,7 @@
     {
       "path": "internal/ui/gitbreach.go",
       "size": 12541,
-      "sha256": "ab94249db15db59731e6a2fda1cf967bf91d251d8660c9b444665770382d3568"
+      "sha256": "f3150636492cee8fa65532709fc21cfa08f6ea5cedbc0455b991516444d35da0"
     },
     {
       "path": "internal/ui/gitbreach_test.go",
@@ -46091,5 +46091,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "34e6681c0ef14117bdd9d425dcb4f4ea29b13409edd9188c9e70707c893abc92"
+  "merkle_root": "e89ebb1fde81778b3068ad7d74e7e0a849e1d6b6443eb0ee00b0a66966a74d83"
 }
