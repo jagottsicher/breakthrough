@@ -92,6 +92,42 @@ func TestLogAuditTimelineLabelIncludesDateOnlyAcrossDayBoundary(t *testing.T) {
 	}
 }
 
+// TestRenderLogAuditTimelineIgnoresUnlaidOutDefaultWidth pins a real,
+// user-reported bug: a freshly-opened group's very first timeline
+// render used tview.Box's own un-laid-out default width (15 — see
+// logAuditTimelineUnlaidOutWidth's own doc comment) as if it were the
+// real screen width, producing a narrow bar that didn't match the
+// width every later render of the exact same entries correctly used —
+// confusingly different-looking for no reason the user had any way to
+// know about.
+func TestRenderLogAuditTimelineIgnoresUnlaidOutDefaultWidth(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.SetRect(0, 0, 200, 50)
+	r.logAuditTable.Select(1, 0)
+
+	// logAuditTimelineView has never been drawn at this point — still
+	// at tview's own NewBox default (0,0,15,10) — the exact state a
+	// freshly-opened group's first render actually runs under (see
+	// openLogAuditViewer: renderLogAuditViewer runs before pushOverlay,
+	// and pushOverlay alone never cascades a real rect to a child —
+	// only a real Draw() does).
+	if _, _, w, _ := r.logAuditTimelineView.GetRect(); w != 15 {
+		t.Fatalf("setup: logAuditTimelineView width = %d, want tview's own un-laid-out default 15", w)
+	}
+
+	r.openLogAuditViewer()
+
+	got := r.logAuditTimelineView.GetText(true)
+	if got == "" {
+		t.Fatal("expected a non-empty timeline for two distinct timestamps")
+	}
+	if len(got) < 60 {
+		t.Errorf("timeline = %q (%d chars), want it sized against the real screen width (200), not tview's own un-laid-out default (15)", got, len(got))
+	}
+}
+
 func TestLogAuditCountsByLevelOmitsZeroAndOrdersBySeverity(t *testing.T) {
 	entries := []logview.Entry{
 		{Level: logview.LevelError}, {Level: logview.LevelError}, {Level: logview.LevelInfo},

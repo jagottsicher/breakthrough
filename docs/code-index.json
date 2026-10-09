@@ -1648,13 +1648,13 @@
     },
     {
       "path": "internal/ui/logauditstats.go",
-      "size": 14360,
-      "sha256": "b39ad567ee7f1c66c491fb5ba748373b5d828aed2225134a122fa2a2ace18e2d"
+      "size": 15912,
+      "sha256": "f0671e7efdc3944a438fa3a595bb7917c459fdc86ee1064afa883bcd207e2989"
     },
     {
       "path": "internal/ui/logauditstats_test.go",
-      "size": 5061,
-      "sha256": "f3074b442c5d3bde45bf471a92fcf9aa4921808bf979ee3e72f7245d3486979b"
+      "size": 6652,
+      "sha256": "3ca1870faf855121553523668891dbb8c55c850b3755c66b8d797e73667252ee"
     },
     {
       "path": "internal/ui/logaudittitlebar_test.go",
@@ -27273,59 +27273,66 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
+      "name": "logAuditTimelineUnlaidOutWidth",
+      "kind": "const",
+      "line": 217
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/logauditstats.go",
       "name": "renderLogAuditTimeline",
       "kind": "method",
       "receiver": "*Root",
-      "line": 201
+      "line": 224
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditLevelCount",
       "kind": "type",
-      "line": 215
+      "line": 238
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditSourceCount",
       "kind": "type",
-      "line": 220
+      "line": 243
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditLevelOrder",
       "kind": "var",
-      "line": 229
+      "line": 252
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditCountsByLevel",
       "kind": "function",
-      "line": 239
+      "line": 262
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditStatsMaxSources",
       "kind": "const",
-      "line": 257
+      "line": 280
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditCountsBySource",
       "kind": "function",
-      "line": 264
+      "line": 287
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats.go",
       "name": "logAuditStatsText",
       "kind": "function",
-      "line": 289
+      "line": 312
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27333,7 +27340,7 @@
       "name": "newLogAuditStatsScreen",
       "kind": "method",
       "receiver": "*Root",
-      "line": 313
+      "line": 336
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27341,7 +27348,7 @@
       "name": "logAuditViewerVisibleEntries",
       "kind": "method",
       "receiver": "*Root",
-      "line": 331
+      "line": 354
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27349,7 +27356,7 @@
       "name": "openLogAuditStats",
       "kind": "method",
       "receiver": "*Root",
-      "line": 349
+      "line": 372
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27357,7 +27364,7 @@
       "name": "closeLogAuditStats",
       "kind": "method",
       "receiver": "*Root",
-      "line": 369
+      "line": 392
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27365,7 +27372,7 @@
       "name": "captureLogAuditStatsKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 376
+      "line": 399
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27373,7 +27380,7 @@
       "name": "applyLogAuditStatsTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 387
+      "line": 410
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27413,23 +27420,30 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats_test.go",
+      "name": "TestRenderLogAuditTimelineIgnoresUnlaidOutDefaultWidth",
+      "kind": "function",
+      "line": 103
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/logauditstats_test.go",
       "name": "TestLogAuditCountsByLevelOmitsZeroAndOrdersBySeverity",
       "kind": "function",
-      "line": 95
+      "line": 131
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats_test.go",
       "name": "TestLogAuditCountsBySourceSortsByCountThenName",
       "kind": "function",
-      "line": 111
+      "line": 147
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/logauditstats_test.go",
       "name": "TestLogAuditStatsTextReportsTotalsAndNoSourceFallback",
       "kind": "function",
-      "line": 124
+      "line": 160
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -37760,14 +37774,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
@@ -45105,5 +45119,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "94a616c6cb1fbb322ecbcf9df6ea378f21e7da721ce8a1f651022eca2ce02390"
+  "merkle_root": "9ed9e8e53086751883fb2a3432e2d54e383cb8c9917e970fe579764865abd665"
 }
