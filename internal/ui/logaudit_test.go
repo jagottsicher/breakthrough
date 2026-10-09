@@ -350,6 +350,36 @@ func TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick(t *testing.
 	}
 }
 
+// TestLogAuditFilterLabelsAreShortWithExamplesAsPlaceholders pins the
+// user's own explicit request: the Time/Level fields' own "(e.g. ...)"
+// examples used to be baked into the label text itself, shown
+// permanently; they now live in each field's own placeholder instead,
+// visible only while it's actually empty, with the labels themselves
+// shortened to match.
+func TestLogAuditFilterLabelsAreShortWithExamplesAsPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	for _, tc := range []struct {
+		field *tview.InputField
+		label string
+	}{
+		{r.logAuditKeywordField, "Filter: "},
+		{r.logAuditTimeField, "Time: "},
+		{r.logAuditLevelField, "Level >= "},
+	} {
+		if got := tc.field.GetLabel(); got != tc.label {
+			t.Errorf("label = %q, want %q", got, tc.label)
+		}
+		if strings.Contains(tc.field.GetLabel(), "e.g.") {
+			t.Errorf("label = %q, want the example moved to the field's own placeholder, not left in the label", tc.field.GetLabel())
+		}
+	}
+}
+
 func TestLogAuditGroupInfo(t *testing.T) {
 	groups := []logview.FileGroup{
 		{Base: "access.log", Files: []logview.CandidateFile{

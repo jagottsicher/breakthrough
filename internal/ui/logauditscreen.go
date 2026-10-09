@@ -141,6 +141,11 @@ func (r *Root) newLogAuditViewerScreen() {
 
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
+	// Placeholder, not a parenthetical in the label — per the user's
+	// own explicit request to move every field's own example into the
+	// field itself (shown only while it's actually empty), the same
+	// row Time/Level's own "(e.g. ...)" labels used to carry instead.
+	r.logAuditKeywordField.SetPlaceholder("keyword")
 	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
@@ -155,7 +160,8 @@ func (r *Root) newLogAuditViewerScreen() {
 	// already accept, rather than a third date grammar for what is,
 	// structurally, the same kind of question.
 	r.logAuditTimeField = tview.NewInputField()
-	r.logAuditTimeField.SetLabel("Time (e.g. \"last 7 days\", \"after 2026-09-01\"): ")
+	r.logAuditTimeField.SetLabel("Time: ")
+	r.logAuditTimeField.SetPlaceholder(`last 7 days, after 2026-09-01`)
 	r.logAuditTimeField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
@@ -169,7 +175,8 @@ func (r *Root) newLogAuditViewerScreen() {
 	// for: a quick "show me the bad stuff" narrowing, not a precise
 	// equality filter nobody actually wants while triaging.
 	r.logAuditLevelField = tview.NewInputField()
-	r.logAuditLevelField.SetLabel("Level >= (e.g. warn): ")
+	r.logAuditLevelField.SetLabel("Level >= ")
+	r.logAuditLevelField.SetPlaceholder("warn")
 	r.logAuditLevelField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditViewerTable, r.logAuditTimeField)
