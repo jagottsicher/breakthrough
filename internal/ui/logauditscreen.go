@@ -145,7 +145,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
 	})
-	r.logAuditKeywordField.SetFocusFunc(func() { styleInput(r.logAuditKeywordField, r.theme, true) })
+	r.logAuditKeywordField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditKeywordField) })
 	r.logAuditKeywordField.SetBlurFunc(func() { styleInput(r.logAuditKeywordField, r.theme, false) })
 
 	// Time reuses filterexpr.ParseMtime verbatim (see
@@ -160,7 +160,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
 	})
-	r.logAuditTimeField.SetFocusFunc(func() { styleInput(r.logAuditTimeField, r.theme, true) })
+	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditTimeField) })
 	r.logAuditTimeField.SetBlurFunc(func() { styleInput(r.logAuditTimeField, r.theme, false) })
 
 	// Level is a *minimum* severity ("warn" shows WARN and everything
@@ -174,7 +174,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditViewerTable, r.logAuditTimeField)
 	})
-	r.logAuditLevelField.SetFocusFunc(func() { styleInput(r.logAuditLevelField, r.theme, true) })
+	r.logAuditLevelField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditLevelField) })
 	r.logAuditLevelField.SetBlurFunc(func() { styleInput(r.logAuditLevelField, r.theme, false) })
 
 	r.logAuditFilterRow = tview.NewFlex().
@@ -202,7 +202,10 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditViewerTable.SetFixed(1, 0)
 	r.logAuditViewerTable.SetInputCapture(r.captureLogAuditViewerTableKey)
 	r.logAuditViewerTable.SetSelectedFunc(func(row, col int) { r.openLogAuditDetail(row) })
-	r.logAuditViewerTable.SetFocusFunc(func() { r.renderLogAuditFocusIndicator(true) })
+	r.logAuditViewerTable.SetFocusFunc(func() {
+		r.renderLogAuditFocusIndicator(true)
+		r.restyleLogAuditFilterFields(nil)
+	})
 	r.logAuditViewerTable.SetBlurFunc(func() { r.renderLogAuditFocusIndicator(false) })
 
 	r.logAuditViewerHint = tview.NewTextView()
@@ -440,6 +443,46 @@ func logAuditHighlight(text, keyword string, bg tcell.Color) string {
 		restLower = restLower[idx+len(keyword):]
 	}
 	return b.String()
+}
+
+// logAuditFilterFields lists the Keyword/Time/Level fields together,
+// for restyleLogAuditFilterFields.
+func (r *Root) logAuditFilterFields() []*tview.InputField {
+	return []*tview.InputField{r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField}
+}
+
+// restyleLogAuditFilterFields re-styles every Log Audit filter field,
+// highlighting only focused (styleInput's own InputFocusedBackground)
+// and graying out every other one (InputBackground) — nil highlights
+// none, used when focus moves to the list instead of any field.
+//
+// Works around a real, confirmed tview gap rather than a bug in our
+// own BlurFunc wiring: NewInputField's own constructor (verified
+// directly against inputfield.go) forwards its embedded TextArea's
+// Focus event to the InputField's own registered FocusFunc —
+// "// Forward focus event to the input field." — but never adds the
+// matching Blur forwarder. A Tab-driven focus change still blurs the
+// *InputField itself (Root's own code calls r.app.SetFocus on the
+// InputField value directly — see logAuditViewerFieldDone), so that
+// path's own SetBlurFunc call still fires correctly. A mouse click,
+// though, is handled by TextArea.MouseHandler (see its own
+// MouseLeftDown case), which hands focus to the TextArea *value*, not
+// the InputField wrapping it — so from that point on, Application's
+// own a.focus.Blur() blurs the TextArea, which has no corresponding
+// forwarder back out to the InputField's own BlurFunc, and the field
+// stays visually "focused" forever after even once real focus has
+// long since moved elsewhere — confirmed directly against a
+// tcell.SimulationScreen with instrumented Focus/Blur callbacks and
+// app.GetFocus() printed before/after each click, not assumed from
+// reading tview's source alone. Reusing styleInput's existing Blur
+// path as the single source of "which look applies" means a user-
+// visible freshness check (the known-forwarded Focus event) rather
+// than depending on the known-broken Blur chain is what each field's
+// own FocusFunc now calls instead of styleInput directly.
+func (r *Root) restyleLogAuditFilterFields(focused *tview.InputField) {
+	for _, f := range r.logAuditFilterFields() {
+		styleInput(f, r.theme, f == focused)
+	}
 }
 
 // renderLogAuditFocusIndicator paints the row itself in

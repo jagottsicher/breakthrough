@@ -275,6 +275,81 @@ func TestRenderLogAuditViewerKeepsGoodEntriesWhenOneFileFails(t *testing.T) {
 	}
 }
 
+// clickPrimitive simulates a real left-click on p — MouseLeftDown then
+// MouseLeftUp at its own rect's center, through root's actual
+// MouseHandler chain, the same path a real click takes (not a direct
+// r.app.SetFocus(p) call, which would bypass the exact tview quirk
+// TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick
+// below exists to pin).
+func clickPrimitive(root *Root, p tview.Primitive) {
+	x, y, w, h := p.GetRect()
+	cx, cy := x+w/2, y+h/2
+	handler := root.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(cx, cy, tcell.Button1, 0), func(p tview.Primitive) { root.app.SetFocus(p) })
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(cx, cy, tcell.ButtonNone, 0), func(p tview.Primitive) { root.app.SetFocus(p) })
+}
+
+// TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick pins
+// a real, confirmed tview gap (see restyleLogAuditFilterFields' own
+// doc comment, logauditscreen.go, for the full mechanism): tview's
+// InputField forwards its embedded TextArea's Focus event back out to
+// the InputField's own FocusFunc, but never forwards Blur — so a mouse
+// click (unlike Tab, which focuses the *InputField directly) leaves
+// the previously-focused field's own background stuck at
+// InputFocusedBackground forever, since the real tview.Primitive that
+// actually loses focus on the next click is the TextArea, not the
+// InputField whose BlurFunc we registered. The user's own explicit,
+// live report: "ich kann auch alle zu Fokusfarbe machen" — clicking
+// through all three fields left every one of them stuck highlighted.
+func TestRestyleLogAuditFilterFieldsFixesStuckFocusColorOnMouseClick(t *testing.T) {
+	dir := t.TempDir()
+	writeLogAuditFixture(t, dir)
+	r := newTestRootForLogAudit(t, dir)
+	r.logAuditTable.Select(1, 0)
+	r.openLogAuditViewer()
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(200, 50)
+	r.SetRect(0, 0, 200, 50)
+	r.Draw(screen)
+
+	fieldBG := func(f *tview.InputField) tcell.Color {
+		_, bg, _ := f.GetFieldStyle().Decompose()
+		return bg
+	}
+
+	clickPrimitive(r, r.logAuditKeywordField)
+	r.Draw(screen)
+	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputFocusedBackground {
+		t.Fatalf("setup: Keyword bg = %v after its own click, want InputFocusedBackground %v", got, r.theme.InputFocusedBackground)
+	}
+
+	clickPrimitive(r, r.logAuditTimeField)
+	r.Draw(screen)
+	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputBackground {
+		t.Errorf("Keyword bg = %v after clicking Time, want it back to InputBackground %v, not stuck highlighted", got, r.theme.InputBackground)
+	}
+	if got := fieldBG(r.logAuditTimeField); got != r.theme.InputFocusedBackground {
+		t.Errorf("Time bg = %v, want InputFocusedBackground %v (it's the one just clicked)", got, r.theme.InputFocusedBackground)
+	}
+
+	clickPrimitive(r, r.logAuditLevelField)
+	r.Draw(screen)
+	if got := fieldBG(r.logAuditKeywordField); got != r.theme.InputBackground {
+		t.Errorf("Keyword bg = %v after clicking Level, want InputBackground %v", got, r.theme.InputBackground)
+	}
+	if got := fieldBG(r.logAuditTimeField); got != r.theme.InputBackground {
+		t.Errorf("Time bg = %v after clicking Level, want InputBackground %v — not stuck highlighted either", got, r.theme.InputBackground)
+	}
+	if got := fieldBG(r.logAuditLevelField); got != r.theme.InputFocusedBackground {
+		t.Errorf("Level bg = %v, want InputFocusedBackground %v (it's the one just clicked)", got, r.theme.InputFocusedBackground)
+	}
+}
+
 func TestLogAuditGroupInfo(t *testing.T) {
 	groups := []logview.FileGroup{
 		{Base: "access.log", Files: []logview.CandidateFile{
