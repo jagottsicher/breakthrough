@@ -336,6 +336,9 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// The Log Audit screen (see logauditscreen.go/applyLogAuditTheme).
 	r.applyLogAuditTheme(theme)
 
+	// The Git breach dashboard (see gitbreachscreen.go/applyGitBreachTheme).
+	r.applyGitBreachTheme(theme)
+
 	if r.compareTreeTable != nil {
 		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
 		r.compareTreeHint.SetText(compareTreeHintText)

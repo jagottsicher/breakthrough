@@ -104,6 +104,8 @@ var helpText = strings.TrimLeft(`
                 its own queue) · mC Cancel Compress/Extract (same
                 question) — mR/mC never touch each other or Paste
     j  tools    jc Compress… · je Extract · jE Extract, del org ·
+                jg Git breach dashboard (stage/commit for the repo
+                under the active panel) ·
                 jm Mounts screen (what's mounted right now) ·
                 jn Network Tools screen · jf Firewall screen (this
                 host's own actual rules) · jh Hardware Tools screen ·
@@ -573,6 +575,30 @@ var helpText = strings.TrimLeft(`
   the log itself is written oldest-first, but read the other way around
   here, the same "tail, not head" reasoning a live log is usually
   browsed with.
+
+[::b]Git breach dashboard ("jg")[::-]
+
+  Like "jL" (Log Audit) below, not a fixed destination: "jg" resolves
+  the git repository containing the active panel's own current
+  directory — its own parent directories included, exactly the way a
+  real "git status" typed there would find it — and opens a dashboard
+  on it. Several boxes at once rather than one full-screen list: Status
+  (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
+  untracked, Conflicts first if any), and three stub boxes (Branches/
+  Commits/Stash) reserved for a later Ausbaustufe. The Main box on the
+  right shows the diff of whichever row in Files the cursor is on —
+  staged vs. unstaged, or the raw content for an untracked file.
+  Local only: there is no command-execution channel to run git against
+  a remote session, so "jg" refuses visibly on a remote-connected panel
+  or inside an archive view rather than reading the wrong repository on
+  this machine under the same-looking path.
+
+    Space    Stage the row under the cursor if it isn't, unstage it if
+             it is (does nothing on a Conflicts row)
+    c        Commit whatever is currently staged, after typing a
+             message (does nothing with nothing staged)
+    r        Re-read the repository's current status
+    Esc      Close
 
 [::b]Log Audit screen ("jL")[::-]
 
