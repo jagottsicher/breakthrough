@@ -158,6 +158,20 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// apt's own eipp.log — RFC822-style package stanzas, no
+			// timestamp anywhere at all, confirmed against the user's
+			// own real file. See FormatEIPP's own doc comment
+			// (detect.go) for the full shape.
+			name: "apt eipp.log",
+			want: FormatEIPP,
+			in: []string{
+				"Package: node-has-values",
+				"Architecture: all",
+				"Version: 2.0.1-4",
+				"Status: installed",
+			},
+		},
+		{
 			name: "plain fallback",
 			want: FormatPlain,
 			in: []string{

@@ -37,6 +37,24 @@ const (
 	// genuinely different, stateful parsing pass instead of the
 	// ordinary line-by-line parseLine loop every other format uses.
 	FormatAptHistory
+	// FormatEIPP is apt's own eipp.log (/var/lib/apt/eipp.log.xz,
+	// Extended Installed Packages Protocol) — RFC822-style stanzas, one
+	// per package, separated by blank lines ("Package:", "Version:",
+	// "Status:", "Depends:", ...). Genuinely unlike every format above:
+	// there is no timestamp anywhere in the file at all, not per line,
+	// not per stanza — it's a snapshot of package state apt regenerates
+	// fresh immediately before each transaction, not a sequence of
+	// timed events, so every entry's own Time stays exactly
+	// fallbackTime (the file's own mtime) regardless. The real value
+	// here is Source: each stanza's own "Package: " line names every
+	// other line in that same stanza too — confirmed against the
+	// user's own real eipp.log, and the user's own explicit choice,
+	// once told plainly that no real timestamp exists to recover, to
+	// still want that Source grouping. See parseEIPPEntries' own doc
+	// comment (parse.go) for the same stateful-pass shape
+	// parseAptHistoryEntries already uses, carrying "Package" forward
+	// instead of "Start-Date".
+	FormatEIPP
 )
 
 // String names Format for diagnostics and the selection screen's own
@@ -55,6 +73,8 @@ func (f Format) String() string {
 		return "access log (Apache/nginx/CUPS)"
 	case FormatAptHistory:
 		return "apt history.log"
+	case FormatEIPP:
+		return "apt eipp.log (no timestamps)"
 	default:
 		return "plain text"
 	}
@@ -165,6 +185,13 @@ var (
 	// file; parseAptHistoryEntries (parse.go) does the real,
 	// stateful per-field work.
 	reAptHistoryField = regexp.MustCompile(`^(?:Start-Date|End-Date|Commandline|Requested-By|Install|Upgrade|Remove|Purge|Downgrade|Reinstall|Error):\s`)
+	// reEIPPField matches any of eipp.log's own fixed field labels —
+	// every non-blank line in a real eipp.log starts with one of these
+	// (see FormatEIPP's own doc comment for the full shape and why
+	// there's no timestamp at all to look for here); parseEIPPEntries
+	// (parse.go) does the real, stateful per-field work (grouping every
+	// field under its own stanza's "Package:").
+	reEIPPField = regexp.MustCompile(`^(?:Package|Architecture|Version|Status|Multi-Arch|APT-ID|Mode|Depends|Pre-Depends|Recommends|Suggests|Breaks|Conflicts|Provides|Replaces|Enhances|Priority|Section|Essential|Installed-Size|Maintainer|Description|Homepage):\s`)
 )
 
 // detectSampleSize is how many of a file's own leading non-blank lines
@@ -212,6 +239,8 @@ func Detect(sample []string) Format {
 			counts[FormatCLF]++
 		case reAptHistoryField.MatchString(l):
 			counts[FormatAptHistory]++
+		case reEIPPField.MatchString(l):
+			counts[FormatEIPP]++
 		case reGenericTAB.MatchString(l):
 			counts[FormatGeneric]++
 		}

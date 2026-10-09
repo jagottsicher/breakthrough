@@ -266,6 +266,49 @@ func TestParseAllGenericNginxErrorLog(t *testing.T) {
 	}
 }
 
+// TestParseAllEIPPGroupsFieldsBySourcePackage pins the user's own
+// explicit choice: eipp.log has no timestamp anywhere (every entry's
+// own Time is just fallbackTime), but every field within one stanza
+// should still show the stanza's own "Package:" as Source — and a
+// second stanza's own Package must correctly replace the first's
+// after the blank line between them, not leak across.
+func TestParseAllEIPPGroupsFieldsBySourcePackage(t *testing.T) {
+	input := strings.Join([]string{
+		"Package: node-has-values",
+		"Architecture: all",
+		"Version: 2.0.1-4",
+		"Status: installed",
+		"",
+		"Package: gpgconf",
+		"Version: 2.4.9-7+b1",
+	}, "\n") + "\n"
+
+	fallback := time.Date(2026, 9, 30, 20, 5, 32, 0, time.UTC)
+	entries, format, err := ParseAll(strings.NewReader(input), "eipp.log", fallback)
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatEIPP {
+		t.Fatalf("format = %v, want FormatEIPP", format)
+	}
+	if len(entries) != 6 {
+		t.Fatalf("len(entries) = %d, want 6", len(entries))
+	}
+	for i := 0; i < 4; i++ {
+		if entries[i].Source != "node-has-values" {
+			t.Errorf("entries[%d].Source = %q, want %q", i, entries[i].Source, "node-has-values")
+		}
+		if !entries[i].Time.Equal(fallback) {
+			t.Errorf("entries[%d].Time = %v, want fallback %v (eipp.log has no real timestamp)", i, entries[i].Time, fallback)
+		}
+	}
+	for i := 4; i < 6; i++ {
+		if entries[i].Source != "gpgconf" {
+			t.Errorf("entries[%d].Source = %q, want %q — the second stanza's Package must not still be the first's", i, entries[i].Source, "gpgconf")
+		}
+	}
+}
+
 // TestParseAllAptHistoryUsesMostRecentStartDate pins the real, user-
 // reported gap: apt history.log's own non-timestamped lines
 // (Commandline, Install, ...) used to all collapse onto the whole

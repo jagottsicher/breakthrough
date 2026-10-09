@@ -56,6 +56,9 @@ func ParseAll(r io.Reader, fileName string, fallbackTime time.Time) ([]Entry, Fo
 	if format == FormatAptHistory {
 		return parseAptHistoryEntries(lines, fileName, fallbackTime), format, nil
 	}
+	if format == FormatEIPP {
+		return parseEIPPEntries(lines, fileName, fallbackTime), format, nil
+	}
 
 	entries := make([]Entry, 0, len(lines))
 	for i, line := range lines {
@@ -380,6 +383,46 @@ func parseAptHistoryTimestamp(line, prefix string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return t, true
+}
+
+// eippPackagePrefix is eipp.log's own stanza header — the one field
+// every other field in the same stanza is grouped under (see
+// parseEIPPEntries' own doc comment).
+const eippPackagePrefix = "Package:"
+
+// parseEIPPEntries is eipp.log's own dedicated parsing pass — the same
+// stateful shape parseAptHistoryEntries already uses, carrying a
+// stanza's own "Package: " value forward as Source for every other
+// field line in that same stanza, reset at each blank line (a real
+// eipp.log always starts a fresh stanza with its own "Package:" line
+// right after one — see FormatEIPP's own doc comment, detect.go, for
+// why). There is no timestamp anywhere in this format at all, by
+// design — a snapshot of package state, not a sequence of timed
+// events — so every entry's own Time is simply fallbackTime
+// throughout; confirmed against the user's own real eipp.log, and the
+// user's own explicit choice to still want this Source grouping once
+// told plainly that no real timestamp exists to recover here.
+func parseEIPPEntries(lines []string, fileName string, fallbackTime time.Time) []Entry {
+	entries := make([]Entry, 0, len(lines))
+	currentPackage := ""
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			currentPackage = ""
+			continue
+		}
+		if pkg, ok := strings.CutPrefix(line, eippPackagePrefix); ok {
+			currentPackage = strings.TrimSpace(pkg)
+		}
+		entries = append(entries, Entry{
+			Time:    fallbackTime,
+			Source:  currentPackage,
+			Message: line,
+			Raw:     line,
+			File:    fileName,
+			Line:    i + 1,
+		})
+	}
+	return entries
 }
 
 // timeLayouts are tried in order by parseAnyTime — RFC3339(Nano) first

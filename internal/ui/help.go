@@ -611,8 +611,11 @@ var helpText = strings.TrimLeft(`
   included; apt's own /var/log/apt/history.log (a transaction's own
   Start-Date carried forward onto every untimestamped line in it,
   Commandline/Install/Upgrade/... included, until the next Start-Date
-  or the transaction's own End-Date); or plain text as a fallback.
-  .gz/.xz/.zst/.bz2 files are decompressed transparently.
+  or the transaction's own End-Date); apt's own eipp.log (no
+  timestamp anywhere in this one at all — a snapshot of package
+  state, not a sequence of timed events — but every field still shown
+  under its own stanza's "Package:" as Source); or plain text as a
+  fallback. .gz/.xz/.zst/.bz2 files are decompressed transparently.
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar
