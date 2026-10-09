@@ -684,6 +684,13 @@ func styleList(l *tview.List, theme config.ResolvedTheme) {
 // showed InputBackground/InputFocusedBackground, a real, user-
 // reported mismatch, not a hypothetical one. A field with no label at
 // all (most callers here) is unaffected either way.
+//
+// The label's own background always stays InputBackground, never
+// InputFocusedBackground — per the user's own explicit, later report:
+// a label that turned the same focused color as the field itself made
+// it harder to tell the two apart at a glance, when the whole point of
+// a focus color is to stand out against something that stays put. Only
+// the field/placeholder styles below still react to focused.
 func styleInput(field *tview.InputField, theme config.ResolvedTheme, focused bool) {
 	background := theme.InputBackground
 	if focused {
@@ -692,7 +699,7 @@ func styleInput(field *tview.InputField, theme config.ResolvedTheme, focused boo
 	field.SetFieldBackgroundColor(background)
 	field.SetBackgroundColor(background)
 	field.SetFieldTextColor(theme.TextColor)
-	field.SetLabelStyle(tcell.StyleDefault.Background(background).Foreground(theme.TextColor))
+	field.SetLabelStyle(tcell.StyleDefault.Background(theme.InputBackground).Foreground(theme.TextColor))
 	field.SetPlaceholderStyle(tcell.StyleDefault.Background(background).Foreground(theme.MutedTextColor))
 }
 

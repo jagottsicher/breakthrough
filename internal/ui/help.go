@@ -596,8 +596,9 @@ var helpText = strings.TrimLeft(`
 
   Step 2 — Log Audit view: every selected file's own lines, merged into
   one chronological stream, opening with the list itself already
-  focused (the row just above its header shows "● List" while it is —
-  Tab/Shift+Tab move focus to Filter/Time/Level instead, see below).
+  focused (the row just above its header turns the same color as a
+  focused input field while it is — Tab/Shift+Tab move focus to
+  Filter/Time/Level instead, see below).
   The format of each file (JSON Lines, syslog RFC 3164/5424, a generic
   "timestamp level message" line — comma or dot before the
   milliseconds, either one — or plain text as a fallback) is detected
@@ -608,12 +609,17 @@ var helpText = strings.TrimLeft(`
   instead. The title bar shows running counts (events/files/skipped/
   errors/warnings, plus how many entries currently match if the filters
   narrow it, and "● following" while follow is on). Clicking the Time
-  column header reverses the list between oldest-first (the default)
-  and newest-first, the same arrow-suffix convention the panel's own
+  column header reverses the list between newest-first (the default,
+  so the most recent activity is right there without scrolling) and
+  oldest-first, the same arrow-suffix convention the panel's own
   Name/Size/Modified column headers already use. A mini-timeline above
-  the table shows the matching entries' own density over time — red
-  where a bucket contains an error, the app's own warning color where
-  it contains a warning but nothing worse.
+  the table shows the matching entries' own density over time, labeled
+  with its own start/end time so the scale is clear — red where a
+  bucket contains an error, the app's own warning color where it
+  contains a warning but nothing worse. It reflects the same entries
+  the table currently matches (every file in the family, narrowed by
+  whichever Filter/Time/Level filters are active), not the family's
+  full, unfiltered range.
 
     Filter          Case-insensitive substring over Source and Message,
                      narrowing the list live and highlighting every
