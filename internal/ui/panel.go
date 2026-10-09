@@ -413,8 +413,21 @@ type Panel struct {
 	// selected above, survives a load(): the clipboard isn't scoped to
 	// whatever directory happens to be on screen, so navigating away
 	// and back must still show the same rows highlighted.
-	clipboardPaths map[string]bool
-	clipboardCut   bool
+	//
+	// clipboardClient mirrors Root.clipboardSourceClient alongside the
+	// paths — nil for a local Copy/Cut, or the originating panel's own
+	// remotefs.Client otherwise. Required because clipboardPaths is a
+	// bare path string: a remote tab's "/home/user/project/foo" and a
+	// local tab showing the same directory string are two different
+	// files on two different machines that merely share a path, and a
+	// local tab must never tint a row just because some *other*
+	// connection (or no connection at all) happens to have a matching
+	// path on its clipboard. rowBackground/rowBackgroundInactive only
+	// tint a row when this panel's own p.remote equals the clipboard's
+	// client too, not just when its path matches.
+	clipboardPaths  map[string]bool
+	clipboardCut    bool
+	clipboardClient remotefs.Client
 
 	// labels is the shared, app-wide color-label store (see
 	// internal/filelabels and Root.labels's own doc comment) — pushed
@@ -2244,9 +2257,14 @@ func (p *Panel) addRow(row int, ref rowRef) {
 // are then free to change independently of it). ".." (checkable
 // false) never tints even if its own path happens to match — it isn't
 // a real clipboard target, and rowRef.path for it is the parent
-// directory, not something Copy/Cut could ever have captured.
+// directory, not something Copy/Cut could ever have captured. Also
+// requires p.remote == p.clipboardClient: a path string alone never
+// identifies which filesystem it lives on, so without this a local
+// tab (or a tab connected to a different remote host) showing a
+// directory whose path string happens to match the clipboard's own
+// would wrongly tint a row that was never actually copied/cut at all.
 func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
-	if !ref.checkable || !p.clipboardPaths[ref.path] {
+	if !ref.checkable || !p.clipboardPaths[ref.path] || p.remote != p.clipboardClient {
 		return 0, false
 	}
 	if p.clipboardCut {
@@ -2262,7 +2280,7 @@ func (p *Panel) rowBackground(ref rowRef) (bg tcell.Color, ok bool) {
 // by rowSelectedStyle, for a tinted row that's also the cursor row
 // while this panel doesn't currently have real keyboard focus.
 func (p *Panel) rowBackgroundInactive(ref rowRef) (bg tcell.Color, ok bool) {
-	if !ref.checkable || !p.clipboardPaths[ref.path] {
+	if !ref.checkable || !p.clipboardPaths[ref.path] || p.remote != p.clipboardClient {
 		return 0, false
 	}
 	if p.clipboardCut {
@@ -2482,20 +2500,27 @@ func (p *Panel) paintFixedRowCells(row int, ref rowRef, focused bool) {
 }
 
 // setClipboard applies the app-wide clipboard's current contents (see
-// Root.clipboard/clipboardCut and Root.syncClipboardHighlight, which
-// calls this for every open tab, not just whichever one triggered the
-// change) to this panel's own row highlighting. Repaints whatever rows
-// are already on screen in place — nothing on disk changed, so there's
-// nothing to reload — and stores paths/cut so any row addRow builds
-// afterward (a fresh load(), not just a repaint) picks up the current
-// state too.
-func (p *Panel) setClipboard(paths []string, cut bool) {
+// Root.clipboard/clipboardCut/clipboardSourceClient and
+// Root.syncClipboardHighlight, which calls this for every open tab, not
+// just whichever one triggered the change) to this panel's own row
+// highlighting. client is Root.clipboardSourceClient, carried alongside
+// the paths so rowBackground/rowBackgroundInactive can tell this
+// panel's own filesystem apart from whichever one the clipboard's paths
+// actually belong to (see clipboardClient's own doc comment) — without
+// it, a path string alone can't distinguish a local directory from a
+// remote one, or two different remote connections, that merely happen
+// to share the same path. Repaints whatever rows are already on screen
+// in place — nothing on disk changed, so there's nothing to reload —
+// and stores paths/cut/client so any row addRow builds afterward (a
+// fresh load(), not just a repaint) picks up the current state too.
+func (p *Panel) setClipboard(paths []string, cut bool, client remotefs.Client) {
 	m := make(map[string]bool, len(paths))
 	for _, path := range paths {
 		m[path] = true
 	}
 	p.clipboardPaths = m
 	p.clipboardCut = cut
+	p.clipboardClient = client
 
 	focused := p.table.HasFocus()
 	for row := 0; row < p.table.GetRowCount(); row++ {

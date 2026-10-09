@@ -1645,7 +1645,7 @@ func TestSetClipboardTintsHeldRowAcrossWholeRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 
 	heldRow, ok := rowForPath(p, held)
 	if !ok {
@@ -1687,7 +1687,7 @@ func TestSetClipboardCutUsesItsOwnDistinctColor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, true)
+	p.setClipboard([]string{held}, true, nil)
 
 	row, ok := rowForPath(p, held)
 	if !ok {
@@ -1742,7 +1742,7 @@ func TestSetClipboardUnfocusedTintedCursorRowUsesInactiveVariant(t *testing.T) {
 	if p.table.HasFocus() {
 		t.Fatal("setup: table should start unfocused")
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 
 	heldRow, ok := rowForPath(p, held)
 	if !ok {
@@ -1791,7 +1791,7 @@ func TestFocusedTintedCursorRowLetsFocusColorWin(t *testing.T) {
 	if !p.table.HasFocus() {
 		t.Fatal("setup: table should report focused after Focus(nil)")
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 
 	row, ok := rowForPath(p, held)
 	if !ok {
@@ -1823,7 +1823,7 @@ func TestSetSelectionStyleRefreshesTintedCursorRowOnFocusChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, false) // unfocused so far
+	p.setClipboard([]string{held}, false, nil) // unfocused so far
 	row, ok := rowForPath(p, held)
 	if !ok {
 		t.Fatal("held.txt row not found")
@@ -1864,7 +1864,7 @@ func TestSetClipboardClearsSelectedStyleWhenUntinted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 	row, ok := rowForPath(p, held)
 	if !ok {
 		t.Fatal("held.txt row not found")
@@ -1873,7 +1873,7 @@ func TestSetClipboardClearsSelectedStyleWhenUntinted(t *testing.T) {
 		t.Fatal("setup: held.txt's checkbox cell should have its own SelectedStyle set before the clipboard clears")
 	}
 
-	p.setClipboard(nil, false) // clipboard cleared, e.g. a clean Cut+Paste landing
+	p.setClipboard(nil, false, nil) // clipboard cleared, e.g. a clean Cut+Paste landing
 
 	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
 		if _, set := cellSelectedBackground(p.table.GetCell(row, col)); set {
@@ -1901,7 +1901,7 @@ func TestSetClipboardUntintsRowsNoLongerHeld(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 	row, ok := rowForPath(p, held)
 	if !ok {
 		t.Fatal("held.txt row not found")
@@ -1910,7 +1910,7 @@ func TestSetClipboardUntintsRowsNoLongerHeld(t *testing.T) {
 		t.Fatal("setup: held.txt should be tinted before the clipboard clears")
 	}
 
-	p.setClipboard(nil, false) // clipboard cleared, e.g. a clean Cut+Paste landing
+	p.setClipboard(nil, false, nil) // clipboard cleared, e.g. a clean Cut+Paste landing
 
 	for _, col := range []int{colCheckbox, colType, colModifier, colName, colSizeSep, colSize, colModifiedSep, colModified} {
 		if _, tinted := cellBackground(p.table.GetCell(row, col)); tinted {
@@ -1937,7 +1937,7 @@ func TestRowBackgroundNeverTintsTheDotDotRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{parent}, false) // ".." row's own ref.path
+	p.setClipboard([]string{parent}, false, nil) // ".." row's own ref.path
 
 	row, ok := rowForPath(p, parent)
 	if !ok {
@@ -1965,7 +1965,7 @@ func TestSetClipboardSurvivesLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPanel: %v", err)
 	}
-	p.setClipboard([]string{held}, false)
+	p.setClipboard([]string{held}, false, nil)
 
 	if err := p.load(dir); err != nil {
 		t.Fatalf("load: %v", err)
@@ -1978,6 +1978,44 @@ func TestSetClipboardSurvivesLoad(t *testing.T) {
 	bg, tinted := cellBackground(p.table.GetCell(row, colName))
 	if !tinted || bg != theme.ClipboardCopyBackground {
 		t.Errorf("held.txt after reload: background = %v, tinted = %v, want it still tinted with ClipboardCopyBackground", bg, tinted)
+	}
+}
+
+// TestSetClipboardDoesNotTintALocalPanelWhoseDirectoryStringMatchesARemoteClipboard
+// pins the user's own explicit bug report: copying a file while
+// connected to a remote session, then looking at a local tab whose
+// current directory happens to be the exact same path string as the
+// remote one, must not highlight a same-named local file as if it were
+// also on the clipboard — it's a different file on a different
+// machine that merely shares a path (see clipboardClient's own doc
+// comment on Panel).
+func TestSetClipboardDoesNotTintALocalPanelWhoseDirectoryStringMatchesARemoteClipboard(t *testing.T) {
+	dir := t.TempDir()
+	held := filepath.Join(dir, "held.txt")
+	if err := os.WriteFile(held, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	theme := config.DefaultTheme().Resolve()
+	p, err := NewPanel(tview.NewApplication(), dir, theme, config.DefaultSettings())
+	if err != nil {
+		t.Fatalf("NewPanel: %v", err)
+	}
+
+	remote := newTestFakeRemote(dir)
+	remote.entries[dir] = []fsops.Entry{{Name: "held.txt"}}
+
+	// A remote Copy/Cut on a *different* panel captured held — the same
+	// path string as this local panel's own file, but a different
+	// client. syncClipboardHighlight pushes it to every tab regardless.
+	p.setClipboard([]string{held}, false, remote)
+
+	row, ok := rowForPath(p, held)
+	if !ok {
+		t.Fatal("held.txt row not found")
+	}
+	if _, tinted := cellBackground(p.table.GetCell(row, colName)); tinted {
+		t.Errorf("local held.txt tinted as if it were the remote clipboard's own file, want untinted")
 	}
 }
 
@@ -3854,7 +3892,7 @@ func TestLabelClipboardTakesPrecedenceOverLabel(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 	p.setLabels(store)
-	p.setClipboard([]string{target}, false)
+	p.setClipboard([]string{target}, false, nil)
 
 	row, ok := rowForPath(p, target)
 	if !ok {
