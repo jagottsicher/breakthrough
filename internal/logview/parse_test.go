@@ -82,6 +82,59 @@ func TestParseAllGenericCommaMilliseconds(t *testing.T) {
 	}
 }
 
+// TestParseAllRFC3164WithISO8601Timestamp pins modern rsyslog's own
+// default "high precision" file format (RSYSLOG_FileFormat) — an
+// ISO8601 timestamp instead of RFC 3164's classic "Mon _2 HH:MM:SS",
+// confirmed against the user's own real /var/log/syslog and
+// /var/log/kern.log. Unlike the classic alternative, this timestamp
+// already carries its own real year — no fallback year involved.
+func TestParseAllRFC3164WithISO8601Timestamp(t *testing.T) {
+	input := "2026-10-09T10:48:44.551263+02:00 kalimashaktide sudo: pam_ecryptfs: pam_sm_authenticate: /home/jens is already mounted\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "syslog", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatSyslogRFC3164 {
+		t.Fatalf("format = %v, want FormatSyslogRFC3164", format)
+	}
+	wantTime := time.Date(2026, 10, 9, 10, 48, 44, 551263000, time.FixedZone("", 2*60*60))
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Source != "sudo" || entries[0].Message != "pam_ecryptfs: pam_sm_authenticate: /home/jens is already mounted" {
+		t.Errorf("entries[0] = %+v", entries[0])
+	}
+}
+
+// TestParseAllGenericWithNoLevelAtAll pins dpkg.log's own real shape —
+// a perfectly good, parseable timestamp, but no level at all
+// (status/install/trigproc are dpkg's own action words, none of them a
+// recognized level) — a real, user-reported gap: this used to fall all
+// the way back to FormatPlain for the sole reason that no level
+// followed, losing the timestamp along with it.
+func TestParseAllGenericWithNoLevelAtAll(t *testing.T) {
+	input := "2026-09-30 20:05:33 status installed man-db:amd64 2.13.1-1\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "dpkg.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	wantTime := time.Date(2026, 9, 30, 20, 5, 33, 0, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v — the timestamp must still be recognized even with no level present", entries[0].Time, wantTime)
+	}
+	if entries[0].Level != LevelUnknown {
+		t.Errorf("entries[0].Level = %v, want LevelUnknown (dpkg's own action words aren't real levels)", entries[0].Level)
+	}
+	if entries[0].Message != "status installed man-db:amd64 2.13.1-1" {
+		t.Errorf("entries[0].Message = %q, want the whole remainder after the timestamp", entries[0].Message)
+	}
+}
+
 func TestParseAllRFC3164UsesFallbackYear(t *testing.T) {
 	input := "Oct  7 16:04:22 server kernel: eth0: link down\n"
 	fallback := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

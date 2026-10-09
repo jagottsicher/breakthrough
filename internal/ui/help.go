@@ -599,10 +599,13 @@ var helpText = strings.TrimLeft(`
   focused (the row just above its header turns the same color as a
   focused input field while it is — Tab/Shift+Tab move focus to
   Filter/Time/Level instead, see below).
-  The format of each file (JSON Lines, syslog RFC 3164/5424, a generic
-  "timestamp level message" line — comma or dot before the
-  milliseconds, either one — or plain text as a fallback) is detected
-  automatically; .gz/.xz/.zst/.bz2 files are decompressed transparently.
+  The format of each file (JSON Lines, syslog RFC 3164/5424 — a classic
+  "Mon _2 HH:MM:SS" or modern rsyslog's own ISO8601 timestamp, either
+  one — a generic "timestamp [level] message" line — comma or dot
+  before the milliseconds, level itself optional, e.g. dpkg.log's own
+  timestamped-but-level-less lines — or plain text as a fallback) is
+  detected automatically; .gz/.xz/.zst/.bz2 files are decompressed
+  transparently.
   A parse error in one file of the family (a corrupted rotation, say)
   only blanks the view when every file failed — otherwise the entries
   that did read fine still show, with the error noted in the title bar

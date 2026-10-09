@@ -25,6 +25,20 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// Modern rsyslog's own default "high precision" file
+			// format (RSYSLOG_FileFormat) — an ISO8601 timestamp
+			// instead of RFC 3164's classic "Mon _2 HH:MM:SS", the
+			// rest (hostname, tag[pid]:, message) identical. A real
+			// gap confirmed against the user's own real /var/log/
+			// syslog and /var/log/kern.log on more than one machine.
+			name: "rfc3164 syslog with ISO8601 timestamp",
+			want: FormatSyslogRFC3164,
+			in: []string{
+				"2026-10-09T10:48:44.551263+02:00 kalimashaktide sudo: pam_ecryptfs: pam_sm_authenticate: /home/jens is already mounted",
+				"2026-10-09T10:45:01.481818+02:00 kalimashaktide CRON[2961797]: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)",
+			},
+		},
+		{
 			name: "rfc5424 syslog",
 			want: FormatSyslogRFC5424,
 			in: []string{
@@ -52,6 +66,21 @@ func TestDetect(t *testing.T) {
 			},
 		},
 		{
+			// dpkg.log's own real shape — a perfectly good, parseable
+			// timestamp, but no level at all (status/install/trigproc
+			// are dpkg's own action words, none of them a recognized
+			// level). Used to fall all the way back to FormatPlain for
+			// the sole reason that no level followed — a real,
+			// user-reported gap ("alles als message zu behandeln, wenn
+			// man die Zeit nicht lesen kann, ist sehr dürftig").
+			name: "generic timestamp with no level at all",
+			want: FormatGeneric,
+			in: []string{
+				"2026-09-30 20:05:33 status installed man-db:amd64 2.13.1-1",
+				"2026-09-30 20:05:33 trigproc man-db:amd64 2.13.1-1 <none>",
+			},
+		},
+		{
 			name: "plain fallback",
 			want: FormatPlain,
 			in: []string{
@@ -72,6 +101,22 @@ func TestDetect(t *testing.T) {
 				t.Errorf("Detect(%v) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestDetectGenericWithISO8601TimestampIsNotMisdetectedAsRFC3164 pins
+// that reRFC3164's own new ISO8601 alternative (see its own doc
+// comment) stays correctly separated from a plain "TIMESTAMP LEVEL
+// message" line sharing the exact same timestamp shape: the extra
+// HOSTNAME + TAG[PID]: structure reRFC3164 now requires for that
+// alternative is what a generic level+message line doesn't have.
+func TestDetectGenericWithISO8601TimestampIsNotMisdetectedAsRFC3164(t *testing.T) {
+	sample := []string{
+		"2026-10-07T16:04:23Z ERROR database connection timeout",
+		"2026-10-07T16:04:24Z INFO connection established",
+	}
+	if got := Detect(sample); got != FormatGeneric {
+		t.Errorf("Detect = %v, want FormatGeneric — an ISO8601 timestamp followed by LEVEL message must not be mistaken for syslog's hostname+tag: shape", got)
 	}
 }
 

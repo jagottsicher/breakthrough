@@ -17,7 +17,7 @@ const (
 	FormatJSON
 	FormatSyslogRFC3164
 	FormatSyslogRFC5424
-	FormatGeneric // "TIMESTAMP LEVEL message"
+	FormatGeneric // "TIMESTAMP [LEVEL] message" — level is optional
 )
 
 // String names Format for diagnostics and the selection screen's own
@@ -31,15 +31,43 @@ func (f Format) String() string {
 	case FormatSyslogRFC5424:
 		return "syslog (RFC 5424)"
 	case FormatGeneric:
-		return "timestamp + level"
+		return "timestamp"
 	default:
 		return "plain text"
 	}
 }
 
+// reISO8601SyslogTimestamp is the timestamp alternative modern rsyslog
+// installs actually use by default (its own "high precision"/
+// RFC3339-ish RSYSLOG_FileFormat, as opposed to the classic BSD-style
+// RSYSLOG_TraditionalFileFormat RFC 3164 §4.1 itself specifies) —
+// "2026-10-09T10:48:44.551263+02:00" rather than "Oct  9 10:48:44". A
+// real, user-reported gap: every field after it (hostname, tag,
+// message) is structurally identical RFC 3164 either way, but this
+// timestamp shape matched neither the classic alternative below nor
+// reGenericTAB (which requires a recognized level token — bare syslog
+// has none at all, by design), so these lines fell all the way back to
+// FormatPlain: Level/Source empty, and the real timestamp showing up
+// as part of the message instead of being recognized, confirmed across
+// several of the user's own real /var/log files (syslog, kern.log) on
+// more than one machine. Shared between reRFC3164 (detection) and
+// reRFC3164Fields (parse.go) so both stay in exact agreement.
+const reISO8601SyslogTimestamp = `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`
+
 var (
 	reRFC5424 = regexp.MustCompile(`^<\d{1,3}>\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+`)
-	reRFC3164 = regexp.MustCompile(`^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+`)
+	// The ISO8601 alternative additionally requires HOSTNAME then
+	// TAG[PID]: (the same structure reRFC3164Fields' own stricter
+	// parsing regex already requires) rather than just "timestamp,
+	// anything" — reGenericTAB's own timestamp shape (below) looks
+	// identical up to this point, and without that extra structural
+	// requirement a plain "TIMESTAMP LEVEL message" line would
+	// wrongly match here first (this case runs before reGenericTAB in
+	// Detect's own switch) and never reach its correct format at all.
+	// The classic BSD-timestamp alternative carries no such risk (a
+	// genuinely different shape from reGenericTAB's own ISO8601-only
+	// timestamp), so it's left exactly as loose as before.
+	reRFC3164 = regexp.MustCompile(`^(?:[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+|` + reISO8601SyslogTimestamp + `\s+\S+\s+[^:\[\s]+(?:\[\d+\])?:\s)`)
 	// [.,]\d+, not \.\d+: Python's own logging.Formatter default
 	// datefmt ("2026-10-08 21:00:00,123 INFO message") uses a comma
 	// before the milliseconds, not a dot — one concrete, very common
@@ -47,7 +75,21 @@ var (
 	// the way back to FormatPlain for it: Level/Source always empty,
 	// and the timestamp itself showing up as plain message text instead
 	// of being recognized at all — matching the user's own report.
-	reGenericTAB = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+\[?(?i:TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s`)
+	//
+	// The level token itself is now optional ("(?:...)?" wraps the
+	// whole bracket-level-colon group) — a second, separate real gap:
+	// a line with a perfectly good, parseable timestamp but no level at
+	// all (dpkg.log's own "2026-09-30 20:05:33 status installed
+	// pkg:amd64 1.0", one concrete example from the user's own real
+	// files) used to fall all the way back to FormatPlain too, for the
+	// sole reason that it has no level — the exact complaint "alles als
+	// message zu behandeln, wenn man die Zeit nicht lesen kann, ist
+	// sehr dürftig" was raised over. Detect's own switch still checks
+	// reRFC3164 first, so a line that actually does have the
+	// hostname+tag: structure above is never miscounted as this
+	// instead, even though both now accept the exact same timestamp
+	// shape.
+	reGenericTAB = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s+(?:\[?(?i:TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s+)?\S`)
 )
 
 // detectSampleSize is how many of a file's own leading non-blank lines
@@ -68,7 +110,7 @@ const detectThreshold = 0.6
 // lines are enough — see ReadSample) and picks the one Format whose own
 // line shape most of them match. Order matters: JSON and the two
 // syslog shapes are checked first since they're unambiguous once they
-// match at all, then the generic timestamp+level shape, so a file that
+// match at all, then the generic timestamp (optionally + level) shape, so a file that
 // doesn't commit to any of those falls back to FormatPlain rather than
 // being forced into a bad fit.
 func Detect(sample []string) Format {

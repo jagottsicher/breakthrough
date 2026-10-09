@@ -185,21 +185,33 @@ func rfc5424SeverityLevel(severity int) Level {
 	}
 }
 
-// reRFC3164Fields captures TIMESTAMP (no year), HOSTNAME, TAG (with
-// optional "[pid]"), and MESSAGE — RFC 3164 §4.1, the classic
-// "Mon _2 15:04:05 host tag[pid]: message" shape.
-var reRFC3164Fields = regexp.MustCompile(`^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(\S+)\s+([^:\[\s]+)(?:\[\d+\])?:\s*(.*)$`)
+// reRFC3164Fields captures TIMESTAMP (no year for the classic
+// alternative — RFC 3164 §4.1's own "Mon _2 15:04:05 host tag[pid]:
+// message" shape — a real year for reISO8601SyslogTimestamp, see its
+// own doc comment in detect.go for why a second timestamp shape is
+// accepted here too), HOSTNAME, TAG (with optional "[pid]"), and
+// MESSAGE.
+var reRFC3164Fields = regexp.MustCompile(`^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}|` + reISO8601SyslogTimestamp + `)\s+(\S+)\s+([^:\[\s]+)(?:\[\d+\])?:\s*(.*)$`)
 
 func parseRFC3164Line(line string, year int) (Entry, bool) {
 	m := reRFC3164Fields.FindStringSubmatch(line)
 	if m == nil {
 		return Entry{}, false
 	}
+	// The classic alternative carries no year of its own (fallback
+	// year below); the ISO8601 one already has a complete, unambiguous
+	// timestamp — parseAnyTime (which Time.Parse's own classic layout
+	// can never match, so trying it first costs nothing) handles it
+	// directly, including its own real year.
 	t, err := time.Parse("Jan _2 15:04:05", m[1])
-	if err != nil {
-		return Entry{}, false
+	if err == nil {
+		t = t.AddDate(year, 0, 0)
+	} else {
+		t = parseAnyTime(m[1])
+		if t.IsZero() {
+			return Entry{}, false
+		}
 	}
-	t = t.AddDate(year, 0, 0)
 	return Entry{
 		Time:    t,
 		Source:  m[3],
@@ -207,15 +219,26 @@ func parseRFC3164Line(line string, year int) (Entry, bool) {
 	}, true
 }
 
-// reGenericFields captures TIMESTAMP, LEVEL, MESSAGE for the
-// "2026-10-07 16:04:23 ERROR something happened" shape — the same
-// pattern detect.go's own reGenericTAB already uses to recognize the
-// format in the first place, just with the three parts split into
-// groups here.
+// reGenericFields captures TIMESTAMP, an optional LEVEL, and MESSAGE
+// for the "2026-10-07 16:04:23 ERROR something happened" shape — the
+// same pattern detect.go's own reGenericTAB already uses to recognize
+// the format in the first place, just with the parts split into groups
+// here.
 // [.,]\d+, not \.\d+ — see reGenericTAB's own doc comment (detect.go)
 // for why: Python's logging.Formatter default datefmt uses a comma
 // before milliseconds, not a dot.
-var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s*(.*)$`)
+//
+// The level group is wrapped in its own optional "(?:...)?" — a real,
+// user-reported gap: a line with a perfectly good, parseable timestamp
+// but no level at all (dpkg.log's own "status installed pkg:amd64
+// 1.0", one concrete example from the user's own real files) used to
+// match neither this nor any other format, falling all the way back to
+// FormatPlain — Time lost entirely, not just Level/Source, for the
+// sole reason that no level happened to follow. m[2] is "" in that
+// case; ParseLevel("") already correctly answers LevelUnknown (see its
+// own test), the same honest "no level recognized" this format already
+// gives a line whose level word isn't one of the known ones.
+var reGenericFields = regexp.MustCompile(`(?i)^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?:\[?(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|PANIC|CRITICAL)\]?:?\s+)?(.*)$`)
 
 func parseGenericLine(line string) (Entry, bool) {
 	m := reGenericFields.FindStringSubmatch(line)
