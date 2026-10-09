@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 69295,
-      "sha256": "cbbaa471c1c670a5f868a2f9fa9bef01041465486b2191d104eb0669280f55b1"
+      "size": 70109,
+      "sha256": "dd2b9dc958682058b9064c8d1b0ab33207540565f8a4390a15c6af6fe837c5c9"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -798,8 +798,8 @@
     },
     {
       "path": "internal/git/git_test.go",
-      "size": 10479,
-      "sha256": "6834e3b0a138d5f74788191fd53a8e644be9e2c986d558b0d0f1f12c708162a5"
+      "size": 12763,
+      "sha256": "1bb2856bea611ad3b887c793b74771531cea2fafa979aeefc3d8d7a41e47b834"
     },
     {
       "path": "internal/git/ops.go",
@@ -1578,8 +1578,8 @@
     },
     {
       "path": "internal/ui/gitbreach_test.go",
-      "size": 8017,
-      "sha256": "791290a990eabf258a451ba4fe35b5ec35c49b01fea1bb4ce78fe0740a04d131"
+      "size": 8648,
+      "sha256": "cfc1ede41829902ac0d112e0367a9b373d1ac1b4e91bd89ba6066934ee7a4829"
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
@@ -10911,112 +10911,119 @@
       "file": "internal/git/git_test.go",
       "name": "initRepo",
       "kind": "function",
-      "line": 45
+      "line": 57
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "writeFile",
       "kind": "function",
-      "line": 52
+      "line": 67
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestRootOnADirectoryThatIsNotARepository",
       "kind": "function",
-      "line": 64
+      "line": 79
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestRootFindsTheTopLevelFromANestedSubdirectory",
       "kind": "function",
-      "line": 77
+      "line": 92
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchOnACleanRepository",
       "kind": "function",
-      "line": 109
+      "line": 124
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsStagedUnstagedAndUntracked",
       "kind": "function",
-      "line": 128
+      "line": 143
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsARenameWithItsOriginalPath",
       "kind": "function",
-      "line": 170
+      "line": 185
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestFetchReportsAConflict",
       "kind": "function",
-      "line": 197
+      "line": 212
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestStageAndUnstageRoundTrip",
       "kind": "function",
-      "line": 226
+      "line": 241
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitCreatesARealCommit",
       "kind": "function",
-      "line": 257
+      "line": 272
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitWithNothingStagedFails",
       "kind": "function",
-      "line": 278
+      "line": 293
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestCommitIsCancellable",
       "kind": "function",
-      "line": 290
+      "line": 305
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestDiffUnstagedVsStaged",
       "kind": "function",
-      "line": 305
+      "line": 320
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/git",
+      "file": "internal/git/git_test.go",
+      "name": "TestFetchHandlesPathsWithSpacesAndNonASCIIBytes",
+      "kind": "function",
+      "line": 361
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "TestUntrackedContentReadsTheFileDirectly",
       "kind": "function",
-      "line": 340
+      "line": 395
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "changePaths",
       "kind": "function",
-      "line": 354
+      "line": 409
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
       "file": "internal/git/git_test.go",
       "name": "containsPath",
       "kind": "function",
-      "line": 362
+      "line": 417
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/git",
@@ -26006,70 +26013,70 @@
       "file": "internal/ui/gitbreach_test.go",
       "name": "initGitBreachRepo",
       "kind": "function",
-      "line": 45
+      "line": 52
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "newTestRootForGitBreachDir",
       "kind": "function",
-      "line": 52
+      "line": 62
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachOnARealRepositoryShowsStagedUnstagedAndUntracked",
       "kind": "function",
-      "line": 61
+      "line": 71
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachOnADirectoryThatIsNotARepositoryShowsAnError",
       "kind": "function",
-      "line": 99
+      "line": 109
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachRefusesOnARemotePanel",
       "kind": "function",
-      "line": 114
+      "line": 124
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachRefusesInsideAnArchiveView",
       "kind": "function",
-      "line": 134
+      "line": 144
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestToggleGitBreachStageStagesAndUnstagesTheRowUnderTheCursor",
       "kind": "function",
-      "line": 155
+      "line": 165
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestCommitGitBreachCreatesARealCommitAndReloads",
       "kind": "function",
-      "line": 193
+      "line": 203
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachCommitPromptDoesNothingWithNothingStaged",
       "kind": "function",
-      "line": 217
+      "line": 227
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "gitBreachTableRowForPath",
       "kind": "function",
-      "line": 245
+      "line": 255
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -26334,14 +26341,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinWidth",
+      "name": "helpMinHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help.go",
-      "name": "helpMinHeight",
+      "name": "helpMinWidth",
       "kind": "const",
       "line": 17
     },
@@ -46084,5 +46091,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "e731970f906a6b953aa5451e65c3b1dd3cb57892252cc6241f273d069acba8e3"
+  "merkle_root": "34e6681c0ef14117bdd9d425dcb4f4ea29b13409edd9188c9e70707c893abc92"
 }

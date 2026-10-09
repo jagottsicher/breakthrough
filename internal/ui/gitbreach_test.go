@@ -42,10 +42,20 @@ func runGitBreach(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// initGitBreachRepo sets a repo-local identity and disables gpgsign
+// explicitly — gitBreachTestEnv's own vars only cover this test file's
+// own setup calls (runGitBreach), never git.Commit itself, which
+// builds its own os.Environ()-based Env and would otherwise inherit
+// whatever (or no) global git identity/signing config happens to exist
+// on the machine actually running the test (see internal/git's own
+// identically-reasoned initRepo).
 func initGitBreachRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	runGitBreach(t, dir, "init", "-q", "-b", "main")
+	runGitBreach(t, dir, "config", "user.name", "Test")
+	runGitBreach(t, dir, "config", "user.email", "test@example.com")
+	runGitBreach(t, dir, "config", "commit.gpgsign", "false")
 	return dir
 }
 

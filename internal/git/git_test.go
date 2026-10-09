@@ -42,10 +42,25 @@ func runGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// initRepo sets a repo-local identity and disables gpgsign explicitly
+// — gitTestEnv's own GIT_AUTHOR_*/GIT_COMMITTER_* vars only cover
+// *this test's own setup calls* (runGit), never the code under test:
+// Commit builds its own os.Environ()-based Env, which still inherits
+// whatever (or no) global git identity happens to exist on the
+// machine actually running it. Without this, Commit's own tests pass
+// locally (a developer machine has a global identity) and fail on any
+// CI runner that doesn't - or worse, hang waiting on a passphrase
+// prompt if the runner's own global config happens to force
+// commit.gpgsign=true - exactly the class of "works here, not there"
+// gap gitstatus_test.go's own gitTestEnv doc comment already warns
+// about for its own, narrower set of tests.
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-q", "-b", "main")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "commit.gpgsign", "false")
 	return dir
 }
 
@@ -334,6 +349,46 @@ func TestDiffUnstagedVsStaged(t *testing.T) {
 	}
 	if stagedDiff == "" {
 		t.Error("Diff(staged) after add = \"\", want the staged change")
+	}
+}
+
+// TestFetchHandlesPathsWithSpacesAndNonASCIIBytes pins the actual
+// reason Fetch passes -z to `git status` at all (see its own doc
+// comment): without it, git shell-quotes a path containing a space or
+// a non-ASCII byte (core.quotePath), which would otherwise either
+// corrupt this parser's own SplitN-based field split or leave the
+// path wrapped in literal quote characters nobody asked for.
+func TestFetchHandlesPathsWithSpacesAndNonASCIIBytes(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	const name = "a file with spaces and ümlaut.txt"
+	writeFile(t, dir, name, "content")
+
+	st, err := Fetch(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(st.Untracked) != 1 || st.Untracked[0] != name {
+		t.Fatalf("Untracked = %v, want [%q]", st.Untracked, name)
+	}
+
+	if err := Stage(context.Background(), dir, []string{name}); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	st, err = Fetch(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Fetch after Stage: %v", err)
+	}
+	if !containsPath(changePaths(st.Staged), name) {
+		t.Fatalf("Staged = %v, want %q staged", st.Staged, name)
+	}
+
+	diff, err := Diff(context.Background(), dir, name, true)
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	if diff == "" {
+		t.Error("Diff for the newly staged file = \"\", want a real diff")
 	}
 }
 
