@@ -57,6 +57,322 @@ func TestParseAllGeneric(t *testing.T) {
 	}
 }
 
+// TestParseAllGenericCommaMilliseconds pins Python's own
+// logging.Formatter default datefmt ("2026-10-07 16:04:23,123 INFO
+// message") — a real gap this used to fall straight through to
+// FormatPlain for (see reGenericTAB's own doc comment, detect.go):
+// Level/Source always empty and the timestamp showing up as plain
+// message text instead of being parsed at all.
+func TestParseAllGenericCommaMilliseconds(t *testing.T) {
+	input := "2026-10-07 16:04:23,123 ERROR database connection timeout\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "app.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	if entries[0].Level != LevelError || entries[0].Message != "database connection timeout" {
+		t.Errorf("entries[0] = %+v", entries[0])
+	}
+	wantTime := time.Date(2026, 10, 7, 16, 4, 23, 123000000, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+}
+
+// TestParseAllRFC3164WithISO8601Timestamp pins modern rsyslog's own
+// default "high precision" file format (RSYSLOG_FileFormat) — an
+// ISO8601 timestamp instead of RFC 3164's classic "Mon _2 HH:MM:SS",
+// confirmed against the user's own real /var/log/syslog and
+// /var/log/kern.log. Unlike the classic alternative, this timestamp
+// already carries its own real year — no fallback year involved.
+func TestParseAllRFC3164WithISO8601Timestamp(t *testing.T) {
+	input := "2026-10-09T10:48:44.551263+02:00 kalimashaktide sudo: pam_ecryptfs: pam_sm_authenticate: /home/jens is already mounted\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "syslog", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatSyslogRFC3164 {
+		t.Fatalf("format = %v, want FormatSyslogRFC3164", format)
+	}
+	wantTime := time.Date(2026, 10, 9, 10, 48, 44, 551263000, time.FixedZone("", 2*60*60))
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Source != "sudo" || entries[0].Message != "pam_ecryptfs: pam_sm_authenticate: /home/jens is already mounted" {
+		t.Errorf("entries[0] = %+v", entries[0])
+	}
+}
+
+// TestParseAllGenericWithNoLevelAtAll pins dpkg.log's own real shape —
+// a perfectly good, parseable timestamp, but no level at all
+// (status/install/trigproc are dpkg's own action words, none of them a
+// recognized level) — a real, user-reported gap: this used to fall all
+// the way back to FormatPlain for the sole reason that no level
+// followed, losing the timestamp along with it.
+func TestParseAllGenericWithNoLevelAtAll(t *testing.T) {
+	input := "2026-09-30 20:05:33 status installed man-db:amd64 2.13.1-1\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "dpkg.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	wantTime := time.Date(2026, 9, 30, 20, 5, 33, 0, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v — the timestamp must still be recognized even with no level present", entries[0].Time, wantTime)
+	}
+	if entries[0].Level != LevelUnknown {
+		t.Errorf("entries[0].Level = %v, want LevelUnknown (dpkg's own action words aren't real levels)", entries[0].Level)
+	}
+	if entries[0].Message != "status installed man-db:amd64 2.13.1-1" {
+		t.Errorf("entries[0].Message = %q, want the whole remainder after the timestamp", entries[0].Message)
+	}
+}
+
+// TestParseAllGenericWithSlashDate pins TeamViewer's own log format —
+// a slash-separated date ("2023/12/31 22:33:22.756"), two numeric
+// PID/TID fields, and its own "S"/"S!!" severity marker (not a
+// recognized level) before the message. A real, user-reported gap:
+// the timestamp was lost entirely for the sole reason that the date
+// used "/" instead of "-".
+func TestParseAllGenericWithSlashDate(t *testing.T) {
+	input := "2023/12/31 22:33:22.756 11924 11924 S!! DBus: unable to unregister Object Path\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "TeamViewer15_Logfile.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	wantTime := time.Date(2023, 12, 31, 22, 33, 22, 756000000, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Level != LevelUnknown {
+		t.Errorf("entries[0].Level = %v, want LevelUnknown (TeamViewer's own \"S!!\" isn't a real level)", entries[0].Level)
+	}
+	if entries[0].Message != "11924 11924 S!! DBus: unable to unregister Object Path" {
+		t.Errorf("entries[0].Message = %q, want the whole remainder after the timestamp", entries[0].Message)
+	}
+}
+
+// TestParseAllCLFAccessLog pins Apache/CUPS/nginx's own Common/
+// Combined Log Format — confirmed against the user's own real CUPS
+// access_log, and the exact format nginx/apache2's own default access
+// logs already use too (both explicitly asked about).
+func TestParseAllCLFAccessLog(t *testing.T) {
+	input := `localhost - - [03/Oct/2026:14:15:46 +0200] "POST / HTTP/1.1" 200 183 Renew-Subscription successful-ok` + "\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "access_log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatCLF {
+		t.Fatalf("format = %v, want FormatCLF", format)
+	}
+	wantTime := time.Date(2026, 10, 3, 14, 15, 46, 0, time.FixedZone("", 2*60*60))
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Source != "localhost" {
+		t.Errorf("entries[0].Source = %q, want %q", entries[0].Source, "localhost")
+	}
+	if entries[0].Message != `"POST / HTTP/1.1" 200 183 Renew-Subscription successful-ok` {
+		t.Errorf("entries[0].Message = %q", entries[0].Message)
+	}
+}
+
+// TestParseAllGenericWithPHPFPMTimestamp pins PHP-FPM's own default
+// log shape — a real gap, same as dpkg.log's: the bracketed
+// "DD-Mon-YYYY HH:MM:SS" timestamp matched no format at all before,
+// nor did "WARNING"/"NOTICE" (ParseLevel already knew both, just never
+// reachable through this regex's own narrower token list).
+func TestParseAllGenericWithPHPFPMTimestamp(t *testing.T) {
+	input := "[10-Oct-2026 13:55:36] WARNING: [pool www] child 1234 said into stderr: a warning\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "php-fpm.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	wantTime := time.Date(2026, 10, 10, 13, 55, 36, 0, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Level != LevelWarn {
+		t.Errorf("entries[0].Level = %v, want LevelWarn", entries[0].Level)
+	}
+	if entries[0].Message != "[pool www] child 1234 said into stderr: a warning" {
+		t.Errorf("entries[0].Message = %q", entries[0].Message)
+	}
+}
+
+// TestParseAllGenericWithApacheErrorLogTimestamp pins Apache's own
+// error log default format (httpd's ErrorLogFormat %{u}t) — the
+// bracketed "Day Mon DD HH:MM:SS.ffffff YYYY" timestamp and
+// "[core:error]"'s own module-prefixed level both matched no format at
+// all before.
+func TestParseAllGenericWithApacheErrorLogTimestamp(t *testing.T) {
+	input := "[Thu Oct 09 13:55:36.123456 2026] [core:error] [pid 1234:tid 5678] AH00646: something failed\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "error.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	wantTime := time.Date(2026, 10, 9, 13, 55, 36, 123456000, time.UTC)
+	if !entries[0].Time.Equal(wantTime) {
+		t.Errorf("entries[0].Time = %v, want %v", entries[0].Time, wantTime)
+	}
+	if entries[0].Level != LevelError {
+		t.Errorf("entries[0].Level = %v, want LevelError (the \"core:\" module prefix must not block it)", entries[0].Level)
+	}
+	if entries[0].Message != "[pid 1234:tid 5678] AH00646: something failed" {
+		t.Errorf("entries[0].Message = %q", entries[0].Message)
+	}
+}
+
+// TestParseAllGenericNginxErrorLog pins nginx's own error log default
+// format — needs no new timestamp alternative (its slash date already
+// matched), only the broadened level vocabulary: "notice" wasn't
+// recognized by this regex's own original token list even though
+// ParseLevel already knew how to map it.
+func TestParseAllGenericNginxErrorLog(t *testing.T) {
+	input := "2026/10/09 13:55:36 [notice] 1234#0: signal process started\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "nginx-error.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatGeneric {
+		t.Fatalf("format = %v, want FormatGeneric", format)
+	}
+	if entries[0].Level != LevelInfo {
+		t.Errorf("entries[0].Level = %v, want LevelInfo (ParseLevel maps \"notice\" to Info)", entries[0].Level)
+	}
+	if entries[0].Message != "1234#0: signal process started" {
+		t.Errorf("entries[0].Message = %q", entries[0].Message)
+	}
+}
+
+// TestParseAllEIPPGroupsFieldsBySourcePackage pins the user's own
+// explicit choice: eipp.log has no timestamp anywhere (every entry's
+// own Time is just fallbackTime), but every field within one stanza
+// should still show the stanza's own "Package:" as Source — and a
+// second stanza's own Package must correctly replace the first's
+// after the blank line between them, not leak across.
+func TestParseAllEIPPGroupsFieldsBySourcePackage(t *testing.T) {
+	input := strings.Join([]string{
+		"Package: node-has-values",
+		"Architecture: all",
+		"Version: 2.0.1-4",
+		"Status: installed",
+		"",
+		"Package: gpgconf",
+		"Version: 2.4.9-7+b1",
+	}, "\n") + "\n"
+
+	fallback := time.Date(2026, 9, 30, 20, 5, 32, 0, time.UTC)
+	entries, format, err := ParseAll(strings.NewReader(input), "eipp.log", fallback)
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatEIPP {
+		t.Fatalf("format = %v, want FormatEIPP", format)
+	}
+	if len(entries) != 6 {
+		t.Fatalf("len(entries) = %d, want 6", len(entries))
+	}
+	for i := 0; i < 4; i++ {
+		if entries[i].Source != "node-has-values" {
+			t.Errorf("entries[%d].Source = %q, want %q", i, entries[i].Source, "node-has-values")
+		}
+		if !entries[i].Time.Equal(fallback) {
+			t.Errorf("entries[%d].Time = %v, want fallback %v (eipp.log has no real timestamp)", i, entries[i].Time, fallback)
+		}
+	}
+	for i := 4; i < 6; i++ {
+		if entries[i].Source != "gpgconf" {
+			t.Errorf("entries[%d].Source = %q, want %q — the second stanza's Package must not still be the first's", i, entries[i].Source, "gpgconf")
+		}
+	}
+}
+
+// TestParseAllAptHistoryUsesMostRecentStartDate pins the real, user-
+// reported gap: apt history.log's own non-timestamped lines
+// (Commandline, Install, ...) used to all collapse onto the whole
+// file's own single fallback mtime, rather than each transaction's own
+// Start-Date. Two transactions here, back to back, to also confirm
+// the second Start-Date correctly replaces the first as "current" —
+// not just that the first one works in isolation.
+func TestParseAllAptHistoryUsesMostRecentStartDate(t *testing.T) {
+	input := strings.Join([]string{
+		"Start-Date: 2026-02-18  18:39:28",
+		"Commandline: apt install thunderbird",
+		"Install: thunderbird:amd64 (1:140.7.1esr-1+b1)",
+		"End-Date: 2026-02-18  18:39:39",
+		"",
+		"Start-Date: 2026-02-25  21:04:11",
+		"Requested-By: jens (1000)",
+		"Commandline: apt install nodejs",
+		"End-Date: 2026-02-25  21:04:19",
+	}, "\n") + "\n"
+
+	entries, format, err := ParseAll(strings.NewReader(input), "history.log", time.Time{})
+	if err != nil {
+		t.Fatalf("ParseAll: %v", err)
+	}
+	if format != FormatAptHistory {
+		t.Fatalf("format = %v, want FormatAptHistory", format)
+	}
+	if len(entries) != 8 { // 9 non-blank lines minus the blank separator
+		t.Fatalf("len(entries) = %d, want 8", len(entries))
+	}
+
+	wantMessages := []string{
+		"Start-Date: 2026-02-18  18:39:28",
+		"Commandline: apt install thunderbird",
+		"Install: thunderbird:amd64 (1:140.7.1esr-1+b1)",
+		"End-Date: 2026-02-18  18:39:39",
+	}
+	for i, want := range wantMessages {
+		if entries[i].Message != want {
+			t.Errorf("entries[%d].Message = %q, want %q", i, entries[i].Message, want)
+		}
+	}
+
+	firstStart := time.Date(2026, 2, 18, 18, 39, 28, 0, time.UTC)
+	if !entries[0].Time.Equal(firstStart) {
+		t.Errorf("entries[0].Time (Start-Date line) = %v, want %v", entries[0].Time, firstStart)
+	}
+	if !entries[1].Time.Equal(firstStart) {
+		t.Errorf("entries[1].Time (Commandline, no timestamp of its own) = %v, want the transaction's own Start-Date %v", entries[1].Time, firstStart)
+	}
+	wantEnd := time.Date(2026, 2, 18, 18, 39, 39, 0, time.UTC)
+	if !entries[3].Time.Equal(wantEnd) {
+		t.Errorf("entries[3].Time (End-Date line) = %v, want its own %v", entries[3].Time, wantEnd)
+	}
+
+	secondStart := time.Date(2026, 2, 25, 21, 4, 11, 0, time.UTC)
+	if !entries[4].Time.Equal(secondStart) {
+		t.Errorf("entries[4].Time (second Start-Date) = %v, want %v", entries[4].Time, secondStart)
+	}
+	if !entries[5].Time.Equal(secondStart) {
+		t.Errorf("entries[5].Time (Requested-By, second transaction) = %v, want %v — must not still be the first transaction's Start-Date", entries[5].Time, secondStart)
+	}
+}
+
 func TestParseAllRFC3164UsesFallbackYear(t *testing.T) {
 	input := "Oct  7 16:04:22 server kernel: eth0: link down\n"
 	fallback := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

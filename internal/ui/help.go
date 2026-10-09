@@ -586,7 +586,8 @@ var helpText = strings.TrimLeft(`
   Step 1 — file selection: every logrotate family found in that
   directory (e.g. access.log, access.log.1, access.log.2.gz, collapsed
   into one row) with a summary of how many of its own files are
-  compressed. The "✕" glyph in the title bar's own top-right corner is
+  compressed, plus the family's own newest file's Size and Modified
+  time. The "✕" glyph in the title bar's own top-right corner is
   a mouse-clickable equivalent to Escape — both screens below have one.
 
     Enter    Open the Log Audit view for the family under the cursor
@@ -594,16 +595,44 @@ var helpText = strings.TrimLeft(`
     Esc      Close
 
   Step 2 — Log Audit view: every selected file's own lines, merged into
-  one chronological stream. The format of each file (JSON Lines, syslog
-  RFC 3164/5424, a generic "timestamp level message" line, or plain
-  text as a fallback) is detected automatically; .gz/.xz/.zst/.bz2
-  files are decompressed transparently. The title bar shows running
-  counts (events/files/skipped/errors/warnings, plus how many entries
-  currently match if the filters narrow it, and "● following" while
-  follow is on). A mini-timeline above the table shows the matching
-  entries' own density over time — red where a bucket contains an
-  error, the app's own warning color where it contains a warning but
-  nothing worse.
+  one chronological stream, opening with the list itself already
+  focused (the row just above its header turns the same color as a
+  focused input field while it is — Tab/Shift+Tab move focus to
+  Filter/Time/Level instead, see below).
+  The format of each file is detected automatically: JSON Lines;
+  syslog RFC 3164/5424 (a classic "Mon _2 HH:MM:SS" or modern
+  rsyslog's own ISO8601 timestamp, either one); Apache/nginx/CUPS's
+  own access log (Common/Combined Log Format); a generic "timestamp
+  [level] message" line covering most everything else with a leading
+  or bracketed timestamp — dash or slash date, dot or comma before the
+  milliseconds, level itself optional (dpkg.log's own timestamped-
+  but-level-less lines) or module-prefixed (Apache's own
+  "[core:error]"), PHP-FPM's and Apache's own bracketed date shapes
+  included; apt's own /var/log/apt/history.log (a transaction's own
+  Start-Date carried forward onto every untimestamped line in it,
+  Commandline/Install/Upgrade/... included, until the next Start-Date
+  or the transaction's own End-Date); apt's own eipp.log (no
+  timestamp anywhere in this one at all — a snapshot of package
+  state, not a sequence of timed events — but every field still shown
+  under its own stanza's "Package:" as Source); or plain text as a
+  fallback. .gz/.xz/.zst/.bz2 files are decompressed transparently.
+  A parse error in one file of the family (a corrupted rotation, say)
+  only blanks the view when every file failed — otherwise the entries
+  that did read fine still show, with the error noted in the title bar
+  instead. The title bar shows running counts (events/files/skipped/
+  errors/warnings, plus how many entries currently match if the filters
+  narrow it, and "● following" while follow is on). Clicking the Time
+  column header reverses the list between newest-first (the default,
+  so the most recent activity is right there without scrolling) and
+  oldest-first, the same arrow-suffix convention the panel's own
+  Name/Size/Modified column headers already use. A mini-timeline above
+  the table shows the matching entries' own density over time, labeled
+  with its own start/end time so the scale is clear — red where a
+  bucket contains an error, the app's own warning color where it
+  contains a warning but nothing worse. It reflects the same entries
+  the table currently matches (every file in the family, narrowed by
+  whichever Filter/Time/Level filters are active), not the family's
+  full, unfiltered range.
 
     Filter          Case-insensitive substring over Source and Message,
                      narrowing the list live and highlighting every

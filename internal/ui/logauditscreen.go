@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,11 @@ const (
 const (
 	logAuditSelName = iota
 	logAuditSelInfo
+	// Size/Modified describe the family's own newest file (see
+	// logview.FileGroup.Newest) — per the user's own explicit request
+	// to see those without opening the group first.
+	logAuditSelSize
+	logAuditSelModified
 )
 
 const (
@@ -135,11 +141,16 @@ func (r *Root) newLogAuditViewerScreen() {
 
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
+	// Placeholder, not a parenthetical in the label — per the user's
+	// own explicit request to move every field's own example into the
+	// field itself (shown only while it's actually empty), the same
+	// row Time/Level's own "(e.g. ...)" labels used to carry instead.
+	r.logAuditKeywordField.SetPlaceholder("keyword")
 	r.logAuditKeywordField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditKeywordField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditTimeField, r.logAuditViewerTable)
 	})
-	r.logAuditKeywordField.SetFocusFunc(func() { styleInput(r.logAuditKeywordField, r.theme, true) })
+	r.logAuditKeywordField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditKeywordField) })
 	r.logAuditKeywordField.SetBlurFunc(func() { styleInput(r.logAuditKeywordField, r.theme, false) })
 
 	// Time reuses filterexpr.ParseMtime verbatim (see
@@ -149,12 +160,18 @@ func (r *Root) newLogAuditViewerScreen() {
 	// already accept, rather than a third date grammar for what is,
 	// structurally, the same kind of question.
 	r.logAuditTimeField = tview.NewInputField()
-	r.logAuditTimeField.SetLabel("Time (e.g. \"last 7 days\", \"after 2026-09-01\"): ")
+	r.logAuditTimeField.SetLabel("Time: ")
+	// A third example covering "between", per the user's own explicit
+	// request — filterexpr.ParseMtime's own grammar (see
+	// logAuditEntryVisible's doc comment above) needs exactly two
+	// moments joined by "and", unlike "last"/"after" which take just
+	// one.
+	r.logAuditTimeField.SetPlaceholder(`last 7 days, after 2026-09-01, between 2026-09-01 and 2026-09-30`)
 	r.logAuditTimeField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditTimeField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditLevelField, r.logAuditKeywordField)
 	})
-	r.logAuditTimeField.SetFocusFunc(func() { styleInput(r.logAuditTimeField, r.theme, true) })
+	r.logAuditTimeField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditTimeField) })
 	r.logAuditTimeField.SetBlurFunc(func() { styleInput(r.logAuditTimeField, r.theme, false) })
 
 	// Level is a *minimum* severity ("warn" shows WARN and everything
@@ -163,12 +180,13 @@ func (r *Root) newLogAuditViewerScreen() {
 	// for: a quick "show me the bad stuff" narrowing, not a precise
 	// equality filter nobody actually wants while triaging.
 	r.logAuditLevelField = tview.NewInputField()
-	r.logAuditLevelField.SetLabel("Level >= (e.g. warn): ")
+	r.logAuditLevelField.SetLabel("Level >= ")
+	r.logAuditLevelField.SetPlaceholder("warn")
 	r.logAuditLevelField.SetChangedFunc(func(string) { r.renderLogAuditViewer() })
 	r.logAuditLevelField.SetDoneFunc(func(key tcell.Key) {
 		r.logAuditViewerFieldDone(key, r.logAuditViewerTable, r.logAuditTimeField)
 	})
-	r.logAuditLevelField.SetFocusFunc(func() { styleInput(r.logAuditLevelField, r.theme, true) })
+	r.logAuditLevelField.SetFocusFunc(func() { r.restyleLogAuditFilterFields(r.logAuditLevelField) })
 	r.logAuditLevelField.SetBlurFunc(func() { styleInput(r.logAuditLevelField, r.theme, false) })
 
 	r.logAuditFilterRow = tview.NewFlex().
@@ -180,13 +198,27 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditTimelineView.SetWrap(false)
 	r.logAuditTimelineView.SetDynamicColors(true)
 
+	// logAuditFocusIndicator takes over the row the table's own top
+	// border padding used to leave blank (padding dropped to 0 below) —
+	// per the user's own explicit request to turn that previously-empty
+	// space into a "the list has focus" indicator, rather than leaving
+	// it an easy-to-miss cue buried in which row happens to be
+	// highlighted.
+	r.logAuditFocusIndicator = tview.NewTextView()
+	r.logAuditFocusIndicator.SetWrap(false)
+
 	r.logAuditViewerTable = tview.NewTable()
 	r.logAuditViewerTable.SetBorders(false)
-	r.logAuditViewerTable.SetBorderPadding(1, 0, 2, 1)
+	r.logAuditViewerTable.SetBorderPadding(0, 0, 2, 1)
 	r.logAuditViewerTable.SetSelectable(true, false)
 	r.logAuditViewerTable.SetFixed(1, 0)
 	r.logAuditViewerTable.SetInputCapture(r.captureLogAuditViewerTableKey)
 	r.logAuditViewerTable.SetSelectedFunc(func(row, col int) { r.openLogAuditDetail(row) })
+	r.logAuditViewerTable.SetFocusFunc(func() {
+		r.renderLogAuditFocusIndicator(true)
+		r.restyleLogAuditFilterFields(nil)
+	})
+	r.logAuditViewerTable.SetBlurFunc(func() { r.renderLogAuditFocusIndicator(false) })
 
 	r.logAuditViewerHint = tview.NewTextView()
 	r.logAuditViewerHint.SetWrap(false)
@@ -200,6 +232,7 @@ func (r *Root) newLogAuditViewerScreen() {
 		AddItem(r.logAuditViewerTitle, 1, 0, false).
 		AddItem(r.logAuditFilterRow, 1, 0, false).
 		AddItem(r.logAuditTimelineView, 1, 0, false).
+		AddItem(r.logAuditFocusIndicator, 1, 0, false).
 		AddItem(r.logAuditViewerTable, 0, 1, true).
 		AddItem(r.logAuditViewerHint, 1, 0, false)
 }
@@ -265,6 +298,8 @@ func (r *Root) renderLogAuditSelection() {
 	}
 	header(logAuditSelName, "Name")
 	header(logAuditSelInfo, "Info")
+	header(logAuditSelSize, "Size")
+	header(logAuditSelModified, "Modified")
 
 	if r.logAuditDiscoverErr != nil {
 		showTablePlaceholder(r.logAuditTable, r.logAuditDiscoverErr.Error(), r.theme.EntryError)
@@ -282,6 +317,15 @@ func (r *Root) renderLogAuditSelection() {
 			tview.NewTableCell(g.Base).SetTextColor(r.theme.Text).SetSelectable(true))
 		r.logAuditTable.SetCell(row, logAuditSelInfo,
 			tview.NewTableCell(logAuditGroupInfo(g)).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
+		sizeText, modText := "", ""
+		if newest, ok := g.Newest(); ok {
+			sizeText = humanSize(newest.Size)
+			modText = logAuditTimeText(newest.ModTime)
+		}
+		r.logAuditTable.SetCell(row, logAuditSelSize,
+			tview.NewTableCell(sizeText).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
+		r.logAuditTable.SetCell(row, logAuditSelModified,
+			tview.NewTableCell(modText).SetTextColor(r.theme.MutedTextColor).SetSelectable(true))
 	}
 
 	if cur, _ := r.logAuditTable.GetSelection(); cur < 1 || cur > len(r.logAuditGroups) {
@@ -413,12 +457,89 @@ func logAuditHighlight(text, keyword string, bg tcell.Color) string {
 	return b.String()
 }
 
+// logAuditFilterFields lists the Keyword/Time/Level fields together,
+// for restyleLogAuditFilterFields.
+func (r *Root) logAuditFilterFields() []*tview.InputField {
+	return []*tview.InputField{r.logAuditKeywordField, r.logAuditTimeField, r.logAuditLevelField}
+}
+
+// restyleLogAuditFilterFields re-styles every Log Audit filter field,
+// highlighting only focused (styleInput's own InputFocusedBackground)
+// and graying out every other one (InputBackground) — nil highlights
+// none, used when focus moves to the list instead of any field.
+//
+// Works around a real, confirmed tview gap rather than a bug in our
+// own BlurFunc wiring: NewInputField's own constructor (verified
+// directly against inputfield.go) forwards its embedded TextArea's
+// Focus event to the InputField's own registered FocusFunc —
+// "// Forward focus event to the input field." — but never adds the
+// matching Blur forwarder. A Tab-driven focus change still blurs the
+// *InputField itself (Root's own code calls r.app.SetFocus on the
+// InputField value directly — see logAuditViewerFieldDone), so that
+// path's own SetBlurFunc call still fires correctly. A mouse click,
+// though, is handled by TextArea.MouseHandler (see its own
+// MouseLeftDown case), which hands focus to the TextArea *value*, not
+// the InputField wrapping it — so from that point on, Application's
+// own a.focus.Blur() blurs the TextArea, which has no corresponding
+// forwarder back out to the InputField's own BlurFunc, and the field
+// stays visually "focused" forever after even once real focus has
+// long since moved elsewhere — confirmed directly against a
+// tcell.SimulationScreen with instrumented Focus/Blur callbacks and
+// app.GetFocus() printed before/after each click, not assumed from
+// reading tview's source alone. Reusing styleInput's existing Blur
+// path as the single source of "which look applies" means a user-
+// visible freshness check (the known-forwarded Focus event) rather
+// than depending on the known-broken Blur chain is what each field's
+// own FocusFunc now calls instead of styleInput directly.
+func (r *Root) restyleLogAuditFilterFields(focused *tview.InputField) {
+	for _, f := range r.logAuditFilterFields() {
+		styleInput(f, r.theme, f == focused)
+	}
+}
+
+// renderLogAuditFocusIndicator paints the row itself in
+// theme.InputFocusedBackground while focused is true (logAuditViewer-
+// Table itself has keyboard focus), theme.SurfaceBackground otherwise
+// — the user's own explicit request for a visible cue that Tab-cycling
+// has landed back on the list (as opposed to one of the three filter
+// fields above it), rather than only being inferable from which row
+// happens to be highlighted. No text of its own (an earlier "● List"
+// label was dropped per the user's own explicit, later report that it
+// added nothing the background color alone doesn't already say).
+// Takes focused explicitly rather than querying logAuditViewerTable.
+// HasFocus() itself: tview.Box.Blur() (verified directly against its
+// own box.go) runs the blur callback *before* flipping its own
+// hasFocus flag, so a blur-triggered call here would otherwise still
+// see focus as true — the exact same "pass the known state in, don't
+// re-derive it" shape styleInput's own FocusFunc/BlurFunc pairs
+// already use elsewhere in this file. Called from the table's own
+// SetFocusFunc/SetBlurFunc (see newLogAuditViewerScreen) and once from
+// applyLogAuditTheme (passing the table's own current, settled
+// HasFocus — safe there, since that call never happens from inside a
+// Blur callback) so a live theme switch repaints it in the right
+// color either way.
+func (r *Root) renderLogAuditFocusIndicator(focused bool) {
+	background := r.theme.SurfaceBackground
+	if focused {
+		background = r.theme.InputFocusedBackground
+	}
+	r.logAuditFocusIndicator.SetBackgroundColor(background)
+}
+
 // renderLogAuditViewer fills the viewer table with every entry
 // matching the keyword field, Time/Level/Source/Message columns, the
 // matched keyword highlighted in Source/Message via logAuditHighlight
 // — and updates the title bar with the running counts the original
 // conversation's own mockup called for ("4,812 events │ 3 files │ 2
-// compressed │ 1 error").
+// compressed │ 1 error"). The Time column header is clickable (see
+// above) and toggles logAuditNewestFirst, the same "click to sort,
+// click again to reverse" convention the panel's own column headers
+// already use (see sortArrow, panel.go) — applied here by reversing
+// shown before logAuditMaxRenderedRows truncates it, so a truncated
+// view always keeps the chronological end that direction actually
+// means to show (the newest entries, not whichever happened to come
+// first in file order) rather than silently biasing toward one end
+// regardless of what the arrow says.
 func (r *Root) renderLogAuditViewer() {
 	r.logAuditViewerTable.Clear()
 
@@ -429,7 +550,17 @@ func (r *Root) renderLogAuditViewer() {
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
 	}
-	header(logAuditColTime, padRight("Time", 19))
+	timeLabel := padRight("Time"+sortArrow(r.logAuditNewestFirst), 19)
+	r.logAuditViewerTable.SetCell(0, logAuditColTime,
+		tview.NewTableCell(timeLabel).
+			SetTextColor(r.theme.Text).
+			SetAttributes(tcell.AttrBold).
+			SetSelectable(false).
+			SetClickedFunc(func() bool {
+				r.logAuditNewestFirst = !r.logAuditNewestFirst
+				r.renderLogAuditViewer()
+				return false
+			}))
 	header(logAuditColLevel, padRight("Level", 5))
 	header(logAuditColSource, "Source")
 	header(logAuditColMessage, "Message")
@@ -458,8 +589,29 @@ func (r *Root) renderLogAuditViewer() {
 	if len(shown) != len(r.logAuditAllEntries) {
 		title += fmt.Sprintf(" │ %d matching", len(shown))
 	}
+	if len(shown) > logAuditMaxRenderedRows {
+		// Without this, a file past the cap silently showed only a
+		// fraction of what the counts above claim — a real, user-
+		// reported point of confusion ("es werden doch auch alle logs
+		// ... richtig angezeigt", i.e. the file counts looked complete,
+		// so the missing rows read as a bug rather than a documented
+		// limit).
+		title += fmt.Sprintf(" │ showing first %d (of %d — narrow the filter to see the rest)", logAuditMaxRenderedRows, len(shown))
+	}
 	if r.logAuditFollowing {
 		title += " │ ● following"
+	}
+	// A parse error only blocks the whole view when there is nothing
+	// else to show — readLogAuditGroup/logaudit.go keeps every entry
+	// that DID parse from a group's other files even when one of them
+	// failed (a corrupted .gz, a permission error on an older
+	// rotation, ...), so showing just the error page here used to
+	// silently hide all of those too, a real, independently-discovered
+	// bug directly on point for "nicht alle Logeinträge sichtbar": an
+	// unrelated problem with one rotation of a file could erase every
+	// entry from the whole family, successfully-read ones included.
+	if r.logAuditParseErr != nil && len(r.logAuditAllEntries) > 0 {
+		title += fmt.Sprintf(" │ 1 file failed: %s", r.logAuditParseErr.Error())
 	}
 	// One general note instead of repeating it on every affected hint
 	// — see logAuditViewerHintEntries' own doc comment for why.
@@ -468,7 +620,7 @@ func (r *Root) renderLogAuditViewer() {
 
 	r.renderLogAuditTimeline(shown)
 
-	if r.logAuditParseErr != nil {
+	if r.logAuditParseErr != nil && len(r.logAuditAllEntries) == 0 {
 		showTablePlaceholder(r.logAuditViewerTable, r.logAuditParseErr.Error(), r.theme.EntryError)
 		return
 	}
@@ -481,10 +633,23 @@ func (r *Root) renderLogAuditViewer() {
 		return
 	}
 
+	// logAuditNewestFirst reverses the table's own order, not shown
+	// itself — renderLogAuditTimeline above already ran against the
+	// real chronological order, which its own density strip always
+	// reads left-to-right regardless of which way the table currently
+	// sorts.
+	rendered := shown
+	if r.logAuditNewestFirst {
+		rendered = slices.Clone(rendered)
+		slices.Reverse(rendered)
+	}
 	// logAuditMaxRenderedRows caps the table itself, not the counts
 	// above or the timeline (both still reflect every matching entry)
-	// — see its own doc comment for why.
-	rendered := shown
+	// — see its own doc comment for why. Truncating after the reverse
+	// above, not before: the first logAuditMaxRenderedRows of whichever
+	// order is currently showing is always the relevant end to keep —
+	// the newest entries when sorted newest-first, not whichever
+	// happened to come first in file order regardless of the arrow.
 	if len(rendered) > logAuditMaxRenderedRows {
 		rendered = rendered[:logAuditMaxRenderedRows]
 	}
@@ -719,6 +884,11 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	// and darker than SurfaceBackground in the default scheme, fixing
 	// the user's second report ("zu hell") in the same change.
 	r.logAuditTimelineView.SetBackgroundColor(theme.PopupBackground)
+	// logAuditFocusIndicator's own background comes entirely from
+	// renderLogAuditFocusIndicator (SurfaceBackground or
+	// InputFocusedBackground, depending on the list's current focus) —
+	// no separate line needed here.
+	r.renderLogAuditFocusIndicator(r.logAuditViewerTable.HasFocus())
 	// Label color and background both come from styleInput itself —
 	// see its own doc comment (theme.go) on the background mismatch
 	// this used to leave in place.

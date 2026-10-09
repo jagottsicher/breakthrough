@@ -35,18 +35,28 @@ var timelineBlocks = []rune{' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇'
 // equal-width slices spanning the earliest to the latest timestamp
 // among them (zero Times are skipped — they'd only ever come from a
 // bug upstream; ParseAll already seeds every timestamp-less line with
-// its file's own mtime, see its own doc comment). Returns ok=false
-// when there's no meaningful span to bucket at all — fewer than two
-// distinct timestamps, the same "not enough range for a timeline"
-// case a single-entry or all-identical-timestamp result both are.
-// severity[i] is the highest Level seen in that bucket, driving
-// logAuditTimelineText's own per-bucket color.
-func logAuditTimelineBuckets(entries []logview.Entry, bucketCount int) (counts []int, severity []logview.Level, ok bool) {
+// its file's own mtime, see its own doc comment). entries is always
+// whatever the viewer currently matches (see renderLogAuditTimeline's
+// own doc comment) — every file in the open family, narrowed by
+// whichever Filter/Time/Level filters are active, same as the table
+// below it; never the filters' own nominal range, only the real
+// min/max timestamp actually found among what matched. Returns
+// ok=false when there's no meaningful span to bucket at all — fewer
+// than two distinct timestamps, the same "not enough range for a
+// timeline" case a single-entry or all-identical-timestamp result
+// both are. severity[i] is the highest Level seen in that bucket,
+// driving logAuditTimelineText's own per-bucket color. minT/maxT are
+// the span's own real endpoints, for logAuditTimelineText's own start/
+// end labels — per the user's own explicit report that the bar alone,
+// with no indication of what time range or scale it actually spans,
+// was unreadable on a sparse log (long stretches of blank buckets
+// between a few real bursts, with nothing to say how long "long"
+// actually was).
+func logAuditTimelineBuckets(entries []logview.Entry, bucketCount int) (counts []int, severity []logview.Level, minT, maxT time.Time, ok bool) {
 	if bucketCount <= 0 {
-		return nil, nil, false
+		return nil, nil, time.Time{}, time.Time{}, false
 	}
 
-	var minT, maxT time.Time
 	first := true
 	for _, e := range entries {
 		if e.Time.IsZero() {
@@ -61,7 +71,7 @@ func logAuditTimelineBuckets(entries []logview.Entry, bucketCount int) (counts [
 		first = false
 	}
 	if first || !maxT.After(minT) {
-		return nil, nil, false
+		return nil, nil, time.Time{}, time.Time{}, false
 	}
 
 	span := maxT.Sub(minT)
@@ -83,16 +93,34 @@ func logAuditTimelineBuckets(entries []logview.Entry, bucketCount int) (counts [
 			severity[idx] = e.Level
 		}
 	}
-	return counts, severity, true
+	return counts, severity, minT, maxT, true
+}
+
+// logAuditTimelineLabel renders t for the timeline's own start/end
+// labels — just the time ("15:04:05") when both endpoints fall on the
+// same calendar day (the common case: following one service's own
+// recent activity), the full date too ("2006-01-02 15:04:05", the
+// same layout logAuditTimeText uses for the table itself) once the
+// span crosses a day boundary, where the bare time alone would be
+// ambiguous about which day it belongs to.
+func logAuditTimelineLabel(t time.Time, sameDay bool) string {
+	if sameDay {
+		return t.Format("15:04:05")
+	}
+	return t.Format("2006-01-02 15:04:05")
 }
 
 // logAuditTimelineText renders entries' own time distribution as one
-// line of density blocks, colored per bucket — red if that bucket
-// contains an Error/Fatal, the app's own WarningText if a Warn (and
-// nothing worse), otherwise plain text color — "" when
-// logAuditTimelineBuckets itself has nothing meaningful to show
-// (renderLogAuditTimeline then leaves the line blank rather than
-// drawing an empty, misleadingly flat bar).
+// line of density blocks between its own start/end time labels (see
+// logAuditTimelineLabel) — per the user's own explicit report that the
+// bar alone said nothing about what time range or scale it covered,
+// confusing on a sparse log where most of the width is blank between
+// a few real bursts. Colored per bucket — red if that bucket contains
+// an Error/Fatal, the app's own WarningText if a Warn (and nothing
+// worse), otherwise plain text color — "" when logAuditTimelineBuckets
+// itself has nothing meaningful to show (renderLogAuditTimeline then
+// leaves the line blank rather than drawing an empty, misleadingly
+// flat bar).
 func logAuditTimelineText(entries []logview.Entry, width int, theme config.ResolvedTheme) string {
 	if width < 10 {
 		width = 10
@@ -100,7 +128,31 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 	if width > 200 {
 		width = 200
 	}
-	counts, severity, ok := logAuditTimelineBuckets(entries, width)
+
+	// A first pass just to find the real span, before committing to a
+	// label format or a final bucket count — logAuditTimelineBuckets
+	// itself is cheap (one pass over entries), and the label width has
+	// to be known before the second, real call below can know how many
+	// buckets actually fit in what's left of width.
+	_, _, minT, maxT, ok := logAuditTimelineBuckets(entries, 1)
+	if !ok {
+		return ""
+	}
+	sameDay := minT.Year() == maxT.Year() && minT.YearDay() == maxT.YearDay()
+	startLabel := logAuditTimelineLabel(minT, sameDay)
+	endLabel := logAuditTimelineLabel(maxT, sameDay)
+
+	barWidth := width - len(startLabel) - len(endLabel) - 2 // 2 separating spaces
+	if barWidth < 10 {
+		// Too narrow for both labels and a readable bar — the labels
+		// are what actually answers the user's own "what scale is
+		// this" question, so they win; the bar still renders, just
+		// below the floor logAuditTimelineBuckets itself also enforces
+		// (the same 10 newLogAuditViewerScreen's own first call uses).
+		barWidth = 10
+	}
+
+	counts, severity, _, _, ok := logAuditTimelineBuckets(entries, barWidth)
 	if !ok {
 		return ""
 	}
@@ -116,6 +168,7 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 	}
 
 	var b strings.Builder
+	fmt.Fprintf(&b, "[%s]%s [-:-:-]", colorTag(theme.MutedTextColor), startLabel)
 	for i, c := range counts {
 		level := 0
 		if c > 0 {
@@ -135,18 +188,42 @@ func logAuditTimelineText(entries []logview.Entry, width int, theme config.Resol
 		}
 		fmt.Fprintf(&b, "[%s]%c", colorTag(color), timelineBlocks[level])
 	}
+	fmt.Fprintf(&b, "[%s] %s[-:-:-]", colorTag(theme.MutedTextColor), endLabel)
 	return b.String()
 }
 
+// logAuditTimelineUnlaidOutWidth is tview.Box's own default width
+// (verified directly against NewBox in box.go, not assumed) — what
+// logAuditTimelineView.GetRect() still reports the very first time
+// renderLogAuditTimeline runs for a freshly-opened group, since
+// openLogAuditViewer calls renderLogAuditViewer (and so this) before
+// pushOverlay, and pushOverlay alone never cascades a real rect down
+// to a child either — only an actual Draw() does (the same "SetRect
+// alone never cascades, only Draw() does" caveat this package's own
+// chmoddialog.go doc comment already established for tview.Pages).
+// A plain "width <= 0" check (what this used to be) never catches
+// this: 15 is a real, positive, but entirely wrong number for an
+// 80+-column terminal, a real, user-reported bug — the family's own
+// first-ever timeline render came out barely 15 columns wide,
+// contradicting the width of a real room or the screen it's on, then
+// correcting itself (needlessly, confusingly differently from the
+// first look) the moment literally anything else re-rendered it after
+// the view's first real Draw() had already happened. See
+// nameColumnWidth's own doc comment (panel.go) for the same class of
+// "falls back to a generous estimate before the first real draw"
+// problem, solved there with an explicitly-tracked layout field
+// instead — not practical to copy verbatim here since this bar has no
+// sibling columns of its own to size against, only the screen itself.
+const logAuditTimelineUnlaidOutWidth = 15
+
 // renderLogAuditTimeline fills the timeline bar from entries (the
 // viewer's own currently-matching set — see renderLogAuditViewer) —
-// the bar's own real width if it's been drawn at least once, else the
-// whole screen's width as a reasonable first guess (the same
-// first-draw fallback nameColumnWidth already uses for exactly the
-// same reason).
+// the bar's own real width if it's been drawn at least once (anything
+// past logAuditTimelineUnlaidOutWidth — see its own doc comment), else
+// the whole screen's width as a reasonable first guess.
 func (r *Root) renderLogAuditTimeline(entries []logview.Entry) {
 	_, _, width, _ := r.logAuditTimelineView.GetRect()
-	if width <= 0 {
+	if width <= logAuditTimelineUnlaidOutWidth {
 		if _, _, screenWidth, _ := r.GetRect(); screenWidth > 4 {
 			width = screenWidth - 4
 		} else {

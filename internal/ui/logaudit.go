@@ -80,9 +80,20 @@ func (r *Root) openLogAuditViewer() {
 	r.logAuditKeywordField.SetText("")
 	r.logAuditTimeField.SetText("")
 	r.logAuditLevelField.SetText("")
+	// Newest-first, not the Merge's own oldest-first order — per the
+	// user's own explicit request, the same "most recent at the top"
+	// default every other reasonable default for triaging a log
+	// actually wants. Still just the opening default: the Time column
+	// header (logauditscreen.go) toggles it for the rest of the session.
+	r.logAuditNewestFirst = true
 	r.renderLogAuditViewer()
 	r.pushOverlay(logAuditViewerPage, r.logAuditViewerLayout, nil)
-	r.app.SetFocus(r.logAuditKeywordField)
+	// The list, not logAuditKeywordField — per the user's own explicit
+	// request: opening the viewer should land you ready to read/navigate
+	// entries right away, not typing into a filter first (see
+	// renderLogAuditFocusIndicator, logauditscreen.go, for the visible
+	// cue this now gives).
+	r.app.SetFocus(r.logAuditViewerTable)
 }
 
 // refreshLogAuditViewerData re-reads and re-merges logAuditGroupOpen's
@@ -254,15 +265,22 @@ func (r *Root) stopLogAuditFollow() {
 // tickLogAuditFollow applies one follow tick's own already-read result
 // (see readLogAuditGroup/startLogAuditFollow — the actual file I/O
 // already happened off the UI goroutine by the time this runs) and
-// re-renders — stayedAtBottom captures, before applying it, whether
-// the cursor was already on the last row (the only case Select should
-// move it: an admin watching the tail end should keep seeing the
-// tail end once new lines arrive, but one who scrolled up to read an
-// older entry must not be yanked away from it).
+// re-renders — stayedAtTail captures, before applying it, whether the
+// cursor was already on the row new entries actually arrive at (the
+// only case Select should move it: an admin watching the tail end
+// should keep seeing the tail end once new lines arrive, but one who
+// scrolled away to read an older entry must not be yanked back to
+// it). Which row that is depends on logAuditNewestFirst — row 1 (new
+// entries appear at the top) when true, the last row (they appear at
+// the bottom, same as a plain `tail -f`) when false, the default.
 func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, err error) {
 	rowCount := r.logAuditViewerTable.GetRowCount()
 	cur, _ := r.logAuditViewerTable.GetSelection()
-	stayedAtBottom := rowCount > 1 && cur == rowCount-1
+	tailRow := rowCount - 1
+	if r.logAuditNewestFirst {
+		tailRow = 1
+	}
+	stayedAtTail := rowCount > 1 && cur == tailRow
 
 	r.logAuditAllEntries = entries
 	r.logAuditFiles = files
@@ -270,9 +288,13 @@ func (r *Root) tickLogAuditFollow(entries []logview.Entry, files, skipped int, e
 	r.logAuditParseErr = err
 	r.renderLogAuditViewer()
 
-	if stayedAtBottom {
+	if stayedAtTail {
 		if newCount := r.logAuditViewerTable.GetRowCount(); newCount > 1 {
-			r.logAuditViewerTable.Select(newCount-1, 0)
+			newTailRow := newCount - 1
+			if r.logAuditNewestFirst {
+				newTailRow = 1
+			}
+			r.logAuditViewerTable.Select(newTailRow, 0)
 		}
 	}
 }
