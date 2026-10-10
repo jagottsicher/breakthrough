@@ -14,12 +14,18 @@ import (
 // (git log's own default order) — Subject is the commit message's own
 // first line only, the same "short, human-facing summary" Log's own
 // --format already limits itself to; the full message body isn't
-// needed anywhere a LogEntry value is used today.
+// needed anywhere a LogEntry value is used today. AuthorEmail is the
+// stable identity internal/ui's own author-coloring hashes (the same
+// person can change their display name; their email is what actually
+// stays constant across commits) — AuthorName is only ever what gets
+// shown.
 type LogEntry struct {
-	Hash    string
-	Short   string
-	Subject string
-	When    time.Time
+	Hash        string
+	Short       string
+	Subject     string
+	AuthorName  string
+	AuthorEmail string
+	When        time.Time
 }
 
 // CommitLogLimit bounds how many commits Log ever fetches in one call —
@@ -48,7 +54,7 @@ const CommitLogLimit = 200
 func Log(ctx context.Context, root string) ([]LogEntry, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "log",
 		"-n", strconv.Itoa(CommitLogLimit),
-		"--format=%H%x00%h%x00%s%x00%cI")
+		"--format=%H%x00%h%x00%s%x00%cI%x00%an%x00%ae")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -70,15 +76,18 @@ func Log(ctx context.Context, root string) ([]LogEntry, error) {
 		if line == "" {
 			continue
 		}
-		fields := strings.SplitN(line, "\x00", 4)
-		if len(fields) != 4 {
+		fields := strings.SplitN(line, "\x00", 6)
+		if len(fields) != 6 {
 			continue
 		}
 		when, err := time.Parse(time.RFC3339, fields[3])
 		if err != nil {
 			when = time.Time{}
 		}
-		commits = append(commits, LogEntry{Hash: fields[0], Short: fields[1], Subject: fields[2], When: when})
+		commits = append(commits, LogEntry{
+			Hash: fields[0], Short: fields[1], Subject: fields[2], When: when,
+			AuthorName: fields[4], AuthorEmail: fields[5],
+		})
 	}
 	return commits, nil
 }

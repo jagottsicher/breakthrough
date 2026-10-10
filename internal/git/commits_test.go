@@ -32,6 +32,9 @@ func TestLogListsCommitsNewestFirst(t *testing.T) {
 	if commits[0].When.IsZero() {
 		t.Error("Log: When left zero")
 	}
+	if commits[0].AuthorName != "Test" || commits[0].AuthorEmail != "test@example.com" {
+		t.Errorf("Log: AuthorName/AuthorEmail = %q/%q, want Test/test@example.com", commits[0].AuthorName, commits[0].AuthorEmail)
+	}
 }
 
 // TestLogOnARepositoryWithNoCommitsYet pins a real distinction: `git
