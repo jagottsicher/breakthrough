@@ -603,12 +603,17 @@ var helpText = strings.TrimLeft(`
 
     Tab      Switch keyboard focus between Files, Branches, Commits
              and Stash
-    Space    (Files) Stage the row under the cursor if it isn't,
-             unstage it if it is (does nothing on a Conflicts row)
-    Enter    (Branches) Check out the branch under the cursor —
-             confirms first if the working tree isn't clean
+    Space    (Files only) Stage the row under the cursor if it isn't,
+             unstage it if it is (does nothing on a Conflicts row) —
+             only shown in the hint bar while Files has focus, since
+             it has no meaning on any other box's own row
+    Enter    (Branches only) Check out the branch under the cursor —
+             confirms first if the working tree isn't clean — only
+             shown in the hint bar while Branches has focus
     c        Commit whatever is currently staged, after typing a
-             message (does nothing with nothing staged)
+             message (does nothing with nothing staged) — works no
+             matter which box currently has focus, since committing
+             doesn't depend on which row is selected anywhere
     r        Re-read the repository's current status/branches/commits/
              stash
     Esc      Close

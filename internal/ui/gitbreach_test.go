@@ -803,3 +803,103 @@ func TestGitBreachMainOwnerStashDoesNothingWhenFilesOwnsMain(t *testing.T) {
 		t.Error("startGitBreachStashDiffIfOwner started a fetch while Files owns Main, want a no-op")
 	}
 }
+
+// TestGitBreachCommitPromptOpensFromAnyBox pins the user's own explicit
+// point: committing whatever is already staged has nothing to do with
+// which row is selected anywhere, so "c" must work no matter which box
+// currently has keyboard focus — not just Files, the only one whose own
+// key capture originally wired it up.
+func TestGitBreachCommitPromptOpensFromAnyBox(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+
+	cKey := tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone)
+
+	for _, tc := range []struct {
+		name    string
+		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Branches", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
+		{"Commits", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForGitBreachDir(t, dir)
+			r.openGitBreach()
+
+			if got := tc.capture(r)(cKey); got != nil {
+				t.Errorf("capture(%q) = %v, want nil (consumed)", 'c', got)
+			}
+			if r.activePage != promptPage {
+				t.Errorf("activePage = %q, want %q (the commit prompt)", r.activePage, promptPage)
+			}
+		})
+	}
+}
+
+// gitBreachHintHasKey reports whether entries contains one whose own
+// single key (every gitBreachHintEntries entry has exactly one — see
+// hintKey) matches key — checking the structured entries themselves
+// rather than the rendered hint text avoids false positives from a key
+// label's own letters coincidentally appearing elsewhere in the text
+// (e.g. "switch box" contains a "c").
+func gitBreachHintHasKey(entries []listHintEntry, key string) bool {
+	for _, e := range entries {
+		for _, k := range e.keys {
+			if k.key == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TestGitBreachHintShowsSpaceOnlyWhileFilesHasFocus and its Branches
+// counterpart below pin the user's own explicit point the other way:
+// Space only ever acts on a Files row, and Enter only ever checks out a
+// Branches row, so the hint bar shouldn't advertise either one while a
+// different box has focus — unlike "c", which now always shows (see
+// TestGitBreachCommitPromptOpensFromAnyBox).
+func TestGitBreachHintShowsSpaceOnlyWhileFilesHasFocus(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Space") {
+		t.Error("hint entries don't mention Space while Files has focus")
+	}
+
+	r.toggleGitBreachFocus() // -> Branches
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Space") {
+		t.Error("hint entries still mention Space after focus moved to Branches")
+	}
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "c") {
+		t.Error("hint entries should still mention \"c\" (commit) regardless of focus")
+	}
+}
+
+func TestGitBreachHintShowsEnterOnlyWhileBranchesHasFocus(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
+		t.Error("hint entries mention Enter before Branches has focus")
+	}
+
+	r.toggleGitBreachFocus() // -> Branches
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
+		t.Error("hint entries don't mention Enter while Branches has focus")
+	}
+
+	r.toggleGitBreachFocus() // -> Commits
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
+		t.Error("hint entries still mention Enter after focus moved to Commits")
+	}
+}
