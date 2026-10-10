@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -73,5 +74,76 @@ func TestStashDiffShowsTheStashedChange(t *testing.T) {
 	}
 	if !strings.Contains(diff, "+line two") {
 		t.Errorf("StashDiff = %q, want it to contain the stashed line", diff)
+	}
+}
+
+func TestStashApplyRestoresTheStashedChangeAndKeepsTheStash(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "line one\n")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "initial")
+	writeFile(t, dir, "a.txt", "line one\nline two\n")
+	runGit(t, dir, "stash", "push", "-q", "-m", "wip")
+
+	stashes, err := StashList(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("StashList: %v", err)
+	}
+	if len(stashes) != 1 {
+		t.Fatalf("StashList = %+v, want 1", stashes)
+	}
+
+	if err := StashApply(context.Background(), dir, stashes[0].Ref); err != nil {
+		t.Fatalf("StashApply: %v", err)
+	}
+
+	content, err := os.ReadFile(dir + "/a.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(content), "line two") {
+		t.Errorf("a.txt after StashApply = %q, want it to contain the stashed line", content)
+	}
+
+	// Apply, deliberately, must never drop the stash — see its own doc
+	// comment on why this package offers apply/drop separately rather
+	// than pop.
+	stashes, err = StashList(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("StashList after apply: %v", err)
+	}
+	if len(stashes) != 1 {
+		t.Errorf("StashList after apply = %+v, want the stash to still exist", stashes)
+	}
+}
+
+func TestStashDropRemovesTheStash(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "a")
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-q", "-m", "initial")
+	writeFile(t, dir, "a.txt", "a changed")
+	runGit(t, dir, "stash", "push", "-q", "-m", "wip")
+
+	stashes, err := StashList(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("StashList: %v", err)
+	}
+	if len(stashes) != 1 {
+		t.Fatalf("StashList = %+v, want 1", stashes)
+	}
+
+	if err := StashDrop(context.Background(), dir, stashes[0].Ref); err != nil {
+		t.Fatalf("StashDrop: %v", err)
+	}
+
+	stashes, err = StashList(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("StashList after drop: %v", err)
+	}
+	if len(stashes) != 0 {
+		t.Errorf("StashList after drop = %+v, want none", stashes)
 	}
 }

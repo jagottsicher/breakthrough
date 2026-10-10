@@ -597,8 +597,9 @@ var helpText = strings.TrimLeft(`
   file, or a Commits/Stash row's own full diff across every file it
   touched. Tab switches keyboard focus between Files, Branches, Commits
   and Stash, the dashboard's own four real, navigable boxes so far — no
-  action on a Commits or Stash row yet (checkout/revert/cherry-pick/
-  reset and apply/pop/drop are later Ausbaustufen).
+  action on a Commits row yet (checkout/revert/cherry-pick/reset are
+  later Ausbaustufen). A Stash row can be applied or dropped (never
+  popped — see the key list below).
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on
@@ -618,6 +619,13 @@ var helpText = strings.TrimLeft(`
              a branch is itself the irreversible action. Refuses with
              the same error git itself gives for an unmerged branch
              (never force-deletes); does nothing on the current branch
+    a        (Stash only) Apply the entry under the cursor onto the
+             working tree — confirms first only if the working tree
+             isn't clean; the stash itself is never removed (apply,
+             not pop)
+    d        (Stash only) Drop the entry under the cursor, after
+             confirming — always confirms, like Branches' own "d",
+             since dropping a stash is itself the irreversible action
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing

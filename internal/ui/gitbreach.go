@@ -669,3 +669,90 @@ func (r *Root) maybeLoadMoreGitBreachCommits(row int) {
 	r.gitBreachCommits = commits
 	r.renderGitBreachCommits()
 }
+
+// openGitBreachStashApply is "a" on the Stash table — restores the
+// entry under the cursor onto the working tree, confirming first only
+// when there's actually something uncommitted to conflict with, the
+// same "only ask if there's something to lose" restraint
+// openGitBreachCheckout's own dirty-tree branch already establishes.
+// Deliberately apply, never pop — see git.StashApply's own doc comment
+// for why: pop can leave the stash behind in a conflicted state Git
+// breach has no UI to resolve, while apply always keeps the stash
+// either way, recoverable by hand regardless of how the apply itself
+// goes. Dropping the entry afterward, if desired, is "d" (see
+// openGitBreachStashDrop), a separate, explicit action — never implicit
+// here.
+func (r *Root) openGitBreachStashApply() {
+	row, _ := r.gitBreachStashTable.GetSelection()
+	s, ok := r.gitBreachStashAt(row)
+	if !ok {
+		return
+	}
+
+	st := r.gitBreachStatus
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Apply stash %q with uncommitted changes in the working tree?", s.Message),
+			"Yes, apply",
+			func() { r.applyGitBreachStash(s.Ref) },
+		)
+		return
+	}
+	r.applyGitBreachStash(s.Ref)
+}
+
+// applyGitBreachStash runs the actual apply and reloads — both this
+// dashboard's own state (Files' own now-possibly-changed status) and
+// the active panel underneath it, the same reasoning
+// checkoutGitBreachBranch's own doc comment already gives: an apply can
+// change which files exist on disk in the exact directory the panel is
+// already showing.
+func (r *Root) applyGitBreachStash(ref string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.StashApply(ctx, r.gitBreachRoot, ref); err != nil {
+		r.showError(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
+// openGitBreachStashDrop is "d" on the Stash table — always confirms
+// first, unlike Apply: dropping a stash is itself the irreversible
+// action (the stashed changes are simply gone), not something that's
+// only risky in some working-tree states, the same distinction
+// openGitBreachDeleteBranch's own doc comment draws for Branches.
+// Scoped to the Stash table's own key capture, same as Branches' own
+// "d" is scoped to its own table — the two never collide.
+func (r *Root) openGitBreachStashDrop() {
+	row, _ := r.gitBreachStashTable.GetSelection()
+	s, ok := r.gitBreachStashAt(row)
+	if !ok {
+		return
+	}
+	r.openConfirm(
+		fmt.Sprintf("Drop stash %q?", s.Message),
+		"Yes, drop",
+		func() { r.dropGitBreachStash(s.Ref) },
+	)
+}
+
+// dropGitBreachStash runs the actual drop and reloads Git breach's own
+// state — nothing on disk in the active panel's own directory can
+// change from dropping a stash entry that was never applied to begin
+// with, but reloadGitBreach is still the right call rather than
+// hand-patching gitBreachStash: the same "re-run the real read, don't
+// just redraw" contract every other Git breach action already follows,
+// and the one safe way to get every later entry's own ref correctly
+// renumbered (stash@{N} is positional — dropping stash@{0} shifts every
+// entry below it down by one).
+func (r *Root) dropGitBreachStash(ref string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.StashDrop(ctx, r.gitBreachRoot, ref); err != nil {
+		r.showError(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+}

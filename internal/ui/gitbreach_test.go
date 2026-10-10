@@ -1287,3 +1287,152 @@ func TestRenderGitBreachCommitsHeaderShowsHintOnlyWhileTruncated(t *testing.T) {
 		t.Errorf("header text = %q, want no hint once every commit is loaded", text)
 	}
 }
+
+// TestOpenGitBreachStashApplyRestoresOnACleanTree pins the "don't ask
+// what there's nothing to lose" half: applying a stash onto an already
+// clean working tree has nothing to conflict with, so it runs
+// immediately with no confirm — the same restraint
+// openGitBreachCheckout's own doc comment already establishes for
+// checkout.
+func TestOpenGitBreachStashApplyRestoresOnACleanTree(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "wip")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable)
+	r.gitBreachStashTable.Select(0, 0)
+
+	r.openGitBreachStashApply()
+
+	if r.activePage == confirmPage {
+		t.Fatal("activePage = confirmPage, want an immediate apply on a clean tree")
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "a changed" {
+		t.Errorf("a.txt = %q, want the stashed change restored", content)
+	}
+	if len(r.gitBreachStash) != 1 {
+		t.Errorf("gitBreachStash = %+v, want the stash to still exist after apply", r.gitBreachStash)
+	}
+}
+
+// TestOpenGitBreachStashApplyConfirmsOnADirtyTree pins the other half:
+// staged/unstaged/conflicted changes must not silently receive a
+// possibly-conflicting stash apply without the user being asked first.
+func TestOpenGitBreachStashApplyConfirmsOnADirtyTree(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "wip")
+	// Dirty the tree again: a different staged, uncommitted change.
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "b.txt")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable)
+	r.gitBreachStashTable.Select(0, 0)
+
+	r.openGitBreachStashApply()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog on a dirty tree", r.activePage)
+	}
+	content, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if string(content) == "a changed" {
+		t.Error("a.txt already has the stashed change before confirming, want the apply to not have run yet")
+	}
+
+	r.pendingConfirm()
+
+	content, err := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "a changed" {
+		t.Errorf("a.txt = %q after confirming, want the stashed change restored", content)
+	}
+}
+
+// TestOpenGitBreachStashDropConfirmsThenDrops pins the "always confirm"
+// half: unlike apply, dropping a stash is itself the irreversible
+// action.
+func TestOpenGitBreachStashDropConfirmsThenDrops(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "wip")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable)
+	r.gitBreachStashTable.Select(0, 0)
+
+	r.openGitBreachStashDrop()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog before dropping a stash", r.activePage)
+	}
+	if len(r.gitBreachStash) != 1 {
+		t.Error("stash already gone before confirming, want the drop to not have run yet")
+	}
+
+	r.pendingConfirm()
+
+	if len(r.gitBreachStash) != 0 {
+		t.Errorf("gitBreachStash = %+v, want none after confirming the drop", r.gitBreachStash)
+	}
+}
+
+// TestOpenGitBreachStashApplyDoesNothingWithNoStash pins a plain no-op
+// guard: there's nothing under the cursor to apply on an empty stash
+// stack, the same restraint gitBreachStashAt's own bounds check already
+// gives every other Stash action.
+func TestOpenGitBreachStashApplyDoesNothingWithNoStash(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable)
+
+	r.openGitBreachStashApply()
+
+	if r.activePage == confirmPage {
+		t.Error("activePage = confirmPage, want a no-op with no stash entries")
+	}
+}
