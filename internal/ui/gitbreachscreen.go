@@ -41,6 +41,14 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachStatusHeader, r.gitBreachStatusView = newGitBreachBox("Status")
 
 	r.gitBreachFilesHeader = newGitBreachBoxHeader("Files")
+	// The header is its own separate TextView from the table it labels
+	// — a plain click on it would otherwise do nothing at all (see
+	// gitBreachBlockFocusSteal's own doc comment for why every other
+	// box's header is deliberately inert instead), so it gets its own
+	// mouse capture that focuses Files explicitly, per the user's own
+	// explicit request that the header line itself be clickable too,
+	// not just the table beneath it.
+	r.gitBreachFilesHeader.SetMouseCapture(r.gitBreachFocusFilesOnClick)
 	r.gitBreachFilesTable = tview.NewTable()
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
@@ -53,17 +61,33 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true) })
 	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
+	r.gitBreachStatusHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachStatusView.SetMouseCapture(gitBreachBlockFocusSteal)
+
 	r.gitBreachBranchesHeader, r.gitBreachBranchesView = newGitBreachBox("Branches (stub)")
 	r.gitBreachBranchesView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachBranchesHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachBranchesView.SetMouseCapture(gitBreachBlockFocusSteal)
 	r.gitBreachCommitsHeader, r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
 	r.gitBreachCommitsView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachCommitsHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachCommitsView.SetMouseCapture(gitBreachBlockFocusSteal)
 	r.gitBreachStashHeader, r.gitBreachStashView = newGitBreachBox("Stash (stub)")
 	r.gitBreachStashView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachStashHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachStashView.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.gitBreachDiffHeader, r.gitBreachDiffView = newGitBreachBox("Main — Diff")
 	r.gitBreachDiffView.SetWrap(false)
 	r.gitBreachDiffView.SetDynamicColors(false)
 	r.gitBreachDiffView.SetScrollable(true)
+	r.gitBreachDiffHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	// The diff view's own MouseLeftDown is blocked the same as every
+	// other passive box's (see gitBreachBlockFocusSteal), but every
+	// other mouse action still passes through unchanged — the wheel
+	// scroll a long diff needs still works without ever taking
+	// keyboard focus away from Files.
+	r.gitBreachDiffView.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.gitBreachHint = tview.NewTextView()
 	r.gitBreachHint.SetWrap(false)
@@ -100,6 +124,40 @@ func newGitBreachBoxHeader(title string) *tview.TextView {
 	h.SetWrap(false)
 	h.SetText(" " + title + " ")
 	return h
+}
+
+// gitBreachBlockFocusSteal is every passive box's own (and its own
+// header's) mouse capture — Status, Branches/Commits/Stash, Main, and
+// all five of their own headers. A plain tview.TextView's own default
+// MouseHandler calls setFocus(itself) unconditionally on a
+// MouseLeftDown anywhere inside it (verified directly against
+// textview.go, not guessed) — fine for a box that's actually meant to
+// receive keyboard focus, but a real, reported bug for one that isn't:
+// an ordinary click anywhere on this dashboard outside the Files table
+// silently moved real keyboard focus onto a box nothing could ever
+// navigate inside, with no way back short of closing and reopening the
+// whole dashboard. Swallowing MouseLeftDown here is what keeps that
+// from happening; every other mouse action (wheel scroll, chiefly)
+// still passes through unchanged, so the Main box's own diff can still
+// be scrolled with the mouse without taking focus away from Files.
+func gitBreachBlockFocusSteal(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
+// gitBreachFocusFilesOnClick is the Files header's own mouse capture —
+// clicking the header line itself focuses the Files table, the same as
+// clicking anywhere in the table's own body already does via Table's
+// default MouseHandler, per the user's own explicit request that the
+// header be clickable too, not just the content beneath it.
+func (r *Root) gitBreachFocusFilesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		r.app.SetFocus(r.gitBreachFilesTable)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
 }
 
 // newGitBreachBox is every TextView-bodied box's own shared

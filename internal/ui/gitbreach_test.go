@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/git"
@@ -243,6 +244,64 @@ func TestOpenGitBreachCommitPromptDoesNothingWithNothingStaged(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want the error overlay for \"nothing staged\"", r.activePage)
+	}
+}
+
+// TestGitBreachBlockFocusStealSwallowsLeftDown pins the user's own
+// explicit bug report: an ordinary click anywhere on one of the
+// passive boxes (Status, Branches/Commits/Stash, Main) used to steal
+// real keyboard focus onto a box nothing could ever navigate inside,
+// with no way back short of closing and reopening the whole dashboard
+// — tview's own TextView.MouseHandler calls setFocus(itself)
+// unconditionally on MouseLeftDown otherwise.
+func TestGitBreachBlockFocusStealSwallowsLeftDown(t *testing.T) {
+	action, event := gitBreachBlockFocusSteal(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+	if event != nil {
+		t.Errorf("event = %v, want nil (swallowed, never reaching TextView's own default handler)", event)
+	}
+	if action != tview.MouseConsumed {
+		t.Errorf("action = %v, want MouseConsumed", action)
+	}
+}
+
+// TestGitBreachBlockFocusStealPassesThroughOtherActions pins the other
+// half of the same fix: only MouseLeftDown (the one action that steals
+// focus) is swallowed — a wheel scroll over the Main box's own long
+// diff must still reach TextView's own default scroll handling.
+func TestGitBreachBlockFocusStealPassesThroughOtherActions(t *testing.T) {
+	orig := tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0)
+	action, event := gitBreachBlockFocusSteal(tview.MouseScrollDown, orig)
+	if event != orig {
+		t.Errorf("event = %v, want the original event passed through unchanged", event)
+	}
+	if action != tview.MouseScrollDown {
+		t.Errorf("action = %v, want MouseScrollDown passed through unchanged", action)
+	}
+}
+
+// TestGitBreachFocusFilesOnClickFocusesTheTable pins the user's own
+// further explicit request: the Files header line itself must be
+// clickable too, not just the table beneath it — before this, clicking
+// the header did nothing at all (a header is its own separate TextView
+// from the table it labels).
+func TestGitBreachFocusFilesOnClickFocusesTheTable(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	r.app.SetFocus(r.gitBreachStatusView) // simulate focus having landed somewhere else
+	if r.gitBreachFilesTable.HasFocus() {
+		t.Fatal("setup: Files should not have focus yet")
+	}
+
+	action, event := r.gitBreachFocusFilesOnClick(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("clicking the Files header should focus the Files table")
+	}
+	if event != nil || action != tview.MouseConsumed {
+		t.Errorf("action=%v event=%v, want the click consumed", action, event)
 	}
 }
 
