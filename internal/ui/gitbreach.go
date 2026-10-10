@@ -346,7 +346,7 @@ func (r *Root) startGitBreachDiff(row int) {
 				r.gitBreachDiffView.SetText(renderSyntax(viewer.Highlight(gr.path, text), paletteFor(r.theme.SurfaceBackground)))
 				return
 			}
-			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, r.theme))
+			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, gr.path, r.theme))
 		})
 	})
 }
