@@ -95,21 +95,28 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
 	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachDiff(row) })
-	// Files is the one real, focusable box in this first Ausbaustufe —
-	// Status/Branches/Commits/Stash/Main have nothing for keyboard focus
+	// Files and Branches are this Ausbaustufe's own two real, focusable
+	// boxes — Status/Commits/Stash/Main have nothing for keyboard focus
 	// to ever land on yet, so their own headers/bodies stay permanently
 	// in the "inactive" look applyGitBreachTheme's own initial pass
-	// already gives every box.
+	// already gives every box. See gitBreachFocusables for the shared,
+	// data-driven list Tab cycles through — adding a third real box
+	// later means adding it there, not touching the cycling logic
+	// itself.
 	r.gitBreachFilesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true) })
 	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
 	r.gitBreachStatusHeader.SetMouseCapture(gitBreachBlockFocusSteal)
 	r.gitBreachStatusView.SetMouseCapture(gitBreachBlockFocusSteal)
 
-	r.gitBreachBranchesHeader, r.gitBreachBranchesView = newGitBreachBox("Branches (stub)")
-	r.gitBreachBranchesView.SetText("kommt in einer späteren Ausbaustufe")
-	r.gitBreachBranchesHeader.SetMouseCapture(gitBreachBlockFocusSteal)
-	r.gitBreachBranchesView.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachBranchesHeader = newGitBreachBoxHeader("Branches")
+	r.gitBreachBranchesHeader.SetMouseCapture(r.gitBreachFocusBranchesOnClick)
+	r.gitBreachBranchesTable = tview.NewTable()
+	r.gitBreachBranchesTable.SetSelectable(true, false)
+	r.gitBreachBranchesTable.SetInputCapture(r.captureGitBreachBranchesTableKey)
+	r.gitBreachBranchesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, true) })
+	r.gitBreachBranchesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, false) })
+
 	r.gitBreachCommitsHeader, r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
 	r.gitBreachCommitsView.SetText("kommt in einer späteren Ausbaustufe")
 	r.gitBreachCommitsHeader.SetMouseCapture(gitBreachBlockFocusSteal)
@@ -145,8 +152,8 @@ func (r *Root) newGitBreachScreen() {
 
 	leftColumn := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(gitBreachBoxFlex(r.gitBreachStatusHeader, r.gitBreachStatusView), gitBreachStatusHeight, 0, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 1, true).
-		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesView), gitBreachStubHeight, 0, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 2, true).
+		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesTable), 0, 1, false).
 		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsView), gitBreachStubHeight, 0, false).
 		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashView), gitBreachStubHeight, 0, false)
 
@@ -290,7 +297,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	}
 
 	textBodies := []*tview.TextView{
-		r.gitBreachStatusView, r.gitBreachBranchesView, r.gitBreachCommitsView,
+		r.gitBreachStatusView, r.gitBreachCommitsView,
 		r.gitBreachStashView, r.gitBreachDiffView,
 	}
 	for _, v := range textBodies {
@@ -298,9 +305,31 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 		v.SetTextColor(theme.Text)
 	}
 	r.gitBreachFilesTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.gitBreachBranchesTable.SetBackgroundColor(theme.SurfaceBackground)
 
-	if r.gitBreachFilesTable.HasFocus() {
-		r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true)
+	// Both tables mix several per-cell text colors (Staged/Unstaged/
+	// Untracked rows each carry their own gitBreachRowColor; Branches'
+	// current-branch row carries EntryExecutable) — without an explicit
+	// SetSelectedStyle, tview's own default selection rendering reverses
+	// whatever foreground a cell already has into the highlight's own
+	// background, so the "selected row" color silently changes from row
+	// to row instead of reading as one consistent selection bar. Same
+	// fix, same reasoning, as sshKeysTable/connectionMenuTable/
+	// sedPreviewTable/tabSwitcher already apply.
+	selStyle := tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.TextColor)
+	r.gitBreachFilesTable.SetSelectedStyle(selStyle)
+	r.gitBreachBranchesTable.SetSelectedStyle(selStyle)
+
+	// Re-assert whichever of Files/Branches actually has real keyboard
+	// focus right now on top of the uniform "inactive" pass above — the
+	// same "a live theme switch must not silently lose a focus-
+	// dependent look" case this function's own doc comment already
+	// gives, now checked for both of this Ausbaustufe's own real boxes
+	// instead of just Files.
+	for _, f := range r.gitBreachFocusables() {
+		if f.body.HasFocus() {
+			r.styleGitBreachFocus(f.header, f.body, true)
+		}
 	}
 
 	r.renderGitBreach() // cell colors baked in per cell, not looked up live at draw time
@@ -312,20 +341,80 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 // actually wired.
 func gitBreachHintEntries() []listHintEntry {
 	return []listHintEntry{
+		hintKey("Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
 		hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
+		hintKey("Enter", "checkout (Branches)", func(r *Root) { r.openGitBreachCheckout() }),
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }),
 	}
 }
 
-// captureGitBreachFilesTableKey: Space toggles stage/unstage, "c"
-// commits, "r" reloads, Escape closes — the same per-table
-// InputCapture shape captureLogAuditSelectionTableKey already
-// establishes elsewhere in this package.
+// gitBreachFocusable pairs one box's own header with its body — both
+// *tview.Table and *tview.TextView already satisfy this (every real
+// tview.Primitive does, plus SetBackgroundColor from the embedded
+// Box), so the same pairing styleGitBreachFocus already colors works
+// for either concrete type without its own switch.
+type gitBreachFocusable interface {
+	tview.Primitive
+	gitBreachBackgroundSetter
+}
+
+type gitBreachFocusEntry struct {
+	header *tview.TextView
+	body   gitBreachFocusable
+}
+
+// gitBreachFocusables is the ordered list Tab cycles through (see
+// toggleGitBreachFocus) and applyGitBreachTheme's own "which box
+// currently has focus" re-check — Files and Branches today, the only
+// two real, focusable boxes in this Ausbaustufe. A later Ausbaustufe
+// giving Commits or Stash real, navigable content adds its own entry
+// here and nowhere else — the whole point of making this a function
+// returning a slice rather than a fixed two-way toggle.
+func (r *Root) gitBreachFocusables() []gitBreachFocusEntry {
+	return []gitBreachFocusEntry{
+		{r.gitBreachFilesHeader, r.gitBreachFilesTable},
+		{r.gitBreachBranchesHeader, r.gitBreachBranchesTable},
+	}
+}
+
+// toggleGitBreachFocus is "Tab" — advances real keyboard focus to the
+// next entry in gitBreachFocusables, wrapping back to the first past
+// the last. Falls back to focusing the first entry outright if nothing
+// in the list currently has focus (shouldn't happen in practice, but a
+// real fallback costs nothing and avoids a silent no-op if it ever
+// does).
+func (r *Root) toggleGitBreachFocus() {
+	focusables := r.gitBreachFocusables()
+	if len(focusables) == 0 {
+		return
+	}
+	for i, f := range focusables {
+		if f.body.HasFocus() {
+			r.app.SetFocus(focusables[(i+1)%len(focusables)].body)
+			return
+		}
+	}
+	r.app.SetFocus(focusables[0].body)
+}
+
+// captureGitBreachFilesTableKey: Tab switches to the next box, Space
+// toggles stage/unstage, "c" commits, "r" reloads, Escape closes — the
+// same per-table InputCapture shape captureLogAuditSelectionTableKey
+// already establishes elsewhere in this package. Tab is intercepted
+// explicitly rather than left to bubble: tview's own Table.InputHandler
+// treats KeyTab as a "done" key (calls SetDoneFunc, which this table
+// has none of, then simply returns) rather than passing it through —
+// verified directly against table.go, not guessed — so Tab would
+// otherwise silently do nothing at all instead of switching boxes.
 func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
+		return nil
+	}
+	if event.Key() == tcell.KeyTab {
+		r.toggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -344,6 +433,43 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 	return event
 }
 
+// captureGitBreachBranchesTableKey: Tab switches to the next box
+// (same reasoning as captureGitBreachFilesTableKey's own doc comment),
+// Enter checks out the branch under the cursor, "r" reloads, Escape
+// closes.
+func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyEscape {
+		r.closeGitBreach()
+		return nil
+	}
+	if event.Key() == tcell.KeyTab {
+		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyEnter {
+		r.openGitBreachCheckout()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
+		r.reloadGitBreach()
+		return nil
+	}
+	return event
+}
+
+// gitBreachFocusBranchesOnClick is the Branches header's own mouse
+// capture — clicking the header line itself focuses the table, the
+// same as gitBreachFocusFilesOnClick already does for Files' own
+// header (see its own doc comment for why a header needs this at all:
+// it's its own separate TextView from the table it labels).
+func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		r.app.SetFocus(r.gitBreachBranchesTable)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
 // renderGitBreach refreshes every box from r.gitBreachStatus/Rows —
 // called by reloadGitBreach after every fetch, stage, unstage, and
 // commit, the same "re-render from the current state, never patch it
@@ -357,6 +483,7 @@ func (r *Root) renderGitBreach() {
 
 	r.renderGitBreachStatus()
 	r.renderGitBreachFiles()
+	r.renderGitBreachBranches()
 }
 
 // renderGitBreachStatus fills the Status box — branch, ahead/behind,
@@ -474,12 +601,17 @@ func (r *Root) renderGitBreachFiles() {
 
 	// Keep the cursor on a real file row, not a non-selectable section
 	// header — the same restraint renderActivityLog's own tail already
-	// shows after a refresh changes how many rows there are.
+	// shows after a refresh changes how many rows there are. The !ok
+	// check alone isn't enough the very first time real rows exist:
+	// see gitBreachFilesReady's own doc comment on Root for why a
+	// leftover selectedRow from the construction-time placeholder
+	// render can pass as "valid" by sheer coincidence.
 	cur, _ := r.gitBreachFilesTable.GetSelection()
-	if _, ok := r.gitBreachRowIndex[cur]; !ok {
+	if _, ok := r.gitBreachRowIndex[cur]; !ok || !r.gitBreachFilesReady {
 		cur = gitBreachFirstDataRow(r.gitBreachRowIndex)
 		r.gitBreachFilesTable.Select(cur, 0)
 	}
+	r.gitBreachFilesReady = true
 	// Explicitly (re)fetch the diff for whatever row is now current — a
 	// real, reported bug otherwise: Select() only invokes
 	// SetSelectionChangedFunc when tview's own internal selectedRow
@@ -493,6 +625,76 @@ func (r *Root) renderGitBreachFiles() {
 	// otherwise leave the Main box showing a stale or empty diff
 	// forever, never refreshed, since nothing else ever asked it to be.
 	r.startGitBreachDiff(cur)
+}
+
+// renderGitBreachBranches rebuilds the Branches table — unlike Files,
+// no section headers at all (every row is the same kind of thing, a
+// branch), so gitBreachBranchAt indexes r.gitBreachBranches directly
+// by row rather than needing Files' own gitBreachRowIndex indirection.
+func (r *Root) renderGitBreachBranches() {
+	r.gitBreachBranchesTable.Clear()
+
+	if r.gitBreachBranchesErr != nil {
+		showTablePlaceholder(r.gitBreachBranchesTable, r.gitBreachBranchesErr.Error(), r.theme.EntryError)
+		return
+	}
+
+	// A detached HEAD matches no entry in r.gitBreachBranches at all
+	// (git.Branches only ever lists refs/heads/, which a detached HEAD
+	// isn't one of) — said so explicitly here via gitBreachStatus's own
+	// Detached/Branch fields (already fetched by the very same Fetch
+	// call that filled Status/Files), rather than letting "no row shows
+	// as current" read as a bug instead of the real, if unusual, state
+	// it actually is.
+	row := 0
+	if r.gitBreachStatus.Detached {
+		r.gitBreachBranchesTable.SetCell(row, 0,
+			tview.NewTableCell(fmt.Sprintf("(detached at %s)", r.gitBreachStatus.Branch)).
+				SetTextColor(r.theme.MutedTextColor).
+				SetSelectable(false))
+		row++
+	}
+
+	// Current branch in EntryExecutable (this app's own established
+	// "healthy/ready" green, the same one gitBreachRowColor already
+	// uses for a Staged row), every other branch in the box's own
+	// plain text color — the current branch reads as the single
+	// obvious answer to "which one am I on" at a glance rather than
+	// needing a separate marker column.
+	for _, b := range r.gitBreachBranches {
+		text, color := "  "+b.Name, r.theme.Text
+		if b.Current {
+			text, color = "* "+b.Name, r.theme.EntryExecutable
+		}
+		r.gitBreachBranchesTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(color))
+		row++
+	}
+
+	if len(r.gitBreachBranches) == 0 {
+		showTablePlaceholder(r.gitBreachBranchesTable, "No local branches found.", r.theme.MutedTextColor)
+		return
+	}
+
+	// Real rows exist past this point — re-assert SetSelectable(true,
+	// false) the same reason renderGitBreachFiles's own tail already
+	// documents: showTablePlaceholder turns it off as its own fix for a
+	// real tview v0.42.0 freeze, and never turns it back on by itself.
+	r.gitBreachBranchesTable.SetSelectable(true, false)
+
+	// The !ok check alone isn't enough the very first time real rows
+	// exist — see gitBreachBranchesReady's own doc comment on Root for
+	// why a leftover selectedRow from the construction-time placeholder
+	// render can pass as "valid" here too, landing on the wrong branch
+	// instead of the first one.
+	cur, _ := r.gitBreachBranchesTable.GetSelection()
+	if _, ok := r.gitBreachBranchAt(cur); !ok || !r.gitBreachBranchesReady {
+		firstRow := 0
+		if r.gitBreachStatus.Detached {
+			firstRow = 1 // row 0 is the non-selectable "(detached at ...)" row
+		}
+		r.gitBreachBranchesTable.Select(firstRow, 0)
+	}
+	r.gitBreachBranchesReady = true
 }
 
 // gitBreachFirstDataRow returns the lowest table row present in
