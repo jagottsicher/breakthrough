@@ -623,16 +623,25 @@ type Root struct {
 	// Branches/Commits/Stash are stub boxes in this first Ausbaustufe;
 	// Status and Files are the only two with real content, Files being
 	// the one interactive list (Status is a read-only summary).
-	gitBreachLayout       *tview.Flex
-	gitBreachTitleBar     *tview.TextView
-	gitBreachStatusView   *tview.TextView
-	gitBreachFilesTable   *tview.Table
-	gitBreachBranchesView *tview.TextView
-	gitBreachCommitsView  *tview.TextView
-	gitBreachStashView    *tview.TextView
-	gitBreachDiffView     *tview.TextView
-	gitBreachHint         *tview.TextView
-	gitBreachHintSpans    []listHintSpan
+	gitBreachLayout   *tview.Flex
+	gitBreachTitleBar *tview.TextView
+	// Each box below is a header/body pair (see newGitBreachBoxHeader/
+	// styleGitBreachFocus) — no border, a colored header line instead,
+	// per the user's own explicit request.
+	gitBreachStatusHeader   *tview.TextView
+	gitBreachStatusView     *tview.TextView
+	gitBreachFilesHeader    *tview.TextView
+	gitBreachFilesTable     *tview.Table
+	gitBreachBranchesHeader *tview.TextView
+	gitBreachBranchesView   *tview.TextView
+	gitBreachCommitsHeader  *tview.TextView
+	gitBreachCommitsView    *tview.TextView
+	gitBreachStashHeader    *tview.TextView
+	gitBreachStashView      *tview.TextView
+	gitBreachDiffHeader     *tview.TextView
+	gitBreachDiffView       *tview.TextView
+	gitBreachHint           *tview.TextView
+	gitBreachHintSpans      []listHintSpan
 
 	gitBreachDir    string // the directory "jg" was invoked from
 	gitBreachRoot   string // resolved repository root, see git.Root

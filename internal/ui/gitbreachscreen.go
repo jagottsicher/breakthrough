@@ -12,47 +12,55 @@ import (
 
 // gitBreachStubHeight/gitBreachStatusHeight are the fixed row counts
 // Branches/Commits/Stash and Status get in the left column's own Flex
-// — a stub box only ever needs room for its one-line placeholder plus
-// its own border, Status for its two-line summary plus border. Files,
-// the one real list, gets whatever's left (see newGitBreachScreen's
-// own AddItem proportions).
+// — a stub box only ever needs room for its own one-row header plus a
+// one-line placeholder, Status for its own header plus a two-line
+// summary. Files, the one real list, gets whatever's left (see
+// newGitBreachScreen's own AddItem proportions).
 const (
-	gitBreachStatusHeight = 4
-	gitBreachStubHeight   = 3
+	gitBreachStatusHeight = 3
+	gitBreachStubHeight   = 2
 )
 
 // newGitBreachScreen builds the whole dashboard once — see
 // gitBreachLayout's own doc comment on Root for why this is laid out
-// as several bordered boxes rather than one full-screen list. Native
-// tview borders (Box.SetBorder/SetTitle), not this app's own usual
-// title-bar-TextView convention every single-list screen already uses
-// elsewhere: this is the one screen that actually needs to show
-// several distinct regions on screen *at once*, which a real border
-// gives for free and a shared title-bar convention built for exactly
-// one region at a time does not.
+// as several boxes at once rather than one full-screen list. Each box
+// is a plain one-row header (newGitBreachBoxHeader) stacked over its
+// own content, not a bordered tview.Box — per the user's own explicit
+// request, matching this app's own established "no borders, a colored
+// header line shows what's focused" convention (toolWindow's/Details'
+// own title bars: InputFocusedBackground while that box has real
+// keyboard focus, InputBackground while it doesn't — see
+// styleGitBreachFocus). The user's own further request — the body
+// itself also changes background, not just the header — is what
+// styleGitBreachFocus's own PopupBackground/SurfaceBackground pair
+// adds on top of that established scheme.
 func (r *Root) newGitBreachScreen() {
 	r.gitBreachTitleBar = newPlainTitleBar("Git breach")
 	r.gitBreachTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.gitBreachTitleBar, r.closeGitBreach))
 
-	r.gitBreachStatusView = newGitBreachBox("Status")
+	r.gitBreachStatusHeader, r.gitBreachStatusView = newGitBreachBox("Status")
 
+	r.gitBreachFilesHeader = newGitBreachBoxHeader("Files")
 	r.gitBreachFilesTable = tview.NewTable()
-	r.gitBreachFilesTable.SetBorder(true)
-	r.gitBreachFilesTable.SetTitle(" Files ")
-	r.gitBreachFilesTable.SetTitleAlign(tview.AlignLeft)
-	r.gitBreachFilesTable.SetBorderPadding(0, 0, 1, 1)
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
 	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachDiff(row) })
+	// Files is the one real, focusable box in this first Ausbaustufe —
+	// Status/Branches/Commits/Stash/Main have nothing for keyboard focus
+	// to ever land on yet, so their own headers/bodies stay permanently
+	// in the "inactive" look applyGitBreachTheme's own initial pass
+	// already gives every box.
+	r.gitBreachFilesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true) })
+	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
-	r.gitBreachBranchesView = newGitBreachBox("Branches (stub)")
+	r.gitBreachBranchesHeader, r.gitBreachBranchesView = newGitBreachBox("Branches (stub)")
 	r.gitBreachBranchesView.SetText("kommt in einer späteren Ausbaustufe")
-	r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
+	r.gitBreachCommitsHeader, r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
 	r.gitBreachCommitsView.SetText("kommt in einer späteren Ausbaustufe")
-	r.gitBreachStashView = newGitBreachBox("Stash (stub)")
+	r.gitBreachStashHeader, r.gitBreachStashView = newGitBreachBox("Stash (stub)")
 	r.gitBreachStashView.SetText("kommt in einer späteren Ausbaustufe")
 
-	r.gitBreachDiffView = newGitBreachBox("Main — Diff")
+	r.gitBreachDiffHeader, r.gitBreachDiffView = newGitBreachBox("Main — Diff")
 	r.gitBreachDiffView.SetWrap(false)
 	r.gitBreachDiffView.SetDynamicColors(false)
 	r.gitBreachDiffView.SetScrollable(true)
@@ -66,15 +74,15 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachHint.SetMouseCapture(r.captureListHintMouse(r.gitBreachHint, &r.gitBreachHintSpans))
 
 	leftColumn := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(r.gitBreachStatusView, gitBreachStatusHeight, 0, false).
-		AddItem(r.gitBreachFilesTable, 0, 1, true).
-		AddItem(r.gitBreachBranchesView, gitBreachStubHeight, 0, false).
-		AddItem(r.gitBreachCommitsView, gitBreachStubHeight, 0, false).
-		AddItem(r.gitBreachStashView, gitBreachStubHeight, 0, false)
+		AddItem(gitBreachBoxFlex(r.gitBreachStatusHeader, r.gitBreachStatusView), gitBreachStatusHeight, 0, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 1, true).
+		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesView), gitBreachStubHeight, 0, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsView), gitBreachStubHeight, 0, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashView), gitBreachStubHeight, 0, false)
 
 	body := tview.NewFlex().
 		AddItem(leftColumn, 0, 1, true).
-		AddItem(r.gitBreachDiffView, 0, 2, false)
+		AddItem(gitBreachBoxFlex(r.gitBreachDiffHeader, r.gitBreachDiffView), 0, 2, false)
 
 	r.gitBreachLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.gitBreachTitleBar, 1, 0, false).
@@ -82,23 +90,79 @@ func (r *Root) newGitBreachScreen() {
 		AddItem(r.gitBreachHint, 1, 0, false)
 }
 
-// newGitBreachBox is every non-Files box's own shared construction —
-// bordered, left-aligned title, no internal padding needed beyond the
-// border itself for a couple of lines of plain text.
-func newGitBreachBox(title string) *tview.TextView {
-	v := tview.NewTextView()
-	v.SetBorder(true)
-	v.SetTitle(" " + title + " ")
-	v.SetTitleAlign(tview.AlignLeft)
-	v.SetWrap(true)
-	return v
+// newGitBreachBoxHeader is every box's own one-row header line — plain
+// text, no border, colored by styleGitBreachFocus/applyGitBreachTheme
+// rather than here (construction time has no theme to color it with
+// yet, same reason every other screen's own widgets in this package
+// are colored by a separate applyXTheme pass instead of at construction).
+func newGitBreachBoxHeader(title string) *tview.TextView {
+	h := tview.NewTextView()
+	h.SetWrap(false)
+	h.SetText(" " + title + " ")
+	return h
 }
 
-// applyGitBreachTheme colors every box the same SurfaceBackground/
-// BorderColor/Text triple every other overlay in this app already
-// uses, just applied to several bordered Box-es at once instead of one
-// screen-wide background — see newGitBreachScreen's own doc comment
-// for why this screen alone needs real borders.
+// newGitBreachBox is every TextView-bodied box's own shared
+// construction (Status, the three stubs, Main) — Files is the one
+// exception, built inline in newGitBreachScreen since its own body is
+// a Table, not a TextView.
+func newGitBreachBox(title string) (header, body *tview.TextView) {
+	header = newGitBreachBoxHeader(title)
+	body = tview.NewTextView()
+	body.SetWrap(true)
+	return header, body
+}
+
+// gitBreachBoxFlex stacks one box's own header over its own body — the
+// one shape every box in this dashboard shares, Files' Table body
+// included (tview.Primitive is satisfied by both).
+func gitBreachBoxFlex(header *tview.TextView, body tview.Primitive) *tview.Flex {
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(header, 1, 0, false).
+		AddItem(body, 0, 1, true)
+}
+
+// gitBreachBackgroundSetter is the shape both *tview.TextView (which
+// overrides SetBackgroundColor to also touch its own internal style)
+// and *tview.Table (which inherits it verbatim from the embedded Box)
+// already share — both still return *tview.Box, verified directly
+// against tview's own source rather than guessed — letting
+// styleGitBreachFocus restyle either kind of box body with one shared
+// function instead of one per concrete type.
+type gitBreachBackgroundSetter interface {
+	SetBackgroundColor(tcell.Color) *tview.Box
+}
+
+// styleGitBreachFocus recolors one box's own header/body pair for
+// whether it currently has real keyboard focus — the same two-state
+// header scheme toolWindow's/Details' own title bars already establish
+// (InputFocusedBackground while focused, InputBackground while not),
+// per the user's own explicit request that every box in this dashboard
+// follow it too, instead of the bordered-box look this screen started
+// with. The body itself also tints (PopupBackground, this app's own
+// already-established "distinct secondary surface" role — see
+// logAuditTimelineView's own doc comment for the same reasoning
+// applied there — vs. the baseline SurfaceBackground every box's body
+// otherwise sits on) per the user's own further, explicitly optional
+// request that an active box read as visually distinct beyond just its
+// own header line.
+func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgroundSetter, focused bool) {
+	if focused {
+		header.SetBackgroundColor(r.theme.InputFocusedBackground)
+		body.SetBackgroundColor(r.theme.PopupBackground)
+	} else {
+		header.SetBackgroundColor(r.theme.InputBackground)
+		body.SetBackgroundColor(r.theme.SurfaceBackground)
+	}
+}
+
+// applyGitBreachTheme colors every box's own header/body pair — an
+// initial "nothing focused yet" pass across all of them, then
+// re-asserts Files' own focused look on top if it's actually what
+// currently has real keyboard focus, the same "a live theme switch
+// must not silently lose a focus-dependent look" case this app's other
+// focus-aware widgets already handle (see e.g.
+// updateOverlayTitleBarColors).
 func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	if r.gitBreachLayout == nil {
 		return
@@ -112,15 +176,28 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.gitBreachHint.SetText(hintText)
 	r.gitBreachHintSpans = hintSpans
 
-	for _, box := range []*tview.TextView{r.gitBreachStatusView, r.gitBreachBranchesView, r.gitBreachCommitsView, r.gitBreachStashView, r.gitBreachDiffView} {
-		box.SetBackgroundColor(theme.SurfaceBackground)
-		box.SetBorderColor(theme.BorderColor)
-		box.SetTitleColor(theme.Text)
-		box.SetTextColor(theme.Text)
+	headers := []*tview.TextView{
+		r.gitBreachStatusHeader, r.gitBreachFilesHeader, r.gitBreachBranchesHeader,
+		r.gitBreachCommitsHeader, r.gitBreachStashHeader, r.gitBreachDiffHeader,
+	}
+	for _, h := range headers {
+		h.SetBackgroundColor(theme.InputBackground)
+		h.SetTextColor(theme.TextColor)
+	}
+
+	textBodies := []*tview.TextView{
+		r.gitBreachStatusView, r.gitBreachBranchesView, r.gitBreachCommitsView,
+		r.gitBreachStashView, r.gitBreachDiffView,
+	}
+	for _, v := range textBodies {
+		v.SetBackgroundColor(theme.SurfaceBackground)
+		v.SetTextColor(theme.Text)
 	}
 	r.gitBreachFilesTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.gitBreachFilesTable.SetBorderColor(theme.BorderColor)
-	r.gitBreachFilesTable.SetTitleColor(theme.Text)
+
+	if r.gitBreachFilesTable.HasFocus() {
+		r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true)
+	}
 
 	r.renderGitBreach() // cell colors baked in per cell, not looked up live at draw time
 }
