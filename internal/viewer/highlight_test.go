@@ -139,3 +139,42 @@ func TestHighlightMergesAdjacentSameKindRuns(t *testing.T) {
 		}
 	}
 }
+
+// TestHighlightSamePathGivesIdenticalResultWhetherOrNotCached pins the
+// one thing lexerFor's own cache must never change: calling Highlight
+// twice with the same path must classify identically whether the
+// second call hits the cache or (as the very first call for this path
+// in the whole test binary might) still has to resolve it fresh — the
+// cache is a performance fix, not a behavior change.
+func TestHighlightSamePathGivesIdenticalResultWhetherOrNotCached(t *testing.T) {
+	content := "package main\n\nfunc main() { println(1) }\n"
+	first := Highlight("cachecheck.go", content)
+	second := Highlight("cachecheck.go", content)
+
+	if len(first) != len(second) {
+		t.Fatalf("token count differs: first=%d second=%d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Errorf("token %d differs: first=%+v second=%+v", i, first[i], second[i])
+		}
+	}
+}
+
+// TestHighlightCachesAnUnrecognizedFilenameAsNoLexerToo pins the real
+// Go gotcha lexerCacheEntry exists to avoid: caching a genuinely-nil
+// resolved lexer by storing it directly (instead of wrapped in
+// lexerCacheEntry) would make every later lookup for that same
+// filename look like a cache miss again — asserting .(chroma.Lexer) on
+// a bare nil interface{} always fails — silently defeating the cache
+// for every unrecognized filename without this test ever catching it,
+// since the behavior (falling back to Analyse or plain text) looks
+// identical either way from Highlight's own return value alone.
+func TestHighlightCachesAnUnrecognizedFilenameAsNoLexerToo(t *testing.T) {
+	const name = "totally-unrecognizable-filename.zzzznotareallanguage"
+	Highlight(name, "whatever content")
+
+	if _, ok := lexerCache[name]; !ok {
+		t.Error("lexerFor did not cache the no-match result for an unrecognized filename")
+	}
+}
