@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -889,6 +890,32 @@ func (r *Root) renderGitBreachBranches() {
 	r.gitBreachBranchesReady = true
 }
 
+// gitBreachAuthorColor picks one of config.LabelFallbackColor's own
+// nine vivid hues for email, deterministically — the same author
+// always gets the same color across a render and across reloads,
+// without this package having to track "which author got which color
+// already" state of its own anywhere. Deliberately LabelFallbackColor,
+// not one of r.theme's own resolved Label1Background..Label9Background:
+// those are muted, dark-scheme-matched tints meant to sit *behind*
+// existing text (see DefaultTheme's own doc comment), not to *be*
+// readable text themselves — measured directly against this app's own
+// default SurfaceBackground, several of them contrast at barely over
+// 1:1, unreadable as a commit row's own foreground color. Hashes the
+// email, not the display name (per the user's own implied "color by
+// who, not by what they're currently called" expectation): the same
+// person's commits should read as the same author even if they changed
+// their git config's user.name at some point, and email is what
+// actually stays stable across that. FNV-1a, not a cryptographic hash:
+// this only ever needs to be a consistent, well-distributed bucket
+// index, never resistant to anyone deliberately choosing an email to
+// collide with another author's color — a real but harmless failure
+// mode (two authors sharing a color) rather than a security concern.
+func gitBreachAuthorColor(email string) tcell.Color {
+	h := fnv.New32a()
+	h.Write([]byte(email))
+	return tcell.GetColor(config.LabelFallbackColor(int(h.Sum32())))
+}
+
 // renderGitBreachCommits rebuilds the Commits table — same shape as
 // renderGitBreachBranches (no section headers, one row per entry), same
 // gitBreachCommitsReady fix for the same construction-time-placeholder
@@ -906,8 +933,8 @@ func (r *Root) renderGitBreachCommits() {
 	}
 
 	for row, c := range r.gitBreachCommits {
-		text := fmt.Sprintf("%s %s", c.Short, c.Subject)
-		r.gitBreachCommitsTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+		text := fmt.Sprintf("%s %s %s", c.Short, c.AuthorName, c.Subject)
+		r.gitBreachCommitsTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(gitBreachAuthorColor(c.AuthorEmail)))
 	}
 
 	// Real rows exist past this point — re-assert SetSelectable(true,

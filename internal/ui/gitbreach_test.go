@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -722,6 +723,72 @@ func TestRenderGitBreachCommitsListsCommitsNewestFirst(t *testing.T) {
 	if r.gitBreachCommits[0].Subject != "second" || r.gitBreachCommits[1].Subject != "first" {
 		t.Errorf("gitBreachCommits order = %q, %q, want [second, first] (newest first)",
 			r.gitBreachCommits[0].Subject, r.gitBreachCommits[1].Subject)
+	}
+}
+
+// TestGitBreachAuthorColorIsStablePerEmail pins the exact identity
+// gitBreachAuthorColor hashes on: the same email must always land on
+// the same one of the theme's nine label colors, both across repeated
+// calls and regardless of a changed display name — the whole point of
+// hashing the email rather than the name (see its own doc comment).
+func TestGitBreachAuthorColorIsStablePerEmail(t *testing.T) {
+	first := gitBreachAuthorColor("jens@example.com")
+	second := gitBreachAuthorColor("jens@example.com")
+	if first != second {
+		t.Errorf("gitBreachAuthorColor(same email) = %v, %v, want identical", first, second)
+	}
+}
+
+// TestGitBreachAuthorColorUsesOneOfTheThemesNineLabelColors pins that
+// the result always comes from the theme's own nine label colors
+// (user-configurable, see labelFallbackColors in internal/config), not
+// some separate, hardcoded palette of its own.
+func TestGitBreachAuthorColorUsesOneOfTheNineLabelFallbackColors(t *testing.T) {
+	labels := map[tcell.Color]bool{}
+	for i := 0; i < config.MaxLabelID; i++ {
+		labels[tcell.GetColor(config.LabelFallbackColor(i))] = true
+	}
+	for _, email := range []string{"a@example.com", "b@example.com", "c@example.com"} {
+		if got := gitBreachAuthorColor(email); !labels[got] {
+			t.Errorf("gitBreachAuthorColor(%q) = %v, not one of the nine label fallback colors", email, got)
+		}
+	}
+}
+
+// TestRenderGitBreachCommitsColorsByAuthor pins the actual render,
+// not just the hashing function in isolation: a commit's row in the
+// table really does carry gitBreachAuthorColor's own result, and the
+// author's name is visible in the row's own text (color alone isn't
+// enough to identify who, for anyone who can't distinguish the nine
+// label hues at a glance).
+func TestRenderGitBreachCommitsColorsByAuthor(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if len(r.gitBreachCommits) != 1 {
+		t.Fatalf("gitBreachCommits = %+v, want 1", r.gitBreachCommits)
+	}
+	wantColor := gitBreachAuthorColor(r.gitBreachCommits[0].AuthorEmail)
+	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	// tview.NewTableCell's own Style already carries a non-default
+	// Foreground/Background pair, so SetTextColor (see its own tview
+	// source) stores the color in Style rather than the legacy Color
+	// field — Decompose is how a cell's actual rendered foreground is
+	// read back, not the Color field directly.
+	gotColor, _, _ := cell.Style.Decompose()
+	if gotColor != wantColor {
+		t.Errorf("row color = %v, want %v (gitBreachAuthorColor for %q)", gotColor, wantColor, r.gitBreachCommits[0].AuthorEmail)
+	}
+	if !strings.Contains(cell.Text, r.gitBreachCommits[0].AuthorName) {
+		t.Errorf("row text = %q, want it to contain the author's name %q", cell.Text, r.gitBreachCommits[0].AuthorName)
 	}
 }
 

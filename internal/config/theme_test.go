@@ -109,6 +109,35 @@ func TestLabelBackgroundInvalidIDReturnsColorDefault(t *testing.T) {
 	}
 }
 
+// TestLabelFallbackColorMatchesTheRawTable pins LabelFallbackColor's
+// own one real job: returning labelFallbackColors' own undimmed hues
+// verbatim, not ResolvedTheme's own muted Label1-9Background fields —
+// the whole reason it exists as a separate, exported entry point (see
+// its own doc comment on why a caller needing readable foreground text
+// wants this table specifically).
+func TestLabelFallbackColorMatchesTheRawTable(t *testing.T) {
+	for i, want := range labelFallbackColors {
+		if got := LabelFallbackColor(i); got != want {
+			t.Errorf("LabelFallbackColor(%d) = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestLabelFallbackColorWrapsOutOfRangeIndices pins the documented
+// modulo behavior for an index outside 0..MaxLabelID-1 — every real
+// caller computes i from a hash specifically so it lands in range, but
+// a hash's own range (e.g. a full uint32) isn't bounded by this
+// package's own nine-entry table, so wrapping rather than panicking is
+// the contract, not an incidental side effect of how it's implemented.
+func TestLabelFallbackColorWrapsOutOfRangeIndices(t *testing.T) {
+	if got, want := LabelFallbackColor(MaxLabelID), labelFallbackColors[0]; got != want {
+		t.Errorf("LabelFallbackColor(MaxLabelID) = %q, want %q (wraps to index 0)", got, want)
+	}
+	if got, want := LabelFallbackColor(MaxLabelID+2), labelFallbackColors[2]; got != want {
+		t.Errorf("LabelFallbackColor(MaxLabelID+2) = %q, want %q (wraps to index 2)", got, want)
+	}
+}
+
 // spread reports the difference between c's own brightest and dimmest
 // RGB channel — the absolute magnitude a viewer's eye actually reads
 // as "this has a color cast", independent of how dark or bright c is
