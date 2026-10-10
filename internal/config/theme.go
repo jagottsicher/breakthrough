@@ -465,25 +465,6 @@ var labelFallbackColors = [MaxLabelID]string{
 // the same constant, for labelFallbackColors' own array size.
 const MaxLabelID = 9
 
-// LabelFallbackColor exposes labelFallbackColors' own nine hues to
-// callers outside this package that need a vivid, "never invisible"
-// foreground color rather than one of ResolvedTheme's own
-// Label1Background..Label9Background — those are deliberately muted,
-// dark-scheme-matched tints meant to sit *behind* existing text (see
-// DefaultTheme's own doc comment on them), not to *be* readable text
-// themselves. Measured directly against this app's own default
-// SurfaceBackground (#2f4f4f): the nine resolved label backgrounds
-// contrast at 1.2–2.6:1, well under even WCAG's minimum 3:1 for large
-// text; labelFallbackColors' own undimmed hues contrast at 1.3–6.8:1,
-// uneven but markedly better, consistent with what this table was
-// actually designed for. i wraps via modulo rather than panicking on
-// an out-of-range index — every real caller already computes i from a
-// hash specifically so it lands in range, but a hash's own range isn't
-// this package's contract to enforce.
-func LabelFallbackColor(i int) string {
-	return labelFallbackColors[i%MaxLabelID]
-}
-
 // Resolve parses every field via tcell.GetColor, falling back to
 // DefaultTheme's own value field-by-field wherever t's own value is
 // empty or unrecognized. tcell.GetColor itself returns

@@ -890,30 +890,65 @@ func (r *Root) renderGitBreachBranches() {
 	r.gitBreachBranchesReady = true
 }
 
-// gitBreachAuthorColor picks one of config.LabelFallbackColor's own
-// nine vivid hues for email, deterministically — the same author
-// always gets the same color across a render and across reloads,
-// without this package having to track "which author got which color
-// already" state of its own anywhere. Deliberately LabelFallbackColor,
-// not one of r.theme's own resolved Label1Background..Label9Background:
-// those are muted, dark-scheme-matched tints meant to sit *behind*
-// existing text (see DefaultTheme's own doc comment), not to *be*
-// readable text themselves — measured directly against this app's own
-// default SurfaceBackground, several of them contrast at barely over
-// 1:1, unreadable as a commit row's own foreground color. Hashes the
-// email, not the display name (per the user's own implied "color by
-// who, not by what they're currently called" expectation): the same
-// person's commits should read as the same author even if they changed
-// their git config's user.name at some point, and email is what
-// actually stays stable across that. FNV-1a, not a cryptographic hash:
-// this only ever needs to be a consistent, well-distributed bucket
-// index, never resistant to anyone deliberately choosing an email to
-// collide with another author's color — a real but harmless failure
-// mode (two authors sharing a color) rather than a security concern.
+// gitBreachAuthorColors are twelve hues, evenly spaced around the hue
+// wheel, each one's own lightness individually tuned (not one shared
+// lightness for all twelve) so every single one contrasts at roughly
+// the same ~4.5:1 (WCAG AA for normal text) against this app's own
+// default SurfaceBackground (#2f4f4f) — a flat lightness across all
+// twelve hues badly fails this for blue/purple specifically (blue's own
+// luminance coefficient is the smallest of the three channels, so a
+// blue needs noticeably more raw lightness than a yellow or green to
+// read as equally bright), live-confirmed against a real terminal
+// after the user's own report that an earlier candidate (reusing
+// internal/config's existing nine label colors) read as too dark,
+// purple worst of all. Git-breach-local and fixed, not a
+// ResolvedTheme/config.Theme field: the same "a specific feature gets
+// its own named, hardcoded color(s) outside the user-configurable
+// scheme" precedent gitBreachDiffAddedColor's own doc comment already
+// establishes, for the same reason — commit-author identity needs a
+// color guaranteed readable on this app's own dark surface, not
+// whatever an arbitrary third-party scheme's own label colors happen
+// to be. Twelve, not nine or more: past about a dozen, adjacent hues
+// in a narrow table cell stop reading as reliably distinct from each
+// other; a repository with more distinct authors than this reuses
+// colors (see gitBreachAuthorColor's own doc comment on why that's an
+// accepted, harmless outcome rather than something this table needs to
+// grow arbitrarily large to avoid).
+var gitBreachAuthorColors = [12]tcell.Color{
+	tcell.GetColor("#f7a2a2"), // 0°   red
+	tcell.GetColor("#f2a95f"), // 30°  orange
+	tcell.GetColor("#bfbf0f"), // 60°  yellow-olive
+	tcell.GetColor("#6fcf10"), // 90°  yellow-green
+	tcell.GetColor("#11d611"), // 120° green
+	tcell.GetColor("#11d472"), // 150° green-teal
+	tcell.GetColor("#10cdcd"), // 180° teal
+	tcell.GetColor("#85bdf5"), // 210° light blue
+	tcell.GetColor("#b2b2f8"), // 240° blue-purple
+	tcell.GetColor("#cfa8f7"), // 270° purple
+	tcell.GetColor("#f696f6"), // 300° pink-purple
+	tcell.GetColor("#f79dca"), // 330° pink
+}
+
+// gitBreachAuthorColor picks one of gitBreachAuthorColors for email,
+// deterministically — the same author always gets the same color
+// across a render and across reloads, without this package having to
+// track "which author got which color already" state of its own
+// anywhere. Hashes the email, not the display name (per the user's own
+// implied "color by who, not by what they're currently called"
+// expectation): the same person's commits should read as the same
+// author even if they changed their git config's user.name at some
+// point, and email is what actually stays stable across that. FNV-1a,
+// not a cryptographic hash: this only ever needs to be a consistent,
+// well-distributed bucket index, never resistant to anyone
+// deliberately choosing an email to collide with another author's
+// color — a real but harmless failure mode (two authors sharing a
+// color) rather than a security concern, and with only twelve buckets,
+// one every real repository with more than a handful of contributors
+// will eventually hit anyway by sheer chance, not just adversarially.
 func gitBreachAuthorColor(email string) tcell.Color {
 	h := fnv.New32a()
 	h.Write([]byte(email))
-	return tcell.GetColor(config.LabelFallbackColor(int(h.Sum32())))
+	return gitBreachAuthorColors[h.Sum32()%uint32(len(gitBreachAuthorColors))]
 }
 
 // renderGitBreachCommits rebuilds the Commits table — same shape as
