@@ -1578,8 +1578,8 @@
     },
     {
       "path": "internal/ui/gitbreach_test.go",
-      "size": 11276,
-      "sha256": "3bf3d16f9edcd2c78da9e95e32c35fe2c87acad9baa4a70036a084c39455c018"
+      "size": 13546,
+      "sha256": "af51edf94dc329e2fd3051332024b578b94056e2578f732a6f78430f50234d6e"
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
@@ -26025,79 +26025,86 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
+      "name": "TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff",
+      "kind": "function",
+      "line": 90
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachOnARealRepositoryShowsStagedUnstagedAndUntracked",
       "kind": "function",
-      "line": 72
+      "line": 119
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachOnADirectoryThatIsNotARepositoryShowsAnError",
       "kind": "function",
-      "line": 110
+      "line": 157
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachRefusesOnARemotePanel",
       "kind": "function",
-      "line": 125
+      "line": 172
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachRefusesInsideAnArchiveView",
       "kind": "function",
-      "line": 145
+      "line": 192
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestToggleGitBreachStageStagesAndUnstagesTheRowUnderTheCursor",
       "kind": "function",
-      "line": 166
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestCommitGitBreachCreatesARealCommitAndReloads",
       "kind": "function",
-      "line": 204
+      "line": 251
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestOpenGitBreachCommitPromptDoesNothingWithNothingStaged",
       "kind": "function",
-      "line": 228
+      "line": 275
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestGitBreachBlockFocusStealSwallowsLeftDown",
       "kind": "function",
-      "line": 257
+      "line": 304
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestGitBreachBlockFocusStealPassesThroughOtherActions",
       "kind": "function",
-      "line": 271
+      "line": 318
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "TestGitBreachFocusFilesOnClickFocusesTheTable",
       "kind": "function",
-      "line": 287
+      "line": 334
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/gitbreach_test.go",
       "name": "gitBreachTableRowForPath",
       "kind": "function",
-      "line": 314
+      "line": 361
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -46170,5 +46177,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "ecdd0739e24fc448cc5c81f2ef6d23ea05711c0b97bb780143add1f1d065090a"
+  "merkle_root": "62c12420714f121366c0711e6f9f64a5c2b8f5b5ed2b1233dc6ad4bad4a2b845"
 }
