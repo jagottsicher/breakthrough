@@ -21,6 +21,22 @@ const (
 	gitBreachStubHeight   = 2
 )
 
+// gitBreachDiffAddedColor is a dedicated, brighter green for a diff's
+// own added lines — per the user's own explicit request for something
+// stronger than theme.EntryExecutable (the panel's own muted
+// "executable file name" green, #008000, deliberately kept dark
+// against the dark panel background — see its own doc comment). A
+// diff's own red/green convention is expected to read as vivid at a
+// glance, unlike a sedate file-type indicator, so this is a fixed
+// color rather than a theme field, the same "a specific feature gets
+// its own named, hardcoded color outside the user-configurable
+// scheme" precedent bottombar.go's own statusDiskColor/statusInodeColor
+// etc. already establish. #3cb44b is not a new, arbitrary choice: it's
+// the same green already vetted as one of this app's own nine
+// maximally-distinct label colors (see labelFallbackColors in
+// internal/config/theme.go), reused here rather than inventing another.
+var gitBreachDiffAddedColor = tcell.GetColor("#3cb44b")
+
 // newGitBreachScreen builds the whole dashboard once — see
 // gitBreachLayout's own doc comment on Root for why this is laid out
 // as several boxes at once rather than one full-screen list. Each box
@@ -41,6 +57,14 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachStatusHeader, r.gitBreachStatusView = newGitBreachBox("Status")
 
 	r.gitBreachFilesHeader = newGitBreachBoxHeader("Files")
+	// The header is its own separate TextView from the table it labels
+	// — a plain click on it would otherwise do nothing at all (see
+	// gitBreachBlockFocusSteal's own doc comment for why every other
+	// box's header is deliberately inert instead), so it gets its own
+	// mouse capture that focuses Files explicitly, per the user's own
+	// explicit request that the header line itself be clickable too,
+	// not just the table beneath it.
+	r.gitBreachFilesHeader.SetMouseCapture(r.gitBreachFocusFilesOnClick)
 	r.gitBreachFilesTable = tview.NewTable()
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
@@ -53,17 +77,37 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true) })
 	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
+	r.gitBreachStatusHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachStatusView.SetMouseCapture(gitBreachBlockFocusSteal)
+
 	r.gitBreachBranchesHeader, r.gitBreachBranchesView = newGitBreachBox("Branches (stub)")
 	r.gitBreachBranchesView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachBranchesHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachBranchesView.SetMouseCapture(gitBreachBlockFocusSteal)
 	r.gitBreachCommitsHeader, r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
 	r.gitBreachCommitsView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachCommitsHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachCommitsView.SetMouseCapture(gitBreachBlockFocusSteal)
 	r.gitBreachStashHeader, r.gitBreachStashView = newGitBreachBox("Stash (stub)")
 	r.gitBreachStashView.SetText("kommt in einer späteren Ausbaustufe")
+	r.gitBreachStashHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachStashView.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.gitBreachDiffHeader, r.gitBreachDiffView = newGitBreachBox("Main — Diff")
 	r.gitBreachDiffView.SetWrap(false)
-	r.gitBreachDiffView.SetDynamicColors(false)
+	// Dynamic colors — per the user's own explicit request that a
+	// diff's own removed/added lines be colored (see
+	// gitBreachColorizeDiff, which every real diff shown here goes
+	// through), not left as plain text.
+	r.gitBreachDiffView.SetDynamicColors(true)
 	r.gitBreachDiffView.SetScrollable(true)
+	r.gitBreachDiffHeader.SetMouseCapture(gitBreachBlockFocusSteal)
+	// The diff view's own MouseLeftDown is blocked the same as every
+	// other passive box's (see gitBreachBlockFocusSteal), but every
+	// other mouse action still passes through unchanged — the wheel
+	// scroll a long diff needs still works without ever taking
+	// keyboard focus away from Files.
+	r.gitBreachDiffView.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.gitBreachHint = tview.NewTextView()
 	r.gitBreachHint.SetWrap(false)
@@ -100,6 +144,40 @@ func newGitBreachBoxHeader(title string) *tview.TextView {
 	h.SetWrap(false)
 	h.SetText(" " + title + " ")
 	return h
+}
+
+// gitBreachBlockFocusSteal is every passive box's own (and its own
+// header's) mouse capture — Status, Branches/Commits/Stash, Main, and
+// all five of their own headers. A plain tview.TextView's own default
+// MouseHandler calls setFocus(itself) unconditionally on a
+// MouseLeftDown anywhere inside it (verified directly against
+// textview.go, not guessed) — fine for a box that's actually meant to
+// receive keyboard focus, but a real, reported bug for one that isn't:
+// an ordinary click anywhere on this dashboard outside the Files table
+// silently moved real keyboard focus onto a box nothing could ever
+// navigate inside, with no way back short of closing and reopening the
+// whole dashboard. Swallowing MouseLeftDown here is what keeps that
+// from happening; every other mouse action (wheel scroll, chiefly)
+// still passes through unchanged, so the Main box's own diff can still
+// be scrolled with the mouse without taking focus away from Files.
+func gitBreachBlockFocusSteal(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
+// gitBreachFocusFilesOnClick is the Files header's own mouse capture —
+// clicking the header line itself focuses the Files table, the same as
+// clicking anywhere in the table's own body already does via Table's
+// default MouseHandler, per the user's own explicit request that the
+// header be clickable too, not just the content beneath it.
+func (r *Root) gitBreachFocusFilesOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		r.app.SetFocus(r.gitBreachFilesTable)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
 }
 
 // newGitBreachBox is every TextView-bodied box's own shared
@@ -346,10 +424,14 @@ func (r *Root) renderGitBreachFiles() {
 
 	if r.gitBreachFetchErr != nil {
 		showTablePlaceholder(r.gitBreachFilesTable, r.gitBreachFetchErr.Error(), r.theme.EntryError)
+		r.cancelGitBreachDiff()
+		r.gitBreachDiffView.SetText("")
 		return
 	}
 	if row == 0 {
 		showTablePlaceholder(r.gitBreachFilesTable, "Working tree clean.", r.theme.MutedTextColor)
+		r.cancelGitBreachDiff()
+		r.gitBreachDiffView.SetText("")
 		return
 	}
 
@@ -369,8 +451,22 @@ func (r *Root) renderGitBreachFiles() {
 	// shows after a refresh changes how many rows there are.
 	cur, _ := r.gitBreachFilesTable.GetSelection()
 	if _, ok := r.gitBreachRowIndex[cur]; !ok {
-		r.gitBreachFilesTable.Select(gitBreachFirstDataRow(r.gitBreachRowIndex), 0)
+		cur = gitBreachFirstDataRow(r.gitBreachRowIndex)
+		r.gitBreachFilesTable.Select(cur, 0)
 	}
+	// Explicitly (re)fetch the diff for whatever row is now current — a
+	// real, reported bug otherwise: Select() only invokes
+	// SetSelectionChangedFunc when tview's own internal selectedRow
+	// actually changes value, not when the *data* a stable row number
+	// now refers to has changed underneath it. After any reload, a row
+	// number that happened to already be selected but now points at a
+	// completely different file (or, the very first time this screen
+	// ever renders, a still-building row index with no file at all yet
+	// — the "Working tree clean" placeholder path's own Select(1, 0),
+	// which fires before a single real row has been added) would
+	// otherwise leave the Main box showing a stale or empty diff
+	// forever, never refreshed, since nothing else ever asked it to be.
+	r.startGitBreachDiff(cur)
 }
 
 // gitBreachFirstDataRow returns the lowest table row present in
@@ -427,4 +523,46 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 	default:
 		return theme.MutedTextColor
 	}
+}
+
+// gitBreachColorizeDiff turns a plain `git diff` into tview markup —
+// per the user's own explicit request that removed lines read red and
+// added ones green. Removed lines reuse theme.CriticalText verbatim
+// (gitBreachRowColor's own conflict color); added lines use
+// gitBreachDiffAddedColor, a dedicated brighter green — see its own
+// doc comment for why added needed its own color but removed didn't
+// (a muted-red follow-up request was tried and reverted). Requires
+// gitBreachDiffView.SetDynamicColors(true) (see newGitBreachScreen) to
+// actually render; every line is escaped first (tview.Escape — diff
+// content routinely contains "[", e.g. Go's own "[]byte", which would
+// otherwise be swallowed as a style tag instead of shown — the same
+// reason renderSyntax already escapes file content before coloring it)
+// so the diff's own text is never itself misread as markup.
+//
+// "+++"/"---" (the diff's own old/new file-header lines) are checked
+// before the plain "+"/"-" cases below, which would otherwise also
+// match their own leading character and color a file header like a
+// single added/removed line.
+func gitBreachColorizeDiff(diff string, theme config.ResolvedTheme) string {
+	lines := strings.Split(diff, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		escaped := tview.Escape(line)
+		switch {
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+			b.WriteString(wrapColor(theme.MutedTextColor, escaped))
+		case strings.HasPrefix(line, "+"):
+			b.WriteString(wrapColor(gitBreachDiffAddedColor, escaped))
+		case strings.HasPrefix(line, "-"):
+			b.WriteString(wrapColor(theme.CriticalText, escaped))
+		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "diff --git"), strings.HasPrefix(line, "index "):
+			b.WriteString(wrapColor(theme.MutedTextColor, escaped))
+		default:
+			b.WriteString(escaped)
+		}
+		if i < len(lines)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }
