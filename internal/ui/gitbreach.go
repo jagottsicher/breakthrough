@@ -549,7 +549,7 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 			}
 			curRow, _ := r.gitBreachCommitsTable.GetSelection()
 			curC, ok := r.gitBreachCommitAt(curRow)
-			if !ok || curC != c {
+			if !ok || curC.Hash != c.Hash {
 				return // the cursor moved to a different row before this landed
 			}
 			if err != nil {
