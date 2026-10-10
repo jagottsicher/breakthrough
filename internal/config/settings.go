@@ -480,7 +480,7 @@ type Settings struct {
 	// Label1Name..Label9Name are the nine color labels' own display
 	// names, behind the "zl" chord (see internal/filelabels and
 	// internal/ui's own labelMenuRows) — nine flat keys, not a
-	// structured list, per CLAUDE.md's own flat-config rule. Label 0
+	// structured list, per this project's own flat-config rule. Label 0
 	// ("no label") is fixed and not renamable, so there is no
 	// Label0Name. Default "Label 1".."Label 9" (see DefaultSettings)
 	// until the user renames them — Phase 2's own Options "Label"

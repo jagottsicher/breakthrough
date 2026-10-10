@@ -614,7 +614,8 @@ func (r *Root) runExternalPager(path string) {
 // a real local X11/Wayland session (full quality, its own window),
 // falling back automatically to tct — mpv's own true-color *terminal*
 // renderer, no window system needed at all — over SSH/tmux/screen,
-// exactly this app's own primary audience (see CLAUDE.md). --fullscreen
+// exactly this app's own primary audience (see this project's own
+// documented focus on admin work over SSH/tmux/screen). --fullscreen
 // only affects the windowed (gpu) case; tct already fills the whole
 // terminal on its own and simply ignores it.
 func (r *Root) playVideoFullscreen(path string) {
