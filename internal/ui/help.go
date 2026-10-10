@@ -595,18 +595,20 @@ var helpText = strings.TrimLeft(`
   staged/unstaged diff (also syntax-colored, background tinted green/
   red for added/removed lines) or the raw content for an untracked
   file, or a Commits/Stash row's own full diff across every file it
-  touched. Tab switches keyboard focus between Files, Branches, Commits
-  and Stash, the dashboard's own four real, navigable boxes so far — no
-  action on a Commits row yet (checkout/revert/cherry-pick/reset are
-  later Ausbaustufen). A Stash row can be applied or dropped (never
-  popped — see the key list below).
+  touched. Tab/Shift-Tab switches keyboard focus forwards/backwards
+  between Files, Branches, Commits and Stash, the dashboard's own four
+  real, navigable boxes so far — no action on a Commits row yet
+  (checkout/revert/cherry-pick/reset are later Ausbaustufen). A Stash
+  row can be applied or dropped (never popped — see the key list
+  below).
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on
   this machine under the same-looking path.
 
-    Tab      Switch keyboard focus between Files, Branches, Commits
-             and Stash
+    Tab/     Switch keyboard focus forwards/backwards between Files,
+    Shift-   Branches, Commits and Stash
+    Tab
     Space    (Files only) Stage the row under the cursor if it isn't,
              unstage it if it is (does nothing on a Conflicts row) —
              only shown in the hint bar while Files has focus, since

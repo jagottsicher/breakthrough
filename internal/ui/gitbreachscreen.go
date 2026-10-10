@@ -392,7 +392,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 // focused" in the first place.
 func (r *Root) gitBreachHintEntries() []listHintEntry {
 	entries := []listHintEntry{
-		hintKey("Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
+		hintKey("Tab/Shift-Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
 	}
 	if r.gitBreachFilesTable.HasFocus() {
 		entries = append(entries, hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }))
@@ -506,6 +506,23 @@ func (r *Root) toggleGitBreachFocus() {
 	r.app.SetFocus(focusables[0].body)
 }
 
+// reverseToggleGitBreachFocus is "Shift-Tab" (tcell.KeyBacktab) — the
+// mirror image of toggleGitBreachFocus, stepping to the previous entry
+// in gitBreachFocusables with wraparound instead of the next one.
+func (r *Root) reverseToggleGitBreachFocus() {
+	focusables := r.gitBreachFocusables()
+	if len(focusables) == 0 {
+		return
+	}
+	for i, f := range focusables {
+		if f.body.HasFocus() {
+			r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+			return
+		}
+	}
+	r.app.SetFocus(focusables[len(focusables)-1].body)
+}
+
 // captureGitBreachFilesTableKey: Tab switches to the next box, Space
 // toggles stage/unstage, "c" commits, "r" reloads, Escape closes — the
 // same per-table InputCapture shape captureLogAuditSelectionTableKey
@@ -522,6 +539,10 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
@@ -556,6 +577,10 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
@@ -614,6 +639,10 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		r.toggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
+		return nil
+	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
 		r.scrollGitBreachDiff(event.Key())
 		return nil
@@ -654,6 +683,10 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {

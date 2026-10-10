@@ -700,6 +700,74 @@ func TestToggleGitBreachFocusCyclesThroughFilesBranchesCommitsAndStash(t *testin
 	}
 }
 
+// TestReverseToggleGitBreachFocusCyclesBackwards pins Shift-Tab as the
+// exact mirror image of Tab: starting from Files (wraparound in the
+// other direction) and stepping backwards through Stash, Commits,
+// Branches, back to Files.
+func TestReverseToggleGitBreachFocusCyclesBackwards(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Fatal("setup: Files should have focus right after opening")
+	}
+
+	r.reverseToggleGitBreachFocus()
+	if !r.gitBreachStashTable.HasFocus() {
+		t.Error("after one Shift-Tab from Files: Stash should have focus")
+	}
+
+	r.reverseToggleGitBreachFocus()
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Error("after a second Shift-Tab: Commits should have focus")
+	}
+
+	r.reverseToggleGitBreachFocus()
+	if !r.gitBreachBranchesTable.HasFocus() {
+		t.Error("after a third Shift-Tab: Branches should have focus")
+	}
+
+	r.reverseToggleGitBreachFocus()
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("after a fourth Shift-Tab: focus should be back on Files")
+	}
+}
+
+// TestCaptureGitBreachKeyBacktabReversesFocusFromEveryBox verifies all
+// four per-table InputCapture functions wire KeyBacktab to
+// reverseToggleGitBreachFocus, not just toggleGitBreachFocus's own
+// KeyTab path.
+func TestCaptureGitBreachKeyBacktabReversesFocusFromEveryBox(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	backtab := tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+
+	r.captureGitBreachFilesTableKey(backtab)
+	if !r.gitBreachStashTable.HasFocus() {
+		t.Error("Shift-Tab from Files should move focus to Stash")
+	}
+
+	r.captureGitBreachStashTableKey(backtab)
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Error("Shift-Tab from Stash should move focus to Commits")
+	}
+
+	r.captureGitBreachCommitsTableKey(backtab)
+	if !r.gitBreachBranchesTable.HasFocus() {
+		t.Error("Shift-Tab from Commits should move focus to Branches")
+	}
+
+	r.captureGitBreachBranchesTableKey(backtab)
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("Shift-Tab from Branches should move focus to Files")
+	}
+}
+
 func TestRenderGitBreachCommitsListsCommitsNewestFirst(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
