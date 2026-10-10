@@ -103,6 +103,7 @@ func (r *Root) newGitBreachScreen() {
 		r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true)
 		r.gitBreachMainOwner = gitBreachMainOwnerFiles
 		r.startGitBreachFilesDiffIfOwner()
+		r.refreshGitBreachHint()
 	})
 	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
@@ -114,7 +115,10 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachBranchesTable = tview.NewTable()
 	r.gitBreachBranchesTable.SetSelectable(true, false)
 	r.gitBreachBranchesTable.SetInputCapture(r.captureGitBreachBranchesTableKey)
-	r.gitBreachBranchesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, true) })
+	r.gitBreachBranchesTable.SetFocusFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, true)
+		r.refreshGitBreachHint()
+	})
 	r.gitBreachBranchesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, false) })
 
 	r.gitBreachCommitsHeader = newGitBreachBoxHeader("Commits")
@@ -127,6 +131,7 @@ func (r *Root) newGitBreachScreen() {
 		r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, true)
 		r.gitBreachMainOwner = gitBreachMainOwnerCommits
 		r.startGitBreachCommitsDiffIfOwner()
+		r.refreshGitBreachHint()
 	})
 	r.gitBreachCommitsTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, false) })
 
@@ -140,6 +145,7 @@ func (r *Root) newGitBreachScreen() {
 		r.styleGitBreachFocus(r.gitBreachStashHeader, r.gitBreachStashTable, true)
 		r.gitBreachMainOwner = gitBreachMainOwnerStash
 		r.startGitBreachStashDiffIfOwner()
+		r.refreshGitBreachHint()
 	})
 	r.gitBreachStashTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachStashHeader, r.gitBreachStashTable, false) })
 
@@ -162,9 +168,7 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachHint = tview.NewTextView()
 	r.gitBreachHint.SetWrap(false)
 	r.gitBreachHint.SetDynamicColors(true)
-	hintText, hintSpans := buildListHint(r.theme, gitBreachHintEntries())
-	r.gitBreachHint.SetText(hintText)
-	r.gitBreachHintSpans = hintSpans
+	r.refreshGitBreachHint()
 	r.gitBreachHint.SetMouseCapture(r.captureListHintMouse(r.gitBreachHint, &r.gitBreachHintSpans))
 
 	leftColumn := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -300,9 +304,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.gitBreachTitleBar.SetTextColor(theme.TextColor)
 	r.gitBreachHint.SetBackgroundColor(theme.InputBackground)
 	r.gitBreachHint.SetTextColor(theme.MutedTextColor)
-	hintText, hintSpans := buildListHint(theme, gitBreachHintEntries())
-	r.gitBreachHint.SetText(hintText)
-	r.gitBreachHintSpans = hintSpans
+	r.refreshGitBreachHint()
 
 	headers := []*tview.TextView{
 		r.gitBreachStatusHeader, r.gitBreachFilesHeader, r.gitBreachBranchesHeader,
@@ -355,19 +357,44 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.renderGitBreach() // cell colors baked in per cell, not looked up live at draw time
 }
 
-// gitBreachHintEntries: Space stages/unstages the row under the cursor,
-// "c" opens the commit-message prompt, "r" re-reads the repository,
-// Escape closes — see captureGitBreachFilesTableKey for where each is
-// actually wired.
-func gitBreachHintEntries() []listHintEntry {
-	return []listHintEntry{
+// gitBreachHintEntries builds the hint bar's own entries for whichever
+// box currently has real keyboard focus — per the user's own explicit
+// point: Space (stage/unstage) only ever acts on a Files row, and Enter
+// only ever checks out a Branches row, so showing either one while a
+// different box has focus advertised a key the keyboard would then do
+// nothing with. "c" (commit) is different: it commits whatever is
+// already staged, which has nothing to do with which row is currently
+// selected anywhere, so it now works regardless of focus (see its own
+// handling added to every table's own InputCapture) and stays in the
+// hint bar unconditionally, same as "r"/Tab/Escape, which were never
+// box-specific to begin with.
+func (r *Root) gitBreachHintEntries() []listHintEntry {
+	entries := []listHintEntry{
 		hintKey("Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
-		hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
-		hintKey("Enter", "checkout (Branches)", func(r *Root) { r.openGitBreachCheckout() }),
+	}
+	if r.gitBreachFilesTable.HasFocus() {
+		entries = append(entries, hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }))
+	}
+	if r.gitBreachBranchesTable.HasFocus() {
+		entries = append(entries, hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }))
+	}
+	entries = append(entries,
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }),
-	}
+	)
+	return entries
+}
+
+// refreshGitBreachHint rebuilds the hint bar's own text/spans from
+// gitBreachHintEntries' own current, focus-dependent list — called
+// whenever which box has focus changes (every table's own FocusFunc),
+// not just on open/theme-apply, so the hint bar never shows a stale set
+// of keys for whichever box the cursor just left.
+func (r *Root) refreshGitBreachHint() {
+	hintText, hintSpans := buildListHint(r.theme, r.gitBreachHintEntries())
+	r.gitBreachHint.SetText(hintText)
+	r.gitBreachHintSpans = hintSpans
 }
 
 // gitBreachFocusable pairs one box's own header with its body — both
@@ -473,9 +500,15 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 		r.openGitBreachCheckout()
 		return nil
 	}
-	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
-		r.reloadGitBreach()
-		return nil
+	if event.Key() == tcell.KeyRune {
+		switch event.Rune() {
+		case 'r':
+			r.reloadGitBreach()
+			return nil
+		case 'c':
+			r.openGitBreachCommitPrompt()
+			return nil
+		}
 	}
 	return event
 }
@@ -494,9 +527,13 @@ func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tc
 }
 
 // captureGitBreachCommitsTableKey: Tab switches to the next box, "r"
-// reloads, Escape closes — no Enter action yet, since this first
-// Ausbaustufe only ever shows a commit's own diff in Main (via Commits'
-// own SetSelectionChangedFunc/FocusFunc), with no action a commit row
+// reloads, "c" opens the commit-message prompt (per the user's own
+// explicit point: committing what's already staged has nothing to do
+// with which row is selected here, so it works regardless of focus,
+// unlike Space/Enter which only ever act on a Files/Branches row),
+// Escape closes — no Enter action yet, since this first Ausbaustufe
+// only ever shows a commit's own diff in Main (via Commits' own
+// SetSelectionChangedFunc/FocusFunc), with no action a commit row
 // itself triggers (checkout/revert/cherry-pick/reset are explicitly
 // later Ausbaustufen — see feature_ideas.txt's own list).
 func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.EventKey {
@@ -508,9 +545,15 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		r.toggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
-		r.reloadGitBreach()
-		return nil
+	if event.Key() == tcell.KeyRune {
+		switch event.Rune() {
+		case 'r':
+			r.reloadGitBreach()
+			return nil
+		case 'c':
+			r.openGitBreachCommitPrompt()
+			return nil
+		}
 	}
 	return event
 }
@@ -526,8 +569,8 @@ func (r *Root) gitBreachFocusCommitsOnClick(action tview.MouseAction, event *tce
 }
 
 // captureGitBreachStashTableKey mirrors captureGitBreachCommitsTableKey
-// exactly — no row action yet (apply/pop/drop are later Ausbaustufen),
-// just Tab/r/Escape.
+// exactly, "c" included — no row action yet (apply/pop/drop are later
+// Ausbaustufen).
 func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -537,9 +580,15 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 		r.toggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
-		r.reloadGitBreach()
-		return nil
+	if event.Key() == tcell.KeyRune {
+		switch event.Rune() {
+		case 'r':
+			r.reloadGitBreach()
+			return nil
+		case 'c':
+			r.openGitBreachCommitPrompt()
+			return nil
+		}
 	}
 	return event
 }
