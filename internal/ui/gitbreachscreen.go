@@ -543,6 +543,19 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 // before the plain "+"/"-" cases below, which would otherwise also
 // match their own leading character and color a file header like a
 // single added/removed line.
+//
+// Deliberately hand-rolled rather than routed through
+// internal/viewer.Highlight's own chroma-backed pipeline (used for
+// untracked files — see startGitBreachDiff): tried chroma's own
+// dedicated Diff lexer directly and found it strictly worse for this
+// exact job — it colors "---"/"+++" file-header lines as a removed/
+// added line each (wrong: they're path headers, not content changes,
+// exactly the miscoloring this function's own early "+++"/"---" check
+// above exists to avoid), and it collapses an entire run of context
+// lines plus the "@@" hunk marker into one single undifferentiated
+// token instead of coloring each line on its own — no per-line
+// granularity, and no per-language coloring of the code inside a
+// changed line either, so there was nothing to gain by switching.
 func gitBreachColorizeDiff(diff string, theme config.ResolvedTheme) string {
 	lines := strings.Split(diff, "\n")
 	var b strings.Builder

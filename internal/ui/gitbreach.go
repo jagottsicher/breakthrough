@@ -13,6 +13,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/git"
+	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 const gitBreachPage = "gitBreach"
@@ -327,14 +328,22 @@ func (r *Root) startGitBreachDiff(row int) {
 				return
 			}
 			if gr.kind == gitBreachRowUntracked {
-				// Raw file content, not a diff — per the user's own
-				// explicit request that a diff's own +/- lines be
-				// colored, not every file this box ever shows (an
-				// untracked file has no "+"/"-" lines of its own to
-				// color in the first place), so this goes straight
-				// through tview.Escape instead of
-				// gitBreachColorizeDiff.
-				r.gitBreachDiffView.SetText(tview.Escape(text))
+				// Raw file content, not a diff — gitBreachColorizeDiff's
+				// own +/- line coloring doesn't apply here at all (an
+				// untracked file has no such lines), but the user's own
+				// explicit follow-up request was that it shouldn't just
+				// be plain white text either: real syntax highlighting,
+				// the same internal/viewer.Highlight + renderSyntax
+				// pipeline Look already uses (see viewer.go's own
+				// showBuiltinLook) — auto-detects the language from
+				// gr.path's own name, the same "don't ask the user,
+				// figure it out" convention Look's own Highlight call
+				// already establishes. Chroma's own dedicated Diff lexer
+				// was tried for the diff case above and rejected (see
+				// gitBreachColorizeDiff's own doc comment) — this is a
+				// real source file, not a diff, so that rejection
+				// doesn't apply here.
+				r.gitBreachDiffView.SetText(renderSyntax(viewer.Highlight(gr.path, text), paletteFor(r.theme.SurfaceBackground)))
 				return
 			}
 			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, r.theme))
