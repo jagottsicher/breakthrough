@@ -26,6 +26,12 @@ type LogEntry struct {
 	AuthorName  string
 	AuthorEmail string
 	When        time.Time
+	// Parents holds this commit's own parent hashes, in the order git
+	// itself lists them (first parent first) — zero for a root commit,
+	// one for an ordinary commit, two or more for a merge, including an
+	// octopus merge. internal/ui's own lane-assignment algorithm walks
+	// this list; nothing else in this package interprets it.
+	Parents []string
 }
 
 // CommitLogLimit is the suggested starting point for limit, Log's own
@@ -58,7 +64,7 @@ const CommitLogLimit = 200
 func Log(ctx context.Context, root string, limit int) ([]LogEntry, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "log",
 		"-n", strconv.Itoa(limit),
-		"--format=%H%x00%h%x00%s%x00%cI%x00%an%x00%ae")
+		"--format=%H%x00%h%x00%s%x00%cI%x00%an%x00%ae%x00%P")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -80,17 +86,21 @@ func Log(ctx context.Context, root string, limit int) ([]LogEntry, error) {
 		if line == "" {
 			continue
 		}
-		fields := strings.SplitN(line, "\x00", 6)
-		if len(fields) != 6 {
+		fields := strings.SplitN(line, "\x00", 7)
+		if len(fields) != 7 {
 			continue
 		}
 		when, err := time.Parse(time.RFC3339, fields[3])
 		if err != nil {
 			when = time.Time{}
 		}
+		var parents []string
+		if fields[6] != "" {
+			parents = strings.Split(fields[6], " ")
+		}
 		commits = append(commits, LogEntry{
 			Hash: fields[0], Short: fields[1], Subject: fields[2], When: when,
-			AuthorName: fields[4], AuthorEmail: fields[5],
+			AuthorName: fields[4], AuthorEmail: fields[5], Parents: parents,
 		})
 	}
 	return commits, nil

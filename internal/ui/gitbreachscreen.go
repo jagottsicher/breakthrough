@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
@@ -392,7 +393,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 // focused" in the first place.
 func (r *Root) gitBreachHintEntries() []listHintEntry {
 	entries := []listHintEntry{
-		hintKey("Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
+		hintKey("Tab/Shift-Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
 	}
 	if r.gitBreachFilesTable.HasFocus() {
 		entries = append(entries, hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }))
@@ -506,6 +507,23 @@ func (r *Root) toggleGitBreachFocus() {
 	r.app.SetFocus(focusables[0].body)
 }
 
+// reverseToggleGitBreachFocus is "Shift-Tab" (tcell.KeyBacktab) — the
+// mirror image of toggleGitBreachFocus, stepping to the previous entry
+// in gitBreachFocusables with wraparound instead of the next one.
+func (r *Root) reverseToggleGitBreachFocus() {
+	focusables := r.gitBreachFocusables()
+	if len(focusables) == 0 {
+		return
+	}
+	for i, f := range focusables {
+		if f.body.HasFocus() {
+			r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+			return
+		}
+	}
+	r.app.SetFocus(focusables[len(focusables)-1].body)
+}
+
 // captureGitBreachFilesTableKey: Tab switches to the next box, Space
 // toggles stage/unstage, "c" commits, "r" reloads, Escape closes — the
 // same per-table InputCapture shape captureLogAuditSelectionTableKey
@@ -522,6 +540,10 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
@@ -556,6 +578,10 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
@@ -614,6 +640,10 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		r.toggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
+		return nil
+	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
 		r.scrollGitBreachDiff(event.Key())
 		return nil
@@ -654,6 +684,10 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyBacktab {
+		r.reverseToggleGitBreachFocus()
 		return nil
 	}
 	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
@@ -983,6 +1017,70 @@ func gitBreachAuthorColor(email string) tcell.Color {
 	return gitBreachAuthorColors[h.Sum32()%uint32(len(gitBreachAuthorColors))]
 }
 
+// gitBreachLaneColor reuses the same twelve contrast-verified colors
+// gitBreachAuthorColor already picks from, indexed by git.LaneRow's
+// own stable lane id instead of a hashed author email — a different
+// axis (which branch path a commit's line belongs to, not who wrote
+// it) read from a different part of the same row (the graph prefix on
+// the left, the author name further right), so the two meanings never
+// have to be told apart at a glance. A negative lane id (an empty
+// column) has no color of its own; the caller never wraps that glyph
+// in a color tag to begin with.
+func gitBreachLaneColor(lane int) tcell.Color {
+	return gitBreachAuthorColors[lane%len(gitBreachAuthorColors)]
+}
+
+// gitBreachGraphGlyph maps one git.LaneGlyph to the rune it draws —
+// rounded box-drawing corners for forks/joins (a merge commit's extra
+// parents branching out, two lanes converging back on a shared
+// ancestor) read as distinctly "line bends here" against the plain
+// vertical bar of an unrelated pass-through lane, the same visual
+// language git log --graph/lazygit/gitk all already use.
+func gitBreachGraphGlyph(g git.LaneGlyph) rune {
+	switch g {
+	case git.LaneGlyphPass:
+		return '│'
+	case git.LaneGlyphNode:
+		return '●'
+	case git.LaneGlyphHorizontal:
+		return '─'
+	case git.LaneGlyphForkRight:
+		return '╮'
+	case git.LaneGlyphForkLeft:
+		return '╭'
+	case git.LaneGlyphJoinRight:
+		return '╯'
+	case git.LaneGlyphJoinLeft:
+		return '╰'
+	default:
+		return ' '
+	}
+}
+
+// gitBreachGraphPrefix renders one git.LaneRow's own Cells as a
+// tview-tagged string — each glyph individually color-wrapped by its
+// own lane id, a single Table cell drawing several differently
+// colored lanes side by side exactly the way tview's own tag-aware
+// cell rendering already supports (verified directly against a
+// tcell.SimulationScreen before this was built, not assumed) — then
+// right-pads with plain spaces to width columns, so every row's own
+// hash/author/subject lines up regardless of how many lanes that
+// particular row happened to need.
+func gitBreachGraphPrefix(row git.LaneRow, width int) string {
+	var b strings.Builder
+	for _, c := range row.Cells {
+		if c.Glyph == git.LaneGlyphNone {
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteString(wrapColor(gitBreachLaneColor(c.Lane), string(gitBreachGraphGlyph(c.Glyph))))
+	}
+	for i := len(row.Cells); i < width; i++ {
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
 // renderGitBreachCommits rebuilds the Commits table — same shape as
 // renderGitBreachBranches (no section headers, one row per entry), same
 // gitBreachCommitsReady fix for the same construction-time-placeholder
@@ -1024,8 +1122,22 @@ func (r *Root) renderGitBreachCommits() {
 		return
 	}
 
-	for row, c := range r.gitBreachCommits {
-		text := fmt.Sprintf("%s %s %s", c.Short, c.AuthorName, c.Subject)
+	lanes := git.CommitLanes(r.gitBreachCommits)
+	width := 0
+	for _, l := range lanes {
+		if len(l.Cells) > width {
+			width = len(l.Cells)
+		}
+	}
+	for row, l := range lanes {
+		c := l.Commit
+		// AuthorName/Subject are escaped: the graph prefix just ahead
+		// of them is built entirely out of this package's own color
+		// tags, and an unescaped "[" in either (a subject like "fix:
+		// strip [brackets]" is entirely plausible) would otherwise be
+		// parsed as more of the same tag syntax and corrupt the rest
+		// of the row instead of just failing to color one word.
+		text := fmt.Sprintf("%s %s %s %s", gitBreachGraphPrefix(l, width), c.Short, tview.Escape(c.AuthorName), tview.Escape(c.Subject))
 		r.gitBreachCommitsTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(gitBreachAuthorColor(c.AuthorEmail)))
 	}
 
