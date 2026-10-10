@@ -635,7 +635,7 @@ type Root struct {
 	gitBreachBranchesHeader *tview.TextView
 	gitBreachBranchesTable  *tview.Table
 	gitBreachCommitsHeader  *tview.TextView
-	gitBreachCommitsView    *tview.TextView
+	gitBreachCommitsTable   *tview.Table
 	gitBreachStashHeader    *tview.TextView
 	gitBreachStashView      *tview.TextView
 	gitBreachDiffHeader     *tview.TextView
@@ -684,6 +684,30 @@ type Root struct {
 	// 0 to absorb it the way Files' section headers do), which is what
 	// made this bug user-visible instead of merely latent.
 	gitBreachBranchesReady bool
+	// gitBreachCommits/gitBreachCommitsErr/gitBreachCommitsReady are the
+	// Commits box's own equivalent of gitBreachBranches/
+	// gitBreachBranchesErr/gitBreachBranchesReady above — same shape,
+	// same construction-time-placeholder reason for the Ready flag, a
+	// third instance of the identical fix (see renderGitBreachCommits).
+	gitBreachCommits      []git.LogEntry
+	gitBreachCommitsErr   error
+	gitBreachCommitsReady bool
+	// gitBreachMainOwner tracks which box's own selection the Main —
+	// Diff box is currently showing: Files' own staged/unstaged/
+	// untracked diff, or a Commits row's own CommitDiff. Per
+	// feature_ideas.txt's own documented layout ("Main folgt der
+	// aktiven Box"), Main always follows whichever of these two boxes
+	// currently has keyboard focus — not whichever last had a row
+	// selected. Without this, renderGitBreachFiles' own unconditional
+	// refresh-Main-on-reload call (see its own doc comment on the real
+	// stale-diff bug that fix addressed) would clobber a commit's own
+	// diff with a file diff on every reload while Commits has focus,
+	// simply because Files re-asserts its own cursor position on every
+	// render regardless of which box the user is actually looking at.
+	// Files is the zero value (gitBreachMainOwnerFiles == 0) so a fresh
+	// Root needs no explicit initialization to start in the correct,
+	// default-focus state.
+	gitBreachMainOwner gitBreachMainOwnerKind
 	// gitBreachDiffCancel cancels whichever diff fetch is in flight for
 	// the row the cursor was on before it moved again — see
 	// startGitBreachDiff/cancelGitBreachDiff, the same shape

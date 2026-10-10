@@ -585,26 +585,28 @@ var helpText = strings.TrimLeft(`
   on it. Several boxes at once rather than one full-screen list: Status
   (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
   untracked, Conflicts first if any, real syntax coloring on every
-  change), Branches (every local branch, the current one marked), and
-  two stub boxes (Commits/Stash) reserved for a later Ausbaustufe. The
-  Main box on the right shows the diff of whichever row in Files the
-  cursor is on — staged vs. unstaged (also syntax-colored, background
-  tinted green/red for added/removed lines), or the raw content for an
-  untracked file. Tab switches keyboard focus between Files and
-  Branches, the dashboard's own two real, navigable boxes so far.
+  change), Branches (every local branch, the current one marked),
+  Commits (the most recent commits, newest first), and one remaining
+  stub box (Stash) reserved for a later Ausbaustufe. The Main box on the
+  right shows the diff of whichever box currently has keyboard focus:
+  Files' own staged/unstaged diff (also syntax-colored, background
+  tinted green/red for added/removed lines) or the raw content for an
+  untracked file, or a Commits row's own full diff across every file it
+  touched. Tab switches keyboard focus between Files, Branches and
+  Commits, the dashboard's own three real, navigable boxes so far.
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on
   this machine under the same-looking path.
 
-    Tab      Switch keyboard focus between Files and Branches
+    Tab      Switch keyboard focus between Files, Branches and Commits
     Space    (Files) Stage the row under the cursor if it isn't,
              unstage it if it is (does nothing on a Conflicts row)
     Enter    (Branches) Check out the branch under the cursor —
              confirms first if the working tree isn't clean
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged)
-    r        Re-read the repository's current status/branches
+    r        Re-read the repository's current status/branches/commits
     Esc      Close
 
 [::b]Log Audit screen ("jL")[::-]
