@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/git"
@@ -66,6 +67,53 @@ func newTestRootForGitBreachDir(t *testing.T, dir string) *Root {
 		t.Fatalf("NewRoot: %v", err)
 	}
 	return r
+}
+
+// TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff pins
+// a real, reported bug: the Main box's own diff never refreshed past
+// the very first open, no matter which row the cursor later moved to.
+// The very first render — before any real git status has been fetched
+// — takes the "Working tree clean" placeholder path, whose own
+// showTablePlaceholder calls Select(1, 0) while gitBreachRowIndex is
+// still empty, so the one diff fetch that call triggers finds no row
+// and clears the view. Once real status lands and row 1 happens to
+// already be a real file (as it is here), tview's own
+// SetSelectionChangedFunc never fires again — Select() only invokes it
+// when the selected row *number* changes, not when the data a stable
+// number refers to does — so nothing else ever asked for a real diff
+// either, had renderGitBreachFiles not been fixed to ask explicitly.
+// Reproduced here the same way it actually happened: open on an
+// already-clean repo (the "Working tree clean" path, row 0, no real
+// files at all), then dirty it and reload — exactly the gap between
+// opening a dashboard on a quiet repo and a file changing moments
+// later that the real bug report came from.
+func TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach() // clean repo — takes the "Working tree clean" path
+	if len(r.gitBreachRows) != 0 {
+		t.Fatalf("setup: gitBreachRows = %v, want none on a clean repo", r.gitBreachRows)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	r.reloadGitBreach()
+
+	if len(r.gitBreachRows) != 1 || r.gitBreachRows[0].path != "a.txt" {
+		t.Fatalf("setup: gitBreachRows = %v, want just a.txt staged", r.gitBreachRows)
+	}
+	if r.gitBreachDiffCancel == nil {
+		t.Error("gitBreachDiffCancel is nil — reloadGitBreach never started fetching a diff for the now-real row")
+	}
 }
 
 func TestOpenGitBreachOnARealRepositoryShowsStagedUnstagedAndUntracked(t *testing.T) {
@@ -243,6 +291,64 @@ func TestOpenGitBreachCommitPromptDoesNothingWithNothingStaged(t *testing.T) {
 
 	if r.activePage != errorPage {
 		t.Errorf("activePage = %q, want the error overlay for \"nothing staged\"", r.activePage)
+	}
+}
+
+// TestGitBreachBlockFocusStealSwallowsLeftDown pins the user's own
+// explicit bug report: an ordinary click anywhere on one of the
+// passive boxes (Status, Branches/Commits/Stash, Main) used to steal
+// real keyboard focus onto a box nothing could ever navigate inside,
+// with no way back short of closing and reopening the whole dashboard
+// — tview's own TextView.MouseHandler calls setFocus(itself)
+// unconditionally on MouseLeftDown otherwise.
+func TestGitBreachBlockFocusStealSwallowsLeftDown(t *testing.T) {
+	action, event := gitBreachBlockFocusSteal(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+	if event != nil {
+		t.Errorf("event = %v, want nil (swallowed, never reaching TextView's own default handler)", event)
+	}
+	if action != tview.MouseConsumed {
+		t.Errorf("action = %v, want MouseConsumed", action)
+	}
+}
+
+// TestGitBreachBlockFocusStealPassesThroughOtherActions pins the other
+// half of the same fix: only MouseLeftDown (the one action that steals
+// focus) is swallowed — a wheel scroll over the Main box's own long
+// diff must still reach TextView's own default scroll handling.
+func TestGitBreachBlockFocusStealPassesThroughOtherActions(t *testing.T) {
+	orig := tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0)
+	action, event := gitBreachBlockFocusSteal(tview.MouseScrollDown, orig)
+	if event != orig {
+		t.Errorf("event = %v, want the original event passed through unchanged", event)
+	}
+	if action != tview.MouseScrollDown {
+		t.Errorf("action = %v, want MouseScrollDown passed through unchanged", action)
+	}
+}
+
+// TestGitBreachFocusFilesOnClickFocusesTheTable pins the user's own
+// further explicit request: the Files header line itself must be
+// clickable too, not just the table beneath it — before this, clicking
+// the header did nothing at all (a header is its own separate TextView
+// from the table it labels).
+func TestGitBreachFocusFilesOnClickFocusesTheTable(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	r.app.SetFocus(r.gitBreachStatusView) // simulate focus having landed somewhere else
+	if r.gitBreachFilesTable.HasFocus() {
+		t.Fatal("setup: Files should not have focus yet")
+	}
+
+	action, event := r.gitBreachFocusFilesOnClick(tview.MouseLeftDown, tcell.NewEventMouse(0, 0, tcell.ButtonNone, 0))
+
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("clicking the Files header should focus the Files table")
+	}
+	if event != nil || action != tview.MouseConsumed {
+		t.Errorf("action=%v event=%v, want the click consumed", action, event)
 	}
 }
 

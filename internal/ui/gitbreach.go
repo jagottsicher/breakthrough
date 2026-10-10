@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/rivo/tview"
+
 	"github.com/jagottsicher/breakthrough/internal/git"
 )
 
@@ -276,7 +278,7 @@ func (r *Root) startGitBreachDiff(row int) {
 	}
 
 	if gr.kind == gitBreachRowConflict {
-		r.gitBreachDiffView.SetText(fmt.Sprintf("%s: unresolved conflict — resolving conflicts is not yet supported here.", gr.path))
+		r.gitBreachDiffView.SetText(tview.Escape(fmt.Sprintf("%s: unresolved conflict — resolving conflicts is not yet supported here.", gr.path)))
 		return
 	}
 
@@ -316,14 +318,26 @@ func (r *Root) startGitBreachDiff(row int) {
 				return
 			}
 			curRow, _ := r.gitBreachFilesTable.GetSelection()
-			if curGr, ok := r.gitBreachRowAt(curRow); !ok || curGr != gr {
+			curGr, ok := r.gitBreachRowAt(curRow)
+			if !ok || curGr != gr {
 				return // the cursor moved to a different row before this landed
 			}
 			if err != nil {
-				r.gitBreachDiffView.SetText(fmt.Sprintf("%s: %v", gr.path, err))
+				r.gitBreachDiffView.SetText(tview.Escape(fmt.Sprintf("%s: %v", gr.path, err)))
 				return
 			}
-			r.gitBreachDiffView.SetText(text)
+			if gr.kind == gitBreachRowUntracked {
+				// Raw file content, not a diff — per the user's own
+				// explicit request that a diff's own +/- lines be
+				// colored, not every file this box ever shows (an
+				// untracked file has no "+"/"-" lines of its own to
+				// color in the first place), so this goes straight
+				// through tview.Escape instead of
+				// gitBreachColorizeDiff.
+				r.gitBreachDiffView.SetText(tview.Escape(text))
+				return
+			}
+			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, r.theme))
 		})
 	})
 }
