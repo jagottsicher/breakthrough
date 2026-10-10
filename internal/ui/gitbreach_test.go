@@ -10,7 +10,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/jagottsicher/breakthrough/internal/config"
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
 )
@@ -743,14 +742,14 @@ func TestGitBreachAuthorColorIsStablePerEmail(t *testing.T) {
 // the result always comes from the theme's own nine label colors
 // (user-configurable, see labelFallbackColors in internal/config), not
 // some separate, hardcoded palette of its own.
-func TestGitBreachAuthorColorUsesOneOfTheNineLabelFallbackColors(t *testing.T) {
+func TestGitBreachAuthorColorUsesOneOfTheTwelveAuthorColors(t *testing.T) {
 	labels := map[tcell.Color]bool{}
-	for i := 0; i < config.MaxLabelID; i++ {
-		labels[tcell.GetColor(config.LabelFallbackColor(i))] = true
+	for _, c := range gitBreachAuthorColors {
+		labels[c] = true
 	}
 	for _, email := range []string{"a@example.com", "b@example.com", "c@example.com"} {
 		if got := gitBreachAuthorColor(email); !labels[got] {
-			t.Errorf("gitBreachAuthorColor(%q) = %v, not one of the nine label fallback colors", email, got)
+			t.Errorf("gitBreachAuthorColor(%q) = %v, not one of the twelve author colors", email, got)
 		}
 	}
 }
