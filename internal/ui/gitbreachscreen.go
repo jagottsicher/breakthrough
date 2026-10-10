@@ -11,16 +11,12 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
-// gitBreachStubHeight/gitBreachStatusHeight are the fixed row counts
-// Stash and Status get in the left column's own Flex — a stub box only
-// ever needs room for its own one-row header plus a one-line
-// placeholder, Status for its own header plus a two-line summary.
-// Files/Branches/Commits, the real lists, share whatever's left
-// proportionally (see newGitBreachScreen's own AddItem proportions).
-const (
-	gitBreachStatusHeight = 3
-	gitBreachStubHeight   = 2
-)
+// gitBreachStatusHeight is the fixed row count Status gets in the left
+// column's own Flex — its own header plus a two-line summary, nothing
+// more. Files/Branches/Commits/Stash, the real lists, share whatever's
+// left proportionally (see newGitBreachScreen's own AddItem
+// proportions) — none of them are a fixed-height stub anymore.
+const gitBreachStatusHeight = 3
 
 // gitBreachDiffAddedColor is a dedicated, brighter green for a diff's
 // own added-line marker ("+") — per the user's own explicit request for
@@ -134,10 +130,18 @@ func (r *Root) newGitBreachScreen() {
 	})
 	r.gitBreachCommitsTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, false) })
 
-	r.gitBreachStashHeader, r.gitBreachStashView = newGitBreachBox("Stash (stub)")
-	r.gitBreachStashView.SetText("kommt in einer späteren Ausbaustufe")
-	r.gitBreachStashHeader.SetMouseCapture(gitBreachBlockFocusSteal)
-	r.gitBreachStashView.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachStashHeader = newGitBreachBoxHeader("Stash")
+	r.gitBreachStashHeader.SetMouseCapture(r.gitBreachFocusStashOnClick)
+	r.gitBreachStashTable = tview.NewTable()
+	r.gitBreachStashTable.SetSelectable(true, false)
+	r.gitBreachStashTable.SetInputCapture(r.captureGitBreachStashTableKey)
+	r.gitBreachStashTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachStashDiffIfOwner() })
+	r.gitBreachStashTable.SetFocusFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachStashHeader, r.gitBreachStashTable, true)
+		r.gitBreachMainOwner = gitBreachMainOwnerStash
+		r.startGitBreachStashDiffIfOwner()
+	})
+	r.gitBreachStashTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachStashHeader, r.gitBreachStashTable, false) })
 
 	r.gitBreachDiffHeader, r.gitBreachDiffView = newGitBreachBox("Main — Diff")
 	r.gitBreachDiffView.SetWrap(false)
@@ -168,7 +172,7 @@ func (r *Root) newGitBreachScreen() {
 		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 2, true).
 		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesTable), 0, 1, false).
 		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsTable), 0, 2, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashView), gitBreachStubHeight, 0, false)
+		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashTable), 0, 1, false)
 
 	body := tview.NewFlex().
 		AddItem(leftColumn, 0, 1, true).
@@ -310,8 +314,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	}
 
 	textBodies := []*tview.TextView{
-		r.gitBreachStatusView,
-		r.gitBreachStashView, r.gitBreachDiffView,
+		r.gitBreachStatusView, r.gitBreachDiffView,
 	}
 	for _, v := range textBodies {
 		v.SetBackgroundColor(theme.SurfaceBackground)
@@ -320,8 +323,9 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.gitBreachFilesTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.gitBreachBranchesTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.gitBreachCommitsTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.gitBreachStashTable.SetBackgroundColor(theme.SurfaceBackground)
 
-	// Both tables mix several per-cell text colors (Staged/Unstaged/
+	// These tables mix several per-cell text colors (Staged/Unstaged/
 	// Untracked rows each carry their own gitBreachRowColor; Branches'
 	// current-branch row carries EntryExecutable) — without an explicit
 	// SetSelectedStyle, tview's own default selection rendering reverses
@@ -334,6 +338,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.gitBreachFilesTable.SetSelectedStyle(selStyle)
 	r.gitBreachBranchesTable.SetSelectedStyle(selStyle)
 	r.gitBreachCommitsTable.SetSelectedStyle(selStyle)
+	r.gitBreachStashTable.SetSelectedStyle(selStyle)
 
 	// Re-assert whichever of Files/Branches actually has real keyboard
 	// focus right now on top of the uniform "inactive" pass above — the
@@ -382,16 +387,18 @@ type gitBreachFocusEntry struct {
 
 // gitBreachFocusables is the ordered list Tab cycles through (see
 // toggleGitBreachFocus) and applyGitBreachTheme's own "which box
-// currently has focus" re-check — Files, Branches and Commits today,
-// the only three real, focusable boxes in this Ausbaustufe. A later
-// Ausbaustufe giving Stash real, navigable content adds its own entry
-// here and nowhere else — the whole point of making this a function
-// returning a slice rather than a fixed two-way toggle.
+// currently has focus" re-check — Files, Branches, Commits and Stash,
+// every real, focusable box this dashboard has today. A later
+// Ausbaustufe giving some other view (Worktrees, Remotes, ...) real,
+// navigable content adds its own entry here and nowhere else — the
+// whole point of making this a function returning a slice rather than
+// a fixed toggle.
 func (r *Root) gitBreachFocusables() []gitBreachFocusEntry {
 	return []gitBreachFocusEntry{
 		{r.gitBreachFilesHeader, r.gitBreachFilesTable},
 		{r.gitBreachBranchesHeader, r.gitBreachBranchesTable},
 		{r.gitBreachCommitsHeader, r.gitBreachCommitsTable},
+		{r.gitBreachStashHeader, r.gitBreachStashTable},
 	}
 }
 
@@ -518,6 +525,35 @@ func (r *Root) gitBreachFocusCommitsOnClick(action tview.MouseAction, event *tce
 	return action, event
 }
 
+// captureGitBreachStashTableKey mirrors captureGitBreachCommitsTableKey
+// exactly — no row action yet (apply/pop/drop are later Ausbaustufen),
+// just Tab/r/Escape.
+func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyEscape {
+		r.closeGitBreach()
+		return nil
+	}
+	if event.Key() == tcell.KeyTab {
+		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
+		r.reloadGitBreach()
+		return nil
+	}
+	return event
+}
+
+// gitBreachFocusStashOnClick mirrors gitBreachFocusCommitsOnClick
+// exactly, for Stash's own header.
+func (r *Root) gitBreachFocusStashOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		r.app.SetFocus(r.gitBreachStashTable)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
 // renderGitBreach refreshes every box from r.gitBreachStatus/Rows —
 // called by reloadGitBreach after every fetch, stage, unstage, and
 // commit, the same "re-render from the current state, never patch it
@@ -533,6 +569,7 @@ func (r *Root) renderGitBreach() {
 	r.renderGitBreachFiles()
 	r.renderGitBreachBranches()
 	r.renderGitBreachCommits()
+	r.renderGitBreachStash()
 }
 
 // renderGitBreachStatus fills the Status box — branch, ahead/behind,
@@ -790,6 +827,48 @@ func (r *Root) renderGitBreachCommits() {
 	r.startGitBreachCommitsDiffIfOwner()
 }
 
+// renderGitBreachStash rebuilds the Stash table — same shape as
+// renderGitBreachCommits (no section headers, one row per entry), same
+// gitBreachStashReady fix for the same construction-time-placeholder
+// reason (see its own doc comment on Root).
+func (r *Root) renderGitBreachStash() {
+	r.gitBreachStashTable.Clear()
+
+	if r.gitBreachStashErr != nil {
+		showTablePlaceholder(r.gitBreachStashTable, r.gitBreachStashErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreachStash) == 0 {
+		showTablePlaceholder(r.gitBreachStashTable, "No stashed changes.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, s := range r.gitBreachStash {
+		text := fmt.Sprintf("%s %s", s.Ref, s.Message)
+		r.gitBreachStashTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+	}
+
+	// Real rows exist past this point — re-assert SetSelectable(true,
+	// false) the same reason renderGitBreachFiles's/
+	// renderGitBreachBranches's/renderGitBreachCommits's own tails
+	// already document: showTablePlaceholder turns it off as its own
+	// fix for a real tview v0.42.0 freeze, and never turns it back on
+	// by itself.
+	r.gitBreachStashTable.SetSelectable(true, false)
+
+	// The !ok check alone isn't enough the very first time real rows
+	// exist — see gitBreachStashReady's own doc comment on Root for why
+	// a leftover selectedRow from the construction-time placeholder
+	// render can pass as "valid" here too, the same bug Branches/
+	// Commits had.
+	cur, _ := r.gitBreachStashTable.GetSelection()
+	if cur < 0 || cur >= len(r.gitBreachStash) || !r.gitBreachStashReady {
+		r.gitBreachStashTable.Select(0, 0)
+	}
+	r.gitBreachStashReady = true
+	r.startGitBreachStashDiffIfOwner()
+}
+
 // gitBreachMainOwnerKind names which box's own selection the Main —
 // Diff box currently follows — see gitBreachMainOwner's own doc
 // comment on Root.
@@ -798,6 +877,7 @@ type gitBreachMainOwnerKind int
 const (
 	gitBreachMainOwnerFiles gitBreachMainOwnerKind = iota
 	gitBreachMainOwnerCommits
+	gitBreachMainOwnerStash
 )
 
 // startGitBreachFilesDiffIfOwner refreshes Main with Files' own
@@ -825,6 +905,16 @@ func (r *Root) startGitBreachCommitsDiffIfOwner() {
 	}
 	row, _ := r.gitBreachCommitsTable.GetSelection()
 	r.startGitBreachCommitDiff(row)
+}
+
+// startGitBreachStashDiffIfOwner mirrors startGitBreachFilesDiffIfOwner
+// exactly, for Stash.
+func (r *Root) startGitBreachStashDiffIfOwner() {
+	if r.gitBreachMainOwner != gitBreachMainOwnerStash {
+		return
+	}
+	row, _ := r.gitBreachStashTable.GetSelection()
+	r.startGitBreachStashDiff(row)
 }
 
 // gitBreachFirstDataRow returns the lowest table row present in
