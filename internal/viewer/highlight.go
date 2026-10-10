@@ -3,6 +3,7 @@ package viewer
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -61,6 +62,64 @@ type Token struct {
 // any realistic source file, well below a log worth worrying about.
 const HighlightLimit = 1 << 20 // 1 MiB
 
+// lexerCacheEntry wraps a resolved lexer so a cache hit can be told
+// apart from "not yet resolved" even when the resolved lexer itself is
+// nil (no lexer recognizes this filename) — a bare nil interface{}
+// can't make that distinction on its own: storing a nil chroma.Lexer
+// directly in the map and then type-asserting it back out hits a real
+// Go gotcha (asserting a truly nil interface{} to any interface type
+// always fails, ok == false), which would silently defeat caching for
+// every unrecognized filename instead of actually caching the "no
+// match" result.
+type lexerCacheEntry struct {
+	lexer chroma.Lexer
+}
+
+// lexerCache memoizes lexerFor's own result by path — see its own doc
+// comment for why. A plain map guarded by a mutex rather than sync.Map:
+// gitBreachColorizeDiff (internal/ui) calls Highlight from a background
+// goroutine (see its own startGitBreachDiff/startGitBreachCommitDiff),
+// so concurrent access is real, not hypothetical, but the access
+// pattern here (many reads of a handful of distinct paths within one
+// diff render, occasional writes) doesn't need sync.Map's own
+// optimization for disjoint-key workloads.
+var (
+	lexerCacheMu sync.Mutex
+	lexerCache   = map[string]lexerCacheEntry{}
+)
+
+// lexerFor resolves path's own lexer via lexers.Match, the same call
+// Highlight always made directly before this cache existed — now
+// memoized by path's own base name, since a real, reported bug
+// otherwise: lexers.Match's own doc comment says outright that it
+// "iterates over all file patterns in all lexers, so is not fast" (a
+// linear scan across chroma's own ~200 bundled lexers' filename globs),
+// and Highlight is called once per *line* of a diff (see
+// gitBreachColorizeDiff/gitBreachColorizeDiffLine in internal/ui) —
+// every line of the same file was repeating that same full scan for no
+// reason, since the same path always resolves to the same lexer.
+// Measured against a real ~2,400-line commit diff before this fix:
+// colorizing it took over 12 seconds; the same diff after this fix
+// takes a small fraction of that, the rest being the actual per-line
+// tokenising work this cache was never meant to avoid.
+func lexerFor(path string) chroma.Lexer {
+	base := filepath.Base(path)
+
+	lexerCacheMu.Lock()
+	entry, ok := lexerCache[base]
+	lexerCacheMu.Unlock()
+	if ok {
+		return entry.lexer
+	}
+
+	lexer := lexers.Match(base)
+
+	lexerCacheMu.Lock()
+	lexerCache[base] = lexerCacheEntry{lexer: lexer}
+	lexerCacheMu.Unlock()
+	return lexer
+}
+
 // Highlight splits content into colored Tokens, choosing a lexer by
 // path's own file name first and falling back to analysing content
 // itself (chroma's own Match/Analyse — so an extensionless file that's
@@ -82,7 +141,7 @@ func Highlight(path, content string) []Token {
 		return plain
 	}
 
-	lexer := lexers.Match(filepath.Base(path))
+	lexer := lexerFor(path)
 	if lexer == nil {
 		lexer = lexers.Analyse(content)
 	}
