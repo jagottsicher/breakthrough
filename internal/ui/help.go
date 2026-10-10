@@ -600,7 +600,13 @@ var helpText = strings.TrimLeft(`
   real, navigable boxes so far — no action on a Commits row yet
   (checkout/revert/cherry-pick/reset are later Ausbaustufen). A Stash
   row can be applied or dropped (never popped — see the key list
-  below).
+  below). Commits also draws a lane/branch graph to the left of each
+  row — a merge commit forks its extra parents into their own, newly
+  colored lanes, and two lanes converging back on a shared ancestor
+  join into one again, the same shape git log --graph/lazygit/gitk all
+  already draw, each lane's own color stable across the rows it spans
+  and independent of the author color its own commit text already
+  carries further right.
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on

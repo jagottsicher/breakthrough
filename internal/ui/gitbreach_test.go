@@ -860,6 +860,114 @@ func TestRenderGitBreachCommitsColorsByAuthor(t *testing.T) {
 	}
 }
 
+// TestGitBreachGraphGlyphCoversEveryLaneGlyph pins the rune each
+// git.LaneGlyph maps to — mostly to catch a future new LaneGlyph
+// constant silently falling through to the default space instead of
+// getting its own case here.
+func TestGitBreachGraphGlyphCoversEveryLaneGlyph(t *testing.T) {
+	cases := map[git.LaneGlyph]rune{
+		git.LaneGlyphNone:       ' ',
+		git.LaneGlyphPass:       '│',
+		git.LaneGlyphNode:       '●',
+		git.LaneGlyphHorizontal: '─',
+		git.LaneGlyphForkRight:  '╮',
+		git.LaneGlyphForkLeft:   '╭',
+		git.LaneGlyphJoinRight:  '╯',
+		git.LaneGlyphJoinLeft:   '╰',
+	}
+	for glyph, want := range cases {
+		if got := gitBreachGraphGlyph(glyph); got != want {
+			t.Errorf("gitBreachGraphGlyph(%v) = %q, want %q", glyph, got, want)
+		}
+	}
+}
+
+// TestGitBreachGraphPrefixColorsEachLaneAndPadsToWidth pins the two
+// things gitBreachGraphPrefix owns beyond glyph lookup: each non-empty
+// cell gets wrapped in its own lane's color tag (so a merge row's two
+// differently colored lanes render correctly in one Table cell — see
+// the tcell.SimulationScreen spike this whole feature started from),
+// and the result is right-padded with plain, untagged spaces up to
+// width so every row's hash/author/subject column lines up regardless
+// of how many lanes that particular row needed.
+func TestGitBreachGraphPrefixColorsEachLaneAndPadsToWidth(t *testing.T) {
+	row := git.LaneRow{
+		Cells: []git.LaneCell{
+			{Glyph: git.LaneGlyphNode, Lane: 0},
+			{Glyph: git.LaneGlyphForkRight, Lane: 1},
+		},
+	}
+	got := gitBreachGraphPrefix(row, 4)
+	wantColor0 := colorTag(gitBreachLaneColor(0))
+	wantColor1 := colorTag(gitBreachLaneColor(1))
+	want := fmt.Sprintf("[%s]●[-][%s]╮[-]  ", wantColor0, wantColor1)
+	if got != want {
+		t.Errorf("gitBreachGraphPrefix = %q, want %q", got, want)
+	}
+}
+
+// TestGitBreachGraphPrefixLeavesEmptyColumnsUncolored pins that a
+// LaneGlyphNone column renders as a bare space, never wrapped in a
+// color tag of its own (there's no lane to color).
+func TestGitBreachGraphPrefixLeavesEmptyColumnsUncolored(t *testing.T) {
+	row := git.LaneRow{Cells: []git.LaneCell{{Glyph: git.LaneGlyphNone, Lane: -1}}}
+	got := gitBreachGraphPrefix(row, 1)
+	if got != " " {
+		t.Errorf("gitBreachGraphPrefix for an empty column = %q, want a bare space", got)
+	}
+}
+
+// TestRenderGitBreachCommitsDrawsAMergeWithTwoLanes exercises the real
+// render path end to end against an actual merge commit — a feature
+// branch with one commit, merged back — confirming the merge row's own
+// cell carries two differently colored glyphs (its own node plus the
+// fork into the feature lane) rather than just the plain, single-lane
+// text the pre-graph version of this table used to show.
+func TestRenderGitBreachCommitsDrawsAMergeWithTwoLanes(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "base")
+	runGitBreach(t, dir, "checkout", "-q", "-b", "feature-x")
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "feature work")
+	runGitBreach(t, dir, "checkout", "-q", "main")
+	runGitBreach(t, dir, "merge", "-q", "--no-ff", "feature-x", "-m", "merge feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if len(r.gitBreachCommits) != 3 {
+		t.Fatalf("gitBreachCommits = %+v, want 3 (merge, feature work, base)", r.gitBreachCommits)
+	}
+	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	if !strings.Contains(cell.Text, "●") {
+		t.Errorf("merge row text = %q, want a node glyph", cell.Text)
+	}
+	if !strings.Contains(cell.Text, "╮") && !strings.Contains(cell.Text, "╭") {
+		t.Errorf("merge row text = %q, want a fork glyph for the second parent", cell.Text)
+	}
+}
+
+// TestRenderGitBreachCommitsEscapesBracketsInSubjectsAndNames pins the
+// bug this feature would otherwise reintroduce: the graph prefix is
+// built entirely out of this package's own "[color]...[-]" tags, so an
+// unescaped "[" anywhere later in the same cell's text (a subject like
+// "fix: strip [brackets]" is entirely plausible) would be parsed as
+// more of the same tag syntax and corrupt the rest of the row instead
+// of just failing to color one word.
+func TestRenderGitBreachCommitsEscapesBracketsInSubjectsAndNames(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "fix: strip [brackets] from input")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	cell := r.gitBreachCommitsTable.GetCell(0, 0)
+	if !strings.Contains(cell.Text, "[brackets[] from input") {
+		t.Errorf("row text = %q, want tview.Escape's own escaped form of \"[brackets] from input\"", cell.Text)
+	}
+}
+
 // TestOpenGitBreachSelectsTheFirstCommitNotTheSecond is the Commits
 // box's own version of TestOpenGitBreachSelectsTheFirstBranchNotTheSecond
 // — the identical construction-time-placeholder bug (see
