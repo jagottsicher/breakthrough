@@ -556,7 +556,7 @@ func TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch(t *testing.T) {
 // TestToggleGitBreachFocusCyclesBetweenFilesAndBranches pins "Tab" —
 // gitBreachFocusables' own doc comment on why this is a data-driven
 // list rather than a hardcoded two-way toggle.
-func TestToggleGitBreachFocusCyclesBetweenFilesAndBranches(t *testing.T) {
+func TestToggleGitBreachFocusCyclesThroughFilesBranchesAndCommits(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
@@ -572,7 +572,139 @@ func TestToggleGitBreachFocusCyclesBetweenFilesAndBranches(t *testing.T) {
 	}
 
 	r.toggleGitBreachFocus()
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Error("after a second Tab: Commits should have focus")
+	}
+
+	r.toggleGitBreachFocus()
 	if !r.gitBreachFilesTable.HasFocus() {
-		t.Error("after a second Tab: focus should be back on Files")
+		t.Error("after a third Tab: focus should be back on Files")
+	}
+}
+
+func TestRenderGitBreachCommitsListsCommitsNewestFirst(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "second")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if len(r.gitBreachCommits) != 2 {
+		t.Fatalf("gitBreachCommits = %+v, want 2", r.gitBreachCommits)
+	}
+	if r.gitBreachCommits[0].Subject != "second" || r.gitBreachCommits[1].Subject != "first" {
+		t.Errorf("gitBreachCommits order = %q, %q, want [second, first] (newest first)",
+			r.gitBreachCommits[0].Subject, r.gitBreachCommits[1].Subject)
+	}
+}
+
+// TestOpenGitBreachSelectsTheFirstCommitNotTheSecond is the Commits
+// box's own version of TestOpenGitBreachSelectsTheFirstBranchNotTheSecond
+// — the identical construction-time-placeholder bug (see
+// gitBreachCommitsReady's own doc comment on Root), a third instance of
+// the same fix.
+func TestOpenGitBreachSelectsTheFirstCommitNotTheSecond(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "second")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	gotRow, _ := r.gitBreachCommitsTable.GetSelection()
+	if gotRow != 0 {
+		c, _ := r.gitBreachCommitAt(gotRow)
+		t.Errorf("selected row %d (%q), want row 0 (the newest commit)", gotRow, c.Subject)
+	}
+}
+
+// TestGitBreachMainOwnerFollowsKeyboardFocus pins the real bug the
+// advisor flagged before this box existed: Files' own unconditional
+// refresh-Main-on-reload (renderGitBreachFiles' own tail) would
+// otherwise clobber a commit's own diff with a file diff on every
+// reload while Commits has focus, simply because Files re-asserts its
+// own cursor position on every render regardless of which box the user
+// is actually looking at. gitBreachMainOwner exists specifically so
+// that doesn't happen — this test exercises the owner switch itself
+// (Tab to Commits), not the diff fetch's own async result, the same
+// restraint TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff's
+// own doc comment already explains for why "a fetch was started" (not
+// "the fetch landed with this exact text") is what's actually testable
+// deterministically here.
+func TestGitBreachMainOwnerFollowsKeyboardFocus(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
+		t.Fatalf("setup: gitBreachMainOwner = %v, want gitBreachMainOwnerFiles right after opening", r.gitBreachMainOwner)
+	}
+
+	r.toggleGitBreachFocus() // -> Branches
+	r.toggleGitBreachFocus() // -> Commits
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Fatal("setup: Commits should have focus after two Tabs")
+	}
+	if r.gitBreachMainOwner != gitBreachMainOwnerCommits {
+		t.Error("gitBreachMainOwner did not switch to Commits when it gained keyboard focus")
+	}
+
+	r.toggleGitBreachFocus() // -> Files
+	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
+		t.Error("gitBreachMainOwner did not switch back to Files when it regained keyboard focus")
+	}
+}
+
+// TestStartGitBreachCommitsDiffIfOwnerDoesNothingWhenFilesOwnsMain pins
+// the guard itself, directly: without it, renderGitBreachCommits'/
+// renderGitBreachFiles' own unconditional tail calls (both needed for
+// the real stale-diff bug those tails originally fixed) would clobber
+// whichever box's diff Main is actually showing, on every reload,
+// regardless of which box has real keyboard focus.
+func TestStartGitBreachCommitsDiffIfOwnerDoesNothingWhenFilesOwnsMain(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.cancelGitBreachDiff() // openGitBreach's own Files-owned fetch already started one
+
+	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
+		t.Fatal("setup: gitBreachMainOwner should still be Files")
+	}
+	r.startGitBreachCommitsDiffIfOwner()
+	if r.gitBreachDiffCancel != nil {
+		t.Error("startGitBreachCommitsDiffIfOwner started a fetch while Files owns Main, want a no-op")
 	}
 }

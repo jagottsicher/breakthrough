@@ -100,6 +100,10 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreachBranches = branches
 	r.gitBreachBranchesErr = branchesErr
 
+	commits, commitsErr := git.Log(ctx, r.gitBreachRoot)
+	r.gitBreachCommits = commits
+	r.gitBreachCommitsErr = commitsErr
+
 	r.renderGitBreach()
 }
 
@@ -429,6 +433,71 @@ func (r *Root) startGitBreachDiff(row int) {
 				return
 			}
 			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, gr.path, r.theme))
+		})
+	})
+}
+
+// gitBreachCommitAt returns gitBreachCommits[row] — the Commits table
+// has no non-selectable header rows interspersed (same as Branches, see
+// gitBreachBranchAt's own doc comment), so the table row index maps
+// directly onto gitBreachCommits without an indirection map.
+func (r *Root) gitBreachCommitAt(row int) (git.LogEntry, bool) {
+	if row < 0 || row >= len(r.gitBreachCommits) {
+		return git.LogEntry{}, false
+	}
+	return r.gitBreachCommits[row], true
+}
+
+// startGitBreachCommitDiff mirrors startGitBreachDiff exactly (debounce,
+// cancellable context, safeGo, QueueUpdateDraw, a final check against
+// the still-current selection) for a commit's own diff instead of a
+// file's — git.CommitDiff's own single call already covers every file
+// the commit touched in one combined diff, which gitBreachColorizeDiff
+// now tracks per file via its own "diff --git" header parsing (see its
+// own doc comment) rather than lexing the whole thing as one language.
+func (r *Root) startGitBreachCommitDiff(row int) {
+	r.cancelGitBreachDiff()
+	c, ok := r.gitBreachCommitAt(row)
+	if !ok {
+		r.gitBreachDiffView.SetText("")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.gitBreachDiffCancel = cancel
+	root := r.gitBreachRoot
+
+	r.safeGo("Git breach commit diff", r.cancelGitBreachDiff, func() {
+		select {
+		case <-ctx.Done():
+			return // the cursor moved on before this even started
+		case <-time.After(gitBreachDiffDebounce):
+		}
+
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, gitBreachDiffTimeout)
+		text, err := git.CommitDiff(fetchCtx, root, c.Hash)
+		fetchCancel()
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil && text == "" {
+			text = fmt.Sprintf("%s: no diff to show.", c.Short)
+		}
+
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			curRow, _ := r.gitBreachCommitsTable.GetSelection()
+			curC, ok := r.gitBreachCommitAt(curRow)
+			if !ok || curC != c {
+				return // the cursor moved to a different row before this landed
+			}
+			if err != nil {
+				r.gitBreachDiffView.SetText(tview.Escape(fmt.Sprintf("%s: %v", c.Short, err)))
+				return
+			}
+			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, "", r.theme))
 		})
 	})
 }
