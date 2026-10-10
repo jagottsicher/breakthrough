@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestLogListsCommitsNewestFirst(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "second")
 
-	commits, err := Log(context.Background(), dir)
+	commits, err := Log(context.Background(), dir, CommitLogLimit)
 	if err != nil {
 		t.Fatalf("Log: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestLogOnARepositoryWithNoCommitsYet(t *testing.T) {
 	requireGit(t)
 	dir := initRepo(t)
 
-	commits, err := Log(context.Background(), dir)
+	commits, err := Log(context.Background(), dir, CommitLogLimit)
 	if err != nil {
 		t.Fatalf("Log on an empty repository: err = %v, want nil", err)
 	}
@@ -66,7 +67,7 @@ func TestCommitDiffShowsTheCommitsOwnChange(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "second")
 
-	commits, err := Log(context.Background(), dir)
+	commits, err := Log(context.Background(), dir, CommitLogLimit)
 	if err != nil {
 		t.Fatalf("Log: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestCommitDiffOnTheRootCommit(t *testing.T) {
 	runGit(t, dir, "add", "a.txt")
 	runGit(t, dir, "commit", "-q", "-m", "root commit")
 
-	commits, err := Log(context.Background(), dir)
+	commits, err := Log(context.Background(), dir, CommitLogLimit)
 	if err != nil {
 		t.Fatalf("Log: %v", err)
 	}
@@ -104,5 +105,65 @@ func TestCommitDiffOnTheRootCommit(t *testing.T) {
 	}
 	if !strings.Contains(diff, "+line one") {
 		t.Errorf("CommitDiff on the root commit = %q, want it to contain the added line", diff)
+	}
+}
+
+// TestLogRespectsASmallerLimit pins Log's own second argument actually
+// bounding how many commits come back — internal/ui's own
+// maybeLoadMoreGitBreachCommits relies on Log returning fewer than
+// limit as the signal that it just fetched every commit there is.
+func TestLogRespectsASmallerLimit(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	for i := 0; i < 5; i++ {
+		writeFile(t, dir, "a.txt", fmt.Sprintf("line %d", i))
+		runGit(t, dir, "add", "a.txt")
+		runGit(t, dir, "commit", "-q", "-m", fmt.Sprintf("commit %d", i))
+	}
+
+	commits, err := Log(context.Background(), dir, 3)
+	if err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+	if len(commits) != 3 {
+		t.Fatalf("Log with limit 3 = %+v, want exactly 3", commits)
+	}
+	if commits[0].Subject != "commit 4" {
+		t.Errorf("Log with limit 3, newest = %q, want %q", commits[0].Subject, "commit 4")
+	}
+}
+
+func TestCommitCountMatchesTheRealCommitCount(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+	for i := 0; i < 4; i++ {
+		writeFile(t, dir, "a.txt", fmt.Sprintf("line %d", i))
+		runGit(t, dir, "add", "a.txt")
+		runGit(t, dir, "commit", "-q", "-m", fmt.Sprintf("commit %d", i))
+	}
+
+	count, err := CommitCount(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("CommitCount: %v", err)
+	}
+	if count != 4 {
+		t.Errorf("CommitCount = %d, want 4", count)
+	}
+}
+
+// TestCommitCountOnARepositoryWithNoCommitsYet mirrors
+// TestLogOnARepositoryWithNoCommitsYet exactly, for the same reason:
+// `git rev-list --count HEAD` on a brand new repository fails outright,
+// but that's not a real error, just nothing to count yet.
+func TestCommitCountOnARepositoryWithNoCommitsYet(t *testing.T) {
+	requireGit(t)
+	dir := initRepo(t)
+
+	count, err := CommitCount(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("CommitCount on an empty repository: err = %v, want nil", err)
+	}
+	if count != 0 {
+		t.Errorf("CommitCount on an empty repository = %d, want 0", count)
 	}
 }

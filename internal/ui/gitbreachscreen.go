@@ -123,11 +123,28 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachBranchesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, false) })
 
 	r.gitBreachCommitsHeader = newGitBreachBoxHeader("Commits")
+	// SetDrawFunc, not a width computed once at render time: the header
+	// TextView's own GetRect() is still zero-width the first time
+	// renderGitBreach runs (applyGitBreachTheme bakes in cell colors
+	// before the dashboard has ever actually been drawn to a real
+	// screen), the same "ask the widget, not the screen" fix
+	// filterField's own SetDrawFunc already establishes elsewhere in
+	// this app for the identical reason. Re-renders the hint on every
+	// draw, not just on reload, so a live terminal resize updates the
+	// padding immediately rather than only catching up on the dashboard's
+	// own next reload.
+	r.gitBreachCommitsHeader.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		r.renderGitBreachCommitsHeader(width)
+		return x, y, width, height
+	})
 	r.gitBreachCommitsHeader.SetMouseCapture(r.gitBreachFocusCommitsOnClick)
 	r.gitBreachCommitsTable = tview.NewTable()
 	r.gitBreachCommitsTable.SetSelectable(true, false)
 	r.gitBreachCommitsTable.SetInputCapture(r.captureGitBreachCommitsTableKey)
-	r.gitBreachCommitsTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachCommitsDiffIfOwner() })
+	r.gitBreachCommitsTable.SetSelectionChangedFunc(func(row, _ int) {
+		r.startGitBreachCommitsDiffIfOwner()
+		r.maybeLoadMoreGitBreachCommits(row)
+	})
 	r.gitBreachCommitsTable.SetFocusFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, true)
 		r.gitBreachMainOwner = gitBreachMainOwnerCommits
@@ -955,6 +972,31 @@ func gitBreachAuthorColor(email string) tcell.Color {
 // renderGitBreachBranches (no section headers, one row per entry), same
 // gitBreachCommitsReady fix for the same construction-time-placeholder
 // reason (see its own doc comment on Root).
+// renderGitBreachCommitsHeader rebuilds the Commits header's own text,
+// right-padding a "loaded/total" hint against width — the user's own
+// explicit request, after asking whether the Commits box really shows
+// every commit (it doesn't past git.CommitLogLimit without scrolling,
+// see maybeLoadMoreGitBreachCommits) and proposing this exact fix.
+// Hidden once every commit is already loaded (gitBreachCommits is no
+// shorter than gitBreachCommitsTotal) or if gitBreachCommitsTotal
+// itself is still its zero value (CommitCount hasn't succeeded yet, or
+// genuinely found none) — showing "0/0" or a hint that's wrong because
+// the real total failed to fetch would be worse than showing nothing.
+func (r *Root) renderGitBreachCommitsHeader(width int) {
+	title := " Commits "
+	loaded := len(r.gitBreachCommits)
+	if r.gitBreachCommitsTotal == 0 || loaded >= r.gitBreachCommitsTotal {
+		r.gitBreachCommitsHeader.SetText(title)
+		return
+	}
+	hint := fmt.Sprintf("%d/%d ", loaded, r.gitBreachCommitsTotal)
+	padding := width - tview.TaggedStringWidth(title) - tview.TaggedStringWidth(hint)
+	if padding < 0 {
+		padding = 0
+	}
+	r.gitBreachCommitsHeader.SetText(title + strings.Repeat(" ", padding) + hint)
+}
+
 func (r *Root) renderGitBreachCommits() {
 	r.gitBreachCommitsTable.Clear()
 
