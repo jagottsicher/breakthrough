@@ -840,6 +840,16 @@ terminal.
   "e"/"w" to jump between errors and warnings, a follow mode ("f") that
   re-reads every two seconds, and a raw-line section in the detail view
   whenever the original line differs from the extracted message.
+- Git breach (`jg`): a multi-pane dashboard for the git repository
+  containing the active panel's own current directory, shelling out to
+  the system's own `git` rather than reimplementing it. A Status box
+  (branch, ahead/behind, a one-line summary) sits above Files
+  (staged/unstaged/untracked, conflicts first — Space stages/unstages
+  the row under the cursor), with Branches/Commits/Stash reserved as
+  stub boxes for a later release. The Main pane shows the diff of
+  whichever row in Files the cursor is on; "c" commits whatever is
+  currently staged. Local working trees only — there is no
+  command-execution channel to run git against a remote session.
 
 ## Status
 
@@ -862,7 +872,9 @@ request, an Action
 Log screen (`jl`) browsing the real activity log with keyword/time
 filtering, a Log Audit screen (`jL`) reading and merging *other* log
 files found in whichever directory the active panel currently shows,
-a Sessions screen (`js`) listing local GNU screen, tmux, and
+a Git breach dashboard (`jg`) for staging, committing, and diffing the
+local git repository containing the active panel's own current
+directory, a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once
