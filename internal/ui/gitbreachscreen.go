@@ -367,7 +367,11 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 // selected anywhere, so it now works regardless of focus (see its own
 // handling added to every table's own InputCapture) and stays in the
 // hint bar unconditionally, same as "r"/Tab/Escape, which were never
-// box-specific to begin with.
+// box-specific to begin with. PgUp/PgDn (see scrollGitBreachDiff) are
+// the same way: they page the Main — Diff box regardless of which of
+// the four side boxes has focus, since Main itself is never a
+// gitBreachFocusables entry and so can never be "the box that's
+// focused" in the first place.
 func (r *Root) gitBreachHintEntries() []listHintEntry {
 	entries := []listHintEntry{
 		hintKey("Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
@@ -379,6 +383,13 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		entries = append(entries, hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }))
 	}
 	entries = append(entries,
+		listHintEntry{
+			keys: []listHintKey{
+				{"PgUp", func(r *Root) { r.scrollGitBreachDiff(tcell.KeyPgUp) }},
+				{"PgDn", func(r *Root) { r.scrollGitBreachDiff(tcell.KeyPgDn) }},
+			},
+			label: "scroll diff",
+		},
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
 		hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }),
@@ -395,6 +406,25 @@ func (r *Root) refreshGitBreachHint() {
 	hintText, hintSpans := buildListHint(r.theme, r.gitBreachHintEntries())
 	r.gitBreachHint.SetText(hintText)
 	r.gitBreachHintSpans = hintSpans
+}
+
+// scrollGitBreachDiff pages the Main — Diff box up/down without ever
+// giving it real keyboard focus — the user's own explicit reported bug:
+// Main never appears in gitBreachFocusables (it has no row-navigable
+// content of its own; it only ever mirrors whichever side box is
+// active, see gitBreachMainOwner), so Tab never lands on it and the
+// mouse wheel was the only way to move through a long diff. Forwarded
+// straight to tview.TextView's own InputHandler rather than
+// reimplementing scroll math here: that already knows how to clamp at
+// the top/end and honors pageSize, exactly the same scrolling a real
+// click-to-focus-then-PgUp/PgDn would do if Main could ever be focused
+// at all — this just makes that same, already-correct behavior
+// reachable without taking focus away from whichever box the cursor is
+// actually navigating.
+func (r *Root) scrollGitBreachDiff(key tcell.Key) {
+	if h := r.gitBreachDiffView.InputHandler(); h != nil {
+		h(tcell.NewEventKey(key, 0, tcell.ModNone), func(tview.Primitive) {})
+	}
 }
 
 // gitBreachFocusable pairs one box's own header with its body — both
@@ -467,6 +497,10 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		r.toggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
+		r.scrollGitBreachDiff(event.Key())
+		return nil
+	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case ' ':
@@ -494,6 +528,10 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
+		r.scrollGitBreachDiff(event.Key())
 		return nil
 	}
 	if event.Key() == tcell.KeyEnter {
@@ -545,6 +583,10 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		r.toggleGitBreachFocus()
 		return nil
 	}
+	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
+		r.scrollGitBreachDiff(event.Key())
+		return nil
+	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case 'r':
@@ -578,6 +620,10 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 	}
 	if event.Key() == tcell.KeyTab {
 		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
+		r.scrollGitBreachDiff(event.Key())
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {

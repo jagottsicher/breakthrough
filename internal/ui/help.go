@@ -614,6 +614,11 @@ var helpText = strings.TrimLeft(`
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
              doesn't depend on which row is selected anywhere
+    PgUp/    Page the Main — Diff box up/down — works no matter which
+    PgDn     of the four side boxes currently has focus, since Main
+             itself is never one of them and so can never be tabbed to
+             directly; this is the only way to move through a long
+             diff with the keyboard instead of the mouse wheel
     r        Re-read the repository's current status/branches/commits/
              stash
     Esc      Close

@@ -903,3 +903,68 @@ func TestGitBreachHintShowsEnterOnlyWhileBranchesHasFocus(t *testing.T) {
 		t.Error("hint entries still mention Enter after focus moved to Commits")
 	}
 }
+
+// TestScrollGitBreachDiffForwardsToTheDiffView pins the actual
+// mechanism behind the user's own explicit reported bug: Main never
+// appears in gitBreachFocusables, so it can never receive real
+// keyboard focus, which is exactly why the mouse wheel was previously
+// the only way to move through a long diff. scrollGitBreachDiff forwards
+// a key event straight to the diff view's own InputHandler regardless
+// of focus — proven here with Home rather than PgUp/PgDn specifically,
+// since PgUp/PgDn's own tview behavior depends on pageSize, which stays
+// zero without a real Draw() cycle (no screen in a unit test); Home
+// unconditionally resets the scroll position regardless of pageSize, so
+// it still proves the event genuinely reaches the TextView's own
+// InputHandler rather than going nowhere.
+func TestScrollGitBreachDiffForwardsToTheDiffView(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	r.gitBreachDiffView.ScrollTo(50, 0)
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
+		t.Fatalf("setup: ScrollTo(50, 0) left scroll offset at row %d, want 50", row)
+	}
+
+	r.scrollGitBreachDiff(tcell.KeyHome)
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
+		t.Errorf("scrollGitBreachDiff(KeyHome) left scroll offset at row %d, want 0", row)
+	}
+}
+
+// TestGitBreachTableKeysConsumePageKeys pins the other half: every
+// table's own key capture must swallow PgUp/PgDn (consumed, nil
+// returned) rather than letting them fall through to the table's own
+// default row-selection handling, which has no PgUp/PgDn behavior of
+// its own and would otherwise silently do nothing with the keypress.
+func TestGitBreachTableKeysConsumePageKeys(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+
+	for _, tc := range []struct {
+		name    string
+		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Files", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Branches", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachBranchesTableKey }},
+		{"Commits", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForGitBreachDir(t, dir)
+			r.openGitBreach()
+
+			for _, key := range []tcell.Key{tcell.KeyPgUp, tcell.KeyPgDn} {
+				if got := tc.capture(r)(tcell.NewEventKey(key, 0, tcell.ModNone)); got != nil {
+					t.Errorf("capture(%v) = %v, want nil (consumed)", key, got)
+				}
+			}
+		})
+	}
+}
