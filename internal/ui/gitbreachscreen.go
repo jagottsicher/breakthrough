@@ -380,7 +380,10 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		entries = append(entries, hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }))
 	}
 	if r.gitBreachBranchesTable.HasFocus() {
-		entries = append(entries, hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }))
+		entries = append(entries,
+			hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
+			hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
+		)
 	}
 	entries = append(entries,
 		listHintEntry{
@@ -519,8 +522,9 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 
 // captureGitBreachBranchesTableKey: Tab switches to the next box
 // (same reasoning as captureGitBreachFilesTableKey's own doc comment),
-// Enter checks out the branch under the cursor, "r" reloads, Escape
-// closes.
+// Enter checks out the branch under the cursor, "d" deletes it
+// (git branch -d only — see its own doc comment for why not -D), "r"
+// reloads, Escape closes.
 func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -545,6 +549,9 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'd':
+			r.openGitBreachDeleteBranch()
 			return nil
 		}
 	}

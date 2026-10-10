@@ -74,3 +74,22 @@ func Branches(ctx context.Context, root string) ([]Branch, error) {
 func Checkout(ctx context.Context, root, branch string) error {
 	return run(ctx, root, "checkout", branch)
 }
+
+// DeleteBranch runs `git branch -d <branch>` — the safe form, never
+// `-D`: git itself already refuses outright (a real, clean error, not a
+// silent no-op) whenever branch has commits not reachable from any
+// other branch, which is exactly the "would actually lose work" case a
+// confirmation elsewhere in this app would otherwise exist to prevent.
+// Force-deleting past that refusal is deliberately not offered here —
+// its own explicit second confirmation, if ever added, is its own
+// later Ausbaustufe, not a flag silently bolted onto this one. The
+// caller's own job to refuse outright on the current branch before
+// ever calling this at all (see internal/ui's own
+// openGitBreachDeleteBranch): git's own error for that case ("cannot
+// delete branch ... used by worktree") is clear enough on its own, but
+// matching openGitBreachCheckout's own established "a no-op, not an
+// error, for the already-current branch" convention is the more
+// consistent user experience here.
+func DeleteBranch(ctx context.Context, root, branch string) error {
+	return run(ctx, root, "branch", "-d", branch)
+}
