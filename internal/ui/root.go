@@ -633,7 +633,7 @@ type Root struct {
 	gitBreachFilesHeader    *tview.TextView
 	gitBreachFilesTable     *tview.Table
 	gitBreachBranchesHeader *tview.TextView
-	gitBreachBranchesView   *tview.TextView
+	gitBreachBranchesTable  *tview.Table
 	gitBreachCommitsHeader  *tview.TextView
 	gitBreachCommitsView    *tview.TextView
 	gitBreachStashHeader    *tview.TextView
@@ -658,6 +658,32 @@ type Root struct {
 	// entry for at all.
 	gitBreachRowIndex map[int]int
 	gitBreachFetchErr error
+	// gitBreachFilesReady is false until renderGitBreachFiles has shown
+	// real, selectable file rows at least once. newGitBreachScreen bakes
+	// in cell colors by calling renderGitBreach before reloadGitBreach
+	// has ever run, with gitBreachRows still empty — that construction-
+	// time render hits the "Working tree clean" placeholder, and
+	// showTablePlaceholder's own Select(1, 0) leaves tview's internal
+	// selectedRow at 1 (Table.Clear() never resets it). Without this
+	// flag, the first real render would mistake that leftover 1 for a
+	// deliberate cursor position whenever it happens to still address a
+	// real file row — see gitBreachBranchesReady below for the case
+	// where that coincidence doesn't hold and the bug is visible.
+	gitBreachFilesReady bool
+	// gitBreachBranches/gitBreachBranchesErr are the Branches box's own
+	// equivalent of gitBreachRows/gitBreachFetchErr above — a separate
+	// git invocation (git.Branches, for-each-ref) from the one that
+	// fills Status/Files, so its own failure is tracked and shown
+	// independently rather than conflated with gitBreachFetchErr.
+	gitBreachBranches    []git.Branch
+	gitBreachBranchesErr error
+	// gitBreachBranchesReady mirrors gitBreachFilesReady exactly, for
+	// the exact same construction-time-placeholder reason — except here
+	// the leftover selectedRow of 1 lands on the second branch instead
+	// of the first (Branches has no non-selectable header row at index
+	// 0 to absorb it the way Files' section headers do), which is what
+	// made this bug user-visible instead of merely latent.
+	gitBreachBranchesReady bool
 	// gitBreachDiffCancel cancels whichever diff fetch is in flight for
 	// the row the cursor was on before it moved again — see
 	// startGitBreachDiff/cancelGitBreachDiff, the same shape
