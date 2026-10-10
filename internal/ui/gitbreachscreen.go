@@ -12,11 +12,11 @@ import (
 )
 
 // gitBreachStubHeight/gitBreachStatusHeight are the fixed row counts
-// Branches/Commits/Stash and Status get in the left column's own Flex
-// — a stub box only ever needs room for its own one-row header plus a
-// one-line placeholder, Status for its own header plus a two-line
-// summary. Files, the one real list, gets whatever's left (see
-// newGitBreachScreen's own AddItem proportions).
+// Stash and Status get in the left column's own Flex — a stub box only
+// ever needs room for its own one-row header plus a one-line
+// placeholder, Status for its own header plus a two-line summary.
+// Files/Branches/Commits, the real lists, share whatever's left
+// proportionally (see newGitBreachScreen's own AddItem proportions).
 const (
 	gitBreachStatusHeight = 3
 	gitBreachStubHeight   = 2
@@ -94,16 +94,20 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable = tview.NewTable()
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
-	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachDiff(row) })
-	// Files and Branches are this Ausbaustufe's own two real, focusable
-	// boxes — Status/Commits/Stash/Main have nothing for keyboard focus
-	// to ever land on yet, so their own headers/bodies stay permanently
-	// in the "inactive" look applyGitBreachTheme's own initial pass
-	// already gives every box. See gitBreachFocusables for the shared,
-	// data-driven list Tab cycles through — adding a third real box
-	// later means adding it there, not touching the cycling logic
-	// itself.
-	r.gitBreachFilesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true) })
+	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachFilesDiffIfOwner() })
+	// Files, Branches and Commits are this Ausbaustufe's own three real,
+	// focusable boxes — Status/Stash/Main have nothing for keyboard
+	// focus to ever land on yet, so their own headers/bodies stay
+	// permanently in the "inactive" look applyGitBreachTheme's own
+	// initial pass already gives every box. See gitBreachFocusables for
+	// the shared, data-driven list Tab cycles through — adding a fourth
+	// real box later means adding it there, not touching the cycling
+	// logic itself.
+	r.gitBreachFilesTable.SetFocusFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, true)
+		r.gitBreachMainOwner = gitBreachMainOwnerFiles
+		r.startGitBreachFilesDiffIfOwner()
+	})
 	r.gitBreachFilesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachFilesHeader, r.gitBreachFilesTable, false) })
 
 	r.gitBreachStatusHeader.SetMouseCapture(gitBreachBlockFocusSteal)
@@ -117,10 +121,19 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachBranchesTable.SetFocusFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, true) })
 	r.gitBreachBranchesTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachBranchesHeader, r.gitBreachBranchesTable, false) })
 
-	r.gitBreachCommitsHeader, r.gitBreachCommitsView = newGitBreachBox("Commits (stub)")
-	r.gitBreachCommitsView.SetText("kommt in einer späteren Ausbaustufe")
-	r.gitBreachCommitsHeader.SetMouseCapture(gitBreachBlockFocusSteal)
-	r.gitBreachCommitsView.SetMouseCapture(gitBreachBlockFocusSteal)
+	r.gitBreachCommitsHeader = newGitBreachBoxHeader("Commits")
+	r.gitBreachCommitsHeader.SetMouseCapture(r.gitBreachFocusCommitsOnClick)
+	r.gitBreachCommitsTable = tview.NewTable()
+	r.gitBreachCommitsTable.SetSelectable(true, false)
+	r.gitBreachCommitsTable.SetInputCapture(r.captureGitBreachCommitsTableKey)
+	r.gitBreachCommitsTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachCommitsDiffIfOwner() })
+	r.gitBreachCommitsTable.SetFocusFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, true)
+		r.gitBreachMainOwner = gitBreachMainOwnerCommits
+		r.startGitBreachCommitsDiffIfOwner()
+	})
+	r.gitBreachCommitsTable.SetBlurFunc(func() { r.styleGitBreachFocus(r.gitBreachCommitsHeader, r.gitBreachCommitsTable, false) })
+
 	r.gitBreachStashHeader, r.gitBreachStashView = newGitBreachBox("Stash (stub)")
 	r.gitBreachStashView.SetText("kommt in einer späteren Ausbaustufe")
 	r.gitBreachStashHeader.SetMouseCapture(gitBreachBlockFocusSteal)
@@ -154,7 +167,7 @@ func (r *Root) newGitBreachScreen() {
 		AddItem(gitBreachBoxFlex(r.gitBreachStatusHeader, r.gitBreachStatusView), gitBreachStatusHeight, 0, false).
 		AddItem(gitBreachBoxFlex(r.gitBreachFilesHeader, r.gitBreachFilesTable), 0, 2, true).
 		AddItem(gitBreachBoxFlex(r.gitBreachBranchesHeader, r.gitBreachBranchesTable), 0, 1, false).
-		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsView), gitBreachStubHeight, 0, false).
+		AddItem(gitBreachBoxFlex(r.gitBreachCommitsHeader, r.gitBreachCommitsTable), 0, 2, false).
 		AddItem(gitBreachBoxFlex(r.gitBreachStashHeader, r.gitBreachStashView), gitBreachStubHeight, 0, false)
 
 	body := tview.NewFlex().
@@ -297,7 +310,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	}
 
 	textBodies := []*tview.TextView{
-		r.gitBreachStatusView, r.gitBreachCommitsView,
+		r.gitBreachStatusView,
 		r.gitBreachStashView, r.gitBreachDiffView,
 	}
 	for _, v := range textBodies {
@@ -306,6 +319,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	}
 	r.gitBreachFilesTable.SetBackgroundColor(theme.SurfaceBackground)
 	r.gitBreachBranchesTable.SetBackgroundColor(theme.SurfaceBackground)
+	r.gitBreachCommitsTable.SetBackgroundColor(theme.SurfaceBackground)
 
 	// Both tables mix several per-cell text colors (Staged/Unstaged/
 	// Untracked rows each carry their own gitBreachRowColor; Branches'
@@ -319,6 +333,7 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	selStyle := tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.TextColor)
 	r.gitBreachFilesTable.SetSelectedStyle(selStyle)
 	r.gitBreachBranchesTable.SetSelectedStyle(selStyle)
+	r.gitBreachCommitsTable.SetSelectedStyle(selStyle)
 
 	// Re-assert whichever of Files/Branches actually has real keyboard
 	// focus right now on top of the uniform "inactive" pass above — the
@@ -367,15 +382,16 @@ type gitBreachFocusEntry struct {
 
 // gitBreachFocusables is the ordered list Tab cycles through (see
 // toggleGitBreachFocus) and applyGitBreachTheme's own "which box
-// currently has focus" re-check — Files and Branches today, the only
-// two real, focusable boxes in this Ausbaustufe. A later Ausbaustufe
-// giving Commits or Stash real, navigable content adds its own entry
+// currently has focus" re-check — Files, Branches and Commits today,
+// the only three real, focusable boxes in this Ausbaustufe. A later
+// Ausbaustufe giving Stash real, navigable content adds its own entry
 // here and nowhere else — the whole point of making this a function
 // returning a slice rather than a fixed two-way toggle.
 func (r *Root) gitBreachFocusables() []gitBreachFocusEntry {
 	return []gitBreachFocusEntry{
 		{r.gitBreachFilesHeader, r.gitBreachFilesTable},
 		{r.gitBreachBranchesHeader, r.gitBreachBranchesTable},
+		{r.gitBreachCommitsHeader, r.gitBreachCommitsTable},
 	}
 }
 
@@ -470,6 +486,38 @@ func (r *Root) gitBreachFocusBranchesOnClick(action tview.MouseAction, event *tc
 	return action, event
 }
 
+// captureGitBreachCommitsTableKey: Tab switches to the next box, "r"
+// reloads, Escape closes — no Enter action yet, since this first
+// Ausbaustufe only ever shows a commit's own diff in Main (via Commits'
+// own SetSelectionChangedFunc/FocusFunc), with no action a commit row
+// itself triggers (checkout/revert/cherry-pick/reset are explicitly
+// later Ausbaustufen — see feature_ideas.txt's own list).
+func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.EventKey {
+	if event.Key() == tcell.KeyEscape {
+		r.closeGitBreach()
+		return nil
+	}
+	if event.Key() == tcell.KeyTab {
+		r.toggleGitBreachFocus()
+		return nil
+	}
+	if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
+		r.reloadGitBreach()
+		return nil
+	}
+	return event
+}
+
+// gitBreachFocusCommitsOnClick mirrors gitBreachFocusBranchesOnClick
+// exactly, for Commits' own header.
+func (r *Root) gitBreachFocusCommitsOnClick(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	if action == tview.MouseLeftDown {
+		r.app.SetFocus(r.gitBreachCommitsTable)
+		return tview.MouseConsumed, nil
+	}
+	return action, event
+}
+
 // renderGitBreach refreshes every box from r.gitBreachStatus/Rows —
 // called by reloadGitBreach after every fetch, stage, unstage, and
 // commit, the same "re-render from the current state, never patch it
@@ -484,6 +532,7 @@ func (r *Root) renderGitBreach() {
 	r.renderGitBreachStatus()
 	r.renderGitBreachFiles()
 	r.renderGitBreachBranches()
+	r.renderGitBreachCommits()
 }
 
 // renderGitBreachStatus fills the Status box — branch, ahead/behind,
@@ -624,7 +673,11 @@ func (r *Root) renderGitBreachFiles() {
 	// which fires before a single real row has been added) would
 	// otherwise leave the Main box showing a stale or empty diff
 	// forever, never refreshed, since nothing else ever asked it to be.
-	r.startGitBreachDiff(cur)
+	// Gated by startGitBreachFilesDiffIfOwner's own ownership check —
+	// see gitBreachMainOwner's doc comment on Root — so this reload
+	// doesn't clobber Main with a file diff while Commits actually owns
+	// it right now.
+	r.startGitBreachFilesDiffIfOwner()
 }
 
 // renderGitBreachBranches rebuilds the Branches table — unlike Files,
@@ -695,6 +748,83 @@ func (r *Root) renderGitBreachBranches() {
 		r.gitBreachBranchesTable.Select(firstRow, 0)
 	}
 	r.gitBreachBranchesReady = true
+}
+
+// renderGitBreachCommits rebuilds the Commits table — same shape as
+// renderGitBreachBranches (no section headers, one row per entry), same
+// gitBreachCommitsReady fix for the same construction-time-placeholder
+// reason (see its own doc comment on Root).
+func (r *Root) renderGitBreachCommits() {
+	r.gitBreachCommitsTable.Clear()
+
+	if r.gitBreachCommitsErr != nil {
+		showTablePlaceholder(r.gitBreachCommitsTable, r.gitBreachCommitsErr.Error(), r.theme.EntryError)
+		return
+	}
+	if len(r.gitBreachCommits) == 0 {
+		showTablePlaceholder(r.gitBreachCommitsTable, "No commits yet.", r.theme.MutedTextColor)
+		return
+	}
+
+	for row, c := range r.gitBreachCommits {
+		text := fmt.Sprintf("%s %s", c.Short, c.Subject)
+		r.gitBreachCommitsTable.SetCell(row, 0, tview.NewTableCell(text).SetTextColor(r.theme.Text))
+	}
+
+	// Real rows exist past this point — re-assert SetSelectable(true,
+	// false) the same reason renderGitBreachFiles's/
+	// renderGitBreachBranches's own tails already document:
+	// showTablePlaceholder turns it off as its own fix for a real tview
+	// v0.42.0 freeze, and never turns it back on by itself.
+	r.gitBreachCommitsTable.SetSelectable(true, false)
+
+	// The !ok check alone isn't enough the very first time real rows
+	// exist — see gitBreachCommitsReady's own doc comment on Root for
+	// why a leftover selectedRow from the construction-time placeholder
+	// render can pass as "valid" here too, the same bug Branches had.
+	cur, _ := r.gitBreachCommitsTable.GetSelection()
+	if cur < 0 || cur >= len(r.gitBreachCommits) || !r.gitBreachCommitsReady {
+		r.gitBreachCommitsTable.Select(0, 0)
+	}
+	r.gitBreachCommitsReady = true
+	r.startGitBreachCommitsDiffIfOwner()
+}
+
+// gitBreachMainOwnerKind names which box's own selection the Main —
+// Diff box currently follows — see gitBreachMainOwner's own doc
+// comment on Root.
+type gitBreachMainOwnerKind int
+
+const (
+	gitBreachMainOwnerFiles gitBreachMainOwnerKind = iota
+	gitBreachMainOwnerCommits
+)
+
+// startGitBreachFilesDiffIfOwner refreshes Main with Files' own
+// currently-selected row's diff, but only when Files actually owns
+// Main right now — called from Files' own SetSelectionChangedFunc,
+// FocusFunc, and renderGitBreachFiles' own tail (the real, reported bug
+// that tail originally fixed: Select() only invokes
+// SetSelectionChangedFunc when the selected row *number* changes, not
+// when the data a stable number refers to does). Without the owner
+// check, any of those three paths firing while Commits has real focus
+// would silently clobber a commit's own diff with a file diff.
+func (r *Root) startGitBreachFilesDiffIfOwner() {
+	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
+		return
+	}
+	row, _ := r.gitBreachFilesTable.GetSelection()
+	r.startGitBreachDiff(row)
+}
+
+// startGitBreachCommitsDiffIfOwner mirrors
+// startGitBreachFilesDiffIfOwner exactly, for Commits.
+func (r *Root) startGitBreachCommitsDiffIfOwner() {
+	if r.gitBreachMainOwner != gitBreachMainOwnerCommits {
+		return
+	}
+	row, _ := r.gitBreachCommitsTable.GetSelection()
+	r.startGitBreachCommitDiff(row)
 }
 
 // gitBreachFirstDataRow returns the lowest table row present in
@@ -805,32 +935,63 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 // each line on its own — no per-line granularity at all, which this
 // function needs regardless of where the per-language coloring within
 // each line comes from.
+// path is the lexer path to use before the first "diff --git" header
+// line, if any, is seen — the only path a single-file diff (Files'/
+// Branches' own staged/unstaged diff) ever has. A commit's own diff
+// (see startGitBreachCommitDiff) can span several files in one combined
+// diff text; each "diff --git a/X b/Y" header line updates which path
+// every following line is lexed against, via gitBreachDiffHeaderPath,
+// rather than lexing every file in the commit as whatever the one
+// fixed path argument says.
 func gitBreachColorizeDiff(diff, path string, theme config.ResolvedTheme) string {
 	palette := paletteFor(theme.SurfaceBackground)
 	lines := strings.Split(diff, "\n")
 	var b strings.Builder
+	currentPath := path
 	for i, line := range lines {
 		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			if p, ok := gitBreachDiffHeaderPath(line); ok {
+				currentPath = p
+			}
+			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
 		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
 			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
 		case strings.HasPrefix(line, "+"):
-			b.WriteString(gitBreachColorizeDiffLine(line, path, palette, gitBreachDiffAddedColor, gitBreachDiffAddedBackground))
+			b.WriteString(gitBreachColorizeDiffLine(line, currentPath, palette, gitBreachDiffAddedColor, gitBreachDiffAddedBackground))
 		case strings.HasPrefix(line, "-"):
-			b.WriteString(gitBreachColorizeDiffLine(line, path, palette, theme.CriticalText, gitBreachDiffRemovedBackground))
-		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "diff --git"), strings.HasPrefix(line, "index "):
+			b.WriteString(gitBreachColorizeDiffLine(line, currentPath, palette, theme.CriticalText, gitBreachDiffRemovedBackground))
+		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "index "):
 			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
 		default:
 			// A context line — real file content too, so it gets the
 			// same per-language coloring as an added/removed line's own
 			// content, just with no background tint (nothing about it
 			// changed).
-			b.WriteString(renderSyntax(viewer.Highlight(path, line), palette))
+			b.WriteString(renderSyntax(viewer.Highlight(currentPath, line), palette))
 		}
 		if i < len(lines)-1 {
 			b.WriteString("\n")
 		}
 	}
 	return b.String()
+}
+
+// gitBreachDiffHeaderPath extracts the post-change ("b/...") path out
+// of a "diff --git a/X b/Y" header line — the last " b/" occurrence,
+// not the first, since X itself could coincidentally contain the
+// substring " b/" (rare, but a known, accepted edge case: a path
+// containing that exact substring right before a rename's own "b/"
+// marker could still pick the wrong split point — not solved here,
+// same spirit as this file's other documented, non-blocking
+// limitations).
+func gitBreachDiffHeaderPath(line string) (string, bool) {
+	rest := strings.TrimPrefix(line, "diff --git ")
+	idx := strings.LastIndex(rest, " b/")
+	if idx < 0 {
+		return "", false
+	}
+	return rest[idx+len(" b/"):], true
 }
 
 // gitBreachColorizeDiffLine renders one added/removed line: markerColor
