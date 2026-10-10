@@ -222,8 +222,8 @@ type Theme struct {
 	// own Panel.rowLabelBackground) — MC/Finder-style per-file/-directory
 	// tagging, independent of DirectoryBackground. Nine separate named
 	// fields, the same shape every other field here already has, per
-	// CLAUDE.md's own flat-config rule — deliberately not a [9]string
-	// array, which would be this type's one outlier.
+	// this project's own flat-config rule — deliberately not a
+	// [9]string array, which would be this type's one outlier.
 	//
 	// Unlike every other field in this struct, an empty or unrecognized
 	// value here does NOT fall back to DefaultTheme's own (deliberately

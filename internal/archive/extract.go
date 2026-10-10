@@ -402,8 +402,8 @@ func memberPathsOf(members []Entry) []string {
 // lives, which is not guaranteed to share a filesystem with an
 // arbitrary user-chosen destDir — see fsops.Move's own doc comment on
 // the EXDEV fallback this project's own file operations already
-// require everywhere else (see CLAUDE.md's own "Bei Dateibewegungen
-// EXDEV behandeln").
+// require everywhere else (see this project's own documented rule to
+// always handle EXDEV on a file move).
 func moveExtractedTree(tmpDir, destDir string, members []string) error {
 	var errs []error
 	err := filepath.WalkDir(tmpDir, func(p string, d fs.DirEntry, err error) error {

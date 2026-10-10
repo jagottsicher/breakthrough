@@ -94,8 +94,8 @@ func TestOpenLogAuditDiscoversAndReadsRemoteFiles(t *testing.T) {
 }
 
 // TestRenderLogAuditSelectionTitleNamesTheRemoteConnectionWhenRemote
-// pins CLAUDE.md's own "remote views must never describe local paths
-// or metadata" rule applied in the other direction: once the
+// pins this project's own "a remote view must never describe local
+// paths or metadata" rule applied in the other direction: once the
 // selection screen genuinely reads through a remote connection, it
 // must say so (and which one) rather than looking exactly like a
 // local listing — the user has no other way to tell from this screen
