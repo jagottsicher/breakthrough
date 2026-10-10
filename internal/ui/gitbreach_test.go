@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1143,5 +1144,146 @@ func TestGitBreachTableKeysConsumePageKeys(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// gitBreachRepoWithCommits commits n trivial, individually distinct
+// changes to a.txt, oldest first — a repo with a real, known commit
+// count to test gitBreachCommitsLimit/maybeLoadMoreGitBreachCommits
+// against without needing anywhere near git.CommitLogLimit's own real
+// 200.
+func gitBreachRepoWithCommits(t *testing.T, n int) string {
+	t.Helper()
+	dir := initGitBreachRepo(t)
+	for i := 0; i < n; i++ {
+		if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(fmt.Sprintf("line %d", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		runGitBreach(t, dir, "add", "a.txt")
+		runGitBreach(t, dir, "commit", "-q", "-m", fmt.Sprintf("commit %d", i))
+	}
+	return dir
+}
+
+// TestMaybeLoadMoreGitBreachCommitsExpandsLimitAtTheLastRow pins the
+// user's own explicit request: reaching the bottom of what's currently
+// loaded fetches another git.CommitLogLimit worth rather than the list
+// just stopping. gitBreachCommitsLimit is set directly to an
+// artificially small value and reloadGitBreach re-run (reloadGitBreach
+// itself never resets the limit — only openGitBreach does, see its own
+// doc comment) rather than creating git.CommitLogLimit-plus real
+// commits, which would make this test disproportionately slow for what
+// it needs to pin.
+func TestMaybeLoadMoreGitBreachCommitsExpandsLimitAtTheLastRow(t *testing.T) {
+	requireGitForBreach(t)
+	dir := gitBreachRepoWithCommits(t, 5)
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreachCommitsLimit = 3
+	r.reloadGitBreach()
+	if len(r.gitBreachCommits) != 3 {
+		t.Fatalf("setup: gitBreachCommits = %+v, want exactly 3 (the artificially small limit)", r.gitBreachCommits)
+	}
+
+	r.maybeLoadMoreGitBreachCommits(2) // the last loaded row (index 2 of 3)
+
+	if want := 3 + git.CommitLogLimit; r.gitBreachCommitsLimit != want {
+		t.Errorf("gitBreachCommitsLimit = %d, want %d after reaching the last loaded row", r.gitBreachCommitsLimit, want)
+	}
+	if len(r.gitBreachCommits) != 5 {
+		t.Errorf("gitBreachCommits = %+v, want all 5 commits after loading more", r.gitBreachCommits)
+	}
+}
+
+// TestMaybeLoadMoreGitBreachCommitsDoesNothingWhenNotAtTheLastRow pins
+// the first guard: moving the cursor around anywhere above the actual
+// last loaded row must never refetch.
+func TestMaybeLoadMoreGitBreachCommitsDoesNothingWhenNotAtTheLastRow(t *testing.T) {
+	requireGitForBreach(t)
+	dir := gitBreachRepoWithCommits(t, 5)
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreachCommitsLimit = 3
+	r.reloadGitBreach()
+
+	r.maybeLoadMoreGitBreachCommits(0) // not the last row
+
+	if r.gitBreachCommitsLimit != 3 {
+		t.Errorf("gitBreachCommitsLimit = %d, want unchanged 3", r.gitBreachCommitsLimit)
+	}
+	if len(r.gitBreachCommits) != 3 {
+		t.Errorf("gitBreachCommits = %+v, want unchanged (still 3)", r.gitBreachCommits)
+	}
+}
+
+// TestMaybeLoadMoreGitBreachCommitsDoesNothingPastTheTrueEnd pins the
+// second guard: once Log already returned fewer commits than the
+// current limit (every real commit the repository has), reaching that
+// last row must not refetch — there's genuinely nothing more to load.
+func TestMaybeLoadMoreGitBreachCommitsDoesNothingPastTheTrueEnd(t *testing.T) {
+	requireGitForBreach(t)
+	dir := gitBreachRepoWithCommits(t, 2)
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach() // limit defaults to git.CommitLogLimit (200); only 2 commits exist
+
+	r.maybeLoadMoreGitBreachCommits(1) // the last (and only) real row
+
+	if r.gitBreachCommitsLimit != git.CommitLogLimit {
+		t.Errorf("gitBreachCommitsLimit = %d, want unchanged %d", r.gitBreachCommitsLimit, git.CommitLogLimit)
+	}
+}
+
+// TestGitBreachCommitsLimitPersistsAcrossReloadButResetsOnFreshOpen
+// pins both halves of gitBreachCommitsLimit's own documented contract
+// on Root: "r" (reloadGitBreach) must never lose an already-expanded
+// limit, but a fresh "jg" (openGitBreach) must always start over at
+// git.CommitLogLimit.
+func TestGitBreachCommitsLimitPersistsAcrossReloadButResetsOnFreshOpen(t *testing.T) {
+	requireGitForBreach(t)
+	dir := gitBreachRepoWithCommits(t, 2)
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreachCommitsLimit = 3 + git.CommitLogLimit // simulate having loaded more already
+	r.reloadGitBreach()
+	if want := 3 + git.CommitLogLimit; r.gitBreachCommitsLimit != want {
+		t.Errorf("reloadGitBreach changed gitBreachCommitsLimit to %d, want it to stay %d", r.gitBreachCommitsLimit, want)
+	}
+
+	r.openGitBreach()
+	if r.gitBreachCommitsLimit != git.CommitLogLimit {
+		t.Errorf("a fresh openGitBreach left gitBreachCommitsLimit at %d, want it reset to %d", r.gitBreachCommitsLimit, git.CommitLogLimit)
+	}
+}
+
+// TestRenderGitBreachCommitsHeaderShowsHintOnlyWhileTruncated pins the
+// header hint's own visibility rule: shown as "loaded/total" while
+// there's genuinely more to scroll to, hidden once every commit is
+// already loaded — showing "5/5" would just be noise once there's
+// nothing left to page to.
+func TestRenderGitBreachCommitsHeaderShowsHintOnlyWhileTruncated(t *testing.T) {
+	requireGitForBreach(t)
+	dir := gitBreachRepoWithCommits(t, 5)
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.gitBreachCommitsLimit = 3
+	r.reloadGitBreach()
+
+	r.renderGitBreachCommitsHeader(40)
+	text := r.gitBreachCommitsHeader.GetText(true)
+	if !strings.Contains(text, "3/5") {
+		t.Errorf("header text = %q, want it to contain the 3/5 hint while truncated", text)
+	}
+
+	r.gitBreachCommitsLimit = 5
+	r.reloadGitBreach()
+	r.renderGitBreachCommitsHeader(40)
+	text = r.gitBreachCommitsHeader.GetText(true)
+	if strings.Contains(text, "/") {
+		t.Errorf("header text = %q, want no hint once every commit is loaded", text)
 	}
 }

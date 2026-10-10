@@ -587,7 +587,9 @@ var helpText = strings.TrimLeft(`
   untracked, Conflicts first if any, real syntax coloring on every
   change), Branches (every local branch, the current one marked),
   Commits (the most recent commits, newest first, each one colored by
-  its own author), and Stash (every
+  its own author — loads 200 at a time, reaching the last loaded row
+  fetches 200 more automatically, with a "loaded/total" hint in the
+  box's own header while there's still more to reach), and Stash (every
   stashed change, newest first). The Main box on the right shows the
   diff of whichever box currently has keyboard focus: Files' own
   staged/unstaged diff (also syntax-colored, background tinted green/

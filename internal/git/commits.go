@@ -28,16 +28,20 @@ type LogEntry struct {
 	When        time.Time
 }
 
-// CommitLogLimit bounds how many commits Log ever fetches in one call —
-// an unbounded `git log` on a large, long-lived repository would block
-// reloadGitBreach's own synchronous fetch for however long that takes,
-// and the Commits box only ever shows a fixed-height list on screen
-// anyway (see internal/ui's own gitBreachFirstDataRow-style scrolling,
-// not a "load more" affordance this first Ausbaustufe doesn't have).
+// CommitLogLimit is the suggested starting point for limit, Log's own
+// second argument — an unbounded `git log` on a large, long-lived
+// repository would block reloadGitBreach's own synchronous fetch for
+// however long that takes, and the Commits box only ever shows a
+// fixed-height list on screen at once anyway. Not a hard ceiling
+// anymore: internal/ui's own gitBreachCommitsLimit starts here and
+// grows by another CommitLogLimit each time the cursor reaches the
+// last loaded row with more still available (see
+// maybeLoadMoreGitBreachCommits), rather than this package enforcing
+// one fixed cutoff no caller can ever see past.
 const CommitLogLimit = 200
 
-// Log lists the CommitLogLimit most recent commits reachable from HEAD.
-// %x00 between fields mirrors Branches' own reasoning (a commit subject
+// Log lists the limit most recent commits reachable from HEAD. %x00
+// between fields mirrors Branches' own reasoning (a commit subject
 // could contain almost anything except a literal NUL byte); each
 // commit is still its own line, the same default `git log --format`
 // behavior for a format string with no embedded %n that for-each-ref's
@@ -51,9 +55,9 @@ const CommitLogLimit = 200
 // first place; otherwise this returns (nil, nil), the same "nothing
 // to show yet, not broken" shape Branches' own empty-repo case has via
 // for-each-ref's own empty-but-successful output.
-func Log(ctx context.Context, root string) ([]LogEntry, error) {
+func Log(ctx context.Context, root string, limit int) ([]LogEntry, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "log",
-		"-n", strconv.Itoa(CommitLogLimit),
+		"-n", strconv.Itoa(limit),
 		"--format=%H%x00%h%x00%s%x00%cI%x00%an%x00%ae")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -90,6 +94,38 @@ func Log(ctx context.Context, root string) ([]LogEntry, error) {
 		})
 	}
 	return commits, nil
+}
+
+// CommitCount returns the total number of commits reachable from HEAD
+// — internal/ui's own Commits box header uses this against however
+// many Log actually returned to show "loaded/total" only while loaded
+// is still less than total, so the user knows there's more to scroll
+// to rather than silently wondering why the list stops where it does.
+// Same empty-repository handling as Log, for the same reason: `git
+// rev-list --count` on a repository with no commits at all isn't a
+// real error, just nothing to count yet.
+func CommitCount(ctx context.Context, root string) (int, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "rev-list", "--count", "HEAD")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		if verifyErr := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--verify", "-q", "HEAD").Run(); verifyErr != nil {
+			return 0, nil
+		}
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return 0, fmt.Errorf("git rev-list: %s", msg)
+		}
+		return 0, fmt.Errorf("git rev-list: %w", err)
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(stdout.String()))
+	if err != nil {
+		return 0, fmt.Errorf("git rev-list: unexpected output %q", stdout.String())
+	}
+	return count, nil
 }
 
 // CommitDiff returns hash's own diff against its parent — `git show

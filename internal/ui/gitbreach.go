@@ -66,6 +66,11 @@ func (r *Root) openGitBreach() {
 
 	r.gitBreachDir = r.panel.path
 	r.gitBreachRoot = root
+	// Reset to the starting limit on every fresh "jg" open — unlike "r"
+	// (reloadGitBreach on its own, see its own doc comment), which
+	// deliberately leaves an already-expanded limit alone so a user who
+	// scrolled to 600 commits and reloads doesn't lose that expansion.
+	r.gitBreachCommitsLimit = git.CommitLogLimit
 	r.reloadGitBreach()
 	r.showOverlayWithRestore(gitBreachPage, r.gitBreachLayout, r.restoreGitBreachFocus)
 }
@@ -100,9 +105,13 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreachBranches = branches
 	r.gitBreachBranchesErr = branchesErr
 
-	commits, commitsErr := git.Log(ctx, r.gitBreachRoot)
+	commits, commitsErr := git.Log(ctx, r.gitBreachRoot, r.gitBreachCommitsLimit)
 	r.gitBreachCommits = commits
 	r.gitBreachCommitsErr = commitsErr
+	total, totalErr := git.CommitCount(ctx, r.gitBreachRoot)
+	if totalErr == nil {
+		r.gitBreachCommitsTotal = total
+	}
 
 	stash, stashErr := git.StashList(ctx, r.gitBreachRoot)
 	r.gitBreachStash = stash
@@ -609,4 +618,54 @@ func (r *Root) startGitBreachStashDiff(row int) {
 			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, "", r.theme))
 		})
 	})
+}
+
+// maybeLoadMoreGitBreachCommits is Commits' own SetSelectionChangedFunc
+// tail — the user's own explicit request: reaching the bottom of what's
+// currently loaded should fetch another git.CommitLogLimit worth
+// rather than the list just silently stopping. Two guards, in order:
+// len(r.gitBreachCommits) != r.gitBreachCommitsLimit means Log already
+// returned fewer than it was asked for last time, i.e. this already is
+// every commit the repository has — nothing more exists to load,
+// regardless of which row the cursor is on. row is only "the last
+// loaded row", not merely "a low row number", so moving the cursor
+// around below the true end (a short list) never spuriously refetches.
+//
+// Deliberately synchronous, like the rest of reloadGitBreach: `git log`
+// against a larger limit is still fast purely locally, and a second,
+// separate async-fetch surface here would duplicate
+// startGitBreachCommitDiff's own cancellation machinery for a case that
+// doesn't actually need it.
+//
+// On failure, shows the error via showError and leaves
+// gitBreachCommits/gitBreachCommitsLimit untouched rather than
+// replacing an already-successfully-loaded list with an error
+// placeholder — a transient git failure while paging for more
+// shouldn't cost the user everything already on screen.
+//
+// Never re-triggers itself: renderGitBreachCommits' own tail only
+// calls Select() when the current row is no longer valid (see its own
+// doc comment on gitBreachCommitsReady) — row itself doesn't change
+// here, so tview's own Select() never fires SetSelectionChangedFunc a
+// second time (it only fires on an actual value change), and this
+// function never recurses.
+func (r *Root) maybeLoadMoreGitBreachCommits(row int) {
+	if len(r.gitBreachCommits) == 0 || len(r.gitBreachCommits) != r.gitBreachCommitsLimit {
+		return
+	}
+	if row != len(r.gitBreachCommits)-1 {
+		return
+	}
+
+	newLimit := r.gitBreachCommitsLimit + git.CommitLogLimit
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	commits, err := git.Log(ctx, r.gitBreachRoot, newLimit)
+	if err != nil {
+		r.showError(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.gitBreachCommitsLimit = newLimit
+	r.gitBreachCommits = commits
+	r.renderGitBreachCommits()
 }

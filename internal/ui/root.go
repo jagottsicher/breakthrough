@@ -692,6 +692,21 @@ type Root struct {
 	gitBreachCommits      []git.LogEntry
 	gitBreachCommitsErr   error
 	gitBreachCommitsReady bool
+	// gitBreachCommitsLimit is how many commits reloadGitBreach's own
+	// git.Log call asks for — starts at git.CommitLogLimit on every
+	// fresh "jg" open (see openGitBreach), grows by another
+	// git.CommitLogLimit each time the cursor reaches the last loaded
+	// row with more still available (see
+	// maybeLoadMoreGitBreachCommits), and deliberately survives an "r"
+	// reload rather than resetting, so a user who scrolled to 600
+	// commits doesn't lose that expansion just for re-reading current
+	// status. gitBreachCommitsTotal is the repository's own real total
+	// commit count (git.CommitCount) — the Commits header shows
+	// "loaded/total" only while gitBreachCommits is shorter than this,
+	// so the user knows there's more to scroll to rather than wondering
+	// why the list stops where it does.
+	gitBreachCommitsLimit int
+	gitBreachCommitsTotal int
 	// gitBreachStash/gitBreachStashErr/gitBreachStashReady mirror
 	// gitBreachCommits/gitBreachCommitsErr/gitBreachCommitsReady exactly
 	// — same shape, same construction-time-placeholder reason for the
