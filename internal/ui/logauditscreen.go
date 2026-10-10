@@ -288,12 +288,13 @@ func logAuditGroupInfo(g logview.FileGroup) string {
 func (r *Root) renderLogAuditSelection() {
 	title := " Log Audit — select files"
 	if r.panel.isRemote() {
-		// Named explicitly, not just "(remote)" — per CLAUDE.md's own
-		// "remote views must never describe local paths or metadata"
-		// rule: this screen now genuinely reads through a remote
-		// connection (see currentLogAuditSource, logauditsource.go),
-		// so saying so, and which one, is the honest thing to show
-		// right where the directory itself is already named.
+		// Named explicitly, not just "(remote)" — per this project's own
+		// "a remote view must never describe local paths or metadata"
+		// rule, read the other way: this screen now genuinely reads
+		// through a remote connection (see currentLogAuditSource,
+		// logauditsource.go), so saying so, and which one, is the
+		// honest thing to show right where the directory itself is
+		// already named.
 		title += " — " + r.panel.remoteConn.Label()
 	}
 	renderCloseTitleBar(r.logAuditTitleBar, title+" ", r.lastScreenWidth)

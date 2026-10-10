@@ -464,6 +464,19 @@ func chordFamilies() []chordFamily {
 		// and Extract are tools too, not a fourth full-screen catalog)
 		// lead, ahead of the four full-screen catalogs that follow.
 		//
+		// "jg" opens the Git breach dashboard (gitbreach.go/
+		// gitbreachscreen.go) — named "Git breach" per the user's own
+		// explicit request, not a pun on "git branch" — a multi-pane
+		// screen (Status/Files/Branches/Commits/Stash at once, the
+		// first screen in this app shaped that way instead of a
+		// full-screen list) scoped to wherever the active panel
+		// currently is, the same "own destination, resolved fresh each
+		// time" shape "jL" (Log Audit) already establishes — unlike
+		// every other member of this family below, which always shows
+		// the same thing regardless of where the panel is. See
+		// feature_ideas.txt's own #21 for the planned later Ausbaustufen
+		// this first one deliberately leaves out.
+		//
 		// "jm" opens the Mounts screen (mounts.go) — a full-screen
 		// catalog under this prefix, kept separate from the Toolbox's
 		// own command list rather than folded in as one more entry
@@ -504,6 +517,7 @@ func chordFamilies() []chordFamily {
 			{'c', "Compress…", func(r *Root) { r.openCompress() }},
 			{'e', "Extract", func(r *Root) { r.extractCurrentArchive(false) }},
 			{'E', "Extract, del org", func(r *Root) { r.extractCurrentArchive(true) }},
+			{'g', "Git breach", func(r *Root) { r.openGitBreach() }},
 			{'m', "Mounts", func(r *Root) { r.openMounts() }},
 			{'n', "Network Tools", func(r *Root) { r.openNetworkTools() }},
 			{'f', "Firewall", func(r *Root) { r.openFirewall() }},

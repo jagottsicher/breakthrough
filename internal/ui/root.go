@@ -20,6 +20,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/filelabels"
 	"github.com/jagottsicher/breakthrough/internal/firewall"
 	"github.com/jagottsicher/breakthrough/internal/fsops"
+	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
@@ -605,6 +606,63 @@ type Root struct {
 	logAuditFiles          int
 	logAuditSkipped        int
 	logAuditParseErr       error
+
+	// The Git breach dashboard (see gitbreach.go/gitbreachscreen.go) —
+	// "jg", this app's first genuine multi-pane screen rather than one
+	// full-screen list: several boxes (Status, Files, Branches, Commits,
+	// Stash) at once, grouped from the start after lazygit's own default
+	// side-panel grouping (see feature_ideas.txt's own #21) so a later
+	// Ausbaustufe can add a tab to an existing box — Worktrees/
+	// Submodules into Files, Remotes/Tags into Branches, Reflog into
+	// Commits — instead of restructuring this layout. Opened on whichever
+	// repository contains the active panel's own current directory, the
+	// same way a real `git status` typed there would find it (see
+	// git.Root) — local only, the same limitation
+	// startDetailsGitStatus (gitstatus.go) already documents: there is
+	// no command-execution channel to a remote session's own git(1).
+	// Branches/Commits/Stash are stub boxes in this first Ausbaustufe;
+	// Status and Files are the only two with real content, Files being
+	// the one interactive list (Status is a read-only summary).
+	gitBreachLayout   *tview.Flex
+	gitBreachTitleBar *tview.TextView
+	// Each box below is a header/body pair (see newGitBreachBoxHeader/
+	// styleGitBreachFocus) — no border, a colored header line instead,
+	// per the user's own explicit request.
+	gitBreachStatusHeader   *tview.TextView
+	gitBreachStatusView     *tview.TextView
+	gitBreachFilesHeader    *tview.TextView
+	gitBreachFilesTable     *tview.Table
+	gitBreachBranchesHeader *tview.TextView
+	gitBreachBranchesView   *tview.TextView
+	gitBreachCommitsHeader  *tview.TextView
+	gitBreachCommitsView    *tview.TextView
+	gitBreachStashHeader    *tview.TextView
+	gitBreachStashView      *tview.TextView
+	gitBreachDiffHeader     *tview.TextView
+	gitBreachDiffView       *tview.TextView
+	gitBreachHint           *tview.TextView
+	gitBreachHintSpans      []listHintSpan
+
+	gitBreachDir    string // the directory "jg" was invoked from
+	gitBreachRoot   string // resolved repository root, see git.Root
+	gitBreachStatus git.Status
+	// gitBreachRows flattens gitBreachStatus into gitBreachFilesTable's
+	// own rows (see buildGitBreachRows) — one row per Staged/Unstaged/
+	// Untracked/Conflict entry, in that section order, matching the
+	// mockup's own "Staged (n)" / "Unstaged (n)" grouping.
+	gitBreachRows []gitBreachRow
+	// gitBreachRowIndex maps a Files table row to its own index into
+	// gitBreachRows — built fresh by renderGitBreachFiles on every
+	// render, since the table also contains non-selectable section
+	// header rows ("Staged (n)", ...) that gitBreachRows itself has no
+	// entry for at all.
+	gitBreachRowIndex map[int]int
+	gitBreachFetchErr error
+	// gitBreachDiffCancel cancels whichever diff fetch is in flight for
+	// the row the cursor was on before it moved again — see
+	// startGitBreachDiff/cancelGitBreachDiff, the same shape
+	// cancelDetailsGitStatus already establishes.
+	gitBreachDiffCancel context.CancelFunc
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
@@ -2291,6 +2349,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// two stacked overlay layers built once here, populated on open.
 	r.newLogAuditScreen()
 
+	// The Git breach dashboard (see gitbreach.go/gitbreachscreen.go) —
+	// "jg", built once here, repopulated on every open.
+	r.newGitBreachScreen()
+
 	// The search dialog (see openSearch).
 	r.searchPages = r.newSearchDialog()
 
@@ -2454,6 +2516,10 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(logAuditViewerPage, r.logAuditViewerLayout, true, false)
 	r.AddPage(logAuditDetailPage, r.logAuditDetailLayout, false, false)
 	r.AddPage(logAuditStatsPage, r.logAuditStatsLayout, false, false)
+	// resize=true: the Git breach dashboard deliberately fills the whole
+	// terminal too, the same reasoning every other full-screen catalog's
+	// own comment above gives.
+	r.AddPage(gitBreachPage, r.gitBreachLayout, true, false)
 	r.AddPage(searchPage, r.searchPages, false, false)
 	r.AddPage(chmodPage, r.chmodPages, false, false)
 	r.AddPage(dirPickerPage, r.dirPicker, false, false)
