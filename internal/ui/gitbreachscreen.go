@@ -8,6 +8,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 // gitBreachStubHeight/gitBreachStatusHeight are the fixed row counts
@@ -22,8 +23,8 @@ const (
 )
 
 // gitBreachDiffAddedColor is a dedicated, brighter green for a diff's
-// own added lines — per the user's own explicit request for something
-// stronger than theme.EntryExecutable (the panel's own muted
+// own added-line marker ("+") — per the user's own explicit request for
+// something stronger than theme.EntryExecutable (the panel's own muted
 // "executable file name" green, #008000, deliberately kept dark
 // against the dark panel background — see its own doc comment). A
 // diff's own red/green convention is expected to read as vivid at a
@@ -35,7 +36,32 @@ const (
 // the same green already vetted as one of this app's own nine
 // maximally-distinct label colors (see labelFallbackColors in
 // internal/config/theme.go), reused here rather than inventing another.
+//
+// Only the marker glyph itself uses this color now — the rest of an
+// added/removed line's own content is real per-language syntax
+// coloring (see gitBreachColorizeDiff), which a single solid
+// foreground color across the whole line would otherwise compete
+// with. gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground
+// (below) are what actually marks a whole line as added/removed now,
+// per the user's own explicit follow-up request.
 var gitBreachDiffAddedColor = tcell.GetColor("#3cb44b")
+
+// gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground tint an
+// added/removed diff line's own entire background — a dark, muted
+// green/red close in brightness to theme.SurfaceBackground
+// (darkslategray, #2f4f4f, by default) and theme.PopupBackground
+// (#263f3f), picked so every one of darkSyntaxPalette's own foreground
+// colors (cornflowerblue, darksalmon, mediumpurple, paleturquoise,
+// gold, gray, ...) still reads clearly on top — the same reasoning
+// EntryExecutable's own doc comment already gives for keeping a
+// background-adjacent color muted rather than bright: a vivid green/
+// red wash across a whole line would fight the very syntax colors it's
+// meant to sit behind. Fixed colors, not theme fields, for the same
+// reason gitBreachDiffAddedColor above already is.
+var (
+	gitBreachDiffAddedBackground   = tcell.GetColor("#1e3a28")
+	gitBreachDiffRemovedBackground = tcell.GetColor("#3a1e1e")
+)
 
 // newGitBreachScreen builds the whole dashboard once — see
 // gitBreachLayout's own doc comment on Root for why this is laid out
@@ -525,57 +551,101 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 	}
 }
 
-// gitBreachColorizeDiff turns a plain `git diff` into tview markup —
-// per the user's own explicit request that removed lines read red and
-// added ones green. Removed lines reuse theme.CriticalText verbatim
-// (gitBreachRowColor's own conflict color); added lines use
-// gitBreachDiffAddedColor, a dedicated brighter green — see its own
-// doc comment for why added needed its own color but removed didn't
-// (a muted-red follow-up request was tried and reverted). Requires
-// gitBreachDiffView.SetDynamicColors(true) (see newGitBreachScreen) to
-// actually render; every line is escaped first (tview.Escape — diff
-// content routinely contains "[", e.g. Go's own "[]byte", which would
-// otherwise be swallowed as a style tag instead of shown — the same
-// reason renderSyntax already escapes file content before coloring it)
-// so the diff's own text is never itself misread as markup.
+// gitBreachColorizeDiff turns a plain `git diff` into tview markup.
+// Line *classification* (file header / hunk header / added / removed /
+// context) is still this function's own hand-rolled "+"/"-"/"@@"
+// prefix check, not chroma's — see the "Deliberately hand-rolled"
+// paragraph below, unchanged from before. What changed, per the user's
+// own explicit follow-up request after trying real syntax highlighting
+// on untracked files (see startGitBreachDiff): an added/removed line's
+// own *content* is no longer painted one single solid green/red
+// foreground. Instead, its whole background tints
+// (gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground — their
+// own doc comment explains the color choice) and its content is real,
+// per-language syntax highlighting via the exact same
+// internal/viewer.Highlight + renderSyntax pipeline Look and the
+// untracked-file case already use — background carries "this line
+// changed", foreground carries "what this code actually is", the same
+// two-channel split a real code-review tool's diff view already uses,
+// instead of one channel fighting the other. Context lines get the
+// same per-language coloring too (no background tint — nothing
+// changed on them), so a diff doesn't read as "colorful lines, plain
+// white lines" alternating for no reason.
+//
+// Known, accepted limitation, not yet solved (see feature_ideas.txt's
+// own #21 for where this is tracked as a later Ausbaustufe): each
+// line's content is lexed on its own, in isolation from the rest of
+// the file. Most chroma lexers tokenize correctly this way since most
+// constructs end on the same line they start on, but one spanning
+// several lines - a block comment, a multi-line or raw string literal
+// - can come out misclassified, since the lexer never sees the lines
+// around it that would normally tell it "this is still inside a
+// comment/string". The robust fix reconstructs the full old/new file
+// content from the diff's own hunks, highlights each in full (so
+// multi-line constructs lex correctly with their real surrounding
+// context), then maps the resulting tokens back onto each diff line -
+// real but genuinely more work, deferred rather than blocking this
+// step on it.
 //
 // "+++"/"---" (the diff's own old/new file-header lines) are checked
 // before the plain "+"/"-" cases below, which would otherwise also
-// match their own leading character and color a file header like a
+// match their own leading character and treat a file header as a
 // single added/removed line.
 //
-// Deliberately hand-rolled rather than routed through
-// internal/viewer.Highlight's own chroma-backed pipeline (used for
-// untracked files — see startGitBreachDiff): tried chroma's own
-// dedicated Diff lexer directly and found it strictly worse for this
-// exact job — it colors "---"/"+++" file-header lines as a removed/
-// added line each (wrong: they're path headers, not content changes,
-// exactly the miscoloring this function's own early "+++"/"---" check
-// above exists to avoid), and it collapses an entire run of context
-// lines plus the "@@" hunk marker into one single undifferentiated
-// token instead of coloring each line on its own — no per-line
-// granularity, and no per-language coloring of the code inside a
-// changed line either, so there was nothing to gain by switching.
-func gitBreachColorizeDiff(diff string, theme config.ResolvedTheme) string {
+// Deliberately hand-rolled rather than routed through chroma's own
+// dedicated Diff lexer for the line *classification* itself: tried it
+// directly and found it strictly worse for this exact job — it colors
+// "---"/"+++" file-header lines as a removed/added line each (wrong:
+// they're path headers, not content changes, exactly the miscoloring
+// this function's own early "+++"/"---" check above exists to avoid),
+// and it collapses an entire run of context lines plus the "@@" hunk
+// marker into one single undifferentiated token instead of coloring
+// each line on its own — no per-line granularity at all, which this
+// function needs regardless of where the per-language coloring within
+// each line comes from.
+func gitBreachColorizeDiff(diff, path string, theme config.ResolvedTheme) string {
+	palette := paletteFor(theme.SurfaceBackground)
 	lines := strings.Split(diff, "\n")
 	var b strings.Builder
 	for i, line := range lines {
-		escaped := tview.Escape(line)
 		switch {
 		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-			b.WriteString(wrapColor(theme.MutedTextColor, escaped))
+			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
 		case strings.HasPrefix(line, "+"):
-			b.WriteString(wrapColor(gitBreachDiffAddedColor, escaped))
+			b.WriteString(gitBreachColorizeDiffLine(line, path, palette, gitBreachDiffAddedColor, gitBreachDiffAddedBackground))
 		case strings.HasPrefix(line, "-"):
-			b.WriteString(wrapColor(theme.CriticalText, escaped))
+			b.WriteString(gitBreachColorizeDiffLine(line, path, palette, theme.CriticalText, gitBreachDiffRemovedBackground))
 		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "diff --git"), strings.HasPrefix(line, "index "):
-			b.WriteString(wrapColor(theme.MutedTextColor, escaped))
+			b.WriteString(wrapColor(theme.MutedTextColor, tview.Escape(line)))
 		default:
-			b.WriteString(escaped)
+			// A context line — real file content too, so it gets the
+			// same per-language coloring as an added/removed line's own
+			// content, just with no background tint (nothing about it
+			// changed).
+			b.WriteString(renderSyntax(viewer.Highlight(path, line), palette))
 		}
 		if i < len(lines)-1 {
 			b.WriteString("\n")
 		}
 	}
 	return b.String()
+}
+
+// gitBreachColorizeDiffLine renders one added/removed line: markerColor
+// for the leading "+"/"-" glyph itself (gitBreachDiffAddedColor/
+// theme.CriticalText — not code, so it stays outside the per-language
+// coloring below), then the rest of the line's own content
+// (everything after that one marker character) run through
+// internal/viewer.Highlight/renderSyntax exactly as a context line or
+// an untracked file's own content already is — the one difference an
+// added/removed line gets at all is the background tint wrapping both
+// pieces together, via nameHighlightTags's own "[:#rrggbb:]...[-:-:-]"
+// background-only tag shape (panel.go) — an empty foreground field
+// leaves whatever renderSyntax/wrapColor already set alone, so the
+// background tint and the per-language foreground coloring never fight
+// over the same tag.
+func gitBreachColorizeDiffLine(line, path string, palette syntaxPalette, markerColor, background tcell.Color) string {
+	marker, content := line[:1], line[1:]
+	highlighted := wrapColor(markerColor, tview.Escape(marker)) + renderSyntax(viewer.Highlight(path, content), palette)
+	return fmt.Sprintf("[:#%06x:]%s[-:-:-]", uint32(background.Hex())&0xffffff, highlighted)
 }
