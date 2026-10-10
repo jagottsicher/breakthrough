@@ -403,6 +403,12 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 			hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
 		)
 	}
+	if r.gitBreachStashTable.HasFocus() {
+		entries = append(entries,
+			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
+			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
+		)
+	}
 	entries = append(entries,
 		listHintEntry{
 			keys: []listHintKey{
@@ -635,9 +641,12 @@ func (r *Root) gitBreachFocusCommitsOnClick(action tview.MouseAction, event *tce
 	return action, event
 }
 
-// captureGitBreachStashTableKey mirrors captureGitBreachCommitsTableKey
-// exactly, "c" included — no row action yet (apply/pop/drop are later
-// Ausbaustufen).
+// captureGitBreachStashTableKey mirrors captureGitBreachCommitsTableKey,
+// "c" included, plus "a" (apply the stash under the cursor, confirming
+// first only on a dirty working tree) and "d" (drop it, always
+// confirming — see openGitBreachStashApply/openGitBreachStashDrop's own
+// doc comments). Deliberately no "pop": see git.StashApply's own doc
+// comment for why apply and drop stay two separate, explicit actions.
 func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		r.closeGitBreach()
@@ -658,6 +667,12 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 			return nil
 		case 'c':
 			r.openGitBreachCommitPrompt()
+			return nil
+		case 'a':
+			r.openGitBreachStashApply()
+			return nil
+		case 'd':
+			r.openGitBreachStashDrop()
 			return nil
 		}
 	}

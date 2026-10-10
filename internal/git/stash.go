@@ -55,6 +55,36 @@ func StashList(ctx context.Context, root string) ([]Stash, error) {
 	return stashes, nil
 }
 
+// StashApply runs `git stash apply <ref>` — deliberately apply, never
+// `pop`: pop is apply-then-drop, but on a conflicting apply it *keeps*
+// the stash anyway, leaving the working tree conflicted with no way for
+// this dashboard to resolve it (Git breach has no conflict-resolution
+// UI at all yet — see CommitDiff's own sibling, the Files box's own
+// Conflicts row, which still just says resolving conflicts isn't
+// supported here). Apply alone keeps the stash either way, so a
+// conflict is always recoverable by hand outside this dashboard rather
+// than something this one call could silently strand the user in.
+// Dropping the ref afterward, if desired, is the caller's own separate,
+// explicit StashDrop call — never implicit here.
+func StashApply(ctx context.Context, root, ref string) error {
+	return run(ctx, root, "stash", "apply", ref)
+}
+
+// StashDrop runs `git stash drop <ref>` — the one truly irreversible
+// Stash action (unlike Apply, which always leaves the stash itself
+// intact): once dropped, the stashed changes are gone for good, no
+// different in kind from `git branch -d`'s own "this permanently
+// removes something" shape DeleteBranch already documents, just with
+// no equivalent "unmerged" safety net git itself can refuse on here —
+// a stash is either dropped or it isn't. The caller's own job to
+// confirm first (see internal/ui's own openGitBreachStashDrop), always,
+// not conditionally — unlike checkout's own "only ask if there's
+// something to lose" restraint, dropping a stash is itself the
+// irreversible action, not something that's only risky in some states.
+func StashDrop(ctx context.Context, root, ref string) error {
+	return run(ctx, root, "stash", "drop", ref)
+}
+
 // StashDiff returns ref's own diff against the commit it was stashed
 // from — `git stash show -p`, the same shape CommitDiff's own `git
 // show --format=` output already has (gitBreachColorizeDiff's own
