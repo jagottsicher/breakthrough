@@ -637,7 +637,7 @@ type Root struct {
 	gitBreachCommitsHeader  *tview.TextView
 	gitBreachCommitsTable   *tview.Table
 	gitBreachStashHeader    *tview.TextView
-	gitBreachStashView      *tview.TextView
+	gitBreachStashTable     *tview.Table
 	gitBreachDiffHeader     *tview.TextView
 	gitBreachDiffView       *tview.TextView
 	gitBreachHint           *tview.TextView
@@ -692,21 +692,30 @@ type Root struct {
 	gitBreachCommits      []git.LogEntry
 	gitBreachCommitsErr   error
 	gitBreachCommitsReady bool
+	// gitBreachStash/gitBreachStashErr/gitBreachStashReady mirror
+	// gitBreachCommits/gitBreachCommitsErr/gitBreachCommitsReady exactly
+	// — same shape, same construction-time-placeholder reason for the
+	// Ready flag, a fourth instance of the identical fix (see
+	// renderGitBreachStash).
+	gitBreachStash      []git.Stash
+	gitBreachStashErr   error
+	gitBreachStashReady bool
 	// gitBreachMainOwner tracks which box's own selection the Main —
 	// Diff box is currently showing: Files' own staged/unstaged/
-	// untracked diff, or a Commits row's own CommitDiff. Per
-	// feature_ideas.txt's own documented layout ("Main folgt der
-	// aktiven Box"), Main always follows whichever of these two boxes
-	// currently has keyboard focus — not whichever last had a row
-	// selected. Without this, renderGitBreachFiles' own unconditional
-	// refresh-Main-on-reload call (see its own doc comment on the real
-	// stale-diff bug that fix addressed) would clobber a commit's own
-	// diff with a file diff on every reload while Commits has focus,
-	// simply because Files re-asserts its own cursor position on every
-	// render regardless of which box the user is actually looking at.
-	// Files is the zero value (gitBreachMainOwnerFiles == 0) so a fresh
-	// Root needs no explicit initialization to start in the correct,
-	// default-focus state.
+	// untracked diff, a Commits row's own CommitDiff, or a Stash row's
+	// own StashDiff. Per feature_ideas.txt's own documented layout
+	// ("Main folgt der aktiven Box"), Main always follows whichever of
+	// these three boxes currently has keyboard focus — not whichever
+	// last had a row selected. Without this, renderGitBreachFiles' own
+	// unconditional refresh-Main-on-reload call (see its own doc
+	// comment on the real stale-diff bug that fix addressed) would
+	// clobber a commit's or stash's own diff with a file diff on every
+	// reload while Commits/Stash has focus, simply because Files
+	// re-asserts its own cursor position on every render regardless of
+	// which box the user is actually looking at. Files is the zero
+	// value (gitBreachMainOwnerFiles == 0) so a fresh Root needs no
+	// explicit initialization to start in the correct, default-focus
+	// state.
 	gitBreachMainOwner gitBreachMainOwnerKind
 	// gitBreachDiffCancel cancels whichever diff fetch is in flight for
 	// the row the cursor was on before it moved again — see

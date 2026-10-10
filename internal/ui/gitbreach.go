@@ -104,6 +104,10 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreachCommits = commits
 	r.gitBreachCommitsErr = commitsErr
 
+	stash, stashErr := git.StashList(ctx, r.gitBreachRoot)
+	r.gitBreachStash = stash
+	r.gitBreachStashErr = stashErr
+
 	r.renderGitBreach()
 }
 
@@ -495,6 +499,65 @@ func (r *Root) startGitBreachCommitDiff(row int) {
 			}
 			if err != nil {
 				r.gitBreachDiffView.SetText(tview.Escape(fmt.Sprintf("%s: %v", c.Short, err)))
+				return
+			}
+			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, "", r.theme))
+		})
+	})
+}
+
+// gitBreachStashAt returns gitBreachStash[row] — mirrors
+// gitBreachCommitAt exactly (no non-selectable header rows in the
+// Stash table either).
+func (r *Root) gitBreachStashAt(row int) (git.Stash, bool) {
+	if row < 0 || row >= len(r.gitBreachStash) {
+		return git.Stash{}, false
+	}
+	return r.gitBreachStash[row], true
+}
+
+// startGitBreachStashDiff mirrors startGitBreachCommitDiff exactly, for
+// a stash entry's own diff (git.StashDiff) instead of a commit's.
+func (r *Root) startGitBreachStashDiff(row int) {
+	r.cancelGitBreachDiff()
+	s, ok := r.gitBreachStashAt(row)
+	if !ok {
+		r.gitBreachDiffView.SetText("")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	r.gitBreachDiffCancel = cancel
+	root := r.gitBreachRoot
+
+	r.safeGo("Git breach stash diff", r.cancelGitBreachDiff, func() {
+		select {
+		case <-ctx.Done():
+			return // the cursor moved on before this even started
+		case <-time.After(gitBreachDiffDebounce):
+		}
+
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, gitBreachDiffTimeout)
+		text, err := git.StashDiff(fetchCtx, root, s.Ref)
+		fetchCancel()
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil && text == "" {
+			text = fmt.Sprintf("%s: no diff to show.", s.Ref)
+		}
+
+		r.app.QueueUpdateDraw(func() {
+			if ctx.Err() != nil {
+				return
+			}
+			curRow, _ := r.gitBreachStashTable.GetSelection()
+			curS, ok := r.gitBreachStashAt(curRow)
+			if !ok || curS != s {
+				return // the cursor moved to a different row before this landed
+			}
+			if err != nil {
+				r.gitBreachDiffView.SetText(tview.Escape(fmt.Sprintf("%s: %v", s.Ref, err)))
 				return
 			}
 			r.gitBreachDiffView.SetText(gitBreachColorizeDiff(text, "", r.theme))

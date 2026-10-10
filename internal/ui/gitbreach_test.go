@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -556,7 +557,7 @@ func TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch(t *testing.T) {
 // TestToggleGitBreachFocusCyclesBetweenFilesAndBranches pins "Tab" —
 // gitBreachFocusables' own doc comment on why this is a data-driven
 // list rather than a hardcoded two-way toggle.
-func TestToggleGitBreachFocusCyclesThroughFilesBranchesAndCommits(t *testing.T) {
+func TestToggleGitBreachFocusCyclesThroughFilesBranchesCommitsAndStash(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
@@ -577,8 +578,13 @@ func TestToggleGitBreachFocusCyclesThroughFilesBranchesAndCommits(t *testing.T) 
 	}
 
 	r.toggleGitBreachFocus()
+	if !r.gitBreachStashTable.HasFocus() {
+		t.Error("after a third Tab: Stash should have focus")
+	}
+
+	r.toggleGitBreachFocus()
 	if !r.gitBreachFilesTable.HasFocus() {
-		t.Error("after a third Tab: focus should be back on Files")
+		t.Error("after a fourth Tab: focus should be back on Files")
 	}
 }
 
@@ -675,6 +681,11 @@ func TestGitBreachMainOwnerFollowsKeyboardFocus(t *testing.T) {
 		t.Error("gitBreachMainOwner did not switch to Commits when it gained keyboard focus")
 	}
 
+	r.toggleGitBreachFocus() // -> Stash
+	if r.gitBreachMainOwner != gitBreachMainOwnerStash {
+		t.Error("gitBreachMainOwner did not switch to Stash when it gained keyboard focus")
+	}
+
 	r.toggleGitBreachFocus() // -> Files
 	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
 		t.Error("gitBreachMainOwner did not switch back to Files when it regained keyboard focus")
@@ -706,5 +717,89 @@ func TestStartGitBreachCommitsDiffIfOwnerDoesNothingWhenFilesOwnsMain(t *testing
 	r.startGitBreachCommitsDiffIfOwner()
 	if r.gitBreachDiffCancel != nil {
 		t.Error("startGitBreachCommitsDiffIfOwner started a fetch while Files owns Main, want a no-op")
+	}
+}
+
+func TestRenderGitBreachStashListsStashedChangesNewestFirst(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "first stash")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("c"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "second stash")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if len(r.gitBreachStash) != 2 {
+		t.Fatalf("gitBreachStash = %+v, want 2", r.gitBreachStash)
+	}
+	if !strings.Contains(r.gitBreachStash[0].Message, "second stash") {
+		t.Errorf("gitBreachStash[0] = %+v, want the newest stash first", r.gitBreachStash[0])
+	}
+}
+
+// TestOpenGitBreachSelectsTheFirstStashNotTheSecond is the Stash box's
+// own version of TestOpenGitBreachSelectsTheFirstCommitNotTheSecond —
+// the identical construction-time-placeholder bug (see
+// gitBreachStashReady's own doc comment on Root), a fourth instance of
+// the same fix.
+func TestOpenGitBreachSelectsTheFirstStashNotTheSecond(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "first stash")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("c"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-m", "second stash")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	gotRow, _ := r.gitBreachStashTable.GetSelection()
+	if gotRow != 0 {
+		s, _ := r.gitBreachStashAt(gotRow)
+		t.Errorf("selected row %d (%q), want row 0 (the newest stash)", gotRow, s.Message)
+	}
+}
+
+func TestGitBreachMainOwnerStashDoesNothingWhenFilesOwnsMain(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "first")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.cancelGitBreachDiff() // openGitBreach's own Files-owned fetch already started one
+
+	if r.gitBreachMainOwner != gitBreachMainOwnerFiles {
+		t.Fatal("setup: gitBreachMainOwner should still be Files")
+	}
+	r.startGitBreachStashDiffIfOwner()
+	if r.gitBreachDiffCancel != nil {
+		t.Error("startGitBreachStashDiffIfOwner started a fetch while Files owns Main, want a no-op")
 	}
 }
