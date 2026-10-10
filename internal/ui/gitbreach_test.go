@@ -366,3 +366,213 @@ func gitBreachTableRowForPath(r *Root, path string) int {
 	}
 	return 0
 }
+
+// gitBreachBranchRow scans r.gitBreachBranches for name and returns its
+// own table row — the mirror image of gitBreachTableRowForPath, going
+// through gitBreachBranchAt's own detached-HEAD row-offset logic (see
+// its own doc comment) rather than assuming row == index, so a
+// regression there would be caught here too.
+func gitBreachBranchRow(r *Root, name string) (int, bool) {
+	for row := 0; row < r.gitBreachBranchesTable.GetRowCount(); row++ {
+		if b, ok := r.gitBreachBranchAt(row); ok && b.Name == name {
+			return row, true
+		}
+	}
+	return 0, false
+}
+
+func TestRenderGitBreachBranchesListsLocalBranchesWithCurrentMarked(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if len(r.gitBreachBranches) != 2 {
+		t.Fatalf("gitBreachBranches = %+v, want 2 (main, feature-x)", r.gitBreachBranches)
+	}
+	row, ok := gitBreachBranchRow(r, "main")
+	if !ok {
+		t.Fatal("main not found in the Branches table")
+	}
+	if b, _ := r.gitBreachBranchAt(row); !b.Current {
+		t.Error("main.Current = false, want true (it's the checked-out branch)")
+	}
+}
+
+// TestOpenGitBreachSelectsTheFirstBranchNotTheSecond pins a real,
+// reported bug: the cursor landed on the second branch instead of the
+// first the moment the Branches box had any real content at all.
+// newGitBreachScreen's own construction-time render (baking in cell
+// colors before reloadGitBreach has ever run, with gitBreachBranches
+// still empty) takes the "No local branches found" placeholder path,
+// whose showTablePlaceholder calls Select(1, 0) — tview's Table.Clear()
+// never resets that selectedRow afterward. Files' own section headers
+// happen to absorb that same leftover 1 onto a legitimately-first real
+// file row, masking the identical bug there (see
+// TestOpenGitBreachOnACleanRepoThenDirtyingItStillRefreshesTheDiff's own
+// doc comment); Branches has no header row to absorb it, so the cursor
+// landed squarely on the second branch (alphabetically after the
+// first) the very first time real branches existed. Needs two branches
+// sorted so the first one isn't already current, since
+// openGitBreachCheckout's own current-branch guard would otherwise mask
+// a wrong starting row as a correct no-op.
+func TestOpenGitBreachSelectsTheFirstBranchNotTheSecond(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "zzz-not-current")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	wantRow, ok := gitBreachBranchRow(r, "main")
+	if !ok {
+		t.Fatal("main not found in the Branches table")
+	}
+	gotRow, _ := r.gitBreachBranchesTable.GetSelection()
+	if gotRow != wantRow {
+		b, _ := r.gitBreachBranchAt(gotRow)
+		t.Errorf("selected row %d (%q), want row %d (main, the alphabetically-first branch)", gotRow, b.Name, wantRow)
+	}
+}
+
+// TestOpenGitBreachCheckoutSwitchesImmediatelyOnACleanTree pins the
+// "don't ask what there's nothing to lose" half of the confirmation
+// logic — openGitBreachCheckout's own doc comment.
+func TestOpenGitBreachCheckoutSwitchesImmediatelyOnACleanTree(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "feature-x")
+	if !ok {
+		t.Fatal("feature-x not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachCheckout()
+
+	if r.activePage == confirmPage {
+		t.Fatal("activePage = confirmPage, want an immediate checkout on a clean tree")
+	}
+	if b, _ := r.gitBreachBranchAt(row); !b.Current {
+		t.Errorf("feature-x.Current = false after checkout, want true")
+	}
+}
+
+// TestOpenGitBreachCheckoutConfirmsOnADirtyTree pins the other half:
+// staged/unstaged/conflicted changes must not silently ride along onto
+// a different branch without the user being asked first.
+func TestOpenGitBreachCheckoutConfirmsOnADirtyTree(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+	// Dirty the tree: a staged, uncommitted change.
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "feature-x")
+	if !ok {
+		t.Fatal("feature-x not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachCheckout()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog on a dirty tree", r.activePage)
+	}
+	if b, _ := r.gitBreachBranchAt(row); b.Current {
+		t.Error("feature-x.Current = true before confirming, want the checkout to not have run yet")
+	}
+
+	r.pendingConfirm()
+	if b, _ := r.gitBreachBranchAt(row); !b.Current {
+		t.Error("feature-x.Current = false after confirming, want the checkout to have run")
+	}
+}
+
+// TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch pins a plain
+// no-op guard: checking out the branch you're already on is never a
+// real action (and would otherwise prompt for confirmation on a dirty
+// tree for literally nothing).
+func TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "main")
+	if !ok {
+		t.Fatal("main not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachCheckout()
+
+	if r.activePage == confirmPage {
+		t.Error("activePage = confirmPage, want a no-op for the already-current branch")
+	}
+}
+
+// TestToggleGitBreachFocusCyclesBetweenFilesAndBranches pins "Tab" —
+// gitBreachFocusables' own doc comment on why this is a data-driven
+// list rather than a hardcoded two-way toggle.
+func TestToggleGitBreachFocusCyclesBetweenFilesAndBranches(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Fatal("setup: Files should have focus right after opening")
+	}
+
+	r.toggleGitBreachFocus()
+	if !r.gitBreachBranchesTable.HasFocus() {
+		t.Error("after one Tab: Branches should have focus")
+	}
+
+	r.toggleGitBreachFocus()
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("after a second Tab: focus should be back on Files")
+	}
+}

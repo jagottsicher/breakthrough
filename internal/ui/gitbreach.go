@@ -71,21 +71,23 @@ func (r *Root) openGitBreach() {
 }
 
 // restoreGitBreachFocus sends real keyboard focus to the Files table —
-// the dashboard's own only interactive box in this first Ausbaustufe
-// (Status is a read-only summary, Branches/Commits/Stash are stubs) —
 // both on first open (showOverlayWithRestore's own initial call) and
 // whenever something pushed on top of this dashboard closes back to it
 // (the commit-message prompt — see openGitBreachCommitPrompt), the
 // same "restore callback" shape restoreProperties already establishes.
+// Always Files specifically, not "whichever box last had focus": a
+// fresh "jg" (or returning from the commit prompt mid-session) should
+// land somewhere predictable rather than wherever Tab (see
+// toggleGitBreachFocus) happened to leave it last time.
 func (r *Root) restoreGitBreachFocus() {
 	r.app.SetFocus(r.gitBreachFilesTable)
 }
 
-// reloadGitBreach re-fetches gitBreachRoot's own status and rebuilds
-// every box's own content — "r" re-runs this directly, and every
-// stage/unstage/commit does too afterward, the same "re-run the real
-// read, don't just redraw" contract reloadLogAuditDiscovery already
-// documents.
+// reloadGitBreach re-fetches gitBreachRoot's own status and branch
+// list, rebuilding every box's own content — "r" re-runs this
+// directly, and every stage/unstage/commit/checkout does too
+// afterward, the same "re-run the real read, don't just redraw"
+// contract reloadLogAuditDiscovery already documents.
 func (r *Root) reloadGitBreach() {
 	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
 	defer cancel()
@@ -93,6 +95,11 @@ func (r *Root) reloadGitBreach() {
 	r.gitBreachStatus = status
 	r.gitBreachFetchErr = err
 	r.gitBreachRows = buildGitBreachRows(status)
+
+	branches, branchesErr := git.Branches(ctx, r.gitBreachRoot)
+	r.gitBreachBranches = branches
+	r.gitBreachBranchesErr = branchesErr
+
 	r.renderGitBreach()
 }
 
@@ -240,6 +247,81 @@ func (r *Root) commitGitBreach(message string) {
 		return
 	}
 	r.reloadGitBreach()
+}
+
+// openGitBreachCheckout is Enter on the Branches table — checks out
+// the branch under the cursor, confirming first if the working tree
+// isn't clean. git itself already refuses a checkout outright when it
+// would actually overwrite a modified file, but stays silent (and
+// succeeds) whenever the target branch's own version of every modified
+// file happens not to conflict — quietly carrying uncommitted changes
+// onto a different branch than whoever made them was looking at. A
+// clean tree (the common case) checks out immediately with no prompt,
+// the same "don't ask what there's nothing to lose" restraint
+// openRemoveConfirm's own TrashConfirm setting already applies
+// elsewhere — this one isn't user-configurable, since unlike moving
+// something to Trash, a clean-tree checkout has no irreversible side
+// effect to weigh at all.
+func (r *Root) openGitBreachCheckout() {
+	row, _ := r.gitBreachBranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok || branch.Current {
+		return
+	}
+
+	// Untracked files deliberately don't trigger this: they're not part
+	// of any branch's own content, so a checkout never silently carries
+	// one across the way a tracked, uncommitted change could — git
+	// itself still refuses loudly (surfaced via checkoutGitBreachBranch's
+	// own showError) in the one case an untracked file actually would be
+	// overwritten.
+	st := r.gitBreachStatus
+	if len(st.Staged) > 0 || len(st.Unstaged) > 0 || len(st.Conflicts) > 0 {
+		r.openConfirm(
+			fmt.Sprintf("Check out %q with uncommitted changes in the working tree?", branch.Name),
+			"Yes, check out",
+			func() { r.checkoutGitBreachBranch(branch.Name) },
+		)
+		return
+	}
+	r.checkoutGitBreachBranch(branch.Name)
+}
+
+// checkoutGitBreachBranch runs the actual checkout and reloads — both
+// this dashboard's own state (the new branch's own status/Files/
+// Branches) and the active panel underneath it, since a checkout can
+// change which files exist on disk in the exact directory the panel
+// is already showing; leaving its own listing stale after a checkout
+// would be exactly the kind of silent staleness this project's own
+// "reflect the real, current state" convention exists to avoid.
+func (r *Root) checkoutGitBreachBranch(branch string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.Checkout(ctx, r.gitBreachRoot, branch); err != nil {
+		r.showError(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+	r.showError(r.panel.load(r.panel.path))
+}
+
+// gitBreachBranchAt returns gitBreachBranches[row] — unlike Files'
+// own gitBreachRowAt, the Branches table has no section-header rows
+// interspersed (see renderGitBreachBranches), so the table row index
+// maps directly onto gitBreachBranches without an indirection map.
+func (r *Root) gitBreachBranchAt(row int) (git.Branch, bool) {
+	// renderGitBreachBranches puts a non-selectable "(detached at ...)"
+	// row at row 0 first whenever gitBreachStatus.Detached is true,
+	// shifting every real branch down by one — accounted for here so
+	// gitBreachAt's own caller never has to know this box's own
+	// row-0 special case exists at all.
+	if r.gitBreachStatus.Detached {
+		row--
+	}
+	if row < 0 || row >= len(r.gitBreachBranches) {
+		return git.Branch{}, false
+	}
+	return r.gitBreachBranches[row], true
 }
 
 // gitBreachDiffDebounce/gitBreachDiffTimeout mirror
