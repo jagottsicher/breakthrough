@@ -1583,8 +1583,8 @@
     },
     {
       "path": "internal/ui/gitbreachscreen.go",
-      "size": 24308,
-      "sha256": "2b971460675a4b7f5841a9d758679ecaaa93bcce72596fd8cbe9e0e4357f7148"
+      "size": 24456,
+      "sha256": "47de320d6017b43642f9eda8c613df8251721d0cf242e6a855bc384f7f900089"
     },
     {
       "path": "internal/ui/gitstatus.go",
@@ -26266,7 +26266,7 @@
       "file": "internal/ui/gitbreachscreen.go",
       "name": "gitBreachColorizeDiff",
       "kind": "function",
-      "line": 544
+      "line": 546
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -46177,5 +46177,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "62c12420714f121366c0711e6f9f64a5c2b8f5b5ed2b1233dc6ad4bad4a2b845"
+  "merkle_root": "90b30c77cfb546a2c2f0c6faafa14dbe7526c323b15d93f9e2d60920d08f4801"
 }

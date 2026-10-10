@@ -527,9 +527,11 @@ func gitBreachRowColor(gr gitBreachRow, theme config.ResolvedTheme) tcell.Color 
 
 // gitBreachColorizeDiff turns a plain `git diff` into tview markup —
 // per the user's own explicit request that removed lines read red and
-// added ones green, the same CriticalText/EntryExecutable severity
-// language gitBreachRowColor above already applies to a whole Files
-// row, just applied per diff line instead. Requires
+// added ones green. Removed lines reuse theme.CriticalText verbatim
+// (gitBreachRowColor's own conflict color); added lines use
+// gitBreachDiffAddedColor, a dedicated brighter green — see its own
+// doc comment for why added needed its own color but removed didn't
+// (a muted-red follow-up request was tried and reverted). Requires
 // gitBreachDiffView.SetDynamicColors(true) (see newGitBreachScreen) to
 // actually render; every line is escaped first (tview.Escape — diff
 // content routinely contains "[", e.g. Go's own "[]byte", which would
