@@ -554,6 +554,117 @@ func TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch(t *testing.T) {
 	}
 }
 
+// TestOpenGitBreachDeleteBranchConfirmsThenDeletes pins the "always
+// confirm" half: unlike checkout, deleting a branch is itself the
+// irreversible action, not something that's only risky in some states.
+func TestOpenGitBreachDeleteBranchConfirmsThenDeletes(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "feature-x")
+	if !ok {
+		t.Fatal("feature-x not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachDeleteBranch()
+
+	if r.activePage != confirmPage {
+		t.Fatalf("activePage = %q, want the confirm dialog before deleting a branch", r.activePage)
+	}
+	if _, ok := gitBreachBranchRow(r, "feature-x"); !ok {
+		t.Error("feature-x already gone before confirming, want the delete to not have run yet")
+	}
+
+	r.pendingConfirm()
+
+	if _, ok := gitBreachBranchRow(r, "feature-x"); ok {
+		t.Error("feature-x still present after confirming, want the delete to have run")
+	}
+}
+
+// TestOpenGitBreachDeleteBranchDoesNothingOnTheCurrentBranch mirrors
+// TestOpenGitBreachCheckoutDoesNothingOnTheCurrentBranch exactly:
+// deleting the branch you're currently on is never a real action, and
+// git itself would otherwise refuse it with a differently-worded error
+// ("used by worktree") than this no-op guard's own silence.
+func TestOpenGitBreachDeleteBranchDoesNothingOnTheCurrentBranch(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "main")
+	if !ok {
+		t.Fatal("main not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachDeleteBranch()
+
+	if r.activePage == confirmPage {
+		t.Error("activePage = confirmPage, want a no-op for the already-current branch")
+	}
+}
+
+// TestOpenGitBreachDeleteBranchSurfacesGitsOwnRefusal pins that an
+// unmerged branch's own refusal (see git.DeleteBranch's own doc
+// comment) reaches the user as a real error rather than being silently
+// swallowed.
+func TestOpenGitBreachDeleteBranchSurfacesGitsOwnRefusal(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	runGitBreach(t, dir, "checkout", "-q", "-b", "feature-x")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "unmerged change")
+	runGitBreach(t, dir, "checkout", "-q", "main")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	row, ok := gitBreachBranchRow(r, "feature-x")
+	if !ok {
+		t.Fatal("feature-x not found in the Branches table")
+	}
+	r.gitBreachBranchesTable.Select(row, 0)
+
+	r.openGitBreachDeleteBranch()
+	r.pendingConfirm()
+
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want the error overlay for git's own unmerged-branch refusal", r.activePage)
+	}
+	if _, ok := gitBreachBranchRow(r, "feature-x"); !ok {
+		t.Error("feature-x is gone despite git's own refusal, want it to still exist")
+	}
+}
+
 // TestToggleGitBreachFocusCyclesBetweenFilesAndBranches pins "Tab" —
 // gitBreachFocusables' own doc comment on why this is a data-driven
 // list rather than a hardcoded two-way toggle.

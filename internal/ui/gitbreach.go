@@ -313,6 +313,52 @@ func (r *Root) checkoutGitBreachBranch(branch string) {
 	r.showError(r.panel.load(r.panel.path))
 }
 
+// openGitBreachDeleteBranch is "d" on the Branches table — always
+// confirms first, unlike checkout's own "only ask if there's actually
+// something to lose": deleting a branch is itself the irreversible
+// action (the ref disappears outright; a merged branch's own commits
+// stay reachable through whatever merged them, but the branch name
+// itself is gone either way), not something that's only risky in some
+// states the way an uncommitted-changes checkout is. Refuses outright
+// on the current branch before ever calling git.DeleteBranch at all,
+// matching openGitBreachCheckout's own established "a no-op, not an
+// error" convention for the one case where the action makes no sense,
+// rather than letting git's own real but differently-worded refusal
+// ("used by worktree") surface instead.
+func (r *Root) openGitBreachDeleteBranch() {
+	row, _ := r.gitBreachBranchesTable.GetSelection()
+	branch, ok := r.gitBreachBranchAt(row)
+	if !ok || branch.Current {
+		return
+	}
+	r.openConfirm(
+		fmt.Sprintf("Delete branch %q?", branch.Name),
+		"Yes, delete",
+		func() { r.deleteGitBreachBranch(branch.Name) },
+	)
+}
+
+// deleteGitBreachBranch runs the actual delete and reloads — only
+// Branches' own state changes here (unlike checkoutGitBreachBranch,
+// nothing on disk in the active panel's own directory can change from
+// deleting a ref that wasn't checked out to begin with), but
+// reloadGitBreach is still the right call rather than hand-patching
+// gitBreachBranches: the same "re-run the real read, don't just
+// redraw" contract every other git breach action already follows.
+// git branch -d's own refusal on an unmerged branch (see
+// git.DeleteBranch's own doc comment) surfaces as-is via showError,
+// exactly the same way checkoutGitBreachBranch already surfaces git's
+// own refusals rather than silently swallowing them.
+func (r *Root) deleteGitBreachBranch(branch string) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitBreachFetchTimeout)
+	defer cancel()
+	if err := git.DeleteBranch(ctx, r.gitBreachRoot, branch); err != nil {
+		r.showError(fmt.Errorf("git breach: %w", err))
+		return
+	}
+	r.reloadGitBreach()
+}
+
 // gitBreachBranchAt returns gitBreachBranches[row] — unlike Files'
 // own gitBreachRowAt, the Branches table has no section-header rows
 // interspersed (see renderGitBreachBranches), so the table row index

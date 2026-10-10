@@ -610,6 +610,11 @@ var helpText = strings.TrimLeft(`
     Enter    (Branches only) Check out the branch under the cursor —
              confirms first if the working tree isn't clean — only
              shown in the hint bar while Branches has focus
+    d        (Branches only) Delete the branch under the cursor, after
+             confirming — always confirms, unlike Enter, since deleting
+             a branch is itself the irreversible action. Refuses with
+             the same error git itself gives for an unmerged branch
+             (never force-deletes); does nothing on the current branch
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
