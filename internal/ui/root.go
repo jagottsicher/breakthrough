@@ -32,17 +32,18 @@ import (
 )
 
 const (
-	panelPage       = "panel"
-	contextMenuPage = "context-menu"
-	renamePage      = "rename"
-	promptPage      = "prompt"
-	pickerPage      = "owner-group-picker"
-	quitConfirmPage = "quit-confirm"
-	confirmPage     = "confirm"
-	sedReplacePage  = "sed-replace"
-	sedPreviewPage  = "sed-preview"
-	duplicatePage   = "duplicate"
-	rsyncPage       = "rsync"
+	panelPage             = "panel"
+	contextMenuPage       = "context-menu"
+	renamePage            = "rename"
+	promptPage            = "prompt"
+	pickerPage            = "owner-group-picker"
+	quitConfirmPage       = "quit-confirm"
+	confirmPage           = "confirm"
+	activityLogNoticePage = "activity-log-notice"
+	sedReplacePage        = "sed-replace"
+	sedPreviewPage        = "sed-preview"
+	duplicatePage         = "duplicate"
+	rsyncPage             = "rsync"
 	// The three remote-connection dialogs (see connectdialog.go,
 	// hostkeyconfirm.go, connectionmenu.go).
 	connectDialogPage  = "connect-dialog"
@@ -871,6 +872,24 @@ type Root struct {
 	confirmDialogTitleBar *tview.TextView
 	confirmDialogLayout   *tview.Flex
 	pendingConfirm        func()
+
+	// activityLogNotice*/activityLogNoticeDontShowAgain back the
+	// startup notice shown when the activity log falls back to a
+	// per-user directory (see newActivityLogger's own doc comment) —
+	// its own small dialog rather than the generic confirmDialog
+	// (openConfirm is documented as the single entry point for a real
+	// yes/no confirmation; this has no such choice, just an
+	// acknowledgment plus an optional "don't show again" toggle, and
+	// threading that through confirmDialog's own two-item shape would
+	// touch Remove/Empty Trash/both Options resets for one unrelated
+	// caller). List-based with a checkboxText-prefixed toggle item, the
+	// same shape sedFlagsList already establishes for exactly this
+	// reason: tview.Form.AddCheckbox can't keep a background different
+	// from a real field's (see newSedForm's own doc comment).
+	activityLogNoticeLayout        *tview.Flex
+	activityLogNoticeTitleBar      *tview.TextView
+	activityLogNoticeList          *tview.List
+	activityLogNoticeDontShowAgain bool
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -2233,6 +2252,17 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
 
+	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
+	r.activityLogNoticeList.SetHighlightFullLine(true)
+	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
+	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
+	r.activityLogNoticeList.AddItem("OK", "", 0, r.acceptActivityLogNotice)
+	r.activityLogNoticeList.SetDoneFunc(r.acceptActivityLogNotice) // Escape acknowledges too -- there is no real "no" to cancel into
+	r.activityLogNoticeTitleBar = newPlainTitleBar("")
+	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
+		AddItem(r.activityLogNoticeList, 0, 1, true)
+
 	// The Paste conflict dialog (see pasteconflict.go) — one shared List
 	// again, this time with several distinct answers rather than a
 	// single confirm/cancel pair.
@@ -2523,6 +2553,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
+	r.AddPage(activityLogNoticePage, r.activityLogNoticeLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
@@ -2635,8 +2666,23 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	if notice := r.pruneTrashAtStartup(); notice != "" {
 		startupNotices = append(startupNotices, notice)
 	}
-	logger, activityLogNotice := r.newActivityLogger()
+	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
 	r.activityLog = logger
+
+	// The activity-log fallback notice gets its own dialog (see
+	// openActivityLogFallbackNotice's own doc comment) only when it's
+	// the sole startup notice — otherwise it's folded back into the
+	// joined showError below, the same as every other startup notice
+	// already is, rather than risking two overlays racing for the
+	// screen at once. A real activity-log error (logging stays off,
+	// not just relocated) is never dialog-worthy on its own either way
+	// and always joins the others.
+	if len(startupNotices) == 0 && activityLogIsFallback {
+		r.safeGo("startup notice", nil, func() {
+			r.app.QueueUpdateDraw(func() { r.openActivityLogFallbackNotice(activityLogNotice) })
+		})
+		return r, nil
+	}
 	if activityLogNotice != "" {
 		startupNotices = append(startupNotices, activityLogNotice)
 	}

@@ -186,6 +186,10 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.confirmDialogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.confirmDialogTitleBar.SetTextColor(theme.TextColor)
 
+	styleList(r.activityLogNoticeList, theme)
+	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+
 	// styleList(r.pasteConflictDialog, ...) and the title bar's own
 	// coloring were both simply missing before — unlike every other List
 	// in this app, this one was never themed at all. FocusedBackground,
