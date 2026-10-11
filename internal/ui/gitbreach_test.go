@@ -2085,12 +2085,11 @@ func TestGitBreachDiffPageReachesTheLastPageOnUnevenContent(t *testing.T) {
 // (tview itself should never hand one, but a defensive clamp costs
 // nothing) never reports a page past totalPages.
 func TestGitBreachDiffPageStartsAtOneAndNeverExceedsTotal(t *testing.T) {
-	page, totalPages := gitBreachDiffPage(0, 29, 10)
-	if page != 1 {
+	if page, _ := gitBreachDiffPage(0, 29, 10); page != 1 {
 		t.Errorf("page at row 0 = %d, want 1", page)
 	}
 
-	page, totalPages = gitBreachDiffPage(10_000, 29, 10)
+	page, totalPages := gitBreachDiffPage(10_000, 29, 10)
 	if page != totalPages {
 		t.Errorf("page past the real maximum row = %d, want it clamped to %d", page, totalPages)
 	}
