@@ -2278,9 +2278,18 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	r.activityLogNoticeMessageView = tview.NewTextView()
 	r.activityLogNoticeMessageView.SetWrap(true)
+	r.activityLogNoticeMessageView.SetBorderPadding(0, 0, 1, 1)
 
 	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
 	r.activityLogNoticeList.SetHighlightFullLine(true)
+	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
+	// Only highlight the checkbox while the List itself actually holds
+	// focus — the default (always-on) highlight is right for
+	// quitConfirm/confirmDialog, where the List is the dialog's only
+	// focus target, but wrong here: with Cancel/OK as two further Tab
+	// stops, an always-on highlight kept painting this row as if it
+	// still had focus even after Tab moved on to a button.
+	r.activityLogNoticeList.SetSelectedFocusOnly(true)
 	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
 
 	r.activityLogNoticeCancelButton = tview.NewButton("Cancel")
@@ -2296,10 +2305,20 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
 	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
 
+	// Equal proportion (0, 1) each, nothing in between — the same shape
+	// newSearchButtons' own Cancel/Find row already uses, per the user's
+	// own request that this row match that dialog's: Button.Draw already
+	// centers its own label (AlignCenter) within whatever rect it's
+	// given, so two equal halves read as two evenly matched buttons
+	// rather than one left-hugging and one right-hugging a gap.
+	// The 1-column Box on each end is this row's own share of the
+	// dialog-wide left/right margin every other row gets through
+	// SetBorderPadding (a plain Flex has no such built-in padding).
 	buttonRow := tview.NewFlex().
+		AddItem(tview.NewBox(), 1, 0, false).
 		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
+		AddItem(r.activityLogNoticeOKButton, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false)
 
 	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).

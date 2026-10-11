@@ -118,16 +118,20 @@ func (r *Root) openActivityLogFallbackNotice(message string) {
 	// Message area sized exactly the way showError's own errorView
 	// already is: wrapped at errorWidth() (which itself already leaves
 	// room for the one-column padding on each side SetBorderPadding
-	// below adds back), measured via textSize.
+	// above adds back), measured via textSize.
 	wrapped := strings.Join(wrapText(message, r.errorWidth()), "\n")
 	r.activityLogNoticeMessageView.SetText(wrapped)
 	messageWidth, messageHeight := textSize(wrapped)
-	messageWidth += 2 // the border padding's own one column on each side
+	messageWidth += 2 // the message view's own SetBorderPadding(0, 0, 1, 1)
 
-	const buttonRowMinWidth = 28                                     // comfortable room for "Cancel" ... "OK" plus real spacing between them, not just their own label widths
-	headerMinWidth := tview.TaggedStringWidth(" Important note") + 3 // one gap column plus the close glyph's own two-column reservation (see activityLogNoticeTitleBarMouseCapture)
+	listMinWidth := tview.TaggedStringWidth(activityLogNoticeCheckboxText(false)) + 2 // the list's own SetBorderPadding(0, 0, 1, 1)
+	const buttonRowMinWidth = 30                                                      // comfortable room for "Cancel"/"OK" plus real spacing, +2 for buttonRow's own 1-column Box on each end
+	headerMinWidth := tview.TaggedStringWidth(" Important note") + 3                  // one gap column plus the close glyph's own two-column reservation (see activityLogNoticeTitleBarMouseCapture)
 
 	width := messageWidth
+	if listMinWidth > width {
+		width = listMinWidth
+	}
 	if buttonRowMinWidth > width {
 		width = buttonRowMinWidth
 	}
