@@ -1343,8 +1343,8 @@
     },
     {
       "path": "internal/ui/activitylogscreen.go",
-      "size": 16225,
-      "sha256": "6b9bef85681fee33f7bb137da924dca49db823c8ab77be127e9dd1bd632a48d7"
+      "size": 16677,
+      "sha256": "853e2816b5b4313521e51579c0719134eab42e42d9eaf5931e5d3414ce00b09c"
     },
     {
       "path": "internal/ui/activitylogscreen_test.go",
@@ -1583,8 +1583,8 @@
     },
     {
       "path": "internal/ui/firewall.go",
-      "size": 16271,
-      "sha256": "f29b59d49b03a114ff67e2ee555289f85f1da19b325f7724a117988fdc1cc82f"
+      "size": 16728,
+      "sha256": "b635a1c41e6e55ab02dc2334e8d02dd4dc2c66784d1fe284cca49d2eda73c04a"
     },
     {
       "path": "internal/ui/firewall_test.go",
@@ -1723,8 +1723,8 @@
     },
     {
       "path": "internal/ui/logauditscreen.go",
-      "size": 39061,
-      "sha256": "f3b4cdc8f6d646ff04e138d5f2761b339c1d55ee71580192f32c6086e0fd4cc0"
+      "size": 39705,
+      "sha256": "029b7604a5bcc9dde16283c6d91c279f5c1f86269ebfebe502ef9cb2683e18bd"
     },
     {
       "path": "internal/ui/logauditsource.go",
@@ -1768,8 +1768,8 @@
     },
     {
       "path": "internal/ui/messages.go",
-      "size": 25895,
-      "sha256": "9ec360b28cc39c2bc7f3138977b1f507621e633499214b9cdba371811e284f77"
+      "size": 26344,
+      "sha256": "451de90e90e294efcdde57ce3ca51441d1d6d3ff3f7076113150c0acec7c85ad"
     },
     {
       "path": "internal/ui/messages_test.go",
@@ -1778,8 +1778,8 @@
     },
     {
       "path": "internal/ui/mounts.go",
-      "size": 14927,
-      "sha256": "660768f370c5eb35f5b4578158a6417355d5ad66764b268377e36e25c3d369b9"
+      "size": 15374,
+      "sha256": "1921243cd65e4e48a4db7ff9165574f8379b1f78ed803059d8b163d4a4f696d5"
     },
     {
       "path": "internal/ui/mounts_test.go",
@@ -2008,8 +2008,8 @@
     },
     {
       "path": "internal/ui/sessions.go",
-      "size": 19481,
-      "sha256": "07c17aff41e2fdd4d6be9dd18a2186a0bfd57786d4d4c23bbcac7571e0786e43"
+      "size": 19930,
+      "sha256": "d50edaf1458f59fd408a0ccb88a1ae40d9bc4633c0dc3e2536e7f832a6496964"
     },
     {
       "path": "internal/ui/sessions_test.go",
@@ -2138,8 +2138,8 @@
     },
     {
       "path": "internal/ui/theme.go",
-      "size": 39335,
-      "sha256": "1309151342b79af8a1acc1b65a5347267422d67fe87f8bf0397d0beb790780fd"
+      "size": 41474,
+      "sha256": "194a85f8f494d1af1257176297d212bcef464caf3883badde880a0263b5921b7"
     },
     {
       "path": "internal/ui/theme_test.go",
@@ -2148,8 +2148,8 @@
     },
     {
       "path": "internal/ui/toolbox.go",
-      "size": 19219,
-      "sha256": "1bacd32b24c21eb5eb3d8b83e7bc02a811e74e035724d5cc15604157e22f896f"
+      "size": 19667,
+      "sha256": "8192d3c25c7336fa609b933fed78a80f6fa6d0c9eac6844e3db9fcd67739d250"
     },
     {
       "path": "internal/ui/toolbox_test.go",
@@ -45302,35 +45302,35 @@
       "file": "internal/ui/theme.go",
       "name": "styleButton",
       "kind": "function",
-      "line": 703
+      "line": 740
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleList",
       "kind": "function",
-      "line": 718
+      "line": 755
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleInput",
       "kind": "function",
-      "line": 762
+      "line": 799
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDisabledInput",
       "kind": "function",
-      "line": 776
+      "line": 813
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/theme.go",
       "name": "styleDropDown",
       "kind": "function",
-      "line": 785
+      "line": 822
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -47780,5 +47780,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "cf5567898214cb68a2afe91a2c1bc88bdbe3f1a026fb2212d0bbc6d955841c54"
+  "merkle_root": "474d3e8d09aeeecd26ce32d5907a7428a6fce4afb9099746e8bbc1cf74796a0f"
 }
