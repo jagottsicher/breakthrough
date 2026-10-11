@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
+	"github.com/jagottsicher/breakthrough/internal/viewer"
 )
 
 // requireGitForBreach/gitBreachTestEnv/runGitBreach/initGitBreachRepo
@@ -2214,5 +2216,56 @@ func TestGitBreachDiffMarkersStayVisibleAgainstTheirOwnBackground(t *testing.T) 
 	removedBGFit := tcell.FindColor(gitBreachDiffRemovedBackground, pal)
 	if removedMarkerFit == removedBGFit {
 		t.Errorf("removed marker and its own background both degrade to the same %v on a 256-color terminal", removedMarkerFit)
+	}
+}
+
+// gitBreachContrastRatio is the plain WCAG 2.x relative-luminance
+// contrast formula — used here to pin a minimum readability bar for
+// the comment color against Git breach's own degraded diff
+// backgrounds, the same formula (re-implemented, not imported — this
+// package has no existing contrast helper) the standalone spike script
+// that picked #a8a8a8 used to verify it before shipping.
+func gitBreachContrastRatio(c1, c2 tcell.Color) float64 {
+	srgb := func(v int32) float64 {
+		x := float64(v) / 255.0
+		if x <= 0.03928 {
+			return x / 12.92
+		}
+		return math.Pow((x+0.055)/1.055, 2.4)
+	}
+	luminance := func(c tcell.Color) float64 {
+		r, g, b := c.RGB()
+		return 0.2126*srgb(r) + 0.7152*srgb(g) + 0.0722*srgb(b)
+	}
+	l1, l2 := luminance(c1), luminance(c2)
+	if l1 < l2 {
+		l1, l2 = l2, l1
+	}
+	return (l1 + 0.05) / (l2 + 0.05)
+}
+
+// TestGitBreachDiffCommentColorStaysReadableOnA256ColorTerminal pins
+// the user's own second live follow-up to the background-color fix
+// above: a muted comment token must still clear a real readability bar
+// against Git breach's own degraded added/removed backgrounds, not
+// just avoid being literally invisible. tcell.ColorGray (#808080, the
+// previous darkSyntaxPalette comment color) only cleared 2.02:1
+// against the degraded green background — this pins the real floor
+// (3:1, the WCAG large-text/non-text threshold — a comment color was
+// never meant to clear full 4.5:1 body-text contrast) so a future
+// palette tweak can't silently regress this fix the way the original
+// backgrounds themselves regressed unnoticed.
+func TestGitBreachDiffCommentColorStaysReadableOnA256ColorTerminal(t *testing.T) {
+	pal := gitBreach256Palette()
+	commentFit := tcell.FindColor(darkSyntaxPalette[viewer.KindComment], pal)
+	addedBGFit := tcell.FindColor(gitBreachDiffAddedBackground, pal)
+	removedBGFit := tcell.FindColor(gitBreachDiffRemovedBackground, pal)
+
+	const minContrast = 3.0
+	if got := gitBreachContrastRatio(commentFit, addedBGFit); got < minContrast {
+		t.Errorf("degraded comment color vs degraded added background = %.2f, want >= %.1f", got, minContrast)
+	}
+	if got := gitBreachContrastRatio(commentFit, removedBGFit); got < minContrast {
+		t.Errorf("degraded comment color vs degraded removed background = %.2f, want >= %.1f", got, minContrast)
 	}
 }

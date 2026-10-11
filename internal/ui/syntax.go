@@ -27,9 +27,23 @@ type syntaxPalette map[viewer.TokenKind]tcell.Color
 // any one editor theme's own palette — a user coming from vim, nano, or
 // bat should find them unsurprising.
 var darkSyntaxPalette = syntaxPalette{
-	viewer.KindKeyword:    tcell.ColorCornflowerBlue,
-	viewer.KindString:     tcell.ColorDarkSalmon,
-	viewer.KindComment:    tcell.ColorGray,
+	viewer.KindKeyword: tcell.ColorCornflowerBlue,
+	viewer.KindString:  tcell.ColorDarkSalmon,
+	// Brightened from tcell.ColorGray (#808080) after the user's own
+	// live report: on a 256-color terminal, Git breach's own added/
+	// removed diff backgrounds (gitBreachDiffAddedBackground/
+	// gitBreachDiffRemovedBackground) bottom out at #005f00/#5f0000 —
+	// the darkest green/red that still degrades to a real hue instead
+	// of collapsing into the grayscale ramp (see those two colors' own
+	// doc comment) — and #808080 only clears 2.02:1 contrast against
+	// the green one there, well under readable. #a8a8a8 is an exact
+	// 256-palette entry of its own (survives degradation unchanged,
+	// the same way #808080 already did) and clears 3.35:1/5.94:1
+	// against the degraded green/red respectively, while still reading
+	// as a dimmer, muted color against the normal panel background —
+	// verified directly against tcell.FindColor and the real 256-color
+	// palette, not guessed.
+	viewer.KindComment:    tcell.GetColor("#a8a8a8"),
 	viewer.KindNumber:     tcell.ColorMediumPurple,
 	viewer.KindName:       tcell.ColorPaleTurquoise,
 	viewer.KindLiteral:    tcell.ColorGold,
