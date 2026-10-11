@@ -22,11 +22,17 @@ startup files and expands its aliases, whichever shell that actually is
 
 <p align="left">
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20082338.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20082338.png" width="32%"></a>&nbsp;
-  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20090321.png" width="32%"></a>&nbsp;
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20082338.png" width="49%"></a>&nbsp;
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20084756.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20084756.png" width="32%">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20084756.png" width="49%">
+  </a>
+</p>
+
+<p align="left">
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20090321.png" width="49%"></a>&nbsp;
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-13-44.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-13-44.png" width="49%">
   </a>
 </p>
 
@@ -842,12 +848,19 @@ terminal.
   whenever the original line differs from the extracted message.
 - Git breach (`jg`): a multi-pane dashboard for the git repository
   containing the active panel's own current directory, shelling out to
-  the system's own `git` rather than reimplementing it. A Status box
-  (branch, ahead/behind, a one-line summary) sits above Files
-  (staged/unstaged/untracked, conflicts first — Space stages/unstages
-  the row under the cursor), with Branches/Commits/Stash reserved as
-  stub boxes for a later release. The Main pane shows the diff of
-  whichever row in Files the cursor is on; "c" commits whatever is
+  the system's own `git` rather than reimplementing it. Status
+  (branch, ahead/behind, a one-line summary), Files (staged/unstaged/
+  untracked, conflicts first, syntax-colored diffs — Space stages/
+  unstages the row under the cursor), Branches (every local branch,
+  checkout on Enter, delete with "d"), Commits (newest first, colored
+  by author, a lane/branch graph for merges, loads 200 at a time) and
+  Stash (apply with "a", drop with "d") are all live. The Main pane on
+  the right shows whichever side box currently has focus — Files' own
+  diff, an untracked file's raw content, or a Commits/Stash row's full
+  diff — and can take real keyboard focus itself (Right/Enter/Space to
+  jump in, arrow keys or PgUp/PgDn to scroll, Left/Enter/Space/Esc to
+  step back out), remembering each file/commit/stash entry's own
+  scroll position for the whole session. "c" commits whatever is
   currently staged. Local working trees only — there is no
   command-execution channel to run git against a remote session.
 

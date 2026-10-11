@@ -457,6 +457,22 @@ type Settings struct {
 	LogCategoryShell       bool
 	LogCategoryFirewall    bool
 
+	// HideActivityLogFallbackNotice silences the one-time startup
+	// notice that fires when the activity log falls back to a per-user
+	// directory because /var/log/breakthrough isn't writable (not
+	// running as root, no pre-prepared shared group directory — see
+	// activitylog.ResolvePath's own doc comment). Root's own
+	// activityLogFallbackWarned field already keeps that notice from
+	// repeating within one run; this is the same idea persisted across
+	// runs, set by checking "Don't show this again" on the notice
+	// itself rather than hunting for a matching Options toggle first.
+	// False by default — logging to the wrong-looking directory is
+	// worth surfacing at least once. Only gates the benign fallback
+	// case: a real failure to resolve/open the log at all (logging
+	// stays off) is a different, always-shown error, never silenced by
+	// this.
+	HideActivityLogFallbackNotice bool
+
 	// FirewallDefaultDirection/FirewallDefaultAction/
 	// FirewallDefaultProtocol are the Firewall screen's own "Add rule"
 	// form's starting Direction/Action/Protocol — "in" (the default),
@@ -605,15 +621,16 @@ func DefaultSettings() Settings {
 		SearchCaseSensitive: false,
 		SearchSkipHidden:    false,
 
-		LogLevel:               "off",
-		LogCategoryFileOps:     true,
-		LogCategoryPermissions: true,
-		LogCategoryArchive:     true,
-		LogCategoryTextOps:     true,
-		LogCategoryRsync:       true,
-		LogCategoryRemote:      true,
-		LogCategoryShell:       true,
-		LogCategoryFirewall:    true,
+		LogLevel:                      "off",
+		LogCategoryFileOps:            true,
+		LogCategoryPermissions:        true,
+		LogCategoryArchive:            true,
+		LogCategoryTextOps:            true,
+		LogCategoryRsync:              true,
+		LogCategoryRemote:             true,
+		LogCategoryShell:              true,
+		LogCategoryFirewall:           true,
+		HideActivityLogFallbackNotice: false,
 
 		FirewallDefaultDirection: "in",
 		FirewallDefaultAction:    "allow",
@@ -800,6 +817,8 @@ func (s *Settings) apply(key, value string) error {
 		return parseBool(&s.LogCategoryShell)
 	case "log_category_firewall":
 		return parseBool(&s.LogCategoryFirewall)
+	case "hide_activity_log_fallback_notice":
+		return parseBool(&s.HideActivityLogFallbackNotice)
 	case "firewall_default_direction":
 		s.FirewallDefaultDirection = value
 	case "firewall_default_action":

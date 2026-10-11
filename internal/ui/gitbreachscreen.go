@@ -129,7 +129,6 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
 	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) {
-		r.gitBreachDiffView.ScrollToBeginning()
 		r.startGitBreachFilesDiffIfOwner()
 	})
 	// Files, Branches and Commits are this Ausbaustufe's own three real,
@@ -182,7 +181,6 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachCommitsTable.SetSelectable(true, false)
 	r.gitBreachCommitsTable.SetInputCapture(r.captureGitBreachCommitsTableKey)
 	r.gitBreachCommitsTable.SetSelectionChangedFunc(func(row, _ int) {
-		r.gitBreachDiffView.ScrollToBeginning()
 		r.startGitBreachCommitsDiffIfOwner()
 		r.maybeLoadMoreGitBreachCommits(row)
 	})
@@ -200,7 +198,6 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachStashTable.SetSelectable(true, false)
 	r.gitBreachStashTable.SetInputCapture(r.captureGitBreachStashTableKey)
 	r.gitBreachStashTable.SetSelectionChangedFunc(func(row, _ int) {
-		r.gitBreachDiffView.ScrollToBeginning()
 		r.startGitBreachStashDiffIfOwner()
 	})
 	r.gitBreachStashTable.SetFocusFunc(func() {
@@ -473,7 +470,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 	case r.gitBreachFilesTable.HasFocus():
 		entries = append(entries,
 			hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
-			hintKey("Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
 	case r.gitBreachBranchesTable.HasFocus():
 		entries = append(entries,
@@ -482,13 +479,13 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 		)
 	case r.gitBreachCommitsTable.HasFocus():
 		entries = append(entries,
-			hintKey("Enter/Space/Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("Enter/Space/→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
 	case r.gitBreachStashTable.HasFocus():
 		entries = append(entries,
 			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
 			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
-			hintKey("Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+			hintKey("→", "view diff", func(r *Root) { r.activateGitBreachMain() }),
 		)
 	case r.app.GetFocus() == r.gitBreachDiffView:
 		entries = append(entries,
@@ -501,7 +498,7 @@ func (r *Root) gitBreachHintEntries() []listHintEntry {
 				},
 				label: "scroll diff",
 			},
-			hintKey("Left/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
+			hintKey("←/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
 		)
 	}
 	entries = append(entries,
@@ -1301,17 +1298,49 @@ func (r *Root) renderGitBreachDiffHeader(width, height int) {
 		return
 	}
 	row, _ := r.gitBreachDiffView.GetScrollOffset()
-	totalPages := (totalLines + height - 1) / height
-	currentPage := row/height + 1
-	if currentPage > totalPages {
-		currentPage = totalPages
-	}
+	currentPage, totalPages := gitBreachDiffPage(row, totalLines, height)
 	hint := fmt.Sprintf("Page %d/%d ", currentPage, totalPages)
 	padding := width - tview.TaggedStringWidth(title) - tview.TaggedStringWidth(hint)
 	if padding < 0 {
 		padding = 0
 	}
 	r.gitBreachDiffHeader.SetText(title + strings.Repeat(" ", padding) + hint)
+}
+
+// gitBreachDiffPage maps a scroll row to a 1-based "page" number out of
+// totalPages, given the box's own current height — not simply
+// row/height+1, clamped: when totalLines isn't a multiple of height,
+// tview's own scroll offset never goes past totalLines-height (there's
+// nothing further to scroll to), which that naive formula would then
+// report as something short of the real last page, forever out of
+// reach no matter how far down the user scrolls — the user's own
+// explicit report: a 29-line diff at height 10 (3 pages, ceil(29/10))
+// never showing "Page 3/3" because the maximum reachable row (19) is
+// still "page 2" under row/height+1. Instead, row is mapped
+// proportionally across [0, maxRow] onto [1, totalPages], so the true
+// top always reads as page 1 and the true bottom (wherever tview
+// itself clamps scrolling to) always reads as the real last page,
+// reachable by construction — the tradeoff is that a page "boundary"
+// while scrolling line by line no longer falls at an exact multiple of
+// height once totalLines doesn't divide evenly, the same rounding
+// every proportional (not fixed-size) pagination scheme has.
+func gitBreachDiffPage(row, totalLines, height int) (currentPage, totalPages int) {
+	totalPages = (totalLines + height - 1) / height
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	maxRow := totalLines - height
+	if maxRow <= 0 {
+		return 1, totalPages
+	}
+	if row > maxRow {
+		row = maxRow
+	}
+	if row < 0 {
+		row = 0
+	}
+	currentPage = 1 + (row*(totalPages-1)+maxRow/2)/maxRow
+	return currentPage, totalPages
 }
 
 func (r *Root) renderGitBreachCommits() {

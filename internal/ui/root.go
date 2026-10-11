@@ -32,17 +32,18 @@ import (
 )
 
 const (
-	panelPage       = "panel"
-	contextMenuPage = "context-menu"
-	renamePage      = "rename"
-	promptPage      = "prompt"
-	pickerPage      = "owner-group-picker"
-	quitConfirmPage = "quit-confirm"
-	confirmPage     = "confirm"
-	sedReplacePage  = "sed-replace"
-	sedPreviewPage  = "sed-preview"
-	duplicatePage   = "duplicate"
-	rsyncPage       = "rsync"
+	panelPage             = "panel"
+	contextMenuPage       = "context-menu"
+	renamePage            = "rename"
+	promptPage            = "prompt"
+	pickerPage            = "owner-group-picker"
+	quitConfirmPage       = "quit-confirm"
+	confirmPage           = "confirm"
+	activityLogNoticePage = "activity-log-notice"
+	sedReplacePage        = "sed-replace"
+	sedPreviewPage        = "sed-preview"
+	duplicatePage         = "duplicate"
+	rsyncPage             = "rsync"
 	// The three remote-connection dialogs (see connectdialog.go,
 	// hostkeyconfirm.go, connectionmenu.go).
 	connectDialogPage  = "connect-dialog"
@@ -737,6 +738,29 @@ type Root struct {
 	// startGitBreachDiff/cancelGitBreachDiff, the same shape
 	// cancelDetailsGitStatus already establishes.
 	gitBreachDiffCancel context.CancelFunc
+	// gitBreachDiffScroll remembers Main's own last scroll row per
+	// file/commit/stash entry (see gitBreachFileDiffScrollKey and the
+	// "C:"/"S:" key prefixes startGitBreachCommitDiff/
+	// startGitBreachStashDiff build directly) — the user's own explicit
+	// request, after a first, wrong reading of it (reset on every
+	// switch) turned out to be the opposite of what was actually asked:
+	// comparing page 4 of commit A against page 5 of commit B means
+	// going back to A must still show page 4, not the top again.
+	// In-memory only, for this Root's own lifetime (one breakthrough
+	// session, outliving any single "jg" open/close per the user's own
+	// explicit preference for the longer-lived option) — never
+	// persisted to disk.
+	gitBreachDiffScroll map[string]int
+	// gitBreachDiffScrollKey is whichever key Main's own text was last
+	// actually set under (see gitBreachSetDiffText) — not the row the
+	// cursor currently sits on, which can already have moved on again
+	// before a slow fetch for the previous row even lands. This is
+	// exactly why gitBreachSaveDiffScroll, called at the very start of
+	// every startGitBreach*Diff before anything about the old row is
+	// touched, always attributes Main's current scroll position to
+	// whatever content is genuinely still on screen. Empty whenever
+	// nothing with real content is shown (no selection, cancelled).
+	gitBreachDiffScrollKey string
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
@@ -871,6 +895,47 @@ type Root struct {
 	confirmDialogTitleBar *tview.TextView
 	confirmDialogLayout   *tview.Flex
 	pendingConfirm        func()
+
+	// activityLogNotice*/activityLogNoticeDontShowAgain back the
+	// startup notice shown when the activity log falls back to a
+	// per-user directory (see newActivityLogger's own doc comment) —
+	// its own small dialog rather than the generic confirmDialog
+	// (openConfirm is documented as the single entry point for a real
+	// yes/no confirmation shaped as exactly two List items; this one
+	// has a fixed, six-row layout of its own instead: a header bar
+	// ("Important note" plus a clickable "✕", both equivalent to
+	// Cancel), the notice's own message tinted the same
+	// theme.ErrorBackground every other error already uses (see
+	// showError), a blank row, the "Don't show this again" toggle
+	// (checkboxText-prefixed, List-based for the same reason
+	// sedFlagsList already is — tview.Form.AddCheckbox can't keep a
+	// background different from a real field's, see newSedForm's own
+	// doc comment), another blank row, then Cancel and OK side by side
+	// — the one place in this dialog two real buttons share a single
+	// row, so plain tview.Button rather than List items (a List only
+	// ever stacks one choice per row). Cancel and the header's own "✕"
+	// both discard whatever the checkbox was set to; only OK applies
+	// it, the same "Cancel means forget the pending choice" convention
+	// every ordinary dialog already uses, unlike the dialog's own first
+	// cut, before the user's explicit follow-up request for a real
+	// Cancel distinct from OK.
+	activityLogNoticeLayout        *tview.Flex
+	activityLogNoticeTitleBar      *tview.TextView
+	activityLogNoticeMessageView   *tview.TextView
+	activityLogNoticeList          *tview.List
+	activityLogNoticeCancelButton  *tview.Button
+	activityLogNoticeOKButton      *tview.Button
+	activityLogNoticeDontShowAgain bool
+	// activityLogNoticeSpacer1/2 are the blank rows between header/
+	// message/checkbox/buttons — named and styled the same way
+	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// own doc comments) rather than left as anonymous tview.NewBox()
+	// calls, since a plain Box defaults to tview's own built-in
+	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
+	// exactly the kind of mismatch those spacers' own doc comments
+	// already warn about.
+	activityLogNoticeSpacer1 *tview.Box
+	activityLogNoticeSpacer2 *tview.Box
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -2233,6 +2298,68 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
 
+	// Header bar: "Important note" plus a clickable "✕" — both close
+	// exactly like Cancel (see gitBreachBlockFocusSteal's own sibling
+	// pattern elsewhere for "intercept MouseLeftDown, do something with
+	// it" — this one acts instead of swallowing). The glyph's own
+	// column is computed fresh in openActivityLogFallbackNotice's own
+	// SetDrawFunc-free path (this dialog's width never changes after
+	// opening, unlike Git breach's own panes, so a one-time computation
+	// at open time is enough).
+	r.activityLogNoticeTitleBar = newPlainTitleBar("")
+	r.activityLogNoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
+
+	r.activityLogNoticeMessageView = tview.NewTextView()
+	r.activityLogNoticeMessageView.SetWrap(true)
+	r.activityLogNoticeMessageView.SetBorderPadding(0, 0, 1, 1)
+
+	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
+	r.activityLogNoticeList.SetHighlightFullLine(true)
+	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
+	// Only highlight the checkbox while the List itself actually holds
+	// focus — the default (always-on) highlight is right for
+	// quitConfirm/confirmDialog, where the List is the dialog's only
+	// focus target, but wrong here: with Cancel/OK as two further Tab
+	// stops, an always-on highlight kept painting this row as if it
+	// still had focus even after Tab moved on to a button.
+	r.activityLogNoticeList.SetSelectedFocusOnly(true)
+	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
+
+	r.activityLogNoticeCancelButton = tview.NewButton("Cancel")
+	r.activityLogNoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
+	r.activityLogNoticeOKButton = tview.NewButton("OK")
+	r.activityLogNoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
+
+	// Tab/Backtab cycle the three real focus targets (the checkbox
+	// List, Cancel, OK) in a fixed three-way ring — small and fixed
+	// enough that a Git-breach-style data-driven focusables list would
+	// be more machinery than this dialog ever needs.
+	r.activityLogNoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
+	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
+	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
+
+	// Equal proportion (0, 1) each, filling the row edge to edge — the
+	// exact shape newSearchButtons' own Cancel/Find row already uses
+	// (no margin of its own; the row itself spans the full dialog
+	// width), per the user's own explicit request that Cancel/OK match
+	// that row exactly rather than carry their own inset. Button.Draw
+	// already centers its own label (AlignCenter) within whatever rect
+	// it's given, so two equal halves read as two evenly matched
+	// buttons.
+	buttonRow := tview.NewFlex().
+		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
+		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
+
+	r.activityLogNoticeSpacer1 = tview.NewBox()
+	r.activityLogNoticeSpacer2 = tview.NewBox()
+	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
+		AddItem(r.activityLogNoticeMessageView, 0, 1, false).
+		AddItem(r.activityLogNoticeSpacer1, 1, 0, false).
+		AddItem(r.activityLogNoticeList, 1, 0, true).
+		AddItem(r.activityLogNoticeSpacer2, 1, 0, false).
+		AddItem(buttonRow, 1, 0, false)
+
 	// The Paste conflict dialog (see pasteconflict.go) — one shared List
 	// again, this time with several distinct answers rather than a
 	// single confirm/cancel pair.
@@ -2523,6 +2650,7 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(errorPage, r.errorView, false, false)
 	r.AddPage(quitConfirmPage, r.quitConfirmLayout, false, false)
 	r.AddPage(confirmPage, r.confirmDialogLayout, false, false)
+	r.AddPage(activityLogNoticePage, r.activityLogNoticeLayout, false, false)
 	r.AddPage(pasteConflictPage, r.pasteConflictDialogLayout, false, false)
 	r.AddPage(pastePausePage, r.pastePauseDialogLayout, false, false)
 	r.AddPage(bgJobCancelPage, r.bgJobCancelDialogLayout, false, false)
@@ -2635,8 +2763,23 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	if notice := r.pruneTrashAtStartup(); notice != "" {
 		startupNotices = append(startupNotices, notice)
 	}
-	logger, activityLogNotice := r.newActivityLogger()
+	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
 	r.activityLog = logger
+
+	// The activity-log fallback notice gets its own dialog (see
+	// openActivityLogFallbackNotice's own doc comment) only when it's
+	// the sole startup notice — otherwise it's folded back into the
+	// joined showError below, the same as every other startup notice
+	// already is, rather than risking two overlays racing for the
+	// screen at once. A real activity-log error (logging stays off,
+	// not just relocated) is never dialog-worthy on its own either way
+	// and always joins the others.
+	if len(startupNotices) == 0 && activityLogIsFallback {
+		r.safeGo("startup notice", nil, func() {
+			r.app.QueueUpdateDraw(func() { r.openActivityLogFallbackNotice(activityLogNotice) })
+		})
+		return r, nil
+	}
 	if activityLogNotice != "" {
 		startupNotices = append(startupNotices, activityLogNotice)
 	}
