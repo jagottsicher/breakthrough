@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "size": 70109,
-      "sha256": "dd2b9dc958682058b9064c8d1b0ab33207540565f8a4390a15c6af6fe837c5c9"
+      "size": 70601,
+      "sha256": "9d526d796dcda31de888696465234debdb152dd0a9ca71d77a7203f28bc90b53"
     },
     {
       "path": "cmd/breakthrough/debug.go",
@@ -153,8 +153,8 @@
     },
     {
       "path": "docs/user-guide.md",
-      "size": 149198,
-      "sha256": "cd70effa67767a4255e6c4f5f62f3079aace7899c7e5ebaabe363b3fc29c8b27"
+      "size": 149424,
+      "sha256": "f28c0b59d3d4aba7ff5c29188ea17fbdbf531fa265263731b41a4a637eda68c9"
     },
     {
       "path": "docs/whitepaper.md",
@@ -1638,8 +1638,8 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 94052,
-      "sha256": "09cf72cfc4e3ce1dad5e66606e228fe875ac1e47c0e57ba6d5d58f4e48db5111"
+      "size": 94089,
+      "sha256": "08f4f3dd1e3ff2eb8ac240cebb5814f7c360dd9ef17b1045c999ce15da0c693b"
     },
     {
       "path": "internal/ui/help_test.go",
@@ -27991,7 +27991,7 @@
       "name": "aboutText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1516
+      "line": 1517
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -27999,7 +27999,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1539
+      "line": 1540
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28007,7 +28007,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1556
+      "line": 1557
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28015,7 +28015,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1572
+      "line": 1573
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28023,7 +28023,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1592
+      "line": 1593
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28031,7 +28031,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1608
+      "line": 1609
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28039,7 +28039,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1634
+      "line": 1635
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28047,7 +28047,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1664
+      "line": 1665
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28055,7 +28055,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1682
+      "line": 1683
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -47766,5 +47766,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "30be8683e561d2a6b4620fb19178fe75a9a60539ba827ceb32c231267e8bd97d"
+  "merkle_root": "bc34c848b994d6efc003bd38cdba8ea869365b45fe4f5c837b7b302e3a229101"
 }
