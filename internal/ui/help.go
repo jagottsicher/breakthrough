@@ -619,6 +619,14 @@ var helpText = strings.TrimLeft(`
   backs out of the diff, closing the dashboard everywhere else. Tab/
   Shift-Tab from inside the diff continue the same cycle from that
   box's own position, exactly as if pressed from there directly.
+  Selecting a different Files/Commits/Stash row always starts that
+  row's own diff fresh at the top rather than carrying over wherever
+  the previous row happened to be scrolled to; merely leaving and
+  returning to the same still-selected row keeps its own scroll
+  position. Main's own header shows a right-aligned "Page X/Y" while
+  there's real content loaded, X/Y counted in pages of the box's own
+  current height (not raw line numbers) and updating live as the
+  terminal resizes or the diff scrolls.
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on

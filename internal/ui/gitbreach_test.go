@@ -1953,6 +1953,157 @@ func TestCaptureGitBreachMainKeyLetsScrollKeysThrough(t *testing.T) {
 	}
 }
 
+// TestRenderGitBreachDiffHeaderShowsPageHint pins the "Page X/Y" math
+// for the simplest case: scrolled to the very top, total pages is the
+// line count divided by page height, rounded up (ceil), since a
+// partially filled last page — the user's own explicit example, 487
+// lines at 50 rows/page is still 10 pages, not 9.
+func TestRenderGitBreachDiffHeaderShowsPageHint(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	lines := make([]string, 487)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i)
+	}
+	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
+
+	r.renderGitBreachDiffHeader(40, 50)
+
+	got := r.gitBreachDiffHeader.GetText(true)
+	if !strings.Contains(got, "Page 1/10") {
+		t.Errorf("header = %q, want it to contain %q", got, "Page 1/10")
+	}
+}
+
+// TestRenderGitBreachDiffHeaderUpdatesWithScrollOffset pins that the
+// current page follows the real scroll position, not just the total —
+// scrolling to row 100 at 50 rows/page should read as page 3 (rows
+// 100-149 are the third page, 0-indexed row/height + 1).
+func TestRenderGitBreachDiffHeaderUpdatesWithScrollOffset(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	lines := make([]string, 487)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i)
+	}
+	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
+	r.gitBreachDiffView.ScrollTo(100, 0)
+
+	r.renderGitBreachDiffHeader(40, 50)
+
+	got := r.gitBreachDiffHeader.GetText(true)
+	if !strings.Contains(got, "Page 3/10") {
+		t.Errorf("header = %q, want it to contain %q", got, "Page 3/10")
+	}
+}
+
+// TestRenderGitBreachDiffHeaderClampsAtTheLastPage pins that
+// scrolling past what GetScrollOffset would naively divide into a page
+// beyond the real total (tview clamps scroll itself in practice, but
+// the math here must not silently show "page 11/10" if it ever didn't)
+// clamps back down to the real last page instead.
+func TestRenderGitBreachDiffHeaderClampsAtTheLastPage(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	lines := make([]string, 487)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i)
+	}
+	r.gitBreachDiffView.SetText(strings.Join(lines, "\n"))
+	r.gitBreachDiffView.ScrollTo(10000, 0) // far past the real end
+
+	r.renderGitBreachDiffHeader(40, 50)
+
+	got := r.gitBreachDiffHeader.GetText(true)
+	if !strings.Contains(got, "Page 10/10") {
+		t.Errorf("header = %q, want it clamped to %q", got, "Page 10/10")
+	}
+}
+
+// TestRenderGitBreachDiffHeaderHidesHintWithoutRealHeightOrText pins
+// the two "nothing to page through yet" guards: height still zero
+// (before the first real Draw, the same construction-time-placeholder
+// reason every other SetDrawFunc-based header in this package already
+// documents) and an empty diff (nothing loaded/selected).
+func TestRenderGitBreachDiffHeaderHidesHintWithoutRealHeightOrText(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	r.gitBreachDiffView.SetText("some text")
+	r.renderGitBreachDiffHeader(40, 0)
+	if got := r.gitBreachDiffHeader.GetText(true); strings.Contains(got, "Page") {
+		t.Errorf("header = %q, want no page hint with zero height", got)
+	}
+
+	r.gitBreachDiffView.SetText("")
+	r.renderGitBreachDiffHeader(40, 50)
+	if got := r.gitBreachDiffHeader.GetText(true); strings.Contains(got, "Page") {
+		t.Errorf("header = %q, want no page hint with no diff text", got)
+	}
+}
+
+// TestGitBreachSelectingADifferentCommitResetsMainScroll pins the
+// user's own explicit bug report: scrolling into commit A's diff, then
+// selecting a different commit B, must not carry commit A's own scroll
+// position into B's — each row's diff starts fresh at the top rather
+// than remembering a scroll offset across completely different content.
+func TestGitBreachSelectingADifferentCommitResetsMainScroll(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "first")
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "second")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+
+	r.gitBreachDiffView.ScrollTo(50, 0)
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
+		t.Fatalf("setup: ScrollTo(50, 0) left scroll offset at row %d, want 50", row)
+	}
+
+	r.gitBreachCommitsTable.Select(1, 0) // a different commit than row 0
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
+		t.Errorf("scroll offset = %d after selecting a different commit, want 0", row)
+	}
+}
+
+// TestGitBreachRefocusingTheSameRowKeepsMainScroll is the regression
+// guard the other way: merely leaving Main and coming back to the same
+// still-selected row (no row change at all) must not reset the scroll
+// position — only an actual selection change should (see the test
+// above), the exact distinction the user's own bug report drew.
+func TestGitBreachRefocusingTheSameRowKeepsMainScroll(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.activateGitBreachMain()
+	r.gitBreachDiffView.ScrollTo(5, 0)
+
+	r.deactivateGitBreachMain()
+	r.activateGitBreachMain()
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 5 {
+		t.Errorf("scroll offset = %d after refocusing the same row, want 5 (unchanged)", row)
+	}
+}
+
 // TestGitBreachMainGetsFocusStyleWhenActivated pins that Main's own
 // header follows the same focused/InputFocusedBackground vs.
 // unfocused/InputBackground scheme every other box's header already
