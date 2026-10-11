@@ -31,8 +31,8 @@ startup files and expands its aliases, whichever shell that actually is
 <p align="left">
   <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Screenshot%202026-10-02%20090321.png">
     <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Screenshot%202026-10-02%20090321.png" width="49%"></a>&nbsp;
-  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-03-47.png">
-    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-03-47.png" width="49%">
+  <a href="https://github.com/jagottsicher/breakthrough/blob/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-13-44.png">
+    <img src="https://raw.githubusercontent.com/jagottsicher/breakthrough/develop/docs/images/Bildschirmfoto%20vom%202026-10-11%2021-13-44.png" width="49%">
   </a>
 </p>
 
