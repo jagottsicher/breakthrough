@@ -1237,7 +1237,16 @@ func TestGitBreachHintShowsSpaceOnlyWhileFilesHasFocus(t *testing.T) {
 	}
 }
 
-func TestGitBreachHintShowsEnterOnlyWhileBranchesHasFocus(t *testing.T) {
+// TestGitBreachHintShowsEnterOnlyWhileBranchesOrCommitsHasFocus pins
+// both of Enter's two real meanings in this dashboard — checkout in
+// Branches, jump into Main's own diff in Commits (see
+// activateGitBreachMain) — and that Stash, where Enter does nothing,
+// advertises neither. Checks the full combined key label, not just
+// bare "Enter": Commits' own entry is the compound "Enter/Space/Right",
+// which is a different key string entirely from Branches' own bare
+// "Enter" as far as gitBreachHintHasKey's exact-match comparison is
+// concerned.
+func TestGitBreachHintShowsEnterOnlyWhileBranchesOrCommitsHasFocus(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	r := newTestRootForGitBreachDir(t, dir)
@@ -1254,46 +1263,29 @@ func TestGitBreachHintShowsEnterOnlyWhileBranchesHasFocus(t *testing.T) {
 
 	r.toggleGitBreachFocus() // -> Commits
 	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
-		t.Error("hint entries still mention Enter after focus moved to Commits")
+		t.Error(`hint entries should use the compound "Enter/Space/Right" key in Commits, not bare "Enter"`)
+	}
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/Right") {
+		t.Error("hint entries don't mention Enter/Space/Right while Commits has focus")
+	}
+
+	r.toggleGitBreachFocus() // -> Stash
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") || gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/Right") {
+		t.Error("hint entries still mention Enter after focus moved to Stash")
 	}
 }
 
-// TestScrollGitBreachDiffForwardsToTheDiffView pins the actual
-// mechanism behind the user's own explicit reported bug: Main never
-// appears in gitBreachFocusables, so it can never receive real
-// keyboard focus, which is exactly why the mouse wheel was previously
-// the only way to move through a long diff. scrollGitBreachDiff forwards
-// a key event straight to the diff view's own InputHandler regardless
-// of focus — proven here with Home rather than PgUp/PgDn specifically,
-// since PgUp/PgDn's own tview behavior depends on pageSize, which stays
-// zero without a real Draw() cycle (no screen in a unit test); Home
-// unconditionally resets the scroll position regardless of pageSize, so
-// it still proves the event genuinely reaches the TextView's own
-// InputHandler rather than going nowhere.
-func TestScrollGitBreachDiffForwardsToTheDiffView(t *testing.T) {
-	requireGitForBreach(t)
-	dir := initGitBreachRepo(t)
-	r := newTestRootForGitBreachDir(t, dir)
-	r.openGitBreach()
-
-	r.gitBreachDiffView.ScrollTo(50, 0)
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
-		t.Fatalf("setup: ScrollTo(50, 0) left scroll offset at row %d, want 50", row)
-	}
-
-	r.scrollGitBreachDiff(tcell.KeyHome)
-
-	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
-		t.Errorf("scrollGitBreachDiff(KeyHome) left scroll offset at row %d, want 0", row)
-	}
-}
-
-// TestGitBreachTableKeysConsumePageKeys pins the other half: every
-// table's own key capture must swallow PgUp/PgDn (consumed, nil
-// returned) rather than letting them fall through to the table's own
-// default row-selection handling, which has no PgUp/PgDn behavior of
-// its own and would otherwise silently do nothing with the keypress.
-func TestGitBreachTableKeysConsumePageKeys(t *testing.T) {
+// TestGitBreachTableKeysPassThroughPageKeys pins the inverted contract
+// (see CLAUDE.md's own "replace, don't just delete, a changed contract"
+// rule): PgUp/PgDn used to be swallowed by every table and forwarded
+// straight to Main regardless of which box had focus (scrollGitBreachDiff,
+// now removed) — the workaround for Main never being a real focus
+// target at all. Now that Main can hold real keyboard focus on its own
+// (see activateGitBreachMain), a list box's own PgUp/PgDn goes back to
+// meaning what tview.Table already does with it natively: page through
+// the table's own rows. Each capture must therefore let the event
+// through unchanged (non-nil, same key) instead of consuming it.
+func TestGitBreachTableKeysPassThroughPageKeys(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
@@ -1315,8 +1307,9 @@ func TestGitBreachTableKeysConsumePageKeys(t *testing.T) {
 			r.openGitBreach()
 
 			for _, key := range []tcell.Key{tcell.KeyPgUp, tcell.KeyPgDn} {
-				if got := tc.capture(r)(tcell.NewEventKey(key, 0, tcell.ModNone)); got != nil {
-					t.Errorf("capture(%v) = %v, want nil (consumed)", key, got)
+				event := tcell.NewEventKey(key, 0, tcell.ModNone)
+				if got := tc.capture(r)(event); got != event {
+					t.Errorf("capture(%v) = %v, want the same event passed through unchanged", key, got)
 				}
 			}
 		})
@@ -1610,5 +1603,377 @@ func TestOpenGitBreachStashApplyDoesNothingWithNoStash(t *testing.T) {
 
 	if r.activePage == confirmPage {
 		t.Error("activePage = confirmPage, want a no-op with no stash entries")
+	}
+}
+
+// TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus pins
+// Right as the one activation key that applies uniformly to every box
+// with a real diff of its own — Files, Commits and Stash — leaving
+// Branches out (see its own dedicated test below), since Branches
+// never owns Main's content in the first place (gitBreachMainOwnerKind
+// has no Branches value at all).
+func TestActivateGitBreachMainFromFilesCommitsStashGivesMainFocus(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	for _, tc := range []struct {
+		name    string
+		focus   func(r *Root) tview.Primitive
+		capture func(r *Root) func(*tcell.EventKey) *tcell.EventKey
+	}{
+		{"Files", func(r *Root) tview.Primitive { return r.gitBreachFilesTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachFilesTableKey }},
+		{"Commits", func(r *Root) tview.Primitive { return r.gitBreachCommitsTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachCommitsTableKey }},
+		{"Stash", func(r *Root) tview.Primitive { return r.gitBreachStashTable }, func(r *Root) func(*tcell.EventKey) *tcell.EventKey { return r.captureGitBreachStashTableKey }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newTestRootForGitBreachDir(t, dir)
+			r.openGitBreach()
+			r.app.SetFocus(tc.focus(r))
+
+			if got := tc.capture(r)(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); got != nil {
+				t.Errorf("capture(KeyRight) = %v, want nil (consumed)", got)
+			}
+			if !r.gitBreachDiffView.HasFocus() {
+				t.Error("Right did not move keyboard focus to Main")
+			}
+		})
+	}
+}
+
+// TestGitBreachRightArrowFromBranchesDoesNothing pins the one box
+// explicitly excluded from activateGitBreachMain: Branches never owns
+// Main's content (no diff to jump into), so Right there is left
+// unhandled and falls through to tview.Table's own default — which
+// does nothing useful for a single-selectable-column table, but
+// crucially does NOT move keyboard focus away from Branches.
+func TestGitBreachRightArrowFromBranchesDoesNothingSpecial(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+
+	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+
+	if r.gitBreachDiffView.HasFocus() {
+		t.Error("Right from Branches moved focus to Main, but Branches never owns a diff")
+	}
+	if !r.gitBreachBranchesTable.HasFocus() {
+		t.Error("Right from Branches should leave focus on Branches")
+	}
+}
+
+// TestGitBreachEnterAndSpaceActivateMainOnlyFromCommits pins the
+// collision resolution from the user's own explicit design chat: Space
+// already stages a Files row and Enter already checks out a Branches
+// row, so neither gains a second meaning there; Stash's own diff is
+// already fully visible on selection with "a"/"d" as its real actions,
+// so the user confirmed Enter/Space would have nothing to add there
+// either. Commits is the one box where both are free.
+func TestGitBreachEnterAndSpaceActivateMainOnlyFromCommits(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+
+	for _, key := range []tcell.Key{tcell.KeyEnter, tcell.KeyRune} {
+		event := tcell.NewEventKey(key, ' ', tcell.ModNone)
+		if key != tcell.KeyRune {
+			event = tcell.NewEventKey(key, 0, tcell.ModNone)
+		}
+
+		r := newTestRootForGitBreachDir(t, dir)
+		r.openGitBreach()
+		r.app.SetFocus(r.gitBreachCommitsTable)
+
+		r.captureGitBreachCommitsTableKey(event)
+
+		if !r.gitBreachDiffView.HasFocus() {
+			t.Errorf("key %v from Commits did not activate Main", key)
+		}
+	}
+}
+
+// TestGitBreachSpaceStillStagesInFilesNotActivateMain and its Branches
+// counterpart below are the regression guard for the collision
+// resolution above: wiring Enter/Space into Commits must not have
+// changed what either key already does in Files/Branches.
+func TestGitBreachSpaceStillStagesInFilesNotActivateMain(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachFilesTable)
+
+	r.captureGitBreachFilesTableKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+
+	if r.gitBreachDiffView.HasFocus() {
+		t.Error("Space in Files activated Main instead of staging — collides with its own existing meaning")
+	}
+}
+
+func TestGitBreachEnterStillChecksOutInBranchesNotActivateMain(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+	runGitBreach(t, dir, "branch", "feature-x")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachBranchesTable)
+	r.gitBreachBranchesTable.Select(1, 0) // row 0 is the current branch; pick a different one
+
+	r.captureGitBreachBranchesTableKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if r.gitBreachDiffView.HasFocus() {
+		t.Error("Enter in Branches activated Main instead of checking out — collides with its own existing meaning")
+	}
+}
+
+// TestCaptureGitBreachMainKeyReturnsFocusToTheOwner pins the uniform
+// "way back" from Main — Left, Enter and Space all return focus to
+// whichever box activated it (gitBreachMainOwner), regardless of which
+// key was used to get in.
+func TestCaptureGitBreachMainKeyReturnsFocusToTheOwner(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	for _, key := range []tcell.Key{tcell.KeyLeft, tcell.KeyEnter, tcell.KeyRune} {
+		event := tcell.NewEventKey(key, 0, tcell.ModNone)
+		if key == tcell.KeyRune {
+			event = tcell.NewEventKey(key, ' ', tcell.ModNone)
+		}
+
+		r := newTestRootForGitBreachDir(t, dir)
+		r.openGitBreach()
+		r.app.SetFocus(r.gitBreachCommitsTable)
+		r.activateGitBreachMain()
+		if !r.gitBreachDiffView.HasFocus() {
+			t.Fatalf("setup: activateGitBreachMain didn't give Main focus for key %v", key)
+		}
+
+		if got := r.captureGitBreachMainKey(event); got != nil {
+			t.Errorf("captureGitBreachMainKey(%v) = %v, want nil (consumed)", key, got)
+		}
+		if !r.gitBreachCommitsTable.HasFocus() {
+			t.Errorf("key %v from Main didn't return focus to Commits (the owner)", key)
+		}
+	}
+}
+
+// TestCaptureGitBreachMainKeyEscReturnsToOwnerWithoutClosing pins the
+// one deliberately context-dependent key in this dashboard: Esc closes
+// Git breach everywhere except while Main has focus, where it only
+// steps back out of the diff — confirmed here does NOT close
+// (activePage stays unchanged / Git breach stays open) and DOES return
+// focus to the owner, both in the same assertion the other three keys
+// above already share.
+func TestCaptureGitBreachMainKeyEscReturnsToOwnerWithoutClosing(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.activateGitBreachMain()
+
+	if got := r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)); got != nil {
+		t.Errorf("captureGitBreachMainKey(Esc) = %v, want nil (consumed)", got)
+	}
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Error("Esc from Main didn't return focus to Commits")
+	}
+	if r.activePage != gitBreachPage {
+		t.Error("Esc from Main closed Git breach entirely — it should only back out of the diff")
+	}
+}
+
+// TestCaptureGitBreachMainKeyEscDifferentFromListBoxEsc is the
+// companion check from the other side: Esc on any of the four list
+// boxes still closes Git breach exactly as before, unaffected by Esc's
+// new, Main-only meaning.
+func TestCaptureGitBreachMainKeyEscDifferentFromListBoxEsc(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+
+	r.captureGitBreachCommitsTableKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+
+	if r.activePage == gitBreachPage {
+		t.Error("Esc from Commits (a list box) should still close Git breach")
+	}
+}
+
+// TestCaptureGitBreachMainKeyTabAdvancesFromTheOwnersPosition and its
+// Shift-Tab counterpart below pin the "Main sits spatially at its
+// owner's position in the ring" model: Tab/Shift-Tab from Main behave
+// exactly as if pressed from the owning box itself, continuing the
+// cycle rather than resetting it.
+func TestCaptureGitBreachMainKeyTabAdvancesFromTheOwnersPosition(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable) // gitBreachFocusables index 2
+	r.activateGitBreachMain()
+
+	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	if !r.gitBreachStashTable.HasFocus() {
+		t.Error("Tab from Main (owned by Commits) should land on Stash, the next box after Commits")
+	}
+}
+
+func TestCaptureGitBreachMainKeyBacktabRetreatsFromTheOwnersPosition(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable) // gitBreachFocusables index 2
+	r.activateGitBreachMain()
+
+	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+
+	if !r.gitBreachBranchesTable.HasFocus() {
+		t.Error("Shift-Tab from Main (owned by Commits) should land on Branches, the box before Commits")
+	}
+}
+
+// TestToggleGitBreachFocusFromMainUsesTheOwnersPosition and its
+// reverse counterpart pin the exact same owner-relative behavior
+// reached through the shared toggleGitBreachFocus/
+// reverseToggleGitBreachFocus functions directly (real Tab/Shift-Tab
+// presses on any other box already go through these, so this is the
+// same code path, not a separate one), using Stash as the owner this
+// time to also prove it isn't hardcoded to Commits.
+func TestToggleGitBreachFocusFromMainUsesTheOwnersPosition(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable) // gitBreachFocusables index 3
+	r.activateGitBreachMain()
+
+	r.toggleGitBreachFocus()
+
+	if !r.gitBreachFilesTable.HasFocus() {
+		t.Error("Tab from Main (owned by Stash) should wrap to Files, the box after Stash")
+	}
+}
+
+func TestReverseToggleGitBreachFocusFromMainUsesTheOwnersPosition(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable) // gitBreachFocusables index 3
+	r.activateGitBreachMain()
+
+	r.reverseToggleGitBreachFocus()
+
+	if !r.gitBreachCommitsTable.HasFocus() {
+		t.Error("Shift-Tab from Main (owned by Stash) should land on Commits, the box before Stash")
+	}
+}
+
+// TestCaptureGitBreachMainKeyCommitAndReloadWorkFromMainToo pins "c"
+// and "r" as the two keys already documented as focus-independent
+// everywhere else in this dashboard — Main is now a real focus target
+// too, so both must keep working from there instead of silently going
+// dead the moment the cursor is actually reading a diff.
+func TestCaptureGitBreachMainKeyCommitAndReloadWorkFromMainToo(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+	r.activateGitBreachMain()
+
+	r.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
+	if r.activePage != promptPage {
+		t.Error(`"c" from Main didn't open the commit prompt`)
+	}
+
+	r2 := newTestRootForGitBreachDir(t, dir)
+	r2.openGitBreach()
+	r2.app.SetFocus(r2.gitBreachCommitsTable)
+	r2.activateGitBreachMain()
+
+	before := len(r2.gitBreachCommits)
+	r2.captureGitBreachMainKey(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModNone))
+	if len(r2.gitBreachCommits) != before {
+		t.Error(`"r" from Main should still reload without erroring`)
+	}
+}
+
+// TestCaptureGitBreachMainKeyLetsScrollKeysThrough pins the "only
+// override what actually means something different here" contract:
+// Up/Down/PgUp/PgDn and Right must all fall through unchanged to
+// tview.TextView's own already-correct scrolling, not get swallowed by
+// this capture function the way Left/Enter/Space/Esc/Tab/Backtab/c/r
+// deliberately are.
+func TestCaptureGitBreachMainKeyLetsScrollKeysThrough(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+
+	for _, key := range []tcell.Key{tcell.KeyUp, tcell.KeyDown, tcell.KeyPgUp, tcell.KeyPgDn, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd} {
+		event := tcell.NewEventKey(key, 0, tcell.ModNone)
+		if got := r.captureGitBreachMainKey(event); got != event {
+			t.Errorf("captureGitBreachMainKey(%v) = %v, want the same event passed through unchanged", key, got)
+		}
+	}
+}
+
+// TestGitBreachMainGetsFocusStyleWhenActivated pins that Main's own
+// header follows the same focused/InputFocusedBackground vs.
+// unfocused/InputBackground scheme every other box's header already
+// gets from styleGitBreachFocus — without this, focus moving into the
+// diff pane would be invisible beyond the selected row staying
+// highlighted, since Main isn't one of gitBreachFocusables' own
+// entries and so isn't covered by the existing per-box FocusFunc loop.
+func TestGitBreachMainGetsFocusStyleWhenActivated(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachCommitsTable)
+
+	unfocused := r.gitBreachDiffHeader.GetBackgroundColor()
+
+	r.activateGitBreachMain()
+
+	if r.gitBreachDiffHeader.GetBackgroundColor() == unfocused {
+		t.Error("Main's own header background didn't change when it gained keyboard focus")
 	}
 }

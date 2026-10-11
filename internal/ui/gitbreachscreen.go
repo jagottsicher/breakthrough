@@ -176,12 +176,28 @@ func (r *Root) newGitBreachScreen() {
 	// through), not left as plain text.
 	r.gitBreachDiffView.SetDynamicColors(true)
 	r.gitBreachDiffView.SetScrollable(true)
+	r.gitBreachDiffView.SetInputCapture(r.captureGitBreachMainKey)
+	// Main is reachable via Right/Enter/Space (see
+	// activateGitBreachMain) and, once focused, styled/hinted the same
+	// as the four real gitBreachFocusables entries — it's deliberately
+	// still not one of them itself (see toggleGitBreachFocus's own
+	// owner-relative handling for why Tab/Shift-Tab from here still
+	// work correctly).
+	r.gitBreachDiffView.SetFocusFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+		r.refreshGitBreachHint()
+	})
+	r.gitBreachDiffView.SetBlurFunc(func() {
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, false)
+	})
 	r.gitBreachDiffHeader.SetMouseCapture(gitBreachBlockFocusSteal)
 	// The diff view's own MouseLeftDown is blocked the same as every
 	// other passive box's (see gitBreachBlockFocusSteal), but every
 	// other mouse action still passes through unchanged — the wheel
 	// scroll a long diff needs still works without ever taking
-	// keyboard focus away from Files.
+	// keyboard focus away from Files. Mouse-click focus on Main itself
+	// is a later Ausbaustufe (keyboard-only for this one — see
+	// activateGitBreachMain).
 	r.gitBreachDiffView.SetMouseCapture(gitBreachBlockFocusSteal)
 
 	r.gitBreachHint = tview.NewTextView()
@@ -361,12 +377,17 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	r.gitBreachCommitsTable.SetSelectedStyle(selStyle)
 	r.gitBreachStashTable.SetSelectedStyle(selStyle)
 
-	// Re-assert whichever of Files/Branches actually has real keyboard
-	// focus right now on top of the uniform "inactive" pass above — the
-	// same "a live theme switch must not silently lose a focus-
-	// dependent look" case this function's own doc comment already
-	// gives, now checked for both of this Ausbaustufe's own real boxes
-	// instead of just Files.
+	// Re-assert whichever box actually has real keyboard focus right now
+	// on top of the uniform "inactive" pass above — the same "a live
+	// theme switch must not silently lose a focus-dependent look" case
+	// this function's own doc comment already gives. Main included: it
+	// can hold real focus too (see activateGitBreachMain) but is
+	// deliberately never one of gitBreachFocusables' own entries, so it
+	// needs its own explicit check here rather than being covered by
+	// the loop below.
+	if r.app.GetFocus() == r.gitBreachDiffView {
+		r.styleGitBreachFocus(r.gitBreachDiffHeader, r.gitBreachDiffView, true)
+	}
 	for _, f := range r.gitBreachFocusables() {
 		if f.body.HasFocus() {
 			r.styleGitBreachFocus(f.header, f.body, true)
@@ -378,50 +399,67 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 
 // gitBreachHintEntries builds the hint bar's own entries for whichever
 // box currently has real keyboard focus — per the user's own explicit
-// point: Space (stage/unstage) only ever acts on a Files row, and Enter
-// only ever checks out a Branches row, so showing either one while a
-// different box has focus advertised a key the keyboard would then do
-// nothing with. "c" (commit) is different: it commits whatever is
-// already staged, which has nothing to do with which row is currently
-// selected anywhere, so it now works regardless of focus (see its own
-// handling added to every table's own InputCapture) and stays in the
-// hint bar unconditionally, same as "r"/Tab/Escape, which were never
-// box-specific to begin with. PgUp/PgDn (see scrollGitBreachDiff) are
-// the same way: they page the Main — Diff box regardless of which of
-// the four side boxes has focus, since Main itself is never a
-// gitBreachFocusables entry and so can never be "the box that's
-// focused" in the first place.
+// point: Space (stage/unstage) only ever acts on a Files row, Enter
+// only ever checks out a Branches row, and Enter/Space/Right only ever
+// jump into Main from Commits specifically (see activateGitBreachMain's
+// own doc comment for why Files/Stash don't also get Enter/Space), so
+// advertising any of them while a different box has focus would show a
+// key the keyboard wouldn't actually do that with. "c" (commit) and "r"
+// (reload) are different: neither depends on which row is selected
+// anywhere, so both work regardless of focus (see their own handling in
+// every table's and Main's own InputCapture) and stay in the hint bar
+// unconditionally, same as Tab. Esc is the one entry whose own label
+// changes instead of merely appearing/disappearing: it closes Git
+// breach everywhere except while Main has focus, where it only steps
+// back out of the diff (see captureGitBreachMainKey's own doc comment).
 func (r *Root) gitBreachHintEntries() []listHintEntry {
 	entries := []listHintEntry{
 		hintKey("Tab/Shift-Tab", "switch box", func(r *Root) { r.toggleGitBreachFocus() }),
 	}
-	if r.gitBreachFilesTable.HasFocus() {
-		entries = append(entries, hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }))
-	}
-	if r.gitBreachBranchesTable.HasFocus() {
+	switch {
+	case r.gitBreachFilesTable.HasFocus():
+		entries = append(entries,
+			hintKey("Space", "stage/unstage", func(r *Root) { r.toggleGitBreachStage() }),
+			hintKey("Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+		)
+	case r.gitBreachBranchesTable.HasFocus():
 		entries = append(entries,
 			hintKey("Enter", "checkout", func(r *Root) { r.openGitBreachCheckout() }),
 			hintKey("d", "delete branch", func(r *Root) { r.openGitBreachDeleteBranch() }),
 		)
-	}
-	if r.gitBreachStashTable.HasFocus() {
+	case r.gitBreachCommitsTable.HasFocus():
+		entries = append(entries,
+			hintKey("Enter/Space/Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+		)
+	case r.gitBreachStashTable.HasFocus():
 		entries = append(entries,
 			hintKey("a", "apply stash", func(r *Root) { r.openGitBreachStashApply() }),
 			hintKey("d", "drop stash", func(r *Root) { r.openGitBreachStashDrop() }),
+			hintKey("Right", "view diff", func(r *Root) { r.activateGitBreachMain() }),
+		)
+	case r.app.GetFocus() == r.gitBreachDiffView:
+		entries = append(entries,
+			listHintEntry{
+				keys: []listHintKey{
+					{"↑", simulateKeyOnFocused(tcell.KeyUp)},
+					{"↓", simulateKeyOnFocused(tcell.KeyDown)},
+					{"PgUp", simulateKeyOnFocused(tcell.KeyPgUp)},
+					{"PgDn", simulateKeyOnFocused(tcell.KeyPgDn)},
+				},
+				label: "scroll diff",
+			},
+			hintKey("Left/Enter/Space", "back", func(r *Root) { r.deactivateGitBreachMain() }),
 		)
 	}
 	entries = append(entries,
-		listHintEntry{
-			keys: []listHintKey{
-				{"PgUp", func(r *Root) { r.scrollGitBreachDiff(tcell.KeyPgUp) }},
-				{"PgDn", func(r *Root) { r.scrollGitBreachDiff(tcell.KeyPgDn) }},
-			},
-			label: "scroll diff",
-		},
 		hintKey("c", "commit", func(r *Root) { r.openGitBreachCommitPrompt() }),
 		hintKey("r", "reload", func(r *Root) { r.reloadGitBreach() }),
-		hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }),
 	)
+	if r.app.GetFocus() == r.gitBreachDiffView {
+		entries = append(entries, hintKey("Esc", "back", func(r *Root) { r.deactivateGitBreachMain() }))
+	} else {
+		entries = append(entries, hintKey("Esc", "close", func(r *Root) { r.closeGitBreach() }))
+	}
 	return entries
 }
 
@@ -434,25 +472,6 @@ func (r *Root) refreshGitBreachHint() {
 	hintText, hintSpans := buildListHint(r.theme, r.gitBreachHintEntries())
 	r.gitBreachHint.SetText(hintText)
 	r.gitBreachHintSpans = hintSpans
-}
-
-// scrollGitBreachDiff pages the Main — Diff box up/down without ever
-// giving it real keyboard focus — the user's own explicit reported bug:
-// Main never appears in gitBreachFocusables (it has no row-navigable
-// content of its own; it only ever mirrors whichever side box is
-// active, see gitBreachMainOwner), so Tab never lands on it and the
-// mouse wheel was the only way to move through a long diff. Forwarded
-// straight to tview.TextView's own InputHandler rather than
-// reimplementing scroll math here: that already knows how to clamp at
-// the top/end and honors pageSize, exactly the same scrolling a real
-// click-to-focus-then-PgUp/PgDn would do if Main could ever be focused
-// at all — this just makes that same, already-correct behavior
-// reachable without taking focus away from whichever box the cursor is
-// actually navigating.
-func (r *Root) scrollGitBreachDiff(key tcell.Key) {
-	if h := r.gitBreachDiffView.InputHandler(); h != nil {
-		h(tcell.NewEventKey(key, 0, tcell.ModNone), func(tview.Primitive) {})
-	}
 }
 
 // gitBreachFocusable pairs one box's own header with its body — both
@@ -498,6 +517,10 @@ func (r *Root) toggleGitBreachFocus() {
 	if len(focusables) == 0 {
 		return
 	}
+	if r.app.GetFocus() == r.gitBreachDiffView {
+		r.app.SetFocus(focusables[(r.gitBreachMainOwnerIndex()+1)%len(focusables)].body)
+		return
+	}
 	for i, f := range focusables {
 		if f.body.HasFocus() {
 			r.app.SetFocus(focusables[(i+1)%len(focusables)].body)
@@ -515,6 +538,11 @@ func (r *Root) reverseToggleGitBreachFocus() {
 	if len(focusables) == 0 {
 		return
 	}
+	if r.app.GetFocus() == r.gitBreachDiffView {
+		i := r.gitBreachMainOwnerIndex()
+		r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+		return
+	}
 	for i, f := range focusables {
 		if f.body.HasFocus() {
 			r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
@@ -522,6 +550,94 @@ func (r *Root) reverseToggleGitBreachFocus() {
 		}
 	}
 	r.app.SetFocus(focusables[len(focusables)-1].body)
+}
+
+// gitBreachMainOwnerIndex maps gitBreachMainOwner to its own position
+// in gitBreachFocusables' own fixed order (Files, Branches, Commits,
+// Stash) — Tab/Shift-Tab from Main (see captureGitBreachMainKey) step
+// from here exactly as if they'd been pressed from the owning box
+// itself, the same "Main sits spatially at its owner's position in the
+// ring" model toggleGitBreachFocus/reverseToggleGitBreachFocus's own
+// Main-focused branch already relies on. Must stay in sync with
+// gitBreachFocusables' own order; there's no Branches case since
+// Branches never owns Main (see gitBreachMainOwnerKind) and so can
+// never be the value read here.
+func (r *Root) gitBreachMainOwnerIndex() int {
+	switch r.gitBreachMainOwner {
+	case gitBreachMainOwnerCommits:
+		return 2
+	case gitBreachMainOwnerStash:
+		return 3
+	default: // gitBreachMainOwnerFiles
+		return 0
+	}
+}
+
+// activateGitBreachMain gives the Main — Diff box real keyboard focus
+// — reachable via Right from Files/Commits/Stash (wherever there's a
+// diff to look at) and additionally via Enter/Space from Commits only:
+// Space already stages a row in Files, and Stash's own diff is already
+// fully visible the moment a row is selected with "a"/"d" as its real
+// actions, so a second way in would add nothing there — Commits is the
+// one box with neither collision nor an already-visible full diff
+// worth jumping into. Main deliberately never becomes a
+// gitBreachFocusables entry of its own; it's reached spatially instead,
+// the same way lazygit's own diff pane works, with
+// deactivateGitBreachMain as the way back.
+func (r *Root) activateGitBreachMain() {
+	r.app.SetFocus(r.gitBreachDiffView)
+}
+
+// deactivateGitBreachMain returns focus to whichever box currently
+// owns Main's content (gitBreachMainOwner) — Left, Enter, Space or Esc
+// while Main has focus (see captureGitBreachMainKey), the uniform way
+// back regardless of which key originally activated Main.
+func (r *Root) deactivateGitBreachMain() {
+	r.app.SetFocus(r.gitBreachFocusables()[r.gitBreachMainOwnerIndex()].body)
+}
+
+// captureGitBreachMainKey is Main's own InputCapture, once it can
+// actually hold real keyboard focus. Only the keys that mean something
+// different here than tview.TextView's own defaults are intercepted:
+// Left/Enter/Space/Esc leave (Esc leaves without closing Git breach,
+// unlike Esc everywhere else in this dashboard — the one
+// context-dependent exception, since here it's "back out of the diff",
+// not "close the dashboard"), Tab/Backtab continue the ring from the
+// owning box's own position, "c"/"r" keep working here too since both
+// are already documented as focus-independent. Everything else
+// (Up/Down/PgUp/PgDn/Right/Home/End and TextView's own vim-style
+// h/j/k/l/g/G) is left untouched and falls through to
+// tview.TextView's own already-correct scrolling — no forwarding hack
+// needed now that Main can be the real focus target directly (compare
+// the pre-focus-model approach this superseded, scrollGitBreachDiff,
+// now removed entirely).
+func (r *Root) captureGitBreachMainKey(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyEscape, tcell.KeyEnter, tcell.KeyLeft:
+		r.deactivateGitBreachMain()
+		return nil
+	case tcell.KeyTab:
+		r.app.SetFocus(r.gitBreachFocusables()[(r.gitBreachMainOwnerIndex()+1)%len(r.gitBreachFocusables())].body)
+		return nil
+	case tcell.KeyBacktab:
+		focusables := r.gitBreachFocusables()
+		i := r.gitBreachMainOwnerIndex()
+		r.app.SetFocus(focusables[(i-1+len(focusables))%len(focusables)].body)
+		return nil
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case ' ':
+			r.deactivateGitBreachMain()
+			return nil
+		case 'c':
+			r.openGitBreachCommitPrompt()
+			return nil
+		case 'r':
+			r.reloadGitBreach()
+			return nil
+		}
+	}
+	return event
 }
 
 // captureGitBreachFilesTableKey: Tab switches to the next box, Space
@@ -546,8 +662,8 @@ func (r *Root) captureGitBreachFilesTableKey(event *tcell.EventKey) *tcell.Event
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
-		r.scrollGitBreachDiff(event.Key())
+	if event.Key() == tcell.KeyRight {
+		r.activateGitBreachMain()
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
@@ -582,10 +698,6 @@ func (r *Root) captureGitBreachBranchesTableKey(event *tcell.EventKey) *tcell.Ev
 	}
 	if event.Key() == tcell.KeyBacktab {
 		r.reverseToggleGitBreachFocus()
-		return nil
-	}
-	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
-		r.scrollGitBreachDiff(event.Key())
 		return nil
 	}
 	if event.Key() == tcell.KeyEnter {
@@ -644,12 +756,15 @@ func (r *Root) captureGitBreachCommitsTableKey(event *tcell.EventKey) *tcell.Eve
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
-		r.scrollGitBreachDiff(event.Key())
+	if event.Key() == tcell.KeyRight || event.Key() == tcell.KeyEnter {
+		r.activateGitBreachMain()
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
+		case ' ':
+			r.activateGitBreachMain()
+			return nil
 		case 'r':
 			r.reloadGitBreach()
 			return nil
@@ -690,8 +805,8 @@ func (r *Root) captureGitBreachStashTableKey(event *tcell.EventKey) *tcell.Event
 		r.reverseToggleGitBreachFocus()
 		return nil
 	}
-	if event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyPgDn {
-		r.scrollGitBreachDiff(event.Key())
+	if event.Key() == tcell.KeyRight {
+		r.activateGitBreachMain()
 		return nil
 	}
 	if event.Key() == tcell.KeyRune {
