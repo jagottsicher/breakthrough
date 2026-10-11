@@ -1244,7 +1244,7 @@ func TestGitBreachHintShowsSpaceOnlyWhileFilesHasFocus(t *testing.T) {
 // Branches, jump into Main's own diff in Commits (see
 // activateGitBreachMain) — and that Stash, where Enter does nothing,
 // advertises neither. Checks the full combined key label, not just
-// bare "Enter": Commits' own entry is the compound "Enter/Space/Right",
+// bare "Enter": Commits' own entry is the compound "Enter/Space/→",
 // which is a different key string entirely from Branches' own bare
 // "Enter" as far as gitBreachHintHasKey's exact-match comparison is
 // concerned.
@@ -1265,14 +1265,14 @@ func TestGitBreachHintShowsEnterOnlyWhileBranchesOrCommitsHasFocus(t *testing.T)
 
 	r.toggleGitBreachFocus() // -> Commits
 	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") {
-		t.Error(`hint entries should use the compound "Enter/Space/Right" key in Commits, not bare "Enter"`)
+		t.Error(`hint entries should use the compound "Enter/Space/→" key in Commits, not bare "Enter"`)
 	}
-	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/Right") {
-		t.Error("hint entries don't mention Enter/Space/Right while Commits has focus")
+	if !gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/→") {
+		t.Error("hint entries don't mention Enter/Space/→ while Commits has focus")
 	}
 
 	r.toggleGitBreachFocus() // -> Stash
-	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") || gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/Right") {
+	if gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter") || gitBreachHintHasKey(r.gitBreachHintEntries(), "Enter/Space/→") {
 		t.Error("hint entries still mention Enter after focus moved to Stash")
 	}
 }
@@ -2055,12 +2055,58 @@ func TestRenderGitBreachDiffHeaderHidesHintWithoutRealHeightOrText(t *testing.T)
 	}
 }
 
-// TestGitBreachSelectingADifferentCommitResetsMainScroll pins the
-// user's own explicit bug report: scrolling into commit A's diff, then
-// selecting a different commit B, must not carry commit A's own scroll
-// position into B's — each row's diff starts fresh at the top rather
-// than remembering a scroll offset across completely different content.
-func TestGitBreachSelectingADifferentCommitResetsMainScroll(t *testing.T) {
+// TestGitBreachDiffPageReachesTheLastPageOnUnevenContent pins the
+// user's own explicit bug report: at a box height of 10 with 29 lines
+// of content (not a multiple of the height), the maximum row
+// tview.TextView ever actually scrolls to is 19 (29-10 -- there's
+// nothing further below to show), which the old row/height+1 formula
+// reported as page 2 of 3, a last page that could never actually be
+// reached no matter how far down the user scrolled. gitBreachDiffPage
+// maps row proportionally across the real reachable range instead, so
+// the true maximum row always reads as the real last page.
+func TestGitBreachDiffPageReachesTheLastPageOnUnevenContent(t *testing.T) {
+	const height = 10
+	const totalLines = 29
+	maxRow := totalLines - height // 19 -- the real ceiling tview itself clamps scrolling to
+
+	page, totalPages := gitBreachDiffPage(maxRow, totalLines, height)
+
+	if totalPages != 3 {
+		t.Fatalf("totalPages = %d, want 3 (ceil(29/10))", totalPages)
+	}
+	if page != totalPages {
+		t.Errorf("page at the true maximum scroll row = %d, want %d (the last page must be reachable)", page, totalPages)
+	}
+}
+
+// TestGitBreachDiffPageStartsAtOneAndNeverExceedsTotal pins the two
+// edges gitBreachDiffPage must never miss regardless of how row/height
+// divide: row 0 is always page 1, and a row past the real maximum
+// (tview itself should never hand one, but a defensive clamp costs
+// nothing) never reports a page past totalPages.
+func TestGitBreachDiffPageStartsAtOneAndNeverExceedsTotal(t *testing.T) {
+	if page, _ := gitBreachDiffPage(0, 29, 10); page != 1 {
+		t.Errorf("page at row 0 = %d, want 1", page)
+	}
+
+	page, totalPages := gitBreachDiffPage(10_000, 29, 10)
+	if page != totalPages {
+		t.Errorf("page past the real maximum row = %d, want it clamped to %d", page, totalPages)
+	}
+}
+
+// TestGitBreachSelectingADifferentCommitStartsItFreshThenRemembersIt
+// pins the corrected shape of the user's own original bug report: a
+// commit genuinely never visited before starts at the top (not
+// commit A's own leftover scroll position), but once you've actually
+// scrolled into a commit, returning to it later in the same session
+// picks back up exactly where you left off — the user's own explicit
+// follow-up correction after an earlier, wrong reading of "don't carry
+// the scroll over" as "always reset to the top", which broke the
+// actual real-world use this was asked for in the first place:
+// comparing a spot on page 4 of one commit against page 5 of another
+// by flipping back and forth.
+func TestGitBreachSelectingADifferentCommitStartsItFreshThenRemembersIt(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
 	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "first")
@@ -2075,10 +2121,23 @@ func TestGitBreachSelectingADifferentCommitResetsMainScroll(t *testing.T) {
 		t.Fatalf("setup: ScrollTo(50, 0) left scroll offset at row %d, want 50", row)
 	}
 
-	r.gitBreachCommitsTable.Select(1, 0) // a different commit than row 0
+	r.gitBreachCommitsTable.Select(1, 0) // a different commit, never visited before
 
 	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
-		t.Errorf("scroll offset = %d after selecting a different commit, want 0", row)
+		t.Errorf("scroll offset = %d on a commit visited for the first time, want 0", row)
+	}
+
+	r.gitBreachDiffView.ScrollTo(7, 0)
+	r.gitBreachCommitsTable.Select(0, 0) // back to the first commit
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 50 {
+		t.Errorf("scroll offset = %d after returning to the first commit, want its own remembered 50", row)
+	}
+
+	r.gitBreachCommitsTable.Select(1, 0) // and back to the second
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 7 {
+		t.Errorf("scroll offset = %d after returning to the second commit, want its own remembered 7", row)
 	}
 }
 
@@ -2103,6 +2162,53 @@ func TestGitBreachRefocusingTheSameRowKeepsMainScroll(t *testing.T) {
 
 	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 5 {
 		t.Errorf("scroll offset = %d after refocusing the same row, want 5 (unchanged)", row)
+	}
+}
+
+// TestGitBreachFileDiffScrollKeyDistinguishesStagedFromUnstaged pins
+// the subtlest part of per-entry scroll memory: the same path can
+// appear twice at once (staged and unstaged), showing two genuinely
+// different diffs — they must never share one remembered scroll
+// position just because the path string is identical.
+func TestGitBreachFileDiffScrollKeyDistinguishesStagedFromUnstaged(t *testing.T) {
+	staged := gitBreachRow{kind: gitBreachRowStaged, path: "a.txt"}
+	unstaged := gitBreachRow{kind: gitBreachRowUnstaged, path: "a.txt"}
+
+	if gitBreachFileDiffScrollKey(staged) == gitBreachFileDiffScrollKey(unstaged) {
+		t.Errorf("staged and unstaged %q share one scroll key: %q", "a.txt", gitBreachFileDiffScrollKey(staged))
+	}
+}
+
+// TestGitBreachStashScrollIsRememberedPerEntry mirrors the Commits
+// scroll-memory test above, for Stash.
+func TestGitBreachStashScrollIsRememberedPerEntry(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	runGitBreach(t, dir, "commit", "-q", "--allow-empty", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-u", "-m", "first stash")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "stash", "push", "-q", "-u", "-m", "second stash")
+
+	r := newTestRootForGitBreachDir(t, dir)
+	r.openGitBreach()
+	r.app.SetFocus(r.gitBreachStashTable)
+
+	r.gitBreachDiffView.ScrollTo(3, 0)
+	r.gitBreachStashTable.Select(1, 0) // the other stash entry
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 0 {
+		t.Errorf("scroll offset = %d on a stash entry visited for the first time, want 0", row)
+	}
+
+	r.gitBreachStashTable.Select(0, 0) // back to the first
+
+	if row, _ := r.gitBreachDiffView.GetScrollOffset(); row != 3 {
+		t.Errorf("scroll offset = %d after returning to the first stash entry, want its own remembered 3", row)
 	}
 }
 

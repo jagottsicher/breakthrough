@@ -738,6 +738,29 @@ type Root struct {
 	// startGitBreachDiff/cancelGitBreachDiff, the same shape
 	// cancelDetailsGitStatus already establishes.
 	gitBreachDiffCancel context.CancelFunc
+	// gitBreachDiffScroll remembers Main's own last scroll row per
+	// file/commit/stash entry (see gitBreachFileDiffScrollKey and the
+	// "C:"/"S:" key prefixes startGitBreachCommitDiff/
+	// startGitBreachStashDiff build directly) — the user's own explicit
+	// request, after a first, wrong reading of it (reset on every
+	// switch) turned out to be the opposite of what was actually asked:
+	// comparing page 4 of commit A against page 5 of commit B means
+	// going back to A must still show page 4, not the top again.
+	// In-memory only, for this Root's own lifetime (one breakthrough
+	// session, outliving any single "jg" open/close per the user's own
+	// explicit preference for the longer-lived option) — never
+	// persisted to disk.
+	gitBreachDiffScroll map[string]int
+	// gitBreachDiffScrollKey is whichever key Main's own text was last
+	// actually set under (see gitBreachSetDiffText) — not the row the
+	// cursor currently sits on, which can already have moved on again
+	// before a slow fetch for the previous row even lands. This is
+	// exactly why gitBreachSaveDiffScroll, called at the very start of
+	// every startGitBreach*Diff before anything about the old row is
+	// touched, always attributes Main's current scroll position to
+	// whatever content is genuinely still on screen. Empty whenever
+	// nothing with real content is shown (no selection, cancelled).
+	gitBreachDiffScrollKey string
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without
