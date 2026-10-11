@@ -2128,3 +2128,91 @@ func TestGitBreachMainGetsFocusStyleWhenActivated(t *testing.T) {
 		t.Error("Main's own header background didn't change when it gained keyboard focus")
 	}
 }
+
+// gitBreach256Palette builds the real xterm 256-color palette once,
+// the same lookup tcell.FindColor itself degrades truecolor against on
+// a terminal that doesn't advertise truecolor support (see
+// gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground's own
+// doc comment for the real report this is pinning against: iSH on
+// iPadOS, though any 256-color terminal has the identical problem).
+func gitBreach256Palette() []tcell.Color {
+	pal := make([]tcell.Color, 256)
+	for i := range pal {
+		pal[i] = tcell.PaletteColor(i)
+	}
+	return pal
+}
+
+// gitBreachIsGrayish reports whether c's own R/G/B channels are close
+// enough to each other to read as a shade of gray rather than a real
+// hue — the exact failure mode a 256-color degraded removed/added
+// background collapsed into before this fix (see the two colors' own
+// doc comment).
+func gitBreachIsGrayish(c tcell.Color) bool {
+	r, g, b := c.RGB()
+	maxCh, minCh := r, r
+	for _, v := range []int32{g, b} {
+		if v > maxCh {
+			maxCh = v
+		}
+		if v < minCh {
+			minCh = v
+		}
+	}
+	return maxCh-minCh < 10
+}
+
+// TestGitBreachDiffBackgroundsStayDistinctOnA256ColorTerminal pins the
+// actual user-reported bug: on a terminal without truecolor support,
+// tcell quantizes both gitBreachDiffAddedBackground and
+// gitBreachDiffRemovedBackground against the real 256-color palette —
+// before this fix, both landed on neighboring, nearly identical
+// grayscale-ramp entries ("one looks black, the other gray", neither
+// visibly red or green). Pinned directly against tcell.FindColor and
+// the real palette, not against the raw truecolor hex values
+// themselves, since it's specifically the degraded result that was
+// broken.
+func TestGitBreachDiffBackgroundsStayDistinctOnA256ColorTerminal(t *testing.T) {
+	pal := gitBreach256Palette()
+
+	addedFit := tcell.FindColor(gitBreachDiffAddedBackground, pal)
+	removedFit := tcell.FindColor(gitBreachDiffRemovedBackground, pal)
+
+	if gitBreachIsGrayish(addedFit) {
+		t.Errorf("gitBreachDiffAddedBackground degrades to %v on a 256-color terminal, want a real green, not a shade of gray", addedFit)
+	}
+	if gitBreachIsGrayish(removedFit) {
+		t.Errorf("gitBreachDiffRemovedBackground degrades to %v on a 256-color terminal, want a real red, not a shade of gray", removedFit)
+	}
+	if addedFit == removedFit {
+		t.Errorf("added and removed backgrounds both degrade to the same %v on a 256-color terminal, want them visibly distinct", addedFit)
+	}
+}
+
+// TestGitBreachDiffMarkersStayVisibleAgainstTheirOwnBackground pins the
+// user's own explicit follow-up concern when asked to brighten these
+// backgrounds: the "+"/"-" marker glyph itself must not end up the
+// same color as the now-brighter background it sits on, in either a
+// truecolor or a degraded 256-color terminal.
+func TestGitBreachDiffMarkersStayVisibleAgainstTheirOwnBackground(t *testing.T) {
+	pal := gitBreach256Palette()
+
+	if gitBreachDiffAddedColor == gitBreachDiffAddedBackground {
+		t.Error("added marker color is identical to its own background")
+	}
+	if theme := tcell.GetColor("red"); theme == gitBreachDiffRemovedBackground {
+		t.Error("removed marker color is identical to its own background")
+	}
+
+	addedMarkerFit := tcell.FindColor(gitBreachDiffAddedColor, pal)
+	addedBGFit := tcell.FindColor(gitBreachDiffAddedBackground, pal)
+	if addedMarkerFit == addedBGFit {
+		t.Errorf("added marker and its own background both degrade to the same %v on a 256-color terminal", addedMarkerFit)
+	}
+
+	removedMarkerFit := tcell.FindColor(tcell.GetColor("red"), pal)
+	removedBGFit := tcell.FindColor(gitBreachDiffRemovedBackground, pal)
+	if removedMarkerFit == removedBGFit {
+		t.Errorf("removed marker and its own background both degrade to the same %v on a 256-color terminal", removedMarkerFit)
+	}
+}
