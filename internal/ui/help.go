@@ -607,21 +607,42 @@ var helpText = strings.TrimLeft(`
   already draw, each lane's own color stable across the rows it spans
   and independent of the author color its own commit text already
   carries further right.
+  Main itself can take real keyboard focus too, not just mirror
+  whichever side box is active: Right (Files/Commits/Stash) jumps in,
+  and Enter/Space do the same from Commits specifically (Space already
+  stages a Files row, and Stash's own diff is already fully visible on
+  selection with "a"/"d" as its real actions, so neither gains a
+  second meaning there). Once inside, Up/Down/PgUp/PgDn page the diff
+  itself instead of the side box's own list, and Left, Enter, Space or
+  Esc all step back out to whichever box is still selected underneath
+  — Esc here is the one exception to "Esc closes Git breach": it only
+  backs out of the diff, closing the dashboard everywhere else. Tab/
+  Shift-Tab from inside the diff continue the same cycle from that
+  box's own position, exactly as if pressed from there directly.
   Local only: there is no command-execution channel to run git against
   a remote session, so "jg" refuses visibly on a remote-connected panel
   or inside an archive view rather than reading the wrong repository on
   this machine under the same-looking path.
 
     Tab/     Switch keyboard focus forwards/backwards between Files,
-    Shift-   Branches, Commits and Stash
-    Tab
+    Shift-   Branches, Commits and Stash (or, from inside Main's own
+    Tab      diff, continue the same cycle from whichever box is still
+             selected underneath, exactly as if pressed from there)
     Space    (Files only) Stage the row under the cursor if it isn't,
              unstage it if it is (does nothing on a Conflicts row) —
              only shown in the hint bar while Files has focus, since
              it has no meaning on any other box's own row
+    Right    (Files/Commits/Stash) Jump into Main's own diff, giving it
+             real keyboard focus — only shown in the hint bar while one
+             of these three has focus, since Branches has no diff of
+             its own to jump into
     Enter    (Branches only) Check out the branch under the cursor —
              confirms first if the working tree isn't clean — only
              shown in the hint bar while Branches has focus
+    Enter/   (Commits only) Same jump into Main as Right, plus two more
+    Space    keys that are otherwise free there — Space already stages
+             a Files row and Stash's own diff is already fully visible
+             on selection, so neither gains this second meaning there
     d        (Branches only) Delete the branch under the cursor, after
              confirming — always confirms, unlike Enter, since deleting
              a branch is itself the irreversible action. Refuses with
@@ -634,18 +655,24 @@ var helpText = strings.TrimLeft(`
     d        (Stash only) Drop the entry under the cursor, after
              confirming — always confirms, like Branches' own "d",
              since dropping a stash is itself the irreversible action
+    ↑ ↓/     (Main only) Scroll the diff line by line or page by page —
+    PgUp/    native tview.TextView scrolling once Main actually has
+    PgDn     keyboard focus; PgUp/PgDn page whichever side box's own
+             list instead while one of the four side boxes has focus,
+             the ordinary way to move through a long list
+    Left/    (Main only) Step back out to whichever box is still
+    Enter/   selected underneath, returning real keyboard focus there
+    Space    — works no matter which key originally jumped into Main
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
              doesn't depend on which row is selected anywhere
-    PgUp/    Page the Main — Diff box up/down — works no matter which
-    PgDn     of the four side boxes currently has focus, since Main
-             itself is never one of them and so can never be tabbed to
-             directly; this is the only way to move through a long
-             diff with the keyboard instead of the mouse wheel
     r        Re-read the repository's current status/branches/commits/
-             stash
-    Esc      Close
+             stash — works no matter which box currently has focus
+    Esc      Close — except from inside Main's own diff, where it only
+             steps back out to whichever box is still selected
+             underneath (the same as Left/Enter/Space above) instead of
+             closing the dashboard
 
 [::b]Log Audit screen ("jL")[::-]
 
