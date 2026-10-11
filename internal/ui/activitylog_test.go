@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jagottsicher/breakthrough/internal/activitylog"
@@ -58,7 +59,7 @@ func TestNewActivityLoggerIsANoOpWhenLevelIsOff(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.settings.LogLevel = "off"
 
-	logger, notice := r.newActivityLogger()
+	logger, notice, _ := r.newActivityLogger()
 
 	if notice != "" {
 		t.Errorf("notice = %q, want empty when logging is off", notice)
@@ -75,7 +76,7 @@ func TestNewActivityLoggerOpensTheResolvedPathWhenLevelIsOn(t *testing.T) {
 	r.settings.LogLevel = "actions"
 	r.settings.LogCategoryFileOps = true
 
-	logger, notice := r.newActivityLogger()
+	logger, notice, _ := r.newActivityLogger()
 	defer func() { _ = logger.Close() }()
 
 	if notice != "" {
@@ -100,7 +101,7 @@ func TestNewActivityLoggerRespectsEachCategoryIndependently(t *testing.T) {
 	r.settings.LogCategoryFileOps = false
 	r.settings.LogCategoryRsync = true
 
-	logger, _ := r.newActivityLogger()
+	logger, _, _ := r.newActivityLogger()
 	defer func() { _ = logger.Close() }()
 
 	logger.Action(activitylog.CategoryFileOps, "should be dropped")
@@ -125,7 +126,7 @@ func TestReopenActivityLogAppliesUpdatedSettings(t *testing.T) {
 	r, _, _ := newTestRootWithFile(t)
 	r.settings.LogLevel = "errors"
 	r.settings.LogCategoryFileOps = true
-	r.activityLog, _ = r.newActivityLogger()
+	r.activityLog, _, _ = r.newActivityLogger()
 
 	r.activityLog.Action(activitylog.CategoryFileOps, "should be dropped at LevelErrors")
 	// OpenWriter's own os.O_CREATE already creates the file the moment
@@ -149,6 +150,13 @@ func TestReopenActivityLogAppliesUpdatedSettings(t *testing.T) {
 	}
 }
 
+// TestReopenActivityLogWarnsAboutAFallbackOnlyOnce pins the per-run
+// half of the "don't repeat this notice" contract — see
+// TestReopenActivityLogRoutesTheFallbackThroughItsOwnDialog just below
+// for why activityLogNoticePage, not errorPage, is the overlay this
+// now opens: a real activity-log error (logging stays off) still goes
+// through showError, but the fallback (logging just moved) has had its
+// own dialog since the "don't show again" option was added.
 func TestReopenActivityLogWarnsAboutAFallbackOnlyOnce(t *testing.T) {
 	isolateActivityLogPaths(t)
 	// A file, not a directory, at the system log dir's own path forces
@@ -161,13 +169,172 @@ func TestReopenActivityLogWarnsAboutAFallbackOnlyOnce(t *testing.T) {
 	r.settings.LogLevel = "actions"
 
 	r.reopenActivityLog()
-	if r.activePage != errorPage {
-		t.Fatalf("activePage = %q, want the error overlay naming the fallback the first time", r.activePage)
+	if r.activePage != activityLogNoticePage {
+		t.Fatalf("activePage = %q, want the fallback notice dialog the first time", r.activePage)
 	}
 	r.hideOverlay()
 
 	r.reopenActivityLog()
-	if r.activePage == errorPage {
+	if r.activePage == activityLogNoticePage {
 		t.Error("the fallback notice should not be shown a second time in the same run")
+	}
+}
+
+// TestReopenActivityLogRoutesTheFallbackThroughItsOwnDialog and
+// TestReopenActivityLogStillUsesShowErrorForARealFailure pin the split
+// newActivityLogger's own isFallbackNotice return value drives: the
+// benign "logging just moved" case gets the dialog with its own
+// "don't show again" checkbox, a genuine failure (logging stays off)
+// still gets the plain error overlay, since there's nothing to offer
+// "don't show again" about — it isn't a one-time heads-up, it's broken.
+func TestReopenActivityLogRoutesTheFallbackThroughItsOwnDialog(t *testing.T) {
+	isolateActivityLogPaths(t)
+	if err := os.WriteFile(activitylog.SystemLogDir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, _, _ := newTestRootWithFile(t)
+	r.settings.LogLevel = "actions"
+
+	r.reopenActivityLog()
+
+	if r.activePage != activityLogNoticePage {
+		t.Errorf("activePage = %q, want %q", r.activePage, activityLogNoticePage)
+	}
+}
+
+func TestReopenActivityLogStillUsesShowErrorForARealFailure(t *testing.T) {
+	isolateActivityLogPaths(t)
+	// Make the resolved path itself unusable (a directory where the log
+	// file should be) so OpenWriter fails outright — a real error, not
+	// a fallback.
+	if err := os.MkdirAll(filepath.Join(activitylog.SystemLogDir, "breakthrough.log"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, _, _ := newTestRootWithFile(t)
+	r.settings.LogLevel = "actions"
+
+	r.reopenActivityLog()
+
+	if r.activePage != errorPage {
+		t.Errorf("activePage = %q, want %q (a real failure, not the fallback dialog)", r.activePage, errorPage)
+	}
+}
+
+// TestOpenActivityLogFallbackNoticeShowsTheMessage pins that the
+// dialog's own title bar carries the exact notice text it was given —
+// the same "the message IS the header" shape openConfirm already
+// establishes for confirmDialogTitleBar.
+func TestOpenActivityLogFallbackNoticeShowsTheMessage(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+
+	r.openActivityLogFallbackNotice("activity log: /var/log/breakthrough isn't writable — logging to /tmp/x instead")
+
+	got := r.activityLogNoticeTitleBar.GetText(true)
+	if !strings.Contains(got, "isn't writable") {
+		t.Errorf("title bar = %q, want it to contain the notice message", got)
+	}
+	if r.activePage != activityLogNoticePage {
+		t.Errorf("activePage = %q, want %q", r.activePage, activityLogNoticePage)
+	}
+}
+
+// TestToggleActivityLogNoticeDontShowAgainFlipsTheCheckboxGlyph pins
+// the checkboxText-prefixed List item (see this file's own
+// activityLogNoticeCheckboxText) actually flips both the stored bool
+// and the rendered glyph, the same ●/○ pair checkboxText already uses
+// elsewhere in this package (sedFlagsList).
+func TestToggleActivityLogNoticeDontShowAgainFlipsTheCheckboxGlyph(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.openActivityLogFallbackNotice("activity log: fallback")
+
+	if r.activityLogNoticeDontShowAgain {
+		t.Fatal("setup: should start unchecked")
+	}
+	text, _ := r.activityLogNoticeList.GetItemText(0)
+	if !strings.Contains(text, "○") {
+		t.Errorf("checkbox item text = %q, want the unchecked ○ glyph", text)
+	}
+
+	r.toggleActivityLogNoticeDontShowAgain()
+
+	if !r.activityLogNoticeDontShowAgain {
+		t.Error("toggling once should check the box")
+	}
+	text, _ = r.activityLogNoticeList.GetItemText(0)
+	if !strings.Contains(text, "●") {
+		t.Errorf("checkbox item text = %q, want the checked ● glyph after toggling", text)
+	}
+
+	r.toggleActivityLogNoticeDontShowAgain()
+	if r.activityLogNoticeDontShowAgain {
+		t.Error("toggling twice should uncheck the box again")
+	}
+}
+
+// TestAcceptActivityLogNoticePersistsOnlyWhenChecked pins the
+// dialog's own actual point: "OK" alone, with the box left unchecked,
+// never touches HideActivityLogFallbackNotice — only checking the box
+// first does, and that persists via persistSetting the same as the
+// matching Options toggle would.
+func TestAcceptActivityLogNoticePersistsOnlyWhenChecked(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.openActivityLogFallbackNotice("activity log: fallback")
+
+	r.acceptActivityLogNotice()
+
+	if r.settings.HideActivityLogFallbackNotice {
+		t.Error("accepting without checking the box should not set HideActivityLogFallbackNotice")
+	}
+	if r.activePage == activityLogNoticePage {
+		t.Error("accepting should close the dialog")
+	}
+}
+
+func TestAcceptActivityLogNoticeWithTheBoxCheckedPersistsTheSetting(t *testing.T) {
+	r, _, _ := newTestRootWithFile(t)
+	r.openActivityLogFallbackNotice("activity log: fallback")
+	r.toggleActivityLogNoticeDontShowAgain()
+
+	r.acceptActivityLogNotice()
+
+	if !r.settings.HideActivityLogFallbackNotice {
+		t.Error("accepting with the box checked should set HideActivityLogFallbackNotice")
+	}
+	if r.activePage == activityLogNoticePage {
+		t.Error("accepting should close the dialog")
+	}
+}
+
+// TestNewActivityLoggerSkipsTheFallbackNoticeWhenHidden pins the
+// setting's own actual gate inside newActivityLogger: once
+// HideActivityLogFallbackNotice is on, a genuine fallback still opens
+// the Writer (logging keeps working, just quietly), but produces no
+// notice and reports isFallbackNotice as false — never "silence a
+// notice that still fires", an actual absence of one.
+func TestNewActivityLoggerSkipsTheFallbackNoticeWhenHidden(t *testing.T) {
+	isolateActivityLogPaths(t)
+	if err := os.WriteFile(activitylog.SystemLogDir, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, _, _ := newTestRootWithFile(t)
+	r.settings.LogLevel = "actions"
+	r.settings.HideActivityLogFallbackNotice = true
+
+	logger, notice, isFallback := r.newActivityLogger()
+
+	if notice != "" {
+		t.Errorf("notice = %q, want empty when the fallback notice is hidden", notice)
+	}
+	if isFallback {
+		t.Error("isFallbackNotice = true, want false when the notice itself was suppressed")
+	}
+
+	// Logging itself must still work despite the notice being
+	// suppressed — ResolvePath's own fallback path is exercised the
+	// same way TestNewActivityLoggerOpensTheResolvedPathWhenLevelIsOn
+	// proves it for the non-fallback case, via Close erroring were the
+	// Writer actually nil or broken.
+	if err := logger.Close(); err != nil {
+		t.Errorf("logger.Close() = %v, want the fallback Writer to have opened cleanly", err)
 	}
 }
