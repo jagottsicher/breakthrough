@@ -125,7 +125,7 @@ func (r *Root) openActivityLogFallbackNotice(message string) {
 	messageWidth += 2 // the message view's own SetBorderPadding(0, 0, 1, 1)
 
 	listMinWidth := tview.TaggedStringWidth(activityLogNoticeCheckboxText(false)) + 2 // the list's own SetBorderPadding(0, 0, 1, 1)
-	const buttonRowMinWidth = 30                                                      // comfortable room for "Cancel"/"OK" plus real spacing, +2 for buttonRow's own 1-column Box on each end
+	const buttonRowMinWidth = 28                                                      // comfortable room for "Cancel"/"OK" plus real spacing — buttonRow itself has no margin of its own, see its own construction comment in NewRoot
 	headerMinWidth := tview.TaggedStringWidth(" Important note") + 3                  // one gap column plus the close glyph's own two-column reservation (see activityLogNoticeTitleBarMouseCapture)
 
 	width := messageWidth

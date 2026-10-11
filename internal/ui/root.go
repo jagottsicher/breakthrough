@@ -903,6 +903,16 @@ type Root struct {
 	activityLogNoticeCancelButton  *tview.Button
 	activityLogNoticeOKButton      *tview.Button
 	activityLogNoticeDontShowAgain bool
+	// activityLogNoticeSpacer1/2 are the blank rows between header/
+	// message/checkbox/buttons — named and styled the same way
+	// duplicateSpacer/compressSpacer/rsyncSpacer already are (see their
+	// own doc comments) rather than left as anonymous tview.NewBox()
+	// calls, since a plain Box defaults to tview's own built-in
+	// PrimitiveBackgroundColor, not this dialog's SurfaceBackground —
+	// exactly the kind of mismatch those spacers' own doc comments
+	// already warn about.
+	activityLogNoticeSpacer1 *tview.Box
+	activityLogNoticeSpacer2 *tview.Box
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
 	// "Sed Replace" dialog (see sedreplace.go, especially newSedForm's
@@ -2305,27 +2315,26 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
 	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
 
-	// Equal proportion (0, 1) each, nothing in between — the same shape
-	// newSearchButtons' own Cancel/Find row already uses, per the user's
-	// own request that this row match that dialog's: Button.Draw already
-	// centers its own label (AlignCenter) within whatever rect it's
-	// given, so two equal halves read as two evenly matched buttons
-	// rather than one left-hugging and one right-hugging a gap.
-	// The 1-column Box on each end is this row's own share of the
-	// dialog-wide left/right margin every other row gets through
-	// SetBorderPadding (a plain Flex has no such built-in padding).
+	// Equal proportion (0, 1) each, filling the row edge to edge — the
+	// exact shape newSearchButtons' own Cancel/Find row already uses
+	// (no margin of its own; the row itself spans the full dialog
+	// width), per the user's own explicit request that Cancel/OK match
+	// that row exactly rather than carry their own inset. Button.Draw
+	// already centers its own label (AlignCenter) within whatever rect
+	// it's given, so two equal halves read as two evenly matched
+	// buttons.
 	buttonRow := tview.NewFlex().
-		AddItem(tview.NewBox(), 1, 0, false).
 		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
-		AddItem(r.activityLogNoticeOKButton, 0, 1, false).
-		AddItem(tview.NewBox(), 1, 0, false)
+		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
 
+	r.activityLogNoticeSpacer1 = tview.NewBox()
+	r.activityLogNoticeSpacer2 = tview.NewBox()
 	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
 		AddItem(r.activityLogNoticeMessageView, 0, 1, false).
-		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(r.activityLogNoticeSpacer1, 1, 0, false).
 		AddItem(r.activityLogNoticeList, 1, 0, true).
-		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(r.activityLogNoticeSpacer2, 1, 0, false).
 		AddItem(buttonRow, 1, 0, false)
 
 	// The Paste conflict dialog (see pasteconflict.go) — one shared List
