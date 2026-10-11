@@ -81,8 +81,19 @@ var gitBreachDiffAddedColor = tcell.GetColor("#3cb44b")
 // (gitBreachDiffAddedColor/theme.CriticalText, unchanged) still
 // contrasts visibly against its own background in both truecolor and
 // degraded terminals alike.
+//
+// gitBreachDiffAddedBackground nudged one step darker again
+// (#003a00 → #002d00) after the user's own live follow-up: a muted
+// gray comment token (one of darkSyntaxPalette's own colors) still
+// read as hard to make out on the green specifically, even though the
+// green itself was now clearly recognizable. #002d00 is the darkest
+// value that still degrades to #005f00 rather than the grayscale
+// ramp — one step further (#002800) was verified to flip back to
+// gray, so this sits right at that floor rather than leaving headroom
+// to spare. gitBreachDiffRemovedBackground (the red) was reported as
+// already fine and is untouched.
 var (
-	gitBreachDiffAddedBackground   = tcell.GetColor("#003a00")
+	gitBreachDiffAddedBackground   = tcell.GetColor("#002d00")
 	gitBreachDiffRemovedBackground = tcell.GetColor("#3a0000")
 )
 
