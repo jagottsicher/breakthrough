@@ -872,6 +872,14 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	}
 	r.logAuditSelectionLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.logAuditTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 	r.logAuditTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditTitleBar.SetTextColor(theme.TextColor)
 	r.logAuditHint.SetBackgroundColor(theme.InputBackground)
@@ -883,6 +891,10 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 
 	r.logAuditViewerLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.logAuditViewerTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Same fix as logAuditTable just above, for the same reason.
+	r.logAuditViewerTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 	r.logAuditViewerTitle.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditViewerTitle.SetTextColor(theme.TextColor)
 	// logAuditFilterRow themed explicitly to the same SurfaceBackground

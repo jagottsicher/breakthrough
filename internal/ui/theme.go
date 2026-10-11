@@ -333,6 +333,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
 		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+		// Without this, tview's own default selected-cell style just
+		// reverses each cell's own foreground into a background instead
+		// of using one consistent selection bar — the same fix already
+		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// tabSwitcher/gitBreach's tables, for the identical reason.
+		// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
+		// already covers it, the same way it covers optionsTable.
+		r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.SelectionBackground).
+			Foreground(theme.TextColor))
 		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetTextColor(theme.TextColor)
 
@@ -392,6 +402,33 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.applyGitBreachTheme(theme)
 
 	if r.compareTreeTable != nil {
+		// A real, previously-unnoticed gap: unlike every other full-screen
+		// catalog here, this whole block was missing except for the hint
+		// text itself — Compare Tree's own layout/table/status/buttons sat
+		// at tview's plain, unthemed default instead of this app's theme.
+		r.compareTreeLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.compareTreeTable.SetBackgroundColor(theme.SurfaceBackground)
+		// Without this, tview's own default selected-cell style just
+		// reverses each cell's own foreground into a background instead
+		// of using one consistent selection bar — the same fix already
+		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// tabSwitcher/gitBreach's tables, for the identical reason.
+		r.compareTreeTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.SelectionBackground).
+			Foreground(theme.TextColor))
+		r.compareTreeStatus.SetBackgroundColor(theme.SurfaceBackground)
+		r.compareTreeStatus.SetTextColor(theme.TextColor)
+		r.compareTreeButtons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compareTreeModeBtn, theme)
+		styleButton(r.compareTreeShowSameBtn, theme)
+		styleButton(r.compareTreeCloseBtn, theme)
+
+		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// fixed FocusedBackground follows.
+		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
+		r.compareTreeHint.SetBackgroundColor(theme.InputBackground)
+		r.compareTreeHint.SetTextColor(theme.MutedTextColor)
 		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
 		r.compareTreeHint.SetText(compareTreeHintText)
 		r.compareTreeHintSpans = compareTreeHintSpans

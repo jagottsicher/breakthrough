@@ -373,6 +373,14 @@ func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
 	}
 	r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.mountsTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
 	// fixed FocusedBackground just above follows.

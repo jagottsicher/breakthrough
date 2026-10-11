@@ -477,6 +477,14 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	}
 	r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.sessionsTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sessionsTitleBar.SetTextColor(theme.TextColor)
