@@ -565,6 +565,13 @@ func SettingDocs() []SettingDoc {
 			Implemented: true,
 		},
 		{
+			Key:         "hide_activity_log_fallback_notice",
+			Default:     strconv.FormatBool(d.HideActivityLogFallbackNotice),
+			Kind:        KindBool,
+			Summary:     `Don't show the one-time startup notice when the activity log falls back to a per-user directory because /var/log/breakthrough isn't writable.`,
+			Implemented: true,
+		},
+		{
 			Key:         "firewall_default_direction",
 			Default:     d.FirewallDefaultDirection,
 			Kind:        KindEnum,

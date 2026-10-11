@@ -1137,6 +1137,20 @@ func optionCategories() []optionCategory {
 					"Adding a firewall rule via the Firewall screen's own Add-rule form, and its own self-lockout rollback.",
 					func(r *Root) bool { return r.settings.LogCategoryFirewall },
 					func(r *Root, b bool) { r.settings.LogCategoryFirewall = b }),
+				boolOption("hide_activity_log_fallback_notice", "Hide fallback notice",
+					"The one-time startup notice that fires when /var/log/breakthrough isn't "+
+						"writable (not running as root, no pre-prepared shared group directory) "+
+						"and the activity log falls back to a per-user directory instead. Off by "+
+						"default, so the fallback is surfaced at least once; checking the box on "+
+						"the notice itself turns this on, the same as turning it on here directly. "+
+						"Only covers that one benign case — a real failure to open the log at all "+
+						"(logging stays off) is always shown, never silenced by this.",
+					false,
+					func(r *Root) bool { return r.settings.HideActivityLogFallbackNotice },
+					func(r *Root, b bool) {
+						r.settings.HideActivityLogFallbackNotice = b
+						r.persistSetting("hide_activity_log_fallback_notice", strconv.FormatBool(b))
+					}),
 			},
 		},
 		{
@@ -1463,6 +1477,8 @@ func settingValueByKey(s config.Settings, key string) (string, bool) {
 		return strconv.FormatBool(s.LogCategoryShell), true
 	case "log_category_firewall":
 		return strconv.FormatBool(s.LogCategoryFirewall), true
+	case "hide_activity_log_fallback_notice":
+		return strconv.FormatBool(s.HideActivityLogFallbackNotice), true
 	case "firewall_default_direction":
 		return s.FirewallDefaultDirection, true
 	case "firewall_default_action":
