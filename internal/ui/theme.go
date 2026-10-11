@@ -189,6 +189,22 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleList(r.activityLogNoticeList, theme)
 	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+	// ErrorBackground/Text, the same pairing errorView itself already
+	// uses (see this function's own call just below) — the user's own
+	// explicit request that this notice's message read "in rot (wie die
+	// ja sonst auch aussehen)", i.e. exactly like any other error text in
+	// this app rather than a one-off color.
+	r.activityLogNoticeMessageView.SetTextColor(theme.Text)
+	r.activityLogNoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
+	styleButton(r.activityLogNoticeCancelButton, theme)
+	styleButton(r.activityLogNoticeOKButton, theme)
+	// SurfaceBackground, matching styleList's own call just above — a
+	// plain tview.NewBox() defaults to tview's own built-in
+	// PrimitiveBackgroundColor otherwise, the same mismatch
+	// duplicateSpacer/compressSpacer/rsyncSpacer's own doc comments
+	// already warn about.
+	r.activityLogNoticeSpacer1.SetBackgroundColor(theme.SurfaceBackground)
+	r.activityLogNoticeSpacer2.SetBackgroundColor(theme.SurfaceBackground)
 
 	// styleList(r.pasteConflictDialog, ...) and the title bar's own
 	// coloring were both simply missing before — unlike every other List
@@ -669,7 +685,20 @@ func styleButton(b *tview.Button, theme config.ResolvedTheme) {
 // comment documents for buttons, just for List instead of Button.
 func styleList(l *tview.List, theme config.ResolvedTheme) {
 	l.SetBackgroundColor(theme.SurfaceBackground)
-	l.SetMainTextColor(theme.Text)
+	// SetMainTextStyle, not SetMainTextColor: the same real bug
+	// styleButton's own doc comment documents for Button, just for
+	// List's unselected items instead — SetMainTextColor only ever
+	// touches mainTextStyle's Foreground, leaving its Background at
+	// tview's own built-in default (Styles.PrimitiveBackgroundColor,
+	// not this theme's SurfaceBackground), which List.Draw then prints
+	// literally for every item that isn't the current selection —
+	// visible as a plain black row on any List with more than one row
+	// visible, or, on a single-item List with SetSelectedFocusOnly
+	// (see this file's own activityLogNoticeList wiring), on that one
+	// item the moment it loses focus. Per the user's own explicit
+	// report that the checkbox row's background was wrong once focus
+	// moved on to Cancel/OK.
+	l.SetMainTextStyle(tcell.StyleDefault.Background(theme.SurfaceBackground).Foreground(theme.Text))
 	l.SetSelectedStyle(tcell.StyleDefault.Background(theme.SelectionBackground).Foreground(theme.Text))
 }
 
