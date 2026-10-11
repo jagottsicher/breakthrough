@@ -45,20 +45,56 @@ const gitBreachStatusHeight = 3
 var gitBreachDiffAddedColor = tcell.GetColor("#3cb44b")
 
 // gitBreachDiffAddedBackground/gitBreachDiffRemovedBackground tint an
-// added/removed diff line's own entire background — a dark, muted
-// green/red close in brightness to theme.SurfaceBackground
-// (darkslategray, #2f4f4f, by default) and theme.PopupBackground
-// (#263f3f), picked so every one of darkSyntaxPalette's own foreground
-// colors (cornflowerblue, darksalmon, mediumpurple, paleturquoise,
-// gold, gray, ...) still reads clearly on top — the same reasoning
+// added/removed diff line's own entire background — a muted green/red
+// close in brightness to theme.SurfaceBackground (darkslategray,
+// #2f4f4f, by default) and theme.PopupBackground (#263f3f), picked so
+// every one of darkSyntaxPalette's own foreground colors
+// (cornflowerblue, darksalmon, mediumpurple, paleturquoise, gold,
+// gray, ...) still reads clearly on top — the same reasoning
 // EntryExecutable's own doc comment already gives for keeping a
 // background-adjacent color muted rather than bright: a vivid green/
 // red wash across a whole line would fight the very syntax colors it's
 // meant to sit behind. Fixed colors, not theme fields, for the same
 // reason gitBreachDiffAddedColor above already is.
+//
+// Adjusted once already from an original pair (#1e3a28/#3a1e1e) with
+// the same overall brightness as these but a muddying gray component
+// mixed into the "wrong" channel — the user's own explicit report: on
+// a terminal that doesn't advertise truecolor (iSH on iPadOS,
+// specifically, though any 256-color terminal has the identical
+// problem), tcell.FindColor's own CIE76 nearest-match degrades a dark,
+// low-saturation color like that to whichever xterm-256 grayscale-ramp
+// entry happens to sit closest — #1e3a28 and #3a1e1e both landed
+// within one step of each other on that ramp, reading as "one is
+// black, the other is gray", neither visibly red or green at all. The
+// fix is saturation, not brightness: zeroing out the other two
+// channels instead of raising the dominant one keeps these exactly as
+// dark as before (the user's own second, equally explicit complaint,
+// after a first fix that raised brightness instead — "extrem grell",
+// hurting a muted/gray foreground's own readability on top) while
+// giving tcell.FindColor's CIE76 search enough hue signal to prefer a
+// real xterm-256 color-cube entry over the grayscale ramp. Verified
+// directly against tcell.FindColor and the real 256-color palette
+// (tcell.PaletteColor), not guessed: these two degrade to #5f0000 and
+// #005f00 respectively — genuine, clearly distinct dark-red/dark-green
+// cube entries, not the grayscale ramp — while the marker glyph itself
+// (gitBreachDiffAddedColor/theme.CriticalText, unchanged) still
+// contrasts visibly against its own background in both truecolor and
+// degraded terminals alike.
+//
+// gitBreachDiffAddedBackground nudged one step darker again
+// (#003a00 → #002d00) after the user's own live follow-up: a muted
+// gray comment token (one of darkSyntaxPalette's own colors) still
+// read as hard to make out on the green specifically, even though the
+// green itself was now clearly recognizable. #002d00 is the darkest
+// value that still degrades to #005f00 rather than the grayscale
+// ramp — one step further (#002800) was verified to flip back to
+// gray, so this sits right at that floor rather than leaving headroom
+// to spare. gitBreachDiffRemovedBackground (the red) was reported as
+// already fine and is untouched.
 var (
-	gitBreachDiffAddedBackground   = tcell.GetColor("#1e3a28")
-	gitBreachDiffRemovedBackground = tcell.GetColor("#3a1e1e")
+	gitBreachDiffAddedBackground   = tcell.GetColor("#002d00")
+	gitBreachDiffRemovedBackground = tcell.GetColor("#3a0000")
 )
 
 // newGitBreachScreen builds the whole dashboard once — see
