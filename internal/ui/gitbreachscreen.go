@@ -92,7 +92,10 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachFilesTable = tview.NewTable()
 	r.gitBreachFilesTable.SetSelectable(true, false)
 	r.gitBreachFilesTable.SetInputCapture(r.captureGitBreachFilesTableKey)
-	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachFilesDiffIfOwner() })
+	r.gitBreachFilesTable.SetSelectionChangedFunc(func(row, _ int) {
+		r.gitBreachDiffView.ScrollToBeginning()
+		r.startGitBreachFilesDiffIfOwner()
+	})
 	// Files, Branches and Commits are this Ausbaustufe's own three real,
 	// focusable boxes — Status/Stash/Main have nothing for keyboard
 	// focus to ever land on yet, so their own headers/bodies stay
@@ -143,6 +146,7 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachCommitsTable.SetSelectable(true, false)
 	r.gitBreachCommitsTable.SetInputCapture(r.captureGitBreachCommitsTableKey)
 	r.gitBreachCommitsTable.SetSelectionChangedFunc(func(row, _ int) {
+		r.gitBreachDiffView.ScrollToBeginning()
 		r.startGitBreachCommitsDiffIfOwner()
 		r.maybeLoadMoreGitBreachCommits(row)
 	})
@@ -159,7 +163,10 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachStashTable = tview.NewTable()
 	r.gitBreachStashTable.SetSelectable(true, false)
 	r.gitBreachStashTable.SetInputCapture(r.captureGitBreachStashTableKey)
-	r.gitBreachStashTable.SetSelectionChangedFunc(func(row, _ int) { r.startGitBreachStashDiffIfOwner() })
+	r.gitBreachStashTable.SetSelectionChangedFunc(func(row, _ int) {
+		r.gitBreachDiffView.ScrollToBeginning()
+		r.startGitBreachStashDiffIfOwner()
+	})
 	r.gitBreachStashTable.SetFocusFunc(func() {
 		r.styleGitBreachFocus(r.gitBreachStashHeader, r.gitBreachStashTable, true)
 		r.gitBreachMainOwner = gitBreachMainOwnerStash
@@ -177,6 +184,16 @@ func (r *Root) newGitBreachScreen() {
 	r.gitBreachDiffView.SetDynamicColors(true)
 	r.gitBreachDiffView.SetScrollable(true)
 	r.gitBreachDiffView.SetInputCapture(r.captureGitBreachMainKey)
+	// SetDrawFunc, not computed once at render time: the diff view's
+	// own width/height are both needed fresh on every draw to keep the
+	// header's own "Page X/Y" hint correct as the user scrolls or the
+	// terminal resizes, the same "ask the widget, not the screen" fix
+	// gitBreachCommitsHeader's own SetDrawFunc already establishes for
+	// an identical reason.
+	r.gitBreachDiffView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		r.renderGitBreachDiffHeader(width, height)
+		return x, y, width, height
+	})
 	// Main is reachable via Right/Enter/Space (see
 	// activateGitBreachMain) and, once focused, styled/hinted the same
 	// as the four real gitBreachFocusables entries — it's deliberately
@@ -1223,6 +1240,42 @@ func (r *Root) renderGitBreachCommitsHeader(width int) {
 		padding = 0
 	}
 	r.gitBreachCommitsHeader.SetText(title + strings.Repeat(" ", padding) + hint)
+}
+
+// renderGitBreachDiffHeader rebuilds Main's own header text, appending
+// a right-aligned "Page X/Y" hint — the user's own explicit request,
+// after noticing a scrolled-down diff gave no indication of where in
+// the overall text the current view actually sat. X/Y are measured in
+// pages of the box's own current content height (height, as handed in
+// by SetDrawFunc — the diff view's own visible row count), not raw
+// line numbers: a 487-line diff at 50 rows per page is 10 pages (the
+// last one partially filled), matching how a human would describe
+// "page 4 of 10" rather than "line 150 of 487". Hidden (bare title)
+// whenever there's nothing to page through yet — height still zero
+// before the first real Draw, or no diff text loaded at all.
+func (r *Root) renderGitBreachDiffHeader(width, height int) {
+	title := " Main — Diff "
+	if height <= 0 {
+		r.gitBreachDiffHeader.SetText(title)
+		return
+	}
+	totalLines := r.gitBreachDiffView.GetWrappedLineCount()
+	if totalLines == 0 {
+		r.gitBreachDiffHeader.SetText(title)
+		return
+	}
+	row, _ := r.gitBreachDiffView.GetScrollOffset()
+	totalPages := (totalLines + height - 1) / height
+	currentPage := row/height + 1
+	if currentPage > totalPages {
+		currentPage = totalPages
+	}
+	hint := fmt.Sprintf("Page %d/%d ", currentPage, totalPages)
+	padding := width - tview.TaggedStringWidth(title) - tview.TaggedStringWidth(hint)
+	if padding < 0 {
+		padding = 0
+	}
+	r.gitBreachDiffHeader.SetText(title + strings.Repeat(" ", padding) + hint)
 }
 
 func (r *Root) renderGitBreachCommits() {
