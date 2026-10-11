@@ -189,6 +189,15 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	styleList(r.activityLogNoticeList, theme)
 	r.activityLogNoticeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogNoticeTitleBar.SetTextColor(theme.TextColor)
+	// ErrorBackground/Text, the same pairing errorView itself already
+	// uses (see this function's own call just below) — the user's own
+	// explicit request that this notice's message read "in rot (wie die
+	// ja sonst auch aussehen)", i.e. exactly like any other error text in
+	// this app rather than a one-off color.
+	r.activityLogNoticeMessageView.SetTextColor(theme.Text)
+	r.activityLogNoticeMessageView.SetBackgroundColor(theme.ErrorBackground)
+	styleButton(r.activityLogNoticeCancelButton, theme)
+	styleButton(r.activityLogNoticeOKButton, theme)
 
 	// styleList(r.pasteConflictDialog, ...) and the title bar's own
 	// coloring were both simply missing before — unlike every other List
