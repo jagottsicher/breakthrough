@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/jagottsicher/breakthrough/internal/config"
@@ -51,5 +52,41 @@ func TestStyleInputLabelBackgroundMatchesFieldBackgroundOnBlankLabel(t *testing.
 	styleInput(field, theme, false)
 	if fg, bg, _ := field.GetLabelStyle().Decompose(); bg != theme.InputBackground || fg != theme.TextColor {
 		t.Errorf("label style = bg:%v fg:%v, want InputBackground/TextColor even with no label text", bg, fg)
+	}
+}
+
+// TestApplyTviewDefaultThemeMatchesActiveTheme pins that tview's own
+// package-level Styles fallback — what any primitive renders in in place
+// of whatever it never had set explicitly (a plain tview.NewBox() nobody
+// styled, or a forgotten SetBackgroundColor/SetBorderColor call) — always
+// tracks the active breakthrough theme, rather than staying at tview's
+// own built-in black/blue/white default regardless of which color scheme
+// is selected.
+func TestApplyTviewDefaultThemeMatchesActiveTheme(t *testing.T) {
+	saved := tview.Styles
+	t.Cleanup(func() { tview.Styles = saved })
+
+	theme := config.DefaultTheme().Resolve()
+	applyTviewDefaultTheme(theme)
+
+	want := map[string]struct {
+		got, want tcell.Color
+	}{
+		"PrimitiveBackgroundColor":    {tview.Styles.PrimitiveBackgroundColor, theme.SurfaceBackground},
+		"ContrastBackgroundColor":     {tview.Styles.ContrastBackgroundColor, theme.AccentBackground},
+		"MoreContrastBackgroundColor": {tview.Styles.MoreContrastBackgroundColor, theme.InputFocusedBackground},
+		"BorderColor":                 {tview.Styles.BorderColor, theme.BorderColor},
+		"TitleColor":                  {tview.Styles.TitleColor, theme.TextColor},
+		"GraphicsColor":               {tview.Styles.GraphicsColor, theme.BorderColor},
+		"PrimaryTextColor":            {tview.Styles.PrimaryTextColor, theme.TextColor},
+		"SecondaryTextColor":          {tview.Styles.SecondaryTextColor, theme.MutedTextColor},
+		"TertiaryTextColor":           {tview.Styles.TertiaryTextColor, theme.MutedTextColor},
+		"InverseTextColor":            {tview.Styles.InverseTextColor, theme.Text},
+		"ContrastSecondaryTextColor":  {tview.Styles.ContrastSecondaryTextColor, theme.Text},
+	}
+	for name, pair := range want {
+		if pair.got != pair.want {
+			t.Errorf("tview.Styles.%s = %v, want %v (from theme)", name, pair.got, pair.want)
+		}
 	}
 }
