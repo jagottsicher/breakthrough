@@ -315,11 +315,19 @@ func (r *Root) renderMounts() {
 		r.mountsTable.SetCell(row, mountsColTarget,
 			tview.NewTableCell(padRight(m.target, mountsColumnWidth(mountsColTarget))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
+		// statusGlyphText, not checkboxText — bind/persistent are plain
+		// facts about the mount this screen can't change, not a
+		// clickable setting, so they get the same ✔/✘ shape Sessions'
+		// own Status column uses for the identical reason instead of
+		// the ●/○ pair reserved for an actual checkbox. Color
+		// unchanged (PlaceholderText, same as Type/Source/Options) —
+		// see statusGlyphText's own doc comment on why this stays
+		// plain rather than green/red.
 		r.mountsTable.SetCell(row, mountsColBind,
-			tview.NewTableCell(padRight(checkboxText(m.bind), mountsColumnWidth(mountsColBind))).
+			tview.NewTableCell(padRight(statusGlyphText(m.bind), mountsColumnWidth(mountsColBind))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColPersistent,
-			tview.NewTableCell(padRight(checkboxText(m.persistent), mountsColumnWidth(mountsColPersistent))).
+			tview.NewTableCell(padRight(statusGlyphText(m.persistent), mountsColumnWidth(mountsColPersistent))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColFstype,
 			tview.NewTableCell(padRight(m.fstype, mountsColumnWidth(mountsColFstype))).

@@ -173,6 +173,27 @@ func TestOpenActivityLogPopulatesTableFromRealFile(t *testing.T) {
 	}
 }
 
+// TestOpenActivityLogFocusesTable pins that opening the Activity Log
+// screen (chord "jl") lands you ready to read/navigate entries right
+// away, not typing into the keyword filter field first — the same fix
+// openLogAuditViewer already applies (logaudit.go) for its own sibling
+// screen (chord "jL"), just never carried over here until now.
+func TestOpenActivityLogFocusesTable(t *testing.T) {
+	systemDir := isolateActivityLogPaths(t)
+	writeActivityLogLines(t, systemDir, activityLogFixture()...)
+
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	r.openActivityLog()
+
+	if !r.activityLogTable.HasFocus() {
+		t.Error("openActivityLog should focus the table, not activityLogKeywordField")
+	}
+}
+
 // TestRenderActivityLogShowsPlaceholderWhenEmpty pins the "report it,
 // don't leave it looking like a successful empty read" contract for the
 // genuinely-nothing-logged-yet case.

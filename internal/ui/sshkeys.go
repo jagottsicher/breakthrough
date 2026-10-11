@@ -240,7 +240,14 @@ func (r *Root) renderSSHKeysRow(row int, kp sshkeys.KeyPair) {
 		cell(sshKeysColEncrypted, "–", r.theme.MutedTextColor)
 		cell(sshKeysColPerms, "–", r.theme.MutedTextColor)
 	} else {
-		cell(sshKeysColEncrypted, checkboxText(kp.Encrypted), r.theme.Text)
+		// statusGlyphText, not checkboxText — whether a key is
+		// encrypted is a fact about the key file, not a clickable
+		// setting, so it gets the same ✔/✘ Sessions' own Status column
+		// uses for the identical reason instead of the ●/○ pair
+		// reserved for an actual checkbox. Color unchanged (theme.Text,
+		// same as Name/Type) — see statusGlyphText's own doc comment on
+		// why this stays plain rather than green/red.
+		cell(sshKeysColEncrypted, statusGlyphText(kp.Encrypted), r.theme.Text)
 		permsColor := r.theme.Text
 		if kp.PrivatePermissiveWarning {
 			permsColor = r.theme.WarningText
