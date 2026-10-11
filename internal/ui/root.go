@@ -878,17 +878,30 @@ type Root struct {
 	// per-user directory (see newActivityLogger's own doc comment) —
 	// its own small dialog rather than the generic confirmDialog
 	// (openConfirm is documented as the single entry point for a real
-	// yes/no confirmation; this has no such choice, just an
-	// acknowledgment plus an optional "don't show again" toggle, and
-	// threading that through confirmDialog's own two-item shape would
-	// touch Remove/Empty Trash/both Options resets for one unrelated
-	// caller). List-based with a checkboxText-prefixed toggle item, the
-	// same shape sedFlagsList already establishes for exactly this
-	// reason: tview.Form.AddCheckbox can't keep a background different
-	// from a real field's (see newSedForm's own doc comment).
+	// yes/no confirmation shaped as exactly two List items; this one
+	// has a fixed, six-row layout of its own instead: a header bar
+	// ("Important note" plus a clickable "✕", both equivalent to
+	// Cancel), the notice's own message tinted the same
+	// theme.ErrorBackground every other error already uses (see
+	// showError), a blank row, the "Don't show this again" toggle
+	// (checkboxText-prefixed, List-based for the same reason
+	// sedFlagsList already is — tview.Form.AddCheckbox can't keep a
+	// background different from a real field's, see newSedForm's own
+	// doc comment), another blank row, then Cancel and OK side by side
+	// — the one place in this dialog two real buttons share a single
+	// row, so plain tview.Button rather than List items (a List only
+	// ever stacks one choice per row). Cancel and the header's own "✕"
+	// both discard whatever the checkbox was set to; only OK applies
+	// it, the same "Cancel means forget the pending choice" convention
+	// every ordinary dialog already uses, unlike the dialog's own first
+	// cut, before the user's explicit follow-up request for a real
+	// Cancel distinct from OK.
 	activityLogNoticeLayout        *tview.Flex
 	activityLogNoticeTitleBar      *tview.TextView
+	activityLogNoticeMessageView   *tview.TextView
 	activityLogNoticeList          *tview.List
+	activityLogNoticeCancelButton  *tview.Button
+	activityLogNoticeOKButton      *tview.Button
 	activityLogNoticeDontShowAgain bool
 
 	// sedForm/sedFlagsList/sedActions/sedLayout together make up the
@@ -2252,16 +2265,49 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 		AddItem(r.confirmDialogTitleBar, 1, 0, false).
 		AddItem(r.confirmDialog, 0, 1, true)
 
+	// Header bar: "Important note" plus a clickable "✕" — both close
+	// exactly like Cancel (see gitBreachBlockFocusSteal's own sibling
+	// pattern elsewhere for "intercept MouseLeftDown, do something with
+	// it" — this one acts instead of swallowing). The glyph's own
+	// column is computed fresh in openActivityLogFallbackNotice's own
+	// SetDrawFunc-free path (this dialog's width never changes after
+	// opening, unlike Git breach's own panes, so a one-time computation
+	// at open time is enough).
+	r.activityLogNoticeTitleBar = newPlainTitleBar("")
+	r.activityLogNoticeTitleBar.SetMouseCapture(r.activityLogNoticeTitleBarMouseCapture)
+
+	r.activityLogNoticeMessageView = tview.NewTextView()
+	r.activityLogNoticeMessageView.SetWrap(true)
+
 	r.activityLogNoticeList = tview.NewList().ShowSecondaryText(false)
 	r.activityLogNoticeList.SetHighlightFullLine(true)
-	r.activityLogNoticeList.SetBorderPadding(0, 0, 1, 1)
 	r.activityLogNoticeList.AddItem(activityLogNoticeCheckboxText(false), "", 0, r.toggleActivityLogNoticeDontShowAgain)
-	r.activityLogNoticeList.AddItem("OK", "", 0, r.acceptActivityLogNotice)
-	r.activityLogNoticeList.SetDoneFunc(r.acceptActivityLogNotice) // Escape acknowledges too -- there is no real "no" to cancel into
-	r.activityLogNoticeTitleBar = newPlainTitleBar("")
+
+	r.activityLogNoticeCancelButton = tview.NewButton("Cancel")
+	r.activityLogNoticeCancelButton.SetSelectedFunc(r.cancelActivityLogNotice)
+	r.activityLogNoticeOKButton = tview.NewButton("OK")
+	r.activityLogNoticeOKButton.SetSelectedFunc(r.acceptActivityLogNotice)
+
+	// Tab/Backtab cycle the three real focus targets (the checkbox
+	// List, Cancel, OK) in a fixed three-way ring — small and fixed
+	// enough that a Git-breach-style data-driven focusables list would
+	// be more machinery than this dialog ever needs.
+	r.activityLogNoticeList.SetInputCapture(r.captureActivityLogNoticeListKey)
+	r.activityLogNoticeCancelButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeOKButton, r.activityLogNoticeList))
+	r.activityLogNoticeOKButton.SetInputCapture(r.captureActivityLogNoticeButtonKey(r.activityLogNoticeList, r.activityLogNoticeCancelButton))
+
+	buttonRow := tview.NewFlex().
+		AddItem(r.activityLogNoticeCancelButton, 0, 1, true).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(r.activityLogNoticeOKButton, 0, 1, false)
+
 	r.activityLogNoticeLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogNoticeTitleBar, 1, 0, false).
-		AddItem(r.activityLogNoticeList, 0, 1, true)
+		AddItem(r.activityLogNoticeMessageView, 0, 1, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(r.activityLogNoticeList, 1, 0, true).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(buttonRow, 1, 0, false)
 
 	// The Paste conflict dialog (see pasteconflict.go) — one shared List
 	// again, this time with several distinct answers rather than a
