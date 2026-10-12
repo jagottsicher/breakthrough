@@ -1638,13 +1638,13 @@
     },
     {
       "path": "internal/ui/help.go",
-      "size": 94158,
-      "sha256": "fb3b1a96d603244fdfffbc32142d5c6705fbc0eb8cae6f9517c344edd1df3d5b"
+      "size": 94183,
+      "sha256": "648f98d1a4848768e31f8d5f61c89835932d67ada7802e0315b434b7077bf828"
     },
     {
       "path": "internal/ui/help_test.go",
-      "size": 14557,
-      "sha256": "60b958c953244de33742054f1606a721c154fbc413a833b173195e642c6f4704"
+      "size": 15861,
+      "sha256": "2bda121a57e163745aad1ea518f358e6de9ad75ec191e753de5643fb66dfe58d"
     },
     {
       "path": "internal/ui/hostkeyconfirm.go",
@@ -28006,7 +28006,7 @@
       "name": "fullHelpText",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1541
+      "line": 1543
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28014,7 +28014,7 @@
       "name": "newHelpView",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1558
+      "line": 1560
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28022,7 +28022,7 @@
       "name": "newHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1574
+      "line": 1576
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28030,7 +28030,7 @@
       "name": "renderHelpTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1594
+      "line": 1596
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28038,7 +28038,7 @@
       "name": "captureHelpTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1610
+      "line": 1612
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28046,7 +28046,7 @@
       "name": "openHelp",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1636
+      "line": 1638
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28054,7 +28054,7 @@
       "name": "helpContentWidth",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1666
+      "line": 1668
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28062,7 +28062,7 @@
       "name": "helpSize",
       "kind": "method",
       "receiver": "*Root",
-      "line": 1684
+      "line": 1686
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -28144,30 +28144,37 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help_test.go",
+      "name": "TestHelpTextEscapesLiteralBracketExamples",
+      "kind": "function",
+      "line": 284
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/help_test.go",
       "name": "TestHelpTextNeverMentionsFunctionKeys",
       "kind": "function",
-      "line": 278
+      "line": 306
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help_test.go",
       "name": "TestHelpTextMentionsEveryRealShortcut",
       "kind": "function",
-      "line": 304
+      "line": 332
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help_test.go",
       "name": "TestHelpTextNeverMentionsRetiredCtrlBindings",
       "kind": "function",
-      "line": 338
+      "line": 366
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/help_test.go",
       "name": "TestHelpTextMentionsThePrimaryKeyboardLayer",
       "kind": "function",
-      "line": 358
+      "line": 386
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -47815,5 +47822,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "353c9b86960977537c9414b5196f57ad43d89496f7a0f4ed5e7012e6e0bb4719"
+  "merkle_root": "bf57a466bc365dd36ae133db62fe39347277b0174adffbba92a09d4151eb7bd3"
 }

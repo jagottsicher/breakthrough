@@ -269,6 +269,34 @@ func TestHelpTextNeverMentionsAI(t *testing.T) {
 	}
 }
 
+// TestHelpTextEscapesLiteralBracketExamples pins a real bug: the Log
+// Audit format description uses "[level]" and "[core:error]" as
+// literal illustrative text, not as tview style tags. Left unescaped,
+// tview's own tag parser consumed them as (invalid) style tags instead
+// of displaying them — visibly corrupting the colors of everything
+// rendered afterward, and silently breaking keyboard scrolling in the
+// process (tview's line index is built from the same tag-parsing pass).
+// Rendered through a real TextView, not just scanned as a Go string,
+// so this actually exercises tview's own parser rather than an
+// approximation of it. See help.go's "[level[]"/"[core:error[]" escape
+// syntax (an extra "[" right before the closing "]", not "[[level]")
+// for why these specific two render correctly.
+func TestHelpTextEscapesLiteralBracketExamples(t *testing.T) {
+	dir := fixtureDir(t)
+	r, err := NewRoot(tview.NewApplication(), dir)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.openHelp()
+
+	got := r.helpView.GetText(true)
+	for _, want := range []string{"[level] message", `"[core:error]"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered help text is missing literal %q — tview's tag parser likely swallowed it instead of displaying it:\n%s", want, got)
+		}
+	}
+}
+
 // TestHelpTextNeverMentionsFunctionKeys pins the removal itself: no
 // function key does anything in this app any more (see
 // cmd/breakthrough's own dispatch), so none should be documented as if
