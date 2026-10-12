@@ -354,9 +354,11 @@ button ([split view](#split-view)) and, except the first tab, a `✕`.
 
 The first tab can't be closed — `Ctrl`+`Q` is how you leave.
 
-Your tabs are saved when you quit and reopened next time. Starting with
-an explicit directory (`breakthrough /some/path`) opens just that
-instead, and `restore_tabs = false` turns the whole thing off.
+Your tabs are saved when you quit, but a bare `breakthrough` opens in
+the current directory by default rather than reopening them — set
+`restore_tabs = true` to have it resume your last layout instead.
+Starting with an explicit directory (`breakthrough /some/path`) always
+opens just that, regardless of this setting.
 
 ## Split view
 
@@ -2497,7 +2499,7 @@ Every key breakthrough recognizes, with its default:
 | `size_bytes` | `false` | Size column as exact bytes instead of human-readable |
 | `mtime_unix` | `false` | Time column as a Unix timestamp instead of a formatted date |
 | `file_icons` | `false` | Type column shows a Nerd Font icon per entry instead of the plain type character — needs a terminal font that actually has them |
-| `restore_tabs` | `true` | Reopen the tabs (and split) that were open on last exit |
+| `restore_tabs` | `false` | Reopen the tabs (and split) that were open on last exit |
 | `split_stacked` | `false` | Split view stacks its panes above each other instead of side by side |
 | `mouse_enabled` | `true` | Mouse reporting on at startup (clicks/drags work, but blocks the terminal's own native text selection) |
 | `filter_persistent` | `true` | Keep the filter menu's own filter active across a directory change instead of resetting it |
