@@ -181,6 +181,36 @@ nfpms:
         dst: /usr/share/man/man1/brk.1.gz
         type: symlink
 
+# Homebrew tap (macOS/Linuxbrew) — a separate repo, not this one, matching
+# GitHub's own recommendation against mixing a tap with the project it
+# packages. Needs HOMEBREW_TAP_GITHUB_TOKEN (a token with Contents
+# read/write on jagottsicher/homebrew-breakthrough) as a secret on this
+# repo; GITHUB_TOKEN itself can't write to a different repo.
+brews:
+  - name: breakthrough
+    repository:
+      owner: jagottsicher
+      name: homebrew-breakthrough
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/jagottsicher/breakthrough
+    description: >-
+      POSIX-friendly, window/menu-based TUI file manager for the
+      terminal, inspired by the Windows 3.11 UX.
+    license: Apache-2.0
+    commit_author:
+      name: jagottsicher
+      email: jagottsicher@gmx.net
+    commit_msg_template: "brew: update {{ .ProjectName }} to {{ .Tag }}"
+    install: |
+      bin.install "breakthrough"
+      bin.install_symlink bin/"breakthrough" => "brk"
+      man1.install "breakthrough.1.gz"
+      man1.install_symlink man1/"breakthrough.1.gz" => "brk.1.gz"
+    test: |
+      system "#{bin}/breakthrough", "--version"
+
 changelog:
   use: git
   sort: asc
