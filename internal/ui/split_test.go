@@ -442,6 +442,7 @@ func TestSplitSurvivesSaveAndRestore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	after.settings.RestoreTabs = true
 	after.RestoreSavedTabs()
 
 	if !after.splitActive {
@@ -483,6 +484,7 @@ func TestSplitIsDroppedWhenAPaneDirectoryVanished(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	r.settings.RestoreTabs = true
 	r.RestoreSavedTabs()
 
 	if r.splitActive {

@@ -756,6 +756,7 @@ func TestRestoreSavedTabsReopensTheLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	r.settings.RestoreTabs = true
 	r.RestoreSavedTabs()
 
 	if got := r.tabCount(); got != 2 {
@@ -789,6 +790,7 @@ func TestRestoreSavedTabsSkipsVanishedDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
+	r.settings.RestoreTabs = true
 	r.RestoreSavedTabs()
 
 	if got := r.tabCount(); got != 2 {

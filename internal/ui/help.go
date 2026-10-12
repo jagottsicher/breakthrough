@@ -1150,10 +1150,11 @@ var helpText = strings.TrimLeft(`
   strip, and the context menu all work regardless of what your terminal
   can report.
 
-  The open tabs are saved when you quit and reopened next time. Starting
-  breakthrough with an explicit directory ("breakthrough /some/path")
-  opens just that instead; setting "restore_tabs = false" in the config
-  turns the whole thing off.
+  The open tabs are saved when you quit, but a bare "breakthrough"
+  opens in the current directory rather than reopening them; setting
+  "restore_tabs = true" in the config resumes your last layout instead.
+  Starting breakthrough with an explicit directory
+  ("breakthrough /some/path") always opens just that.
 
 [::b]Properties dialog[::-]
 

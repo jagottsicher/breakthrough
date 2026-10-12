@@ -115,13 +115,15 @@ func ParseFile(path string) (values map[string]string, warnings []string, err er
 //     disables quota-based pruning entirely.
 //   - restore_tabs: whether breakthrough reopens the panel tabs that
 //     were open when it last exited (see internal/session's SaveTabs/
-//     LoadTabs and internal/ui's RestoreSavedTabs). true by default —
-//     per the user's own explicit request that each tab remember its own
-//     directory across a restart. Only ever consulted when breakthrough
-//     is started with no explicit directory argument: "breakthrough
-//     /some/path" is an unambiguous instruction about where to open, and
-//     silently reopening yesterday's tabs on top of it would be the
-//     wrong answer to it.
+//     LoadTabs and internal/ui's RestoreSavedTabs). false by default —
+//     a bare "breakthrough" with no path should open where you actually
+//     typed it from, not silently resurrect wherever a previous session
+//     happened to leave off; opt in explicitly if cross-restart tab
+//     memory is wanted. Only ever consulted when breakthrough is started
+//     with no explicit directory argument: "breakthrough /some/path" is
+//     an unambiguous instruction about where to open, and reopening
+//     yesterday's tabs on top of it would be the wrong answer to it
+//     regardless of this setting.
 //   - split_stacked: which way split view divides the window when it's
 //     turned on (see internal/ui's split.go) — false, the default, puts
 //     the two panes side by side; true stacks them above each other.
@@ -559,7 +561,7 @@ func DefaultSettings() Settings {
 		TrashPersistent:   true,
 		TrashMaxAgeDays:   30,
 		TrashQuotaPercent: 10,
-		RestoreTabs:       true,
+		RestoreTabs:       false,
 		SplitStacked:      false,
 		MouseEnabled:      true,
 		FilterPersistent:  true,
