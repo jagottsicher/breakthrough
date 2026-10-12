@@ -28,8 +28,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "size": 2549,
-      "sha256": "70890a35b93c60d220cdec02763e456f5e9c2028be54eec8de3992d8a1ae5202"
+      "size": 5925,
+      "sha256": "b8a8561aa6339070a4014bf656af69e9e9fc2e42ca29c73f3d76edb5236d24f6"
     },
     {
       "path": ".github/workflows/test-linux-arm.yml",
@@ -58,13 +58,13 @@
     },
     {
       "path": ".goreleaser.yaml",
-      "size": 10341,
-      "sha256": "898982648b8a98600a7bb441b7afd3b82243cb500c9fc87c901bf94c609ee88c"
+      "size": 11525,
+      "sha256": "0ce169c8c8562a4fa6ecf0fff247287a6543b9b2afd55e4e0db2f1a4c8a126b0"
     },
     {
       "path": "CONTRIBUTING.md",
-      "size": 2294,
-      "sha256": "ce240f76184f4b27741fac0602402697b7e6794429c9e2fb4bc8639cadcc91b7"
+      "size": 2353,
+      "sha256": "9b6d6ee43ff2ed0bfb0019858f722fe405159632e6c16fa82ef15df24e4a34a0"
     },
     {
       "path": "LICENSE",
@@ -47815,5 +47815,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "e9a9765d918f9978ca9855e2bfa367c58d20145f4c2231a699ae110456206606"
+  "merkle_root": "0958adff0b9af209f4f2d854e9bfded5e0b20318905a5a06646efd53ad1d62c0"
 }
