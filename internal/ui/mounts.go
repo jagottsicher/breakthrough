@@ -315,11 +315,19 @@ func (r *Root) renderMounts() {
 		r.mountsTable.SetCell(row, mountsColTarget,
 			tview.NewTableCell(padRight(m.target, mountsColumnWidth(mountsColTarget))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
+		// statusGlyphText, not checkboxText — bind/persistent are plain
+		// facts about the mount this screen can't change, not a
+		// clickable setting, so they get the same ✔/✘ shape Sessions'
+		// own Status column uses for the identical reason instead of
+		// the ●/○ pair reserved for an actual checkbox. Color
+		// unchanged (PlaceholderText, same as Type/Source/Options) —
+		// see statusGlyphText's own doc comment on why this stays
+		// plain rather than green/red.
 		r.mountsTable.SetCell(row, mountsColBind,
-			tview.NewTableCell(padRight(checkboxText(m.bind), mountsColumnWidth(mountsColBind))).
+			tview.NewTableCell(padRight(statusGlyphText(m.bind), mountsColumnWidth(mountsColBind))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColPersistent,
-			tview.NewTableCell(padRight(checkboxText(m.persistent), mountsColumnWidth(mountsColPersistent))).
+			tview.NewTableCell(padRight(statusGlyphText(m.persistent), mountsColumnWidth(mountsColPersistent))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColFstype,
 			tview.NewTableCell(padRight(m.fstype, mountsColumnWidth(mountsColFstype))).
@@ -373,6 +381,14 @@ func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
 	}
 	r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.mountsTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
 	// fixed FocusedBackground just above follows.

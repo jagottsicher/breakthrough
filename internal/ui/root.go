@@ -2168,6 +2168,13 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	settings, settingOrigins, colorSchemes, configWarnings := loadInitialSettings()
 	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
 
+	// Before any tview.New* call below (and everything NewPanel itself
+	// constructs): tview.Box copies tview.Styles into its own fields at
+	// construction time, not at Draw time (see applyTviewDefaultTheme's
+	// own doc comment), so this has to run ahead of the whole widget
+	// tree being built, not just inside applyTheme further down.
+	applyTviewDefaultTheme(theme)
+
 	panel, err := NewPanel(app, path, theme, settings)
 	if err != nil {
 		return nil, err

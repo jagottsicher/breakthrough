@@ -138,6 +138,37 @@ func colorTag(c tcell.Color) string {
 	return fmt.Sprintf("#%06x", c.Hex())
 }
 
+// applyTviewDefaultTheme points tview.Styles — the package-level fallback
+// every primitive falls back to for whatever it never had set explicitly
+// (a forgotten SetBackgroundColor/SetBorderColor/SetTitleColor call, or a
+// plain tview.NewBox() nobody styled at all) — at the active theme instead
+// of tview's own built-in black/blue/white default.
+//
+// tview.NewBox (and everything built on top of it) copies these values
+// into the primitive's own fields at construction time, not at Draw
+// time — so this only helps a widget built *after* it runs. That's why
+// NewRoot calls it first, before building the widget tree at all (see
+// its own call site), not only here. The call in applyTheme exists for
+// the other direction: a live color-scheme switch (see
+// applyColorScheme), so any primitive built afterwards — a dialog opened
+// for the first time post-switch — still starts from the new theme
+// rather than the one active at startup. Widgets already built before a
+// switch are unaffected either way; they rely on their own explicit
+// styleX call elsewhere in applyTheme to pick up the change live.
+func applyTviewDefaultTheme(theme config.ResolvedTheme) {
+	tview.Styles.PrimitiveBackgroundColor = theme.SurfaceBackground
+	tview.Styles.ContrastBackgroundColor = theme.AccentBackground
+	tview.Styles.MoreContrastBackgroundColor = theme.InputFocusedBackground
+	tview.Styles.BorderColor = theme.BorderColor
+	tview.Styles.TitleColor = theme.TextColor
+	tview.Styles.GraphicsColor = theme.BorderColor
+	tview.Styles.PrimaryTextColor = theme.TextColor
+	tview.Styles.SecondaryTextColor = theme.MutedTextColor
+	tview.Styles.TertiaryTextColor = theme.MutedTextColor
+	tview.Styles.InverseTextColor = theme.Text
+	tview.Styles.ContrastSecondaryTextColor = theme.Text
+}
+
 // applyTheme switches every widget Root owns directly to theme, plus
 // Properties (via a re-render — its own colors are baked into style tags
 // propertiesBuilder.focusTag generates, not looked up live) and the
@@ -148,6 +179,7 @@ func colorTag(c tcell.Color) string {
 // scheme.
 func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.theme = theme
+	applyTviewDefaultTheme(theme)   // see its own doc comment
 	r.updateOverlayTitleBarColors() // propertiesTitleBar/menuTitleBar — see its own doc comment
 
 	// AccentBackground: the shared, constant "normal panel background"
@@ -301,6 +333,16 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.batchRenameFieldHelp.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameFieldHelp.SetTextColor(theme.MutedTextColor)
 		r.batchRenamePreviewTable.SetBackgroundColor(theme.SurfaceBackground)
+		// Without this, tview's own default selected-cell style just
+		// reverses each cell's own foreground into a background instead
+		// of using one consistent selection bar — the same fix already
+		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// tabSwitcher/gitBreach's tables, for the identical reason.
+		// batchRenameFieldsTable doesn't need this: setOptionsPaneFocused
+		// already covers it, the same way it covers optionsTable.
+		r.batchRenamePreviewTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.SelectionBackground).
+			Foreground(theme.TextColor))
 		r.batchRenameStatus.SetBackgroundColor(theme.SurfaceBackground)
 		r.batchRenameStatus.SetTextColor(theme.TextColor)
 
@@ -360,6 +402,33 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	r.applyGitBreachTheme(theme)
 
 	if r.compareTreeTable != nil {
+		// A real, previously-unnoticed gap: unlike every other full-screen
+		// catalog here, this whole block was missing except for the hint
+		// text itself — Compare Tree's own layout/table/status/buttons sat
+		// at tview's plain, unthemed default instead of this app's theme.
+		r.compareTreeLayout.SetBackgroundColor(theme.SurfaceBackground)
+		r.compareTreeTable.SetBackgroundColor(theme.SurfaceBackground)
+		// Without this, tview's own default selected-cell style just
+		// reverses each cell's own foreground into a background instead
+		// of using one consistent selection bar — the same fix already
+		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// tabSwitcher/gitBreach's tables, for the identical reason.
+		r.compareTreeTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.SelectionBackground).
+			Foreground(theme.TextColor))
+		r.compareTreeStatus.SetBackgroundColor(theme.SurfaceBackground)
+		r.compareTreeStatus.SetTextColor(theme.TextColor)
+		r.compareTreeButtons.SetBackgroundColor(theme.SurfaceBackground)
+		styleButton(r.compareTreeModeBtn, theme)
+		styleButton(r.compareTreeShowSameBtn, theme)
+		styleButton(r.compareTreeCloseBtn, theme)
+
+		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
+		// fixed FocusedBackground follows.
+		r.compareTreeTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+		r.compareTreeTitleBar.SetTextColor(theme.TextColor)
+		r.compareTreeHint.SetBackgroundColor(theme.InputBackground)
+		r.compareTreeHint.SetTextColor(theme.MutedTextColor)
 		compareTreeHintText, compareTreeHintSpans := buildListHint(theme, compareTreeHintEntries())
 		r.compareTreeHint.SetText(compareTreeHintText)
 		r.compareTreeHintSpans = compareTreeHintSpans

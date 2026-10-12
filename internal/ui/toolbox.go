@@ -451,6 +451,14 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	}
 	r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.toolboxTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	// FocusedBackground, fixed — the Toolbox screen has exactly one
 	// focusable widget (its own table), never itself the base a

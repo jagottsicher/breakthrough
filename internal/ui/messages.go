@@ -640,6 +640,14 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	}
 	r.messagesLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.messagesTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.messagesTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	r.messagesTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.messagesTitleBar.SetTextColor(theme.TextColor)

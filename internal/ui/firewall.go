@@ -358,6 +358,14 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 		// the rest of the theme.
 		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
 		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
+		// Without this, tview's own default selected-cell style just
+		// reverses each cell's own foreground into a background instead
+		// of using one consistent selection bar — the same fix already
+		// applied to sshKeysTable/connectionMenuTable/sedPreviewTable/
+		// tabSwitcher/gitBreach's tables, for the identical reason.
+		r.firewallTable.SetSelectedStyle(tcell.StyleDefault.
+			Background(theme.SelectionBackground).
+			Foreground(theme.TextColor))
 
 		// FocusedBackground, fixed — same reasoning mountsTitleBar's own
 		// fixed FocusedBackground above follows.

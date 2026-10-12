@@ -78,9 +78,9 @@ const (
 	sessionsCloseGlyph     = "✕"
 
 	// sessionsAttachedGlyph/sessionsDetachedGlyph/sessionsUnknownGlyph are
-	// the Status column's own glyphs, per the user's own explicit choice
-	// for the first two — a heavy checkmark/ballot X (U+2714/U+2718)
-	// colored green/red (see sessionsStatusColor), rather than the words
+	// the Status column's own glyphs — a heavy checkmark/ballot X
+	// (U+2714/U+2718), plain-colored (see sessionsStatusColor's own doc
+	// comment for why, no longer green/red), rather than the words
 	// "Attached"/"Detached" themselves. sessionsUnknownGlyph (a plain em
 	// dash, in the theme's own muted color) is this screen's own
 	// addition for multiplex.StatusUnknown — Zellij's own list-sessions
@@ -107,15 +107,21 @@ func sessionsStatusGlyph(status multiplex.Status) string {
 	}
 }
 
+// sessionsStatusColor used to pair sessionsAttachedGlyph/
+// sessionsDetachedGlyph with green/red (EntryExecutable/CriticalText),
+// per the user's own earlier explicit choice. Reversed per a later,
+// broader explicit request: every ✔/✘ in the app should be either all
+// plain or all green/red, never mixed — and Mounts' own Persistent
+// column already had colored true/false explicitly rejected before
+// (see TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless),
+// so plain is the choice that satisfies both. theme.Text, matching
+// Name/Backend's own column color — MutedTextColor stays for
+// StatusUnknown's own "–", which was never green/red to begin with.
 func sessionsStatusColor(status multiplex.Status, theme config.ResolvedTheme) tcell.Color {
-	switch status {
-	case multiplex.StatusAttached:
-		return theme.EntryExecutable
-	case multiplex.StatusDetached:
-		return theme.CriticalText
-	default:
+	if status == multiplex.StatusUnknown {
 		return theme.MutedTextColor
 	}
+	return theme.Text
 }
 
 // sessionsBackendColor gives each backend's own name its own fixed
@@ -477,6 +483,14 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	}
 	r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
 	r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.sessionsTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sessionsTitleBar.SetTextColor(theme.TextColor)
