@@ -328,7 +328,7 @@ func TestOpenNetworkToolsShowsOnlyTheNetworkingCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Networking"))
@@ -356,7 +356,7 @@ func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
@@ -388,7 +388,7 @@ func TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware(t *testing.T) {
 	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
 		t.Errorf("row count after opening jh = %d, want %d (Hardware only)", got, want)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 }
@@ -422,9 +422,15 @@ func TestActivateToolboxRowOnAHeaderRowDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openNetworkTools()
+	// The full, multi-category catalog, not openNetworkTools/
+	// openHardwareTools: a single-category screen no longer renders a
+	// header row at all (see toolboxDisplayRowsFor's own doc comment —
+	// "jn"/"jh" already name the one category in the title bar itself),
+	// so this needs the one path that still has a header row to
+	// activate.
+	r.openToolboxScreen("Toolbox", toolboxCategories())
 
-	r.activateToolboxRow(0) // the leading "Networking" header
+	r.activateToolboxRow(0) // the leading category header
 
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 — activating a header row should do nothing", len(r.toolWindows))

@@ -110,11 +110,14 @@ func TestReloadSessionsSortsByBackendThenName(t *testing.T) {
 	}
 }
 
-// TestRenderSessionsRowShowsStatusAsAColoredGlyph pins the Status
-// column's own glyph choice — a green ✔ for attached, a red ✘ for
-// detached, per the user's own explicit choice, rather than the words
-// "Attached"/"Detached" themselves.
-func TestRenderSessionsRowShowsStatusAsAColoredGlyph(t *testing.T) {
+// TestRenderSessionsRowShowsStatusAsAPlainGlyph pins the Status
+// column's own glyph choice — a ✔ for attached, a ✘ for detached,
+// rather than the words "Attached"/"Detached" themselves — and that
+// both render in the same plain color, not green/red: reversed from an
+// earlier explicit choice, per a later, broader explicit request that
+// every ✔/✘ in the app be either all plain or all green/red, never
+// mixed (see sessionsStatusColor's own doc comment).
+func TestRenderSessionsRowShowsStatusAsAPlainGlyph(t *testing.T) {
 	r := newTestRootForSessions(t)
 	isolateSessionsList(t, []multiplex.Session{
 		{Name: "attached-one", Backend: multiplex.BackendTmux, Status: multiplex.StatusAttached},
@@ -127,16 +130,16 @@ func TestRenderSessionsRowShowsStatusAsAColoredGlyph(t *testing.T) {
 	if !strings.Contains(attachedCell.Text, sessionsAttachedGlyph) {
 		t.Errorf("attached row's Status cell = %q, want it to contain %q", attachedCell.Text, sessionsAttachedGlyph)
 	}
-	if got := tableCellForeground(attachedCell); got != r.theme.EntryExecutable {
-		t.Errorf("attached row's Status color = %v, want theme.EntryExecutable (%v)", got, r.theme.EntryExecutable)
+	if got := tableCellForeground(attachedCell); got != r.theme.Text {
+		t.Errorf("attached row's Status color = %v, want the plain theme.Text (%v), not a color-coded one", got, r.theme.Text)
 	}
 
 	detachedCell := r.sessionsTable.GetCell(2, sessionsColStatus)
 	if !strings.Contains(detachedCell.Text, sessionsDetachedGlyph) {
 		t.Errorf("detached row's Status cell = %q, want it to contain %q", detachedCell.Text, sessionsDetachedGlyph)
 	}
-	if got := tableCellForeground(detachedCell); got != r.theme.CriticalText {
-		t.Errorf("detached row's Status color = %v, want theme.CriticalText (%v)", got, r.theme.CriticalText)
+	if got := tableCellForeground(detachedCell); got != r.theme.Text {
+		t.Errorf("detached row's Status color = %v, want the same plain theme.Text (%v) as the attached row, not a color-coded one", got, r.theme.Text)
 	}
 }
 

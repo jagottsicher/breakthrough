@@ -230,7 +230,7 @@ func (r *Root) newMountsScreen() {
 	r.mountsTable.SetInputCapture(r.captureMountsKey)
 
 	r.mountsTitleBar = newPlainTitleBar("Mounts")
-	r.mountsTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.mountsTitleBar, r.reloadMounts))
+	r.mountsTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.mountsTitleBar, r.reloadMounts, r.closeMounts))
 
 	r.mountsHint = tview.NewTextView()
 	r.mountsHint.SetWrap(false)
@@ -280,7 +280,7 @@ func (r *Root) reloadMounts() {
 func (r *Root) renderMounts() {
 	r.mountsTable.Clear()
 
-	renderReloadTitleBar(r.mountsTitleBar, " Mounts ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.mountsTitleBar, " Mounts ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
 		r.mountsTable.SetCell(0, col,
@@ -315,11 +315,19 @@ func (r *Root) renderMounts() {
 		r.mountsTable.SetCell(row, mountsColTarget,
 			tview.NewTableCell(padRight(m.target, mountsColumnWidth(mountsColTarget))).
 				SetTextColor(r.theme.Text).SetSelectable(true))
+		// statusGlyphText, not checkboxText — bind/persistent are plain
+		// facts about the mount this screen can't change, not a
+		// clickable setting, so they get the same ✔/✘ shape Sessions'
+		// own Status column uses for the identical reason instead of
+		// the ●/○ pair reserved for an actual checkbox. Color
+		// unchanged (PlaceholderText, same as Type/Source/Options) —
+		// see statusGlyphText's own doc comment on why this stays
+		// plain rather than green/red.
 		r.mountsTable.SetCell(row, mountsColBind,
-			tview.NewTableCell(padRight(checkboxText(m.bind), mountsColumnWidth(mountsColBind))).
+			tview.NewTableCell(padRight(statusGlyphText(m.bind), mountsColumnWidth(mountsColBind))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColPersistent,
-			tview.NewTableCell(padRight(checkboxText(m.persistent), mountsColumnWidth(mountsColPersistent))).
+			tview.NewTableCell(padRight(statusGlyphText(m.persistent), mountsColumnWidth(mountsColPersistent))).
 				SetTextColor(r.theme.PlaceholderText).SetSelectable(true))
 		r.mountsTable.SetCell(row, mountsColFstype,
 			tview.NewTableCell(padRight(m.fstype, mountsColumnWidth(mountsColFstype))).
@@ -371,15 +379,34 @@ func (r *Root) applyMountsTheme(theme config.ResolvedTheme) {
 	if r.mountsTable == nil {
 		return
 	}
-	r.mountsLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.mountsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground/SurfaceBackground, not SurfaceBackground/
+	// InputBackground: Mounts is a full-bleed, always-modal catalog that
+	// never needs to read as "floating over" anything — nothing is ever
+	// visible behind it to float over — so it adopts the exact same
+	// two-layer structure the main screen itself already uses (body
+	// darker than its own bottom bar — see buttonBar/statusBar in
+	// applyTheme) instead of a shade meant for genuinely floating
+	// chrome, per the user's own explicit request to bring every
+	// full-screen catalog in line with the main screen it fully covers.
+	r.mountsLayout.SetBackgroundColor(theme.PanelBackground)
+	r.mountsTable.SetBackgroundColor(theme.PanelBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.mountsTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	// FocusedBackground, fixed — same reasoning toolboxTitleBar's own
 	// fixed FocusedBackground just above follows.
 	r.mountsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.mountsTitleBar.SetTextColor(theme.TextColor)
-	r.mountsHint.SetBackgroundColor(theme.InputBackground)
-	r.mountsHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar exactly — see mountsLayout's own comment above.
+	r.mountsHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.mountsHint.SetTextColor(theme.TextColor)
 	mountsHintText, mountsHintSpans := buildListHint(theme, mountsHintEntries())
 	r.mountsHint.SetText(mountsHintText)
 	r.mountsHintSpans = mountsHintSpans

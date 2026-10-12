@@ -76,6 +76,7 @@ func activityLogHintEntries() []listHintEntry {
 // newFirewallScreen already establish.
 func (r *Root) newActivityLogScreen() {
 	r.activityLogTitleBar = newPlainTitleBar("Activity Log")
+	r.activityLogTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.activityLogTitleBar, r.reloadActivityLog, r.closeActivityLog))
 
 	r.activityLogKeywordField = tview.NewInputField()
 	r.activityLogKeywordField.SetLabel("Keyword: ")
@@ -132,12 +133,14 @@ func (r *Root) activityLogSetFieldStyle(field *tview.InputField, focused bool) {
 
 // openActivityLog shows the Activity Log screen, freshly read every
 // time — the same reasoning openMounts/openFirewall's own doc comments
-// give — with the keyword field focused first, the most likely thing to
-// type into right away.
+// give — with the table focused first, not activityLogKeywordField: the
+// same "land ready to read/navigate entries right away, not typing into
+// a filter first" fix openLogAuditViewer already applies (logaudit.go),
+// just never carried over to this sibling screen.
 func (r *Root) openActivityLog() {
 	r.reloadActivityLog()
 	r.showOverlay(activityLogPage, r.activityLogLayout)
-	r.app.SetFocus(r.activityLogKeywordField)
+	r.app.SetFocus(r.activityLogTable)
 }
 
 // closeActivityLog hides the Activity Log screen. Nothing to save — a
@@ -266,6 +269,7 @@ func activityLogLevelColor(theme config.ResolvedTheme, level activitylog.Level) 
 // like an empty, successful read, the same "report it, don't swallow
 // it" principle renderMounts/renderFirewall already follow.
 func (r *Root) renderActivityLog() {
+	renderReloadCloseTitleBar(r.activityLogTitleBar, " Activity Log ", r.lastScreenWidth)
 	r.activityLogTable.Clear()
 
 	header := func(col int, text string) {
@@ -374,13 +378,25 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	if r.activityLogTable == nil {
 		return
 	}
-	r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.activityLogLayout.SetBackgroundColor(theme.PanelBackground)
+	r.activityLogTable.SetBackgroundColor(theme.PanelBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.activityLogTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 
 	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogTitleBar.SetTextColor(theme.TextColor)
-	r.activityLogHint.SetBackgroundColor(theme.InputBackground)
-	r.activityLogHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.activityLogHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.activityLogHint.SetTextColor(theme.TextColor)
 	activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
 	r.activityLogHint.SetText(activityLogHintText)
 	r.activityLogHintSpans = activityLogHintSpans

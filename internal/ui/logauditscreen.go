@@ -106,7 +106,7 @@ func (r *Root) newLogAuditSelectionScreen() {
 	// glyph itself is drawn by renderLogAuditSelection, every time it
 	// renders (the same "render it fresh each time" shape
 	// renderReloadTitleBar's own callers already use).
-	r.logAuditTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditTitleBar, r.closeLogAuditSelection))
+	r.logAuditTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.logAuditTitleBar, r.reloadLogAuditDiscovery, r.closeLogAuditSelection))
 
 	r.logAuditTable = tview.NewTable()
 	r.logAuditTable.SetBorders(false)
@@ -137,7 +137,7 @@ func (r *Root) newLogAuditViewerScreen() {
 	// newLogAuditSelectionScreen) — drawn by renderLogAuditViewer
 	// itself, since this bar's own text is rebuilt fresh on every
 	// render anyway (the running counts).
-	r.logAuditViewerTitle.SetMouseCapture(captureCloseTitleBarMouse(r.logAuditViewerTitle, r.closeLogAuditViewer))
+	r.logAuditViewerTitle.SetMouseCapture(captureReloadCloseTitleBarMouse(r.logAuditViewerTitle, r.reopenLogAuditViewer, r.closeLogAuditViewer))
 
 	r.logAuditKeywordField = tview.NewInputField()
 	r.logAuditKeywordField.SetLabel("Filter: ")
@@ -297,7 +297,7 @@ func (r *Root) renderLogAuditSelection() {
 		// already named.
 		title += " — " + r.panel.remoteConn.Label()
 	}
-	renderCloseTitleBar(r.logAuditTitleBar, title+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.logAuditTitleBar, title+" ", r.lastScreenWidth)
 	r.logAuditTable.Clear()
 
 	header := func(col int, text string) {
@@ -535,7 +535,11 @@ func (r *Root) restyleLogAuditFilterFields(focused *tview.InputField) {
 // Blur callback) so a live theme switch repaints it in the right
 // color either way.
 func (r *Root) renderLogAuditFocusIndicator(focused bool) {
-	background := r.theme.SurfaceBackground
+	// PanelBackground, not SurfaceBackground — matches the table's own
+	// new background (see logAuditViewerTable's own comment) so the
+	// indicator still blends into the table it's a focus cue for while
+	// unfocused.
+	background := r.theme.PanelBackground
 	if focused {
 		background = r.theme.InputFocusedBackground
 	}
@@ -632,7 +636,7 @@ func (r *Root) renderLogAuditViewer() {
 	// One general note instead of repeating it on every affected hint
 	// — see logAuditViewerHintEntries' own doc comment for why.
 	title += " │ e/w/Enter/r/f/s need the list focused"
-	renderCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.logAuditViewerTitle, title+" ", r.lastScreenWidth)
 
 	r.renderLogAuditTimeline(shown)
 
@@ -870,26 +874,44 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	if r.logAuditTable == nil {
 		return
 	}
-	r.logAuditSelectionLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.logAuditTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.logAuditSelectionLayout.SetBackgroundColor(theme.PanelBackground)
+	r.logAuditTable.SetBackgroundColor(theme.PanelBackground)
+	// Without this, tview's own default selected-cell style just
+	// reverses each cell's own foreground into a background instead of
+	// using one consistent selection bar — the same fix already applied
+	// to sshKeysTable/connectionMenuTable/sedPreviewTable/tabSwitcher/
+	// gitBreach's tables, for the identical reason.
+	r.logAuditTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 	r.logAuditTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditTitleBar.SetTextColor(theme.TextColor)
-	r.logAuditHint.SetBackgroundColor(theme.InputBackground)
-	r.logAuditHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.logAuditHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.logAuditHint.SetTextColor(theme.TextColor)
 	hintText, hintSpans := buildListHint(theme, logAuditSelectionHintEntries())
 	r.logAuditHint.SetText(hintText)
 	r.logAuditHintSpans = hintSpans
 	r.renderLogAuditSelection() // cell colors are baked in per cell, not looked up live at draw time
 
-	r.logAuditViewerLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.logAuditViewerTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.logAuditViewerLayout.SetBackgroundColor(theme.PanelBackground)
+	r.logAuditViewerTable.SetBackgroundColor(theme.PanelBackground)
+	// Same fix as logAuditTable just above, for the same reason.
+	r.logAuditViewerTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.SelectionBackground).
+		Foreground(theme.TextColor))
 	r.logAuditViewerTitle.SetBackgroundColor(theme.InputFocusedBackground)
 	r.logAuditViewerTitle.SetTextColor(theme.TextColor)
-	// logAuditFilterRow themed explicitly to the same SurfaceBackground
-	// the table below it uses, rather than left at tview's own default
-	// — see logAuditFilterRow's own doc comment (root.go) for the
-	// visual mismatch this fixes.
-	r.logAuditFilterRow.SetBackgroundColor(theme.SurfaceBackground)
+	// logAuditFilterRow themed explicitly to the same PanelBackground
+	// the table below it now uses, rather than left at tview's own
+	// default — see logAuditFilterRow's own doc comment (root.go) for
+	// the visual mismatch this fixes.
+	r.logAuditFilterRow.SetBackgroundColor(theme.PanelBackground)
 	// logAuditTimelineView deliberately does NOT match SurfaceBackground
 	// — per the user's own explicit report, a density strip that reads
 	// as part of the same surface as the list below it is confusing;
@@ -911,8 +933,10 @@ func (r *Root) applyLogAuditTheme(theme config.ResolvedTheme) {
 	styleInput(r.logAuditKeywordField, theme, r.logAuditKeywordField.HasFocus())
 	styleInput(r.logAuditTimeField, theme, r.logAuditTimeField.HasFocus())
 	styleInput(r.logAuditLevelField, theme, r.logAuditLevelField.HasFocus())
-	r.logAuditViewerHint.SetBackgroundColor(theme.InputBackground)
-	r.logAuditViewerHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.logAuditViewerHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.logAuditViewerHint.SetTextColor(theme.TextColor)
 	viewerHintText, viewerHintSpans := buildListHint(theme, logAuditViewerHintEntries())
 	r.logAuditViewerHint.SetText(viewerHintText)
 	r.logAuditViewerSpans = viewerHintSpans

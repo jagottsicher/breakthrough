@@ -2984,6 +2984,35 @@ func checkboxText(checked bool) string {
 	return "○"
 }
 
+// statusGlyphText renders a plain, non-interactive boolean fact (a
+// mount's own "bind"/"persistent" flag, an SSH key's own "encrypted"
+// state — anything the user can observe but not change from inside
+// breakthrough) as a heavy checkmark/ballot X (✔/✘, the same glyph
+// shape Sessions' own Status column already uses — see
+// sessionsStatusGlyph) rather than checkboxText's ●/○ pair. ●/○ is
+// deliberately reserved for an actual, clickable checkbox (see
+// checkboxText's own doc comment on the "there's something clickable
+// here" cue that glyph gives) — reusing it for a value nothing in this
+// app lets you toggle implies an affordance that doesn't exist, per the
+// user's own explicit report after noticing this exact mismatch on the
+// Mounts screen.
+//
+// Deliberately glyph-only, no accompanying color helper: unlike
+// Sessions' own Status column (an actual health signal worth a green/
+// red cue), coloring a plain fact true/false green/red reads as a
+// warning the moment it's false — see
+// TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless's own
+// doc comment for the user's explicit prior rejection of exactly that,
+// on this exact column ("das macht eigentlich keinen Sinn"). Callers
+// keep using whatever plain color (PlaceholderText/Text/MutedTextColor)
+// they already had; only the glyph shape changes.
+func statusGlyphText(ok bool) string {
+	if ok {
+		return "✔"
+	}
+	return "✘"
+}
+
 // typeGlyph renders ref's type character, matching Midnight Commander's
 // own single-character "type" panel field exactly (confirmed against
 // source.midnight-commander.org/man/mc.html — not guessed): '*' for an
