@@ -153,9 +153,11 @@ terminal.
   everywhere the others might not. A
   compact numbered strip sits beside the filter — numbers rather than paths, so
   the header row's width stays put as you navigate — and shrinks to just
-  a "+" while only one tab is open. The layout is saved on exit and
-  reopened next time, unless a directory was named on the command line
-  or `restore_tabs = false` turns it off.
+  a "+" while only one tab is open. The layout is saved on exit, but a
+  bare `breakthrough` opens in the current directory rather than
+  reopening it — set `restore_tabs = true` to resume your last layout
+  instead. A directory named on the command line always wins regardless
+  of this setting.
 - Split view (`s`): two of those tabs on screen at once, side by side
   (with a plain background-colored gap column between them) or stacked
   (`z` then `o` flips it, or set `split_stacked` once and forget it).
