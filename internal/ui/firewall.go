@@ -117,6 +117,7 @@ func (r *Root) newFirewallScreen() {
 	r.firewallTable.SetInputCapture(r.captureFirewallKey)
 
 	r.firewallTitleBar = newPlainTitleBar("Firewall")
+	r.firewallTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.firewallTitleBar, r.reloadFirewall, r.closeFirewall))
 
 	r.firewallHint = tview.NewTextView()
 	r.firewallHint.SetWrap(false)
@@ -185,7 +186,7 @@ func (r *Root) renderFirewall() {
 	header(firewallColInterface, "Interface")
 	header(firewallColNote, "Note")
 
-	r.firewallTitleBar.SetText(" " + firewallTitle(r.firewallSnapshot, r.firewallErr) + " ")
+	renderReloadCloseTitleBar(r.firewallTitleBar, " "+firewallTitle(r.firewallSnapshot, r.firewallErr)+" ", r.lastScreenWidth)
 
 	// See showTablePlaceholder's own doc comment for why every early
 	// return below goes through it rather than a bare SetCell — it's
@@ -356,8 +357,10 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 		// (black) background instead of SurfaceBackground — caught per the
 		// user's own explicit report that the "tool pages" didn't match
 		// the rest of the theme.
-		r.firewallLayout.SetBackgroundColor(theme.SurfaceBackground)
-		r.firewallTable.SetBackgroundColor(theme.SurfaceBackground)
+		// PanelBackground, not SurfaceBackground — see mountsLayout's
+		// own identical comment (mounts.go) for the full reasoning.
+		r.firewallLayout.SetBackgroundColor(theme.PanelBackground)
+		r.firewallTable.SetBackgroundColor(theme.PanelBackground)
 		// Without this, tview's own default selected-cell style just
 		// reverses each cell's own foreground into a background instead
 		// of using one consistent selection bar — the same fix already
@@ -371,8 +374,10 @@ func (r *Root) applyFirewallTheme(theme config.ResolvedTheme) {
 		// fixed FocusedBackground above follows.
 		r.firewallTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 		r.firewallTitleBar.SetTextColor(theme.TextColor)
-		r.firewallHint.SetBackgroundColor(theme.InputBackground)
-		r.firewallHint.SetTextColor(theme.MutedTextColor)
+		// SurfaceBackground/TextColor, matching the main screen's own
+		// buttonBar/statusBar — see mountsHint's own identical comment.
+		r.firewallHint.SetBackgroundColor(theme.SurfaceBackground)
+		r.firewallHint.SetTextColor(theme.TextColor)
 		firewallHintText, firewallHintSpans := buildListHint(theme, firewallHintEntries())
 		r.firewallHint.SetText(firewallHintText)
 		r.firewallHintSpans = firewallHintSpans

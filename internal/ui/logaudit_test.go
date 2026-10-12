@@ -186,8 +186,14 @@ func TestLogAuditFocusIndicatorReflectsTableFocus(t *testing.T) {
 	}
 
 	r.app.SetFocus(r.logAuditKeywordField)
-	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.SurfaceBackground {
-		t.Errorf("focus indicator background = %v, want SurfaceBackground %v once focus moves to a filter field", got, r.theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground: the viewer table itself
+	// moved to PanelBackground per the user's own explicit request to
+	// bring every full-screen catalog in line with the main screen it
+	// fully covers (see logAuditViewerTable's own comment) — this
+	// indicator blends into the table it's a cue for while unfocused,
+	// so it moved with it.
+	if got := r.logAuditFocusIndicator.GetBackgroundColor(); got != r.theme.PanelBackground {
+		t.Errorf("focus indicator background = %v, want PanelBackground %v once focus moves to a filter field", got, r.theme.PanelBackground)
 	}
 }
 

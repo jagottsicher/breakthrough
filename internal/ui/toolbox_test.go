@@ -328,7 +328,7 @@ func TestOpenNetworkToolsShowsOnlyTheNetworkingCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Network Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Networking"))
@@ -356,7 +356,7 @@ func TestOpenHardwareToolsShowsOnlyTheHardwareCategory(t *testing.T) {
 	if r.activePage != toolboxPage {
 		t.Fatalf("activePage = %q, want the Toolbox screen", r.activePage)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 	wantRows := toolboxDisplayRowsFor(toolboxCategoriesNamed("Hardware"))
@@ -388,7 +388,7 @@ func TestOpenHardwareToolsAfterNetworkToolsShowsOnlyHardware(t *testing.T) {
 	if got, want := r.toolboxTable.GetRowCount(), len(wantRows); got != want {
 		t.Errorf("row count after opening jh = %d, want %d (Hardware only)", got, want)
 	}
-	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "; got != want {
+	if got, want := r.toolboxTitleBar.GetText(true), " Hardware Tools "+string(toolWindowCloseGlyph)+" "; got != want {
 		t.Errorf("title = %q, want %q", got, want)
 	}
 }

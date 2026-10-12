@@ -76,6 +76,7 @@ func activityLogHintEntries() []listHintEntry {
 // newFirewallScreen already establish.
 func (r *Root) newActivityLogScreen() {
 	r.activityLogTitleBar = newPlainTitleBar("Activity Log")
+	r.activityLogTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.activityLogTitleBar, r.reloadActivityLog, r.closeActivityLog))
 
 	r.activityLogKeywordField = tview.NewInputField()
 	r.activityLogKeywordField.SetLabel("Keyword: ")
@@ -268,6 +269,7 @@ func activityLogLevelColor(theme config.ResolvedTheme, level activitylog.Level) 
 // like an empty, successful read, the same "report it, don't swallow
 // it" principle renderMounts/renderFirewall already follow.
 func (r *Root) renderActivityLog() {
+	renderReloadCloseTitleBar(r.activityLogTitleBar, " Activity Log ", r.lastScreenWidth)
 	r.activityLogTable.Clear()
 
 	header := func(col int, text string) {
@@ -376,8 +378,10 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 	if r.activityLogTable == nil {
 		return
 	}
-	r.activityLogLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.activityLogTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.activityLogLayout.SetBackgroundColor(theme.PanelBackground)
+	r.activityLogTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
@@ -389,8 +393,10 @@ func (r *Root) applyActivityLogTheme(theme config.ResolvedTheme) {
 
 	r.activityLogTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.activityLogTitleBar.SetTextColor(theme.TextColor)
-	r.activityLogHint.SetBackgroundColor(theme.InputBackground)
-	r.activityLogHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.activityLogHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.activityLogHint.SetTextColor(theme.TextColor)
 	activityLogHintText, activityLogHintSpans := buildListHint(theme, activityLogHintEntries())
 	r.activityLogHint.SetText(activityLogHintText)
 	r.activityLogHintSpans = activityLogHintSpans
