@@ -715,11 +715,11 @@ var helpText = strings.TrimLeft(`
   syslog RFC 3164/5424 (a classic "Mon _2 HH:MM:SS" or modern
   rsyslog's own ISO8601 timestamp, either one); Apache/nginx/CUPS's
   own access log (Common/Combined Log Format); a generic "timestamp
-  [level] message" line covering most everything else with a leading
+  [level[] message" line covering most everything else with a leading
   or bracketed timestamp — dash or slash date, dot or comma before the
   milliseconds, level itself optional (dpkg.log's own timestamped-
   but-level-less lines) or module-prefixed (Apache's own
-  "[core:error]"), PHP-FPM's and Apache's own bracketed date shapes
+  "[core:error[]"), PHP-FPM's and Apache's own bracketed date shapes
   included; apt's own /var/log/apt/history.log (a transaction's own
   Start-Date carried forward onto every untimestamped line in it,
   Commandline/Install/Upgrade/... included, until the next Start-Date
@@ -1522,7 +1522,9 @@ func (r *Root) aboutText() string {
   breakthrough — a mouse-and-menu-driven TUI file manager for your
   POSIX-compliant terminal, built around a real embedded bash shell.
 
-  Version    %s (commit %s, built %s by %s)
+  Version    %s
+             commit %s
+             built %s by %s
   License    Apache License, Version 2.0
   Copyright  hand knitted with ❤ by Jens Schendel in 2026
   Homepage   github.com/jagottsicher/breakthrough
