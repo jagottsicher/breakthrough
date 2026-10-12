@@ -23,10 +23,11 @@ go test ./...
 
 - Fork from **`develop`**, not `main`.
 - Create feature branches off `develop`, named `feature/<short-description>`.
-- **Open your pull request against `develop`.** GitHub's "New Pull Request"
-  button may still default to `main` for older forks/bookmarks — please
-  double-check the base branch before submitting. `main` is reserved for
-  tagged releases only and never receives commits directly.
+- **Open your pull request against `develop`.** `main` is this repository's
+  GitHub default branch (it's what releases ship from), so GitHub's "New
+  Pull Request" button will default to it — always switch the base branch
+  to `develop` before submitting. `main` is reserved for tagged releases
+  only and never receives commits directly.
 - After a feature branch is merged, delete it (GitHub does this
   automatically for branches in this repo).
 
