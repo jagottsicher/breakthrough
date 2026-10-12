@@ -65,3 +65,81 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A fine-grained PAT with Contents read/write on
+          # jagottsicher/homebrew-breakthrough — GITHUB_TOKEN can only
+          # write to this repo, not a different one, so the brews:
+          # block in .goreleaser.yaml needs its own token.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+  # Builds the apt/rpm repository metadata consumed by
+  # pkg.breakthrough.jens-schendel.com and pushes it to the separate
+  # jagottsicher/breakthrough-pkg repo (its GitHub Pages source). Runs
+  # after goreleaser so the .deb/.rpm assets it downloads already exist
+  # on the GitHub release.
+  publish-pkg-repo:
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install repo tooling
+        run: sudo apt-get update && sudo apt-get install -y reprepro createrepo-c rpm gnupg
+
+      - name: Import signing key
+        run: |
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          # Belt-and-suspenders against gpg-agent trying to pop a
+          # pinentry prompt (which would just hang in CI) when reprepro
+          # shells out to gpg to sign the apt Release file — the key
+          # itself has no passphrase, but some gpg-agent versions still
+          # want an explicit loopback pinentry configured to skip asking.
+          mkdir -p ~/.gnupg
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent
+          printf '%s\n' \
+            '%_signature gpg' \
+            '%_gpg_name breakthrough package signing' \
+            '%__gpg /usr/bin/gpg' \
+            '%__gpg_sign_cmd %{__gpg} gpg --batch --no-armor --digest-algo sha256 --pinentry-mode loopback --passphrase "" -u "%{_gpg_name}" --detach-sign -o %{__signature_filename} %{__plaintext_filename}' \
+            > ~/.rpmmacros
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "${{ github.ref_name }}" \
+            --repo jagottsicher/breakthrough \
+            --pattern '*.deb' --pattern '*.rpm' \
+            --dir assets
+
+      - name: Clone breakthrough-pkg
+        run: |
+          git clone "https://x-access-token:${{ secrets.PKG_REPO_GITHUB_TOKEN }}@github.com/jagottsicher/breakthrough-pkg.git" pkg-repo
+
+      - name: Update apt repository
+        run: |
+          cd pkg-repo
+          for f in ../assets/*.deb; do
+            reprepro -b apt includedeb stable "$f"
+          done
+
+      - name: Update rpm repository
+        run: |
+          cd pkg-repo
+          for f in ../assets/*_amd64.rpm; do
+            cp "$f" rpm/stable/x86_64/
+          done
+          for f in ../assets/*_arm64.rpm; do
+            cp "$f" rpm/stable/aarch64/
+          done
+          rpm --addsign rpm/stable/x86_64/*.rpm rpm/stable/aarch64/*.rpm
+          createrepo_c --update rpm/stable/x86_64
+          createrepo_c --update rpm/stable/aarch64
+
+      - name: Commit and push
+        run: |
+          cd pkg-repo
+          git -c user.name="jagottsicher" -c user.email="jagottsicher@gmx.net" add -A
+          git -c user.name="jagottsicher" -c user.email="jagottsicher@gmx.net" \
+            commit -m "Add ${{ github.ref_name }}" || echo "nothing to commit"
+          git push origin HEAD:main
