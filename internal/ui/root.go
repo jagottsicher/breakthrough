@@ -4214,6 +4214,59 @@ func captureCloseTitleBarMouse(bar *tview.TextView, close func()) func(tview.Mou
 	}
 }
 
+// reloadCloseTitleBarButtonCol returns the reload glyph's own column
+// when a title bar carries both buttons — immediately left of the close
+// glyph with one blank column of breathing room between them, the same
+// "reload links vom X" convention toolWindowReloadButtonCol already
+// establishes for toolWindow's own corner buttons.
+func reloadCloseTitleBarButtonCol(width int) int {
+	return closeTitleBarButtonCol(width) - 2
+}
+
+// renderReloadCloseTitleBar is renderReloadTitleBar/renderCloseTitleBar's
+// own combined twin, for the catalog screens that want both buttons in
+// the same corner — Escape already closes any of them, and "r" already
+// reloads whichever ones have real state to refresh, but neither action
+// was reachable with the mouse directly from the title bar before this,
+// per the user's own explicit request to bring every full-screen catalog
+// (Mounts, Firewall, Toolbox, Sessions, SSH Keys, Messages, Activity Log,
+// Log Audit, Git Breach) to the same chrome. Toolbox is the one
+// exception that keeps renderCloseTitleBar alone: it has no reload
+// concept of its own (the catalog never goes stale while open).
+func renderReloadCloseTitleBar(bar *tview.TextView, label string, width int) {
+	col := reloadCloseTitleBarButtonCol(width)
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	bar.SetText(label + strings.Repeat(" ", padding) + string(toolWindowReloadGlyph) + " " + string(toolWindowCloseGlyph) + " ")
+}
+
+// captureReloadCloseTitleBarMouse is captureReloadTitleBarMouse/
+// captureCloseTitleBarMouse's own combined twin, dispatching on which of
+// the two glyphs renderReloadCloseTitleBar placed was actually clicked.
+func captureReloadCloseTitleBarMouse(bar *tview.TextView, reload, close func()) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := bar.GetRect()
+		if y != rectY {
+			return action, event
+		}
+		switch x - rectX {
+		case closeTitleBarButtonCol(width):
+			close()
+			return tview.MouseConsumed, nil
+		case reloadCloseTitleBarButtonCol(width):
+			reload()
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	}
+}
+
 // closeMenu hides the context menu without taking any action (Escape at
 // the top level — see closeMenuOrGoBack for one level into a submenu).
 // Resets menuInSubmenu defensively, the same as showMenu's own explicit
