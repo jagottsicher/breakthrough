@@ -112,7 +112,7 @@ var (
 // adds on top of that established scheme.
 func (r *Root) newGitBreachScreen() {
 	r.gitBreachTitleBar = newPlainTitleBar("Git breach")
-	r.gitBreachTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.gitBreachTitleBar, r.closeGitBreach))
+	r.gitBreachTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.gitBreachTitleBar, r.reloadGitBreach, r.closeGitBreach))
 
 	r.gitBreachStatusHeader, r.gitBreachStatusView = newGitBreachBox("Status")
 
@@ -369,7 +369,13 @@ func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgro
 		body.SetBackgroundColor(r.theme.PopupBackground)
 	} else {
 		header.SetBackgroundColor(r.theme.InputBackground)
-		body.SetBackgroundColor(r.theme.SurfaceBackground)
+		// PanelBackground, not SurfaceBackground: every box's own body
+		// now rests on PanelBackground by default (see applyGitBreachTheme's
+		// own comment on gitBreachLayout), so blurring one has to fall
+		// back to that same color — SurfaceBackground here silently
+		// undid the whole-screen change the moment any box lost focus,
+		// a real, live-confirmed regression.
+		body.SetBackgroundColor(r.theme.PanelBackground)
 	}
 }
 
@@ -384,11 +390,15 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 	if r.gitBreachLayout == nil {
 		return
 	}
-	r.gitBreachLayout.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.gitBreachLayout.SetBackgroundColor(theme.PanelBackground)
 	r.gitBreachTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.gitBreachTitleBar.SetTextColor(theme.TextColor)
-	r.gitBreachHint.SetBackgroundColor(theme.InputBackground)
-	r.gitBreachHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.gitBreachHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.gitBreachHint.SetTextColor(theme.TextColor)
 	r.refreshGitBreachHint()
 
 	headers := []*tview.TextView{
@@ -404,13 +414,17 @@ func (r *Root) applyGitBreachTheme(theme config.ResolvedTheme) {
 		r.gitBreachStatusView, r.gitBreachDiffView,
 	}
 	for _, v := range textBodies {
-		v.SetBackgroundColor(theme.SurfaceBackground)
+		// PanelBackground, not SurfaceBackground — see gitBreachLayout's
+		// own comment above for the full reasoning.
+		v.SetBackgroundColor(theme.PanelBackground)
 		v.SetTextColor(theme.Text)
 	}
-	r.gitBreachFilesTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.gitBreachBranchesTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.gitBreachCommitsTable.SetBackgroundColor(theme.SurfaceBackground)
-	r.gitBreachStashTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see gitBreachLayout's own
+	// comment above for the full reasoning.
+	r.gitBreachFilesTable.SetBackgroundColor(theme.PanelBackground)
+	r.gitBreachBranchesTable.SetBackgroundColor(theme.PanelBackground)
+	r.gitBreachCommitsTable.SetBackgroundColor(theme.PanelBackground)
+	r.gitBreachStashTable.SetBackgroundColor(theme.PanelBackground)
 
 	// These tables mix several per-cell text colors (Staged/Unstaged/
 	// Untracked rows each carry their own gitBreachRowColor; Branches'
@@ -897,7 +911,7 @@ func (r *Root) renderGitBreach() {
 	if r.gitBreachRoot != "" {
 		title += " — " + r.gitBreachRoot
 	}
-	renderCloseTitleBar(r.gitBreachTitleBar, title+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.gitBreachTitleBar, title+" ", r.lastScreenWidth)
 
 	r.renderGitBreachStatus()
 	r.renderGitBreachFiles()

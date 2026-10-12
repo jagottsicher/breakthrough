@@ -206,7 +206,7 @@ func (r *Root) newSessionsScreen() {
 	r.sessionsTable.SetSelectedFunc(func(row, column int) { r.activateSessionsCell(row, column) })
 
 	r.sessionsTitleBar = newPlainTitleBar("Sessions")
-	r.sessionsTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.sessionsTitleBar, r.reloadSessions))
+	r.sessionsTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.sessionsTitleBar, r.reloadSessions, r.closeSessions))
 
 	r.sessionsHint = tview.NewTextView()
 	r.sessionsHint.SetWrap(false)
@@ -273,7 +273,7 @@ func (r *Root) renderSessions() {
 	header(sessionsColNewWindow, "")
 	header(sessionsColClose, "")
 
-	renderReloadTitleBar(r.sessionsTitleBar, " "+sessionsTitle(r.sessionsList, r.sessionsErr)+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.sessionsTitleBar, " "+sessionsTitle(r.sessionsList, r.sessionsErr)+" ", r.lastScreenWidth)
 
 	if r.sessionsErr != nil {
 		showTablePlaceholder(r.sessionsTable, r.sessionsErr.Error(), r.theme.EntryError)
@@ -481,8 +481,10 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 	if r.sessionsTable == nil {
 		return
 	}
-	r.sessionsLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.sessionsTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.sessionsLayout.SetBackgroundColor(theme.PanelBackground)
+	r.sessionsTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
@@ -494,8 +496,10 @@ func (r *Root) applySessionsTheme(theme config.ResolvedTheme) {
 
 	r.sessionsTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sessionsTitleBar.SetTextColor(theme.TextColor)
-	r.sessionsHint.SetBackgroundColor(theme.InputBackground)
-	r.sessionsHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.sessionsHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.sessionsHint.SetTextColor(theme.TextColor)
 	sessionsHintText, sessionsHintSpans := buildListHint(theme, sessionsHintEntries())
 	r.sessionsHint.SetText(sessionsHintText)
 	r.sessionsHintSpans = sessionsHintSpans

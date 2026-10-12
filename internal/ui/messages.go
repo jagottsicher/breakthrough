@@ -173,6 +173,7 @@ func (r *Root) newMessagesScreen() {
 	})
 
 	r.messagesTitleBar = newPlainTitleBar("Messages")
+	r.messagesTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.messagesTitleBar, r.reloadMessages, r.closeMessages))
 
 	r.messagesHint = tview.NewTextView()
 	r.messagesHint.SetWrap(false)
@@ -261,7 +262,7 @@ func (r *Root) renderMessages() {
 	header(messagesColMessage, "Message")
 	header(messagesColClose, padRight("", messagesColCloseWidth))
 
-	r.messagesTitleBar.SetText(fmt.Sprintf(" Messages — %d, %d unread ", len(r.messagesList), r.notify.UnreadCount()))
+	renderReloadCloseTitleBar(r.messagesTitleBar, fmt.Sprintf(" Messages — %d, %d unread ", len(r.messagesList), r.notify.UnreadCount()), r.lastScreenWidth)
 
 	if len(r.messagesList) == 0 {
 		showTablePlaceholder(r.messagesTable, "No messages yet.", r.theme.PlaceholderText)
@@ -638,8 +639,10 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 	if r.messagesTable == nil {
 		return
 	}
-	r.messagesLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.messagesTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.messagesLayout.SetBackgroundColor(theme.PanelBackground)
+	r.messagesTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
@@ -651,8 +654,10 @@ func (r *Root) applyMessagesTheme(theme config.ResolvedTheme) {
 
 	r.messagesTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.messagesTitleBar.SetTextColor(theme.TextColor)
-	r.messagesHint.SetBackgroundColor(theme.InputBackground)
-	r.messagesHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.messagesHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.messagesHint.SetTextColor(theme.TextColor)
 	messagesHintText, messagesHintSpans := buildListHint(theme, messagesHintEntries())
 	r.messagesHint.SetText(messagesHintText)
 	r.messagesHintSpans = messagesHintSpans

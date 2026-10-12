@@ -171,17 +171,22 @@ func (dr toolboxDisplayRow) isEntry() bool {
 }
 
 // toolboxDisplayRowsFor expands categories into the table's own row
-// list: one header row per category, a blank spacer between two
+// list: one header row per category (skipped entirely when categories
+// holds just the one — "jn"/"jh" already name it in the title bar
+// itself, so repeating "Networking"/"Hardware" right below it as a
+// second, redundant heading added nothing), a blank spacer between two
 // categories (never before the first one), then each category's own
 // entries. The screen currently open (see r.toolboxRows) decides which
-// categories that is — one single category, for "jn" or "jh".
+// categories that is.
 func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	var rows []toolboxDisplayRow
 	for i, cat := range categories {
 		if i > 0 {
 			rows = append(rows, toolboxDisplayRow{blank: true})
 		}
-		rows = append(rows, toolboxDisplayRow{header: cat.name})
+		if len(categories) > 1 {
+			rows = append(rows, toolboxDisplayRow{header: cat.name})
+		}
 		for _, e := range cat.entries {
 			rows = append(rows, toolboxDisplayRow{entry: e})
 		}
@@ -262,6 +267,11 @@ func (r *Root) newToolboxScreen() {
 	r.toolboxTitleBar = tview.NewTextView()
 	r.toolboxTitleBar.SetWrap(false)
 	r.toolboxTitleBar.SetText(" Toolbox ")
+	// Close only, no reload — Toolbox is a static catalog of commands
+	// (see openToolboxScreen's own doc comment); it never goes stale
+	// while open the way Mounts/Firewall's own live host state can, so
+	// there's nothing for a reload button to do.
+	r.toolboxTitleBar.SetMouseCapture(captureCloseTitleBarMouse(r.toolboxTitleBar, r.closeToolbox))
 
 	r.toolboxHint = tview.NewTextView()
 	r.toolboxHint.SetWrap(false)
@@ -292,7 +302,7 @@ func (r *Root) newToolboxScreen() {
 // last category.
 func (r *Root) openToolboxScreen(title string, categories []toolboxCategory) {
 	r.toolboxRows = toolboxDisplayRowsFor(categories)
-	r.toolboxTitleBar.SetText(" " + title + " ")
+	renderCloseTitleBar(r.toolboxTitleBar, " "+title+" ", r.lastScreenWidth)
 	r.renderToolbox()
 	r.showOverlay(toolboxPage, r.toolboxLayout)
 }
@@ -449,8 +459,10 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	if r.toolboxTable == nil {
 		return
 	}
-	r.toolboxLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.toolboxTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.toolboxLayout.SetBackgroundColor(theme.PanelBackground)
+	r.toolboxTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background instead of
 	// using one consistent selection bar — the same fix already applied
@@ -467,8 +479,10 @@ func (r *Root) applyToolboxTheme(theme config.ResolvedTheme) {
 	// FocusedBackground already follows.
 	r.toolboxTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.toolboxTitleBar.SetTextColor(theme.TextColor)
-	r.toolboxHint.SetBackgroundColor(theme.InputBackground)
-	r.toolboxHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.toolboxHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.toolboxHint.SetTextColor(theme.TextColor)
 	toolboxHintText, toolboxHintSpans := buildListHint(theme, toolboxHintEntries())
 	r.toolboxHint.SetText(toolboxHintText)
 	r.toolboxHintSpans = toolboxHintSpans

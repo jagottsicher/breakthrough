@@ -98,7 +98,7 @@ func (r *Root) newSSHKeysScreen() {
 	r.sshKeysTable.SetInputCapture(r.captureSSHKeysKey)
 
 	r.sshKeysTitleBar = newPlainTitleBar("SSH Keys")
-	r.sshKeysTitleBar.SetMouseCapture(captureReloadTitleBarMouse(r.sshKeysTitleBar, r.reloadSSHKeys))
+	r.sshKeysTitleBar.SetMouseCapture(captureReloadCloseTitleBarMouse(r.sshKeysTitleBar, r.reloadSSHKeys, r.closeSSHKeys))
 
 	r.sshKeysHint = tview.NewTextView()
 	r.sshKeysHint.SetWrap(false)
@@ -179,7 +179,7 @@ func sshKeysTitle(pairs []sshkeys.KeyPair, agent map[string]bool, err error) str
 func (r *Root) renderSSHKeys() {
 	r.sshKeysTable.Clear()
 
-	renderReloadTitleBar(r.sshKeysTitleBar, " "+sshKeysTitle(r.sshKeysPairs, r.sshKeysAgent, r.sshKeysErr)+" ", r.lastScreenWidth)
+	renderReloadCloseTitleBar(r.sshKeysTitleBar, " "+sshKeysTitle(r.sshKeysPairs, r.sshKeysAgent, r.sshKeysErr)+" ", r.lastScreenWidth)
 
 	header := func(col int, text string) {
 		r.sshKeysTable.SetCell(0, col,
@@ -348,8 +348,10 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	if r.sshKeysTable == nil {
 		return
 	}
-	r.sshKeysLayout.SetBackgroundColor(theme.SurfaceBackground)
-	r.sshKeysTable.SetBackgroundColor(theme.SurfaceBackground)
+	// PanelBackground, not SurfaceBackground — see mountsLayout's own
+	// identical comment (mounts.go) for the full reasoning.
+	r.sshKeysLayout.SetBackgroundColor(theme.PanelBackground)
+	r.sshKeysTable.SetBackgroundColor(theme.PanelBackground)
 	// Without this, tview's own default selected-cell style just
 	// reverses each cell's own foreground into a background — fine for
 	// Name/Type/Fingerprint (all plain Text), but the Agent/Comment/Note
@@ -366,8 +368,10 @@ func (r *Root) applySSHKeysTheme(theme config.ResolvedTheme) {
 	// fixed FocusedBackground follows.
 	r.sshKeysTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
 	r.sshKeysTitleBar.SetTextColor(theme.TextColor)
-	r.sshKeysHint.SetBackgroundColor(theme.InputBackground)
-	r.sshKeysHint.SetTextColor(theme.MutedTextColor)
+	// SurfaceBackground/TextColor, matching the main screen's own
+	// buttonBar/statusBar — see mountsHint's own identical comment.
+	r.sshKeysHint.SetBackgroundColor(theme.SurfaceBackground)
+	r.sshKeysHint.SetTextColor(theme.TextColor)
 	sshKeysHintText, sshKeysHintSpans := buildListHint(theme, sshKeysHintEntries())
 	r.sshKeysHint.SetText(sshKeysHintText)
 	r.sshKeysHintSpans = sshKeysHintSpans
