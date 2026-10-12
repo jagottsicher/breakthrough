@@ -422,9 +422,15 @@ func TestActivateToolboxRowOnAHeaderRowDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.openNetworkTools()
+	// The full, multi-category catalog, not openNetworkTools/
+	// openHardwareTools: a single-category screen no longer renders a
+	// header row at all (see toolboxDisplayRowsFor's own doc comment —
+	// "jn"/"jh" already name the one category in the title bar itself),
+	// so this needs the one path that still has a header row to
+	// activate.
+	r.openToolboxScreen("Toolbox", toolboxCategories())
 
-	r.activateToolboxRow(0) // the leading "Networking" header
+	r.activateToolboxRow(0) // the leading category header
 
 	if len(r.toolWindows) != 0 {
 		t.Errorf("len(toolWindows) = %d, want 0 — activating a header row should do nothing", len(r.toolWindows))

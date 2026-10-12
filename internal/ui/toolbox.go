@@ -171,17 +171,22 @@ func (dr toolboxDisplayRow) isEntry() bool {
 }
 
 // toolboxDisplayRowsFor expands categories into the table's own row
-// list: one header row per category, a blank spacer between two
+// list: one header row per category (skipped entirely when categories
+// holds just the one — "jn"/"jh" already name it in the title bar
+// itself, so repeating "Networking"/"Hardware" right below it as a
+// second, redundant heading added nothing), a blank spacer between two
 // categories (never before the first one), then each category's own
 // entries. The screen currently open (see r.toolboxRows) decides which
-// categories that is — one single category, for "jn" or "jh".
+// categories that is.
 func toolboxDisplayRowsFor(categories []toolboxCategory) []toolboxDisplayRow {
 	var rows []toolboxDisplayRow
 	for i, cat := range categories {
 		if i > 0 {
 			rows = append(rows, toolboxDisplayRow{blank: true})
 		}
-		rows = append(rows, toolboxDisplayRow{header: cat.name})
+		if len(categories) > 1 {
+			rows = append(rows, toolboxDisplayRow{header: cat.name})
+		}
 		for _, e := range cat.entries {
 			rows = append(rows, toolboxDisplayRow{entry: e})
 		}

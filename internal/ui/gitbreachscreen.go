@@ -369,7 +369,13 @@ func (r *Root) styleGitBreachFocus(header *tview.TextView, body gitBreachBackgro
 		body.SetBackgroundColor(r.theme.PopupBackground)
 	} else {
 		header.SetBackgroundColor(r.theme.InputBackground)
-		body.SetBackgroundColor(r.theme.SurfaceBackground)
+		// PanelBackground, not SurfaceBackground: every box's own body
+		// now rests on PanelBackground by default (see applyGitBreachTheme's
+		// own comment on gitBreachLayout), so blurring one has to fall
+		// back to that same color — SurfaceBackground here silently
+		// undid the whole-screen change the moment any box lost focus,
+		// a real, live-confirmed regression.
+		body.SetBackgroundColor(r.theme.PanelBackground)
 	}
 }
 
