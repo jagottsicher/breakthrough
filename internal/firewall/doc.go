@@ -15,7 +15,7 @@
 //
 // Every parser here (ParseUFWStatusVerbose, ParseNFTRuleset,
 // ParseIPTablesSave) is a pure function over already-captured text —
-// the same shape internal/ui's own parseFindmntJSON takes for the
+// the same shape internal/mounts' own parseFindmntJSON takes for the
 // Mounts screen — so the whole rule model is unit-tested without ever
 // touching a real system's actual firewall state. ReadSnapshot is the
 // only place that actually shells out, the real "ufw"/"nft"/

@@ -36,9 +36,9 @@ import (
 const sessionsPage = "sessions"
 
 // listMultiplexSessions is a package-level swappable var — the same
-// mockable idiom readFirewallSnapshot/readMounts already establish —
-// so this screen's own render logic can be exercised without ever
-// touching a real host's actual screen/tmux state.
+// mockable idiom readFirewallSnapshot already establishes — so this
+// screen's own render logic can be exercised without ever touching a
+// real host's actual screen/tmux state.
 var listMultiplexSessions = multiplex.ListSessions
 
 // runMultiplexCommand runs argv and reports whether it succeeded —

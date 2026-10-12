@@ -513,8 +513,8 @@
     },
     {
       "path": "internal/firewall/doc.go",
-      "size": 1420,
-      "sha256": "2848f419fb21ff8d4c88fe6e18aa6fca12063d74915df8a5393a235a927db6ea"
+      "size": 1423,
+      "sha256": "4133d2dee5285bd3b76e22d95de2b4957adc028c43d27bcb854bfe3cc76e1642"
     },
     {
       "path": "internal/firewall/iptables.go",
@@ -1793,8 +1793,8 @@
     },
     {
       "path": "internal/ui/mounts_test.go",
-      "size": 10391,
-      "sha256": "3f1802583f8e146aee103176db2b541e5b0ccd29f5276d507b8ccf9c48e9ffa0"
+      "size": 10409,
+      "sha256": "cba27df8d0f2ee106b5ec903bd17c288c7cd2acbdb692cfecac04fa150c91796"
     },
     {
       "path": "internal/ui/mousefocus_test.go",
@@ -2018,8 +2018,8 @@
     },
     {
       "path": "internal/ui/sessions.go",
-      "size": 20799,
-      "sha256": "a0c685c9baf2b6988f5cc0d4b798e67a669c70164f4906b377d6e26544c243d6"
+      "size": 20790,
+      "sha256": "31362387bf9a7c07dbbb35b6079b9e7b6f9cff212ed5031f57725e4b333c67bd"
     },
     {
       "path": "internal/ui/sessions_test.go",
@@ -47856,5 +47856,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "23e27cac03280df7514c88cfa9e4f4a825817f29d2602af72e2c97b1c22b9609"
+  "merkle_root": "664c89c89a70af9437277141ec68c39f806ce4e77440ed5f5b529e3325251582"
 }

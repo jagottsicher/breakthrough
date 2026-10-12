@@ -213,11 +213,11 @@ func TestRenderMountsSelectsTheFirstDataRowOnFirstRender(t *testing.T) {
 // explicit request for a mouse-reachable reload button on the Mounts
 // screen's own title bar, top right: clicking the exact glyph cell must
 // re-read the live mount table, the same as pressing "r". Runs against
-// the real findmnt (see TestReadMountsRealSystem's own identical
-// guard/reasoning), since readMounts has no swappable var of its own —
-// a placeholder entry findmnt could never itself report is used to
-// detect that a real re-read actually happened, not just a re-render of
-// whatever was already there.
+// the real findmnt (see internal/mounts' own TestReadRealSystem for the
+// identical guard/reasoning), since mounts.Read has no swappable var of
+// its own — a placeholder entry findmnt could never itself report is
+// used to detect that a real re-read actually happened, not just a
+// re-render of whatever was already there.
 func TestMountsTitleBarReloadButtonClickReloads(t *testing.T) {
 	requireCommand(t, "findmnt")
 
