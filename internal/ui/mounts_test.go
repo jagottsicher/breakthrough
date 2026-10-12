@@ -8,168 +8,13 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/mounts"
 )
 
-// TestParseFindmntJSONFlattensNestedChildren pins the flattening this
-// screen depends on: findmnt nests every mount under whatever it's
-// physically mounted on top of, arbitrarily deep, and the table needs a
-// plain list, depth-first, in the same order findmnt itself reports.
-func TestParseFindmntJSONFlattensNestedChildren(t *testing.T) {
-	const data = `{
-		"filesystems": [
-			{
-				"target": "/", "source": "/dev/md0", "fstype": "ext4", "options": "rw",
-				"children": [
-					{"target": "/boot", "source": "/dev/md1", "fstype": "ext4", "options": "rw"},
-					{
-						"target": "/home", "source": "/dev/md2", "fstype": "ext4", "options": "rw",
-						"children": [
-							{"target": "/home/jens/snap", "source": "/dev/sdd1", "fstype": "ext4", "options": "rw"}
-						]
-					}
-				]
-			}
-		]
-	}`
-
-	got, err := parseFindmntJSON([]byte(data))
-	if err != nil {
-		t.Fatalf("parseFindmntJSON: %v", err)
-	}
-
-	wantTargets := []string{"/", "/boot", "/home", "/home/jens/snap"}
-	if len(got) != len(wantTargets) {
-		t.Fatalf("got %d nodes, want %d: %+v", len(got), len(wantTargets), got)
-	}
-	for i, want := range wantTargets {
-		if got[i].Target != want {
-			t.Errorf("node %d target = %q, want %q", i, got[i].Target, want)
-		}
-		if got[i].Children != nil {
-			t.Errorf("node %d (%q) still carries its own Children after flattening", i, got[i].Target)
-		}
-	}
-}
-
-// TestParseFindmntJSONInvalidReturnsError pins that malformed input is
-// reported rather than silently producing an empty (and therefore
-// misleadingly "nothing is mounted") list.
-func TestParseFindmntJSONInvalidReturnsError(t *testing.T) {
-	if _, err := parseFindmntJSON([]byte("not json")); err == nil {
-		t.Error("parseFindmntJSON should report an error for invalid JSON")
-	}
-}
-
-// TestIsBindMountSourceDetectsBracketNotation pins the exact pattern
-// confirmed by hand against a real bind mount on a real system:
-// "<device>[<subpath>]" means a bind mount of that sub-path, and
-// anything else — a plain device, a bare name with no brackets, an
-// unterminated bracket — is not one.
-func TestIsBindMountSourceDetectsBracketNotation(t *testing.T) {
-	cases := []struct {
-		source string
-		want   bool
-	}{
-		{"/dev/sdd1[/.bitcoin]", true},
-		{"//192.168.1.1/share[/sub/dir]", true},
-		{"/dev/sda1", false},
-		{"tmpfs", false},
-		{"/dev/sda1[unterminated", false},
-	}
-	for _, c := range cases {
-		if got := isBindMountSource(c.source); got != c.want {
-			t.Errorf("isBindMountSource(%q) = %v, want %v", c.source, got, c.want)
-		}
-	}
-}
-
-// TestBuildMountEntriesMarksFstabTargetsAsPersistent pins the whole
-// point of cross-referencing the two findmnt calls: a live mount whose
-// target is also configured in fstab is persistent (survives a
-// reboot); one that isn't was mounted some other way.
-func TestBuildMountEntriesMarksFstabTargetsAsPersistent(t *testing.T) {
-	live := []findmntNode{
-		{Target: "/", Source: "/dev/md0", Fstype: "ext4", Options: "rw"},
-		{Target: "/mnt/usb", Source: "/dev/sdb1", Fstype: "vfat", Options: "rw"},
-	}
-	fstab := []findmntNode{
-		{Target: "/", Source: "UUID=abc", Fstype: "ext4", Options: "errors=remount-ro"},
-		{Target: "none", Source: "/dev/mapper/cryptswap1", Fstype: "swap", Options: "sw"},
-	}
-
-	entries := buildMountEntries(live, fstab)
-	if len(entries) != 2 {
-		t.Fatalf("got %d entries, want 2", len(entries))
-	}
-	if !entries[0].persistent {
-		t.Errorf("%q is in fstab, should be marked persistent", entries[0].target)
-	}
-	if entries[1].persistent {
-		t.Errorf("%q is not in fstab, should not be marked persistent", entries[1].target)
-	}
-}
-
-// TestBuildMountEntriesNeverMatchesTheSwapPlaceholderTarget pins a
-// specific edge case: fstab's own swap entries use the literal target
-// "none", which is never a real mountpoint — a naive implementation
-// comparing target strings could accidentally treat a live mount that
-// somehow also reported "/" as empty, or otherwise degenerate, as a
-// false match. This pins that "none" itself is never eligible at all.
-func TestBuildMountEntriesNeverMatchesTheSwapPlaceholderTarget(t *testing.T) {
-	live := []findmntNode{{Target: "none", Source: "/dev/mapper/cryptswap1", Fstype: "swap", Options: "sw"}}
-	fstab := []findmntNode{{Target: "none", Source: "/dev/mapper/cryptswap1", Fstype: "swap", Options: "sw"}}
-
-	entries := buildMountEntries(live, fstab)
-	if len(entries) != 1 {
-		t.Fatalf("got %d entries, want 1", len(entries))
-	}
-	if entries[0].persistent {
-		t.Error("the swap placeholder target \"none\" should never be treated as a real, persistent mountpoint")
-	}
-}
-
-// TestBuildMountEntriesDetectsBindMounts pins that bind-mount detection
-// (see TestIsBindMountSourceDetectsBracketNotation) actually reaches
-// the assembled mountEntry, not just the lower-level helper.
-func TestBuildMountEntriesDetectsBindMounts(t *testing.T) {
-	live := []findmntNode{
-		{Target: "/home/jens/snap/bitcoin-core/common/.bitcoin", Source: "/dev/sdd1[/.bitcoin]", Fstype: "ext4", Options: "rw"},
-		{Target: "/", Source: "/dev/md0", Fstype: "ext4", Options: "rw"},
-	}
-
-	entries := buildMountEntries(live, nil)
-	if !entries[0].bind {
-		t.Error("a bracketed source should be detected as a bind mount")
-	}
-	if entries[1].bind {
-		t.Error("a plain device source should not be detected as a bind mount")
-	}
-}
-
-// TestReadMountsRealSystem exercises the real, live shelling-out path
-// end to end — skipped where findmnt itself isn't installed, the same
-// requireCommand pattern TestFetchDiskUsageRealFilesystem already
-// establishes for df. "/" is always mounted, and a real ext4/xfs/btrfs
-// root is never excluded by --real's own pseudo-filesystem filter, so
-// it's a safe thing to assert on any real Linux system.
-func TestReadMountsRealSystem(t *testing.T) {
-	requireCommand(t, "findmnt")
-
-	entries, err := readMounts()
-	if err != nil {
-		t.Fatalf("readMounts: %v", err)
-	}
-
-	found := false
-	for _, e := range entries {
-		if e.target == "/" {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("readMounts should always include the real filesystem root \"/\"")
-	}
-}
+// Parsing/fstab-cross-referencing logic (findmnt JSON flattening, bind
+// detection, persistence matching) is tested in internal/mounts itself —
+// this file only covers the UI/rendering contract on top of it.
 
 // TestOpenMountsShowsThePage pins openMounts' own basic contract.
 func TestOpenMountsShowsThePage(t *testing.T) {
@@ -328,9 +173,9 @@ func TestRenderMountsPersistentColumnUsesTheSamePlainColorRegardless(t *testing.
 		t.Fatalf("NewRoot: %v", err)
 	}
 	r.mountsErr = nil
-	r.mountsEntries = []mountEntry{
-		{target: "/", source: "/dev/md0", fstype: "ext4", persistent: true},
-		{target: "/mnt/usb", source: "/dev/sdb1", fstype: "vfat", persistent: false},
+	r.mountsEntries = []mounts.Entry{
+		{Target: "/", Source: "/dev/md0", Fstype: "ext4", Persistent: true},
+		{Target: "/mnt/usb", Source: "/dev/sdb1", Fstype: "vfat", Persistent: false},
 	}
 
 	r.renderMounts()
@@ -354,7 +199,7 @@ func TestRenderMountsSelectsTheFirstDataRowOnFirstRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsEntries = []mountEntry{{target: "/", source: "/dev/md0", fstype: "ext4"}}
+	r.mountsEntries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
 
 	r.renderMounts()
 
@@ -384,7 +229,7 @@ func TestMountsTitleBarReloadButtonClickReloads(t *testing.T) {
 
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen) // establishes lastScreenWidth, which renderReloadTitleBar's own column math needs
-	r.mountsEntries = []mountEntry{{target: "/definitely-not-a-real-mount-xyz"}}
+	r.mountsEntries = []mounts.Entry{{Target: "/definitely-not-a-real-mount-xyz"}}
 	r.renderMounts()
 	r.mountsTitleBar.SetRect(0, 0, 100, 1) // the same rect a real Draw would have left it at
 
@@ -396,7 +241,7 @@ func TestMountsTitleBarReloadButtonClickReloads(t *testing.T) {
 		t.Error("clicking the reload glyph should consume the click")
 	}
 	for _, e := range r.mountsEntries {
-		if e.target == "/definitely-not-a-real-mount-xyz" {
+		if e.Target == "/definitely-not-a-real-mount-xyz" {
 			t.Error("the placeholder entry survived the click, want it replaced by a real re-read")
 		}
 	}
@@ -411,7 +256,7 @@ func TestMountsTitleBarClickElsewhereDoesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRoot: %v", err)
 	}
-	r.mountsEntries = []mountEntry{{target: "/", source: "/dev/md0", fstype: "ext4"}}
+	r.mountsEntries = []mounts.Entry{{Target: "/", Source: "/dev/md0", Fstype: "ext4"}}
 
 	screen := simulationScreen(t, 100, 30)
 	r.handleBeforeDraw(screen)
