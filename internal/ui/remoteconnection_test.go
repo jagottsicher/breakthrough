@@ -405,8 +405,8 @@ func TestBuildHeaderSpansColorsTheConnectionButtonByState(t *testing.T) {
 	connectionGlowNow = func() time.Time { return time.UnixMilli(0) }
 	defer func() { connectionGlowNow = old }()
 
-	localText, _ := buildHeaderSpans("/", theme, false)
-	connectedText, _ := buildHeaderSpans("/", theme, true)
+	localText, _ := buildHeaderSpans("/", theme, false, false)
+	connectedText, _ := buildHeaderSpans("/", theme, true, false)
 
 	mutedTag := colorTag(theme.MutedTextColor)
 	connectedTag := colorTag(theme.EntryExecutable)

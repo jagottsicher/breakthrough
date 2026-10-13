@@ -434,6 +434,13 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 		r.compareTreeHintSpans = compareTreeHintSpans
 	}
 
+	// The file-vs-file Compare overlay (see compare.go/
+	// applyCompareFileTheme) — the same kind of previously-unnoticed gap
+	// as Compare Tree just above, except this one was never touched at
+	// all, not even partially: unlike compareTree, it has no entry here
+	// before this fix.
+	r.applyCompareFileTheme(theme)
+
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
 		r.searchLeft.SetBackgroundColor(theme.SurfaceBackground)
