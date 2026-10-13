@@ -1693,10 +1693,18 @@ versa. A host whose key isn't in there yet raises its own prompt —
 connect?" — the same trust-on-first-use question a real `ssh` client
 asks interactively; accepting appends it to `known_hosts` so it's only
 ever asked once per host. A host whose key has *changed* since it was
-last trusted is always rejected outright instead, with no prompt and
-no way to bypass it — that's exactly the shape a machine-in-the-middle
-attack produces, not something a "trust anyway" button should ever be
-offered for.
+last trusted is always rejected outright instead — that's exactly the
+shape a machine-in-the-middle attack produces, so there's no prompt
+offering to silently trust it. The Connect dialog's own status line
+shows both fingerprints (the one `known_hosts` already has, and the one
+the server just presented) and relabels its Connect button to "Connect
+anyway": clicking it retries the same attempt once, skipping host key
+verification entirely for that one attempt only — nothing is ever
+written to `known_hosts` this way, so the same warning reappears on
+every later attempt until `known_hosts` is fixed by hand (or the key
+changes back). Meant for a host whose key changed for a known, benign
+reason (a reinstalled server, a host that's rebuilt on a schedule), not
+as a routine way to wave the warning away.
 
 ### What works so far, and what doesn't yet
 

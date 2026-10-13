@@ -713,7 +713,10 @@ terminal.
   `~/.ssh/known_hosts` — an unknown host raises a trust-on-first-use
   prompt, exactly like a real `ssh` client's own "authenticity of host"
   question, while a host whose key *changed* is always rejected
-  outright, no prompt, no bypass. Once connected, the panel browses the
+  outright with no automatic bypass — the dialog shows both
+  fingerprints and offers a "Connect anyway" retry that skips the
+  check for that one attempt only, never saved to `known_hosts`. Once
+  connected, the panel browses the
   remote filesystem exactly like a local one — same columns, same
   sorting, same navigation, and Details/status-bar Disk+Inodes/System
   Info at "/" all describe the *remote* machine, not this one. Rename,

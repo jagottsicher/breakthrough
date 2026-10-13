@@ -277,8 +277,10 @@ var helpText = strings.TrimLeft(`
   tries an ssh-agent, then
   ~/.ssh/id_ed25519 or id_ecdsa or id_rsa if unencrypted, then a typed
   password; host keys are checked against ~/.ssh/known_hosts, with a
-  trust-on-first-use prompt for an unknown one and an outright refusal,
-  no prompt, for one that changed. Browsing, rename, permanent delete,
+  trust-on-first-use prompt for an unknown one and an outright refusal
+  for one that changed, showing both fingerprints and a "Connect
+  anyway" retry that skips the check once, never saved. Browsing,
+  rename, permanent delete,
   chmod, and Copy/Cut/Paste all work once connected ("d" redirects
   straight to the same permanent-delete confirmation "D" uses — no
   remote trash exists to move into instead). A remote-involving Paste
