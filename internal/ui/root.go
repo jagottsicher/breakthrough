@@ -23,6 +23,7 @@ import (
 	"github.com/jagottsicher/breakthrough/internal/git"
 	"github.com/jagottsicher/breakthrough/internal/gitstatus"
 	"github.com/jagottsicher/breakthrough/internal/logview"
+	"github.com/jagottsicher/breakthrough/internal/mounts"
 	"github.com/jagottsicher/breakthrough/internal/multiplex"
 	"github.com/jagottsicher/breakthrough/internal/notify"
 	"github.com/jagottsicher/breakthrough/internal/remotefs"
@@ -324,7 +325,7 @@ type Root struct {
 	mountsHint      *tview.TextView
 	mountsHintSpans []listHintSpan
 	mountsTable     *tview.Table
-	mountsEntries   []mountEntry
+	mountsEntries   []mounts.Entry
 	mountsErr       error
 
 	// The Firewall screen (see firewall.go) — a fourth full-screen
