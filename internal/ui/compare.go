@@ -91,6 +91,30 @@ func (r *Root) newCompareFileScreen() {
 		AddItem(body, 0, 1, true)
 }
 
+// applyCompareFileTheme themes the file-vs-file overlay — split out of
+// applyTheme (see its own doc comment) the same way applyMountsTheme is,
+// and never previously wired in at all: this overlay had no theming of
+// its own from day one, which is exactly why it still looked like a
+// bare, default tview widget (gray-on-black, unstyled buttons) no
+// matter which color scheme was active — a real gap, not a rendering
+// artifact. SurfaceBackground/styleButton here match the same "popup
+// floating over the main panel" convention batchRenameLayout and
+// mountsLayout's own doc comments already establish.
+func (r *Root) applyCompareFileTheme(theme config.ResolvedTheme) {
+	if r.compareLayout == nil {
+		return
+	}
+	r.compareLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareHeader.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareVerdict.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareButtons.SetBackgroundColor(theme.SurfaceBackground)
+	styleButton(r.compareHashBtn, theme)
+	styleButton(r.compareDiffBtn, theme)
+	styleButton(r.compareCloseBtn, theme)
+	r.compareTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.compareTitleBar.SetTextColor(theme.TextColor)
+}
+
 // newCompareButtons builds the file-vs-file overlay's own button row:
 // Compute hash (a byte-exact answer via fsops.Hash — see
 // computeCompareHash), Show diff (a line-by-line answer via diff(1) —
