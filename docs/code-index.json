@@ -1473,8 +1473,8 @@
     },
     {
       "path": "internal/ui/comparediff.go",
-      "size": 16093,
-      "sha256": "35774244732dadbfe97bc856f0273a173cb1c9f979d2df6639129f0f1e7feac2"
+      "size": 17293,
+      "sha256": "b6baae45493712e91eff3a54d0f1a152f4ec25a4b73b7910ae7f00e3177a5a1a"
     },
     {
       "path": "internal/ui/comparetree.go",
@@ -21977,21 +21977,21 @@
       "name": "renderCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 169
+      "line": 183
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffGutterWidth",
       "kind": "const",
-      "line": 201
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "writeCompareDiffLine",
       "kind": "function",
-      "line": 209
+      "line": 226
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -21999,21 +21999,21 @@
       "name": "renderCompareDiffTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 233
+      "line": 247
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffCloseButtonCol",
       "kind": "function",
-      "line": 253
+      "line": 267
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffLinkButtonCol",
       "kind": "function",
-      "line": 261
+      "line": 275
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22021,7 +22021,7 @@
       "name": "captureCompareDiffTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 269
+      "line": 283
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22029,7 +22029,7 @@
       "name": "toggleCompareDiffLinked",
       "kind": "method",
       "receiver": "*Root",
-      "line": 298
+      "line": 312
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22037,7 +22037,7 @@
       "name": "activeCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 311
+      "line": 325
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22045,7 +22045,7 @@
       "name": "inactiveCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 318
+      "line": 332
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22053,7 +22053,7 @@
       "name": "captureCompareDiffPaneKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 334
+      "line": 348
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22061,7 +22061,7 @@
       "name": "compareDiffPageStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 366
+      "line": 380
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22069,7 +22069,7 @@
       "name": "cycleCompareDiffFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 377
+      "line": 391
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22077,7 +22077,7 @@
       "name": "scrollCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 393
+      "line": 407
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -48333,5 +48333,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "462b9574f4c09d2dc1cff73601917e03f0f1533c31cee46ba8f3e0d36f3cd641"
+  "merkle_root": "c255208fb887838a84b8d706f8cbbca7bcecba0385f5cab3e72e3764ea331af4"
 }

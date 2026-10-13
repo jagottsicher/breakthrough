@@ -161,31 +161,43 @@ func (r *Root) closeCompareDiff() {
 // rather than two independently-numbered line sets that merely happen
 // to correspond.
 //
-// Diff coloring reuses syntax.go's own theme-adaptive palette
-// (viewer.KindDiffAdd/KindDiffDelete via paletteFor) — the same colors
-// Look's unified-diff pager already used for +/- lines, not
-// gitbreach.go's own fixed-hex backgrounds, which are that screen's own
-// choice, not a general "diff coloring" convention to copy here.
+// Diff coloring is gitbreach.go's own two-channel scheme
+// (gitBreachColorizeDiffLine), reused rather than reinvented per the
+// user's own explicit request to match that screen's look: a changed/
+// removed/added line's whole background tints (gitBreachDiffAddedBackground/
+// gitBreachDiffRemovedBackground), and its content is real, per-language
+// syntax highlighting (internal/viewer.Highlight + renderSyntax) rather
+// than one solid diff-add/diff-delete foreground color — background
+// carries "this line changed", foreground carries "what this code
+// actually is". A context line (PairSame) gets the same per-language
+// coloring with no background tint, exactly like gitbreach's own
+// context lines. Left and right panes are lexed against compareA/
+// compareB respectively — almost always the same language, but never
+// assumed to be: a .go-vs-.go.bak compare should still highlight both
+// sides as Go.
+//
+// Same known limitation as gitbreach's own doc comment on
+// gitBreachColorizeDiff spells out: each line is lexed in isolation, so
+// a lexer construct spanning several lines (a block comment, a raw
+// string literal) can come out misclassified at its own boundaries.
 func (r *Root) renderCompareDiff() {
 	palette := paletteFor(r.theme.SurfaceBackground)
-	addColor, hasAdd := palette[viewer.KindDiffAdd]
-	delColor, hasDel := palette[viewer.KindDiffDelete]
 
 	var left, right strings.Builder
 	for _, p := range r.compareDiffPairs {
-		leftColor, leftColored := "", false
-		rightColor, rightColored := "", false
+		leftBg, rightBg := tcell.ColorDefault, tcell.ColorDefault
+		haveLeftBg, haveRightBg := false, false
 		switch p.Kind {
 		case compare.PairChanged:
-			leftColor, leftColored = colorTag(delColor), hasDel
-			rightColor, rightColored = colorTag(addColor), hasAdd
+			leftBg, haveLeftBg = gitBreachDiffRemovedBackground, true
+			rightBg, haveRightBg = gitBreachDiffAddedBackground, true
 		case compare.PairOnlyLeft:
-			leftColor, leftColored = colorTag(delColor), hasDel
+			leftBg, haveLeftBg = gitBreachDiffRemovedBackground, true
 		case compare.PairOnlyRight:
-			rightColor, rightColored = colorTag(addColor), hasAdd
+			rightBg, haveRightBg = gitBreachDiffAddedBackground, true
 		}
-		writeCompareDiffLine(&left, p.LeftNo, p.Left, leftColor, leftColored)
-		writeCompareDiffLine(&right, p.RightNo, p.Right, rightColor, rightColored)
+		writeCompareDiffLine(&left, p.LeftNo, p.Left, r.compareA, palette, leftBg, haveLeftBg)
+		writeCompareDiffLine(&right, p.RightNo, p.Right, r.compareB, palette, rightBg, haveRightBg)
 	}
 	r.compareDiffLeft.SetText(left.String())
 	r.compareDiffRight.SetText(right.String())
@@ -202,24 +214,26 @@ const compareDiffGutterWidth = 4
 
 // writeCompareDiffLine appends one line to b: a right-aligned line
 // number (blank, not "0", when lineNo is 0 — see LinePair's own doc
-// comment on what that means), a space, then content — wrapped in
-// colorTag if colored is true. tview.Escape guards content the same way
-// viewer.go's own doc comment explains for Look's pager: a line
-// containing a literal "[" would otherwise be misread as a style tag.
-func writeCompareDiffLine(b *strings.Builder, lineNo int, content, colorTag string, colored bool) {
+// comment on what that means), a space, then content lexed against path
+// via viewer.Highlight/renderSyntax (tview.Escape happens inside
+// renderSyntax itself — see its own doc comment — so content is never
+// escaped twice). When haveBg, the whole content (gutter excluded, the
+// same choice gitBreachColorizeDiffLine makes for its own leading
+// marker column) is wrapped in a background-only tag
+// ("[:#rrggbb:]...[-:-:-]", panel.go's own nameHighlightTags shape) so
+// the tint and the per-language foreground coloring never fight over
+// the same tag.
+func writeCompareDiffLine(b *strings.Builder, lineNo int, content, path string, palette syntaxPalette, bg tcell.Color, haveBg bool) {
 	if lineNo > 0 {
 		fmt.Fprintf(b, "%*d ", compareDiffGutterWidth, lineNo)
 	} else {
 		b.WriteString(strings.Repeat(" ", compareDiffGutterWidth+1))
 	}
-	if colored {
-		b.WriteString("[")
-		b.WriteString(colorTag)
-		b.WriteString("]")
-	}
-	b.WriteString(tview.Escape(content))
-	if colored {
-		b.WriteString("[-]")
+	highlighted := renderSyntax(viewer.Highlight(path, content), palette)
+	if haveBg {
+		fmt.Fprintf(b, "[:#%06x:]%s[-:-:-]", uint32(bg.Hex())&0xffffff, highlighted)
+	} else {
+		b.WriteString(highlighted)
 	}
 	b.WriteString("\n")
 }
