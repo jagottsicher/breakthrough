@@ -1,6 +1,8 @@
 package remotefs
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -87,6 +89,95 @@ func hostKeyCallback(path string, prompt HostKeyPrompt) (ssh.HostKeyCallback, er
 		}
 		return appendKnownHost(path, hostname, key)
 	}, nil
+}
+
+// preferredHostKeyAlgorithms inspects the known_hosts file at path for
+// any entries already trusted for hostWithPort ("host:port", the same
+// string Dial already passes as both the known_hosts hostname and the
+// ssh.NewClientConn addr) and returns their key algorithms
+// (ssh-ed25519, rsa-sha2-512, ...), in the order knownhosts' own
+// lookup returns them — so Dial's own ssh.ClientConfig can ask the
+// server specifically for one of those, rather than letting
+// golang.org/x/crypto/ssh's own default negotiation order pick a
+// different, equally valid host key the server also offers but that
+// was simply never recorded under this algorithm.
+//
+// Without this, hostKeyCallback's own deliberate "no bypass" refusal
+// for a key that changed (see its own doc comment) fires on a false
+// positive exactly that way: a real server offering both an RSA and
+// an Ed25519 host key, already trusted via Ed25519 by a plain `ssh`
+// (OpenSSH's own default preference when both are offered), but this
+// project's client negotiating RSA instead (golang.org/x/crypto/ssh's
+// own default order, which this project never used to override) and
+// finding no RSA entry recorded — reported as "knownhosts: key
+// mismatch", indistinguishable from an actual machine-in-the-middle
+// from knownhosts' own perspective, even though the host was never
+// untrusted at all. A real, user-reported case of exactly this: `ssh
+// user@host` connecting instantly while this project's own Connect
+// dialog refused the same host outright.
+//
+// Returns nil (no preference, golang.org/x/crypto/ssh's own default
+// order) if the host has no entries yet — the ordinary state before
+// its first connection, not an error — or knownHosts can't be read at
+// all; Dial's own hostKeyCallback already handles both of those cases
+// correctly on its own.
+func preferredHostKeyAlgorithms(knownHosts, hostWithPort string) []string {
+	base, err := knownhosts.New(knownHosts)
+	if err != nil {
+		return nil
+	}
+
+	probeKey, err := newProbeKey()
+	if err != nil {
+		return nil
+	}
+
+	// probeAddr's own String() is all knownhosts' own HostKeyCallback
+	// ever reads from it (see its own db.check: hostWithPort itself is
+	// passed as "address", always preferred over "remote" when
+	// non-empty) — never dialed, never read any other way. probeKey is
+	// likewise never presented to any real server: both exist purely to
+	// ask "what, if anything, do you already have recorded for this
+	// host", via the *knownhosts.KeyError.Want a guaranteed mismatch
+	// against a key nothing could ever actually have recorded is
+	// guaranteed to produce.
+	verifyErr := base(hostWithPort, probeAddr(hostWithPort), probeKey)
+	var keyErr *knownhosts.KeyError
+	if !errors.As(verifyErr, &keyErr) {
+		return nil
+	}
+
+	var algos []string
+	seen := make(map[string]bool, len(keyErr.Want))
+	for _, want := range keyErr.Want {
+		t := want.Key.Type()
+		if !seen[t] {
+			seen[t] = true
+			algos = append(algos, t)
+		}
+	}
+	return algos
+}
+
+// probeAddr adapts a plain "host:port" string into the net.Addr
+// knownhosts' own HostKeyCallback signature requires — see
+// preferredHostKeyAlgorithms' own doc comment on why its String() is
+// all that's ever actually read.
+type probeAddr string
+
+func (a probeAddr) Network() string { return "tcp" }
+func (a probeAddr) String() string  { return string(a) }
+
+// newProbeKey generates a fresh, never-reused Ed25519 key pair purely
+// to serve as preferredHostKeyAlgorithms' own throwaway probe —
+// Ed25519 only because key generation is cheap and synchronous, not
+// because the algorithm itself matters to the probe.
+func newProbeKey() (ssh.PublicKey, error) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.NewPublicKey(pub)
 }
 
 func ensureKnownHostsFile(path string) error {
