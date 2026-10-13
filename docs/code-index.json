@@ -1108,8 +1108,13 @@
     },
     {
       "path": "internal/remotefs/hostkey.go",
-      "size": 3935,
-      "sha256": "e6ec271acb6af2d9cfa64993bcb1f0282abbde1640f157818773c7a9d7e7759f"
+      "size": 7748,
+      "sha256": "e56e61fd658554f11822d9192652432cc096f2a6f307529a51d8a32c7f59ecbd"
+    },
+    {
+      "path": "internal/remotefs/hostkey_algorithms_test.go",
+      "size": 6476,
+      "sha256": "f2bb69cb788037cfb0c532916421692375d0767ad400dc5f710bbe882f43b30d"
     },
     {
       "path": "internal/remotefs/hostkey_test.go",
@@ -1118,8 +1123,8 @@
     },
     {
       "path": "internal/remotefs/sftp.go",
-      "size": 12591,
-      "sha256": "cec9ccc95bb9bd5d906c7d97dd8270e2f67edbbc5bff3de23315a6b0062fbc03"
+      "size": 13134,
+      "sha256": "f870778e69e831fd6b3a06123872b39f4837fbe52000009b1593fb417bc00fc8"
     },
     {
       "path": "internal/remotefs/sftp_test.go",
@@ -2912,6 +2917,7 @@
         "internal/remotefs/history.go",
         "internal/remotefs/history_test.go",
         "internal/remotefs/hostkey.go",
+        "internal/remotefs/hostkey_algorithms_test.go",
         "internal/remotefs/hostkey_test.go",
         "internal/remotefs/sftp.go",
         "internal/remotefs/sftp_test.go",
@@ -2922,6 +2928,7 @@
         "context",
         "crypto/ed25519",
         "crypto/rand",
+        "crypto/rsa",
         "encoding/json",
         "encoding/pem",
         "errors",
@@ -14339,35 +14346,107 @@
       "file": "internal/remotefs/hostkey.go",
       "name": "HostKeyPrompt",
       "kind": "type",
-      "line": 31
+      "line": 33
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/hostkey.go",
       "name": "DefaultKnownHostsFile",
       "kind": "function",
-      "line": 39
+      "line": 41
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/hostkey.go",
       "name": "hostKeyCallback",
       "kind": "function",
-      "line": 60
+      "line": 62
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey.go",
+      "name": "preferredHostKeyAlgorithms",
+      "kind": "function",
+      "line": 124
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey.go",
+      "name": "probeAddr",
+      "kind": "type",
+      "line": 166
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey.go",
+      "name": "Network",
+      "kind": "method",
+      "receiver": "probeAddr",
+      "line": 168
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey.go",
+      "name": "String",
+      "kind": "method",
+      "receiver": "probeAddr",
+      "line": 169
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey.go",
+      "name": "newProbeKey",
+      "kind": "function",
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/hostkey.go",
       "name": "ensureKnownHostsFile",
       "kind": "function",
-      "line": 92
+      "line": 183
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/hostkey.go",
       "name": "appendKnownHost",
       "kind": "function",
-      "line": 103
+      "line": 194
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey_algorithms_test.go",
+      "name": "TestPreferredHostKeyAlgorithmsReturnsRecordedTypesForAKnownHost",
+      "kind": "function",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey_algorithms_test.go",
+      "name": "TestDialSucceedsWhenRecordedAlgorithmIsNotTheLibraryDefaultsFirstChoice",
+      "kind": "function",
+      "line": 73
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey_algorithms_test.go",
+      "name": "startTestServerWithExactlyTheseHostKeys",
+      "kind": "function",
+      "line": 115
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey_algorithms_test.go",
+      "name": "newTestRSAKeyPair",
+      "kind": "function",
+      "line": 143
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/hostkey_algorithms_test.go",
+      "name": "sshKnownHostsLine",
+      "kind": "function",
+      "line": 160
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14459,14 +14538,14 @@
       "file": "internal/remotefs/sftp.go",
       "name": "dialSSHContext",
       "kind": "function",
-      "line": 148
+      "line": 157
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/sftp.go",
       "name": "result",
       "kind": "type",
-      "line": 155
+      "line": 164
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14474,7 +14553,7 @@
       "name": "Root",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 178
+      "line": 187
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14482,7 +14561,7 @@
       "name": "ListDir",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 189
+      "line": 198
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14490,7 +14569,7 @@
       "name": "Stat",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 207
+      "line": 216
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14498,7 +14577,7 @@
       "name": "Lstat",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 215
+      "line": 224
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14506,7 +14585,7 @@
       "name": "Open",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 223
+      "line": 232
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14514,7 +14593,7 @@
       "name": "Create",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 224
+      "line": 233
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14522,7 +14601,7 @@
       "name": "Mkdir",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 225
+      "line": 234
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14530,7 +14609,7 @@
       "name": "Remove",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 226
+      "line": 235
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14538,7 +14617,7 @@
       "name": "RemoveDirectory",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 227
+      "line": 236
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14546,7 +14625,7 @@
       "name": "Rename",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 228
+      "line": 237
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14554,7 +14633,7 @@
       "name": "Chmod",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 229
+      "line": 238
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14562,21 +14641,21 @@
       "name": "DiskUsage",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 241
+      "line": 250
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/sftp.go",
       "name": "diskUsageFromStatVFS",
       "kind": "function",
-      "line": 257
+      "line": 266
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/sftp.go",
       "name": "percentOfCounts",
       "kind": "function",
-      "line": 277
+      "line": 286
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14584,7 +14663,7 @@
       "name": "Close",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 284
+      "line": 293
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -14592,21 +14671,21 @@
       "name": "adaptLstatEntry",
       "kind": "method",
       "receiver": "*SFTPClient",
-      "line": 299
+      "line": 308
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/sftp.go",
       "name": "adaptResolvedEntry",
       "kind": "function",
-      "line": 332
+      "line": 341
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
       "file": "internal/remotefs/sftp.go",
       "name": "entryTypeFromMode",
       "kind": "function",
-      "line": 349
+      "line": 358
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
@@ -24564,14 +24643,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -47856,5 +47935,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "664c89c89a70af9437277141ec68c39f806ce4e77440ed5f5b529e3325251582"
+  "merkle_root": "8e98fd571947c628c2ec5338b4ace52a984e38a0cbf1403c9dfa99daa848651f"
 }

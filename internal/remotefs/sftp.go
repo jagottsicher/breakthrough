@@ -95,10 +95,19 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 	}
 
 	config := &ssh.ClientConfig{
-		User:            opts.User,
-		Auth:            methods,
-		HostKeyCallback: hostKeyCB,
-		Timeout:         timeout,
+		User: opts.User,
+		Auth: methods,
+		// HostKeyAlgorithms: nil (the library default order) for a host
+		// with no known_hosts entries yet; otherwise exactly the
+		// algorithm(s) already trusted for it, so a server offering
+		// several host key types can't make a perfectly valid handshake
+		// look like a changed/MITM key just because this project's own
+		// default negotiation order picked a different one than
+		// whatever `ssh` itself previously recorded — see
+		// preferredHostKeyAlgorithms' own doc comment.
+		HostKeyAlgorithms: preferredHostKeyAlgorithms(knownHosts, opts.Addr()),
+		HostKeyCallback:   hostKeyCB,
+		Timeout:           timeout,
 	}
 
 	sshClient, err := dialSSHContext(ctx, opts.Addr(), config)
