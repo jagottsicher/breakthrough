@@ -343,3 +343,24 @@ func TestCloseCompareCancelsAnyRunningHash(t *testing.T) {
 		t.Error("closeCompare should cancel a hash computation still in flight")
 	}
 }
+
+// TestApplyCompareFileThemeColorsTheOverlay pins a real, previously-
+// unnoticed gap: this overlay had no entry in applyTheme at all (unlike
+// Compare Tree's own identical gap, already fixed — see its own
+// comment in theme.go), so it stayed at tview's plain, unstyled
+// defaults regardless of which color scheme was active. NewRoot itself
+// already runs applyTheme once during construction, so this only needs
+// to check the result, not call it again.
+func TestApplyCompareFileThemeColorsTheOverlay(t *testing.T) {
+	r, _ := newCompareRoot(t)
+
+	if got := r.compareLayout.GetBackgroundColor(); got != r.theme.SurfaceBackground {
+		t.Errorf("compareLayout background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
+	}
+	if got := r.compareTitleBar.GetBackgroundColor(); got != r.theme.InputFocusedBackground {
+		t.Errorf("compareTitleBar background = %v, want theme.InputFocusedBackground %v", got, r.theme.InputFocusedBackground)
+	}
+	if got := r.compareButtons.GetBackgroundColor(); got != r.theme.SurfaceBackground {
+		t.Errorf("compareButtons background = %v, want theme.SurfaceBackground %v", got, r.theme.SurfaceBackground)
+	}
+}

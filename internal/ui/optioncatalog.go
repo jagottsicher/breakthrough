@@ -261,7 +261,7 @@ func optionCategories() []optionCategory {
 						"Only shows real glyphs if your terminal is actually using a "+
 						"Nerd Font — this application has no way to detect that, so "+
 						"it's off by default. The \"zi\" chord and the header row's "+
-						"own \"ⓘ\" button are quicker ways to try it and switch back.",
+						"own \"░\" button are quicker ways to try it and switch back.",
 					false,
 					func(r *Root) bool { return r.panel.fileIcons },
 					func(r *Root, b bool) { r.setFileIcons(b) },

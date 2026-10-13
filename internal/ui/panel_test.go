@@ -44,9 +44,9 @@ func stripColorTags(s string) string {
 
 func TestBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/a/bb/c", theme, false)
+	text, spans := buildHeaderSpans("/a/bb/c", theme, false, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/a/bb/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ¡  " + " @  " + "/a/bb/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -101,6 +101,32 @@ func TestBuildHeaderSpans(t *testing.T) {
 	}
 }
 
+// TestBuildHeaderSpansTogglesFileIconsGlyph pins the one header button
+// whose own glyph changes with its target's state (see headerButtons'
+// own doc comment on "¡"/"!") rather than staying fixed the way every
+// other header button does: fileIconsEnabled false shows the inverted
+// "¡" baseline, true shows the plain "!" (the same mark flipped
+// upright) — the user's own explicit, deliberately chosen way to read
+// "flipped" at a glance. Both are a single column wide, so this never
+// shifts anything else in the header (see headerButtonPrefix's own doc
+// comment on why that matters).
+func TestBuildHeaderSpansTogglesFileIconsGlyph(t *testing.T) {
+	theme := config.DefaultTheme().Resolve()
+
+	off, _ := buildHeaderSpans("/a/bb/c", theme, false, false)
+	if got := stripColorTags(off); !strings.Contains(got, " ¡ ") {
+		t.Errorf("fileIconsEnabled=false visible text = %q, want it to contain the inverted \"¡\"", got)
+	}
+
+	on, _ := buildHeaderSpans("/a/bb/c", theme, false, true)
+	if got := stripColorTags(on); !strings.Contains(got, " ! ") {
+		t.Errorf("fileIconsEnabled=true visible text = %q, want it to contain the plain \"!\"", got)
+	}
+	if got := stripColorTags(on); strings.Contains(got, " ¡ ") {
+		t.Errorf("fileIconsEnabled=true visible text = %q, should not still show the inverted \"¡\"", got)
+	}
+}
+
 // TestHeaderButtonPrefixMatchesBuildHeaderSpans pins headerButtonPrefix
 // (headerEdit's own SetLabel — see NewPanel/openEdit) in sync with what
 // buildHeaderSpans actually renders before the path itself starts —
@@ -112,7 +138,7 @@ func TestBuildHeaderSpans(t *testing.T) {
 // tags of its own (see its own doc comment).
 func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, _ := buildHeaderSpans("/a/bb/c", theme, false)
+	text, _ := buildHeaderSpans("/a/bb/c", theme, false, false)
 	if visible := stripColorTags(text); !strings.HasPrefix(visible, headerButtonPrefix) {
 		t.Errorf("buildHeaderSpans' own visible text %q does not start with headerButtonPrefix %q", visible, headerButtonPrefix)
 	}
@@ -120,9 +146,9 @@ func TestHeaderButtonPrefixMatchesBuildHeaderSpans(t *testing.T) {
 
 func TestBuildHeaderSpansRoot(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/", theme, false)
+	text, spans := buildHeaderSpans("/", theme, false, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ¡  " + " @  " + "/"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -145,9 +171,9 @@ func TestBuildHeaderSpansRoot(t *testing.T) {
 // on screen. "文档" is 2 runes but 4 terminal columns.
 func TestBuildHeaderSpansAccountsForWideCharacters(t *testing.T) {
 	theme := config.DefaultTheme().Resolve()
-	text, spans := buildHeaderSpans("/文档/c", theme, false)
+	text, spans := buildHeaderSpans("/文档/c", theme, false, false)
 
-	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ⓘ  " + " @  " + "/文档/c"
+	wantVisible := " ∎  " + " /  " + " ~  " + " ↑  " + " <  " + " >  " + " ⭯  " + " ¡  " + " @  " + "/文档/c"
 	if got := stripColorTags(text); got != wantVisible {
 		t.Fatalf("visible text = %q, want %q", got, wantVisible)
 	}
@@ -2769,7 +2795,7 @@ func TestSetSearchStatusAppendsClickableBreadcrumb(t *testing.T) {
 // buildHeaderSpansText is buildHeaderSpans' own text half, for a test
 // that only needs to compare against it, not the spans too.
 func buildHeaderSpansText(abs string, theme config.ResolvedTheme) string {
-	text, _ := buildHeaderSpans(abs, theme, false)
+	text, _ := buildHeaderSpans(abs, theme, false, false)
 	return text
 }
 
@@ -2887,7 +2913,7 @@ func TestRunHeaderActionReloadDuringSearchModeLeavesSearchMode(t *testing.T) {
 // TestHeaderEditLabelMatchesButtonPrefix pins the actual bug fix: a
 // real user report that switching the header into edit mode reset the
 // editable path's own start column to 0 instead of lining up with
-// where p.header was already showing it, right after the "∎/~↑<>⭯ⓘ "
+// where p.header was already showing it, right after the "∎/~↑<>⭯¡ "
 // buttons. headerEdit's own label (see NewPanel) is what reserves that
 // same width now — there's nothing further for openEdit itself to do
 // per call, so this only needs checking once, right after construction.

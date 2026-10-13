@@ -276,7 +276,7 @@ type Panel struct {
 	// onExpandDetails both exist.
 	onOpenConnectionMenu func()
 
-	// onToggleFileIcons is Root's own wiring for the header's "ⓘ"
+	// onToggleFileIcons is Root's own wiring for the header's "░"
 	// button (see buildHeaderSpans/actionToggleFileIcons, and
 	// Root.toggleFileIcons) — same reason onOpenConnectionMenu exists.
 	onToggleFileIcons func()
@@ -1412,7 +1412,7 @@ func (p *Panel) load(dir string) error {
 	p.endShiftSelect()
 	p.path = abs
 
-	text, spans := buildHeaderSpans(abs, p.theme, p.remote != nil)
+	text, spans := buildHeaderSpans(abs, p.theme, p.remote != nil, p.fileIcons)
 	p.header.SetText(text)
 	p.headerSpans = spans
 	p.renderFilterMenuBtn()
@@ -1671,7 +1671,7 @@ func (p *Panel) setSearchStatus(text string) {
 	prefix := text + separator
 	p.searchHeaderOffset = tview.TaggedStringWidth(prefix)
 
-	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme, p.remote != nil)
+	breadcrumbText, breadcrumbSpans := buildHeaderSpans(p.searchBrowsePath, p.theme, p.remote != nil, p.fileIcons)
 	p.header.SetText(prefix + breadcrumbText)
 
 	spans := make([]headerSpan, len(breadcrumbSpans))
@@ -4294,17 +4294,23 @@ func (p *Panel) previousPath() (string, bool) {
 // family's own go-to members (gg/gh/gu/gp/gn — see chordFamilies in
 // keymap.go) mirror this same order, per that same request.
 //
-// "ⓘ" (U+24D8, circled Latin small letter i) is the "zi" chord's own
-// mouse equivalent (Root.toggleFileIcons/actionToggleFileIcons) — per
-// the user's own explicit request, placed right after Reload. Plain
-// BMP Unicode (Enclosed Alphanumerics), not a Nerd Font PUA glyph: the
-// button that turns Nerd Font icons on has to render on its own,
-// without a Nerd Font, the same reasoning connectionButtonGlyph's own
-// doc comment gives for picking "@" over a pictograph. Its own column
-// never changes — on/off is shown by whether the row it labels has
-// actually switched to icon mode, not by swapping this glyph itself,
-// the same "fixed glyph, state read elsewhere" shape
-// connectionButtonGlyph already establishes.
+// "¡"/"!" (U+00A1/U+0021) is the "zi" chord's own mouse equivalent
+// (Root.toggleFileIcons/actionToggleFileIcons) — per the user's own
+// explicit request, placed right after Reload, and picked by the user
+// directly after comparing several real-rendered candidates side by
+// side (a crosshatched square, a circled "i", and a shaded block were
+// each tried and rejected first). Unlike every other header button,
+// this one's own glyph *does* change with its target's state (see
+// fileIconsOnGlyph/buildHeaderSpans): "¡" (an inverted exclamation
+// mark) normal, flipping upright to a plain "!" once Nerd Font icon
+// mode is on — the user's own chosen way to read "flipped" at a
+// glance, matching what the toggle itself actually did. Plain
+// Latin-1, not a Nerd Font PUA glyph: the button that turns Nerd Font
+// icons on has to render on its own, without a Nerd Font, the same
+// reasoning connectionButtonGlyph's own doc comment gives for picking
+// "@" over a pictograph.
+const fileIconsOnGlyph = "!" // U+0021 EXCLAMATION MARK — see headerButtons' own "¡" entry above
+
 var headerButtons = []struct {
 	glyph  string
 	action headerAction
@@ -4316,7 +4322,7 @@ var headerButtons = []struct {
 	{"<", actionBack},
 	{">", actionForward},
 	{"⭯", actionReload},
-	{"ⓘ", actionToggleFileIcons},
+	{"¡", actionToggleFileIcons},
 }
 
 // headerButtonSeparator is the plain, normal-background column between
@@ -4476,15 +4482,19 @@ var headerButtonPrefix = func() string {
 // between two buttons, or in empty space after the path) is handled by
 // captureHeaderMouse as "switch to edit mode" — deliberately not
 // represented as a span here, since it's everything else.
-func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool) (text string, spans []headerSpan) {
+func buildHeaderSpans(abs string, theme config.ResolvedTheme, connected bool, fileIconsEnabled bool) (text string, spans []headerSpan) {
 	var b strings.Builder
 	col := 0
 
 	keyBG := colorTag(theme.ButtonBackground)
 	for _, btn := range headerButtons {
+		glyph := btn.glyph
+		if btn.action == actionToggleFileIcons && fileIconsEnabled {
+			glyph = fileIconsOnGlyph
+		}
 		start := col
-		fmt.Fprintf(&b, "[:%s:] %s [-:-:-]", keyBG, btn.glyph)
-		col += 1 + tview.TaggedStringWidth(btn.glyph) + 1
+		fmt.Fprintf(&b, "[:%s:] %s [-:-:-]", keyBG, glyph)
+		col += 1 + tview.TaggedStringWidth(glyph) + 1
 		spans = append(spans, headerSpan{start: start, end: col, action: btn.action})
 		b.WriteString(headerButtonSeparator)
 		col++

@@ -401,3 +401,90 @@ func TestHelpTextMentionsThePrimaryKeyboardLayer(t *testing.T) {
 		}
 	}
 }
+
+// TestHelpTextPlainKeyTableColumnsStayAligned pins the three-column
+// "c Copy / d Move to Trash / i Properties" grid's own column
+// positions — a real, user-reported bug: this block is a hand-typed
+// string literal with manually counted spaces (not computed padding),
+// and a single miscounted row silently drifted every key/label after
+// it one or two characters to the right for the rest of the block,
+// which only showed up as "shifted" columns on a real screen, never as
+// a build or vet failure. Checked here against every full row of the
+// grid (the two narrower continuation rows for "+/-"/"by pattern"
+// don't have all three columns, so they're deliberately left out
+// rather than special-cased) — each one's key/label columns must start
+// at the exact same byte offset as the first row, not just "look
+// roughly aligned".
+func TestHelpTextPlainKeyTableColumnsStayAligned(t *testing.T) {
+	lines := strings.Split(helpText, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "  c   Copy") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatal("could not locate the plain-key table's own first row (\"  c   Copy\") in helpText — did its content change shape?")
+	}
+	const tableLen = 13 // c/x/v/r/f/n/s/a rows, the +/- and "by pattern" continuation, then B/C/q
+	if start+tableLen > len(lines) {
+		t.Fatalf("plain-key table at line %d would run past the end of helpText (%d lines)", start, len(lines))
+	}
+	table := lines[start : start+tableLen]
+	if !strings.Contains(table[tableLen-1], "Bash command line") {
+		t.Fatalf("plain-key table's own last row = %q, want it to end with \"Bash command line\" — did its content change shape?", table[tableLen-1])
+	}
+
+	var fullRows []string
+	for _, line := range table {
+		if strings.Contains(line, "Select/deselect") || strings.Contains(line, "by pattern") {
+			continue
+		}
+		fullRows = append(fullRows, line)
+	}
+	if len(fullRows) != 11 {
+		t.Fatalf("found %d full rows in the plain-key table, want 11 — did its content change shape? rows: %q", len(fullRows), fullRows)
+	}
+
+	// Only a run of 2+ spaces counts as a real column boundary — a
+	// single space is just an ordinary word gap inside a label like
+	// "Move to Trash" or "Go to last row", not a new column. Counted in
+	// runes, not bytes ("range"'s own index): "…" (used in "Connect…"/
+	// "Open with…") is one display column but three UTF-8 bytes, which
+	// would otherwise misreport every column after it on its own line
+	// as "shifted" by two columns that were never actually there.
+	columnStarts := func(line string) []int {
+		var starts []int
+		spaceRun := 0
+		for pos, r := range []rune(line) {
+			if r == ' ' {
+				spaceRun++
+				continue
+			}
+			if pos == 0 || spaceRun >= 2 {
+				starts = append(starts, pos)
+			}
+			spaceRun = 0
+		}
+		return starts
+	}
+
+	want := columnStarts(fullRows[0])
+	if len(want) < 6 {
+		t.Fatalf("reference row %q: got %d columns, want at least 6", fullRows[0], len(want))
+	}
+	want = want[:6]
+
+	for _, line := range fullRows[1:] {
+		got := columnStarts(line)
+		if len(got) < 6 {
+			t.Errorf("line %q: got %d columns, want at least 6", line, len(got))
+			continue
+		}
+		got = got[:6]
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("line %q: columns at %v, want %v (reference row: %q)", line, got, want, fullRows[0])
+		}
+	}
+}
