@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -31,6 +32,32 @@ import (
 // nothing above internal/remotefs needs to import it just to show a
 // confirmation dialog.
 type HostKeyPrompt func(hostname, keyType, fingerprint string) (accept bool, err error)
+
+// HostKeyMismatchError is hostKeyCallback's own report of a host whose
+// key *changed* (see its doc comment on why that's always rejected
+// outright rather than offered through HostKeyPrompt) — carrying both
+// the new key the server just presented and every already-trusted key
+// known_hosts has on file for it, so a caller can show a real "this is
+// what changed" comparison rather than knownhosts.KeyError's own bare
+// "key mismatch" string.
+//
+// Dial never bypasses this itself; it only reports it. A caller that
+// wants to let the user connect anyway despite it (see
+// DialOptions.SkipHostKeyVerification) does so as a deliberate, separate
+// retry, not as a path this error itself offers — the same reasoning
+// HostKeyPrompt's own doc comment gives for why an unknown host and a
+// changed one are never treated the same way.
+type HostKeyMismatchError struct {
+	Hostname        string
+	NewKeyType      string
+	NewFingerprint  string
+	OldFingerprints []string // one per already-trusted key/algorithm, oldest known_hosts entries first
+}
+
+func (e *HostKeyMismatchError) Error() string {
+	return fmt.Sprintf("knownhosts: key mismatch for %s: server now offers %s %s, known_hosts has %s",
+		e.Hostname, e.NewKeyType, e.NewFingerprint, strings.Join(e.OldFingerprints, ", "))
+}
 
 // DefaultKnownHostsFile is where Dial reads/appends trusted host keys
 // unless told otherwise — the exact same file and line format
@@ -74,8 +101,20 @@ func hostKeyCallback(path string, prompt HostKeyPrompt) (ssh.HostKeyCallback, er
 			return nil
 		}
 		var keyErr *knownhosts.KeyError
-		if !errors.As(verifyErr, &keyErr) || len(keyErr.Want) > 0 {
+		if !errors.As(verifyErr, &keyErr) {
 			return verifyErr
+		}
+		if len(keyErr.Want) > 0 {
+			oldFingerprints := make([]string, len(keyErr.Want))
+			for i, want := range keyErr.Want {
+				oldFingerprints[i] = ssh.FingerprintSHA256(want.Key)
+			}
+			return &HostKeyMismatchError{
+				Hostname:        hostname,
+				NewKeyType:      key.Type(),
+				NewFingerprint:  ssh.FingerprintSHA256(key),
+				OldFingerprints: oldFingerprints,
+			}
 		}
 		if prompt == nil {
 			return verifyErr
@@ -89,6 +128,19 @@ func hostKeyCallback(path string, prompt HostKeyPrompt) (ssh.HostKeyCallback, er
 		}
 		return appendKnownHost(path, hostname, key)
 	}, nil
+}
+
+// hostKeyAlgorithmsOrNil is Dial's own guard around
+// preferredHostKeyAlgorithms for the one case that would otherwise call
+// it pointlessly: opts.SkipHostKeyVerification already left knownHosts
+// "" (see Dial's own doc comment), and there is nothing to read an
+// algorithm preference from when ssh.InsecureIgnoreHostKey() is about
+// to accept whatever the server offers regardless.
+func hostKeyAlgorithmsOrNil(opts DialOptions, knownHosts string) []string {
+	if opts.SkipHostKeyVerification {
+		return nil
+	}
+	return preferredHostKeyAlgorithms(knownHosts, opts.Addr())
 }
 
 // preferredHostKeyAlgorithms inspects the known_hosts file at path for
