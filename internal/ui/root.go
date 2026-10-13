@@ -1022,6 +1022,16 @@ type Root struct {
 	connectLayout        *tview.Flex
 	connectCancel        context.CancelFunc
 	connectAnimFrame     int
+	// connectPendingSkipHostKey/connectPendingSkipHostKeyConn back the
+	// "Connect anyway" retry after a HostKeyMismatchError (see
+	// connectdialog.go's own finishConnect/runConnect) — set only once
+	// finishConnect has actually shown the mismatch, consumed (and
+	// cleared) the instant runConnect reads it, and only ever honored
+	// for the exact same Connection it was shown for, so editing a
+	// field first can never silently carry an accepted bypass over to
+	// a different host.
+	connectPendingSkipHostKey     bool
+	connectPendingSkipHostKeyConn remotefs.Connection
 
 	// hostKeyConfirmDialog/Layout is the trust-on-first-use prompt a
 	// Dial attempt can raise mid-connection (see hostkeyconfirm.go's

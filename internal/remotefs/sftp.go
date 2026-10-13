@@ -38,6 +38,17 @@ type DialOptions struct {
 	KnownHostsFile string
 	HostKeyPrompt  HostKeyPrompt
 
+	// SkipHostKeyVerification bypasses host key verification entirely
+	// for this one Dial call — never set from a stored preference, only
+	// from an explicit, one-off "connect anyway" retry after a caller
+	// has already seen and reported a HostKeyMismatchError, and never
+	// persisted to known_hosts either way (see HostKeyMismatchError's
+	// own doc comment): a later ordinary Dial against the same host
+	// hits the identical mismatch again until known_hosts itself is
+	// fixed. False is the only safe default — every other Dial caller
+	// must leave this unset.
+	SkipHostKeyVerification bool
+
 	// Timeout bounds the connect+handshake; 0 means
 	// dialDefaultTimeout.
 	Timeout time.Duration
@@ -75,17 +86,31 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 		timeout = dialDefaultTimeout
 	}
 
-	knownHosts := opts.KnownHostsFile
-	if knownHosts == "" {
-		var err error
-		knownHosts, err = DefaultKnownHostsFile()
-		if err != nil {
-			return nil, fmt.Errorf("locating known_hosts: %w", err)
+	var hostKeyCB ssh.HostKeyCallback
+	var knownHosts string
+	if opts.SkipHostKeyVerification {
+		// InsecureIgnoreHostKey, not a vacuous callback of our own: its
+		// name alone is the warning label every reader of this code
+		// needs, and golang.org/x/crypto/ssh's own doc comment on it
+		// says plainly this should "only be used for testing purposes"
+		// — exactly the one-off, explicitly-requested "connect anyway"
+		// case DialOptions.SkipHostKeyVerification's own doc comment
+		// describes, never a default.
+		hostKeyCB = ssh.InsecureIgnoreHostKey()
+	} else {
+		knownHosts = opts.KnownHostsFile
+		if knownHosts == "" {
+			var err error
+			knownHosts, err = DefaultKnownHostsFile()
+			if err != nil {
+				return nil, fmt.Errorf("locating known_hosts: %w", err)
+			}
 		}
-	}
-	hostKeyCB, err := hostKeyCallback(knownHosts, opts.HostKeyPrompt)
-	if err != nil {
-		return nil, err
+		var err error
+		hostKeyCB, err = hostKeyCallback(knownHosts, opts.HostKeyPrompt)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var passwordUsed bool
@@ -104,8 +129,12 @@ func Dial(ctx context.Context, opts DialOptions) (*SFTPClient, error) {
 		// look like a changed/MITM key just because this project's own
 		// default negotiation order picked a different one than
 		// whatever `ssh` itself previously recorded — see
-		// preferredHostKeyAlgorithms' own doc comment.
-		HostKeyAlgorithms: preferredHostKeyAlgorithms(knownHosts, opts.Addr()),
+		// preferredHostKeyAlgorithms' own doc comment. Skipped outright
+		// when SkipHostKeyVerification already made knownHosts "" above:
+		// there is no known_hosts file to prefer an algorithm from, and
+		// ssh.InsecureIgnoreHostKey() accepts whatever the server offers
+		// regardless.
+		HostKeyAlgorithms: hostKeyAlgorithmsOrNil(opts, knownHosts),
 		HostKeyCallback:   hostKeyCB,
 		Timeout:           timeout,
 	}

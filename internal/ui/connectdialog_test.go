@@ -258,3 +258,61 @@ var errAuthFailedForTest = &testDialError{"ssh: handshake failed: authentication
 type testDialError struct{ msg string }
 
 func (e *testDialError) Error() string { return e.msg }
+
+// TestFinishConnectOnHostKeyMismatchOffersConnectAnywayWithoutSaving
+// pins the Connect dialog's own reaction to remotefs.HostKeyMismatchError —
+// a real host-key rotation case (see internal/remotefs's own
+// hostkey.go doc comment on why Dial itself never offers a bypass):
+// the Connect button relabels into the explicit retry, the fingerprint
+// comparison lands in the status line, and the bypass is armed only
+// for this exact Connection, never persisted anywhere by finishConnect
+// itself.
+func TestFinishConnectOnHostKeyMismatchOffersConnectAnywayWithoutSaving(t *testing.T) {
+	withTestConfigHome(t)
+	r := newTestRootForConnect(t)
+	conn := remotefs.Connection{Host: "example.com", User: "tester"}
+	mismatchErr := &remotefs.HostKeyMismatchError{
+		Hostname:        "example.com:22",
+		NewKeyType:      "ssh-ed25519",
+		NewFingerprint:  "SHA256:newkey",
+		OldFingerprints: []string{"SHA256:oldkey"},
+	}
+
+	r.finishConnect(r.panel, conn, nil, mismatchErr)
+
+	if r.activePage != connectDialogPage {
+		t.Errorf("activePage = %q, want the dialog to stay open so the user can retry", r.activePage)
+	}
+	if got := r.connectConnectBtn.GetLabel(); got != "Connect anyway" {
+		t.Errorf("Connect button label = %q, want %q", got, "Connect anyway")
+	}
+	status := r.connectStatus.GetText(true)
+	if !strings.Contains(status, "SHA256:newkey") || !strings.Contains(status, "SHA256:oldkey") {
+		t.Errorf("status = %q, want both the old and new fingerprints shown for comparison", status)
+	}
+	if !r.connectPendingSkipHostKey || !r.connectPendingSkipHostKeyConn.Equal(conn) {
+		t.Error("finishConnect should arm the bypass for exactly this Connection")
+	}
+}
+
+// TestOpenConnectDialogClearsAnyPendingConnectAnywayState pins that
+// reopening the dialog (a different connection attempt, possibly a
+// different host entirely) never inherits an earlier attempt's own
+// accepted-but-unconsumed bypass — see runConnect's own doc comment on
+// why that guard exists at all.
+func TestOpenConnectDialogClearsAnyPendingConnectAnywayState(t *testing.T) {
+	withTestConfigHome(t)
+	r := newTestRootForConnect(t)
+	r.connectPendingSkipHostKey = true
+	r.connectPendingSkipHostKeyConn = remotefs.Connection{Host: "example.com", User: "tester"}
+	r.connectConnectBtn.SetLabel("Connect anyway")
+
+	r.openConnectDialog(remotefs.Connection{})
+
+	if r.connectPendingSkipHostKey {
+		t.Error("openConnectDialog should clear a pending bypass from an earlier attempt")
+	}
+	if got := r.connectConnectBtn.GetLabel(); got != "Connect" {
+		t.Errorf("Connect button label = %q, want the plain %q after reopening", got, "Connect")
+	}
+}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -38,6 +39,7 @@ func (r *Root) openConnectDialog(prefill remotefs.Connection) {
 	r.connectUserField.SetText(prefill.User)
 	r.connectPasswordField.SetText("")
 	r.setConnectStatus("", r.theme.Text)
+	r.resetConnectAnywayState()
 
 	// height covers connectTitleBar's own row plus connectLayout's three
 	// stacked pieces (connectForm's own 9, see newConnectLayout's own
@@ -190,6 +192,18 @@ func (r *Root) newConnectLayout() *tview.Flex {
 		AddItem(content, 0, 1, true)
 }
 
+// resetConnectAnywayState clears whatever "Connect anyway" state a
+// prior HostKeyMismatchError left behind (see finishConnect) and puts
+// connectConnectBtn's own label back to plain "Connect" — called on
+// every fresh dialog open and the instant runConnect consumes a
+// pending bypass, so it can never linger stale across an unrelated
+// attempt or a different host.
+func (r *Root) resetConnectAnywayState() {
+	r.connectPendingSkipHostKey = false
+	r.connectPendingSkipHostKeyConn = remotefs.Connection{}
+	r.connectConnectBtn.SetLabel("Connect")
+}
+
 func (r *Root) setConnectStatus(text string, color tcell.Color) {
 	r.connectStatus.SetTextColor(color)
 	r.connectStatus.SetText(text)
@@ -247,6 +261,17 @@ func (r *Root) runConnect() {
 
 	conn := remotefs.Connection{Host: host, Port: port, User: user}
 
+	// skipHostKeyVerification only ever fires for the exact Connection a
+	// prior attempt's own HostKeyMismatchError was just shown for (see
+	// finishConnect) — consumed here, immediately, so a second,
+	// unrelated click of this same button (after editing a field, or
+	// after this very attempt resolves one way or the other) never
+	// silently repeats the bypass. See
+	// DialOptions.SkipHostKeyVerification's own doc comment for why
+	// this is never anything but a deliberate, one-off, unsaved retry.
+	skipHostKeyVerification := r.connectPendingSkipHostKey && r.connectPendingSkipHostKeyConn.Equal(conn)
+	r.resetConnectAnywayState()
+
 	r.cancelConnectAttempt()
 	ctx, cancel := context.WithCancel(context.Background())
 	r.connectCancel = cancel
@@ -259,9 +284,10 @@ func (r *Root) runConnect() {
 	panel := r.panel
 	r.safeGo("connect", onPanic, func() {
 		client, err := dialFunc(ctx, remotefs.DialOptions{
-			Connection:    conn,
-			Auth:          remotefs.AuthOptions{AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Password: passwordPrompt},
-			HostKeyPrompt: r.askHostKeyTrust,
+			Connection:              conn,
+			Auth:                    remotefs.AuthOptions{AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Password: passwordPrompt},
+			HostKeyPrompt:           r.askHostKeyTrust,
+			SkipHostKeyVerification: skipHostKeyVerification,
 		})
 		r.app.QueueUpdateDraw(func() {
 			if ctx.Err() != nil {
@@ -315,9 +341,23 @@ func (r *Root) finishConnect(panel *Panel, conn remotefs.Connection, client remo
 	if err != nil {
 		_ = remotefs.RecordAttempt(conn, true)
 		r.activityLog.Error(activitylog.CategoryRemote, fmt.Sprintf("connect to %s: %v", conn.Label(), err))
+
+		var mismatchErr *remotefs.HostKeyMismatchError
+		if errors.As(err, &mismatchErr) {
+			r.connectPendingSkipHostKey = true
+			r.connectPendingSkipHostKeyConn = conn
+			r.connectConnectBtn.SetLabel("Connect anyway")
+			r.setConnectStatus(fmt.Sprintf(
+				"Host key changed: now %s %s (known_hosts has %s). Click Connect anyway to proceed without saving.",
+				mismatchErr.NewKeyType, mismatchErr.NewFingerprint, strings.Join(mismatchErr.OldFingerprints, ", "),
+			), r.theme.CriticalText)
+			return
+		}
+		r.resetConnectAnywayState()
 		r.setConnectStatus(err.Error(), r.theme.CriticalText)
 		return
 	}
+	r.resetConnectAnywayState()
 	// Recorded on conn itself, before RecordAttempt persists it to
 	// history and connectRemote attaches it to panel — see
 	// remotefs.AuthMethod's own doc comment for why this is the one
