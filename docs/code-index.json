@@ -1122,6 +1122,11 @@
       "sha256": "b5c4fb5b3e26bb85a5c375d0f9f8f24fd382da529fcbcb630581209ccad62a12"
     },
     {
+      "path": "internal/remotefs/workflow_test.go",
+      "size": 8540,
+      "sha256": "67ce006aa88c5a833dba28018754cce06c1fdd976865b68e319f686fd0eacabe"
+    },
+    {
       "path": "internal/replace/apply.go",
       "size": 5584,
       "sha256": "3629a59c06fdc3226f2eda9b5e12fbe2e5c52c27d39fc919276dbc52ecfe99d0"
@@ -2889,7 +2894,8 @@
         "internal/remotefs/hostkey_test.go",
         "internal/remotefs/sftp.go",
         "internal/remotefs/sftp_test.go",
-        "internal/remotefs/testserver_test.go"
+        "internal/remotefs/testserver_test.go",
+        "internal/remotefs/workflow_test.go"
       ],
       "imports": [
         "bytes",
@@ -14617,6 +14623,41 @@
       "line": 87
     },
     {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/workflow_test.go",
+      "name": "dialTestServer",
+      "kind": "function",
+      "line": 16
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/workflow_test.go",
+      "name": "TestRecursiveDirectoryTreeUploadThenListBackMatches",
+      "kind": "function",
+      "line": 44
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/workflow_test.go",
+      "name": "TestRenameMovesAWholeDirectoryTreeAtomically",
+      "kind": "function",
+      "line": 118
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/workflow_test.go",
+      "name": "TestRemoveDirectoryFailsWhenNotEmptyButSucceedsOnceCleared",
+      "kind": "function",
+      "line": 160
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/remotefs",
+      "file": "internal/remotefs/workflow_test.go",
+      "name": "TestLstatOnASymlinkReportsTheLinkWithoutFollowingItWhileStatResolvesIt",
+      "kind": "function",
+      "line": 198
+    },
+    {
       "package": "github.com/jagottsicher/breakthrough/internal/replace",
       "file": "internal/replace/apply.go",
       "name": "FileChange",
@@ -24425,14 +24466,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -40421,14 +40462,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormWidth",
+      "name": "searchFormHeight",
       "kind": "const",
       "line": 26
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/search.go",
-      "name": "searchFormHeight",
+      "name": "searchFormWidth",
       "kind": "const",
       "line": 26
     },
@@ -47822,5 +47863,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "bf57a466bc365dd36ae133db62fe39347277b0174adffbba92a09d4151eb7bd3"
+  "merkle_root": "8661046fdb8aa13d3c1569e52c157adba0dd01b4f396eb0d5650f4f0a537e7ef"
 }
