@@ -34,19 +34,19 @@ var helpText = strings.TrimLeft(`
   editor, or the bash line is never affected by any of this, and
   neither is any open dialog.
 
-  c   Copy              d   Move to Trash        i   Properties
-  x   Cut               D   Remove permanently    I   Details sidebar
-  v   Paste             u   Undo last rename       h  Compute hashes
-  r   Rename            e   Edit                   k  Directory size
-  f   Find              E   Execute                M  Image metadata
-  n   New tab           w   Close tab             l   Look
-  s   Split view         @  Connect…              t   Tab switcher
-  a   Select all         *  Invert selection      .   Toggle hidden
-                                                   +/- Select/deselect
-                                                       by pattern
-  B   Batch rename       S  Sed Replace           G   Go to last row
-  C   Compare            R  Rsync                 W  Open with…
-  q   Quit                ? This help              :  Bash command line
+  c   Copy           d     Move to Trash        i   Properties
+  x   Cut            D     Remove permanently   I   Details sidebar
+  v   Paste          u     Undo last rename     h   Compute hashes
+  r   Rename         e     Edit                 k   Directory size
+  f   Find           E     Execute              M   Image metadata
+  n   New tab        w     Close tab            l   Look
+  s   Split view     @     Connect…             t   Tab switcher
+  a   Select all     *     Invert selection     .   Toggle hidden
+                     +/-   Select/deselect
+                           by pattern
+  B   Batch rename   S     Sed Replace          G   Go to last row
+  C   Compare        R     Rsync                W   Open with…
+  q   Quit           ?     This help            :   Bash command line
 
   h/k/M target whichever of Properties/Details is relevant (Properties
   first if both are open on the same file), opening the Details sidebar
@@ -115,7 +115,7 @@ var helpText = strings.TrimLeft(`
     z  disp     zN sort by name · zS sort by size · zT sort by time ·
                 zs size format · zt time format · zi Nerd Font icons
                 (needs a terminal font that actually has them — off by
-                default; the header row's own "ⓘ" button, right after
+                default; the header row's own "░" button, right after
                 the reload "⭯" one, does the same) · zl label (set/clear
                 one of 9 colors on the focused or checked row(s)) · zf
                 filter · zo split orientation · zw swap panes · zr
