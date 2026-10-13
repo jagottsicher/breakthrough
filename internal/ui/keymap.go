@@ -561,7 +561,7 @@ func chordFamilies() []chordFamily {
 			{'s', "Size format", func(r *Root) { r.toggleSizeBytes() }},
 			{'t', "Time format", func(r *Root) { r.toggleMtimeUnix() }},
 			// "i" toggles Nerd Font icons in the type column (see
-			// internal/fileicons) — same header-row "ⓘ" button as its
+			// internal/fileicons) — same header-row "░" button as its
 			// mouse equivalent (Panel.onToggleFileIcons), per the user's
 			// own explicit request to place it right after Reload there.
 			{'i', "File icons", func(r *Root) { r.toggleFileIcons() }},

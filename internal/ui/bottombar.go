@@ -1814,7 +1814,7 @@ func (r *Root) refreshActivePanelHeaderGlow() {
 			// drifting apart.
 			p.setSearchStatus(p.searchStatusText)
 		} else {
-			text, spans := buildHeaderSpans(p.path, p.theme, true)
+			text, spans := buildHeaderSpans(p.path, p.theme, true, p.fileIcons)
 			p.header.SetText(text)
 			p.headerSpans = spans
 		}
