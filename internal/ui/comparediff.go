@@ -1,0 +1,409 @@
+package ui
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/compare"
+	"github.com/jagottsicher/breakthrough/internal/config"
+	"github.com/jagottsicher/breakthrough/internal/viewer"
+)
+
+const compareDiffPage = "compare-diff"
+
+// compareDiffLinkedGlyph/compareDiffUnlinkedGlyph are the title bar's
+// own toggle button, two states of one glyph the same way the header's
+// file-icons button is (see panel.go's fileIconsOnGlyph) rather than a
+// static icon plus a separate on/off indicator. '=' reads as "these two
+// move together"; '≠' (NOT EQUAL TO, U+2260) as "these two are free to
+// differ" — both plain, single-width, and common in any monospace
+// terminal font, unlike this app's own reload glyph (U+2B6F, see
+// toolWindowReloadGlyph's doc comment on its rendering gaps).
+const (
+	compareDiffLinkedGlyph   = '='
+	compareDiffUnlinkedGlyph = '≠'
+)
+
+// newCompareDiffScreen builds the side-by-side diff view: a title bar
+// (the link/unlink toggle and a close button, see
+// renderCompareDiffTitleBar) and two independently scrollable panes
+// separated by one column of a plain vertical rule — the same
+// list-plus-chrome shape compareTree's own full screen already
+// establishes, except the "list" here is two TextViews instead of one
+// Table, since a side-by-side diff has two columns of content, not one
+// row per item.
+//
+// Built once here, contents reset on each open (see openCompareDiff) —
+// the same build-once/repopulate-on-open shape every other screen in
+// this app already follows.
+func (r *Root) newCompareDiffScreen() {
+	r.compareDiffLeft = tview.NewTextView()
+	r.compareDiffLeft.SetDynamicColors(true)
+	r.compareDiffLeft.SetWrap(false)
+	r.compareDiffLeft.SetBorderPadding(0, 0, 1, 1)
+	r.compareDiffLeft.SetInputCapture(r.captureCompareDiffPaneKey(true))
+	r.compareDiffLeft.SetFocusFunc(func() { r.compareDiffLeftFocused = true })
+
+	r.compareDiffRight = tview.NewTextView()
+	r.compareDiffRight.SetDynamicColors(true)
+	r.compareDiffRight.SetWrap(false)
+	r.compareDiffRight.SetBorderPadding(0, 0, 1, 1)
+	r.compareDiffRight.SetInputCapture(r.captureCompareDiffPaneKey(false))
+	r.compareDiffRight.SetFocusFunc(func() { r.compareDiffLeftFocused = false })
+
+	r.compareDiffSeparator = tview.NewBox()
+	r.compareDiffSeparator.SetDrawFunc(r.drawCompareDiffSeparator)
+
+	r.compareDiffBody = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.compareDiffLeft, 0, 1, true).
+		AddItem(r.compareDiffSeparator, 1, 0, false).
+		AddItem(r.compareDiffRight, 0, 1, false)
+
+	r.compareDiffTitleBar = newPlainTitleBar("Diff")
+	r.compareDiffTitleBar.SetMouseCapture(r.captureCompareDiffTitleBarMouse())
+
+	r.compareDiffLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(r.compareDiffTitleBar, 1, 0, false).
+		AddItem(r.compareDiffBody, 0, 1, true)
+}
+
+// drawCompareDiffSeparator paints a plain vertical rule the full height
+// of its own one-column-wide Box — the character the user's own
+// reference screenshot shows between the two panes, kept as a real
+// drawn glyph rather than baked into either TextView's own text, so it
+// stays exactly one column wide regardless of how either pane's own
+// content scrolls horizontally.
+func (r *Root) drawCompareDiffSeparator(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+	style := tcell.StyleDefault.Foreground(r.theme.MutedTextColor).Background(r.compareDiffSeparator.GetBackgroundColor())
+	for row := y; row < y+height; row++ {
+		screen.SetContent(x, row, '│', nil, style)
+	}
+	return x, y, width, height
+}
+
+// applyCompareDiffTheme themes the diff view — the same
+// SurfaceBackground/InputFocusedBackground convention every other
+// overlay here already follows (see applyCompareFileTheme). Also
+// re-renders both panes and the title bar: the diff coloring itself
+// (see renderCompareDiff) picks dark/light syntax colors from the
+// background, and the title bar's own padding depends on
+// SetBackgroundColor having already run, same ordering
+// applyCompareFileTheme already follows for its own buttons.
+func (r *Root) applyCompareDiffTheme(theme config.ResolvedTheme) {
+	if r.compareDiffLayout == nil {
+		return
+	}
+	r.compareDiffLayout.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareDiffLeft.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareDiffLeft.SetTextColor(theme.TextColor)
+	r.compareDiffRight.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareDiffRight.SetTextColor(theme.TextColor)
+	r.compareDiffSeparator.SetBackgroundColor(theme.SurfaceBackground)
+	r.compareDiffTitleBar.SetBackgroundColor(theme.InputFocusedBackground)
+	r.compareDiffTitleBar.SetTextColor(theme.TextColor)
+	if r.compareDiffPairs != nil {
+		r.renderCompareDiff()
+	}
+	r.renderCompareDiffTitleBar()
+}
+
+// openCompareDiff is "Show diff": a real line-by-line answer for the
+// currently-open file pair, side by side (see internal/compare's own
+// doc comment for why that's compare.SideBySide, in-process, rather
+// than the system's diff(1) this used to shell out to via the Look
+// pager). Hidden entirely for a binary pair or a directory before this
+// is ever reached (see renderCompareFile's own SetDisabled call); an
+// identical pair still gets here — nothing upstream rules it out — and
+// is handled below as its own case rather than silently opening an
+// empty view.
+func (r *Root) openCompareDiff() {
+	a, err := os.ReadFile(r.compareA)
+	if err != nil {
+		r.showError(fmt.Errorf("compare: %w", err))
+		return
+	}
+	b, err := os.ReadFile(r.compareB)
+	if err != nil {
+		r.showError(fmt.Errorf("compare: %w", err))
+		return
+	}
+	if string(a) == string(b) {
+		r.showError(fmt.Errorf("compare: %s and %s have no differences", filepath.Base(r.compareA), filepath.Base(r.compareB)))
+		return
+	}
+
+	r.compareDiffPairs = compare.SideBySide(string(a), string(b))
+	r.compareDiffLinked = true
+	r.compareDiffLeftFocused = true
+	r.renderCompareDiff()
+	r.renderCompareDiffTitleBar()
+	r.compareDiffLeft.ScrollToBeginning()
+	r.compareDiffRight.ScrollToBeginning()
+	r.showOverlayWithRestore(compareDiffPage, r.compareDiffLayout, func() { r.app.SetFocus(r.compareDiffLeft) })
+}
+
+// closeCompareDiff hides the diff view — Escape, the title bar's own
+// close glyph, or a click outside, the same as every other overlay.
+func (r *Root) closeCompareDiff() {
+	r.hideOverlay()
+}
+
+// renderCompareDiff fills both panes from compareDiffPairs — one row
+// per LinePair, always the same row on both sides (see LinePair's own
+// doc comment: every pair produces exactly one line on each side, blank
+// where PairOnlyLeft/PairOnlyRight has nothing on that side), which is
+// what lets scrollCompareDiff sync the two panes by raw row index alone
+// rather than two independently-numbered line sets that merely happen
+// to correspond.
+//
+// Diff coloring reuses syntax.go's own theme-adaptive palette
+// (viewer.KindDiffAdd/KindDiffDelete via paletteFor) — the same colors
+// Look's unified-diff pager already used for +/- lines, not
+// gitbreach.go's own fixed-hex backgrounds, which are that screen's own
+// choice, not a general "diff coloring" convention to copy here.
+func (r *Root) renderCompareDiff() {
+	palette := paletteFor(r.theme.SurfaceBackground)
+	addColor, hasAdd := palette[viewer.KindDiffAdd]
+	delColor, hasDel := palette[viewer.KindDiffDelete]
+
+	var left, right strings.Builder
+	for _, p := range r.compareDiffPairs {
+		leftColor, leftColored := "", false
+		rightColor, rightColored := "", false
+		switch p.Kind {
+		case compare.PairChanged:
+			leftColor, leftColored = colorTag(delColor), hasDel
+			rightColor, rightColored = colorTag(addColor), hasAdd
+		case compare.PairOnlyLeft:
+			leftColor, leftColored = colorTag(delColor), hasDel
+		case compare.PairOnlyRight:
+			rightColor, rightColored = colorTag(addColor), hasAdd
+		}
+		writeCompareDiffLine(&left, p.LeftNo, p.Left, leftColor, leftColored)
+		writeCompareDiffLine(&right, p.RightNo, p.Right, rightColor, rightColored)
+	}
+	r.compareDiffLeft.SetText(left.String())
+	r.compareDiffRight.SetText(right.String())
+}
+
+// compareDiffGutterWidth is how many columns the line-number gutter
+// gets — four digits plus one space covers any file up to 9999 lines
+// without the gutter itself ever needing to resize mid-view; a longer
+// file still lines up (fmt's own %4d just stops padding), it just loses
+// the fixed-width alignment past that point, same tradeoff
+// compareHeaderHeight's own fixed row budget already accepts elsewhere
+// in this package for a similarly rare edge case.
+const compareDiffGutterWidth = 4
+
+// writeCompareDiffLine appends one line to b: a right-aligned line
+// number (blank, not "0", when lineNo is 0 — see LinePair's own doc
+// comment on what that means), a space, then content — wrapped in
+// colorTag if colored is true. tview.Escape guards content the same way
+// viewer.go's own doc comment explains for Look's pager: a line
+// containing a literal "[" would otherwise be misread as a style tag.
+func writeCompareDiffLine(b *strings.Builder, lineNo int, content, colorTag string, colored bool) {
+	if lineNo > 0 {
+		fmt.Fprintf(b, "%*d ", compareDiffGutterWidth, lineNo)
+	} else {
+		b.WriteString(strings.Repeat(" ", compareDiffGutterWidth+1))
+	}
+	if colored {
+		b.WriteString("[")
+		b.WriteString(colorTag)
+		b.WriteString("]")
+	}
+	b.WriteString(tview.Escape(content))
+	if colored {
+		b.WriteString("[-]")
+	}
+	b.WriteString("\n")
+}
+
+// renderCompareDiffTitleBar sets the title bar's own text: the label,
+// the link/unlink toggle glyph (see compareDiffLinkedGlyph), then the
+// close glyph — the same renderReloadCloseTitleBar shape (root.go),
+// specialized for this screen's own two actions instead of
+// reload/close, since neither of those apply to a diff that's already
+// fully computed and has no state of its own to reload.
+func (r *Root) renderCompareDiffTitleBar() {
+	if r.compareDiffTitleBar == nil {
+		return
+	}
+	glyph := compareDiffUnlinkedGlyph
+	if r.compareDiffLinked {
+		glyph = compareDiffLinkedGlyph
+	}
+	label := " Diff "
+	width := r.lastScreenWidth
+	col := compareDiffCloseButtonCol(width) - 2
+	padding := col - tview.TaggedStringWidth(label)
+	if padding < 0 {
+		padding = 0
+	}
+	r.compareDiffTitleBar.SetText(label + strings.Repeat(" ", padding) + string(glyph) + " " + string(toolWindowCloseGlyph) + " ")
+}
+
+// compareDiffCloseButtonCol mirrors closeTitleBarButtonCol (root.go):
+// one column in from the right edge.
+func compareDiffCloseButtonCol(width int) int {
+	return width - 2
+}
+
+// compareDiffLinkButtonCol is the toggle glyph's own column, immediately
+// left of the close glyph with one blank column of breathing room
+// between them — the same spacing reloadCloseTitleBarButtonCol already
+// uses for its own pair of buttons.
+func compareDiffLinkButtonCol(width int) int {
+	return compareDiffCloseButtonCol(width) - 2
+}
+
+// captureCompareDiffTitleBarMouse dispatches a click on either of the
+// title bar's own two glyphs — the same
+// captureReloadCloseTitleBarMouse shape (root.go), specialized for
+// toggleCompareDiffLinked/closeCompareDiff instead of reload/close.
+func (r *Root) captureCompareDiffTitleBarMouse() func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		rectX, rectY, width, _ := r.compareDiffTitleBar.GetRect()
+		if y != rectY {
+			return action, event
+		}
+		switch x - rectX {
+		case compareDiffCloseButtonCol(width):
+			r.closeCompareDiff()
+			return tview.MouseConsumed, nil
+		case compareDiffLinkButtonCol(width):
+			r.toggleCompareDiffLinked()
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	}
+}
+
+// toggleCompareDiffLinked flips whether the two panes scroll together
+// (see scrollCompareDiff) — syncing the inactive pane to the active
+// one's own current position right away, rather than leaving them
+// visibly out of step until the next scroll, the same "catch up
+// immediately" expectation a user clicking a sync toggle already has
+// elsewhere (e.g. a diff tool's own side-by-side view, which the user's
+// own reference screenshot is one example of).
+func (r *Root) toggleCompareDiffLinked() {
+	r.compareDiffLinked = !r.compareDiffLinked
+	if r.compareDiffLinked {
+		row, col := r.activeCompareDiffPane().GetScrollOffset()
+		r.inactiveCompareDiffPane().ScrollTo(row, col)
+	}
+	r.renderCompareDiffTitleBar()
+}
+
+// activeCompareDiffPane/inactiveCompareDiffPane return the focused pane
+// and its own other half — compareDiffLeftFocused is kept up to date by
+// each TextView's own SetFocusFunc (see newCompareDiffScreen), not by
+// re-deriving it from tview's own focus tree on every call.
+func (r *Root) activeCompareDiffPane() *tview.TextView {
+	if r.compareDiffLeftFocused {
+		return r.compareDiffLeft
+	}
+	return r.compareDiffRight
+}
+
+func (r *Root) inactiveCompareDiffPane() *tview.TextView {
+	if r.compareDiffLeftFocused {
+		return r.compareDiffRight
+	}
+	return r.compareDiffLeft
+}
+
+// captureCompareDiffPaneKey is the diff view's own shared key handling,
+// installed on both panes: Tab/Shift+Tab swap focus between them,
+// Escape closes, Up/Down/PgUp/PgDn scroll (see scrollCompareDiff) —
+// intercepted here rather than left to TextView's own default
+// handling, since a linked scroll has to move both panes together,
+// which TextView's own InputHandler has no way to do on its own.
+// isLeft tells scrollCompareDiff which pane this capture belongs to,
+// since the same function is shared between both panes' own
+// SetInputCapture.
+func (r *Root) captureCompareDiffPaneKey(isLeft bool) func(event *tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			r.cycleCompareDiffFocus()
+			return nil
+		case tcell.KeyEscape:
+			r.closeCompareDiff()
+			return nil
+		case tcell.KeyUp:
+			r.scrollCompareDiff(isLeft, -1)
+			return nil
+		case tcell.KeyDown:
+			r.scrollCompareDiff(isLeft, 1)
+			return nil
+		case tcell.KeyPgUp:
+			r.scrollCompareDiff(isLeft, -r.compareDiffPageStep())
+			return nil
+		case tcell.KeyPgDn:
+			r.scrollCompareDiff(isLeft, r.compareDiffPageStep())
+			return nil
+		}
+		return event
+	}
+}
+
+// compareDiffPageStep is how many rows PgUp/PgDn moves — the pane's own
+// current height, the same "one screenful" convention Page Up/Down
+// anywhere else in this app already follows, or a small fixed fallback
+// before the first Draw has ever sized the pane (GetRect returns 0,0,0,0
+// until then — the same defensive floor renderReloadTitleBar's own doc
+// comment already explains for an identical reason).
+func (r *Root) compareDiffPageStep() int {
+	_, _, _, height := r.compareDiffLeft.GetRect()
+	if height <= 0 {
+		return 10
+	}
+	return height
+}
+
+// cycleCompareDiffFocus swaps tview's own focus between the two panes —
+// there are only ever two, so "the other one" needs no index math the
+// way cycleCompareFocus's own button list does.
+func (r *Root) cycleCompareDiffFocus() {
+	if r.compareDiffLeftFocused {
+		r.app.SetFocus(r.compareDiffRight)
+		return
+	}
+	r.app.SetFocus(r.compareDiffLeft)
+}
+
+// scrollCompareDiff moves the pane named by isLeft by delta rows
+// (negative scrolls up) and, if the two panes are currently linked,
+// moves the other pane to the exact same row — never by delta itself a
+// second time, which would double the movement on whichever pane isn't
+// the one the key landed on. TextView's own Draw clamps an
+// out-of-range row back into bounds on its own (see tview's textview.go
+// — row is never validated here), so delta can run past either edge
+// safely.
+func (r *Root) scrollCompareDiff(isLeft bool, delta int) {
+	pane := r.compareDiffRight
+	if isLeft {
+		pane = r.compareDiffLeft
+	}
+	row, col := pane.GetScrollOffset()
+	row += delta
+	pane.ScrollTo(row, col)
+	if !r.compareDiffLinked {
+		return
+	}
+	other := r.compareDiffLeft
+	if isLeft {
+		other = r.compareDiffRight
+	}
+	other.ScrollTo(row, col)
+}

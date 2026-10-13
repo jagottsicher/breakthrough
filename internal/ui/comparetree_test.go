@@ -172,12 +172,16 @@ func TestActivateCompareTreeRowOpensTheDiffForADifferingPair(t *testing.T) {
 	row := compareTreeRowOf(t, r, "sub/nested.txt")
 	r.activateCompareTreeRow(row)
 
-	if r.activePage != viewerPage {
-		t.Fatalf("activePage = %q, want the Look pager %q", r.activePage, viewerPage)
+	if r.activePage != compareDiffPage {
+		t.Fatalf("activePage = %q, want the diff view %q", r.activePage, compareDiffPage)
 	}
-	got := r.viewerView.GetText(false)
-	if !strings.Contains(got, "old text") || !strings.Contains(got, "new text") {
-		t.Errorf("diff pager text = %q, missing one of the two versions", got)
+	left := r.compareDiffLeft.GetText(false)
+	right := r.compareDiffRight.GetText(false)
+	if !strings.Contains(left, "old text") {
+		t.Errorf("left pane = %q, missing %q", left, "old text")
+	}
+	if !strings.Contains(right, "new text") {
+		t.Errorf("right pane = %q, missing %q", right, "new text")
 	}
 }
 

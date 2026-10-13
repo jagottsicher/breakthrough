@@ -502,8 +502,10 @@ terminal.
   directory trees. Two files get size/modified side by side plus an
   immediate verdict from the same size+time heuristic `rsync`'s own
   default sync mode uses, an on-demand SHA-256 hash for a certain
-  answer, and a real line-by-line diff (the system's own `diff(1)`,
-  shown through the existing Look pager) for text. Two directories get
+  answer, and a real line-by-line diff — a side-by-side view, each pane
+  independently scrollable (Up/Down/Page Up/Page Down, Tab to switch
+  panes) or linked to scroll together via the view's own toggle button
+  — for text. Two directories get
   a full screen listing every difference and every one-sided path — a
   one-sided directory is one row, never descended into, so an old
   backup folder doesn't turn into thousands of lines — with a key to

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -22,12 +21,12 @@ import (
 // since there's no list to browse, just one pair's own facts. Two
 // directories get a full screen (comparetree.go), the same list-plus-
 // status-plus-buttons shape Batch Rename's own preview already
-// establishes. Both offer a real line-by-line answer on text content
-// through the system's own diff(1) (see internal/compare's own doc
-// comment for why that's an external tool here, not a reimplementation)
-// and a byte-exact one through fsops.Hash — this file duplicates
-// neither, it just wires the two screens to internal/compare and to
-// those two.
+// establishes. Both offer a real line-by-line answer on text content —
+// a side-by-side diff view (comparediff.go, on compare.SideBySide; see
+// internal/compare's own doc comment for why that's in-process rather
+// than the system's diff(1) this used to shell out to) — and a
+// byte-exact one through fsops.Hash — this file duplicates neither, it
+// just wires the two screens to internal/compare and to those two.
 //
 // The actual comparison logic lives in internal/compare, not here —
 // this file only ever renders what that package reports and reads back
@@ -322,7 +321,7 @@ func (r *Root) renderCompareFile() {
 
 	binaryA, _ := replace.LooksBinaryFile(r.compareA)
 	binaryB, _ := replace.LooksBinaryFile(r.compareB)
-	r.compareDiffBtn.SetDisabled(!compare.Available() || binaryA || binaryB || fc.A.IsDir || fc.B.IsDir)
+	r.compareDiffBtn.SetDisabled(binaryA || binaryB || fc.A.IsDir || fc.B.IsDir)
 }
 
 // compareVerdictText is the one-line summary shown under the header:
@@ -444,50 +443,5 @@ func (r *Root) cancelCompareHashComputation() {
 	r.compareHashRunning = false
 }
 
-// openCompareDiff is "Show diff": a real line-by-line answer for the
-// currently-open file pair, via the system's own diff(1) (see
-// compare.UnifiedDiff) — shown through the existing Look pager rather
-// than a screen of its own. Not corner-cutting: Look's pager already
-// does everything a diff view needs (scrolling, Page Up/Down, syntax
-// coloring — chroma's own diff lexer already colors +/- lines exactly
-// the way a patch file would, via the same viewer.Highlight/renderSyntax
-// pipeline "l" uses on a real file, matched here by naming the temp
-// file "*.diff" so that lexer is the one actually picked), so building
-// a second pager would only ever be a worse copy of the first one.
-//
-// The temp file exists only for the synchronous instant showBuiltinLook
-// needs to read it — removed immediately after, since by then its
-// content is already copied into the pager's own TextView.
-func (r *Root) openCompareDiff() {
-	if !compare.Available() {
-		r.showError(errors.New("compare: diff(1) not found on $PATH"))
-		return
-	}
-	output, identical, err := compare.UnifiedDiff(r.compareA, r.compareB)
-	if err != nil {
-		r.showError(err)
-		return
-	}
-	if identical {
-		r.showError(fmt.Errorf("compare: %s and %s have no differences", filepath.Base(r.compareA), filepath.Base(r.compareB)))
-		return
-	}
-
-	tmp, err := os.CreateTemp("", "breakthrough-compare-*.diff")
-	if err != nil {
-		r.showError(fmt.Errorf("compare: %w", err))
-		return
-	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
-	if _, err := tmp.WriteString(output); err != nil {
-		_ = tmp.Close()
-		r.showError(fmt.Errorf("compare: %w", err))
-		return
-	}
-	if err := tmp.Close(); err != nil {
-		r.showError(fmt.Errorf("compare: %w", err))
-		return
-	}
-
-	r.showBuiltinLook(tmp.Name())
-}
+// openCompareDiff is "Show diff" — see comparediff.go for its actual
+// implementation (the side-by-side view, not a thing this file owns).

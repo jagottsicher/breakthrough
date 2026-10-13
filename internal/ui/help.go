@@ -1011,9 +1011,11 @@ var helpText = strings.TrimLeft(`
   timestamps — this heuristic genuinely can't tell). "Compute hash"
   settles it for certain (SHA-256, cancellable, the same progress
   animation Properties' own hashing shows); "Show diff" opens a real
-  line-by-line comparison through the system's own diff(1) in the
-  Look pager (red/green, the same as any other diff), disabled for a
-  binary pair or when diff(1) isn't installed.
+  line-by-line comparison, two panes side by side (red/green, the same
+  as any other diff), disabled for a binary pair or a directory. Tab
+  switches which pane Up/Down/Page Up/Page Down scrolls; the title
+  bar's own "=" / "≠" button links the two panes to scroll together or
+  lets them scroll independently.
 
   Two directories opens a full screen: every path that differs, plus
   every path that exists on only one side — a directory that's

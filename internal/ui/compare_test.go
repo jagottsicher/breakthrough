@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/rivo/tview"
-
-	"github.com/jagottsicher/breakthrough/internal/compare"
 )
 
 // newCompareRoot opens a Root against fixtureDir's own fixture files
@@ -263,9 +261,6 @@ func TestComputeCompareHashIgnoresReentryWhileRunning(t *testing.T) {
 }
 
 func TestOpenCompareDiffReportsNoDifferences(t *testing.T) {
-	if !compare.Available() {
-		t.Skip("diff(1) not on PATH")
-	}
 	r, dir := newCompareRoot(t)
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	if err := os.WriteFile(a, []byte("same\n"), 0o644); err != nil {
@@ -285,10 +280,7 @@ func TestOpenCompareDiffReportsNoDifferences(t *testing.T) {
 	}
 }
 
-func TestOpenCompareDiffOpensTheLookPagerWithColoredLines(t *testing.T) {
-	if !compare.Available() {
-		t.Skip("diff(1) not on PATH")
-	}
+func TestOpenCompareDiffOpensTheSideBySideViewWithColoredLines(t *testing.T) {
 	r, dir := newCompareRoot(t)
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	if err := os.WriteFile(a, []byte("line one\n"), 0o644); err != nil {
@@ -300,12 +292,16 @@ func TestOpenCompareDiffOpensTheLookPagerWithColoredLines(t *testing.T) {
 	r.openCompareFile(a, b)
 	r.openCompareDiff()
 
-	if r.activePage != viewerPage {
-		t.Fatalf("activePage = %q, want the Look pager %q", r.activePage, viewerPage)
+	if r.activePage != compareDiffPage {
+		t.Fatalf("activePage = %q, want the diff view %q", r.activePage, compareDiffPage)
 	}
-	got := r.viewerView.GetText(false)
-	if !strings.Contains(got, "line one") || !strings.Contains(got, "line two") {
-		t.Errorf("diff pager text = %q, missing one of the two lines", got)
+	left := r.compareDiffLeft.GetText(false)
+	right := r.compareDiffRight.GetText(false)
+	if !strings.Contains(left, "line one") {
+		t.Errorf("left pane = %q, missing %q", left, "line one")
+	}
+	if !strings.Contains(right, "line two") {
+		t.Errorf("right pane = %q, missing %q", right, "line two")
 	}
 }
 

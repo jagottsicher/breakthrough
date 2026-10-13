@@ -1397,6 +1397,23 @@ type Root struct {
 	compareTreeRunning       bool
 	compareTreeAnim          int
 
+	// The side-by-side diff view (see comparediff.go) — compareDiffPairs
+	// is compare.SideBySide's own last result, kept so Tab/link-toggle
+	// re-renders (no scroll offset change) never need to recompute the
+	// diff. compareDiffLinked mirrors the title bar's own toggle glyph
+	// state; compareDiffLeftFocused tracks which of the two panes
+	// currently has focus, read by captureCompareDiffPaneKey to decide
+	// which pane an Up/Down/PgUp/PgDn keypress scrolls when unlinked.
+	compareDiffLayout      *tview.Flex
+	compareDiffTitleBar    *tview.TextView
+	compareDiffBody        *tview.Flex
+	compareDiffLeft        *tview.TextView
+	compareDiffRight       *tview.TextView
+	compareDiffSeparator   *tview.Box
+	compareDiffPairs       []compare.LinePair
+	compareDiffLinked      bool
+	compareDiffLeftFocused bool
+
 	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
 	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
@@ -2486,11 +2503,12 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 
 	// The Compare screens (see compare.go) — file-vs-file overlay and
 	// directory-vs-directory full screen, built once here the same way.
-	// A text diff (see compare.UnifiedDiff) is shown through the
-	// existing Look pager instead of a screen of its own — see
-	// openCompareDiff's own doc comment for why that's not corner-
-	// cutting but the actually simpler, more capable choice.
+	// A text diff (see comparediff.go/compare.SideBySide) gets its own
+	// full-screen, two-pane view rather than the unified-diff-via-Look
+	// pager this used to route through — see openCompareDiff's own doc
+	// comment for why.
 	r.newCompareScreens()
+	r.newCompareDiffScreen()
 
 	// The generic picker (see openOwnerGroupPicker and, unrelated,
 	// openRsyncTabPicker) — one shared List, repopulated and
@@ -2685,6 +2703,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	r.AddPage(batchRenamePresetPage, r.batchRenamePresetLayout, false, false)
 	r.AddPage(comparePage, r.compareLayout, false, false)
 	r.AddPage(compareTreePage, r.compareTreeLayout, true, false)
+	// resize=true: the diff view deliberately fills the whole terminal,
+	// the same reasoning compareTreePage's own comment just above gives
+	// — two side-by-side panes want all the width and height they can
+	// get, not a fixed-size overlay.
+	r.AddPage(compareDiffPage, r.compareDiffLayout, true, false)
 	// resize=true: the Options screen deliberately fills the whole
 	// terminal (see optionsscreen.go), unlike every other overlay here,
 	// which is positioned explicitly instead.

@@ -440,6 +440,7 @@ func (r *Root) applyTheme(theme config.ResolvedTheme) {
 	// all, not even partially: unlike compareTree, it has no entry here
 	// before this fix.
 	r.applyCompareFileTheme(theme)
+	r.applyCompareDiffTheme(theme)
 
 	if r.searchTop != nil {
 		r.searchTop.SetBackgroundColor(theme.SurfaceBackground)
