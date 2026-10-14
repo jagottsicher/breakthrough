@@ -107,13 +107,26 @@ type verticalScrollbar struct {
 	repeatCancel context.CancelFunc
 }
 
-// scrollbarThumbDarkenFactor scales the track's own background down,
-// per channel, to get the thumb's color — "one shade darker", per the
-// user's own explicit request, not a separately themed token: the track
-// already uses whatever background the surrounding widget uses, so the
-// thumb derives from that directly and stays correct under any color
-// scheme without its own override field.
-const scrollbarThumbDarkenFactor = 0.6
+// scrollbarThumbContrastDelta is the thumb's fixed brightness offset
+// from the track's own background, per channel — darker on a light
+// track, lighter on a dark one (see scrollbarThumbColor) — not a
+// separately themed token: the track already uses whatever background
+// the surrounding widget uses, so the thumb derives from that directly
+// and stays correct under any color scheme without its own override
+// field.
+//
+// A plain percentage darken (the original approach, per the user's own
+// "one shade darker" request) looks fine against a mid-tone track but
+// nearly disappears against an already very dark one: Git Breach's own
+// PanelBackground (#1c3232) darkened by 0.6 landed only ~11-20 points
+// apart per channel — a real, user-reported "can't tell there's a
+// scrollbar there at all" once that same screen's own focus-dependent
+// brighter track (styleGitBreachFocus) gave the eye a directly
+// comparable, much higher-contrast reference right next to it. A fixed
+// absolute delta, flipped to lighten instead of darken once darkening
+// would clip at 0 (see scrollbarThumbColor), keeps the thumb clearly
+// visible either way instead of asymptotically vanishing into black.
+const scrollbarThumbContrastDelta = 32
 
 // scrollbarRepeatDelay/scrollbarRepeatInterval govern press-and-hold
 // auto-repeat on the arrow buttons and the page-jump track: a single
@@ -128,10 +141,45 @@ const (
 
 func scrollbarThumbColor(track tcell.Color) tcell.Color {
 	r, g, b := track.RGB()
-	scale := func(v int32) int32 {
-		return int32(float64(v) * scrollbarThumbDarkenFactor)
+	// Darkening is the default (matches the user's own original "one
+	// shade darker" request, and is what Git Breach's own focused —
+	// already-confirmed-good — track color still gets below). Only
+	// flips to lightening once the track's own darkest channel is so
+	// low that darkening by the fixed delta would clip at 0 — losing
+	// the very distinction a thumb is supposed to provide, rather than
+	// just making it subtler. That clip-at-0 case is exactly Git
+	// Breach's own unfocused state (PanelBackground, #1c3232): a real,
+	// user-reported "can't tell there's a scrollbar there at all" once
+	// that screen's own focus-dependent brighter track gave the eye a
+	// directly comparable, much higher-contrast reference right next
+	// to it. A luminance-based switch was tried first and rejected: on
+	// this app's own teal-leaning palette, even the focused track's
+	// luminance (~83 out of 255) still read as "dark" under any
+	// reasonable fixed threshold, which would have also flipped —
+	// visibly changing — the one case already confirmed to look right.
+	base := r
+	if g < base {
+		base = g
 	}
-	return tcell.NewRGBColor(scale(r), scale(g), scale(b))
+	if b < base {
+		base = b
+	}
+	delta := int32(scrollbarThumbContrastDelta)
+	if base-delta < 0 {
+		delta = -delta
+	}
+	shift := func(v int32) int32 {
+		v -= delta
+		switch {
+		case v < 0:
+			return 0
+		case v > 255:
+			return 255
+		default:
+			return v
+		}
+	}
+	return tcell.NewRGBColor(shift(r), shift(g), shift(b))
 }
 
 // newVerticalScrollbar builds a scrollbar over content — newVerticalScrollbarForTextView/
