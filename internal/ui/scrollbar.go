@@ -8,14 +8,70 @@ import (
 	"github.com/rivo/tview"
 )
 
-// verticalScrollbar is a custom, 1-column-wide vertical scrollbar for a
-// scrollable *tview.TextView — tview itself has no scrollbar support at
-// all (checked directly against its own textview.go, not guessed), so
-// this is fully custom. Pilot for Look's own built-in pager only (see
-// root.go/viewerLayout), per the user's own explicit request to see one
-// working before deciding whether to generalize it to any other
-// scrollable widget in this app — deliberately not a shared, reusable
-// component yet.
+// scrollableContent is what verticalScrollbar needs from whatever it's
+// attached to: its own current rect, its own current scroll offset, a
+// way to change it, and how many rows exist in total. textViewContent/
+// tableContent below are the two adapters this app currently needs — a
+// TextView scrolls by (possibly wrapped) line, a Table scrolls by row —
+// so the rest of this file never needs to know or care which one it's
+// talking to.
+type scrollableContent interface {
+	rect() (x, y, width, height int)
+	scrollOffset() (row, col int)
+	scrollTo(row, col int)
+	totalRows() int
+}
+
+// textViewContent adapts a *tview.TextView. totalRows accounts for
+// wrapping (if the view has SetWrap(true) — see newViewerView) and
+// caches GetWrappedLineCount's own result: tview's own doc comment
+// calls it "an even more expensive call" than counting unwrapped lines,
+// since it has to parse the whole text and allocate a line index.
+// Recomputing it on every Draw (called on every redraw, i.e. on every
+// keypress or mouse move) would be wasteful; cachedWidth/cachedTextLen
+// pin it to the last actual change in whatever it depends on.
+type textViewContent struct {
+	view *tview.TextView
+
+	cachedWidth   int
+	cachedTextLen int
+	cachedTotal   int
+}
+
+func (c *textViewContent) rect() (int, int, int, int) { return c.view.GetRect() }
+func (c *textViewContent) scrollOffset() (int, int)   { return c.view.GetScrollOffset() }
+func (c *textViewContent) scrollTo(row, col int)      { c.view.ScrollTo(row, col) }
+
+func (c *textViewContent) totalRows() int {
+	_, _, width, _ := c.view.GetRect()
+	text := c.view.GetText(false)
+	if width == c.cachedWidth && len(text) == c.cachedTextLen {
+		return c.cachedTotal
+	}
+	c.cachedWidth = width
+	c.cachedTextLen = len(text)
+	c.cachedTotal = c.view.GetWrappedLineCount()
+	return c.cachedTotal
+}
+
+// tableContent adapts a *tview.Table — row-based, no wrapping and
+// nothing expensive to cache (GetRowCount is a plain length check), so
+// unlike textViewContent this one needs no state of its own at all.
+type tableContent struct{ table *tview.Table }
+
+func (c tableContent) rect() (int, int, int, int) { return c.table.GetRect() }
+func (c tableContent) scrollOffset() (int, int)   { return c.table.GetOffset() }
+func (c tableContent) scrollTo(row, col int)      { c.table.SetOffset(row, col) }
+func (c tableContent) totalRows() int             { return c.table.GetRowCount() }
+
+// verticalScrollbar is a custom, 1-column-wide vertical scrollbar —
+// tview itself has no scrollbar support at all (checked directly
+// against its own textview.go/table.go, not guessed), so this is fully
+// custom. First built as a pilot for Look's own built-in pager only
+// (per the user's own explicit request to see one working before
+// deciding whether to generalize it), then confirmed working and
+// extracted into this shared, content-agnostic form once the user
+// asked for it on every scrollable widget in the app.
 //
 // Layout: a track (with the proportional thumb drawn over part of it)
 // filling everything above the bottom two rows, where both arrow
@@ -27,18 +83,7 @@ import (
 type verticalScrollbar struct {
 	*tview.Box
 	root    *Root
-	content *tview.TextView
-
-	// wrappedLineCount cache — tview's own GetWrappedLineCount doc
-	// comment calls it "an even more expensive call" than counting
-	// unwrapped lines, since it has to parse the whole text and
-	// allocate a line index. Recomputing it on every Draw (called on
-	// every redraw, i.e. on every keypress or mouse move) would be
-	// wasteful; cachedWidth/cachedTextLen pin it to the last actual
-	// change in whatever it depends on.
-	cachedWidth   int
-	cachedTextLen int
-	cachedWrapped int
+	content scrollableContent
 
 	dragging        bool
 	dragStartY      int
@@ -76,37 +121,33 @@ func scrollbarThumbColor(track tcell.Color) tcell.Color {
 	return tcell.NewRGBColor(scale(r), scale(g), scale(b))
 }
 
-func newVerticalScrollbar(root *Root, content *tview.TextView) *verticalScrollbar {
+// newVerticalScrollbar builds a scrollbar over content — newVerticalScrollbarForTextView/
+// newVerticalScrollbarForTable below are the usual way to get one.
+func newVerticalScrollbar(root *Root, content scrollableContent) *verticalScrollbar {
 	return &verticalScrollbar{Box: tview.NewBox(), root: root, content: content}
 }
 
-// wrappedLineCount is content's own total row count, wrapping included
-// — see the cache fields' own doc comment on why this isn't just
-// content.GetWrappedLineCount() directly.
-func (sb *verticalScrollbar) wrappedLineCount() int {
-	_, _, width, _ := sb.content.GetRect()
-	text := sb.content.GetText(false)
-	if width == sb.cachedWidth && len(text) == sb.cachedTextLen {
-		return sb.cachedWrapped
-	}
-	sb.cachedWidth = width
-	sb.cachedTextLen = len(text)
-	sb.cachedWrapped = sb.content.GetWrappedLineCount()
-	return sb.cachedWrapped
+func newVerticalScrollbarForTextView(root *Root, view *tview.TextView) *verticalScrollbar {
+	return newVerticalScrollbar(root, &textViewContent{view: view})
+}
+
+func newVerticalScrollbarForTable(root *Root, table *tview.Table) *verticalScrollbar {
+	return newVerticalScrollbar(root, tableContent{table: table})
 }
 
 // viewportRows is how many rows of content are visible at once —
-// content's own rect height directly, since newViewerView's own
-// SetBorderPadding(0, 0, 1, 1) only pads left/right, never top/bottom.
+// content's own rect height directly (a TextView's own
+// SetBorderPadding, where used, only ever pads left/right here, never
+// top/bottom — see newViewerView).
 func (sb *verticalScrollbar) viewportRows() int {
-	_, _, _, height := sb.content.GetRect()
+	_, _, _, height := sb.content.rect()
 	return height
 }
 
 // maxOffset is the highest row content can be scrolled to — 0 once
 // everything already fits inside the viewport.
 func (sb *verticalScrollbar) maxOffset() int {
-	m := sb.wrappedLineCount() - sb.viewportRows()
+	m := sb.content.totalRows() - sb.viewportRows()
 	if m < 0 {
 		return 0
 	}
@@ -133,7 +174,7 @@ func (sb *verticalScrollbar) thumbGeometry(trackRows int) (thumbRows, thumbStart
 	if trackRows <= 0 {
 		return 0, 0
 	}
-	total := sb.wrappedLineCount()
+	total := sb.content.totalRows()
 	viewport := sb.viewportRows()
 	if total <= viewport || total <= 0 {
 		return trackRows, 0
@@ -148,15 +189,15 @@ func (sb *verticalScrollbar) thumbGeometry(trackRows int) (thumbRows, thumbStart
 	span := trackRows - thumbRows
 	maxOffset := total - viewport
 	if span > 0 && maxOffset > 0 {
-		offsetRow, _ := sb.content.GetScrollOffset()
+		offsetRow, _ := sb.content.scrollOffset()
 		thumbStart = offsetRow * span / maxOffset
 	}
 	return thumbRows, thumbStart
 }
 
 func (sb *verticalScrollbar) scrollBy(delta int) {
-	row, col := sb.content.GetScrollOffset()
-	sb.content.ScrollTo(sb.clampOffset(row+delta), col)
+	row, col := sb.content.scrollOffset()
+	sb.content.scrollTo(sb.clampOffset(row+delta), col)
 }
 
 func (sb *verticalScrollbar) pageJump(dir int) {
@@ -166,15 +207,15 @@ func (sb *verticalScrollbar) pageJump(dir int) {
 // dragTo moves the thumb so the point originally grabbed stays under
 // the cursor, matching mouseY's own movement since the drag started
 // (dragStartY/dragStartOffset/dragSpan/dragMaxOffset are all snapshot
-// once, in captureViewerScrollbarMouse, at MouseLeftDown) rather than
-// snapping the thumb's top edge to the cursor on every move.
+// once, in captureMouse, at MouseLeftDown) rather than snapping the
+// thumb's top edge to the cursor on every move.
 func (sb *verticalScrollbar) dragTo(mouseY int) {
 	if sb.dragSpan <= 0 {
 		return
 	}
 	deltaRows := (mouseY - sb.dragStartY) * sb.dragMaxOffset / sb.dragSpan
-	_, col := sb.content.GetScrollOffset()
-	sb.content.ScrollTo(sb.clampOffset(sb.dragStartOffset+deltaRows), col)
+	_, col := sb.content.scrollOffset()
+	sb.content.scrollTo(sb.clampOffset(sb.dragStartOffset+deltaRows), col)
 }
 
 // startRepeat begins step's own press-and-hold auto-repeat — an
@@ -211,10 +252,10 @@ func (sb *verticalScrollbar) startRepeat(step func()) {
 }
 
 // stopRepeat cancels any in-flight startRepeat goroutine — called on
-// MouseLeftUp/a stray button release, and from hideOverlay when Look
-// closes outright (see root.go) so a held-down arrow/page-jump never
-// keeps scrolling a TextView nothing shows any more. A nil receiver or
-// a repeat that was never started are both already a no-op.
+// MouseLeftUp/a stray button release, and from hideOverlay when an
+// overlay closes outright (see root.go) so a held-down arrow/page-jump
+// never keeps scrolling content nothing shows any more. A nil receiver
+// or a repeat that was never started are both already a no-op.
 func (sb *verticalScrollbar) stopRepeat() {
 	if sb == nil || sb.repeatCancel == nil {
 		return
@@ -242,6 +283,18 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 		screen.SetContent(x, row, ch, nil, tcell.StyleDefault.Background(bg).Foreground(theme.TextColor))
 	}
 
+	// Nothing to scroll: per the user's own explicit request, the
+	// scrollbar only shows up once content is actually taller than the
+	// box — blank track, no arrows, no thumb, rather than a permanently
+	// visible but functionally dead control. The column itself stays
+	// reserved (no reflow), it just reads as plain background.
+	if sb.maxOffset() <= 0 {
+		for i := 0; i < height; i++ {
+			setCell(y+i, track, ' ')
+		}
+		return
+	}
+
 	// Both arrows sit together at the track's own bottom end, per the
 	// user's own explicit request (classic Mac OS style) — not one at
 	// each end. The track itself is everything above them.
@@ -259,15 +312,16 @@ func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
 	setCell(y+height-1, thumb, '▼')
 }
 
-// captureViewerScrollbarMouse is viewerLayout's own SetMouseCapture
-// hook (see root.go) — the same "intercept before normal position-based
-// dispatch, do the hit testing by hand" shape dragSearchMouseCapture
-// already uses for Search's own draggable title bar (see search.go),
-// needed here for the same reason: a drag in progress has to keep
-// tracking the mouse even once it strays outside this scrollbar's own
-// 1-column rect, which plain position-gated dispatch wouldn't allow.
-func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-	sb := r.viewerScrollbar
+// captureMouse is this scrollbar's own SetMouseCapture hook — install
+// it on whatever Flex/Pages container holds both this scrollbar and its
+// content (see root.go/viewerLayout for the shape), the same
+// "intercept before normal position-based dispatch, do the hit testing
+// by hand" pattern dragSearchMouseCapture already uses for Search's own
+// draggable title bar (see search.go), needed here for the same
+// reason: a drag in progress has to keep tracking the mouse even once
+// it strays outside this scrollbar's own 1-column rect, which plain
+// position-gated dispatch wouldn't allow.
+func (sb *verticalScrollbar) captureMouse(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 	x, y := event.Position()
 
 	if sb.dragging {
@@ -303,6 +357,15 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		return action, event
 	}
 
+	if sb.maxOffset() <= 0 {
+		// Nothing to scroll — Draw left this column blank (see its own
+		// doc comment), so there's no arrow/thumb/track here to react
+		// to; still consume the click rather than let it leak through
+		// to whatever's drawn on another page at the same screen cell
+		// (see the MouseLeftClick case below for why that matters).
+		return tview.MouseConsumed, nil
+	}
+
 	_, sby, _, sbh := sb.GetRect()
 	rel := y - sby
 	trackRows := sbh - 2
@@ -320,14 +383,15 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		// ours, not whatever happens to be drawn underneath it — in
 		// particular tview derives a trailing MouseLeftClick from the
 		// very same physical click that already fired MouseLeftDown
-		// above (see Application.fireMouseActions), and Look is
-		// maximized to the full screen (see viewerSize's own doc
-		// comment), so without this, that second action falls through
-		// Pages' own dispatch to whatever's drawn at the same screen
-		// cell underneath — a real, user-reported bug: a click on the
-		// scrollbar's own column triggered the main panel's Details
-		// slide-out button (see panel.go/detailsExpandBtn), which sits
-		// at that exact coordinate on the page stacked right behind it.
+		// above (see Application.fireMouseActions), and a maximized
+		// overlay (e.g. Look, see viewerSize's own doc comment) can
+		// share a screen cell with something drawn on another page
+		// entirely, so without this, that second action falls through
+		// Pages' own dispatch to whatever's underneath — a real,
+		// user-reported bug: a click on Look's own scrollbar column
+		// triggered the main panel's Details slide-out button (see
+		// panel.go/detailsExpandBtn), which sat at that exact
+		// coordinate on the page stacked right behind it.
 		return tview.MouseConsumed, nil
 	}
 
@@ -340,7 +404,7 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		sb.startRepeat(func() { sb.scrollBy(1) })
 	default:
 		thumbRows, thumbStart := sb.thumbGeometry(trackRows)
-		trackRel := rel // the track now starts at the scrollbar's own top row (rel 0), no top arrow to offset past
+		trackRel := rel // the track starts at the scrollbar's own top row (rel 0), no top arrow to offset past
 		switch {
 		case trackRel < thumbStart:
 			sb.pageJump(-1)
@@ -351,7 +415,7 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		default:
 			sb.dragging = true
 			sb.dragStartY = y
-			sb.dragStartOffset, _ = sb.content.GetScrollOffset()
+			sb.dragStartOffset, _ = sb.content.scrollOffset()
 			sb.dragSpan = trackRows - thumbRows
 			sb.dragMaxOffset = sb.maxOffset()
 		}

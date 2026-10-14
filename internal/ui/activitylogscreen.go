@@ -111,10 +111,16 @@ func (r *Root) newActivityLogScreen() {
 	r.activityLogHintSpans = activityLogHintSpans
 	r.activityLogHint.SetMouseCapture(r.captureListHintMouse(r.activityLogHint, &r.activityLogHintSpans))
 
+	r.activityLogScrollbar = newVerticalScrollbarForTable(r, r.activityLogTable)
+	activityLogTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.activityLogTable, 0, 1, true).
+		AddItem(r.activityLogScrollbar, 1, 0, false)
+	activityLogTableRow.SetMouseCapture(r.activityLogScrollbar.captureMouse)
+
 	r.activityLogLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.activityLogTitleBar, 1, 0, false).
 		AddItem(filterRow, 1, 0, false).
-		AddItem(r.activityLogTable, 0, 1, true).
+		AddItem(activityLogTableRow, 0, 1, true).
 		AddItem(r.activityLogHint, 1, 0, false)
 }
 

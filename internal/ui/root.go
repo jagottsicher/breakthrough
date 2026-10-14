@@ -304,6 +304,7 @@ type Root struct {
 	toolboxHint      *tview.TextView
 	toolboxHintSpans []listHintSpan
 	toolboxTable     *tview.Table
+	toolboxScrollbar *verticalScrollbar
 	toolboxInput     *tview.InputField
 
 	// toolboxRows is the currently open screen's own row list — one
@@ -325,6 +326,7 @@ type Root struct {
 	mountsHint      *tview.TextView
 	mountsHintSpans []listHintSpan
 	mountsTable     *tview.Table
+	mountsScrollbar *verticalScrollbar
 	mountsEntries   []mounts.Entry
 	mountsErr       error
 
@@ -339,6 +341,7 @@ type Root struct {
 	firewallHint      *tview.TextView
 	firewallHintSpans []listHintSpan
 	firewallTable     *tview.Table
+	firewallScrollbar *verticalScrollbar
 	firewallSnapshot  firewall.Snapshot
 	firewallErr       error
 	firewallServices  firewall.ServiceLookup
@@ -427,6 +430,7 @@ type Root struct {
 	sessionsHint      *tview.TextView
 	sessionsHintSpans []listHintSpan
 	sessionsTable     *tview.Table
+	sessionsScrollbar *verticalScrollbar
 	sessionsList      []multiplex.Session
 	sessionsErr       error
 
@@ -445,6 +449,7 @@ type Root struct {
 	messagesHint      *tview.TextView
 	messagesHintSpans []listHintSpan
 	messagesTable     *tview.Table
+	messagesScrollbar *verticalScrollbar
 	messagesList      []notify.Message
 	// messagesSelected is the Auswahl column's own checked set, keyed by
 	// Message.ID rather than row — row numbers shift on every
@@ -494,6 +499,7 @@ type Root struct {
 	sshKeysHint      *tview.TextView
 	sshKeysHintSpans []listHintSpan
 	sshKeysTable     *tview.Table
+	sshKeysScrollbar *verticalScrollbar
 	sshKeysPairs     []sshkeys.KeyPair
 	sshKeysErr       error
 	sshKeysAgent     map[string]bool
@@ -551,6 +557,7 @@ type Root struct {
 	activityLogKeywordField *tview.InputField
 	activityLogTimeField    *tview.InputField
 	activityLogTable        *tview.Table
+	activityLogScrollbar    *verticalScrollbar
 	activityLogHint         *tview.TextView
 	activityLogHintSpans    []listHintSpan
 	activityLogAllEntries   []activitylog.Entry
@@ -573,6 +580,7 @@ type Root struct {
 	logAuditSelectionLayout *tview.Flex
 	logAuditTitleBar        *tview.TextView
 	logAuditTable           *tview.Table
+	logAuditScrollbar       *verticalScrollbar
 	logAuditHint            *tview.TextView
 	logAuditHintSpans       []listHintSpan
 	logAuditDir             string
@@ -599,15 +607,16 @@ type Root struct {
 	// Tab-cycling through the three filter fields and landing back on
 	// the list is visible at a glance rather than only inferable from
 	// which row is highlighted.
-	logAuditFocusIndicator *tview.TextView
-	logAuditViewerTable    *tview.Table
-	logAuditViewerHint     *tview.TextView
-	logAuditViewerSpans    []listHintSpan
-	logAuditGroupOpen      logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
-	logAuditAllEntries     []logview.Entry
-	logAuditFiles          int
-	logAuditSkipped        int
-	logAuditParseErr       error
+	logAuditFocusIndicator  *tview.TextView
+	logAuditViewerTable     *tview.Table
+	logAuditViewerScrollbar *verticalScrollbar
+	logAuditViewerHint      *tview.TextView
+	logAuditViewerSpans     []listHintSpan
+	logAuditGroupOpen       logview.FileGroup // the group the viewer is currently showing — see reopenLogAuditViewer
+	logAuditAllEntries      []logview.Entry
+	logAuditFiles           int
+	logAuditSkipped         int
+	logAuditParseErr        error
 
 	// The Git breach dashboard (see gitbreach.go/gitbreachscreen.go) —
 	// "jg", this app's first genuine multi-pane screen rather than one
@@ -2655,11 +2664,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// single-static-TextView shape as Help, just with its own text set
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
-	r.viewerScrollbar = newVerticalScrollbar(r, r.viewerView)
+	r.viewerScrollbar = newVerticalScrollbarForTextView(r, r.viewerView)
 	r.viewerLayout = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.viewerView, 0, 1, true).
 		AddItem(r.viewerScrollbar, 1, 0, false)
-	r.viewerLayout.SetMouseCapture(r.captureViewerScrollbarMouse)
+	r.viewerLayout.SetMouseCapture(r.viewerScrollbar.captureMouse)
 
 	// The tab switcher overlay (see tabswitcher.go) — same
 	// list-plus-title-bar shape as the context menu above, rebuilt on
