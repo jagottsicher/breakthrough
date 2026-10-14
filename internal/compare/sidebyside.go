@@ -8,8 +8,12 @@ import (
 
 // PairKind is what one LinePair represents: an unchanged line present on
 // both sides, a changed line present on both but with different content,
-// or a line that only exists on one side (the other side renders as a
-// blank filler, same as a side-by-side diff view anywhere else).
+// a line that only exists on one side (the other side renders as a
+// blank filler, same as a side-by-side diff view anywhere else), or a
+// gap marking a skipped, unchanged region between two hunks of an
+// already-hunked unified diff (see ParseUnifiedDiff — SideBySide never
+// produces PairGap itself, since it always expands context to cover the
+// whole file, leaving nothing to skip).
 type PairKind int
 
 const (
@@ -17,12 +21,13 @@ const (
 	PairChanged
 	PairOnlyLeft
 	PairOnlyRight
+	PairGap
 )
 
 // LinePair is one row of a side-by-side diff: a line from the left file,
-// a line from the right file, which of the four PairKinds they form, and
+// a line from the right file, which of the PairKinds they form, and
 // each side's own 1-based line number (0 on whichever side has no line
-// here — an OnlyLeft/OnlyRight row, or the filler half of one).
+// here — an OnlyLeft/OnlyRight/Gap row, or the filler half of one).
 type LinePair struct {
 	Left, Right     string
 	LeftNo, RightNo int
@@ -62,30 +67,31 @@ func SideBySide(a, b string) []LinePair {
 	var pairs []LinePair
 	leftNo, rightNo := 0, 0
 	for _, h := range ud.Hunks {
-		lines := h.Lines
-		for i := 0; i < len(lines); {
-			switch lines[i].Kind {
-			case udiff.Equal:
-				leftNo++
-				rightNo++
-				pairs = append(pairs, LinePair{
-					Left: trimEOL(lines[i].Content), LeftNo: leftNo,
-					Right: trimEOL(lines[i].Content), RightNo: rightNo,
-					Kind: PairSame,
-				})
-				i++
-			case udiff.Delete, udiff.Insert:
-				dels := takeRun(lines, i, udiff.Delete)
-				i += len(dels)
-				ins := takeRun(lines, i, udiff.Insert)
-				i += len(ins)
-				pairs = append(pairs, pairUpChangedRun(dels, ins, &leftNo, &rightNo)...)
-			default:
-				i++
-			}
-		}
+		pairs = append(pairs, pairUpLines(toOpLines(h.Lines), &leftNo, &rightNo)...)
 	}
 	return pairs
+}
+
+// toOpLines converts go-udiff's own []Line into the shared pairing
+// engine's own input shape (see pairing.go) — the one place SideBySide
+// still touches a go-udiff type directly, isolating the rest of the
+// pairing logic from it so ParseUnifiedDiff (which never sees a
+// udiff.Line at all) can reuse the exact same engine.
+func toOpLines(lines []udiff.Line) []opLine {
+	out := make([]opLine, len(lines))
+	for i, l := range lines {
+		var kind opKind
+		switch l.Kind {
+		case udiff.Delete:
+			kind = opDelete
+		case udiff.Insert:
+			kind = opInsert
+		default:
+			kind = opEqual
+		}
+		out[i] = opLine{kind: kind, text: trimEOL(l.Content)}
+	}
+	return out
 }
 
 // sameLinePairs is SideBySide's own no-edits shortcut: a and b are
@@ -103,51 +109,6 @@ func sameLinePairs(a string) []LinePair {
 	for i, l := range lines {
 		content := trimEOL(l)
 		pairs[i] = LinePair{Left: content, LeftNo: i + 1, Right: content, RightNo: i + 1, Kind: PairSame}
-	}
-	return pairs
-}
-
-// takeRun returns the longest run of lines starting at i that all share
-// kind — Delete lines for one edit always appear contiguously, followed
-// immediately by that same edit's Insert lines (see toUnified in
-// go-udiff's own unified.go), so a run never spans two unrelated edits.
-func takeRun(lines []udiff.Line, i int, kind udiff.OpKind) []udiff.Line {
-	start := i
-	for i < len(lines) && lines[i].Kind == kind {
-		i++
-	}
-	return lines[start:i]
-}
-
-// pairUpChangedRun aligns one edit's deleted lines against its inserted
-// lines position by position — a plain replacement reads most naturally
-// as "this line became that line" rather than all deletions stacked
-// above all insertions. Where one run is longer, the excess lines render
-// as OnlyLeft/OnlyRight (filler blank on the other side), never paired
-// with unrelated content from the other run.
-func pairUpChangedRun(dels, ins []udiff.Line, leftNo, rightNo *int) []LinePair {
-	n := len(dels)
-	if len(ins) > n {
-		n = len(ins)
-	}
-	pairs := make([]LinePair, 0, n)
-	for i := 0; i < n; i++ {
-		switch {
-		case i < len(dels) && i < len(ins):
-			*leftNo++
-			*rightNo++
-			pairs = append(pairs, LinePair{
-				Left: trimEOL(dels[i].Content), LeftNo: *leftNo,
-				Right: trimEOL(ins[i].Content), RightNo: *rightNo,
-				Kind: PairChanged,
-			})
-		case i < len(dels):
-			*leftNo++
-			pairs = append(pairs, LinePair{Left: trimEOL(dels[i].Content), LeftNo: *leftNo, Kind: PairOnlyLeft})
-		default:
-			*rightNo++
-			pairs = append(pairs, LinePair{Right: trimEOL(ins[i].Content), RightNo: *rightNo, Kind: PairOnlyRight})
-		}
 	}
 	return pairs
 }
