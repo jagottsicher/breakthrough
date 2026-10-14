@@ -2821,18 +2821,15 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// agreement with it for the mouse_enabled = false case.
 	app.EnableMouse(settings.MouseEnabled)
 
-	// Both of these can have something to say, and both go through the
-	// same showError overlay — collected into one notice rather than
-	// risking the second call silently overwriting the first before
-	// anything's even been drawn (see pruneTrashAtStartup's own doc
-	// comment).
 	var startupNotices []string
 	if len(configWarnings) > 0 {
 		startupNotices = append(startupNotices, fmt.Sprintf("config: %s", strings.Join(configWarnings, "; ")))
 	}
-	if notice := r.pruneTrashAtStartup(); notice != "" {
-		startupNotices = append(startupNotices, notice)
-	}
+	// Pushes its own notify.CategoryTrash toast directly (see its own
+	// doc comment) rather than adding to startupNotices/showError —
+	// routine housekeeping, not something that needs the user's
+	// immediate attention the way a config warning does.
+	r.pruneTrashAtStartup()
 	logger, activityLogNotice, activityLogIsFallback := r.newActivityLogger()
 	r.activityLog = logger
 

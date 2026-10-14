@@ -73,6 +73,10 @@ const (
 	// labels" background scan finishing — labelorphans.go's
 	// reportOrphanScanResult.
 	CategoryLabel Category = "label"
+	// CategoryTrash covers the startup age/quota trash prune finishing
+	// with something actually removed — internal/ui's
+	// pruneTrashAtStartup.
+	CategoryTrash Category = "trash"
 )
 
 // Message is one recorded notification: Store's own Push builds one,
