@@ -47,6 +47,7 @@ func (r *Root) newCompareDiffScreen() {
 	r.compareDiffLeft.SetWrap(false)
 	r.compareDiffLeft.SetBorderPadding(0, 0, 1, 1)
 	r.compareDiffLeft.SetInputCapture(r.captureCompareDiffPaneKey(true))
+	r.compareDiffLeft.SetMouseCapture(r.captureCompareDiffPaneMouse(true))
 	r.compareDiffLeft.SetFocusFunc(func() { r.compareDiffLeftFocused = true })
 
 	r.compareDiffRight = tview.NewTextView()
@@ -54,6 +55,7 @@ func (r *Root) newCompareDiffScreen() {
 	r.compareDiffRight.SetWrap(false)
 	r.compareDiffRight.SetBorderPadding(0, 0, 1, 1)
 	r.compareDiffRight.SetInputCapture(r.captureCompareDiffPaneKey(false))
+	r.compareDiffRight.SetMouseCapture(r.captureCompareDiffPaneMouse(false))
 	r.compareDiffRight.SetFocusFunc(func() { r.compareDiffLeftFocused = false })
 
 	r.compareDiffSeparator = tview.NewBox()
@@ -122,7 +124,7 @@ func (r *Root) compareDiffHintEntries() []listHintEntry {
 		{keys: []listHintKey{
 			{"←", simulateKeyOnFocused(tcell.KeyLeft)},
 			{"→", simulateKeyOnFocused(tcell.KeyRight)},
-		}, label: "scroll sideways (← at the left edge leaves)"},
+		}, label: "scroll sideways"},
 		hintKey("Tab", "switch pane", func(r *Root) { r.cycleCompareDiffFocus() }),
 		r.compareDiffLinkHintEntry(),
 		hintKey("Esc", "close", func(r *Root) { r.closeCompareDiff() }),
@@ -461,6 +463,15 @@ func (r *Root) captureCompareDiffPaneKey(isLeft bool) func(event *tcell.EventKey
 		case tcell.KeyPgDn:
 			r.scrollCompareDiff(isLeft, r.compareDiffPageStep())
 			return nil
+		case tcell.KeyRune:
+			// Both glyphs toggle, regardless of which one is currently
+			// showing — a user reaching for the key the hint bar/title
+			// bar just displayed shouldn't have to notice it flipped to
+			// the other one first.
+			if event.Rune() == compareDiffLinkedGlyph || event.Rune() == compareDiffUnlinkedGlyph {
+				r.toggleCompareDiffLinked()
+				return nil
+			}
 		}
 		return event
 	}
@@ -515,4 +526,29 @@ func (r *Root) scrollCompareDiff(isLeft bool, delta int) {
 		other = r.compareDiffRight
 	}
 	other.ScrollTo(row, col)
+}
+
+// captureCompareDiffPaneMouse intercepts the mouse wheel on one pane —
+// TextView's own default MouseHandler scrolls only the pane the wheel
+// event landed on, with no notion of the other pane at all, which is
+// exactly how a click can still correctly change focus (see below) but
+// also exactly why linked mode was silently not holding for the wheel:
+// a real, reported bug, not a hypothetical one. Routed through
+// scrollCompareDiff — the same function Up/Down/PgUp/PgDn already use —
+// so the wheel and the keyboard can never drift apart on what "linked"
+// means. Every other action (MouseLeftDown in particular, which must
+// still focus whichever pane was actually clicked) passes through to
+// TextView's own default handling unchanged.
+func (r *Root) captureCompareDiffPaneMouse(isLeft bool) func(tview.MouseAction, *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+	return func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		switch action {
+		case tview.MouseScrollUp:
+			r.scrollCompareDiff(isLeft, -1)
+			return tview.MouseConsumed, nil
+		case tview.MouseScrollDown:
+			r.scrollCompareDiff(isLeft, 1)
+			return tview.MouseConsumed, nil
+		}
+		return action, event
+	}
 }

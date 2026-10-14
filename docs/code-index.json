@@ -367,6 +367,16 @@
       "sha256": "095675cab10b156577a5afc7f30dcac37947a78cb4b87a238a32f3b5c1266a89"
     },
     {
+      "path": "internal/compare/unifieddiff.go",
+      "size": 4613,
+      "sha256": "328213b45a168d2cd04ebc78299e1ac0b737cb7f2abe76f22b20ca8c8611722c"
+    },
+    {
+      "path": "internal/compare/unifieddiff_test.go",
+      "size": 5631,
+      "sha256": "d81ee4772f178841ff7890cd504f5441ca60476d527e4c8009ab269c5253c0a2"
+    },
+    {
       "path": "internal/config/bytesize.go",
       "size": 2907,
       "sha256": "8436012a21bd070cb9d723bbcd9f0a15a6e99a58c9837d84e7bf048cf3c13d63"
@@ -1478,8 +1488,8 @@
     },
     {
       "path": "internal/ui/comparediff.go",
-      "size": 22148,
-      "sha256": "daaadfcc2e46fca2aa15404d5adaced8cbc4fd554a1b073ea6277bb563bcb3f3"
+      "size": 23899,
+      "sha256": "2fb5fe0dfe3606dbcc08ae3c1228109261616d7059916fcd81ee0c5e019945d4"
     },
     {
       "path": "internal/ui/comparetree.go",
@@ -2489,7 +2499,9 @@
         "internal/compare/sidebyside.go",
         "internal/compare/sidebyside_test.go",
         "internal/compare/tree.go",
-        "internal/compare/tree_test.go"
+        "internal/compare/tree_test.go",
+        "internal/compare/unifieddiff.go",
+        "internal/compare/unifieddiff_test.go"
       ],
       "imports": [
         "context",
@@ -2500,7 +2512,9 @@
         "github.com/aymanbagabas/go-udiff",
         "os",
         "path/filepath",
+        "regexp",
         "sort",
+        "strconv",
         "strings",
         "testing",
         "time"
@@ -6215,6 +6229,90 @@
       "name": "TestWalkProgressCountsEveryReportedEntry",
       "kind": "function",
       "line": 246
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff.go",
+      "name": "FileDiff",
+      "kind": "type",
+      "line": 12
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff.go",
+      "name": "unifiedDiffFileHeader",
+      "kind": "var",
+      "line": 23
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff.go",
+      "name": "unifiedDiffHunkHeader",
+      "kind": "var",
+      "line": 35
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff.go",
+      "name": "ParseUnifiedDiff",
+      "kind": "function",
+      "line": 61
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffOneFileOneHunk",
+      "kind": "function",
+      "line": 5
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffInsertsAGapBetweenTwoHunksOfTheSameFile",
+      "kind": "function",
+      "line": 41
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffMultipleFiles",
+      "kind": "function",
+      "line": 71
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffNewFile",
+      "kind": "function",
+      "line": 100
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffDeletedFile",
+      "kind": "function",
+      "line": 125
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffRenameWithNoContentChangeHasNoPairs",
+      "kind": "function",
+      "line": 150
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffEmptyInputReturnsNoFiles",
+      "kind": "function",
+      "line": 168
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/compare",
+      "file": "internal/compare/unifieddiff_test.go",
+      "name": "TestParseUnifiedDiffIgnoresNoNewlineMarker",
+      "kind": "function",
+      "line": 175
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/config",
@@ -22007,7 +22105,7 @@
       "name": "compareDiffHintEntries",
       "kind": "method",
       "receiver": "*Root",
-      "line": 112
+      "line": 114
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22015,7 +22113,7 @@
       "name": "compareDiffLinkHintEntry",
       "kind": "method",
       "receiver": "*Root",
-      "line": 139
+      "line": 141
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22023,7 +22121,7 @@
       "name": "renderCompareDiffHint",
       "kind": "method",
       "receiver": "*Root",
-      "line": 153
+      "line": 155
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22031,7 +22129,7 @@
       "name": "drawCompareDiffSeparator",
       "kind": "method",
       "receiver": "*Root",
-      "line": 165
+      "line": 167
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22039,7 +22137,7 @@
       "name": "applyCompareDiffTheme",
       "kind": "method",
       "receiver": "*Root",
-      "line": 181
+      "line": 183
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22047,7 +22145,7 @@
       "name": "openCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 211
+      "line": 213
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22055,7 +22153,7 @@
       "name": "closeCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 240
+      "line": 242
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22063,21 +22161,21 @@
       "name": "renderCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 271
+      "line": 273
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffGutterWidth",
       "kind": "const",
-      "line": 301
+      "line": 303
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "writeCompareDiffLine",
       "kind": "function",
-      "line": 314
+      "line": 316
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22085,21 +22183,21 @@
       "name": "renderCompareDiffTitleBar",
       "kind": "method",
       "receiver": "*Root",
-      "line": 335
+      "line": 337
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffCloseButtonCol",
       "kind": "function",
-      "line": 355
+      "line": 357
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/comparediff.go",
       "name": "compareDiffLinkButtonCol",
       "kind": "function",
-      "line": 363
+      "line": 365
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22107,7 +22205,7 @@
       "name": "captureCompareDiffTitleBarMouse",
       "kind": "method",
       "receiver": "*Root",
-      "line": 371
+      "line": 373
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22115,7 +22213,7 @@
       "name": "toggleCompareDiffLinked",
       "kind": "method",
       "receiver": "*Root",
-      "line": 406
+      "line": 408
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22123,7 +22221,7 @@
       "name": "activeCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 420
+      "line": 422
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22131,7 +22229,7 @@
       "name": "inactiveCompareDiffPane",
       "kind": "method",
       "receiver": "*Root",
-      "line": 427
+      "line": 429
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22139,7 +22237,7 @@
       "name": "captureCompareDiffPaneKey",
       "kind": "method",
       "receiver": "*Root",
-      "line": 443
+      "line": 445
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22147,7 +22245,7 @@
       "name": "compareDiffPageStep",
       "kind": "method",
       "receiver": "*Root",
-      "line": 475
+      "line": 486
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22155,7 +22253,7 @@
       "name": "cycleCompareDiffFocus",
       "kind": "method",
       "receiver": "*Root",
-      "line": 486
+      "line": 497
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -22163,7 +22261,15 @@
       "name": "scrollCompareDiff",
       "kind": "method",
       "receiver": "*Root",
-      "line": 502
+      "line": 513
+    },
+    {
+      "package": "github.com/jagottsicher/breakthrough/internal/ui",
+      "file": "internal/ui/comparediff.go",
+      "name": "captureCompareDiffPaneMouse",
+      "kind": "method",
+      "receiver": "*Root",
+      "line": 542
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
@@ -25106,14 +25212,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerWidth",
+      "name": "dirPickerHeight",
       "kind": "const",
       "line": 17
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/dirpicker.go",
-      "name": "dirPickerHeight",
+      "name": "dirPickerWidth",
       "kind": "const",
       "line": 17
     },
@@ -47206,14 +47312,14 @@
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinHeight",
+      "name": "viewerMinWidth",
       "kind": "const",
       "line": 24
     },
     {
       "package": "github.com/jagottsicher/breakthrough/internal/ui",
       "file": "internal/ui/viewer.go",
-      "name": "viewerMinWidth",
+      "name": "viewerMinHeight",
       "kind": "const",
       "line": 24
     },
@@ -48419,5 +48525,5 @@
       "line": 101
     }
   ],
-  "merkle_root": "7171b7c58f6bb707521aac4b9b693e2943f6ed961360154085119a806cef7b38"
+  "merkle_root": "40c2b818d862b7ae1aa472e008f4f3cce0fb594774c85200c66fba0880263ab7"
 }
