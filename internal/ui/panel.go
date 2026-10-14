@@ -328,6 +328,7 @@ type Panel struct {
 	// package and its tests by one).
 	columnHeader *tview.Table
 	table        *tview.Table
+	scrollbar    *verticalScrollbar
 
 	// path is the absolute path currently shown — a real directory, or,
 	// while browsing into an archive (see archivepanel.go), a composite
@@ -852,6 +853,13 @@ const (
 	headerTabStripGap = 1
 )
 
+// Theme/App satisfy scrollbarHost (scrollbar.go) — Panel already has
+// both as plain fields; see p.scrollbar's own construction in NewPanel
+// for why this matters (a *Root-only dependency would have needed
+// deferred, post-construction wiring instead).
+func (p *Panel) Theme() config.ResolvedTheme { return p.theme }
+func (p *Panel) App() *tview.Application     { return p.app }
+
 func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, settings config.Settings) (*Panel, error) {
 	p := &Panel{
 		Flex:             tview.NewFlex().SetDirection(tview.FlexRow),
@@ -1086,9 +1094,22 @@ func NewPanel(app *tview.Application, path string, theme config.ResolvedTheme, s
 	headerRow.AddItem(p.detailsExpandBtn, headerDetailsExpandWidth, 0, false)
 	p.headerRow = headerRow
 
+	// p itself, not a *Root: NewPanel runs before Root even exists (see
+	// its own call site in NewRoot — the very first panel has to be
+	// built before there's a *Root to hand it), and many tests build a
+	// bare *Panel with no Root at all. scrollbarHost's Theme()/App()
+	// are satisfied by p's own already-existing theme/app fields (see
+	// Panel's own Theme/App methods below), so this needs no deferred
+	// wiring the way a *Root-only dependency would have.
+	p.scrollbar = newVerticalScrollbarForTable(p, p.table)
+	tableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(p.table, 0, 1, true).
+		AddItem(p.scrollbar, 1, 0, false)
+	tableRow.SetMouseCapture(p.scrollbar.captureMouse)
+
 	p.AddItem(headerRow, 1, 0, false)      // fixed one-line path bar + filter
 	p.AddItem(p.columnHeader, 1, 0, false) // fixed one-line column header
-	p.AddItem(p.table, 0, 1, true)         // fills the rest, holds focus
+	p.AddItem(tableRow, 0, 1, true)        // fills the rest, holds focus
 
 	if err := p.navigate(path); err != nil {
 		return nil, err

@@ -2250,6 +2250,11 @@ type Root struct {
 // NewRoot creates the top-level UI rooted at path. app is passed down to
 // the Panel, which needs it to move keyboard focus into its header's edit
 // field — see Panel.openEdit.
+// Theme/App satisfy scrollbarHost (scrollbar.go) — Root already has
+// both as plain fields.
+func (r *Root) Theme() config.ResolvedTheme { return r.theme }
+func (r *Root) App() *tview.Application     { return r.app }
+
 func NewRoot(app *tview.Application, path string) (*Root, error) {
 	settings, settingOrigins, colorSchemes, configWarnings := loadInitialSettings()
 	theme := config.FindColorScheme(colorSchemes, settings.ColorScheme).Resolve()
