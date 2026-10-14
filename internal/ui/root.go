@@ -1458,8 +1458,9 @@ type Root struct {
 	compareDiffLinked      bool
 	compareDiffLeftFocused bool
 
-	helpView   *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
-	viewerView *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
+	helpView      *tview.TextView // Help overlay's own scrollable content — see help.go/openHelp
+	helpScrollbar *verticalScrollbar
+	viewerView    *tview.TextView // Look overlay's built-in pager — see viewer.go/openLook
 
 	// viewerScrollbar/viewerLayout are Look's own vertical scrollbar
 	// (see scrollbar.go) and the Flex placing it one column right of
@@ -2662,9 +2663,14 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// other overlay in this app already has.
 	r.helpView = r.newHelpView()
 	r.helpTitleBar = r.newHelpTitleBar()
+	r.helpScrollbar = newVerticalScrollbarForTextView(r, r.helpView)
+	helpRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.helpView, 0, 1, true).
+		AddItem(r.helpScrollbar, 1, 0, false)
+	helpRow.SetMouseCapture(r.helpScrollbar.captureMouse)
 	r.helpLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.helpTitleBar, 1, 0, false).
-		AddItem(r.helpView, 0, 1, true)
+		AddItem(helpRow, 0, 1, true)
 
 	// The Look overlay's built-in pager (see viewer.go/openLook) — same
 	// single-static-TextView shape as Help, just with its own text set
