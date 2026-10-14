@@ -127,9 +127,15 @@ func (r *Root) newFirewallScreen() {
 	r.firewallHintSpans = firewallHintSpans
 	r.firewallHint.SetMouseCapture(r.captureListHintMouse(r.firewallHint, &r.firewallHintSpans))
 
+	r.firewallScrollbar = newVerticalScrollbarForTable(r, r.firewallTable)
+	firewallTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.firewallTable, 0, 1, true).
+		AddItem(r.firewallScrollbar, 1, 0, false)
+	firewallTableRow.SetMouseCapture(r.firewallScrollbar.captureMouse)
+
 	r.firewallLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.firewallTitleBar, 1, 0, false).
-		AddItem(r.firewallTable, 0, 1, true).
+		AddItem(firewallTableRow, 0, 1, true).
 		AddItem(r.firewallHint, 1, 0, false)
 }
 

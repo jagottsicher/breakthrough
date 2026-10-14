@@ -124,9 +124,15 @@ func (r *Root) newLogAuditSelectionScreen() {
 	r.logAuditHintSpans = hintSpans
 	r.logAuditHint.SetMouseCapture(r.captureListHintMouse(r.logAuditHint, &r.logAuditHintSpans))
 
+	r.logAuditScrollbar = newVerticalScrollbarForTable(r, r.logAuditTable)
+	logAuditTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.logAuditTable, 0, 1, true).
+		AddItem(r.logAuditScrollbar, 1, 0, false)
+	logAuditTableRow.SetMouseCapture(r.logAuditScrollbar.captureMouse)
+
 	r.logAuditSelectionLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditTitleBar, 1, 0, false).
-		AddItem(r.logAuditTable, 0, 1, true).
+		AddItem(logAuditTableRow, 0, 1, true).
 		AddItem(r.logAuditHint, 1, 0, false)
 }
 
@@ -228,12 +234,18 @@ func (r *Root) newLogAuditViewerScreen() {
 	r.logAuditViewerSpans = hintSpans
 	r.logAuditViewerHint.SetMouseCapture(r.captureListHintMouse(r.logAuditViewerHint, &r.logAuditViewerSpans))
 
+	r.logAuditViewerScrollbar = newVerticalScrollbarForTable(r, r.logAuditViewerTable)
+	logAuditViewerTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.logAuditViewerTable, 0, 1, true).
+		AddItem(r.logAuditViewerScrollbar, 1, 0, false)
+	logAuditViewerTableRow.SetMouseCapture(r.logAuditViewerScrollbar.captureMouse)
+
 	r.logAuditViewerLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.logAuditViewerTitle, 1, 0, false).
 		AddItem(r.logAuditFilterRow, 1, 0, false).
 		AddItem(r.logAuditTimelineView, 1, 0, false).
 		AddItem(r.logAuditFocusIndicator, 1, 0, false).
-		AddItem(r.logAuditViewerTable, 0, 1, true).
+		AddItem(logAuditViewerTableRow, 0, 1, true).
 		AddItem(r.logAuditViewerHint, 1, 0, false)
 }
 

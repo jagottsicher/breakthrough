@@ -183,9 +183,15 @@ func (r *Root) newMessagesScreen() {
 	r.messagesHintSpans = messagesHintSpans
 	r.messagesHint.SetMouseCapture(r.captureListHintMouse(r.messagesHint, &r.messagesHintSpans))
 
+	r.messagesScrollbar = newVerticalScrollbarForTable(r, r.messagesTable)
+	messagesTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.messagesTable, 0, 1, true).
+		AddItem(r.messagesScrollbar, 1, 0, false)
+	messagesTableRow.SetMouseCapture(r.messagesScrollbar.captureMouse)
+
 	r.messagesLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.messagesTitleBar, 1, 0, false).
-		AddItem(r.messagesTable, 0, 1, true).
+		AddItem(messagesTableRow, 0, 1, true).
 		AddItem(r.messagesHint, 1, 0, false)
 }
 

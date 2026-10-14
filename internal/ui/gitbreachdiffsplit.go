@@ -88,9 +88,55 @@ func (r *Root) newGitBreachDiffSplit() {
 		AddItem(r.gitBreachDiffSplitSeparator, 1, 0, false).
 		AddItem(r.gitBreachDiffSplitRight, 0, 1, false)
 
+	// Main gets two scrollbars, one per page of gitBreachDiffPages
+	// below — only one is ever visible at a time, matching whichever
+	// page toggleGitBreachDiffSplit last switched to. The unified
+	// pager is a plain TextView (textViewContent, same as every other
+	// TextView-backed scrollbar); the split view's own scrollbar moves
+	// both panes together via gitBreachDiffSplitContent, never just the
+	// one it happens to be drawn next to — the same "always linked, no
+	// unlinked mode" invariant scrollGitBreachDiffSplit already
+	// enforces for keyboard/wheel scrolling.
+	r.gitBreachDiffScrollbar = newVerticalScrollbarForTextView(r, r.gitBreachDiffView)
+	r.gitBreachDiffScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffView))
+	unifiedRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.gitBreachDiffView, 0, 1, true).
+		AddItem(r.gitBreachDiffScrollbar, 1, 0, false)
+	unifiedRow.SetMouseCapture(r.gitBreachDiffScrollbar.captureMouse)
+
+	r.gitBreachDiffSplitScrollbar = newVerticalScrollbar(r, &gitBreachDiffSplitContent{
+		textViewContent: &textViewContent{view: r.gitBreachDiffSplitLeft},
+		right:           r.gitBreachDiffSplitRight,
+	})
+	r.gitBreachDiffSplitScrollbar.SetTrackColorFunc(r.gitBreachScrollbarTrackColor(r.gitBreachDiffSplitLeft))
+	splitRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(splitBody, 0, 1, true).
+		AddItem(r.gitBreachDiffSplitScrollbar, 1, 0, false)
+	splitRow.SetMouseCapture(r.gitBreachDiffSplitScrollbar.captureMouse)
+
 	r.gitBreachDiffPages = tview.NewPages().
-		AddPage(gitBreachDiffUnifiedPage, r.gitBreachDiffView, true, true).
-		AddPage(gitBreachDiffSplitPage, splitBody, true, false)
+		AddPage(gitBreachDiffUnifiedPage, unifiedRow, true, true).
+		AddPage(gitBreachDiffSplitPage, splitRow, true, false)
+}
+
+// gitBreachDiffSplitContent adapts the diff split view's own linked
+// pair of panes as one scrollableContent (see scrollbar.go) —
+// rect/scrollOffset/totalRows all read from the left pane only
+// (embedding *textViewContent for it directly, cache and all), since
+// gitBreachRenderDiffSplit's own Pair invariant guarantees both panes
+// have the same line count, but scrollTo moves both together — the
+// same "always linked, no unlinked mode" invariant scrollGitBreachDiffSplit
+// already enforces for keyboard/wheel scrolling (see
+// newGitBreachDiffSplit's own doc comment for why there's no unlinked
+// mode here at all).
+type gitBreachDiffSplitContent struct {
+	*textViewContent
+	right *tview.TextView
+}
+
+func (c *gitBreachDiffSplitContent) scrollTo(row, col int) {
+	c.textViewContent.scrollTo(row, col)
+	c.right.ScrollTo(row, col)
 }
 
 // drawGitBreachDiffSplitSeparator mirrors

@@ -216,9 +216,15 @@ func (r *Root) newSessionsScreen() {
 	r.sessionsHintSpans = sessionsHintSpans
 	r.sessionsHint.SetMouseCapture(r.captureListHintMouse(r.sessionsHint, &r.sessionsHintSpans))
 
+	r.sessionsScrollbar = newVerticalScrollbarForTable(r, r.sessionsTable)
+	sessionsTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.sessionsTable, 0, 1, true).
+		AddItem(r.sessionsScrollbar, 1, 0, false)
+	sessionsTableRow.SetMouseCapture(r.sessionsScrollbar.captureMouse)
+
 	r.sessionsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.sessionsTitleBar, 1, 0, false).
-		AddItem(r.sessionsTable, 0, 1, true).
+		AddItem(sessionsTableRow, 0, 1, true).
 		AddItem(r.sessionsHint, 1, 0, false)
 }
 

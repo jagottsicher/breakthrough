@@ -281,9 +281,15 @@ func (r *Root) newToolboxScreen() {
 	r.toolboxHintSpans = toolboxHintSpans
 	r.toolboxHint.SetMouseCapture(r.captureListHintMouse(r.toolboxHint, &r.toolboxHintSpans))
 
+	r.toolboxScrollbar = newVerticalScrollbarForTable(r, r.toolboxTable)
+	toolboxTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.toolboxTable, 0, 1, true).
+		AddItem(r.toolboxScrollbar, 1, 0, false)
+	toolboxTableRow.SetMouseCapture(r.toolboxScrollbar.captureMouse)
+
 	r.toolboxLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.toolboxTitleBar, 1, 0, false).
-		AddItem(r.toolboxTable, 0, 1, true).
+		AddItem(toolboxTableRow, 0, 1, true).
 		AddItem(r.toolboxHint, 1, 0, false)
 
 	// The one small floating input this screen layers on top of itself

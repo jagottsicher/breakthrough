@@ -9,6 +9,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/jagottsicher/breakthrough/internal/mounts"
 )
 
 // openLookWithLines writes a file with n short, fixed-width lines (well
@@ -17,7 +19,7 @@ import (
 // overlay to width×height, and draws it once on a SimulationScreen —
 // the one real draw GetWrappedLineCount's own doc comment says is
 // required before it reflects actual wrapping (see
-// scrollbar.go/wrappedLineCount's own cache doc comment). Returns the
+// textViewContent.totalRows's own cache doc comment). Returns the
 // scrollbar under test and the viewport row count it ends up with.
 func openLookWithLines(t *testing.T, n, width, height int) (*verticalScrollbar, int) {
 	t.Helper()
@@ -118,14 +120,13 @@ func TestVerticalScrollbarThumbFloorsAtOneRow(t *testing.T) {
 // arrow buttons: one click moves the content by exactly one line.
 func TestCaptureViewerScrollbarMouseArrowStepsOneLine(t *testing.T) {
 	sb, _ := openLookWithLines(t, 200, 60, 20)
-	root := sb.root
 	sbx, sby, _, sbh := sb.GetRect()
 
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0))
+	sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0))
 	sb.stopRepeat() // the click itself already started auto-repeat (see startRepeat) — stop it so the test only observes the single immediate step
-	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0))
+	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0))
 
-	if row, _ := sb.content.GetScrollOffset(); row != 1 {
+	if row, _ := sb.content.scrollOffset(); row != 1 {
 		t.Errorf("scroll offset after one down-arrow click = %d, want 1", row)
 	}
 }
@@ -135,18 +136,17 @@ func TestCaptureViewerScrollbarMouseArrowStepsOneLine(t *testing.T) {
 // a single line, and stops at maxOffset rather than overshooting.
 func TestCaptureViewerScrollbarMousePageJumpOnTrackClick(t *testing.T) {
 	sb, viewport := openLookWithLines(t, 200, 60, 20)
-	root := sb.root
 	sbx, sby, _, sbh := sb.GetRect()
 
 	// The track's own last row, just above both arrow buttons (which
 	// now sit together at the bottom two rows — see Draw) — still part
 	// of the track, below the thumb.
 	trackLastRow := sby + sbh - 3
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, trackLastRow, tcell.Button1, 0))
+	sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, trackLastRow, tcell.Button1, 0))
 	sb.stopRepeat()
-	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, trackLastRow, tcell.ButtonNone, 0))
+	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, trackLastRow, tcell.ButtonNone, 0))
 
-	row, _ := sb.content.GetScrollOffset()
+	row, _ := sb.content.scrollOffset()
 	if row != viewport {
 		t.Errorf("scroll offset after one page-jump click = %d, want one viewport height (%d)", row, viewport)
 	}
@@ -158,30 +158,29 @@ func TestCaptureViewerScrollbarMousePageJumpOnTrackClick(t *testing.T) {
 // doesn't keep scrolling.
 func TestVerticalScrollbarDragMovesContentProportionally(t *testing.T) {
 	sb, _ := openLookWithLines(t, 200, 60, 20)
-	root := sb.root
 	sbx, sby, _, sbh := sb.GetRect()
 
 	// The track now starts at the scrollbar's own top row (no arrow
 	// above it — both sit at the bottom, see Draw), so the thumb's own
 	// top row, at rest, is sby itself.
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
+	sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
 	if !sb.dragging {
 		t.Fatal("clicking the thumb itself should start a drag")
 	}
 
-	root.captureViewerScrollbarMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.Button1, 0))
-	movedRow, _ := sb.content.GetScrollOffset()
+	sb.captureMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.Button1, 0))
+	movedRow, _ := sb.content.scrollOffset()
 	if movedRow <= 0 {
 		t.Errorf("scroll offset after dragging the thumb most of the way down = %d, want it clearly advanced", movedRow)
 	}
 
-	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.ButtonNone, 0))
+	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-2, tcell.ButtonNone, 0))
 	if sb.dragging {
 		t.Error("MouseLeftUp should end the drag")
 	}
 
-	root.captureViewerScrollbarMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
-	if afterRow, _ := sb.content.GetScrollOffset(); afterRow != movedRow {
+	sb.captureMouse(tview.MouseMove, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
+	if afterRow, _ := sb.content.scrollOffset(); afterRow != movedRow {
 		t.Errorf("scroll offset moved to %d after the drag already ended, want it to stay at %d", afterRow, movedRow)
 	}
 }
@@ -192,13 +191,12 @@ func TestVerticalScrollbarDragMovesContentProportionally(t *testing.T) {
 // nothing to do with the scrollbar.
 func TestCaptureViewerScrollbarMousePassesThroughOutsideScrollbar(t *testing.T) {
 	sb, _ := openLookWithLines(t, 5, 60, 20)
-	root := sb.root
 
 	event := tcell.NewEventMouse(0, 0, tcell.Button1, 0)
-	action, gotEvent := root.captureViewerScrollbarMouse(tview.MouseLeftDown, event)
+	action, gotEvent := sb.captureMouse(tview.MouseLeftDown, event)
 
 	if action != tview.MouseLeftDown || gotEvent != event {
-		t.Errorf("captureViewerScrollbarMouse(outside click) = (%v, %v), want the event passed through unchanged", action, gotEvent)
+		t.Errorf("captureMouse(outside click) = (%v, %v), want the event passed through unchanged", action, gotEvent)
 	}
 }
 
@@ -214,15 +212,144 @@ func TestCaptureViewerScrollbarMousePassesThroughOutsideScrollbar(t *testing.T) 
 // panel.go/detailsExpandBtn).
 func TestCaptureViewerScrollbarMouseConsumesTrailingClick(t *testing.T) {
 	sb, _ := openLookWithLines(t, 5, 60, 20)
-	root := sb.root
 	sbx, sby, _, _ := sb.GetRect()
 
-	root.captureViewerScrollbarMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
+	sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby, tcell.Button1, 0))
 	sb.stopRepeat()
-	root.captureViewerScrollbarMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
+	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
 
-	action, event := root.captureViewerScrollbarMouse(tview.MouseLeftClick, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
+	action, event := sb.captureMouse(tview.MouseLeftClick, tcell.NewEventMouse(sbx, sby, tcell.ButtonNone, 0))
 	if action != tview.MouseConsumed || event != nil {
-		t.Errorf("captureViewerScrollbarMouse(trailing MouseLeftClick on the scrollbar) = (%v, %v), want it consumed (MouseConsumed, nil) rather than passed through to whatever's underneath", action, event)
+		t.Errorf("captureMouse(trailing MouseLeftClick on the scrollbar) = (%v, %v), want it consumed (MouseConsumed, nil) rather than passed through to whatever's underneath", action, event)
+	}
+}
+
+// TestTableContentScrollbarOnMounts proves the generalized scrollbar
+// (scrollableContent/tableContent, see scrollbar.go) on an actual
+// *tview.Table, not just the TextView it was piloted on — the first
+// widget converted in the "wirklich überall" rollout, per the user's
+// own explicit request to see it on a real catalog screen next. A
+// click on the down arrow must step the table forward by one row via
+// Table.SetOffset, the same contract textViewContent already has
+// through TextView.ScrollTo.
+func TestTableContentScrollbarOnMounts(t *testing.T) {
+	r, err := NewRoot(tview.NewApplication(), fixtureDir(t))
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	r.SetRect(0, 0, 60, 10) // short on purpose: a handful of mount rows should already overflow a 10-row screen once the title bar/hint take their own row each
+
+	entries := make([]mounts.Entry, 50)
+	for i := range entries {
+		entries[i] = mounts.Entry{Target: fmt.Sprintf("/mnt/%02d", i), Fstype: "ext4"}
+	}
+	r.mountsEntries = entries
+	r.mountsErr = nil
+	// Not r.openMounts(): that calls reloadMounts(), which immediately
+	// overwrites mountsEntries above with a real mounts.Read() of
+	// whatever machine runs this test — on a real workstation that's
+	// often still enough rows to accidentally overflow a 10-row screen
+	// anyway, but a CI container can easily have far fewer, making the
+	// test flaky for a reason that has nothing to do with the
+	// scrollbar itself (a real, CI-caught failure). renderMounts +
+	// showOverlay is the same "set state, then just render/show it"
+	// shape TestRenderMountsShowsTheErrorInPlaceOfRows already uses.
+	r.renderMounts()
+	r.showOverlay(mountsPage, r.mountsLayout)
+
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(60, 10)
+	r.mountsLayout.Draw(screen)
+
+	sb := r.mountsScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatal("maxOffset <= 0, want real overflow to scroll through for 50 mount rows on a 10-row screen")
+	}
+
+	sbx, sby, _, sbh := sb.GetRect()
+	sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0))
+	sb.stopRepeat()
+	sb.captureMouse(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0))
+
+	if row, _ := r.mountsTable.GetOffset(); row != 1 {
+		t.Errorf("mountsTable offset after one down-arrow click = %d, want 1", row)
+	}
+}
+
+// TestVerticalScrollbarHiddenWhenContentFits pins the user's own
+// explicit request: the scrollbar only shows up once content is
+// actually taller than the box — a click where the down arrow would
+// otherwise be must do nothing while everything already fits, not
+// silently "work" on an invisible control.
+func TestVerticalScrollbarHiddenWhenContentFits(t *testing.T) {
+	sb, _ := openLookWithLines(t, 5, 60, 20)
+
+	if got := sb.maxOffset(); got != 0 {
+		t.Fatalf("maxOffset = %d, want 0 (5 short lines easily fit a 20-row viewport)", got)
+	}
+
+	sbx, sby, _, sbh := sb.GetRect()
+	action, event := sb.captureMouse(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0))
+	if action != tview.MouseConsumed || event != nil {
+		t.Errorf("captureMouse(click where the down arrow would be) = (%v, %v), want it consumed (MouseConsumed, nil) rather than acted on", action, event)
+	}
+	if row, _ := sb.content.scrollOffset(); row != 0 {
+		t.Errorf("scroll offset after clicking a hidden scrollbar = %d, want 0 (nothing should have happened)", row)
+	}
+	if sb.dragging {
+		t.Error("clicking a hidden scrollbar's own thumb-sized track must not start a drag — there is no thumb to grab")
+	}
+}
+
+// TestScrollbarThumbColorStaysVisibleOnAVeryDarkTrack is a real,
+// user-reported regression test: Git Breach's own unfocused track
+// (PanelBackground, #1c3232) darkened by a plain percentage factor
+// landed so close to black that the thumb became indistinguishable
+// from the track — "kann man nicht erkennen, wo die Leiste ist". The
+// thumb must differ from the track by at least scrollbarThumbContrastDelta
+// in at least one channel, regardless of how dark the track already is.
+func TestScrollbarThumbColorStaysVisibleOnAVeryDarkTrack(t *testing.T) {
+	track := tcell.NewRGBColor(28, 50, 50) // PanelBackground, #1c3232
+	thumb := scrollbarThumbColor(track)
+
+	tr, tg, tb := track.RGB()
+	hr, hg, hb := thumb.RGB()
+	maxDelta := func(a, b int32) int32 {
+		d := a - b
+		if d < 0 {
+			d = -d
+		}
+		return d
+	}
+	biggest := maxDelta(tr, hr)
+	if d := maxDelta(tg, hg); d > biggest {
+		biggest = d
+	}
+	if d := maxDelta(tb, hb); d > biggest {
+		biggest = d
+	}
+	if biggest < scrollbarThumbContrastDelta {
+		t.Errorf("thumb %v vs track %v differ by only %d in the largest channel, want at least %d", thumb, track, biggest, scrollbarThumbContrastDelta)
+	}
+}
+
+// TestScrollbarThumbColorKeepsDarkeningAMidToneTrack pins the other
+// half of the fix: a track bright enough that darkening it doesn't
+// clip at 0 should still darken (matching the user's own original "one
+// shade darker" request, and Git Breach's own focused track — already
+// confirmed to look right) rather than flip to lightening just because
+// a generic luminance threshold happens to call it "dark".
+func TestScrollbarThumbColorKeepsDarkeningAMidToneTrack(t *testing.T) {
+	track := tcell.NewRGBColor(66, 91, 91) // Git Breach's own focused track (PopupBackground + the focus lighten)
+	thumb := scrollbarThumbColor(track)
+
+	tr, _, _ := track.RGB()
+	hr, _, _ := thumb.RGB()
+	if hr >= tr {
+		t.Errorf("thumb red channel %d is not darker than track's own %d, want darkening (not lightening) for a track this far from clipping at 0", hr, tr)
 	}
 }
