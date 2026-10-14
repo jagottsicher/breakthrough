@@ -762,6 +762,33 @@ type Root struct {
 	// whatever content is genuinely still on screen. Empty whenever
 	// nothing with real content is shown (no selection, cancelled).
 	gitBreachDiffScrollKey string
+	// The Main diff box's own second, side-by-side view (see
+	// gitbreachdiffsplit.go's own gitBreachRenderDiffSplit) — "v" while
+	// Main has focus toggles gitBreachDiffSplit and switches
+	// gitBreachDiffPages between "unified" (r.gitBreachDiffView, the
+	// original pager) and "split" (gitBreachDiffSplitLeft/Right,
+	// separated by gitBreachDiffSplitSeparator — the same two-pane
+	// shape comparediff.go's own Compare diff view already
+	// establishes, reused rather than reinvented). gitBreachDiffRawText
+	// is the real diff text behind whatever gitBreachColorizeDiff
+	// already turned into Main's own colored display — kept so a
+	// toggle re-renders the split view from it directly, with no
+	// second git fetch; gitBreachDiffFiles is compare.ParseUnifiedDiff's
+	// own last result for that same text, cached so a theme switch can
+	// re-render without re-parsing.
+	//
+	// Only gitBreachDiffSplitLeft ever holds real keyboard focus in
+	// split mode — gitBreachDiffSplitRight is a pure mirror (see
+	// gitBreachFocusDiffSplitLeftOnClick), since scrolling here is
+	// always linked, by explicit design choice, unlike Compare's own
+	// optional link/unlink toggle.
+	gitBreachDiffSplit          bool
+	gitBreachDiffPages          *tview.Pages
+	gitBreachDiffSplitLeft      *tview.TextView
+	gitBreachDiffSplitRight     *tview.TextView
+	gitBreachDiffSplitSeparator *tview.Box
+	gitBreachDiffRawText        string
+	gitBreachDiffFiles          []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —
 	// Up/Down arrow (see captureLogAuditViewerTableKey), per the user's
 	// own explicit request to be able to read either direction without

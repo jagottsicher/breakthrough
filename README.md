@@ -894,7 +894,8 @@ filtering, a Log Audit screen (`jL`) reading and merging *other* log
 files found in whichever directory the active panel currently shows,
 a Git breach dashboard (`jg`) for staging, committing, and diffing the
 local git repository containing the active panel's own current
-directory, a Sessions screen (`js`) listing local GNU screen, tmux, and
+directory — its own diff pane toggles between a unified pager and a
+side-by-side view (`v`) — a Sessions screen (`js`) listing local GNU screen, tmux, and
 Zellij sessions side by side with per-row Attach/Close actions (Attach
 hands the real terminal to the session — screen `-D -r`, tmux `attach
 -d`, or `zellij attach` — and returns to breakthrough automatically once

@@ -637,6 +637,20 @@ var helpText = strings.TrimLeft(`
   or inside an archive view rather than reading the wrong repository on
   this machine under the same-looking path.
 
+  Main's own diff has a second view, toggled by "v" while Main has
+  focus: a side-by-side pane pair (old on the left, new on the right),
+  the same two-pane shape Compare's own diff view (see "C" above) uses.
+  Scrolling is always linked between the two sides here — there's no
+  independent-scrolling mode to opt out of the way Compare's own "="/
+  "≠" toggle offers, since both panes show the same file, not two
+  unrelated things. Left scrolls the pair sideways for a long line,
+  stepping back out to whichever box is still selected underneath (the
+  same action Esc/Enter/Space already reach) once already scrolled all
+  the way back to the left edge. A Commits/Stash row touching several
+  files stacks each file's own pane content under its own path header,
+  one after another; a gap between two hunks of the same file shows as
+  a muted "⋮" row on both sides rather than disappearing silently.
+
     Tab/     Switch keyboard focus forwards/backwards between Files,
     Shift-   Branches, Commits and Stash (or, from inside Main's own
     Tab      diff, continue the same cycle from whichever box is still
@@ -675,7 +689,13 @@ var helpText = strings.TrimLeft(`
              the ordinary way to move through a long list
     Left/    (Main only) Step back out to whichever box is still
     Enter/   selected underneath, returning real keyboard focus there
-    Space    — works no matter which key originally jumped into Main
+    Space    — works no matter which key originally jumped into Main.
+             In the side-by-side view (see "v" below) Left instead
+             scrolls the pair left while there's still room to, only
+             stepping back out once already at the left edge
+    →        (Main, side-by-side view only) Scroll the pair right
+    v        (Main only) Toggle Main's own diff between the unified
+             pager and the side-by-side view
     c        Commit whatever is currently staged, after typing a
              message (does nothing with nothing staged) — works no
              matter which box currently has focus, since committing
