@@ -655,6 +655,7 @@ type Root struct {
 	gitBreachStashScrollbar    *verticalScrollbar
 	gitBreachDiffHeader        *tview.TextView
 	gitBreachDiffView          *tview.TextView
+	gitBreachDiffScrollbar     *verticalScrollbar
 	gitBreachHint              *tview.TextView
 	gitBreachHintSpans         []listHintSpan
 
@@ -800,6 +801,7 @@ type Root struct {
 	gitBreachDiffSplitLeft      *tview.TextView
 	gitBreachDiffSplitRight     *tview.TextView
 	gitBreachDiffSplitSeparator *tview.Box
+	gitBreachDiffSplitScrollbar *verticalScrollbar
 	gitBreachDiffRawText        string
 	gitBreachDiffFiles          []compare.FileDiff
 	// logAuditNewestFirst toggles the viewer table's own sort order —

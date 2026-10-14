@@ -85,6 +85,141 @@ func TestToggleGitBreachDiffSplitSwitchesViewAndFocus(t *testing.T) {
 	}
 }
 
+// TestGitBreachDiffSplitScrollbarMovesBothPanes pins the split view's
+// own scrollbar: clicking its down arrow must advance both panes by
+// the same amount, through the real dispatch chain (gitBreachLayout's
+// own MouseHandler, not gitBreachDiffSplitScrollbar.captureMouse
+// directly) — the same "don't trust a direct call, the bug lives in
+// dispatch" lesson TestGitBreachCommitsScrollbarMouseClickThroughRealDispatch
+// already pins for the catalog tables.
+func TestGitBreachDiffSplitScrollbarMovesBothPanes(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	var original, changed strings.Builder
+	for i := 0; i < 60; i++ {
+		original.WriteString("line\n")
+		changed.WriteString("CHANGED\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(original.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(changed.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
+	if err != nil {
+		t.Fatalf("git.Diff: %v", err)
+	}
+	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
+	r.toggleGitBreachDiffSplit()
+
+	r.SetRect(0, 0, 100, 20)
+	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	sb := r.gitBreachDiffSplitScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for 60 changed lines on a 20-row screen", sb.maxOffset())
+	}
+	sbx, sby, _, sbh := sb.GetRect()
+
+	leftBefore, _ := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	rightBefore, _ := r.gitBreachDiffSplitRight.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.gitBreachLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	leftAfter, _ := r.gitBreachDiffSplitLeft.GetScrollOffset()
+	rightAfter, _ := r.gitBreachDiffSplitRight.GetScrollOffset()
+	if leftAfter != leftBefore+1 {
+		t.Errorf("left pane offset = %d, want %d (before=%d)", leftAfter, leftBefore+1, leftBefore)
+	}
+	if rightAfter != rightBefore+1 {
+		t.Errorf("right pane offset = %d, want %d (before=%d)", rightAfter, rightBefore+1, rightBefore)
+	}
+	if leftAfter != rightAfter {
+		t.Errorf("panes drifted apart: left=%d right=%d, want them to always match", leftAfter, rightAfter)
+	}
+}
+
+// TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch is the
+// unified pager's own counterpart to
+// TestGitBreachDiffSplitScrollbarMovesBothPanes — a real, user-reported
+// regression: the Main box's own header (gitBreachDiffHeader)
+// swallowed every MouseLeftDown anywhere in the whole box, header or
+// not, the same bug class gitBreachFocus{Files,Branches,Commits,Stash}OnClick
+// already had (see gitBreachDiffHeader's own SetMouseCapture doc
+// comment). Affected both the unified and split pages identically,
+// since the header sits above gitBreachDiffPages itself, a shared
+// ancestor for both.
+func TestGitBreachDiffUnifiedScrollbarMouseClickThroughRealDispatch(t *testing.T) {
+	requireGitForBreach(t)
+	dir := initGitBreachRepo(t)
+	var original, changed strings.Builder
+	for i := 0; i < 60; i++ {
+		original.WriteString("line\n")
+		changed.WriteString("CHANGED\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(original.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitBreach(t, dir, "add", "a.txt")
+	runGitBreach(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(changed.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := openGitBreachFilesDiff(t, dir, "a.txt")
+	r.app.SetFocus(r.gitBreachDiffView)
+	rawDiff, err := git.Diff(context.Background(), dir, "a.txt", false)
+	if err != nil {
+		t.Fatalf("git.Diff: %v", err)
+	}
+	r.gitBreachSetDiffText("test", gitBreachColorizeDiff(rawDiff, "a.txt", r.theme), rawDiff)
+
+	r.SetRect(0, 0, 100, 20)
+	r.gitBreachLayout.SetRect(0, 0, 100, 20)
+	screen := tcell.NewSimulationScreen("")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("screen.Init: %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(100, 20)
+	r.gitBreachLayout.Draw(screen)
+
+	sb := r.gitBreachDiffScrollbar
+	if sb.maxOffset() <= 0 {
+		t.Fatalf("maxOffset = %d, want real overflow for 60 changed lines on a 20-row screen", sb.maxOffset())
+	}
+	sbx, sby, _, sbh := sb.GetRect()
+	before, _ := r.gitBreachDiffView.GetScrollOffset()
+
+	setFocus := func(p tview.Primitive) { r.app.SetFocus(p) }
+	handler := r.gitBreachLayout.MouseHandler()
+	handler(tview.MouseLeftDown, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.Button1, 0), setFocus)
+	sb.stopRepeat()
+	handler(tview.MouseLeftUp, tcell.NewEventMouse(sbx, sby+sbh-1, tcell.ButtonNone, 0), setFocus)
+
+	after, _ := r.gitBreachDiffView.GetScrollOffset()
+	if after != before+1 {
+		t.Errorf("gitBreachDiffView offset after clicking the down arrow = %d, want %d (before=%d)", after, before+1, before)
+	}
+}
+
 func TestCaptureGitBreachMainKeyVEntersSplitMode(t *testing.T) {
 	requireGitForBreach(t)
 	dir := initGitBreachRepo(t)
