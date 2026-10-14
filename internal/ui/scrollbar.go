@@ -228,7 +228,7 @@ func (sb *verticalScrollbar) stopRepeat() {
 // type's own doc comment), so every cell in this 1-column strip is
 // painted by hand.
 func (sb *verticalScrollbar) Draw(screen tcell.Screen) {
-	sb.Box.DrawForSubclass(screen, sb)
+	sb.DrawForSubclass(screen, sb)
 	x, y, _, height := sb.GetInnerRect()
 	if height < 3 {
 		return
@@ -331,11 +331,11 @@ func (r *Root) captureViewerScrollbarMouse(action tview.MouseAction, event *tcel
 		return tview.MouseConsumed, nil
 	}
 
-	switch {
-	case rel == sbh-2: // up arrow — both arrows sit together at the bottom, see Draw
+	switch rel {
+	case sbh - 2: // up arrow — both arrows sit together at the bottom, see Draw
 		sb.scrollBy(-1)
 		sb.startRepeat(func() { sb.scrollBy(-1) })
-	case rel == sbh-1: // down arrow
+	case sbh - 1: // down arrow
 		sb.scrollBy(1)
 		sb.startRepeat(func() { sb.scrollBy(1) })
 	default:
