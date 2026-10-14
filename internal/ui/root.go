@@ -325,6 +325,7 @@ type Root struct {
 	mountsHint      *tview.TextView
 	mountsHintSpans []listHintSpan
 	mountsTable     *tview.Table
+	mountsScrollbar *verticalScrollbar
 	mountsEntries   []mounts.Entry
 	mountsErr       error
 
@@ -2655,11 +2656,11 @@ func NewRoot(app *tview.Application, path string) (*Root, error) {
 	// single-static-TextView shape as Help, just with its own text set
 	// fresh on every open instead of once here.
 	r.viewerView = r.newViewerView()
-	r.viewerScrollbar = newVerticalScrollbar(r, r.viewerView)
+	r.viewerScrollbar = newVerticalScrollbarForTextView(r, r.viewerView)
 	r.viewerLayout = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(r.viewerView, 0, 1, true).
 		AddItem(r.viewerScrollbar, 1, 0, false)
-	r.viewerLayout.SetMouseCapture(r.captureViewerScrollbarMouse)
+	r.viewerLayout.SetMouseCapture(r.viewerScrollbar.captureMouse)
 
 	// The tab switcher overlay (see tabswitcher.go) — same
 	// list-plus-title-bar shape as the context menu above, rebuilt on

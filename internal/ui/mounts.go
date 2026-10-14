@@ -108,9 +108,15 @@ func (r *Root) newMountsScreen() {
 	r.mountsHintSpans = mountsHintSpans
 	r.mountsHint.SetMouseCapture(r.captureListHintMouse(r.mountsHint, &r.mountsHintSpans))
 
+	r.mountsScrollbar = newVerticalScrollbarForTable(r, r.mountsTable)
+	mountsTableRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(r.mountsTable, 0, 1, true).
+		AddItem(r.mountsScrollbar, 1, 0, false)
+	mountsTableRow.SetMouseCapture(r.mountsScrollbar.captureMouse)
+
 	r.mountsLayout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(r.mountsTitleBar, 1, 0, false).
-		AddItem(r.mountsTable, 0, 1, true).
+		AddItem(mountsTableRow, 0, 1, true).
 		AddItem(r.mountsHint, 1, 0, false)
 }
 
